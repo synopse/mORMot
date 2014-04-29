@@ -2179,6 +2179,8 @@ end;
 
 const
   NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
+  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
+  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
   NULCHAR: AnsiChar = #0;
 
 procedure TBSONElement.FromBSON(bson: PByte);
@@ -2692,11 +2694,23 @@ begin
       Value := GetJSONField(JSON,JSON,@wasString,EndOfObject);
       if JSON=nil then
         JSON := @NULCHAR;
-      if (Value=nil) or ((PInteger(Value)^=NULL_LOW) and not wasString) then begin
+      if Value=nil then begin
         BSONWrite(name,betNull);
         exit;
       end;
       if not wasString then begin // try if not a number
+        if PInteger(Value)^=NULL_LOW then begin
+          BSONWrite(name,betNull);
+          exit;
+        end else
+        if PInteger(Value)^=FALSE_LOW then begin
+          BSONWrite(name,false);
+          exit;
+        end else
+        if PInteger(Value)^=TRUE_LOW then begin
+          BSONWrite(name,true);
+          exit;
+        end;
         Dot := Value;
         repeat
           case Dot^ of

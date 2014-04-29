@@ -56,6 +56,9 @@ unit SynMustache;
 interface
 
 uses
+  {$ifdef HASINLINE}
+  Windows, // for Lock/UnLock inlining
+  {$endif}
   Variants,
   SysUtils,
   SynCommons;

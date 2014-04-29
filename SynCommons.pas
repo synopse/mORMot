@@ -5912,6 +5912,7 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 // - '"strings"' are decoded as 'strings'
 // - strings are JSON unescaped (and \u0123 is converted to UTF-8 chars)
 // - any integer value is left as its ascii representation
+// - true/false boolean values are returned as ascii, with wasString=false
 // - wasString is set to true if the JSON value was a "string"
 // - works for both field names or values (e.g. '"FieldName":' or 'Value,')
 // - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)

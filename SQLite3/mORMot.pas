@@ -1340,7 +1340,7 @@ type
     /// Decode() will set each field type approximation
     // - will recognize also JSON_BASE64_MAGIC/JSON_SQLDATE_MAGIC prefix
     FieldTypeApproximation: array[0..MAX_SQLFIELDS-1] of
-      (ftaNumberOrBoolean,ftaString,ftaDate,ftaNull,ftaBlob,ftaObject,ftaArray);
+      (ftaNumber,ftaBoolean,ftaString,ftaDate,ftaNull,ftaBlob,ftaObject,ftaArray);
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
     /// size of the TEXT data (in bytes) in FieldValues[]
@@ -13691,6 +13691,7 @@ end;
 
 const
   NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
+  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
 
 procedure TSQLPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
@@ -17457,11 +17458,19 @@ var EndOfObject: AnsiChar;
                  single quotes in a row - as in Pascal." }
               FieldValues[ndx] := QuotedStr(res,'''');
           end;
-        end else begin
-          // non string params (numeric or null/false/true) are passed untouched
-          FieldValues[ndx] := res;
-          FieldTypeApproximation[ndx] := ftaNumberOrBoolean;
-        end;
+        end else
+          // non string params (numeric or false/true) are passed untouched
+          if PInteger(res)^=FALSE_LOW then begin
+            FieldValues[ndx] := '0';
+            FieldTypeApproximation[ndx] := ftaBoolean;
+          end else
+          if PInteger(res)^=TRUE_LOW then begin
+            FieldValues[ndx] := '1';
+            FieldTypeApproximation[ndx] := ftaBoolean;
+          end else begin
+            FieldValues[ndx] := res;
+            FieldTypeApproximation[ndx] := ftaNumber;
+          end;
       end;
       end;
     end;
@@ -35241,7 +35250,8 @@ begin
         if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
           exit;
         case ValueType of
-        smvBoolean..smvInt64:  SetInt64(Val,Int64s[IndexVar]);
+        smvBoolean: Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
+        smvEnum..smvInt64:     SetInt64(Val,Int64s[IndexVar]);
         smvDouble,smvDateTime: PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
         smvCurrency:   Int64s[IndexVar] := StrToCurr64(Val);
         smvRawUTF8:    RawUTF8s[IndexVar] := Val;
