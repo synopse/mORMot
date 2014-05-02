@@ -16,10 +16,16 @@ type
     btnFossilSynch: TButton;
     btnFullSynch: TButton;
     btnGitSynch: TButton;
+    btnRefreshStatus: TButton;
+    btnGitShell: TButton;
+    btnFossilShell: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
     procedure btnGitSynchClick(Sender: TObject);
+    procedure btnRefreshStatusClick(Sender: TObject);
+    procedure btnGitShellClick(Sender: TObject);
+    procedure btnFossilShellClick(Sender: TObject);
   private
     fBatPath: TFileName;
     fFossilRepository: TFileName;
@@ -37,6 +43,7 @@ implementation
 
 {$R *.dfm}
 
+{$R Vista.res}
 
 function WinExecAndWait32(const Command,CurrentDir: TFileName;
   Visibility: Word; Timeout : DWORD): integer;
@@ -150,5 +157,20 @@ begin
      fGitRepository,SW_SHOWNORMAL,INFINITE);
 end;
 
+procedure TMainForm.btnRefreshStatusClick(Sender: TObject);
+begin
+  ReadStatus;
+end;
+
+procedure TMainForm.btnGitShellClick(Sender: TObject);
+begin
+  WinExecAndWait32(format('%sGitShell.bat  "%s"',[fBatPath,ExtractFilePath(fGitExe)]),
+     fGitRepository,SW_SHOWNORMAL,INFINITE);
+end;
+
+procedure TMainForm.btnFossilShellClick(Sender: TObject);
+begin
+  WinExecAndWait32('cmd.exe',fFossilRepository,SW_SHOWNORMAL,INFINITE);
+end;
 
 end.

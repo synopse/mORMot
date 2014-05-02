@@ -88,12 +88,39 @@ object MainForm: TMainForm
     OnClick = btnFullSynchClick
   end
   object btnGitSynch: TButton
-    Left = 168
+    Left = 256
     Top = 312
     Width = 113
     Height = 41
     Caption = 'Git Synch'
     TabOrder = 4
     OnClick = btnGitSynchClick
+  end
+  object btnRefreshStatus: TButton
+    Left = 520
+    Top = 5
+    Width = 67
+    Height = 17
+    Caption = 'Refresh'
+    TabOrder = 5
+    OnClick = btnRefreshStatusClick
+  end
+  object btnGitShell: TButton
+    Left = 376
+    Top = 328
+    Width = 75
+    Height = 25
+    Caption = 'Git Shell'
+    TabOrder = 6
+    OnClick = btnGitShellClick
+  end
+  object btnFossilShell: TButton
+    Left = 160
+    Top = 328
+    Width = 75
+    Height = 25
+    Caption = 'Fossil Shell'
+    TabOrder = 7
+    OnClick = btnFossilShellClick
   end
 end
