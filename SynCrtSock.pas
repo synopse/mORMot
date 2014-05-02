@@ -2412,16 +2412,17 @@ function TCrtSocket.TrySockRecv(Buffer: pointer; Length: integer): boolean;
 var Size: PtrInt;
 begin
   result := false;
-  if self=nil then exit;
+  if self=nil then
+    exit;
   if (Buffer<>nil) and (Length>0) then
-  repeat
-    Size := Recv(Sock, Buffer, Length, 0);
-    if Size<=0 then
-      exit;
-    inc(BytesIn, Size);
-    dec(Length,Size);
-    inc(PByte(Buffer),Size);
-  until Length=0;
+    repeat
+      Size := Recv(Sock, Buffer, Length, 0);
+      if Size<=0 then
+        exit;
+      inc(BytesIn, Size);
+      dec(Length,Size);
+      inc(PByte(Buffer),Size);
+    until Length=0;
   result := true;
 end;
 

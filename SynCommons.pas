@@ -8233,7 +8233,7 @@ type
     // - this default implementation will do nothing
     procedure Iterate(var Dest: TVarData; const V: TVarData; Index: integer); virtual;
     /// returns TRUE if the supplied variant is of the exact custom type
-    function IsOfType(const V: variant): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function IsOfType(const V: variant): boolean;
   end;
 
   /// a custom variant type used to have direct access to a record content
@@ -9517,11 +9517,6 @@ type
     // then called once after every TestMethod[] run
     procedure DuringRun(TestCaseIndex, TestMethodIndex: integer); virtual;
   public
-    /// if set to a text file address, some debug messages will be reported to
-    // this text file
-    // - for example, use the following line to report to the console:
-    // !  ToConsole := @Output;
-    // - you can also use the SaveToFile() method to create an external file
     /// you can put here some text to be displayed at the end of the messages
     // - some internal versions, e.g.
     // - every line of text must explicitly BEGIN with #13#10
@@ -14958,6 +14953,7 @@ var i, tmpN, L, A, P, len: PtrInt;
     tmp: TRawUTF8DynArray; 
     inlin: set of 0..255; 
     PDeb: PUTF8Char;
+    wasString: Boolean;
 const QUOTECHAR: array[boolean] of AnsiChar = ('''','"');
       NOTTOQUOTE: array[boolean] of set of 0..31 = (
         [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended],
@@ -15004,8 +15000,12 @@ Txt:  len := Format-PDeb;
     if (isParam='?') and (P<=high(Params)) then begin // handle ? substitution
       if tmpN=length(tmp) then
         SetLength(tmp,tmpN+8);
-      VarRecToUTF8(Params[P],tmp[tmpN]);
-      if not (Params[P].VType in NOTTOQUOTE[JSONFormat]) then
+      if JSONFormat and (Params[P].VType=vtVariant) then
+        VariantToUTF8(Params[P].VVariant^,tmp[tmpN],wasString) else begin
+        VarRecToUTF8(Params[P],tmp[tmpN]);
+        wasString := not (Params[P].VType in NOTTOQUOTE[JSONFormat]);
+      end;
+      if wasString then
         tmp[tmpN] := QuotedStr(pointer(tmp[tmpN]),QUOTECHAR[JSONFormat]);
       if not JSONFormat then begin
         inc(L,4); // space for :():
@@ -25204,7 +25204,9 @@ end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
 begin
-  result := (self<>nil) and (TVarData(V).VType=VarType);
+  if TVarData(V).VType=varByRef or varVariant then
+    result := IsOfType(PVariant(TVarData(V).VPointer)^) else
+    result := (self<>nil) and (TVarData(V).VType=VarType);
 end;  
 
 

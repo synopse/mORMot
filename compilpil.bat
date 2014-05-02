@@ -187,6 +187,10 @@ cd "\dev\lib\sqlite3\Samples\23 - JavaScript Tests"
 %DCC% TestSynSM.dpr %Switches%
 @if errorlevel 1 pause
 
+cd "\dev\lib\sqlite3\Samples\24 - MongoDB"
+%DCC% MongoDBTests.dpr %Switches%
+@if errorlevel 1 pause
+
 cd "\dev\lib\sqlite3\Samples\MainDemo"
 call FileMainRes.bat
 %DCC% SynFile.dpr %Switches%

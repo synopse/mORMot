@@ -2235,7 +2235,7 @@ begin
     Check(FormatUTF8(' ?? ',[],[variant(s)])=' :('''+s+'''): ');
     Check(FormatUTF8('% ?',[variant(j)],[variant(j)])=s+' :('''+s+'''):');
     Check(FormatUTF8('? %',[variant(j)],[variant(j)],true)=s+' '+s);
-    Check(FormatUTF8(' ?? ',[],[variant(s)],true)=' '+s+' ');
+    Check(FormatUTF8(' ?? ',[],[variant(s)],true)=' "'+s+'" ');
     Check(FormatUTF8('? %',[variant(s)],[variant(j)],true)=s+' '+s);
 {$endif}
 {$endif}
@@ -4695,8 +4695,9 @@ end;
 var o,od,o2,value: variant;
     d,d2: TDateTime;
     oid, oid2: TBSONObjectID;
+    oids: array of TBSONObjectID;
     bsonDat, temp, bin: RawByteString;
-    i: integer;
+    i,j: integer;
     b: PByte;
     elem, item: TBSONElement;
     name,u,u2,u3: RawUTF8;
@@ -4748,11 +4749,17 @@ begin
   o2 := ObjectID;
   Check(TDateTime(o2)>=TDateTime(o),o);
   oid2.ComputeNew;
-  for i := 1 to 10000000 do begin
+  for i := 1 to 100000 do begin
     oid.ComputeNew;
     Check(not oid.Equal(oid2));
     oid2 := oid;
     Check(oid.Equal(oid2));
+  end;
+  SetLength(oids,300);
+  for i := 0 to high(oids) do begin
+    oids[i].ComputeNew;
+    for j := 0 to i-1 do
+      Check(not oids[i].Equal(oids[j]),'24 bit collision');
   end;
   //Check(GetCurrentProcessId<>oid.ProcessID,'Expected overflow');
   // see http://bsonspec.org/#/specification

@@ -7,6 +7,7 @@ An Open Source Client-Server ORM/SOA framework
   http://mormot.net
 
 [See below if you upgrade from 1.17 revision]
+
   
 Synopse mORMot is a Client-Server ORM and Service Oriented Architecture framework
 for Delphi 6 up to XE6, targeting Win32 and Win64 platforms.
@@ -32,7 +33,8 @@ edition is enough) for creating any application, from a stand-alone solution
 up to the most complex Domain-Driven Design (DDD):
 
  - Presentation layer featuring MVC UI generation with i18n and reporting
- (with pdf export) for rich Delphi clients, or rich AJAX clients;
+ (with pdf export) for rich Delphi clients, MVC web clients (with integrated
+ Mustache template library) or rich AJAX clients;
 
  - Application layer implementing Service Oriented Architecture via
  interface-based services (like WCF) and Client-Server ORM (including 
