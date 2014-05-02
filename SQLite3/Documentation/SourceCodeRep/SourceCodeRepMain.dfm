@@ -136,6 +136,7 @@ object MainForm: TMainForm
     Top = 317
     Width = 113
     Height = 60
+    Anchors = [akLeft, akBottom]
     Caption = 'Regression Tests'
     TabOrder = 8
     WordWrap = True
