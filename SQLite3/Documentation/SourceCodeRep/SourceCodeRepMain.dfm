@@ -5,6 +5,8 @@ object MainForm: TMainForm
   Height = 422
   Caption = ' mORMot Source Code Repository Synch'
   Color = clBtnFace
+  Constraints.MinHeight = 422
+  Constraints.MinWidth = 617
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -52,7 +54,7 @@ object MainForm: TMainForm
     Top = 192
     Width = 569
     Height = 105
-    Anchors = [akLeft, akTop, akRight]
+    Anchors = [akLeft, akTop, akRight, akBottom]
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
     Font.Height = -11
@@ -67,6 +69,7 @@ object MainForm: TMainForm
     Top = 312
     Width = 113
     Height = 41
+    Anchors = [akLeft, akBottom]
     Caption = 'Fossil Synch'
     TabOrder = 3
     OnClick = btnFossilSynchClick
@@ -76,6 +79,7 @@ object MainForm: TMainForm
     Top = 312
     Width = 113
     Height = 57
+    Anchors = [akLeft, akBottom]
     Caption = 'Fossil and Git Synch'
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -92,6 +96,7 @@ object MainForm: TMainForm
     Top = 312
     Width = 113
     Height = 41
+    Anchors = [akLeft, akBottom]
     Caption = 'Git Synch'
     TabOrder = 4
     OnClick = btnGitSynchClick
@@ -101,6 +106,7 @@ object MainForm: TMainForm
     Top = 5
     Width = 67
     Height = 17
+    Anchors = [akTop, akRight]
     Caption = 'Refresh'
     TabOrder = 5
     OnClick = btnRefreshStatusClick
@@ -110,6 +116,7 @@ object MainForm: TMainForm
     Top = 328
     Width = 75
     Height = 25
+    Anchors = [akLeft, akBottom]
     Caption = 'Git Shell'
     TabOrder = 6
     OnClick = btnGitShellClick
@@ -119,6 +126,7 @@ object MainForm: TMainForm
     Top = 328
     Width = 75
     Height = 25
+    Anchors = [akLeft, akBottom]
     Caption = 'Fossil Shell'
     TabOrder = 7
     OnClick = btnFossilShellClick
