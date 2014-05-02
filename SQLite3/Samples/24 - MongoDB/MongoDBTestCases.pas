@@ -24,6 +24,7 @@ type
     procedure DropAndPrepareCollection;
     procedure FillCollectionNoAcknowledge;
     procedure FillCollectionAcknowledge;
+    procedure FillCollectionBulk;
     procedure ReadCollection;
     procedure UpdateCollectionNoAcknowledge;
     procedure UpdateCollectionAcknowledge;
@@ -104,26 +105,16 @@ begin
   Check(fClient.ServerBuildInfoNumber>20000);
 end;
 
-procedure TTestMongoDBDirect.FillCollectionNoAcknowledge;
-begin
-  fClient.WriteConcern := wcUnacknowledged;
-  Fill;
-end;
-
-procedure TTestMongoDBDirect.FillCollectionAcknowledge;
-begin
-  fClient.WriteConcern := wcAcknowledged;
-  Fill;
-end;
-
 procedure TTestMongoDBDirect.Fill;
 var Coll: TMongoCollection;
     oid: TBSONObjectID;
     i: integer;
+    jsonArray: RawUTF8;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
   Coll.EnsureIndex(['Name']);
+  fValues := nil;
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     TDocVariant.New(fValues[i]);
@@ -137,6 +128,34 @@ begin
     Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
   end;
   Check(Coll.Count=COLL_COUNT);
+  jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
+  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
+  Check(Hash32(jsonArray)=HASH1,'projection over a collection');
+end;
+
+procedure TTestMongoDBDirect.FillCollectionNoAcknowledge;
+begin
+  fClient.WriteConcern := wcUnacknowledged;
+  Fill;
+end;
+
+procedure TTestMongoDBDirect.FillCollectionAcknowledge;
+begin
+  fClient.WriteConcern := wcAcknowledged;
+  Fill;
+end;
+
+procedure TTestMongoDBDirect.FillCollectionBulk;
+var Coll: TMongoCollection;
+    jsonArray: RawUTF8;
+begin
+  fDB.CollectionOrNil[COLL_NAME].Drop;
+  Coll := fDB.CollectionOrCreate[COLL_NAME];
+  Coll.EnsureIndex(['Name']);
+  Coll.Insert(fValues); // insert all values at once
+  jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
+  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
+  Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
 procedure TTestMongoDBDirect.ReadCollection;

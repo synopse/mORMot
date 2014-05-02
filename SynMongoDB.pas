@@ -684,6 +684,15 @@ function BSONVariantFieldSelector(const FieldNamesCSV: RawUTF8): variant; overlo
 function BSONVariant(const JSON: RawUTF8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// store some object content, supplied as (extended) JSON, into a TBSONVariant
+// betDoc type instance
+// - in addition to the JSON RFC specification strict mode, this method will
+// handle some BSON-like extensions, as with the overloaded BSON() function
+// - warning: this overloaded method will mofify the supplied JSON buffer
+// in-place: you can use the overloaded BSONVariant(const JSON: RawUTF8) function
+// instead if you do not want to modify the input buffer content
+procedure BSONVariant(JSON: PUTF8Char; var result: variant); overload;
+
 /// store some object content, supplied as (extended) JSON and parameters,
 // into a TBSONVariant betDoc type instance
 // - in addition to the JSON RFC specification strict mode, this method will
@@ -955,13 +964,20 @@ type
   TMongoRequestInsert = class(TMongoRequest)
   public
     /// initialize a MongoDB client message to insert one or more documents in
-    // a collection
+    // a collection, supplied as variants
     // - FullCollectionName is e.g. 'dbname.collectionname'
     // - Documents is an array of TDocVariant or TBSONVariant - i.e. created via
     // _JsonFast() _JsonFastFmt() or BSONVariant()
     // - there is no response to an opInsert message
     constructor Create(const FullCollectionName: RawUTF8;
-      const Documents: array of variant; Flags: TMongoInsertFlags=[]); reintroduce;
+      const Documents: array of variant; Flags: TMongoInsertFlags=[]); reintroduce; overload;
+    /// initialize a MongoDB client message to insert one or more documents in
+    // a collection, supplied as JSON objects
+    // - FullCollectionName is e.g. 'dbname.collectionname'
+    // - JSONDocuments is an array of JSON objects
+    // - there is no response to an opInsert message
+    constructor Create(const FullCollectionName: RawUTF8;
+      const JSONDocuments: array of PUTF8Char; Flags: TMongoInsertFlags=[]); reintroduce; overload;
   end;
 
   /// a MongoDB client message to delete one or more documents in a collection
@@ -1771,6 +1787,13 @@ type
     // increase the execution speed, at the expense of a unsafe process
     procedure Insert(const Documents: array of variant; Flags: TMongoInsertFlags=[];
       NoAcknowledge: boolean=false); overload;
+    /// insert one or more documents in the collection
+    // - JSONDocuments is an array of JSON objects
+    // - by default, it will follow Client.WriteConcern pattern - but you can
+    // set NoAcknowledge = TRUE to avoid calling the getLastError command and
+    // increase the execution speed, at the expense of a unsafe process
+    procedure InsertJSON(const JSONDocuments: array of PUTF8Char;
+      Flags: TMongoInsertFlags=[]; NoAcknowledge: boolean=false); 
 
     /// updates an existing document or inserts a new document, depending on
     // its document parameter
@@ -3526,9 +3549,16 @@ begin
   BSONVariantType.FromBSONDocument(BSON(NameValuePairs),result);
 end;
 
-function BSONVariant(const JSON: RawUTF8): variant; overload;
+function BSONVariant(const JSON: RawUTF8): variant;
 begin
   BSONVariantType.FromBSONDocument(BSON(JSON),result);
+end;
+
+procedure BSONVariant(JSON: PUTF8Char; var result: variant);
+var tmp: TBSONDocument;
+begin
+  JSONBufferToBSONDocument(JSON,tmp);
+  BSONVariantType.FromBSONDocument(tmp,result);
 end;
 
 function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): variant; overload;
@@ -3663,6 +3693,17 @@ begin
   WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestInsert');
   for i := 0 to high(Documents) do
     BSONWriteParam(Documents[i]);
+end;
+
+constructor TMongoRequestInsert.Create(const FullCollectionName: RawUTF8;
+  const JSONDocuments: array of PUTF8Char; Flags: TMongoInsertFlags=[]);
+var i: integer;
+begin
+  inherited Create(FullCollectionName,opInsert,0,0);
+  Write4(byte(Flags));
+  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestInsert');
+  for i := 0 to high(JSONDocuments) do
+    BSONWriteDocFromJSON(JSONDocuments[i],nil);
 end;
 
 { TMongoRequestDelete }
@@ -4738,6 +4779,13 @@ procedure TMongoCollection.Insert(const Documents: array of variant;
 begin
   Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
     fFullCollectionName,Documents,Flags),NoAcknowledge);
+end;
+
+procedure TMongoCollection.InsertJSON(const JSONDocuments: array of PUTF8Char;
+  Flags: TMongoInsertFlags; NoAcknowledge: boolean);
+begin
+  Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
+    fFullCollectionName,JSONDocuments,Flags),NoAcknowledge);
 end;
 
 function EnsureDocumentHasID(var doc: TDocVariantData; var oid: variant;
