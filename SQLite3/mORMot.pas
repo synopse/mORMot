@@ -2825,7 +2825,7 @@ type
     procedure WriteObjectAsString(Value: TObject;
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// override method, able to write sets using RTTI
-    procedure AddTypedJSON(aTypeInfo: pointer; var aValue); overload; override; 
+    procedure AddTypedJSON(aTypeInfo: pointer; const aValue); overload; override;
     /// overloaded method, able to write sets using RTTI in human readable mode
     // - if woFullExpand or woHumanReadable is set, enumerates and sets will
     // be stored as JSON string
@@ -31063,7 +31063,7 @@ begin
   Add('"');
 end;
 
-procedure TJSONSerializer.AddTypedJSON(aTypeInfo: pointer; var aValue);
+procedure TJSONSerializer.AddTypedJSON(aTypeInfo: pointer; const aValue);
 var i: integer;
     PS: PShortString;
 begin

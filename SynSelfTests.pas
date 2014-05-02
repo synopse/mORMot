@@ -5246,6 +5246,8 @@ begin
      Check(GetEnumNameValue(tmp)=i);
      Check(GetEnumNameValue(pointer(tmp))=i);
      Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TOrdType),i)^)=i);
+     tmp := GetEnumName(i)^;
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp))=i);
   end;
   Check(PTypeInfo(TypeInfo(TOrdTypeSet))^.SetEnumType=
     PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType);

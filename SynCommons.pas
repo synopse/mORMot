@@ -368,7 +368,7 @@ unit SynCommons;
     TTimeLog type and name for all Int64 bit-oriented functions - now *Iso8601*
     will be used only for standard ISO-8601 textual representation
   - Delphi XE4/XE5/XE6 compatibility (Windows target platform only)
-  - unit fixed and tested with Delphi XE2/XE3/XE4 64-bit compiler under Windows
+  - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
     kind varString and type RawUTF8 - prior to Delphi 2009, ensure you call
     UTF8ToString(aVariant) if you want to use the value with the VCL
@@ -410,6 +410,7 @@ unit SynCommons;
   - added GetLastCSVItem() function and dedicated HashPointer() function
   - added DirectoryDelete() function
   - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy() 
+  - added GetEnumNameValue() function 
   - added JSONEncodeArrayOfConst() function
   - JSONEncode() and TTextWriter.AddJSONEscape() with NameValuePairs parameters
     will now handle nested arrays or objects specified with '['..']' or '{'..'}'
@@ -3917,8 +3918,15 @@ type
 
 
 /// helper to retrieve the text of an enumerate item
-// - you'd better use RTTI related classes of mORMot.pas unit
+// - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+
+/// helper to retrieve the index of an enumerate item from its text
+// - returns -1 if aValue was not found
+// - will search for the exact text (this function won't trim the lowercase
+// 'a'..'z' chars on the left side of the text)
+// - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
@@ -4894,7 +4902,7 @@ type
     /// append a JSON value from its RTTI type
     // - will handle tkClass,tkEnumeration,tkRecord,tkDynArray,tkVariant types
     // - write null for other types
-    procedure AddTypedJSON(aTypeInfo: pointer; var aValue); virtual;
+    procedure AddTypedJSON(aTypeInfo: pointer; const aValue); virtual;
     /// define a custom serialization for a given dynamic array or record
     // - expects TypeInfo() from a dynamic array or a record (will raise an
     // exception otherwise)
@@ -21240,9 +21248,7 @@ begin
   AppendToTextFile(Msg,ChangeFileExt(paramstr(0),'.log'));
 end;
 
-
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
-{$ifdef PUREPASCAL}
+function GetEnumBaseTypeList(aTypeInfo: pointer; out MaxValue: Integer): PShortString;
 begin
   if aTypeInfo=nil then
     result := nil else begin
@@ -21250,30 +21256,38 @@ begin
     inc(PByte(aTypeInfo),PByte(aTypeInfo)^+sizeof(byte)*2+sizeof(longint)*2);
     aTypeInfo := PPointer(PPointer(aTypeInfo)^)^; // BaseType
     inc(PByte(aTypeInfo)); // BaseTypeInfo.Name
-    result := pointer(PtrUInt(aTypeInfo)+PByte(aTypeInfo)^+
-      sizeof(byte)*2+sizeof(longint)*2+sizeof(pointer));
-    while aIndex>0 do begin
-      inc(PByte(result),ord(result^[0])+1); // next short string
-      dec(aIndex);
-    end;
+    inc(PByte(aTypeInfo),PByte(aTypeInfo)^+sizeof(Byte)*2+sizeof(longint));
+    MaxValue := PLongint(aTypeInfo)^;
+    result := pointer(PtrUInt(aTypeInfo)+sizeof(longint)+sizeof(pointer));
   end;
 end;
-{$else}
-asm // get enumerate name from RTTI
-    or edx,edx
-    movzx ecx,byte ptr [eax+1] // +1=TTypeInfo.Name
-    mov eax,[eax+ecx+1+9+1] //BaseType
-    mov eax,[eax]
-    movzx ecx,byte ptr [eax+1]
-    lea eax,[eax+ecx+1+9+4+1] // eax=EnumType.BaseType^.EnumType.NameList
-    jz @0
-@1: movzx ecx,byte ptr [eax]
-    dec edx
-    lea eax,[eax+ecx+1] // next short string
-    jnz @1
-@0:
+
+function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+var MaxValue: integer;
+const NULL_SHORTSTRING: string[0] = '';
+begin
+  result := GetEnumBaseTypeList(aTypeInfo,MaxValue);
+  if result<>nil then
+    if aIndex>MaxValue then
+      result := @NULL_SHORTSTRING else
+      while aIndex>0 do begin
+        inc(PByte(result),ord(result^[0])+1); // next short string
+        dec(aIndex);
+      end;
 end;
-{$endif}
+
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
+var List: PShortString;
+    MaxValue: integer;
+begin
+  List := GetEnumBaseTypeList(aTypeInfo,MaxValue);
+  if List<>nil then
+    for result := 0 to MaxValue do
+      if IdemPropName(List^,aValue,aValueLen) then
+        exit else
+        inc(PByte(List),ord(List^[0])+1); // next short string
+  result := -1;
+end;
 
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean; 
 {$ifdef CPU64}
@@ -29334,7 +29348,7 @@ begin
   AddDynArrayJSON(DynArray);
 end;
 
-procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; var aValue);
+procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
 begin
   case PByte(aTypeInfo)^ of
     tkClass:
@@ -29347,7 +29361,7 @@ begin
     tkRecord:
       AddRecordJSON(aValue,aTypeInfo);
     tkDynArray:
-      AddDynArrayJSON(DynArray(aTypeInfo,aValue));
+      AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
 {$ifndef NOVARIANTS}
     tkVariant:
       AddVariantJSON(variant(aValue),twJSONEscape);
