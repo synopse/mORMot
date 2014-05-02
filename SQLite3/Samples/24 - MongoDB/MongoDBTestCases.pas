@@ -14,9 +14,11 @@ type
     fClient: TMongoClient;
     fDB: TMongoDatabase;
     fValues: TVariantDynArray;
+    fExpectedCount: integer;
     procedure CleanUp; override;
     procedure Fill;
     procedure Update(Offset: integer);
+    procedure Delete;
   published
     procedure ConnectToLocalServer;
     procedure DropAndPrepareCollection;
@@ -25,6 +27,8 @@ type
     procedure ReadCollection;
     procedure UpdateCollectionNoAcknowledge;
     procedure UpdateCollectionAcknowledge;
+    procedure DeleteSomeItemsNoAcknowledge;
+    procedure DeleteSomeItemsAcknowledge;
   end;
 
   TTestMongoDB = class(TSynTestsLogged)
@@ -78,6 +82,7 @@ begin
   serverTime := res.system.currentTime; // direct conversion to TDateTime
   Check(serverTime<>0);
   CheckSame(Now,serverTime,0.5);
+  fExpectedCount := COLL_COUNT;
 end;
 
 procedure TTestMongoDBDirect.DropAndPrepareCollection;
@@ -198,5 +203,46 @@ begin
     Check(Hash32(jsonArray)=HASH2,'projection over an updated collection');
 end;
 
+
+procedure TTestMongoDBDirect.Delete;
+var i,j: integer;
+    Coll: TMongoCollection;
+    jsonOne: RawUTF8;
+begin
+  Coll := fDB.Collection[COLL_NAME];
+  Check(Coll.Count=fExpectedCount);
+  j := 0;
+  for i := 0 to high(fValues) do
+    if not VarIsNull(fValues[i]._id) then begin
+      if j mod 5=0 then begin
+        if j mod 10=0 then
+          Coll.RemoveOne(BSONObjectID(fValues[i]._id)) else
+        if j mod 15=0 then
+          Coll.RemoveOne(fValues[i]._id) else
+          Coll.RemoveFmt('{_id:?}',[fValues[i]._id]);
+        fValues[i]._id := null;
+        dec(fExpectedCount);
+      end;
+      inc(j)
+    end;
+  Check(Coll.Count=fExpectedCount);
+  for i := 0 to high(fValues) do
+    if not VarIsNull(fValues[i]._id) then begin
+      jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
+      Check(jsonOne=VariantSaveJSON(fValues[i]),'delete');
+    end;
+end;
+
+procedure TTestMongoDBDirect.DeleteSomeItemsAcknowledge;
+begin
+  fClient.WriteConcern := wcAcknowledged;
+  Delete;
+end;
+
+procedure TTestMongoDBDirect.DeleteSomeItemsNoAcknowledge;
+begin
+  fClient.WriteConcern := wcUnacknowledged;
+  Delete;
+end;
 
 end.

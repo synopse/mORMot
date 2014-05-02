@@ -568,6 +568,10 @@ function ObjectID: variant; overload;
 // - will set a BSON element of betObjectID kind
 function ObjectID(const Hexa: RaWUTF8): variant; overload;
 
+/// convert a TBSONVariant Object ID custom variant into a TBSONObjectID
+// - raise an exception if the supplied variant is not a TBSONVariant Object ID 
+function BSONObjectID(const aObjectID: variant): TBSONObjectID; 
+
 /// create a TBSONVariant JavaScript custom variant type from a supplied code
 // - will set a BSON element of betJS kind
 function JavaScript(const JS: RawUTF8): variant; overload;
@@ -1794,7 +1798,7 @@ type
     procedure Save(Document: PUTF8Char; const Params: array of const;
       CreatedObjectID: PBSONObjectID=nil); overload;
 
-    /// modifies an existing document or documents in a collection
+    /// modifies an existing document or several documents in a collection
     // - the method can modify specific fields of existing document or documents
     // or replace an existing document entirely, depending on the update parameter
     // - Query and Update parameters should be TDocVariant (i.e. created via
@@ -1805,11 +1809,11 @@ type
     // - if Update contains update operators (like $set), it will update the
     // corresponding fields in the document
     procedure Update(const Query, Update: variant; Flags: TMongoUpdateFlags=[]); overload;
-    /// modifies an existing document or documents in a collection
+    /// modifies an existing document or several documents in a collection
     // - the method can modify specific fields of existing document or documents
     // or replace an existing document entirely, depending on the update parameter
-    // - Query and Update parameters should be TDocVariant (i.e. created via
-    // _JsonFast() or _JsonFastFmt()) or TBSONVariant (created via BSONVariant())
+    // - Query and Update parameters can be specified as JSON objects with
+    // parameters
     // - Query is the selection criteria for the update; use the same query
     // selectors as used in the Find() method
     // - if Update contains a plain document, it will replace any existing data:
@@ -1825,6 +1829,29 @@ type
     procedure Update(Query: PUTF8Char; const QueryParams: array of const;
       Update: PUTF8Char; const UpdateParams: array of const;
       Flags: TMongoUpdateFlags=[]); overload;
+
+    /// delete an existing document or several documents in a collection
+    // - Query parameter should be TDocVariant (i.e. created via _JsonFast() or
+    // _JsonFastFmt()) or TBSONVariant (created via BSONVariant())
+    // - Query is the selection criteria for the deletion; use the same query
+    // selectors as used in the Find() method
+    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove] 
+    // - to delete all documents matching the deletion criteria, leave it to []
+    procedure Remove(const Query: variant; Flags: TMongoDeleteFlags); overload;
+    /// delete an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be deleted
+    procedure RemoveOne(const _id: TBSONObjectID); overload;
+    /// delete an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be deleted
+    procedure RemoveOne(const _id: variant); overload;
+    /// delete an existing document or several documents in a collection
+    // - Query parameter can be specified as JSON objects with parameters
+    // - Query is the selection criteria for the deletion; use the same query
+    // selectors as used in the Find() method
+    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove] 
+    // - to delete all documents matching the deletion criteria, leave it to []
+    procedure RemoveFmt(Query: PUTF8Char; const QueryParams: array of const;
+       Flags: TMongoDeleteFlags=[]); 
 
     /// creates an index on the specified field(s) if the index does
     // not already exist
@@ -3035,6 +3062,8 @@ function TBSONObjectID.FromVariant(const value: variant): boolean;
 var txt: RawUTF8;
     wasString: boolean;
 begin
+  if TVarData(value).VType=varByRef or varVariant then
+    result := FromVariant(PVariant(TVarData(value).VPointer)^) else
   if (TBSONVariantData(value).VType=BSONVariantType.VarType) and
      (TBSONVariantData(value).VKind=betObjectID) then begin
     self := TBSONVariantData(value).VObjectID;
@@ -3332,6 +3361,12 @@ begin
   if ID.FromText(Hexa) then
     result := ID.ToVariant else
     raise EBSONException.CreateFmt('Invalid ObjectID hexadecimal "%s"',[Hexa]);
+end;
+
+function BSONObjectID(const aObjectID: variant): TBSONObjectID;
+begin
+  if not result.FromVariant(aObjectID) then
+    raise EBSONException.Create('BSONObjectID() over not ObjectID variant');
 end;
 
 function JavaScript(const JS: RawUTF8): variant;
@@ -3925,8 +3960,14 @@ begin
     raise EMongoException.Create('TMongoConnection(nil).Open');
   if fSocket<>nil then
     raise EMongoConnectionException.Create('Duplicate Open',self);
-  fSocket := TCrtSocket.Open(fServerAddress,UInt32ToUtf8(fServerPort),
-    cslTCP,fClient.ConnectionTimeOut);
+  try
+    fSocket := TCrtSocket.Open(fServerAddress,UInt32ToUtf8(fServerPort),
+      cslTCP,fClient.ConnectionTimeOut);
+  except
+    on E: Exception do
+      raise EMongoException.CreateFmt(
+        'Unable to connect to MongoDB server: %s',[E.Message]);
+  end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice
 end;
@@ -4766,6 +4807,29 @@ procedure TMongoCollection.Update(const Query, Update: variant;
 begin
   Database.Client.Connections[0].SendAndFree(TMongoRequestUpdate.Create(
     fFullCollectionName,Query,Update,Flags),false);
+end;
+
+procedure TMongoCollection.Remove(const Query: variant;
+  Flags: TMongoDeleteFlags);
+begin
+  Database.Client.Connections[0].SendAndFree(TMongoRequestDelete.Create(
+    fFullCollectionName,Query,Flags),False);
+end;
+
+procedure TMongoCollection.RemoveOne(const _id: TBSONObjectID);
+begin
+  Remove(_ObjFast(['_id',_id.ToVariant]),[mdfSingleRemove]);
+end;
+
+procedure TMongoCollection.RemoveOne(const _id: variant);
+begin
+  Remove(_ObjFast(['_id',_id]),[mdfSingleRemove]);
+end;
+
+procedure TMongoCollection.RemoveFmt(Query: PUTF8Char;
+  const QueryParams: array of const; Flags: TMongoDeleteFlags);
+begin
+  Remove(_JsonFastFmt(Query,[],QueryParams),Flags);
 end;
 
 
