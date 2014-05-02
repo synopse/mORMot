@@ -409,7 +409,7 @@ unit SynCommons;
   - added CSVToRawUTF8DynArray() overloaded functions
   - added GetLastCSVItem() function and dedicated HashPointer() function
   - added DirectoryDelete() function
-  - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy() 
+  - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy()
   - added GetEnumNameValue() function 
   - added JSONEncodeArrayOfConst() function
   - JSONEncode() and TTextWriter.AddJSONEscape() with NameValuePairs parameters
@@ -447,6 +447,7 @@ unit SynCommons;
   - introducing TJSONCustomParserFromTextDefinition to handle text-defined
     additional RTTI for JSON record serialization (perfect for DDD value objects)
   - added TTextWriter.UnRegisterCustomJSONSerializer() method
+  - added TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType() method
   - added TTextWriter.AddTypedJSON() and AddCRAndIdent methods
   - added TJSONWriter.EndJSONObject() method, for writing an optional
     ',"rowCount":' field in non expanded mode - used for all JSON creation
@@ -4953,6 +4954,17 @@ type
     // instance corresponding to the supplied RTTI text definition
     class function RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
       const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+    /// define a custom serialization for a given simple type
+    // - you should be able to use this type in the RTTI text definition
+    // of any further RegisterCustomJSONSerializerFromText() call
+    // - the RTTI information should be enough to serialize the type from
+    // its name (e.g. an enumeration)
+    // - you can supply a custom type name, which will be registered in addition
+    // to the "official" name defined at RTTI level
+    // - current implementation handles only enumerations, which will be
+    // transmitted as JSON string instead of JSON numbers
+    class procedure RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfo: pointer;
+      aTypeName: RawUTF8='');
     /// undefine a custom serialization for a given dynamic array or record
     // - it will un-register any callback or text-based custom serialization
     // i.e. any previous RegisterCustomJSONSerializer() or
@@ -21289,7 +21301,7 @@ begin
   result := -1;
 end;
 
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean; 
+function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
 {$ifdef CPU64}
 var a: array[0..1] of Int64 absolute guid1;
     b: array[0..1] of Int64 absolute guid2;
@@ -24065,41 +24077,150 @@ type
   /// implement a ptCustom kind of property
   TJSONCustomParserCustom = class(TJSONCustomParserRTTI)
   protected
-    fRecordTypeName: RawUTF8;
-    fRecordTypeInfo: pointer;
-    fLastRecordIndex: integer;
+    fCustomTypeName: RawUTF8;
+    fCustomTypeInfo: pointer;
   public
-    constructor Create(const aRecordTypeName: RawUTF8);
-    function GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
+    constructor Create(const aCustomTypeName: RawUTF8); virtual;
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue); virtual; abstract;
+    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; virtual; abstract;
+    procedure FinalizeItem(Data: Pointer); virtual;
   end;
 
-constructor TJSONCustomParserCustom.Create(const aRecordTypeName: RawUTF8);
+constructor TJSONCustomParserCustom.Create(const aCustomTypeName: RawUTF8);
 begin
   inherited Create;
-  fLastRecordIndex := GlobalJSONCustomParsers.RecordSearch(aRecordTypeName);
-  if fLastRecordIndex<0 then
-    raise ESynException.CreateFmt('%s.Create(unknown "%s" type)',
-      [ClassName,aRecordTypeName]);
-  with GlobalJSONCustomParsers.fParser[fLastRecordIndex] do begin
-    fRecordTypeInfo := RecordTypeInfo;
-    fRecordTypeName := RecordTypeName;
-  end;
-  fDataSize := RecordTypeInfoSize(fRecordTypeInfo);
+  fCustomTypeName := aCustomTypeName;
 end;
 
-function TJSONCustomParserCustom.GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
+procedure TJSONCustomParserCustom.FinalizeItem(Data: Pointer);
+begin // nothing to be done by default
+end;
+
+
+{ TJSONCustomParserCustomRecord }
+
+type
+  /// implement a record over ptCustom kind of property
+  TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
+  protected
+    fLastRecordIndex: integer;
+    function GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
+  public
+    constructor Create(const aCustomTypeName: RawUTF8); override;
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
+    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
+    procedure FinalizeItem(Data: Pointer); override;
+  end;
+
+constructor TJSONCustomParserCustomRecord.Create(const aCustomTypeName: RawUTF8);
+begin
+  inherited Create(aCustomTypeName);
+  fLastRecordIndex := GlobalJSONCustomParsers.RecordSearch(aCustomTypeName);
+  if fLastRecordIndex<0 then
+    raise ESynException.CreateFmt('%s.Create(unknown "%s" type)',
+      [ClassName,aCustomTypeName]);
+  with GlobalJSONCustomParsers.fParser[fLastRecordIndex] do begin
+    fCustomTypeInfo := RecordTypeInfo;
+    fCustomTypeName := RecordTypeName;
+  end;
+  fDataSize := RecordTypeInfoSize(fCustomTypeInfo);
+  if fDataSize=0 then
+    raise ESynException.CreateFmt('%s.Create("%s" non record type)',
+      [ClassName,aCustomTypeName]);
+end;
+
+procedure TJSONCustomParserCustomRecord.FinalizeItem(Data: Pointer);
+begin
+  RecordClear(Data^,fCustomTypeInfo);
+end;
+
+function TJSONCustomParserCustomRecord.GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
 begin
   result := nil;
   if GlobalJSONCustomParsers<>nil then begin
     if (Cardinal(fLastRecordIndex)>=Cardinal(GlobalJSONCustomParsers.fParsersCount)) or
-       not IdemPropNameU(fRecordTypeName,GlobalJSONCustomParsers.fParser[fLastRecordIndex].RecordTypeName) then
-      fLastRecordIndex := GlobalJSONCustomParsers.RecordSearch(fRecordTypeName);
+       not IdemPropNameU(fCustomTypeName,GlobalJSONCustomParsers.fParser[fLastRecordIndex].RecordTypeName) then
+      fLastRecordIndex := GlobalJSONCustomParsers.RecordSearch(fCustomTypeName);
     if fLastRecordIndex>=0 then
       result := @GlobalJSONCustomParsers.fParser[fLastRecordIndex];
   end;
   if result=nil then
     raise ESynException.CreateFmt('"%s" type should not have been un-registered',
-      [fRecordTypeName]);
+      [fCustomTypeName]);
+end;
+
+procedure TJSONCustomParserCustomRecord.CustomWriter(
+  const aWriter: TTextWriter; const aValue);
+begin
+  GetJSONCustomParserRegistration.Writer(aWriter,aValue);
+end;
+
+function TJSONCustomParserCustomRecord.CustomReader(P: PUTF8Char;
+  var aValue; out EndOfObject: AnsiChar): PUTF8Char;
+var valid: boolean;
+begin
+  result := GetJSONCustomParserRegistration.Reader(P,aValue,valid);
+  if not valid then
+    result := nil;
+  if result=nil then
+    exit;
+  EndOfObject := result^;
+  if result^ in [',','}'] then
+    inc(result);
+end;
+
+
+{ TJSONCustomParserCustomSimple }
+
+type
+  /// implement a simple type (e.g. enumerate) over ptCustom kind of property
+  TJSONCustomParserCustomSimple = class(TJSONCustomParserCustom)
+  public
+    constructor Create(const aCustomTypeName: RawUTF8; aCustomType: pointer); reintroduce;
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
+    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
+  end;
+
+constructor TJSONCustomParserCustomSimple.Create(const aCustomTypeName: RawUTF8;
+  aCustomType: pointer);
+begin
+  inherited Create(aCustomTypeName);
+  fCustomTypeInfo := aCustomType;
+  if not (PByte(fCustomTypeInfo)^ in [tkEnumeration]) then
+    raise ESynException.CreateFmt('%s.Create("%s" non supported type: %d)',
+      [ClassName,aCustomTypeName,PByte(fCustomTypeInfo)^]);
+end;
+
+procedure TJSONCustomParserCustomSimple.CustomWriter(
+  const aWriter: TTextWriter; const aValue);
+begin
+  case PByte(fCustomTypeInfo)^ of
+    tkEnumeration: begin
+      aWriter.Add('"');
+      aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
+      aWriter.Add('"');
+    end;
+    else raise ESynException.Create('TJSONCustomParserCustomSimple.CustomWriter');
+  end;
+end;
+
+function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
+  var aValue; out EndOfObject: AnsiChar): PUTF8Char;
+var PropValue: PUTF8Char;
+    wasString: boolean;
+begin
+  case PByte(fCustomTypeInfo)^ of
+    tkEnumeration: begin
+      PropValue := GetJSONField(P,result,@wasString,@EndOfObject);
+      if PropValue=nil then
+        result := nil else
+        if wasString then
+          byte(aValue) := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+          byte(aValue) := GetInteger(PropValue);
+    end;
+   else
+     result := nil;
+  end;
 end;
 
 
@@ -24160,7 +24281,8 @@ begin
       NestedProperty[j].FinalizeNestedRecord(Data);
       continue;
     end;
-    ptCustom: RecordClear(Data^,TJSONCustomParserCustom(NestedProperty[j]).fRecordTypeInfo);
+    ptCustom:
+      TJSONCustomParserCustom(NestedProperty[j]).FinalizeItem(Data);
     end;
     inc(Data,NestedProperty[j].fDataSize);
   end;
@@ -24203,7 +24325,7 @@ var EndOfObject: AnsiChar;
       BegDynArray: PByte;
       {$endif}
       j, ArrayLen: integer;
-      wasString, valid: boolean;
+      wasString: boolean;
       PropValue: PUTF8Char;
   begin
     result := false;
@@ -24260,15 +24382,8 @@ var EndOfObject: AnsiChar;
           inc(P);
       end;
     end;
-    ptCustom: begin
-      P := TJSONCustomParserCustom(Prop).GetJSONCustomParserRegistration.
-        Reader(P,Data^,valid);
-      if (P=nil) or not valid then
-        exit;
-      EndOfObject := P^;
-      if P^ in [',','}'] then
-        inc(P);
-    end;
+    ptCustom:
+      P := TJSONCustomParserCustom(Prop).CustomReader(P,Data^,EndOfObject);
     {$ifndef NOVARIANTS}
     ptVariant:
       P := VariantLoadJSON(PVariant(Data)^,P,@EndOfObject,
@@ -24294,7 +24409,7 @@ var EndOfObject: AnsiChar;
       PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
       if (PropValue=nil) or
          (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
-         ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
+           ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
         exit;
       case Prop.PropertyType of
       ptBoolean:   if PInteger(PropValue)^=TRUE_LOW then
@@ -24452,10 +24567,8 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       aWriter.Add(',');
       exit;
     end;
-    ptCustom: begin
-      TJSONCustomParserCustom(Prop).GetJSONCustomParserRegistration.
-        Writer(aWriter,Value^);
-    end;
+    ptCustom:
+      TJSONCustomParserCustom(Prop).CustomWriter(aWriter,Value^);
     end;
     aWriter.Add(',');
     inc(Value,Prop.fDataSize);
@@ -24488,6 +24601,9 @@ end;
 
 { TJSONCustomParserAbstract }
 
+var
+  GlobalCustomJSONSerializerFromTextSimpleType: TRawUTF8ListHashed;
+  
 constructor TJSONCustomParserAbstract.Create;
 begin
   fItems := TObjectList.Create;
@@ -24504,9 +24620,17 @@ end;
 
 function TJSONCustomParserAbstract.AddItem(const aName: RawUTF8;
   aType: TJSONCustomParserRTTIType; const aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
+var simpleIndex: integer;
 begin
-  if aType=ptCustom then
-    result := TJSONCustomParserCustom.Create(aCustomRecordTypeName) else
+  if aType=ptCustom then begin
+    if GlobalCustomJSONSerializerFromTextSimpleType=nil then
+      simpleIndex := -1 else
+      simpleIndex := GlobalCustomJSONSerializerFromTextSimpleType.IndexOf(aName);
+    if simpleIndex>=0 then
+      result := TJSONCustomParserCustomSimple.Create(aCustomRecordTypeName,
+        GlobalCustomJSONSerializerFromTextSimpleType.Objects[simpleIndex]) else
+      result := TJSONCustomParserCustomRecord.Create(aCustomRecordTypeName);
+  end else
     result := TJSONCustomParserRTTI.Create;
   result.fPropertyName := aName;
   result.fPropertyType := aType;
@@ -29260,6 +29384,17 @@ class function TTextWriter.RegisterCustomJSONSerializerFromText(aTypeInfo: point
   const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
 begin
   result := GlobalJSONCustomParsers.RegisterFromText(aTypeInfo,aRTTIDefinition);
+end;
+
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
+  aTypeInfo: pointer; aTypeName: RawUTF8='');
+begin
+  if GlobalCustomJSONSerializerFromTextSimpleType=nil then
+    GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType,
+      TRawUTF8ListHashed.Create(false));
+  if aTypeName='' then
+    TypeInfoToName(aTypeInfo,aTypeName);
+  GlobalCustomJSONSerializerFromTextSimpleType.AddObject(aTypeName,aTypeInfo);
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
