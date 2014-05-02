@@ -19,6 +19,7 @@ type
     btnRefreshStatus: TButton;
     btnGitShell: TButton;
     btnFossilShell: TButton;
+    btnTests: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -26,6 +27,7 @@ type
     procedure btnRefreshStatusClick(Sender: TObject);
     procedure btnGitShellClick(Sender: TObject);
     procedure btnFossilShellClick(Sender: TObject);
+    procedure btnTestsClick(Sender: TObject);
   private
     fBatPath: TFileName;
     fFossilRepository: TFileName;
@@ -171,6 +173,11 @@ end;
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
 begin
   WinExecAndWait32('cmd.exe',fFossilRepository,SW_SHOWNORMAL,INFINITE);
+end;
+
+procedure TMainForm.btnTestsClick(Sender: TObject);
+begin
+  WinExecAndWait32('d:\dev\lib\compilpil.bat','d:\dev\lib',SW_SHOWNORMAL,INFINITE);
 end;
 
 end.

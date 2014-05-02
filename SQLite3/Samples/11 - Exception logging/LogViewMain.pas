@@ -3,10 +3,15 @@ unit LogViewMain;
 
 interface
 
+
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   SynCommons, ImgList, StdCtrls, CheckLst, Menus, ExtCtrls, ShellAPI,
-  Grids, FileCtrl, Clipbrd;
+  Grids,
+{$WARN UNIT_PLATFORM OFF}
+  FileCtrl,
+{$WARN UNIT_PLATFORM ON}
+  Clipbrd;
 
 type
   TMainLogView = class(TForm)

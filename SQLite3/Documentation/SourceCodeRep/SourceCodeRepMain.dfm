@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = 265
   Top = 235
   Width = 617
-  Height = 422
+  Height = 435
   Caption = ' mORMot Source Code Repository Synch'
   Color = clBtnFace
   Constraints.MinHeight = 422
@@ -16,7 +16,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   DesignSize = (
     601
-    384)
+    397)
   PixelsPerInch = 96
   TextHeight = 13
   object lbl1: TLabel
@@ -53,7 +53,7 @@ object MainForm: TMainForm
     Left = 16
     Top = 192
     Width = 569
-    Height = 105
+    Height = 118
     Anchors = [akLeft, akTop, akRight, akBottom]
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -65,8 +65,8 @@ object MainForm: TMainForm
     TabOrder = 0
   end
   object btnFossilSynch: TButton
-    Left = 40
-    Top = 312
+    Left = 168
+    Top = 317
     Width = 113
     Height = 41
     Anchors = [akLeft, akBottom]
@@ -76,7 +76,7 @@ object MainForm: TMainForm
   end
   object btnFullSynch: TButton
     Left = 472
-    Top = 312
+    Top = 317
     Width = 113
     Height = 57
     Anchors = [akLeft, akBottom]
@@ -92,8 +92,8 @@ object MainForm: TMainForm
     OnClick = btnFullSynchClick
   end
   object btnGitSynch: TButton
-    Left = 256
-    Top = 312
+    Left = 304
+    Top = 317
     Width = 113
     Height = 41
     Anchors = [akLeft, akBottom]
@@ -112,8 +112,8 @@ object MainForm: TMainForm
     OnClick = btnRefreshStatusClick
   end
   object btnGitShell: TButton
-    Left = 376
-    Top = 328
+    Left = 336
+    Top = 365
     Width = 75
     Height = 25
     Anchors = [akLeft, akBottom]
@@ -122,13 +122,23 @@ object MainForm: TMainForm
     OnClick = btnGitShellClick
   end
   object btnFossilShell: TButton
-    Left = 160
-    Top = 328
+    Left = 208
+    Top = 365
     Width = 75
     Height = 25
     Anchors = [akLeft, akBottom]
     Caption = 'Fossil Shell'
     TabOrder = 7
     OnClick = btnFossilShellClick
+  end
+  object btnTests: TButton
+    Left = 16
+    Top = 317
+    Width = 113
+    Height = 60
+    Caption = 'Regression Tests'
+    TabOrder = 8
+    WordWrap = True
+    OnClick = btnTestsClick
   end
 end
