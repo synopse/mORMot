@@ -1198,7 +1198,7 @@ type
     sftFloat,
     /// a ISO 8601 encoded TEXT field - SQLite3 compatible;
     // - a ISO8601 collation is forced 
-	// - corresponds to a TDateTime Delphi property
+   	// - corresponds to a TDateTime Delphi property
     sftDateTime,
     /// an INTEGER field for coding a date and time - not SQLite3 compatible
     // - TTimeLog=Int64 Delphi property which can be typecasted to Iso8601
@@ -3213,8 +3213,6 @@ type
     /// add an entry in fModel[] / fModelMax
     procedure InternalRegisterModel(aModel: TSQLModel;
       aTableIndex: integer; aProperties: TSQLModelRecordProperties);
-    /// set the W.ColNames[] array content + W.AddColumns
-    procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
   public
     /// the TSQLRecord class
     Table: TSQLRecordClass;
@@ -3392,7 +3390,7 @@ type
     /// initialize the JSON writer parameters with corresponding fields
     // - WrittenFields could be e.g. SimpleFieldsBits[TSQLOccasion]
     // or be computed by TSQLRecordProperties.FieldIndexsFromCSV() or
-    // TSQLRecordProperties.FieldIndexsFromRawUTF8()  
+    // TSQLRecordProperties.FieldIndexsFromRawUTF8()
     // - recreate especially the ColNames[] and other necessary properties
     // - if ForceResetFields is TRUE, all parameters will be recreated
     // - if ForceResetFields is FALSE, WrittenFields will be checked against W.Fields
@@ -3400,6 +3398,8 @@ type
     // - is used e.g. in TSQLRestClientURI.BatchUpdate and BatchAdd methods
     procedure SetExpandedJSONWriter(W: TJSONWriter; ForceResetFields: boolean;
       withID: boolean; const WrittenFields: TSQLFieldBits);
+    /// set the W.ColNames[] array content + W.AddColumns
+    procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
 
     /// register a custom filter or validation rule to the class for a specified
     // field
@@ -5611,9 +5611,8 @@ type
   TSQLModelRecordPropertiesExternal = {$ifdef UNICODE}
     record private {$else}
     object protected {$endif}
-    /// the associated TSQLModelRecordProperties
-    fProps: TSQLModelRecordProperties;
     /// storage of main read-only properties
+    fProps: TSQLModelRecordProperties;
     fConnectionProperties: TObject;
     fTableName: RawUTF8;
     fRowIDFieldName: RawUTF8;
@@ -5676,13 +5675,20 @@ type
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
     function AppendFieldName(FieldIndex: Integer; var Text: RawUTF8): boolean;
+    /// return the field name as RawUTF8 value
+    // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
+    // - otherwise, will return the external field name 
+    function FieldNameByIndex(FieldIndex: Integer): RawUTF8;
 
     /// opaque structure used on the Server side to specify e.g. the DB connection
     // - will define such a generic TObject, to avoid any unecessary dependency
     // to the SynDB unit in mORMot.pas
     // - in practice, will be assigned by VirtualTableExternalRegister() to
-    // a TSQLDBConnectionProperties instance
+    // a TSQLDBConnectionProperties instance in mORMotDB.pas
+    // - or by StaticMongoDBRegister() to a TMongoCollection instance
     property ConnectionProperties: TObject read fConnectionProperties;
+    /// the associated TSQLModelRecordProperties
+    property Properties: TSQLModelRecordProperties read fProps;
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
@@ -10200,6 +10206,8 @@ type
     fFileName: TFileName;
     fModified: boolean;
     fOwner: TSQLRestServer;
+    fBasicSQLCount: RawUTF8;
+    fBasicSQLHasRows: array[boolean] of RawUTF8;
     /// any set bit in this field indicates UNIQUE field value
     fIsUnique: TSQLFieldBits;
     /// allow to force refresh for a given Static table
@@ -10410,8 +10418,6 @@ type
     fExpandedJSON: boolean;
     fSearchRec: TSQLRecord;
     fBasicUpperSQLSelect: array[boolean] of RawUTF8;
-    fBasicSQLCount: RawUTF8;
-    fBasicSQLHasRows: array[boolean] of RawUTF8;
     fUniqueFields: TObjectList;
     function UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
     function UniqueFieldHash(aFieldIndex: integer): TListFieldHash;
@@ -14685,9 +14691,17 @@ begin
   result := GetDynArray(Instance).LoadFrom(P);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;  Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
+  Value: PUTF8Char; wasString: boolean);
+var blob: RawByteString;
 begin
-  GetDynArray(Instance).LoadFrom(pointer(BlobToTSQLRawBlob(Value)));
+  if Value=nil then
+    GetDynArray(Instance).Clear else
+  if Base64MagicCheckAndDecode(Value,blob) then
+    GetDynArray(Instance).LoadFrom(pointer(blob)) else begin
+    blob := Value; // private copy since LoadFromJSON() modifies buffer in-place
+    GetDynArray(Instance).LoadFromJSON(Pointer(blob));
+  end;
 end;
 
 function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -20882,6 +20896,14 @@ begin
     Text := Text+FieldNames[FieldIndex];
 end;
 
+function TSQLModelRecordPropertiesExternal.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
+begin
+  if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN then
+    result := RowIDFieldName else
+  if cardinal(FieldIndex)>=cardinal(Length(FieldNames)) then
+    result := '' else // FieldIndex out of range
+    result := FieldNames[FieldIndex];
+end;
 
 { TSQLModelRecordProperties }
 
@@ -23912,7 +23934,7 @@ begin
     if aServerClass=nil then
       aServerClass := TSQLRestServerStaticInMemory; // default in-memory engine
     result := aServerClass.Create(aClass,self,aFileName,aBinaryFile);
-    if fStaticData=nil then
+    if length(fStaticData)<length(Model.Tables) then
       SetLength(fStaticData,length(Model.Tables));
     fStaticData[i] := result;
   end;
@@ -26697,10 +26719,6 @@ begin
       SetLength(fBasicUpperSQLSelect[false],length(fBasicUpperSQLSelect[false])-1); // trim right ';'
       fBasicUpperSQLSelect[true] := StringReplaceAll(fBasicUpperSQLSelect[false],' ROWID,',' ID,');
     end;
-  fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
-  fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
-  fBasicSQLHasRows[true] := fBasicSQLHasRows[false];
-  system.delete(fBasicSQLHasRows[true],8,3);
   if not IsZero(fIsUnique) then begin
     fUniqueFields := TObjectList.Create;
     with fStoredClassRecordProps do
@@ -27001,8 +27019,9 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticInMemory.GetJSONValues(Stream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldBits; WhereField: integer; const WhereValue: RawUTF8;
+function TSQLRestServerStaticInMemory.GetJSONValues(Stream: TStream;
+  Expand, withID: boolean; const Fields: TSQLFieldBits;
+  WhereField: integer; const WhereValue: RawUTF8;
   FoundLimit,FoundOffset: integer): PtrInt;
 var i,KnownRowsCount: integer;
     W: TJSONSerializer;
@@ -27014,7 +27033,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
       KnownRowsCount := FoundLimit else
       KnownRowsCount := fValue.Count else
     KnownRowsCount := 0;
-  W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,Fields,KnownRowsCount);
+  W := fStoredClassRecordProps.CreateJSONWriter(
+    Stream,Expand,withID,Fields,KnownRowsCount);
   if W<>nil then
   try
     if Expand then
@@ -27029,7 +27049,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
       end;
       result := fValue.Count;
     end else
-      result := FindWhereEqual(WhereField,WhereValue,GetJSONValuesEvent,W,FoundLimit,FoundOffset);
+      result := FindWhereEqual(WhereField,WhereValue,GetJSONValuesEvent,
+        W,FoundLimit,FoundOffset);
     if (result=0) and W.Expand then begin
       // we want the field names at least, even with no data
       W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
@@ -27092,28 +27113,27 @@ begin
   Lock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
-      SetCount(fValue.Count) else
+      SetCount(TableRowCount(fStoredClass)) else
     if IdemPropNameU(fBasicSQLHasRows[false],SQL) or
        IdemPropNameU(fBasicSQLHasRows[true],SQL) then
-      if fValue.Count=0 then begin
+      if TableRowCount(fStoredClass)=0 then begin
         result := '{"fieldCount":1,"values":["RowID"]}'#$A;
         ResCount := 0;
-      end else begin
-        result := '{"fieldCount":1,"values":["RowID",'+
-          Int32ToUTF8(TSQLRecord(fValue.List[0]).fID)+'"]}'#$A;
+      end else begin // return one row with fake ID=1
+        result := '[{"RowID":1}]'#$A;
         ResCount := 1;
       end else begin
       with fStoredClassRecordProps,
         TSynTableStatement.Create(SQL,Fields.IndexByName,
           fStoredClassRecordProps.SimpleFieldsBits[soSelect]) do
       try
-        if (WhereValue='') or
+        if (WhereValue='') or (WhereOperator<>opEqualTo) or
            not IdemPropNameU(TableName,SQLTableName) then
           // invalid request -> return ''
           result := '' else
         if WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
-          SetCount(fValue.Count) else
+          SetCount(TableRowCount(fStoredClass)) else
         if IsZero(Fields) and not WithID then
           if IsSelectCountWhere and (FoundLimit=0) and (FoundOffset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
@@ -27728,6 +27748,10 @@ begin
     end;
   fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
   fFileName := aFileName;
+  fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
+  fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
+  fBasicSQLHasRows[true] := fBasicSQLHasRows[false];
+  system.delete(fBasicSQLHasRows[true],8,3);
 end;
 
 procedure TSQLRestServerStatic.BeginCurrentThread(Sender: TThread);
@@ -27861,7 +27885,8 @@ begin
       if ReadStringFromStream(S)=RawUTF8(ClassName)+'00' then
       repeat
         t := Model.GetTableIndex(ReadStringFromStream(S));
-      until (t<0) or not TSQLRestServerStaticInMemory(fStaticData[t]).LoadFromBinary(S);
+      until (t<0) or
+        not TSQLRestServerStaticInMemory(fStaticData[t]).LoadFromBinary(S);
     finally
       S.Free;
     end;

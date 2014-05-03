@@ -6,10 +6,14 @@ uses
   SysUtils,
   Variants,
   SynCommons,
-  SynMongoDB;
+  SynMongoDB,
+  mORMot,
+  SynSQLite3Static,
+  mORMotSQLite3,
+  mORMotMongoDB;
 
 type
-  TTestMongoDBDirect = class(TSynTestCase)
+  TTestDirect = class(TSynTestCase)
   protected
     fClient: TMongoClient;
     fDB: TMongoDatabase;
@@ -32,9 +36,44 @@ type
     procedure DeleteSomeItemsAcknowledge;
   end;
 
+  TSQLORM = class(TSQLRecord)
+  private
+    fAge: integer;
+    fName: RawUTF8;
+    fDate: TDateTime;
+    fValue: variant;
+    fInts: TIntegerDynArray;
+    fCreateTime: TCreateTime;
+  published
+    property Name: RawUTF8 read fName write fName;
+    property Age: integer read fAge write fAge;
+    property Date: TDateTime read fDate write fDate;
+    property Value: variant read fValue write fValue;
+    property Ints: TIntegerDynArray index 1 read fInts write fInts;
+    property CreateTime: TCreateTime read fCreateTime write fCreateTime;
+  end;
+
+  TTestORM = class(TSynTestCase)
+  protected
+    fClient: TMongoClient;
+    fDB: TMongoDatabase;
+    fModel: TSQLModel;
+    fServer: TSQLRestServer;
+    fStartTimeStamp: TTimeLog;
+    procedure TestOne(R: TSQLORM; aID: integer);
+    procedure CleanUp; override;
+  published
+    procedure ConnectToLocalServer;
+    procedure Insert;
+    procedure Retrieve;
+    procedure RetrieveAll;
+    procedure RetrieveOneWithWhereClause;
+  end;
+
   TTestMongoDB = class(TSynTestsLogged)
   published
-    procedure Direct_Access;
+    procedure DirectAccess;
+    procedure _mORMot;
   end;
 
 implementation
@@ -42,32 +81,38 @@ implementation
 
 { TTestMongoDB }
 
-procedure TTestMongoDB.Direct_Access;
+procedure TTestMongoDB.DirectAccess;
 begin
-  AddCase([TTestMongoDBDirect]);
+  AddCase([TTestDirect]);
 end;
 
-{ TTestMongoDBDirect }
+procedure TTestMongoDB._mORMot;
+begin
+  AddCase([TTestORM]);
+end;
+
+
+{ TTestDirect }
 
 const
   DB_NAME = 'mwx1';
   COLL_NAME = 'test24';
-  {$ifdef ADD5000}
+  {$ifndef ADD5000}
   COLL_COUNT = 100;
-  HASH1 = $FFD8FF4B;
+  HASH1 = $44D5AC3E;
   HASH2 = $8A178B3;
   {$else}
   COLL_COUNT = 5000;
-  HASH1 = $CACB7B7F;
+  HASH1 = $4EA46962;
   HASH2 = $2A005528;
   {$endif}
 
-procedure TTestMongoDBDirect.CleanUp;
+procedure TTestDirect.CleanUp;
 begin
   FreeAndNil(fClient);
 end;
 
-procedure TTestMongoDBDirect.ConnectToLocalServer;
+procedure TTestDirect.ConnectToLocalServer;
 var serverTime: TDateTime;
     res: variant;
     errmsg: RawUTF8;
@@ -86,7 +131,7 @@ begin
   fExpectedCount := COLL_COUNT;
 end;
 
-procedure TTestMongoDBDirect.DropAndPrepareCollection;
+procedure TTestDirect.DropAndPrepareCollection;
 var Coll: TMongoCollection;
     errmsg: RawUTF8;
 begin
@@ -105,10 +150,11 @@ begin
   Check(fClient.ServerBuildInfoNumber>20000);
 end;
 
-procedure TTestMongoDBDirect.Fill;
+procedure TTestDirect.Fill;
 var Coll: TMongoCollection;
     oid: TBSONObjectID;
     i: integer;
+    dat: TDateTime;
     jsonArray: RawUTF8;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
@@ -123,6 +169,9 @@ begin
       fValues[i]._id := ObjectID;
     fValues[i].Name := 'Name '+IntToStr(i+1);
     fValues[i].FirstName := 'FirstName '+IntToStr(i+COLL_COUNT);
+    fValues[i].Number := i;
+    dat := 1.0*(30000+i);
+    fValues[i].Date := dat;
     Check(Coll.Save(fValues[i],@oid)=(i<50));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
     Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
@@ -133,19 +182,19 @@ begin
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
-procedure TTestMongoDBDirect.FillCollectionNoAcknowledge;
+procedure TTestDirect.FillCollectionNoAcknowledge;
 begin
   fClient.WriteConcern := wcUnacknowledged;
   Fill;
 end;
 
-procedure TTestMongoDBDirect.FillCollectionAcknowledge;
+procedure TTestDirect.FillCollectionAcknowledge;
 begin
   fClient.WriteConcern := wcAcknowledged;
   Fill;
 end;
 
-procedure TTestMongoDBDirect.FillCollectionBulk;
+procedure TTestDirect.FillCollectionBulk;
 var Coll: TMongoCollection;
     jsonArray: RawUTF8;
 begin
@@ -158,7 +207,7 @@ begin
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
-procedure TTestMongoDBDirect.ReadCollection;
+procedure TTestDirect.ReadCollection;
 var i: integer;
     Coll: TMongoCollection;
     docs: variant;
@@ -167,38 +216,38 @@ begin
   Coll := fDB.Collection[COLL_NAME];
   Check(Coll.Count=COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
-    jsonOne := VariantSaveJSON(fValues[i]);
+    jsonOne := VariantSaveMongoJSON(fValues[i],modMongoStrict);
     jsonArray := '['+jsonOne+']';
     //if i mod 100=0 then begin // search by name is SLOW, even with the index!
       Check(Coll.FindJSON('{Name:?}',[fValues[i].Name])=jsonArray);
       Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null)=jsonarray);
       Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null,1)=jsonone);
       docs := Coll.FindDoc('{Name:?}',[fValues[i].Name]);
-      Check(VariantSaveJSON(docs)=jsonArray);
+      Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     //end;
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id]);
-    Check(VariantSaveJSON(docs)=jsonArray);
+    Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id],1);
-    Check(VariantSaveJSON(docs)=jsonOne);
+    Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonOne);
   end;
   jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
-procedure TTestMongoDBDirect.UpdateCollectionNoAcknowledge;
+procedure TTestDirect.UpdateCollectionNoAcknowledge;
 begin
   fClient.WriteConcern := wcUnacknowledged;
   Update(0);
 end;
 
-procedure TTestMongoDBDirect.UpdateCollectionAcknowledge;
+procedure TTestDirect.UpdateCollectionAcknowledge;
 begin
   fClient.WriteConcern := wcAcknowledged;
   Update(2);
 end;
 
-procedure TTestMongoDBDirect.Update(Offset: integer);
+procedure TTestDirect.Update(Offset: integer);
 var i: integer;
     Coll: TMongoCollection;
     jsonOne,jsonArray: RawUTF8;
@@ -214,16 +263,16 @@ begin
   Check(Coll.Count=COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
-    Check(jsonOne=VariantSaveJSON(fValues[i]),'in-place update');
+    Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'in-place update');
   end;
-  jsonArray := Coll.FindJSON(null,BSONVariant(['_id',0]));
+  jsonArray := Coll.FindJSON(null,BSONVariant(['_id',0,'Date',0,'Number',0]));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   if Offset=0 then
     Check(Hash32(jsonArray)=HASH2,'projection over an updated collection');
 end;
 
 
-procedure TTestMongoDBDirect.Delete;
+procedure TTestDirect.Delete;
 var i,j: integer;
     Coll: TMongoCollection;
     jsonOne: RawUTF8;
@@ -248,20 +297,154 @@ begin
   for i := 0 to high(fValues) do
     if not VarIsNull(fValues[i]._id) then begin
       jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
-      Check(jsonOne=VariantSaveJSON(fValues[i]),'delete');
+      Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'delete');
     end;
 end;
 
-procedure TTestMongoDBDirect.DeleteSomeItemsAcknowledge;
+procedure TTestDirect.DeleteSomeItemsAcknowledge;
 begin
   fClient.WriteConcern := wcAcknowledged;
   Delete;
 end;
 
-procedure TTestMongoDBDirect.DeleteSomeItemsNoAcknowledge;
+procedure TTestDirect.DeleteSomeItemsNoAcknowledge;
 begin
   fClient.WriteConcern := wcUnacknowledged;
   Delete;
 end;
 
+
+{ TTestORM }
+
+procedure TTestORM.CleanUp;
+begin
+  FreeAndNil(fServer);
+  FreeAndNil(fModel);
+  FreeAndNil(fClient);
+end;
+
+procedure TTestORM.ConnectToLocalServer;
+begin
+  fClient := TMongoClient.Create('localhost',27017);
+  fDB := fClient.Database[DB_NAME];
+  Check(fDB<>nil);
+  Check(fDB.Name=DB_NAME);
+  Check(fClient.ServerBuildInfoNumber<>0);
+  fModel := TSQLModel.Create([TSQLORM]);
+  fServer := TSQLRestServerDB.Create(fModel,':memory:');
+  Check(StaticMongoDBRegister(TSQLORM,fServer,fDB,'mORMot'));
+  fServer.CreateMissingTables;
+  (fServer.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  Check(fServer.TableRowCount(TSQLORM)=0);
+  fStartTimeStamp := fServer.ServerTimeStamp;
+  Check(fStartTimeStamp>10000);
+end;
+
+procedure TTestORM.Insert;
+var R: TSQLORM;
+    i: integer;
+begin
+  Check(fServer.TableRowCount(TSQLORM)=0);
+  R := TSQLORM.Create;
+  try
+    for i := 1 to COLL_COUNT do begin
+      R.Name := 'Name '+Int32ToUTF8(i);
+      R.Age := i;
+      R.Date := 1.0*(30000+i);
+      R.Value := _ObjFast(['num',i]);
+      R.Ints := nil;
+      R.DynArray(1).Add(i);
+      Check(fServer.Add(R,True)=i);
+    end;
+  finally
+    R.Free;
+  end;
+  Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
+end;
+
+procedure TTestORM.TestOne(R: TSQLORM; aID: integer);
+begin
+  Check(R.ID=aID);
+  Check(R.Name='Name '+Int32ToUTF8(aID));
+  Check(R.Age=aID);
+  CheckSame(R.Date,1.0*(30000+aID),1E-5);
+  Check(R.Value.num=aID);
+  Check(Length(R.Ints)=1);
+  Check(R.Ints[0]=aID);
+  Check(R.CreateTime>=fStartTimeStamp);
+end;
+
+procedure TTestORM.Retrieve;
+var R: TSQLORM;
+    i: integer;
+begin
+  Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
+  R := TSQLORM.Create;
+  try
+    for i := 1 to COLL_COUNT do begin
+      Check(fServer.Retrieve(i,R));
+      TestOne(R,i);
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
+procedure TTestORM.RetrieveAll;
+var n: integer;
+    R: TSQLORM;
+begin
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+    end;
+    Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+end;
+
+procedure TTestORM.RetrieveOneWithWhereClause;
+var R: TSQLORM;
+    n: integer;
+begin
+  R := TSQLORM.CreateAndFillPrepare(fServer,'ID=?',[10]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,10);
+    end;
+    Check(n=1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'Name=?',['Name 43']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,43);
+    end;
+    Check(n=1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'Age<?',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+    end;
+    Check(n=50);
+  finally
+    R.Free;
+  end;
+end;
+
 end.
+

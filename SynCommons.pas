@@ -4053,7 +4053,16 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
-function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8;
+function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8; overload;
+
+/// serialize a dynamic array content, supplied as raw binary, as JSON
+// - Value shall be set to the source dynamic array field
+// - is just a wrapper around TTextWriter.AddDynArrayJSON(), creating
+// a temporary TDynArray wrapper on the stack
+// - to be used e.g. for custom record JSON serialization, within a
+// TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
+function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
+  overload;
 
 /// compare two "array of byte" elements
 function SortDynArrayByte(const A,B): integer;
@@ -7471,6 +7480,15 @@ type
   // - 'ID' is handled separately: here must be available only the custom fields
   TSynTableFieldIndex = function(const PropName: RawUTF8): integer of object;
 
+  /// the recognized operators for a TSynTableStatement where clause
+  TSynTableStatementOperator = (
+     opEqualTo,
+     opNotEqualTo,
+     opLessThan,
+     opLessThanOrEqualTo,
+     opGreaterThan,
+     opGreaterThanOrEqualTo);
+
   TSynTableFieldProperties = class;
 
   /// used to parse a SELECT SQL statement
@@ -7494,12 +7512,16 @@ type
     // - if SYNTABLESTATEMENTWHERECOUNT=-2, means SQL statement was
     // "SELECT Count(*) FROM TableName"
     WhereField: integer;
+    /// the operator of the WHERE clause
+    WhereOperator: TSynTableStatementOperator;
     /// the value used for the WHERE clause
     WhereValue: RawUTF8;
     /// an integer representation of WhereValue (used for ID check e.g.)
     WhereValueInteger: integer;
     /// used to fast compare with SBF binary compact formatted data
     WhereValueSBF: TSBFString;
+    /// the value used for the WHERE clause
+    WhereValueVariant: variant;
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
     FoundLimit: integer;
@@ -8490,11 +8512,17 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
-procedure VarRecToVariant(const V: TVarRec; var result: variant);
+procedure VarRecToVariant(const V: TVarRec; var result: variant); overload;
+
+/// convert an open array (const Args: array of const) argument to a variant
+// - note that cardinal values should be type-casted to Int64() (otherwise
+// the integer mapped value will be transmitted, therefore wrongly)
+function VarRecToVariant(const V: TVarRec): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a variant to an open array (const Args: array of const) argument
-// - will always map to a vtVariant kind of argument 
-procedure VariantToVarRec(const V: variant; var result: TVarRec);
+// - will always map to a vtVariant kind of argument
+procedure VariantToVarRec(const V: variant; var result: TVarRec); 
 
 /// convert a dynamic array of variants into its JSON serialization
 // - will use a TDocVariantData temporary storage
@@ -9011,7 +9039,6 @@ type
 // - so you can write the following:
 // ! DocVariantData(aVarDoc.ArrayProp).AddItem('new item');
 function DocVariantData(const DocVariant: variant): PDocVariantData;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -12309,10 +12336,14 @@ begin
       result := False;
       exit;
     end;
-  else begin
-    result := false;
-    exit;
-  end;
+  else
+    if VType=varVariant or varByRef then begin
+      result := VariantToInteger(PVariant(VPointer)^,Value);
+      exit;
+    end else begin
+      result := false;
+      exit;
+    end;
   end;
   result := true;
 end;
@@ -12334,10 +12365,14 @@ begin
   varInteger:  Value := VInteger;
   varWord64,
   varInt64:    Value := VInt64;
-  else begin
-    result := false;
-    exit;
-  end;
+  else
+    if VType=varVariant or varByRef then begin
+      result := VariantToInt64(PVariant(VPointer)^,Value);
+      exit;
+    end else begin
+      result := false;
+      exit;
+    end;
   end;
   result := true;
 end;
@@ -12430,9 +12465,9 @@ end;
 function VarRecAsChar(const V: TVarRec): integer;
 begin
   case V.VType of
-   vtChar:     result := ord(V.VChar);
-   vtWideChar: result := ord(V.VWideChar);
-   else        result := 0;
+    vtChar:     result := ord(V.VChar);
+    vtWideChar: result := ord(V.VWideChar);
+    else        result := 0;
   end;
 end;
 
@@ -24847,8 +24882,11 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 begin
   if not(TVarData(Dest).VType in VTYPE_STATIC) then
     VarClear(Dest);
-  TVarData(Dest).VType := varVariant or varByRef;
-  TVarData(Dest).VPointer := @Source;
+  if TVarData(Source).VType=varVariant or varByRef then // if already by ref
+    TVarData(Dest) := TVarData(Source) else begin
+    TVarData(Dest).VType := varVariant or varByRef;
+    TVarData(Dest).VPointer := @Source;
+  end;
 end;
 
 procedure ZeroFill(var Value: TVarData);
@@ -25099,8 +25137,8 @@ begin
         GetJSONToAnyVariant(Value,Val,EndOfObject,TryCustomVariants);
       end else
         GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants);
-    end;
-    GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants);
+    end else
+      GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants);
   end else begin
     Val := GetJSONField(result,result,@wasString,EndOfObject);
     GetVariantFromJSON(Val,wasString,Value);
@@ -25194,6 +25232,11 @@ begin
   end;
 end;
 
+function VarRecToVariant(const V: TVarRec): variant;
+begin
+  VarRecToVariant(V,result);
+end;
+
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   if TVarData(result).VType in VTYPE_STATIC then
@@ -25223,8 +25266,10 @@ begin
       VType := varDouble;
       VDouble := V.VExtended^;
     end;
-    vtVariant:
-      result := V.VVariant^;
+    vtVariant: begin
+      VType := varVariant or varByRef;
+      VPointer := V.VVariant;
+    end;
     vtAnsiString: begin
       VType := varString;
       VAny := nil;
@@ -25884,6 +25929,7 @@ var i: integer;
     SourceVValue: TVariantDynArray;
     Handler: TCustomVariantType;
     t: word;
+    v: PVarData;
 begin
   with TVarData(SourceDocVariant) do
     if VType=varByRef or varVariant then
@@ -25904,17 +25950,20 @@ begin
   if VCount>0 then begin
     SetLength(VValue,VCount);
     for i := 0 to VCount-1 do begin
-      t := TVarData(SourceVValue[i]).VType;
+      v := @SourceVValue[i];
+      while v^.VType=varByRef or varVariant do
+        v := v^.VPointer;
+      t := v^.VType;
       if t<=varString then // simple string/number types copy
-        VValue[i] := SourceVValue[i] else
+        VValue[i] := variant(v^) else
       if t=VType then // direct recursive copy for TDocVariant
-        TDocVariantData(VValue[i]).InitCopy(SourceVValue[i],aOptions) else
+        TDocVariantData(VValue[i]).InitCopy(variant(v^),aOptions) else
       if FindCustomVariantType(t,Handler) then
         if Handler.InheritsFrom(TSynInvokeableVariantType) then
           TSynInvokeableVariantType(Handler).CopyByValue(
-            TVarData(VValue[i]),TVarData(SourceVValue[i])) else
-          Handler.Copy(TVarData(VValue[i]),TVarData(SourceVValue[i]),false) else
-        VValue[i] := SourceVValue[i]; // default copy
+            TVarData(VValue[i]),v^) else
+          Handler.Copy(TVarData(VValue[i]),v^,false) else
+        VValue[i] := variant(v^); // default copy
     end;
   end;
   VOptions := aOptions; // may not be the same as in Source
@@ -26080,14 +26129,19 @@ end;
 
 procedure TDocVariantData.RetrieveValueOrRaiseException(Index: integer;
   var Dest: variant; DestByRef: boolean);
+var Source: PVariant;
 begin
   if cardinal(Index)>=cardinal(VCount) then
     if dvoReturnNullForOutOfRangeIndex in VOptions then
       SetVariantNull(Dest) else
       raise EDocVariant.CreateFmt('Out of range [%d] (count=%d)',[Index,VCount]) else
     if DestByRef then
-      SetVariantByRef(VValue[Index],Dest) else
-      Dest := VValue[Index];
+      SetVariantByRef(VValue[Index],Dest) else begin
+      Source := @VValue[Index];
+      while PVarData(Source)^.VType=varVariant or varByRef do
+        Source := PVarData(Source)^.VPointer;
+      Dest := Source^;
+    end;
 end;
 
 procedure TDocVariantData.RetrieveValueOrRaiseException(
@@ -26100,9 +26154,7 @@ begin
     if dvoReturnNullForUnknownProperty in VOptions then
       SetVariantNull(Dest) else
       raise EDocVariant.CreateFmt('Unexpected "%s" property',[aName]) else
-    if DestByRef then
-      SetVariantByRef(VValue[ndx],Dest) else
-      Dest := VValue[ndx];
+    RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
 end;
 
 function TDocVariantData.GetValueOrItem(const aNameOrIndex: Variant): Variant;
@@ -26202,7 +26254,7 @@ begin
   ndx := Data.GetValueIndex(aName);
   if ndx<0 then
     Data.InternalAddValue(aName,Variant(Value)) else
-    Data.VValue[ndx]:= Variant(Value);
+    Data.VValue[ndx] := Variant(Value);
 end;
 
 function TDocVariant.IterateCount(const V: TVarData): integer;
@@ -26445,6 +26497,8 @@ end;
 class procedure TDocVariant.GetSingleOrDefault(const docVariantArray, default: variant;
   var result: variant);
 begin
+  if TVarData(DocVariantArray).VType=varByRef or varVariant then
+    GetSingleOrDefault(PVariant(TVarData(DocVariantArray).VPointer)^,default,result) else
   if (DocVariantType=nil) or
      (TVarData(DocVariantArray).VType<>DocVariantType.VarType) or
      (TDocVariantData(DocVariantArray).Kind<>dvArray) or
@@ -26458,9 +26512,8 @@ begin
   with TVarData(DocVariant) do
     if VType=DocVariantType.VarType then
       result := @DocVariant else
-    if (VType=varByRef or varVariant) and
-       (PVarData(VPointer)^.VType=DocVariantType.VarType) then
-      result := VPointer else
+    if VType=varByRef or varVariant then
+      result := DocVariantData(PVariant(VPointer)^) else
     raise EDocVariant.CreateFmt('DocVariantType.Data(%d<>TDocVariant)',[VType]);
 end;
 
@@ -26576,6 +26629,28 @@ begin
     SetText(result);
   finally
     Free;
+  end;
+end;
+
+function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
+var DynArray: TDynArray;
+    Value: pointer;
+begin
+  Value := nil;
+  DynArray.Init(TypeInfo,Value);
+  try
+    if DynArray.LoadFrom(pointer(BlobValue))=nil then
+      result := '' else begin
+      with TTextWriter.CreateOwnedStream(8192) do
+      try
+        AddDynArrayJSON(TypeInfo,Value);
+        SetText(result);
+      finally
+        Free;
+      end;
+     end;
+  finally
+    DynArray.Clear;
   end;
 end;
 
@@ -36677,8 +36752,22 @@ begin
   GetFieldProp;
   if IdemPropName(Prop,'WHERE') then begin
     WhereField := GetPropIndex; // 0 = ID, otherwize PropertyIndex+1
-    if (WhereField<0) or (P^<>'=') then
+    if WhereField<0 then
       exit; // incorrect SQL statement
+    case P^ of
+    '=': WhereOperator := opEqualTo;
+    '>': if P[1]='=' then begin
+           inc(P);
+           WhereOperator := opGreaterThanOrEqualTo;
+         end else
+           WhereOperator := opGreaterThan;
+    '<': if P[1]='=' then begin
+           inc(P);
+           WhereOperator := opLessThanOrEqualTo;
+         end else
+           WhereOperator := opLessThan;
+    else exit; // unknown operator
+    end;
     inc(P); // we had 'WHERE FieldName = '
     P := GotoNextNotSpace(P);
     if PWord(P)^=ord(':')+ord('(') shl 8 then
@@ -36688,19 +36777,23 @@ begin
       P := UnQuoteSQLString(P,WhereValue);
       if P=nil then
         exit; // end of string before end quote -> incorrect
+      RawUTF8ToVariant(WhereValue,WhereValueVariant);
       if FieldProp<>nil then
         // create a SBF formatted version of the WHERE value
         WhereValueSBF := FieldProp.SBFFromRawUTF8(WhereValue);
     end else
-    if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then
+    if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
       // NULL statement
-      WhereValue := '' else begin
+      WhereValue := 'null'; // not void
+      SetVariantNull(WhereValueVariant);
+    end else begin
       // numeric statement or 'true' or 'false' (OK for NormalizeValue)
       B := P;
       repeat
         inc(P);
       until P^ in [#0..' ',';',')'];
       SetString(WhereValue,B,P-B);
+      WhereValueVariant := VariantLoadJSON(WhereValue);
       WhereValueInteger := GetInteger(pointer(WhereValue),err);
       if FieldProp<>nil then
         if WhereValue<>'?' then

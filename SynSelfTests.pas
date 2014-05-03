@@ -7588,6 +7588,7 @@ var RInt: TSQLRecordPeople;
     BatchID,BatchIDUpdate,BatchIDJoined: TIntegerDynArray;
     aExternalClient: TSQLRestClientDB;
     fProperties: TSQLDBConnectionProperties;
+    json: RawUTF8;
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
 begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
@@ -7657,7 +7658,8 @@ begin
             Check(RExt.YearOfBirth=RInt.YearOfBirth);
             Check(RExt.YearOfDeath=RInt.YearOfDeath);
             Check(RExt.YearOfBirth<>RExt.YearOfDeath);
-            Check(VariantDynArrayToJSON(RExt.Value)=FormatUTF8('["text",%]',[RInt.YearOfDeath]));
+            json := FormatUTF8('["text",%]',[RInt.YearOfDeath]);
+            Check(VariantDynArrayToJSON(RExt.Value)=json);
           end;
           inc(n);
         end;

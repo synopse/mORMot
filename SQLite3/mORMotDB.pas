@@ -429,7 +429,7 @@ type
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8): boolean;
+  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8=''): boolean;
 
 /// register all tables of the model to be external
 // - by default, all tables are handled by the SQLite3 engine, unless they
@@ -1540,7 +1540,9 @@ begin
     soInsert: begin
       InsertedID := JSONRetrieveIDField(pointer(SentData));
       if InsertedID=0 then // no specified "ID":... field value -> compute next
-        InsertedID := EngineLockedNextID;
+        InsertedID := EngineLockedNextID else
+        if result>fEngineLockedLastID then
+          fEngineLockedLastID := result;
     end;
     soUpdate:
       if UpdatedID<>0 then
