@@ -24165,7 +24165,7 @@ begin
   if result=nil then
     exit;
   EndOfObject := result^;
-  if result^ in [',','}'] then
+  if result^ in [',','}',']'] then
     inc(result);
 end;
 
@@ -24359,28 +24359,35 @@ var EndOfObject: AnsiChar;
           if Prop.NestedProperty[0].PropertyName='' then begin
             // array of integer/string/array/custom...
             if not ProcessValue(Prop.NestedProperty[0],P,DynArray) or (P=nil) then
-              exit;
+              exit else
+              if EndOfObject=']' then begin
+                if j<>ArrayLen then
+                  exit;
+              end else
+                if EndOfObject<>',' then
+                  exit;
           end else // array of record
           if not Prop.ReadOneLevel(P,DynArray,Options) or (P=nil) then
-            exit;
+            exit else
+            if P^=',' then
+              inc(P);
           {$ifdef ALIGNCUSTOMREC}
           inc(DynArray,(PtrUInt(DynArray)-PtrUInt(BegDynArray)) and 7);
           {$endif}
-          if P^=',' then
-            inc(P);
         end;
       end;
       if P=nil then
         exit;
-      P := GotoNextNotSpace(P);
-      if (P^=']') or (Prop.NestedProperty[0].PropertyName<>'') then begin
+      if (Prop.NestedProperty[0].PropertyName<>'') then begin
+        P := GotoNextNotSpace(P);
         if P^<>']' then
           exit; // we expect a true array here
         repeat inc(P) until not(P^ in [#1..' ']);
-        EndOfObject := P^;
-        if P^<>#0 then //if P^=',' then
-          inc(P);
-      end;
+      end else
+        P := GotoNextNotSpace(P);
+      EndOfObject := P^;
+      if P^<>#0 then //if P^=',' then
+        inc(P);
     end;
     ptCustom:
       P := TJSONCustomParserCustom(Prop).CustomReader(P,Data^,EndOfObject);

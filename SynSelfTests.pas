@@ -3635,10 +3635,16 @@ type
     D: RawByteString;
     E: array of record E1: double; E2: string; end;
   end;
+  TTestCustomJSONArraySimpleArray = packed record
+    F: RawUTF8;
+    G: array of RawUTF8;
+  end;
   TTestCustomJSONArraySimple = packed record
     A,B: Int64;
     C: array of TGUID;
     D: RawUTF8;
+    E: array of TTestCustomJSONArraySimpleArray;
+    H: RawUTF8;
   end;
   {$ifndef NOVARIANTS}
   TTestCustomJSONArrayVariant = packed record
@@ -3696,7 +3702,8 @@ type
 const // convention may be to use __ before the type name
   __TTestCustomJSONRecord = 'A,B,C integer D RawUTF8 E{E1,E2 double} F TDateTime';
   __TTestCustomJSONArray  = 'A,B,C byte D RawByteString E[E1 double E2 string] F TDateTime';
-  __TTestCustomJSONArraySimple = 'A,B Int64 C array of TGUID D RawUTF8';
+  __TTestCustomJSONArraySimple =
+    'A,B Int64 C array of TGUID D RawUTF8 E [F RawUTF8 G array of RawUTF8] H RawUTF8';
   __TTestCustomJSONArrayVariant =  'A,B Int64 C array of variant D RawUTF8';
   __TTestCustomJSONGitHub = 'name RawUTF8 id cardinal description RawUTF8 '+
     'fork boolean owner{login RawUTF8 id cardinal}';
@@ -4480,9 +4487,10 @@ begin
   Finalize(JAS);
   FillChar(JAS,sizeof(JAS),0);
   U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(U='{"A":0,"B":0,"C":[],"D":""}');
+  Check(U='{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
   U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
-    '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4"}';
+    '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
+  J := U;
   RecordLoadJSON(JAS,@U[1],TypeInfo(TTestCustomJSONArraySimple));
   Check(JAS.A=1);
   Check(JAS.B=2);
@@ -4490,8 +4498,14 @@ begin
   Check(GUIDToRawUTF8(JAS.C[0])='{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
   Check(GUIDToRawUTF8(JAS.C[1])='{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
   Check(JAS.D='4');
+  Check(length(JAS.E)=1);
+  Check(JAS.E[0].F='f');
+  Check(Length(JAS.E[0].G)=2);
+  Check(JAS.E[0].G[0]='g1');
+  Check(JAS.E[0].G[1]='g2');
+  Check(JAS.H='h');
   U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(Hash32(U)=$DA415058);
+  Check(SameTextU(J,U));
 {$ifndef NOVARIANTS}
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArrayVariant),__TTestCustomJSONArrayVariant);
@@ -5032,7 +5046,7 @@ begin
 end;
 var discogs: RawUTF8;
 procedure CheckNestedDoc(aOptions: TDocVariantOptions=[]);
-var JSON: RawUTF8;
+var JSON, JSON2: RawUTF8;
     Doc, Doc2: TDocVariantData;
     Doc2Doc, V, Disco: variant;
     i: Integer;
@@ -5052,16 +5066,18 @@ begin
   Check(Doc2.Value['id']=10);
   Check(variant(Doc2).id=10);
   Check(variant(Doc2).doc._kind=ord(dvObject));
-  Doc2Doc := Doc2.Value['doc'];
+  Doc2Doc := variant(Doc2).doc;
   CheckDoc(DocVariantData(Doc2Doc)^);
   CheckDoc(DocVariantData(variant(Doc2).doc)^);
   Doc2Doc := Doc2.GetValueOrRaiseException('doc');
   JSON := '{"id":10,"doc":{"name":"John","birthyear":1972}}';
   Check(Doc2.ToJSON=JSON);
+  //Doc2Doc.birthyear := 1980;
   variant(DocVariantData(Doc2Doc)^).birthyear := 1980;
+  JSON2 := Doc2.ToJSON;
   if dvoValueCopiedByReference in aOptions then
-    Check(Doc2.ToJSON='{"id":10,"doc":{"name":"John","birthyear":1980}}') else
-    Check(Doc2.ToJSON=JSON);
+    Check(JSON2='{"id":10,"doc":{"name":"John","birthyear":1980}}') else
+    Check(JSON2=JSON);
   _JSON(JSON,V,aOptions);
   Check(V._count=2);
   Check(V.id=10);
@@ -5173,6 +5189,7 @@ begin
   Check(V1._Count=2);
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
+  Check(V1._(1)='{"name":"John","year":1972}');
   V1._(1).name := 'Jim';
   Check(V1='["root",{"name":"Jim","year":1972}]');
   Check(V2='["root",{"name":"Jim","year":1972}]');
