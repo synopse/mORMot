@@ -503,6 +503,7 @@ unit SynCommons;
   - added TSynTestCase.CleanUp virtual method for proper cleaning before Destroy
   - added TSynTestCase.CheckMatchAny() method for multi-value checks
   - TSynTestCase.TestFailed now triggers a debugger breakpoint when run from IDE
+  - added TSynTestCase.NotifyTestSpeed() method
   - TSynLog will now append only the execution time when leaving a method,
     without the class/method name (smaller log file, and less resource use)
   - TSynLog header now contains system environment variables
@@ -9517,6 +9518,10 @@ type
     class function RandomAnsi7(CharCount: Integer): RawByteString;
     /// this method is trigerred internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
+    /// will add to the console a message with a speed estimation
+    // - speed is computed from the method start
+    procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
+      SizeInBytes: cardinal=0);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -32487,6 +32492,17 @@ begin
   Inc(fAssertionsFailed);
 end;
 
+procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
+  ItemCount: integer; SizeInBytes: cardinal);
+var Temp: TPrecisionTimer;
+begin
+  Temp := Owner.TestTimer;
+  fRunConsole := format('%s%d %s in %s i.e. %d/s, aver. %s',
+    [fRunConsole,ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),
+     Temp.ByCount(ItemCount)]);
+  if SizeInBytes>0 then
+    fRunConsole := format('%s, %s/s',[fRunConsole,KB(Temp.PerSec(SizeInBytes))]);
+end;
 
 { TSynTests }
 

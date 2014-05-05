@@ -161,6 +161,7 @@ unit SynCrtSock;
     resource retrieval using either WinHTTP or WinINet APIs
   - added TURI structure, ready to parse a supplied HTTP URI
   - added 'ConnectionID: 1234578' to the HTTP headers - request [0636eeec54]
+  - fixed TCrtSocket.BytesIn and TCrtSocket.BytesOut properties
   - fixed ticket [82df275784] TWinHttpAPI with responses without Content-Length
   - fixed ticket [f0749956af] TWinINet does not work with HTTPS servers
   - fixed ticket [842a5ae15a] THttpApiServer.Execute/SendError message
@@ -333,7 +334,7 @@ type
     /// total bytes received
     BytesIn,
     /// total bytes sent
-    BytesOut: cardinal;
+    BytesOut: Int64;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: cardinal=10000); reintroduce; virtual;
@@ -2301,8 +2302,8 @@ begin
     if SentLen<0 then
       exit;
     dec(Len,SentLen);
-    if Len<=0 then break;
     inc(BytesOut,SentLen);
+    if Len<=0 then break;
     inc(PtrUInt(P),SentLen);
   until false;
   result := true;
