@@ -788,6 +788,7 @@ begin
   finally
     FreeAndNil(fBatchWriter);
     fBatchMethod := mNone;
+    UnLock;
   end;
 end;
 
