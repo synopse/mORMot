@@ -180,6 +180,26 @@ end;
 
 { TSQLRestServerStaticMongoDB }
 
+constructor TSQLRestServerStaticMongoDB.Create(aClass: TSQLRecordClass;
+  aServer: TSQLRestServer; const aFileName: TFileName;
+  aBinaryFile: boolean);
+var F: integer;
+begin
+  inherited;
+  if fStoredClassProps=nil then
+    raise EORMMongoDBException.CreateFmt(
+      'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
+  // ConnectionProperties should have been set in StaticMongoDBRegister()
+  fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
+  BSONProjectionSet(fBSONProjectionSimpleFields,
+    fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
+  if not IsZero(fIsUnique) then
+    for F := 0 to fStoredClassRecordProps.Fields.Count do
+      if F in fIsUnique then
+        fCollection.EnsureIndex(
+          [fStoredClassProps.ExternalDB.FieldNames[f]],true,true);
+end;
+
 function TSQLRestServerStaticMongoDB.BSONProjectionSet(var Projection: variant;
   const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
 var i: integer;
@@ -211,20 +231,6 @@ begin
   end;
 end;
 
-constructor TSQLRestServerStaticMongoDB.Create(aClass: TSQLRecordClass;
-  aServer: TSQLRestServer; const aFileName: TFileName;
-  aBinaryFile: boolean);
-begin
-  inherited;
-  if fStoredClassProps=nil then
-    raise EORMMongoDBException.CreateFmt(
-      'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
-  // ConnectionProperties should have been set in StaticMongoDBRegister()
-  fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
-  BSONProjectionSet(fBSONProjectionSimpleFields,
-    fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
-end;
-
 function TSQLRestServerStaticMongoDB.CreateSQLMultiIndex(
   Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
   Unique: boolean; IndexName: RawUTF8): boolean;
@@ -232,7 +238,7 @@ begin
   result := false;
   if (self=nil) or (fCollection=nil) or (Table<>fStoredClass) then
     exit;
-  fCollection.EnsureIndex(FieldNames);
+  fCollection.EnsureIndex(FieldNames,true,Unique);
 end;
 
 procedure TSQLRestServerStaticMongoDB.Drop;

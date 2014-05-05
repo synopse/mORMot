@@ -1927,7 +1927,8 @@ type
     // - Keys are the correspondiong field names
     // - you can write e.g. to create an ascending index on a given field:
     // ! book.EnsureIndex(['orderDate']);
-    procedure EnsureIndex(const Keys: array of RawUTF8; Ascending: boolean=true); overload;
+    procedure EnsureIndex(const Keys: array of RawUTF8; Ascending: boolean=true;
+      Unique: boolean=false); overload;
     /// drops the entire collection from the database
     // - once dropped, this TMongoCollection instance will be freed: never
     // use this instance again after success (i.e. returned '')
@@ -4853,15 +4854,17 @@ begin
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUTF8;
-  Ascending: boolean=true);
+  Ascending, Unique: boolean);
 const Order: array[boolean] of Integer = (-1,1);
-var k: variant;
+var k,opt: variant;
     A: integer;
 begin
   TDocVariant.New(k);
   for A := 0 to high(Keys) do
     TDocVariantData(k).AddValue(Keys[A],Order[Ascending]);
-  EnsureIndex(k,null);
+  if Unique then
+    opt := _ObjFast(['unique',true]);
+  EnsureIndex(k,opt);
 end;
 
 function TMongoCollection.Count: integer;
