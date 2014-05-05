@@ -4317,6 +4317,17 @@ It is possible to force the In-Memory virtual table data to stay in memory, and 
 In order to create disk content, you'll then have to explicitly call the corresponding method on purpose:
 ! Server.StaticVirtualTable[TSQLRecordDali1].UpdateToFile;
 Since {\f1\fs20 StaticVirtualTable} property is only available on the Server side, you are the one to blame if your client updates the table data and this update never reaches the disk!
+:   In-Memory and ACID
+For data stored in memory, the {\f1\fs20 TSQLRestServerStaticInMemory} table is @*ACID@.\line It means that concurrent access will be consistent and work safely, as expected.
+On disk, this kind of table is ACID only when its content is written to the file.\line I mean, the whole file which will be written in an ACID way. The file will always be consistent.
+The exact process of these in-memory tables is that each time you write some new data to a {\f1\fs20 TSQLRestServerStaticInMemory} table:
+- It will be ACID in memory (i.e. work safely in concurrent mode);
+- Individual writes (INSERT/UPDATE/DELETE) won't automatically be written to file;
+- COMMIT will by default write the whole table to file (either as JSON or compressed binary);
+- COMMIT won't write the data to file if the {\f1\fs20 CommitShouldNotUpdateFile} property is set to TRUE;
+- ROLLBACK process won't do anything, so won't be ACID - but since your code may later use a real RDBMS, it is a good habit to always write the command, like in the sample code above, as {\f1\fs20 except aClient.RollBack}.
+When you write the data to file, the whole file is rewritten: it seems not feasible to write the data to disk at every write - in this case, SQLite3 in exclusive mode will be faster, since it will write only the new data, not the whole table content.
+This may sound like a limitation, but in our eayes, it could be seen more like a feature - we do not want to have a whole RDBMS/SQL engine here, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestServerStaticInMemory} storage is too limited for your process.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
 The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
