@@ -1061,32 +1061,38 @@ begin
 end;
 
 function TSQLRestServerDB.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var SQL: RawUTF8;
+var Static: TSQLRestServerStatic;
+    SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
 begin
   result := false;
-  if (DB<>nil) and (Value<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
-  with Value.RecordProps do
-  if BlobFields<>nil then begin
-    SQL := FormatUTF8('SELECT % FROM % WHERE ROWID=?;',
-      [SQLTableRetrieveBlobFields,Table.RecordProps.SQLTableName]);
-    DB.Lock(SQL);
-    try
-      with fStatementCache.Prepare(SQL)^ do begin
-        Bind(1,Value.ID);
-        if Step<>SQLITE_ROW then
-          exit;
-        for f := 0 to high(BlobFields) do begin
-          SQlite3ValueToSQLVar(FieldValue(f),data);
-          BlobFields[f].SetFieldSQLVar(Value,data); // OK for all blobs
+  if Value=nil then
+    exit;
+  Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+  if Static<>nil then
+    result := Static.RetrieveBlobFields(Value) else
+    if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
+    with Value.RecordProps do
+    if BlobFields<>nil then begin
+      SQL := FormatUTF8('SELECT % FROM % WHERE ROWID=?;',
+        [SQLTableRetrieveBlobFields,Table.RecordProps.SQLTableName]);
+      DB.Lock(SQL);
+      try
+        with fStatementCache.Prepare(SQL)^ do begin
+          Bind(1,Value.ID);
+          if Step<>SQLITE_ROW then
+            exit;
+          for f := 0 to high(BlobFields) do begin
+            SQlite3ValueToSQLVar(FieldValue(f),data);
+            BlobFields[f].SetFieldSQLVar(Value,data); // OK for all blobs
+          end;
+          result := true;
         end;
-        result := true;
+      finally
+        DB.UnLock;
       end;
-    finally
-      DB.UnLock;
     end;
-  end;
 end;
 
 procedure TSQLRestServerDB.SetNoAJAXJSON(const Value: boolean);
@@ -1143,37 +1149,43 @@ begin
 end;
 
 function TSQLRestServerDB.UpdateBlobFields(Value: TSQLRecord): boolean;
-var SQL: RawUTF8;
+var Static: TSQLRestServerStatic;
+    SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
     temp: RawByteString;
 begin
   result := false;
-  if (DB<>nil) and (Value<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
-  with Value.RecordProps do
-  if BlobFields<>nil then begin
-    SQL := FormatUTF8('UPDATE % SET % WHERE ROWID=?;',
-      [SQLTableName,SQLTableUpdateBlobFields]);
-    DB.Lock(SQL); // UPDATE for all blob fields -> no JSON cache flush, but UI refresh
-    try
-      with fStatementCache.Prepare(SQL)^ do begin
-        for f := 1 to length(BlobFields) do begin
-          BlobFields[f-1].GetFieldSQLVar(Value,data,temp); // OK for all blobs
-          if data.VType=ftBlob then
-            Bind(f,data.VBlob,data.VBlobLen) else
-            BindNull(f); // not possible (BlobFields[] are TSQLPropInfoRTTIRawBlob)
+  if Value=nil then
+    exit;
+  Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+  if Static<>nil then
+    result := Static.UpdateBlobFields(Value) else
+    if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
+    with Value.RecordProps do
+    if BlobFields<>nil then begin
+      SQL := FormatUTF8('UPDATE % SET % WHERE ROWID=?;',
+        [SQLTableName,SQLTableUpdateBlobFields]);
+      DB.Lock(SQL); // UPDATE for all blob fields -> no cache flush, but UI refresh
+      try
+        with fStatementCache.Prepare(SQL)^ do begin
+          for f := 1 to length(BlobFields) do begin
+            BlobFields[f-1].GetFieldSQLVar(Value,data,temp); // OK for all blobs
+            if data.VType=ftBlob then
+              Bind(f,data.VBlob,data.VBlobLen) else
+              BindNull(f); // not possible (BlobFields[] are TSQLPropInfoRTTIRawBlob)
+          end;
+          Bind(length(BlobFields)+1,Value.ID);
+          repeat
+          until Step<>SQLITE_ROW; // Execute all steps of the first statement
+          result := true;
         end;
-        Bind(length(BlobFields)+1,Value.ID);
-        repeat
-        until Step<>SQLITE_ROW; // Execute all steps of the first statement
-        result := true;
+      finally
+        DB.UnLock;
       end;
-    finally
-      DB.UnLock;
-    end;
-    InternalUpdateEvent(seUpdateBlob,PSQLRecordClass(Value)^,Value.ID,@BlobFieldsBits);
-  end else
-    result := true; // as TSQLRest.UpdateblobFields()
+      InternalUpdateEvent(seUpdateBlob,PSQLRecordClass(Value)^,Value.ID,@BlobFieldsBits);
+    end else
+      result := true; // as TSQLRest.UpdateblobFields()
 end;
 
 function TSQLRestServerDB.EngineUpdateField(Table: TSQLRecordClass;

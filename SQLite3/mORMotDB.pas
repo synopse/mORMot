@@ -199,10 +199,10 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
       const FieldValue: array of const; var ResultID: TIntegerDynArray): boolean;
-    // overriden method returning TRUE + next calls to EngineAdd/Update/Delete (
+    // overriden method returning TRUE for next calls to EngineAdd/Update/Delete 
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
-    /// internal method called by TSQLRestServer.RunBatch() to process fast sending
+    // internal method called by TSQLRestServer.RunBatch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
@@ -887,7 +887,8 @@ begin
      (BATCH[method] in fProperties.BatchSendingAbilities) then begin
     Lock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
-      assert(fBatchMethod=mNone,'InternalBatchStop should have been called');
+      if fBatchMethod<>mNone then
+        raise EORMException.Create('InternalBatchStop should have been called');
       if Method=mPOST then
         fBatchAddedID := EngineLockedNextID else
         fBatchAddedID := 0;
