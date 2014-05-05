@@ -60,6 +60,7 @@ type
     fModel: TSQLModel;
     fServer: TSQLRestServer;
     fStartTimeStamp: TTimeLog;
+    fUpdateOffset: integer;
     procedure TestOne(R: TSQLORM; aID: integer);
     procedure CleanUp; override;
   published
@@ -68,6 +69,7 @@ type
     procedure Retrieve;
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
+    procedure Update;
   end;
 
   TTestMongoDB = class(TSynTestsLogged)
@@ -97,7 +99,7 @@ end;
 const
   DB_NAME = 'mwx1';
   COLL_NAME = 'test24';
-  {$ifndef ADD5000}
+  {$ifdef ADD5000}
   COLL_COUNT = 100;
   HASH1 = $44D5AC3E;
   HASH2 = $8A178B3;
@@ -271,7 +273,6 @@ begin
     Check(Hash32(jsonArray)=HASH2,'projection over an updated collection');
 end;
 
-
 procedure TTestDirect.Delete;
 var i,j: integer;
     Coll: TMongoCollection;
@@ -366,9 +367,9 @@ procedure TTestORM.TestOne(R: TSQLORM; aID: integer);
 begin
   Check(R.ID=aID);
   Check(R.Name='Name '+Int32ToUTF8(aID));
-  Check(R.Age=aID);
+  Check(R.Age=aID+fUpdateOffset);
   CheckSame(R.Date,1.0*(30000+aID),1E-5);
-  Check(R.Value.num=aID);
+  Check(R.Value.num=aID+fUpdateOffset);
   Check(Length(R.Ints)=1);
   Check(R.Ints[0]=aID);
   Check(R.CreateTime>=fStartTimeStamp);
@@ -441,6 +442,37 @@ begin
       TestOne(R,n);
     end;
     Check(n=50);
+  finally
+    R.Free;
+  end;
+end;
+
+procedure TTestORM.Update;
+var R: TSQLORM;
+    n: integer;
+begin
+  inc(fUpdateOffset);
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    while R.FillOne do begin
+      R.Age := R.Age+fUpdateOffset;
+      R.Value.num := R.Value.num+fUpdateOffset;
+      fServer.Update(R);
+      inc(n);
+    end;
+    Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+    end;
+    Check(n=COLL_COUNT);
   finally
     R.Free;
   end;

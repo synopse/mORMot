@@ -1,4 +1,4 @@
-/// direct optimized MongoDB access for mORMot
+/// direct optimized MongoDB access for mORMot's ORM
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMotMongoDB;
@@ -50,6 +50,7 @@ unit mORMotMongoDB;
 
   
   TODO:
+  - WHERE clause with a MongoDB Query object
   - BATCH mode, using fast MongoDB bulk insert
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
     in a dedicated mORMotDBMongoDB unit 
@@ -84,7 +85,7 @@ type
     fEngineLastID: integer;
     fBSONProjectionSimpleFields: variant;
     function EngineNextID: Integer;
-    function DocFromJSON(const JSON: RawUTF8; ForceIDIfNotSet: boolean;
+    function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion; 
       var Doc: TDocVariantData): integer;
     procedure JSONFromDoc(var doc: Variant; var result: RawUTF8);
     // overridden methods calling the MongoDB external server
@@ -278,38 +279,54 @@ begin
 end;
 
 function TSQLRestServerStaticMongoDB.DocFromJSON(const JSON: RawUTF8;
-  ForceIDIfNotSet: boolean; var Doc: TDocVariantData): integer;
+  Occasion: TSQLOccasion; var Doc: TDocVariantData): integer;
 var i, ndx: integer;
     blob: RawByteString;
+    info: TSQLPropInfo;
     js: RawUTF8;
+    MissingID: boolean;
 begin
   doc.InitJSON(JSON,[dvoValueCopiedByReference]);
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.Create('Invalid JSON context');
-  for i := 0 to doc.Count-1 do
+  if not (Occasion in [soInsert,soUpdate]) then
+    raise EORMMongoDBException.CreateFmt('DocFromJSON(%s)',[
+      GetEnumName(TypeInfo(TSQLOccasion),ord(Occasion))^]);
+  MissingID := true;
+  for i := doc.Count-1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(doc.Names[i])) then begin
+      MissingID := false;
       doc.Names[i] := fStoredClassProps.ExternalDB.RowIDFieldName;
       VariantToInteger(doc.Values[i],result);
-      ForceIDIfNotSet := false;
+      if Occasion=soUpdate then
+        doc.Delete(i); // update does not expect any $set:{_id:..}
     end else begin
       ndx := fStoredClassProps.Props.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
         raise EORMMongoDBException.CreateFmt('Unkwnown field name "%s"',[doc.Names[i]]);
       doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
-      case fStoredClassProps.Props.Fields.List[ndx].SQLFieldType of
-        sftDateTime:
+      info := fStoredClassProps.Props.Fields.List[ndx];
+      case info.SQLFieldType of
+        sftDateTime: // store as MongoDB date/time
           doc.Values[i] := Iso8601ToDateTime(Doc.Values[i]);
-        sftBlobDynArray: begin
+        {$ifdef PUBLISHRECORD}sftBlobRecord,{$endif}
+        sftBlob, sftBlobCustom: begin // store BLOB as binary
           blob := doc.Values[i];
-          with (fStoredClassProps.Props.Fields.List[ndx] as TSQLPropInfoRTTIDynArray) do
-            js := DynArraySaveJSON(PropInfo^.PropType^,BlobToTSQLRawBlob(pointer(blob)));
+          BSONVariantType.FromBinary(BlobToTSQLRawBlob(pointer(blob)),doc.Values[i]);
+        end;
+        sftBlobDynArray: begin // try dynamic array as object from any JSON
+          blob := doc.Values[i];
+          js := DynArraySaveJSON(
+            (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^,
+            BlobToTSQLRawBlob(pointer(blob)));
           if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
             BSONVariantType.FromJSON(pointer(js),doc.Values[i]) else
             BSONVariantType.FromBinary(blob,doc.Values[i]);
         end;
+        // sftObject,sftVariant were already converted to object from JSON
       end;
     end;
-  if ForceIDIfNotSet then begin
+  if (Occasion=soInsert) and MissingID then begin
     result := EngineNextID;
     doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
   end;
@@ -321,8 +338,28 @@ var doc: TDocVariantData;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) then
     result := 0 else begin
-    result := DocFromJSON(SentData,true,Doc);
-    fCollection.Insert([variant(doc)]);
+    result := DocFromJSON(SentData,soInsert,Doc);
+    try
+      fCollection.Insert([variant(doc)]);
+    except
+      result := 0;
+    end;
+  end;
+end;
+
+function TSQLRestServerStaticMongoDB.EngineUpdate(Table: TSQLRecordClass;
+  ID: integer; const SentData: RawUTF8): boolean;
+var doc: TDocVariantData;
+begin
+  if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
+    result := false else begin
+    DocFromJSON(SentData,soUpdate,Doc);
+    try
+      fCollection.Update('{_id:?}',[ID],'{$set:?}',[variant(Doc)]);
+      result := true;
+    except
+      result := false;
+    end;
   end;
 end;
 
@@ -331,8 +368,12 @@ function TSQLRestServerStaticMongoDB.EngineDelete(Table: TSQLRecordClass;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
     result := false else begin
-    fCollection.RemoveOne(ID);
-    result := true;
+    try
+      fCollection.RemoveOne(ID);
+      result := true;
+    except
+      result := false;
+    end;
   end;
 end;
 
@@ -524,12 +565,6 @@ end;
 function TSQLRestServerStaticMongoDB.EngineRetrieveBlob(
   Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
   out BlobData: TSQLRawBlob): boolean;
-begin
-
-end;
-
-function TSQLRestServerStaticMongoDB.EngineUpdate(Table: TSQLRecordClass;
-  ID: integer; const SentData: RawUTF8): boolean;
 begin
 
 end;

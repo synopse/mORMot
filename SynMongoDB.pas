@@ -4305,7 +4305,7 @@ begin
             [ord(fClient.WriteConcern)],self,Request);
         end;
         RunCommand(Request.DatabaseName,cmd,result);
-        if result.err<>null then
+        if not VarIsNull(result.err) then
           raise EMongoRequestException.Create('SendAndFree',self,Request,TDocVariantData(result));
       end else // socket error on sending
         if fClient.WriteConcern=wcErrorsIgnored then
@@ -4983,18 +4983,18 @@ end;
 
 procedure TMongoCollection.RemoveOne(const _id: TBSONObjectID);
 begin
-  Remove(_ObjFast(['_id',_id.ToVariant]),[mdfSingleRemove]);
+  Remove(BSONVariant(['_id',_id.ToVariant]),[mdfSingleRemove]);
 end;
 
 procedure TMongoCollection.RemoveOne(const _id: variant);
 begin
-  Remove(_ObjFast(['_id',_id]),[mdfSingleRemove]);
+  Remove(BSONVariant(['_id',_id]),[mdfSingleRemove]);
 end;
 
 procedure TMongoCollection.RemoveFmt(Query: PUTF8Char;
   const QueryParams: array of const; Flags: TMongoDeleteFlags);
 begin
-  Remove(_JsonFastFmt(Query,[],QueryParams),Flags);
+  Remove(BSONVariant(Query,[],QueryParams),Flags);
 end;
 
 
