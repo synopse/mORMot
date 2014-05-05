@@ -50,8 +50,8 @@ unit mORMotMongoDB;
 
   
   TODO:
-  - WHERE clause with a MongoDB Query object
   - BATCH mode, using fast MongoDB bulk insert
+  - complex WHERE clause with a MongoDB Query object instead of SQL syntax
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
     in a dedicated mORMotDBMongoDB unit 
 
@@ -202,11 +202,11 @@ end;
 
 function TSQLRestServerStaticMongoDB.BSONProjectionSet(var Projection: variant;
   const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
-var i: integer;
+var i,n: integer;
     Start: cardinal;
     W: TBSONWriter;
 begin
-  result := 1; // _id always there
+  result := 1; // _id is always part of the MongoDB projected fields
   W := TBSONWriter.Create(TRawByteStringStream);
   try
     Start := W.BSONDocumentBegin;
@@ -222,9 +222,12 @@ begin
     with fStoredClassProps.ExternalDB do begin
       SetLength(ExtFieldNames^,result);
       ExtFieldNames^[0] := RowIDFieldName;
+      n := 1;
       for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
-        if i in Fields then
-         ExtFieldNames^[i+1] := FieldNames[i]
+        if i in Fields then begin
+          ExtFieldNames^[n] := FieldNames[i];
+          inc(n);
+        end;
     end;
   finally
     W.Free;
@@ -318,7 +321,8 @@ begin
         {$ifdef PUBLISHRECORD}sftBlobRecord,{$endif}
         sftBlob, sftBlobCustom: begin // store BLOB as binary
           blob := doc.Values[i];
-          BSONVariantType.FromBinary(BlobToTSQLRawBlob(pointer(blob)),doc.Values[i]);
+          BSONVariantType.FromBinary(BlobToTSQLRawBlob(pointer(blob)),
+            bbtGeneric,doc.Values[i]);
         end;
         sftBlobDynArray: begin // try dynamic array as object from any JSON
           blob := doc.Values[i];
@@ -327,7 +331,7 @@ begin
             BlobToTSQLRawBlob(pointer(blob)));
           if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
             BSONVariantType.FromJSON(pointer(js),doc.Values[i]) else
-            BSONVariantType.FromBinary(blob,doc.Values[i]);
+            BSONVariantType.FromBinary(blob,bbtGeneric,doc.Values[i]);
         end;
         // sftObject,sftVariant were already converted to object from JSON
       end;
@@ -356,12 +360,36 @@ end;
 function TSQLRestServerStaticMongoDB.EngineUpdate(Table: TSQLRecordClass;
   ID: integer; const SentData: RawUTF8): boolean;
 var doc: TDocVariantData;
+    query,update: variant; // use explicit TBSONVariant for type safety
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
     result := false else begin
     DocFromJSON(SentData,soUpdate,Doc);
     try
-      fCollection.Update('{_id:?}',[ID],'{$set:?}',[variant(Doc)]);
+      query := BSONVariant(['_id',ID]);
+      update := BSONVariant(['$set',variant(Doc)]);
+      fCollection.Update(query,update);
+      result := true;
+    except
+      result := false;
+    end;
+  end;
+end;
+
+function TSQLRestServerStaticMongoDB.EngineUpdateBlob(
+  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
+  const BlobData: TSQLRawBlob): boolean;
+var query,update,blob: variant; // use explicit TBSONVariant for type safety
+    FieldName: RawUTF8;
+begin
+  if (fCollection=nil) or (Table<>fStoredClass) or (aID<=0) or (BlobField=nil) then
+    result := false else begin
+    query := BSONVariant(['_id',aID]);
+    FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+    BSONVariantType.FromBinary(BlobData,bbtGeneric,blob);
+    update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
+    try
+      fCollection.Update(query,update);
       result := true;
     except
       result := false;
@@ -428,6 +456,34 @@ begin
   JSONFromDoc(doc,result);
 end;
 
+function TSQLRestServerStaticMongoDB.EngineRetrieveBlob(
+  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
+  out BlobData: TSQLRawBlob): boolean;
+var doc: variant;
+    data: TVarData;
+    FieldName: RawUTF8;
+begin
+  if (fCollection=nil) or (Table<>fStoredClass) or (aID<=0) or (BlobField=nil) then
+    result := false else begin
+    FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+    try
+      doc := fCollection.FindDoc(BSONVariant(['_id',aID]),BSONVariant([FieldName,1]),1);
+      if DocVariantType.IsOfType(doc) and
+         DocVariantData(doc)^.GetVarData(FieldName,data) then
+        BSONVariantType.ToBlob(variant(data),RawByteString(BlobData));
+      result := true;
+    except
+      result := false;
+    end;
+  end;
+end;
+
+function TSQLRestServerStaticMongoDB.AdaptSQLForEngineList(
+  var SQL: RawUTF8): boolean;
+begin
+  result := true; // we do not have any Virtual Table yet -> always accept
+end;
+
 const // see http://docs.mongodb.org/manual/reference/operator/query
   QUERY_OPS: array[TSynTableStatementOperator] of PUTF8Char = (
     '{%:?}', '{%:{$ne:?}}', '{%:{$lt:?}}', '{%:{$lte:?}}',
@@ -448,10 +504,11 @@ var W: TJSONSerializer;
     item: array of TBSONElement;
 function itemFind(const aName: RawUTF8): integer;
 begin
-  for result := 0 to colCount-1 do
-    with item[result] do
-      if IdemPropNameU(aName,Name,NameLen) then
-        exit;
+  if aName<>'' then
+    for result := 0 to colCount-1 do
+      with item[result] do
+        if IdemPropNameU(aName,Name,NameLen) then
+          exit;
   raise EORMMongoDBException.CreateFmt('Unexpected field "%s" in row',[aName]);
 end;
 procedure SetCount(aCount: integer);
@@ -574,26 +631,6 @@ begin // same logic as in TSQLRestServerStaticInMemory.EngineList()
   end;
   if ReturnedRowCount<>nil then
     ReturnedRowCount^ := ResCount;
-end;
-
-function TSQLRestServerStaticMongoDB.EngineRetrieveBlob(
-  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
-  out BlobData: TSQLRawBlob): boolean;
-begin
-
-end;
-
-function TSQLRestServerStaticMongoDB.EngineUpdateBlob(
-  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
-  const BlobData: TSQLRawBlob): boolean;
-begin
-
-end;
-
-function TSQLRestServerStaticMongoDB.AdaptSQLForEngineList(
-  var SQL: RawUTF8): boolean;
-begin
-  result := true; // we do not have any Virtual Table yet -> always accept
 end;
 
 

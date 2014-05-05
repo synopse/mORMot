@@ -44,12 +44,14 @@ type
     fValue: variant;
     fInts: TIntegerDynArray;
     fCreateTime: TCreateTime;
+    fData: TSQLRawBlob;
   published
-    property Name: RawUTF8 read fName write fName;
+    property Name: RawUTF8 read fName write fName stored AS_UNIQUE;
     property Age: integer read fAge write fAge;
     property Date: TDateTime read fDate write fDate;
     property Value: variant read fValue write fValue;
     property Ints: TIntegerDynArray index 1 read fInts write fInts;
+    property Data: TSQLRawBlob read fData write fData;
     property CreateTime: TCreateTime read fCreateTime write fCreateTime;
   end;
 
@@ -70,6 +72,7 @@ type
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
     procedure Update;
+    procedure Blobs;
     procedure Delete;
   end;
 
@@ -480,12 +483,56 @@ begin
   end;
 end;
 
+procedure TTestORM.Blobs;
+var R: TSQLORM;
+    i, n: integer;
+    blob,blobRead: TSQLRawBlob;
+begin
+  SetLength(blob,8);
+  for i := 1 to COLL_COUNT do begin
+    PIntegerArray(blob)[0] := i;
+    PIntegerArray(blob)[1] := i*$01020304;
+    Check(fServer.UpdateBlob(TSQLORM,i,'Data',blob));
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+      Check(R.Data='');
+      fServer.RetrieveBlob(TSQLORM,n,'Data',blobRead);
+      PIntegerArray(blob)[0] := n;
+      PIntegerArray(blob)[1] := n*$01020304;
+      Check(blobRead=blob);
+    end;
+    Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'','ID,Data');
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(R.ID=n);
+      Check(R.Age=0);
+      PIntegerArray(blob)[0] := n;
+      PIntegerArray(blob)[1] := n*$01020304;
+      Check(R.Data=blob);
+    end;
+    Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+end;
+
 procedure TTestORM.Delete;
 var i,n: integer;
     ExpectedCount: integer;
     R: TSQLORM;
 begin
-  Check(fServer.Delete(TSQLORM,'ID in (5,10,15)'));
+  Check(fServer.Delete(TSQLORM,'ID in (5,10,15)'),'deletion with IN clause');
   ExpectedCount := COLL_COUNT-3;
   for i := 20 to COLL_COUNT do
     if i mod 5=0 then begin
@@ -508,6 +555,7 @@ begin
     R.Free;
   end;
 end;
+
 
 end.
 

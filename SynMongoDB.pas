@@ -219,12 +219,18 @@ type
     procedure FromBSONDocument(const BSONDoc: TBSONDocument; var result: variant;
       Kind: TBSONElementType=betDoc);
     /// convert a BLOB binary content into a TBSONVariant of kind betBinary
-    procedure FromBinary(const Bin: RawByteString; var result: variant);
+    procedure FromBinary(const Bin: RawByteString; BinType: TBSONElementBinaryType;
+      var result: variant);
     /// convert a JSON content into a TBSONVariant of kind betDoc or betArray
     // - warning: the supplied JSON buffer will be modified in-place 
     procedure FromJSON(json: PUTF8Char; var result: variant);
-    /// returns TRUE if the supplied variant stores a supplied BSON kind of value
+    /// returns TRUE if the supplied variant stores the supplied BSON kind of value
     function IsOfKind(const V: variant; Kind: TBSONElementType): boolean;
+    /// retrieve a betBinary content stored in a TBSONVariant instance
+    // - returns TRUE if the supplied variant is a betBinary, and set the
+    // binary value into the supplied Blob variable
+    // - returns FALSE otherwise
+    function ToBlob(const V: Variant; var Blob: RawByteString): boolean;
     /// convert a TBSONDocument binary content into a TBSONVariant of kind betDoc
     // - is the default property, so that you can write:
     // ! BSONVariantType[BSON(['BSON',_Arr(['awesome',5.05, 1986])])]
@@ -652,6 +658,11 @@ function BSON(const JSON: RawUTF8): TBSONDocument; overload;
 // ! BSON('{id:new ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUTC]);
 // - will create the BSON binary without any temporary TDocVariant storage,
 // by calling JSONBufferToBSONDocument() on the generated JSON content
+// - since all content will be transformed into JSON internally, use this
+// method only if the supplied parameters are simple types, and identified
+// explicitely via BSON-like extensions: any complex value (e.g. a TDateTime
+// or a BSONVariant binary) won't be handled as expected - use the overloaded
+// BSON() with explicit BSONVariant() name/value pairs instead
 function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocument; overload;
 
 /// store some TDocVariant custom variant content into BSON encoded binary
@@ -1868,6 +1879,10 @@ type
     /// modifies an existing document or several documents in a collection
     // - the method can modify specific fields of existing document or documents
     // or replace an existing document entirely, depending on the update parameter
+    // - since all content will be transformed into JSON internally, use this
+    // method only if the supplied parameters are simple types: any complex value
+    // (e.g. a TDateTime or a BSONVariant binary) won't be handled as expected -
+    // use the overloaded Update() with explicit BSONVariant() values instead 
     // - Query and Update parameters can be specified as JSON objects with
     // parameters
     // - Query is the selection criteria for the update; use the same query
@@ -2237,7 +2252,7 @@ begin
   betBinary:
   case Mode of
   modNoMongo:
-bin:W.WrBase64(Element,ElementBytes,true);
+    W.WrBase64(Data.Blob,Data.BlobLen,true);
   modMongoStrict: begin
     W.AddShort(BSON_JSON_BINARY[false,false]);
     W.WrBase64(Data.Blob,Data.BlobLen,false);
@@ -2256,7 +2271,7 @@ bin:W.WrBase64(Element,ElementBytes,true);
   betRegEx:
   case Mode of
   modNoMongo:
-    goto bin;
+bin:W.WrBase64(Element,ElementBytes,true);
   modMongoStrict:
     goto regex;
   modMongoShell:
@@ -2363,9 +2378,10 @@ str:Kind := betString;
   else
   if aVarData.VType=BSONVariantType.VarType then begin
     Kind := aBson.VKind;
-    if Kind=betObjectID then
-        FromBSON(@aBson.VObjectID) else
-        FromBSON(aBson.VBlob);
+    case Kind of
+    betObjectID: FromBSON(@aBson.VObjectID);
+    else         FromBSON(aBson.VBlob);
+    end;
     if ElementBytes<0 then
       VarCastError;
   end else
@@ -3189,15 +3205,38 @@ begin
       result := (self<>nil) and (VType=VarType) and (VKind=Kind);
 end;
 
-procedure TBSONVariant.FromBinary(const Bin: RawByteString; var result: variant);
+function TBSONVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
 begin
+  with TVarData(V) do
+    if VType=varByRef or varVariant then begin
+      result := ToBlob(PVariant(VPointer)^,Blob);
+      exit;
+     end;
+  with TBSONVariantData(V) do begin
+    result := (VType=VarType) and (VKind=betBinary);
+    if result then
+      if (VBlob=nil) or
+         (PInteger(VBlob)^<>Length(RawByteString(VBlob))-(sizeof(integer)+1)) then
+        Blob := '' else
+        SetString(Blob,PAnsiChar(VBlob)+(sizeof(integer)+1),PInteger(VBlob)^);
+  end;
+end;
+
+procedure TBSONVariant.FromBinary(const Bin: RawByteString;
+  BinType: TBSONElementBinaryType; var result: variant);
+var Len: integer;
+begin // "\x05" e_name int32 subtype (byte*)
   with TBSONVariantData(result) do begin
     if not(VType in VTYPE_STATIC) then
       VarClear(result);
     VType := VarType;
     VKind := betBinary;
     VBlob := nil; // avoid GPF here below
-    RawByteString(VBlob) := Bin;
+    Len := length(Bin);
+    SetLength(RawByteString(VBlob),Len+(sizeof(integer)+1));
+    PInteger(VBlob)^ := Len;
+    PByteArray(VBlob)^[sizeof(integer)] := ord(BinType);
+    move(pointer(Bin)^,PByteArray(VBlob)^[sizeof(integer)+1],Len);
   end;
 end;
 
