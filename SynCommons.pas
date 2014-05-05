@@ -25668,11 +25668,15 @@ begin // this code should copy parameters without any reference count handling
       V := PWordBool(pointer(P^))^ else
       V := PWordBool(P)^;
   varVariant:
+    {$ifdef CPU64} // circumvent Delphi x64 compiler oddiness
+    Value := PVarData(pointer(P^))^
+    {$else}
     if ByRef then
       Value := PVarData(pointer(P^))^ else begin
       Value := PVarData(P)^;
       Size := Sizeof(Value);
     end;
+    {$endif}
   else
     raise EInvalidCast.CreateFmt('ParseParamPointer: Invalid VarType=%d',[aType and TYPE_BYREF_MASK]);
   end;
