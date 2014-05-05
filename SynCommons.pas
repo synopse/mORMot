@@ -8893,6 +8893,11 @@ type
     // - return the supplied default if aName is not found, or if the instance
     // is not a TDocVariant
     function GetValueOrDefault(const aName: RawUTF8; const aDefault: variant): variant;
+    /// find an item in this document, and returns its value as TVarData
+    // - return false if aName is not found, or if the instance is not
+    // a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    function GetVarData(const aName: RawUTF8; var aValue: TVarData): boolean;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -26114,6 +26119,22 @@ begin
     if ndx>=0 then
       result := VValue[ndx] else
       result := aDefault;
+  end;
+end;
+
+function TDocVariantData.GetVarData(const aName: RawUTF8;
+  var aValue: TVarData): boolean;
+var ndx: Integer;
+begin
+  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+     (Kind<>dvObject) then
+    result := false else begin
+    ndx := GetValueIndex(aName);
+    if ndx>=0 then begin
+      aValue := TVarData(VValue[ndx]);
+      result := true;
+    end else
+      result := false;
   end;
 end;
 
