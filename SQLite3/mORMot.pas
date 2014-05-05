@@ -743,6 +743,8 @@ unit mORMot;
     - new function CurrentServiceContext, to be used from packages instead of
       direct ServiceContext threadvar access - circumvent Delphi RTL/compiler
       restriction (bug?) as reported by [155b09dc1b]
+    - let TSQLRest.OneFieldValues() handle directly naive expressions like
+      'SELECT ID from Table where ID=10' or 'where ID in (10,20,30)'
     - new TSQLRestClientURI.ForceBlobTransfertTable[] property which enable to
       get and set BLOB fields values with usual Add/Update/Retrieve methods for
       a particular table (more tuned than existing ForceBlobTransfert property)
@@ -21779,8 +21781,39 @@ end;
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; var Data: TIntegerDynArray): boolean;
 var T: TSQLTableJSON;
+    V,err: integer;
+    Prop: ShortString;
+    P: PUTF8Char;
 begin
-  SetLength(Data,0);
+  Data := nil;
+  // handle naive expressions like SELECT ID from Table where ID=10
+  if IsRowID(pointer(FieldName)) and (length(WhereClause)>2) then begin
+    P := pointer(WhereClause);
+    GetNextFieldProp(P,Prop);
+    if IsRowIDShort(Prop) then 
+      case P^ of
+      '=': begin
+        V := GetInteger(P+1,err);
+        if err=0 then begin
+          SetLength(Data,1);
+          Data[0] := V;
+          result := true;
+          exit;
+        end;
+      end;
+      'i','I': if P[1] in ['n','N'] then begin
+        P := GotoNextNotSpace(P+2);
+        if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
+          CSVToIntegerDynArray(P+1,Data);
+          if Data<>nil then begin
+            result := true;
+            exit;
+          end;
+        end;
+      end;
+      end;
+  end;
+  // retrieve the content from database
   result := false;
   T := InternalListJSON(Table,FieldName,WhereClause);
   if T<>nil then

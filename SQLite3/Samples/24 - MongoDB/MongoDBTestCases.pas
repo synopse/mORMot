@@ -70,6 +70,7 @@ type
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
     procedure Update;
+    procedure Delete;
   end;
 
   TTestMongoDB = class(TSynTestsLogged)
@@ -99,7 +100,7 @@ end;
 const
   DB_NAME = 'mwx1';
   COLL_NAME = 'test24';
-  {$ifdef ADD5000}
+  {$ifndef ADD5000}
   COLL_COUNT = 100;
   HASH1 = $44D5AC3E;
   HASH2 = $8A178B3;
@@ -292,7 +293,7 @@ begin
         fValues[i]._id := null;
         dec(fExpectedCount);
       end;
-      inc(j)
+      inc(j);
     end;
   Check(Coll.Count=fExpectedCount);
   for i := 0 to high(fValues) do
@@ -339,6 +340,7 @@ begin
   Check(fServer.TableRowCount(TSQLORM)=0);
   fStartTimeStamp := fServer.ServerTimeStamp;
   Check(fStartTimeStamp>10000);
+  fServer.NoAJAXJSON := true;
 end;
 
 procedure TTestORM.Insert;
@@ -473,6 +475,35 @@ begin
       TestOne(R,n);
     end;
     Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+end;
+
+procedure TTestORM.Delete;
+var i,n: integer;
+    ExpectedCount: integer;
+    R: TSQLORM;
+begin
+  Check(fServer.Delete(TSQLORM,'ID in (5,10,15)'));
+  ExpectedCount := COLL_COUNT-3;
+  for i := 20 to COLL_COUNT do
+    if i mod 5=0 then begin
+      Check(fServer.Delete(TSQLORM,i));
+      dec(ExpectedCount);
+    end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    i := 0;
+    while R.FillOne do begin
+      inc(i);
+      if i mod 5=0 then
+        inc(i);
+      inc(n);
+      TestOne(R,i);
+    end;
+    Check(n=ExpectedCount);
   finally
     R.Free;
   end;

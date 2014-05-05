@@ -7487,7 +7487,8 @@ type
      opLessThan,
      opLessThanOrEqualTo,
      opGreaterThan,
-     opGreaterThanOrEqualTo);
+     opGreaterThanOrEqualTo,
+     opIn);
 
   TSynTableFieldProperties = class;
 
@@ -8185,6 +8186,10 @@ function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean; {$ifdef HASI
 /// returns TRUE if the specified field name is either 'ID', either 'ROWID'
 function IsRowIDShort(const FieldName: shortstring): boolean; {$ifdef HASINLINE}inline;{$endif} overload;
 
+/// retrieve the next identifier within the UTF-8 buffer
+// - and returns the next non-void item 
+procedure GetNextFieldProp(var P: PUTF8Char; var Prop: ShortString);
+
 
 { ************ variant-based process, including JSON/BSON document content }
 
@@ -8344,6 +8349,8 @@ type
      dvoJSONObjectParseWithinString);
 
   /// set of options for a TDocVariant storage
+  // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
+  // local document
   TDocVariantOptions = set of TDocVariantOption;
 
   /// pointer to a set of options for a TDocVariant storage
@@ -36676,13 +36683,7 @@ begin
     (PIntegerArray(@FieldName)^[1] and $dfdf=ord('I')+ord('D')shl 8);
 end;
 
-constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
-  FieldProp: TSynTableFieldProperties=nil);
-var Prop: ShortString;
-    P, B: PUTF8Char;
-    err: integer;
-procedure GetFieldProp;
+procedure GetNextFieldProp(var P: PUTF8Char; var Prop: ShortString);
 var B: PUTF8Char;
 begin
   P := GotoNextNotSpace(P); // trim left
@@ -36691,9 +36692,16 @@ begin
   SetString(Prop,B,P-B);
   P := GotoNextNotSpace(P); // trim right
 end;
+
+constructor TSynTableStatement.Create(const SQL: RawUTF8;
+  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
+  FieldProp: TSynTableFieldProperties=nil);
+var Prop: ShortString;
+    P, B: PUTF8Char;
+    err: integer;
 function GetPropIndex: integer;
 begin
-  GetFieldProp;
+  GetNextFieldProp(P,Prop);
   if IsRowIDShort(Prop) then
     result := 0 else begin // 0 = ID field
     result := GetFieldIndex(Prop);
@@ -36713,6 +36721,7 @@ begin
     result := true;
   end;
 end;
+label limit;
 begin
   // if fValue.Count=0 then exit; allow no row
   P := pointer(SQL);
@@ -36729,27 +36738,27 @@ begin
     withID := true;
     Fields := SimpleFieldsBits;
     inc(P);
-    GetFieldProp;
+    GetNextFieldProp(P,Prop);
   end else
   if IdemPChar(P,'COUNT(*) ') then begin
     inc(P,8);
-    GetFieldProp;
+    GetNextFieldProp(P,Prop);
     IsSelectCountWhere := true; // get WHERE clause below
   end else begin
     if not SetFields then
       exit else // we need at least one field name
       if P^<>',' then
-        GetFieldProp else
+        GetNextFieldProp(P,Prop) else
         repeat
           while P^ in [',',#1..' '] do inc(P); // trim left
         until not SetFields; // add other CSV field names
   end;
   // 2. get FROM clause
   if not IdemPropName(Prop,'FROM') then exit; // incorrect SQL statement
-  GetFieldProp;
+  GetNextFieldProp(P,Prop);
   TableName := Prop;
   // 3. get WHERE clause
-  GetFieldProp;
+  GetNextFieldProp(P,Prop);
   if IdemPropName(Prop,'WHERE') then begin
     WhereField := GetPropIndex; // 0 = ID, otherwize PropertyIndex+1
     if WhereField<0 then
@@ -36766,6 +36775,26 @@ begin
            WhereOperator := opLessThanOrEqualTo;
          end else
            WhereOperator := opLessThan;
+    'i','I': if P[1] in ['n','N'] then begin
+           inc(P,2);
+           WhereOperator := opIn;
+           P := GotoNextNotSpace(P);
+           if P^<>'(' then
+             exit; // incorrect SQL statement
+           B := P; // get the IN() clause - without :(...): by now
+           inc(P);
+           while P^<>')' do
+             if P^=#0 then
+               exit else
+               inc(P);
+           inc(P);
+           SetString(WhereValue,PAnsiChar(B),P-B);
+           WhereValue[1] := '[';
+           WhereValue[P-B] := ']';
+           TDocVariantData(WhereValueVariant).InitJSONInPlace(
+             pointer(WhereValue),JSON_OPTIONS[true]);
+           goto Limit;
+         end;
     else exit; // unknown operator
     end;
     inc(P); // we had 'WHERE FieldName = '
@@ -36806,9 +36835,10 @@ begin
     if PWord(P)^=ord(')')+ord(':')shl 8 then
       inc(P,2); // ignore :(...): parameter
     // 4. get optional LIMIT clause
+limit:
     P := GotoNextNotSpace(P);
     while (P<>nil) and not(P^ in [#0,';']) do begin
-      GetFieldProp;
+      GetNextFieldProp(P,Prop);
       if IdemPropName(Prop,'LIMIT') then
         FoundLimit := GetNextItemCardinal(P,' ') else
       if IdemPropName(Prop,'OFFSET') then

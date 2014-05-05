@@ -212,11 +212,12 @@ type
     // - it uses case-sensitive text (hexadecimal) comparison for betObjectID
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
-    /// convert a TBSONDocument binary content into a TBSONVariant of kind betDoc
+    /// convert a TBSONDocument binary content into a TBSONVariant of kind
+    // betDoc or betArray
     // - see also all BSONVariant() overloaded functions, which also create
     // a TBSONVariant betDoc instance
-    procedure FromBSONDocument(const BSONDoc: TBSONDocument; var result: variant);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure FromBSONDocument(const BSONDoc: TBSONDocument; var result: variant;
+      Kind: TBSONElementType=betDoc);
     /// convert a BLOB binary content into a TBSONVariant of kind betBinary
     procedure FromBinary(const Bin: RawByteString; var result: variant);
     /// convert a JSON content into a TBSONVariant of kind betDoc or betArray
@@ -474,8 +475,10 @@ type
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
     // - this method wil be faster than using a BSONWriteDoc(_ArrFast(...))
-    procedure BSONWriteArray(const Items: array of const);
-    /// write some BSON document from a supplied (extended) JSON array or object 
+    procedure BSONWriteArray(const Items: array of const); 
+    /// write an array of integers as a BSON Document
+    procedure BSONWriteArrayOfInteger(const Integers: array of integer);
+    /// write some BSON document from a supplied (extended) JSON array or object
     // - warning: the incoming JSON buffer will be modified in-place: so you
     // should make a private copy before running this method
     // - will handle only '{ ... }', '[ ... ]' or 'null' input, with the standard
@@ -657,6 +660,10 @@ function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocume
 // - if supplied variant is not a TDocVariant, raise an EBSONException
 function BSON(const doc: TDocVariantData): TBSONDocument; overload;
 
+/// store an array of integer into BSON encoded binary
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONFromIntegers(const Integers: array of integer): TBSONDocument;
+
 /// store some object content, supplied as (extended) JSON into BSON binary
 // - warning: the supplied JSON buffer will be modified in-place, if necessary:
 // so you should create a temporary copy before calling this function, or call
@@ -714,6 +721,10 @@ function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): vari
 /// convert a TDocVariant variant into a TBSONVariant betDoc type instance
 function BSONVariant(doc: TDocVariantData): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// store an array of integer into a TBSONVariant betArray type instance
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONVariantFromIntegers(const Integers: array of integer): variant;
 
 /// parse the header of a BSON encoded binary buffer, and return its length
 // - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
@@ -2877,6 +2888,16 @@ begin
   BSONDocumentEnd(Start);
 end;
 
+procedure TBSONWriter.BSONWriteArrayOfInteger(const Integers: array of integer);
+var Start: cardinal;
+    i: integer;
+begin
+  Start := BSONDocumentBegin;
+  for i := 0 to high(Integers) do
+    BSONWrite(UInt32ToUtf8(i),Integers[i]);
+  BSONDocumentEnd(Start);
+end;
+
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char);
 var tmp: variant; // we use a local variant for only BSONVariant values
@@ -3180,13 +3201,13 @@ begin
 end;
 
 procedure TBSONVariant.FromBSONDocument(const BSONDoc: TBSONDocument;
-  var result: variant);
+  var result: variant; Kind: TBSONElementType);
 begin
   with TBSONVariantData(result) do begin
     if not(VType in VTYPE_STATIC) then
       VarClear(result);
     VType := VarType;
-    VKind := betDoc;
+    VKind := Kind;
     VBlob := nil; // avoid GPF here below
     RawByteString(VBlob) := BSONDoc;
   end;
@@ -3486,7 +3507,6 @@ begin
 end;
 
 function BSON(const doc: TDocVariantData): TBSONDocument;
-var W: TBSONWriter;
 begin
   if TVarData(doc).VType=varVariant or varByRef then begin
     result := BSON(PDocVariantData(TVarData(doc).VPointer)^);
@@ -3494,12 +3514,23 @@ begin
   end;
   if TVarData(doc).VType<>DocVariantType.VarType then
     raise EBSONException.Create('doc is not a TDocVariant');
-  W := TBSONWriter.Create(TRawByteStringStream);
+  with TBSONWriter.Create(TRawByteStringStream) do
   try
-    W.BSONWriteDoc(doc);
-    W.ToBSONDocument(result);
+    BSONWriteDoc(doc);
+    ToBSONDocument(result);
   finally
-    W.Free;
+    Free;
+  end;
+end;
+
+function BSONFromIntegers(const Integers: array of integer): TBSONDocument;
+begin
+  with TBSONWriter.Create(TRawByteStringStream) do
+  try
+    BSONWriteArrayOfInteger(Integers);
+    ToBSONDocument(result);
+  finally
+    Free;
   end;
 end;
 
@@ -3653,6 +3684,11 @@ end;
 function BSONVariantFieldSelector(const FieldNamesCSV: RawUTF8): variant;
 begin
   BSONVariantType.FromBSONDocument(BSONFieldSelector(FieldNamesCSV),result);
+end;
+
+function BSONVariantFromIntegers(const Integers: array of integer): variant;
+begin
+  BSONVariantType.FromBSONDocument(BSONFromIntegers(Integers),result,betArray);
 end;
 
 

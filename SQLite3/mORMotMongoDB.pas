@@ -377,6 +377,21 @@ begin
   end;
 end;
 
+function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
+  Table: TSQLRecordClass; const SQLWhere: RawUTF8;
+  const IDs: TIntegerDynArray): boolean;
+begin // here we use the pre-computed IDs[]
+  if (fCollection=nil) or (Table<>fStoredClass) or (IDs=nil) then
+    result := false else begin
+    try
+      fCollection.RemoveFmt('{_id:{$in:?}}',[BSONVariantFromIntegers(IDs)]);
+      result := true;
+    except
+      result := false;
+    end;
+  end;
+end;
+
 procedure TSQLRestServerStaticMongoDB.JSONFromDoc(var doc: Variant;
   var result: RawUTF8);
 var i: integer;
@@ -410,7 +425,7 @@ end;
 const // see http://docs.mongodb.org/manual/reference/operator/query
   QUERY_OPS: array[TSynTableStatementOperator] of PUTF8Char = (
     '{%:?}', '{%:{$ne:?}}', '{%:{$lt:?}}', '{%:{$lte:?}}',
-    '{%:{$gt:?}}', '{%:{$gte:?}}');
+    '{%:{$gt:?}}', '{%:{$gte:?}}', '{%:{$in:?}}');
     
 function TSQLRestServerStaticMongoDB.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
@@ -553,13 +568,6 @@ begin // same logic as in TSQLRestServerStaticInMemory.EngineList()
   end;
   if ReturnedRowCount<>nil then
     ReturnedRowCount^ := ResCount;
-end;
-
-function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
-  Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-  const IDs: TIntegerDynArray): boolean;
-begin
-
 end;
 
 function TSQLRestServerStaticMongoDB.EngineRetrieveBlob(
