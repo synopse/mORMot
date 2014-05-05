@@ -8805,7 +8805,6 @@ type
     /// begin a transaction (implements REST BEGIN Member)
     // - to be used to speed up some SQL statements like Add/Update/Delete methods
     // above
-    // - in the current implementation, the aTable parameter is not used yet
     // - in the current implementation, nested transactions are not allowed
     // - must be ended with Commit on success
     // - must be aborted with Rollback if any SQL statement failed
