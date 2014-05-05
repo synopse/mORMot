@@ -2494,6 +2494,8 @@ type
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
+    procedure GetBlob(Instance: TObject; var Blob: RawByteString);
+    procedure SetBlob(Instance: TObject; const Blob: RawByteString);
   end;
 
   /// information about a WideString published property
@@ -14403,6 +14405,18 @@ var tmp: RawByteString;
 begin
   GetLongStrProp(Instance,fPropInfo,tmp);
   W.WrBase64(pointer(tmp),length(tmp),true);
+end;
+
+procedure TSQLPropInfoRTTIRawBlob.GetBlob(Instance: TObject;
+  var Blob: RawByteString);
+begin
+  GetLongStrProp(Instance,fPropInfo,Blob);
+end;
+
+procedure TSQLPropInfoRTTIRawBlob.SetBlob(Instance: TObject;
+  const Blob: RawByteString);
+begin
+  SetLongStrProp(Instance,fPropInfo,Blob);
 end;
 
 procedure TSQLPropInfoRTTIRawBlob.GetValueVar(Instance: TObject;
