@@ -317,15 +317,15 @@ begin
       info := fStoredClassProps.Props.Fields.List[ndx];
       case info.SQLFieldType of
         sftDateTime: // store as MongoDB date/time
-          doc.Values[i] := Iso8601ToDateTime(Doc.Values[i]);
+          doc.Values[i] := Iso8601ToDateTime(VariantToUTF8(Doc.Values[i]));
         {$ifdef PUBLISHRECORD}sftBlobRecord,{$endif}
         sftBlob, sftBlobCustom: begin // store BLOB as binary
-          blob := doc.Values[i];
+          blob := VariantToUTF8(doc.Values[i]);
           BSONVariantType.FromBinary(BlobToTSQLRawBlob(pointer(blob)),
             bbtGeneric,doc.Values[i]);
         end;
         sftBlobDynArray: begin // try dynamic array as object from any JSON
-          blob := doc.Values[i];
+          blob := VariantToUTF8(doc.Values[i]);
           js := DynArraySaveJSON(
             (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^,
             BlobToTSQLRawBlob(pointer(blob)));

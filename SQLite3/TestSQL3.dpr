@@ -92,6 +92,7 @@ uses
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',
+  mORMotMongoDB in 'mORMotMongoDB.pas',
   {$ifndef CPU64}
   SynSMAPI in '..\SynSMAPI.pas',
   SynSM in '..\SynSM.pas',
