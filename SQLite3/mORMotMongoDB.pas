@@ -84,10 +84,17 @@ type
     fCollection: TMongoCollection;
     fEngineLastID: integer;
     fBSONProjectionSimpleFields: variant;
+    fBSONProjectionBlobFields: variant;
+    fBSONProjectionBlobFieldsNames: TRawUTF8DynArray;
+    // multi-thread BATCH process is secured via Lock/UnLock critical section
+    fBatchMethod: TSQLURIMethod;
+    fBatchWriter: TBSONWriter;
     function EngineNextID: Integer;
-    function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion; 
+    function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): integer;
     procedure JSONFromDoc(var doc: Variant; var result: RawUTF8);
+    function BSONProjectionSet(var Projection: variant; const Fields: TSQLFieldBits;
+      ExtFieldNames: PRawUTF8DynArray): integer;
     // overridden methods calling the MongoDB external server
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
@@ -107,8 +114,12 @@ type
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateBlob(Table: TSQLRecordClass; aID: integer;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
-    function BSONProjectionSet(var Projection: variant; const Fields: TSQLFieldBits;
-      ExtFieldNames: PRawUTF8DynArray): integer;
+    // overriden method returning TRUE for next calls to EngineAdd/Update/Delete
+    // will properly handle operations until InternalBatchStop is called
+    function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
+    // internal method called by TSQLRestServer.RunBatch() to process fast
+    // BULK sending to remote MongoDB database
+    procedure InternalBatchStop; override;
   public
     /// initialize the direct access to the MongoDB collection
     // - all filename/binary parameters are ignored here
@@ -119,10 +130,10 @@ type
     /// release used memory
     destructor Destroy; override;
 
-    /// drop the whole table content
-    // - but you can still add items to it - whereas Collection.Drop would
-    // trigger GPF issues
-    procedure Drop;
+     /// overriden method for one single update call to the MongoDB server
+    function UpdateBlobFields(Value: TSQLRecord): boolean; override;
+     /// overriden method for one single read call to the MongoDB server
+    function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
     /// get the row count of a specified table
     // - return -1 on error
     // - return the row count of the table on success
@@ -137,6 +148,10 @@ type
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; override;
 
+    /// drop the whole table content
+    // - but you can still add items to it - whereas Collection.Drop would
+    // trigger GPF issues
+    procedure Drop;
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
   end;
@@ -193,11 +208,14 @@ begin
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   BSONProjectionSet(fBSONProjectionSimpleFields,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
+  BSONProjectionSet(fBSONProjectionBlobFields,
+    fStoredClassRecordProps.BlobFieldsBits,@fBSONProjectionBlobFieldsNames);
   if not IsZero(fIsUnique) then
     for F := 0 to fStoredClassRecordProps.Fields.Count do
       if F in fIsUnique then
         fCollection.EnsureIndex(
           [fStoredClassProps.ExternalDB.FieldNames[f]],true,true);
+
 end;
 
 function TSQLRestServerStaticMongoDB.BSONProjectionSet(var Projection: variant;
@@ -257,6 +275,7 @@ end;
 destructor TSQLRestServerStaticMongoDB.Destroy;
 begin
   inherited;
+  FreeAndNil(fBatchWriter);
 end;
 
 function TSQLRestServerStaticMongoDB.TableHasRows(
@@ -350,7 +369,15 @@ begin
     result := 0 else begin
     result := DocFromJSON(SentData,soInsert,Doc);
     try
-      fCollection.Insert([variant(doc)]);
+      if fBatchMethod<>mNone then
+        if (fBatchMethod<>mPost) or (fBatchWriter<>nil) then
+          result := 0 else
+          fBatchWriter.BSONWriteDoc(doc) else begin
+        fCollection.Insert([variant(doc)]);
+        if Owner<>nil then
+          TSQLRestServerStaticMongoDB(Owner). // to access protected method
+            InternalUpdateEvent(seAdd,fStoredClass,result,nil);
+      end;
     except
       result := 0;
     end;
@@ -369,6 +396,9 @@ begin
       query := BSONVariant(['_id',ID]);
       update := BSONVariant(['$set',variant(Doc)]);
       fCollection.Update(query,update);
+      if Owner<>nil then
+        TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+          InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
       result := true;
     except
       result := false;
@@ -381,6 +411,7 @@ function TSQLRestServerStaticMongoDB.EngineUpdateBlob(
   const BlobData: TSQLRawBlob): boolean;
 var query,update,blob: variant; // use explicit TBSONVariant for type safety
     FieldName: RawUTF8;
+    AffectedField: TSQLFieldBits;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (aID<=0) or (BlobField=nil) then
     result := false else begin
@@ -390,10 +421,53 @@ begin
     update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
     try
       fCollection.Update(query,update);
+      if Owner<>nil then begin
+        fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
+        TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+          InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,@AffectedField);
+      end;
       result := true;
     except
       result := false;
     end;
+  end;
+end;
+
+function TSQLRestServerStaticMongoDB.UpdateBlobFields(
+  Value: TSQLRecord): boolean;
+var query,blob: variant;
+    update: TDocVariantData;
+    info: TSQLPropInfo;
+    blobRaw: RawByteString;
+    aID, f: integer;
+begin
+  result := false;
+  if (fCollection=nil) or (PSQLRecordClass(Value)^<>fStoredClass) or (Value=nil) then
+    exit;
+  aID := Value.ID;
+  if aID<=0 then
+    exit;
+  query := BSONVariant(['_id',aID]);
+  update.Init(JSON_OPTIONS[true]);
+  for f := 0 to fStoredClassRecordProps.Fields.Count-1 do begin
+    info := fStoredClassRecordProps.Fields.List[f];
+    if info.SQLFieldType=sftBlob then begin
+      (info as TSQLPropInfoRTTIRawBlob).GetBlob(Value,blobRaw);
+      BSONVariantType.FromBinary(blobRaw,bbtGeneric,blob);
+      update.AddValue(fStoredClassProps.ExternalDB.FieldNames[f],blob);
+    end;
+  end;
+  if update.Count=0 then
+    exit;
+  try
+    fCollection.Update(query,BSONVariant(['$set',variant(update)]));
+    if Owner<>nil then
+      TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+        InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
+          @fStoredClassRecordProps.BlobFieldsBits);
+    result := true;
+  except
+    result := false;
   end;
 end;
 
@@ -404,6 +478,9 @@ begin
     result := false else begin
     try
       fCollection.RemoveOne(ID);
+      if Owner<>nil then
+        TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+          InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
       result := true;
     except
       result := false;
@@ -414,10 +491,15 @@ end;
 function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
   Table: TSQLRecordClass; const SQLWhere: RawUTF8;
   const IDs: TIntegerDynArray): boolean;
+var i: integer;
 begin // here we use the pre-computed IDs[]
   if (fCollection=nil) or (Table<>fStoredClass) or (IDs=nil) then
     result := false else begin
     try
+      if Owner<>nil then // notify BEFORE deletion
+      for i := 0 to high(IDs) do
+        TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+          InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil);
       fCollection.RemoveFmt('{_id:{$in:?}}',[BSONVariantFromIntegers(IDs)]);
       result := true;
     except
@@ -475,6 +557,39 @@ begin
     except
       result := false;
     end;
+  end;
+end;
+
+function TSQLRestServerStaticMongoDB.RetrieveBlobFields(
+  Value: TSQLRecord): boolean;
+var aID, f: Integer;
+    doc: variant;
+    docv: PDocVariantData;
+    blob: TVarData;
+    blobRaw: RawByteString;
+begin
+  result := false;
+  if (fCollection=nil) or (PSQLRecordClass(Value)^<>fStoredClass) or (Value=nil) then
+    exit;
+  aID := Value.ID;
+  if aID<=0 then
+    exit;
+  try
+    doc := fCollection.FindDoc(BSONVariant(['_id',aID]),fBSONProjectionBlobFields,1);
+    docv := DocVariantData(doc);
+    for f := 0 to high(fStoredClassRecordProps.BlobFields) do begin
+      if docv^.Names[f+1]=fBSONProjectionBlobFieldsNames[f+1] then
+        BSONVariantType.ToBlob(docv^.Values[f+1],blobRaw) else
+      if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f+1],blob) then
+        BSONVariantType.ToBlob(variant(blob),blobRaw) else
+        raise EORMMongoDBException.CreateFmt('Field "%s" not found',
+          [fBSONProjectionBlobFieldsNames[f]]);
+      (fStoredClassRecordProps.BlobFields[f] as TSQLPropInfoRTTIRawBlob).
+        SetBlob(Value,blobRaw);
+    end;
+    result := true;
+  except
+    result := false;
   end;
 end;
 
@@ -632,7 +747,34 @@ begin // same logic as in TSQLRestServerStaticInMemory.EngineList()
   if ReturnedRowCount<>nil then
     ReturnedRowCount^ := ResCount;
 end;
+    
+function TSQLRestServerStaticMongoDB.InternalBatchStart(
+  Method: TSQLURIMethod): boolean;
+begin
+  result := false; // means BATCH mode not supported
+  exit; // not finished yet
+  if (self<>nil) and (method in [mPOST]) then begin
+    Lock(true); // protected by try..finally in TSQLRestServer.RunBatch
+    try
+      if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
+        raise EORMException.Create('InternalBatchStop should have been called');
+      fBatchMethod := Method;
+      case Method of
+      mPOST: // POST=ADD=INSERT
+        fBatchWriter := TBSONWriter.Create(TRawByteStringStream);
+      end;
+      result := true; // means BATCH mode is supported
+    finally
+      if not result then
+        UnLock;
+    end;
+  end;
+end;
 
+procedure TSQLRestServerStaticMongoDB.InternalBatchStop;
+begin
+  inherited;
 
+end;
 
 end.

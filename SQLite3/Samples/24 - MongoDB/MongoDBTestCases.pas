@@ -3,7 +3,7 @@ unit MongoDBTestCases;
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
-{$define ADD5000}
+{.$define ADD5000}
 
 uses
   SysUtils,
@@ -529,6 +529,27 @@ begin
       PIntegerArray(blob)[0] := n;
       PIntegerArray(blob)[1] := n*$01020304;
       Check(R.Data=blob);
+      PIntegerArray(blob)[0] := n*2;
+      PIntegerArray(blob)[1] := n*$02030405;
+      R.Data := blob;
+      fServer.UpdateBlobFields(R);
+    end;
+    Check(n=COLL_COUNT);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+      Check(R.Data='');
+      Check(fServer.RetrieveBlobFields(R));
+      PIntegerArray(blob)[0] := n*2;
+      PIntegerArray(blob)[1] := n*$02030405;
+      Check(R.Data=blob);
+      R.Data := '';
     end;
     Check(n=COLL_COUNT);
   finally
