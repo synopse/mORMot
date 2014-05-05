@@ -3,7 +3,7 @@ unit MongoDBTestCases;
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
-{.$define ADD5000}
+{$define ADD5000}
 
 uses
   SysUtils,
@@ -23,21 +23,17 @@ type
     fValues: TVariantDynArray;
     fExpectedCount: integer;
     procedure CleanUp; override;
-    procedure Fill;
-    procedure Update(Offset: integer);
-    procedure Delete;
   published
     procedure ConnectToLocalServer;
     procedure DropAndPrepareCollection;
-    procedure FillCollectionNoAcknowledge;
-    procedure FillCollectionAcknowledge;
+    procedure FillCollection;
     procedure FillCollectionBulk;
     procedure ReadCollection;
-    procedure UpdateCollectionNoAcknowledge;
-    procedure UpdateCollectionAcknowledge;
-    procedure DeleteSomeItemsNoAcknowledge;
-    procedure DeleteSomeItemsAcknowledge;
+    procedure UpdateCollection;
+    procedure DeleteSomeItems;
   end;
+  TTestDirectWithAcknowledge = class(TTestDirect);
+  TTestDirectWithoutAcknowledge = class(TTestDirect);
 
   TSQLORM = class(TSQLRecord)
   private
@@ -78,11 +74,13 @@ type
     procedure Blobs;
     procedure Delete;
   end;
+  TTestORMWithAcknowledge = class(TTestORM);
+  TTestORMWithoutAcknowledge = class(TTestORM);
 
   TTestMongoDB = class(TSynTestsLogged)
   published
     procedure DirectAccess;
-    procedure _mORMot;
+    procedure ORM;
   end;
 
 implementation
@@ -92,12 +90,12 @@ implementation
 
 procedure TTestMongoDB.DirectAccess;
 begin
-  AddCase([TTestDirect]);
+  AddCase([TTestDirectWithAcknowledge,TTestDirectWithoutAcknowledge]);
 end;
 
-procedure TTestMongoDB._mORMot;
+procedure TTestMongoDB.ORM;
 begin
-  AddCase([TTestORM]);
+  AddCase([TTestORMWithAcknowledge,TTestORMWithoutAcknowledge]);
 end;
 
 
@@ -128,6 +126,11 @@ var serverTime: TDateTime;
 begin
   assert(fClient=nil);
   fClient := TMongoClient.Create('localhost',27017);
+  if ClassType=TTestDirectWithAcknowledge then
+    fClient.WriteConcern := wcAcknowledged else
+  if ClassType=TTestDirectWithoutAcknowledge then
+    fClient.WriteConcern := wcUnacknowledged else
+    assert(false);
   fDB := fClient.Database[DB_NAME];
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
@@ -159,16 +162,18 @@ begin
   Check(fClient.ServerBuildInfoNumber>20000);
 end;
 
-procedure TTestDirect.Fill;
+procedure TTestDirect.FillCollection;
 var Coll: TMongoCollection;
     oid: TBSONObjectID;
     i: integer;
     dat: TDateTime;
     jsonArray: RawUTF8;
+    bytes: Int64;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
   Coll.EnsureIndex(['Name']);
+  bytes := fClient.BytesTransmitted;
   fValues := nil;
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
@@ -185,32 +190,24 @@ begin
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
     Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
   end;
+  NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
   jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
-procedure TTestDirect.FillCollectionNoAcknowledge;
-begin
-  fClient.WriteConcern := wcUnacknowledged;
-  Fill;
-end;
-
-procedure TTestDirect.FillCollectionAcknowledge;
-begin
-  fClient.WriteConcern := wcAcknowledged;
-  Fill;
-end;
-
 procedure TTestDirect.FillCollectionBulk;
 var Coll: TMongoCollection;
     jsonArray: RawUTF8;
+    bytes: Int64;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
   Coll.EnsureIndex(['Name']);
+  bytes := fClient.BytesTransmitted;
   Coll.Insert(fValues); // insert all values at once
+  NotifyTestSpeed('rows inserted',Coll.Count,fClient.BytesTransmitted-bytes);
   jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
@@ -221,9 +218,15 @@ var i: integer;
     Coll: TMongoCollection;
     docs: variant;
     jsonOne,jsonArray: RawUTF8;
+    bytes: Int64;
 begin
   Coll := fDB.Collection[COLL_NAME];
   Check(Coll.Count=COLL_COUNT);
+  bytes := fClient.BytesTransmitted;
+  jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
+  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
+  Check(Hash32(jsonArray)=HASH1,'projection over a collection');
+  NotifyTestSpeed('rows read at once',Coll.Count,fClient.BytesTransmitted-bytes);
   for i := 0 to COLL_COUNT-1 do begin
     jsonOne := VariantSaveMongoJSON(fValues[i],modMongoStrict);
     jsonArray := '['+jsonOne+']';
@@ -239,54 +242,43 @@ begin
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id],1);
     Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonOne);
   end;
-  jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
-  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
-  Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
-procedure TTestDirect.UpdateCollectionNoAcknowledge;
-begin
-  fClient.WriteConcern := wcUnacknowledged;
-  Update(0);
-end;
-
-procedure TTestDirect.UpdateCollectionAcknowledge;
-begin
-  fClient.WriteConcern := wcAcknowledged;
-  Update(2);
-end;
-
-procedure TTestDirect.Update(Offset: integer);
+procedure TTestDirect.UpdateCollection;
 var i: integer;
     Coll: TMongoCollection;
     jsonOne,jsonArray: RawUTF8;
+    bytes: Int64;
 begin
   Coll := fDB.Collection[COLL_NAME];
   Check(Coll.Count=COLL_COUNT);
+  bytes := fClient.BytesTransmitted;
   for i := 0 to COLL_COUNT-1 do begin
-    fValues[i].Name := 'Name '+IntToStr(i+Offset);
+    fValues[i].Name := 'Name '+IntToStr(i+1);
     if i<COLL_COUNT div 2 then
       Check(not Coll.Save(fValues[i])) else
       Coll.Update('{_id:?}',[fValues[i]._id],'?',[fValues[i]]);
   end;
+  NotifyTestSpeed('rows updated',Coll.Count,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
     jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
     Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'in-place update');
   end;
   jsonArray := Coll.FindJSON(null,BSONVariant(['_id',0,'Date',0,'Number',0]));
-  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
-  if Offset=0 then
-    Check(Hash32(jsonArray)=HASH2,'projection over an updated collection');
+  Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT,'projection over an updated collection');
 end;
 
-procedure TTestDirect.Delete;
-var i,j: integer;
+procedure TTestDirect.DeleteSomeItems;
+var beforeCount,i,j: integer;
     Coll: TMongoCollection;
     jsonOne: RawUTF8;
+    bytes: Int64;
 begin
   Coll := fDB.Collection[COLL_NAME];
   Check(Coll.Count=fExpectedCount);
+  bytes := fClient.BytesTransmitted;
+  beforeCount := fExpectedCount;
   j := 0;
   for i := 0 to high(fValues) do
     if not VarIsNull(fValues[i]._id) then begin
@@ -301,24 +293,13 @@ begin
       end;
       inc(j);
     end;
+  NotifyTestSpeed('rows deleted',beforeCount-fExpectedCount,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=fExpectedCount);
   for i := 0 to high(fValues) do
     if not VarIsNull(fValues[i]._id) then begin
       jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
       Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'delete');
     end;
-end;
-
-procedure TTestDirect.DeleteSomeItemsAcknowledge;
-begin
-  fClient.WriteConcern := wcAcknowledged;
-  Delete;
-end;
-
-procedure TTestDirect.DeleteSomeItemsNoAcknowledge;
-begin
-  fClient.WriteConcern := wcUnacknowledged;
-  Delete;
 end;
 
 
@@ -334,6 +315,11 @@ end;
 procedure TTestORM.ConnectToLocalServer;
 begin
   fClient := TMongoClient.Create('localhost',27017);
+  if ClassType=TTestORMWithAcknowledge then
+    fClient.WriteConcern := wcAcknowledged else
+  if ClassType=TTestORMWithoutAcknowledge then
+    fClient.WriteConcern := wcUnacknowledged else
+    assert(false);
   fDB := fClient.Database[DB_NAME];
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
@@ -352,8 +338,10 @@ end;
 procedure TTestORM.Insert;
 var R: TSQLORM;
     i: integer;
+    bytes: Int64;
 begin
   Check(fServer.TableRowCount(TSQLORM)=0);
+  bytes := fClient.BytesTransmitted;
   R := TSQLORM.Create;
   try
     for i := 1 to COLL_COUNT do begin
@@ -368,6 +356,7 @@ begin
   finally
     R.Free;
   end;
+  NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
   Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
 end;
 
@@ -386,8 +375,10 @@ end;
 procedure TTestORM.Retrieve;
 var R: TSQLORM;
     i: integer;
+    bytes: Int64;
 begin
   Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
+  bytes := fClient.BytesTransmitted;
   R := TSQLORM.Create;
   try
     for i := 1 to COLL_COUNT do begin
@@ -397,12 +388,15 @@ begin
   finally
     R.Free;
   end;
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
 end;
 
 procedure TTestORM.RetrieveAll;
 var n: integer;
     R: TSQLORM;
+    bytes: Int64;
 begin
+  bytes := fClient.BytesTransmitted;
   R := TSQLORM.CreateAndFillPrepare(fServer,'');
   try
     n := 0;
@@ -414,23 +408,29 @@ begin
   finally
     R.Free;
   end;
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
 end;
 
 procedure TTestORM.RetrieveOneWithWhereClause;
 var R: TSQLORM;
-    n: integer;
+    i,n: integer;
+    bytes: Int64;
 begin
-  R := TSQLORM.CreateAndFillPrepare(fServer,'ID=?',[10]);
-  try
-    n := 0;
-    while R.FillOne do begin
-      inc(n);
-      TestOne(R,10);
+  bytes := fClient.BytesTransmitted;
+  for i := 1 to COLL_COUNT do begin
+    R := TSQLORM.CreateAndFillPrepare(fServer,'ID=?',[i]);
+    try
+      n := 0;
+      while R.FillOne do begin
+        inc(n);
+        TestOne(R,i);
+      end;
+      Check(n=1);
+    finally
+      R.Free;
     end;
-    Check(n=1);
-  finally
-    R.Free;
   end;
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fServer,'Name=?',['Name 43']);
   try
     n := 0;
@@ -457,11 +457,13 @@ end;
 
 procedure TTestORM.Update;
 var R: TSQLORM;
+    bytes: Int64;
     n: integer;
 begin
   inc(fUpdateOffset);
   R := TSQLORM.CreateAndFillPrepare(fServer,'');
   try
+    bytes := fClient.BytesTransmitted;
     n := 0;
     while R.FillOne do begin
       R.Age := R.Age+fUpdateOffset;
@@ -473,6 +475,7 @@ begin
   finally
     R.Free;
   end;
+  NotifyTestSpeed('rows updated',COLL_COUNT,fClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fServer,'');
   try
     n := 0;
@@ -490,13 +493,16 @@ procedure TTestORM.Blobs;
 var R: TSQLORM;
     i, n: integer;
     blob,blobRead: TSQLRawBlob;
+    bytes: Int64;
 begin
   SetLength(blob,8);
+  bytes := fClient.BytesTransmitted;
   for i := 1 to COLL_COUNT do begin
     PIntegerArray(blob)[0] := i;
     PIntegerArray(blob)[1] := i*$01020304;
     Check(fServer.UpdateBlob(TSQLORM,i,'Data',blob));
   end;
+  NotifyTestSpeed('rows updated',COLL_COUNT,fClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fServer,'');
   try
     n := 0;
@@ -533,15 +539,18 @@ end;
 procedure TTestORM.Delete;
 var i,n: integer;
     ExpectedCount: integer;
+    bytes: Int64;
     R: TSQLORM;
 begin
   Check(fServer.Delete(TSQLORM,'ID in (5,10,15)'),'deletion with IN clause');
+  bytes := fClient.BytesTransmitted;
   ExpectedCount := COLL_COUNT-3;
   for i := 20 to COLL_COUNT do
     if i mod 5=0 then begin
       Check(fServer.Delete(TSQLORM,i));
       dec(ExpectedCount);
     end;
+  NotifyTestSpeed('rows deleted',COLL_COUNT-ExpectedCount,fClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fServer,'');
   try
     n := 0;

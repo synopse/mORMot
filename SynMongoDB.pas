@@ -1539,6 +1539,8 @@ type
     wcUnacknowledged, wcErrorsIgnored);
 
   /// remote access to a MongoDB server
+  // - a single server can have several active connections, if some secondary
+  // hosts were defined
   TMongoClient = class
   protected
     fConnectionString: RawUTF8;
@@ -1556,6 +1558,9 @@ type
     function GetServerBuildInfo: variant;
     function GetServerBuildInfoNumber: cardinal;
     function GetOneReadConnection: TMongoConnection;
+    function GetBytesReceived: Int64;
+    function GetBytesSent: Int64;
+    function GetBytesTransmitted: Int64;
   public
     /// prepare a connection to a MongoDB server or Replica Set
     // - this constructor won't create the connection until the Open method
@@ -1599,6 +1604,8 @@ type
     // - first item [0] is the Primary member
     // - other items [1..] are the Secondary members
     property Connections: TMongoConnectionDynArray read fConnections;
+    /// define the logging instance to be used for LogRequestEvent/LogReplyEvent
+    property Log: TSynLog read fLog write fLog;
   published
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
@@ -1619,8 +1626,12 @@ type
     /// the connection time out, in milli seconds
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
-    /// define the logging instance to be used for LogRequestEvent/LogReplyEvent
-    property Log: TSynLog read fLog write fLog;
+    /// how may bytes this client did received, among all its connections
+    property BytesReceived: Int64 read GetBytesReceived;
+    /// how may bytes this client did received, among all its connections
+    property BytesSent: Int64 read GetBytesSent;
+    /// how may bytes this client did transmit, adding both input and output
+    property BytesTransmitted: Int64 read GetBytesTransmitted;
     /// if set to something else than default sllNone, will log each request
     // with the corresponding logging event kind
     // - will use the Log property for the destination log
@@ -4725,6 +4736,32 @@ begin
     ComputeIt;
   result := fServerBuildInfoNumber;
 end;
+
+function TMongoClient.GetBytesReceived: Int64;
+var i: integer;
+begin
+  result := 0;
+  for i := 0 to high(fConnections) do
+    inc(result,fConnections[i].Socket.BytesIn);
+end;
+
+function TMongoClient.GetBytesSent: Int64;
+var i: integer;
+begin
+  result := 0;
+  for i := 0 to high(fConnections) do
+    inc(result,fConnections[i].Socket.BytesOut);
+end;
+
+function TMongoClient.GetBytesTransmitted: Int64;
+var i: integer;
+begin
+  result := 0;
+  for i := 0 to high(fConnections) do
+    inc(result,fConnections[i].Socket.BytesIn+fConnections[i].Socket.BytesOut);
+end;
+
+
 
 
 { TMongoDatabase }
