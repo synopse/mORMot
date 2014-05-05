@@ -914,7 +914,8 @@ var i,j,n,max,BatchBegin,BatchEnd,ValuesMax: integer;
     Occasion: TSQLOccasion;
     Decode: TJSONObjectDecoder;
 begin
-  assert(fBatchMethod<>mNone);
+  if fBatchMethod=mNone then
+    raise EORMException.CreateFmt('%s.BatchMethod=mNone',[fStoredClassRecordProps.SQLTableName]);
   try
     if fBatchCount>0 then begin
       if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion

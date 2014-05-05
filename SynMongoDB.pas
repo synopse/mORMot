@@ -419,6 +419,7 @@ type
     end;
     procedure WriteNonVoidCString(const text: RawUTF8; const ErrorMsg: string);
       {$ifdef HASINLINE}inline;{$endif}
+    procedure WriteCollectionName(Flags: integer; const CollectionName: RawUTF8);
   public
     /// write a boolean value
     procedure BSONWrite(const name: RawUTF8; const value: boolean); overload;
@@ -1009,6 +1010,14 @@ type
     // - there is no response to an opInsert message
     constructor Create(const FullCollectionName: RawUTF8;
       const Documents: array of variant; Flags: TMongoInsertFlags=[]); reintroduce; overload;
+    /// initialize a MongoDB client message to insert one or more documents in
+    // a collection, supplied as raw BSON binary
+    // - FullCollectionName is e.g. 'dbname.collectionname'
+    // - Documents is the low-level concatenation of BSON documents, created
+    // e.g. with a TBSONWriter stream
+    // - there is no response to an opInsert message
+    constructor Create(const FullCollectionName: RawUTF8;
+      const Documents: TBSONDocument; Flags: TMongoInsertFlags=[]); reintroduce; overload;
     /// initialize a MongoDB client message to insert one or more documents in
     // a collection, supplied as JSON objects
     // - FullCollectionName is e.g. 'dbname.collectionname'
@@ -1843,6 +1852,14 @@ type
     procedure Insert(const Documents: array of variant; Flags: TMongoInsertFlags=[];
       NoAcknowledge: boolean=false); overload;
     /// insert one or more documents in the collection
+    // - Documents is the low-level concatenation of BSON documents, created
+    // e.g. with a TBSONWriter stream
+    // - by default, it will follow Client.WriteConcern pattern - but you can
+    // set NoAcknowledge = TRUE to avoid calling the getLastError command and
+    // increase the execution speed, at the expense of a unsafe process
+    procedure Insert(const Documents: TBSONDocument;
+      Flags: TMongoInsertFlags=[]; NoAcknowledge: boolean=false); overload;
+    /// insert one or more documents in the collection
     // - JSONDocuments is an array of JSON objects
     // - by default, it will follow Client.WriteConcern pattern - but you can
     // set NoAcknowledge = TRUE to avoid calling the getLastError command and
@@ -2636,6 +2653,12 @@ end;
 
 
 { TBSONWriter }
+
+procedure TBSONWriter.WriteCollectionName(Flags: integer; const CollectionName: RawUTF8);
+begin
+  Write4(Flags);
+  WriteNonVoidCString(CollectionName,'Missing collection name');
+end;
 
 procedure TBSONWriter.WriteNonVoidCString(const text: RawUTF8; const ErrorMsg: string);
 begin
@@ -3838,8 +3861,7 @@ constructor TMongoRequestUpdate.Create(const FullCollectionName: RawUTF8;
   const Selector, Update: variant; Flags: TMongoUpdateFlags);
 begin
   inherited Create(FullCollectionName,opUpdate,0,0);
-  Write4(0); // reserved for future use
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestUpdate');
+  WriteCollectionName(0,FullCollectionName);
   Write4(byte(Flags));
   BSONWriteParam(Selector);
   BSONWriteParam(Update);
@@ -3866,10 +3888,17 @@ constructor TMongoRequestInsert.Create(const FullCollectionName: RawUTF8;
 var i: integer;
 begin
   inherited Create(FullCollectionName,opInsert,0,0);
-  Write4(byte(Flags));
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestInsert');
+  WriteCollectionName(byte(Flags),FullCollectionName);
   for i := 0 to high(Documents) do
     BSONWriteParam(Documents[i]);
+end;
+
+constructor TMongoRequestInsert.Create(const FullCollectionName: RawUTF8;
+  const Documents: TBSONDocument; Flags: TMongoInsertFlags=[]);
+begin
+  inherited Create(FullCollectionName,opInsert,0,0);
+  WriteCollectionName(byte(Flags),FullCollectionName);
+  Write(pointer(Documents),Length(Documents));
 end;
 
 constructor TMongoRequestInsert.Create(const FullCollectionName: RawUTF8;
@@ -3878,8 +3907,7 @@ var i: integer;
     kind: TBSONElementType;
 begin
   inherited Create(FullCollectionName,opInsert,0,0);
-  Write4(byte(Flags));
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestInsert');
+  WriteCollectionName(byte(Flags),FullCollectionName);
   for i := 0 to high(JSONDocuments) do
     BSONWriteDocFromJSON(JSONDocuments[i],nil,kind);
 end;
@@ -3890,8 +3918,7 @@ constructor TMongoRequestDelete.Create(const FullCollectionName: RawUTF8;
   const Selector: variant; Flags: TMongoDeleteFlags=[]);
 begin
   inherited Create(FullCollectionName,opDelete,0,0);
-  Write4(0); // reserved for future use
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestDelete');
+  WriteCollectionName(byte(Flags),FullCollectionName);
   Write4(byte(Flags));
   BSONWriteParam(Selector);
   fQuery := TVarData(Selector);
@@ -3915,8 +3942,7 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUTF8;
 begin
   inherited Create(FullCollectionName,opQuery,0,0);
   fNumberToReturn := NumberToReturn;
-  Write4(byte(Flags));
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestQuery');
+  WriteCollectionName(byte(Flags),FullCollectionName);
   Write4(NumberToSkip);
   Write4(NumberToReturn);
   BSONWriteParam(Query);
@@ -3946,8 +3972,7 @@ constructor TMongoRequestGetMore.Create(const FullCollectionName: RawUTF8;
   NumberToReturn: integer; CursorID: Int64);
 begin
   inherited Create(FullCollectionName,opGetMore,0,0);
-  Write4(0); // reserved for future use
-  WriteNonVoidCString(FullCollectionName,'Missing collection name for TMongoRequestGetMore');
+  WriteCollectionName(0,FullCollectionName);
   Write4(NumberToReturn);
   Write8(CursorID);
 end;
@@ -5008,6 +5033,13 @@ end;
 
 procedure TMongoCollection.Insert(const Documents: array of variant;
   Flags: TMongoInsertFlags; NoAcknowledge: boolean);
+begin
+  Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
+    fFullCollectionName,Documents,Flags),NoAcknowledge);
+end;
+
+procedure TMongoCollection.Insert(const Documents: TBSONDocument;
+  Flags: TMongoInsertFlags=[]; NoAcknowledge: boolean=false);
 begin
   Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
     fFullCollectionName,Documents,Flags),NoAcknowledge);

@@ -3,7 +3,7 @@ unit MongoDBTestCases;
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
-{.$define ADD5000}
+{$define ADD5000}
 
 uses
   SysUtils,
@@ -27,6 +27,7 @@ type
     procedure ConnectToLocalServer;
     procedure DropAndPrepareCollection;
     procedure FillCollection;
+    procedure DropCollection;
     procedure FillCollectionBulk;
     procedure ReadCollection;
     procedure UpdateCollection;
@@ -56,10 +57,10 @@ type
 
   TTestORM = class(TSynTestCase)
   protected
-    fClient: TMongoClient;
+    fMongoClient: TMongoClient;
     fDB: TMongoDatabase;
     fModel: TSQLModel;
-    fServer: TSQLRestServer;
+    fClient: TSQLRestClientDB;
     fStartTimeStamp: TTimeLog;
     fUpdateOffset: integer;
     procedure TestOne(R: TSQLORM; aID: integer);
@@ -67,6 +68,7 @@ type
   published
     procedure ConnectToLocalServer;
     procedure Insert;
+    procedure InsertInBatchMode;
     procedure Retrieve;
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
@@ -146,6 +148,8 @@ end;
 procedure TTestDirect.DropAndPrepareCollection;
 var Coll: TMongoCollection;
     errmsg: RawUTF8;
+    dat: TDateTime;
+    i: integer;
 begin
   assert(fDB<>nil);
   Coll := fDB.CollectionOrNil[COLL_NAME];
@@ -160,20 +164,6 @@ begin
   errmsg := Coll.Drop;
   Check(errmsg<>'','dropping a non existing collection should return an error');
   Check(fClient.ServerBuildInfoNumber>20000);
-end;
-
-procedure TTestDirect.FillCollection;
-var Coll: TMongoCollection;
-    oid: TBSONObjectID;
-    i: integer;
-    dat: TDateTime;
-    jsonArray: RawUTF8;
-    bytes: Int64;
-begin
-  fDB.CollectionOrNil[COLL_NAME].Drop;
-  Coll := fDB.CollectionOrCreate[COLL_NAME];
-  Coll.EnsureIndex(['Name']);
-  bytes := fClient.BytesTransmitted;
   fValues := nil;
   SetLength(fValues,COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
@@ -186,6 +176,21 @@ begin
     fValues[i].Number := i;
     dat := 1.0*(30000+i);
     fValues[i].Date := dat;
+  end;
+end;
+
+procedure TTestDirect.FillCollection;
+var Coll: TMongoCollection;
+    oid: TBSONObjectID;
+    i: integer;
+    jsonArray: RawUTF8;
+    bytes: Int64;
+begin
+  fDB.CollectionOrNil[COLL_NAME].Drop;
+  Coll := fDB.CollectionOrCreate[COLL_NAME];
+  Coll.EnsureIndex(['Name']);
+  bytes := fClient.BytesTransmitted;
+  for i := 0 to COLL_COUNT-1 do begin
     Check(Coll.Save(fValues[i],@oid)=(i<50));
     Check(BSONVariantType.IsOfKind(fValues[i]._id,betObjectID));
     Check(fValues[i]._id=oid.ToVariant,'EnsureDocumentHasID failure');
@@ -197,12 +202,16 @@ begin
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
 end;
 
+procedure TTestDirect.DropCollection;
+begin
+  fDB.CollectionOrNil[COLL_NAME].Drop;
+end;
+
 procedure TTestDirect.FillCollectionBulk;
 var Coll: TMongoCollection;
     jsonArray: RawUTF8;
     bytes: Int64;
 begin
-  fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
   Coll.EnsureIndex(['Name']);
   bytes := fClient.BytesTransmitted;
@@ -303,36 +312,37 @@ begin
 end;
 
 
-{ TTestORM }
 
-procedure TTestORM.CleanUp;
-begin
-  FreeAndNil(fServer);
-  FreeAndNil(fModel);
-  FreeAndNil(fClient);
-end;
+{ TTestORM }
 
 procedure TTestORM.ConnectToLocalServer;
 begin
-  fClient := TMongoClient.Create('localhost',27017);
+  fMongoClient := TMongoClient.Create('localhost',27017);
   if ClassType=TTestORMWithAcknowledge then
-    fClient.WriteConcern := wcAcknowledged else
+    fMongoClient.WriteConcern := wcAcknowledged else
   if ClassType=TTestORMWithoutAcknowledge then
-    fClient.WriteConcern := wcUnacknowledged else
+    fMongoClient.WriteConcern := wcUnacknowledged else
     assert(false);
-  fDB := fClient.Database[DB_NAME];
+  fDB := fMongoClient.Database[DB_NAME];
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
-  Check(fClient.ServerBuildInfoNumber<>0);
+  Check(fMongoClient.ServerBuildInfoNumber<>0);
   fModel := TSQLModel.Create([TSQLORM]);
-  fServer := TSQLRestServerDB.Create(fModel,':memory:');
-  Check(StaticMongoDBRegister(TSQLORM,fServer,fDB,'mORMot'));
-  fServer.CreateMissingTables;
-  (fServer.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
-  Check(fServer.TableRowCount(TSQLORM)=0);
-  fStartTimeStamp := fServer.ServerTimeStamp;
+  fClient := TSQLRestClientDB.Create(fModel,nil,':memory:',TSQLRestServerDB);
+  Check(StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'mORMot'));
+  fClient.Server.CreateMissingTables;
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  Check(fClient.TableRowCount(TSQLORM)=0);
+  fStartTimeStamp := fClient.ServerTimeStamp;
   Check(fStartTimeStamp>10000);
-  fServer.NoAJAXJSON := true;
+  fClient.Server.NoAJAXJSON := true;
+end;
+
+procedure TTestORM.CleanUp;
+begin
+  FreeAndNil(fClient);
+  FreeAndNil(fModel);
+  FreeAndNil(fMongoClient);
 end;
 
 procedure TTestORM.Insert;
@@ -340,8 +350,8 @@ var R: TSQLORM;
     i: integer;
     bytes: Int64;
 begin
-  Check(fServer.TableRowCount(TSQLORM)=0);
-  bytes := fClient.BytesTransmitted;
+  Check(fClient.TableRowCount(TSQLORM)=0);
+  bytes := fMongoClient.BytesTransmitted;
   R := TSQLORM.Create;
   try
     for i := 1 to COLL_COUNT do begin
@@ -351,13 +361,42 @@ begin
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
       R.DynArray(1).Add(i);
-      Check(fServer.Add(R,True)=i);
+      Check(fClient.Add(R,True)=i);
     end;
   finally
     R.Free;
   end;
-  NotifyTestSpeed('rows inserted',COLL_COUNT,fClient.BytesTransmitted-bytes);
-  Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
+  NotifyTestSpeed('rows inserted',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+  Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+end;
+
+procedure TTestORM.InsertInBatchMode;
+var R: TSQLORM;
+    i: integer;
+    bytes: Int64;
+    IDs: TIntegerDynArray;
+begin
+  Check(fClient.TableRowCount(TSQLORM)=0);
+  bytes := fMongoClient.BytesTransmitted;
+  fClient.BatchStart(TSQLORM);
+  R := TSQLORM.Create;
+  try
+    for i := 1 to COLL_COUNT do begin
+      R.Name := 'Name '+Int32ToUTF8(i);
+      R.Age := i;
+      R.Date := 1.0*(30000+i);
+      R.Value := _ObjFast(['num',i]);
+      R.Ints := nil;
+      R.DynArray(1).Add(i);
+      Check(fClient.BatchAdd(R,True)=i-1);
+    end;
+  finally
+    R.Free;
+  end;
+  Check(fClient.BatchSend(IDs)=HTML_SUCCESS);
+  NotifyTestSpeed('rows inserted',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+  Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
 end;
 
 procedure TTestORM.TestOne(R: TSQLORM; aID: integer);
@@ -377,18 +416,18 @@ var R: TSQLORM;
     i: integer;
     bytes: Int64;
 begin
-  Check(fServer.TableRowCount(TSQLORM)=COLL_COUNT);
-  bytes := fClient.BytesTransmitted;
+  Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
+  bytes := fMongoClient.BytesTransmitted;
   R := TSQLORM.Create;
   try
     for i := 1 to COLL_COUNT do begin
-      Check(fServer.Retrieve(i,R));
+      Check(fClient.Retrieve(i,R));
       TestOne(R,i);
     end;
   finally
     R.Free;
   end;
-  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
 end;
 
 procedure TTestORM.RetrieveAll;
@@ -396,8 +435,8 @@ var n: integer;
     R: TSQLORM;
     bytes: Int64;
 begin
-  bytes := fClient.BytesTransmitted;
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  bytes := fMongoClient.BytesTransmitted;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;
     while R.FillOne do begin
@@ -408,7 +447,7 @@ begin
   finally
     R.Free;
   end;
-  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
 end;
 
 procedure TTestORM.RetrieveOneWithWhereClause;
@@ -416,9 +455,9 @@ var R: TSQLORM;
     i,n: integer;
     bytes: Int64;
 begin
-  bytes := fClient.BytesTransmitted;
+  bytes := fMongoClient.BytesTransmitted;
   for i := 1 to COLL_COUNT do begin
-    R := TSQLORM.CreateAndFillPrepare(fServer,'ID=?',[i]);
+    R := TSQLORM.CreateAndFillPrepare(fClient,'ID=?',[i]);
     try
       n := 0;
       while R.FillOne do begin
@@ -430,8 +469,8 @@ begin
       R.Free;
     end;
   end;
-  NotifyTestSpeed('rows retrieved',COLL_COUNT,fClient.BytesTransmitted-bytes);
-  R := TSQLORM.CreateAndFillPrepare(fServer,'Name=?',['Name 43']);
+  NotifyTestSpeed('rows retrieved',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name=?',['Name 43']);
   try
     n := 0;
     while R.FillOne do begin
@@ -442,7 +481,7 @@ begin
   finally
     R.Free;
   end;
-  R := TSQLORM.CreateAndFillPrepare(fServer,'Age<?',[51]);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age<?',[51]);
   try
     n := 0;
     while R.FillOne do begin
@@ -461,22 +500,22 @@ var R: TSQLORM;
     n: integer;
 begin
   inc(fUpdateOffset);
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
-    bytes := fClient.BytesTransmitted;
+    bytes := fMongoClient.BytesTransmitted;
     n := 0;
     while R.FillOne do begin
       R.Age := R.Age+fUpdateOffset;
       R.Value.num := R.Value.num+fUpdateOffset;
-      fServer.Update(R);
+      fClient.Update(R);
       inc(n);
     end;
     Check(n=COLL_COUNT);
   finally
     R.Free;
   end;
-  NotifyTestSpeed('rows updated',COLL_COUNT,fClient.BytesTransmitted-bytes);
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  NotifyTestSpeed('rows updated',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;
     while R.FillOne do begin
@@ -496,21 +535,21 @@ var R: TSQLORM;
     bytes: Int64;
 begin
   SetLength(blob,8);
-  bytes := fClient.BytesTransmitted;
+  bytes := fMongoClient.BytesTransmitted;
   for i := 1 to COLL_COUNT do begin
     PIntegerArray(blob)[0] := i;
     PIntegerArray(blob)[1] := i*$01020304;
-    Check(fServer.UpdateBlob(TSQLORM,i,'Data',blob));
+    Check(fClient.UpdateBlob(TSQLORM,i,'Data',blob));
   end;
-  NotifyTestSpeed('rows updated',COLL_COUNT,fClient.BytesTransmitted-bytes);
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  NotifyTestSpeed('rows updated',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;
     while R.FillOne do begin
       inc(n);
       TestOne(R,n);
       Check(R.Data='');
-      fServer.RetrieveBlob(TSQLORM,n,'Data',blobRead);
+      fClient.RetrieveBlob(TSQLORM,n,'Data',blobRead);
       PIntegerArray(blob)[0] := n;
       PIntegerArray(blob)[1] := n*$01020304;
       Check(blobRead=blob);
@@ -519,7 +558,7 @@ begin
   finally
     R.Free;
   end;
-  R := TSQLORM.CreateAndFillPrepare(fServer,'','ID,Data');
+  R := TSQLORM.CreateAndFillPrepare(fClient,'','ID,Data');
   try
     n := 0;
     while R.FillOne do begin
@@ -532,20 +571,20 @@ begin
       PIntegerArray(blob)[0] := n*2;
       PIntegerArray(blob)[1] := n*$02030405;
       R.Data := blob;
-      fServer.UpdateBlobFields(R);
+      fClient.UpdateBlobFields(R);
     end;
     Check(n=COLL_COUNT);
   finally
     R.Free;
   end;
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;
     while R.FillOne do begin
       inc(n);
       TestOne(R,n);
       Check(R.Data='');
-      Check(fServer.RetrieveBlobFields(R));
+      Check(fClient.RetrieveBlobFields(R));
       PIntegerArray(blob)[0] := n*2;
       PIntegerArray(blob)[1] := n*$02030405;
       Check(R.Data=blob);
@@ -563,16 +602,16 @@ var i,n: integer;
     bytes: Int64;
     R: TSQLORM;
 begin
-  Check(fServer.Delete(TSQLORM,'ID in (5,10,15)'),'deletion with IN clause');
-  bytes := fClient.BytesTransmitted;
+  Check(fClient.Delete(TSQLORM,'ID in (5,10,15)'),'deletion with IN clause');
+  bytes := fMongoClient.BytesTransmitted;
   ExpectedCount := COLL_COUNT-3;
   for i := 20 to COLL_COUNT do
     if i mod 5=0 then begin
-      Check(fServer.Delete(TSQLORM,i));
+      Check(fClient.Delete(TSQLORM,i));
       dec(ExpectedCount);
     end;
-  NotifyTestSpeed('rows deleted',COLL_COUNT-ExpectedCount,fClient.BytesTransmitted-bytes);
-  R := TSQLORM.CreateAndFillPrepare(fServer,'');
+  NotifyTestSpeed('rows deleted',COLL_COUNT-ExpectedCount,fMongoClient.BytesTransmitted-bytes);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;
     i := 0;

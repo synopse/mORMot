@@ -50,7 +50,6 @@ unit mORMotMongoDB;
 
   
   TODO:
-  - BATCH mode, using fast MongoDB bulk insert
   - complex WHERE clause with a MongoDB Query object instead of SQL syntax
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
     in a dedicated mORMotDBMongoDB unit 
@@ -270,6 +269,7 @@ begin
   CollName := Collection.Name;
   Collection.Drop;
   fCollection := DB.CollectionOrCreate[CollName];
+  fEngineLastID := 0;
 end;
 
 destructor TSQLRestServerStaticMongoDB.Destroy;
@@ -370,7 +370,7 @@ begin
     result := DocFromJSON(SentData,soInsert,Doc);
     try
       if fBatchMethod<>mNone then
-        if (fBatchMethod<>mPost) or (fBatchWriter<>nil) then
+        if (fBatchMethod<>mPOST) or (fBatchWriter=nil) then
           result := 0 else
           fBatchWriter.BSONWriteDoc(doc) else begin
         fCollection.Insert([variant(doc)]);
@@ -752,7 +752,6 @@ function TSQLRestServerStaticMongoDB.InternalBatchStart(
   Method: TSQLURIMethod): boolean;
 begin
   result := false; // means BATCH mode not supported
-  exit; // not finished yet
   if (self<>nil) and (method in [mPOST]) then begin
     Lock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
@@ -772,9 +771,24 @@ begin
 end;
 
 procedure TSQLRestServerStaticMongoDB.InternalBatchStop;
+var docs: TBSONDocument;
 begin
-  inherited;
-
+  try
+    case fBatchMethod of
+    mPOST: begin // Add/Insert
+      if fBatchWriter.TotalWritten=0 then
+        exit; // nothing to add
+      fBatchWriter.ToBSONDocument(docs);
+      fCollection.Insert(docs);
+    end;
+    else
+      raise EORMException.CreateFmt('%s.BatchMethod=%d',
+        [fStoredClassRecordProps.SQLTableName,ord(fBatchMethod)]);
+    end;
+  finally
+    FreeAndNil(fBatchWriter);
+    fBatchMethod := mNone;
+  end;
 end;
 
 end.
