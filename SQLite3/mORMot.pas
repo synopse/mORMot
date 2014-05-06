@@ -1593,9 +1593,9 @@ type
 
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
-// - the data inside From^ is modified (unescaped and transformed): don't call
-// JSONToObject(pointer(JSONRawUTF8)) but makes a temporary copy of the
-// JSONRawUTF8 text before calling this function
+// - the data inside From^ is modified in-place (unescaped and transformed):
+// don't call JSONToObject(pointer(JSONRawUTF8)) but makes a temporary copy of
+// the JSON text buffer before calling this function, if want to reuse it later
 // - handle Integer, Int64, enumerate (including boolean), set, floating point,
 // TDateTime, TCollection, TStrings, TRawUTF8List, variant, and string properties
 // (excluding ShortString, but including WideString and UnicodeString under
@@ -1624,6 +1624,9 @@ function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
 // - and the corresponding class shall have been previously registered by
 // TJSONSerializer.RegisterClassForJSON(), in order to retrieve the class type
 // from it name - or, at least, by a Classes.RegisterClass() function call
+// - the data inside From^ is modified in-place (unescaped and transformed):
+// don't call JSONToObject(pointer(JSONRawUTF8)) but makes a temporary copy of
+// the JSON text buffer before calling this function, if want to reuse it later
 function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
   Options: TJSONToObjectOptions=[]): TObject;
 

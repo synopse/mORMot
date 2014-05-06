@@ -4021,6 +4021,8 @@ function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 // TTextWriter.AddRecordJSON
 // - will handle both default (Bin64 encoding of Record Save binary) and
 // custom true JSON format (as set by TTextWriter.RegisterCustomJSONSerializer)
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy if you need to access it later 
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 
@@ -4045,6 +4047,8 @@ procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
 // TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJSONCustomReader callback
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy if you need to access it later 
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 
@@ -8435,6 +8439,9 @@ function VariantLoad(const Bin: RawByteString;
 // the textual content, and string in all other cases, except TryCustomVariants
 // points to some options and input is a known object or array, either encoded
 // as strict-JSON (i.e. {..} or [..]), or with some extended (e.g. BSON) syntax
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy or the overloaded functions with RawUTF8 parameter
+// if you need to access it later
 function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
   EndOfObject: PUTF8Char=nil; TryCustomVariants: PDocVariantOptions=nil): PUTF8Char; overload;
 
@@ -8445,6 +8452,8 @@ function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
 // the textual content, and string in all other cases, except TryCustomVariants
 // points to some options and input is a known object or array, either encoded
 // as strict-JSON (i.e. {..} or [..]), or with some extended (e.g. BSON) syntax
+// - this overloaded procedure will make a temporary copy before JSON parsing
+// and return the variant as result
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions=nil); overload;
 
@@ -8494,7 +8503,7 @@ procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
 // a RawUTF8 instance - which does make sense in the mORMot area
 function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind=twJSONEscape): integer;
 
-/// set a variant Value from a JSON number or string
+/// low-level function to set a variant from an unesceped JSON number or string
 // - expect the JSON input buffer to be already unescaped, e.g. by GetJSONField()
 // - is called e.g. by function VariantLoadJSON()
 // - will return either an Integer, Int64, currency, double or string in Value
