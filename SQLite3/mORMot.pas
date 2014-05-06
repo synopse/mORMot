@@ -20911,16 +20911,12 @@ function TSQLModelRecordPropertiesExternal.ExternalToInternalIndex(
   const ExtFieldName: RawUTF8): integer;
 begin
   if IdemPropNameU(ExtFieldName,RowIDFieldName) then
-    result := -1 else
-    with fProps.Props.Fields do begin
+    result := -1 else begin
     // search for customized field mapping
     for result := 0 to high(fFieldNames) do
       if IdemPropNameU(ExtFieldName,fFieldNames[result]) then
         exit;
-    // search for not customized field mapping
-    result := IndexByName(ExtFieldName);
-    if result<0 then
-      result := -2; // indicates not found
+    result := -2; // indicates not found
   end;
 end;
 

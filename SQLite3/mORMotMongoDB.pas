@@ -93,7 +93,7 @@ type
     function EngineNextID: Integer;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): integer;
-    procedure JSONFromDoc(var doc: Variant; var result: RawUTF8);
+    procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
     function BSONProjectionSet(var Projection: variant; WithID: boolean;
       const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
     function GetJSONValues(const Res: TBSONDocument;
@@ -522,23 +522,34 @@ begin // here we use the pre-computed IDs[]
     end;
 end;
 
-procedure TSQLRestServerStaticMongoDB.JSONFromDoc(var doc: Variant;
+procedure TSQLRestServerStaticMongoDB.JSONFromDoc(var doc: TDocVariantData;
   var result: RawUTF8);
 var i: integer;
     name: RawUTF8;
+    W: TTextWriter;
 begin
-  with TDocVariantData(doc) do
-  if (VarType=DocVariantType.VarType) and (Kind=dvObject) then begin
-    for i := 0 to Count-1 do begin
-      name := fStoredClassProps.ExternalDB.ExternalToInternalOrNull(Names[i]);
+  if (doc.VarType<>DocVariantType.VarType) or (doc.Kind<>dvObject) or (doc.Count=0) then begin
+    result := '';
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream;
+  try
+    W.Add('{');
+    for i := 0 to doc.Count-1 do begin
+      name := fStoredClassProps.ExternalDB.ExternalToInternalOrNull(doc.Names[i]);
       if name='' then
         raise EORMMongoDBException.CreateFmt('Unknown field name "%s" for table %s',
-          [Names[i],fStoredClassRecordProps.SQLTableName]);
-      Names[i] := name;
+          [doc.Names[i],fStoredClassRecordProps.SQLTableName]);
+      W.AddFieldName(pointer(name),Length(name));
+      W.AddVariantJSON(doc.Values[i],twJSONEscape);
+      W.Add(',');
     end;
-    VariantSaveJSON(doc,twJSONEscape,result);
-  end else
-    result := '';
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineRetrieve(TableModelIndex,
@@ -549,7 +560,7 @@ begin
   if (fCollection=nil) or (ID<=0) then
     exit;
   doc := fCollection.FindDoc(BSONVariant(['_id',ID]),fBSONProjectionSimpleFields,1);
-  JSONFromDoc(doc,result);
+  JSONFromDoc(TDocVariantData(doc),result);
 end;
 
 function TSQLRestServerStaticMongoDB.EngineRetrieveBlob(

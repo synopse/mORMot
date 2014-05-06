@@ -3,7 +3,7 @@ unit MongoDBTestCases;
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
-{$define ADD5000}
+{.$define ADD5000}
 
 uses
   SysUtils,

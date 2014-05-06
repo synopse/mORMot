@@ -16,6 +16,7 @@ interface
 {.$define USELOCALDB2}
 {.$define USELOCALPOSTGRESQL}
 {.$define USELOCALMYSQL}
+{.$define USEMONGODB}
 {$ifdef CPU64}
   {$undef USENEXUSDB} // official NexusDB is not yet 64 bit ready :(
   {$undef USEJET}     // MS Access / JET is not available under Win64
@@ -50,6 +51,9 @@ uses
     uADPhysOracle, uADPhysMSAcc, uADPhysMSSQL,
     uADPhysSQLite, uADPhysIB, uADPhysPG, uADPhysDB2, uADPhysMySQL,
     {$endif}
+  {$endif}
+  {$ifdef USEMONGODB}
+    SynMongoDB, mORMotMongoDB,
   {$endif}
   SynSQLite3, SynSQLite3Static;
 
@@ -183,6 +187,10 @@ begin
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off exc)',true,smOff,lmExclusive);
     Test(TSQLDBSQLite3ConnectionProperties,SQLITE_MEMORY_DATABASE_NAME,'','','',' (ext mem)',true);
     //*)
+    {$ifdef USEMONGODB}
+    Test(nil,'MongoDB','','','','MongoDB (ack)',false);
+    Test(nil,'MongoDB','','','','MongoDB (no ack)',false);
+    {$endif}
     {$ifdef ODBCSQLITEFIREBIRD}
     // download driver from http://www.ch-werner.de/sqliteodbc
     Test(TODBCConnectionProperties,'','DRIVER=SQLite3 ODBC Driver','','',' SQLite3',true);
@@ -420,6 +428,10 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
     Res: TIntegerDynArray;
     U, Server,DBName, MainDBName, Num, Time: RawUTF8;
     Rate, i: integer;
+    {$ifdef USEMONGODB}
+    MongoClient: TMongoClient;
+    MongoDatabase: TMongoDatabase;
+    {$endif}
 
   procedure ValueCheck;
   var err: RawUTF8;
@@ -507,16 +519,32 @@ begin
       MainDBName := Server;
       Props := nil;
     end;
+    {$ifdef USEMONGODB}
+    MongoClient := nil;
+    {$endif}
     try
       if Server='SQL' then begin
         MainDBName := SQLITE_MEMORY_DATABASE_NAME;
         Model.VirtualTableRegister(TSQLRecordSample,TSQLVirtualTableBinary);
       end else
+      if Server='MongoDB' then
+        MainDBName := SQLITE_MEMORY_DATABASE_NAME else
+        // do nothing if Props=nil
         VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
       Client := TSQLRestClientDB.Create(Model,nil,string(MainDBName),TSQLRestServerDB,false,'');
       if Server='static' then begin
         DeleteFile('static.data');
         Client.Server.StaticDataCreate(TSQLRecordSample,'static.data',true);
+      {$ifdef USEMONGODB}
+      end else
+      if Server='MongoDB' then begin
+        MongoClient := TMongoClient.Create('localhost',27017);
+        if aTrailDesc='MongoDB (no ack)' then
+          MongoClient.WriteConcern := wcUnacknowledged;
+        MongoDatabase := MongoClient.Database['dbperf'];
+        MongoDatabase.CollectionOrNil['perftest'].Drop;
+        StaticMongoDBRegister(TSQLRecordSample,Client.Server,MongoDatabase,'perftest');
+      {$endif}
       end;
       Client.Server.DB.Synchronous := Mode;
       Client.Server.DB.LockingMode := Lock;
@@ -651,6 +679,11 @@ begin
       finally
         Timer.Start;
         try
+          {$ifdef USEMONGODB}
+          if Server='MongoDB' then
+            (Client.Server.StaticDataServer[TSQLRecordSample] as
+              TSQLRestServerStaticMongoDB).Drop else
+          {$endif}
           if not DBIsFile then
             Client.Server.EngineExecuteAll('drop table '+Value.SQLTableName);
         finally
@@ -661,6 +694,10 @@ begin
       inc(Num[1]);
     finally
       Props.Free;
+      {$ifdef USEMONGODB}
+      if Server='MongoDB' then
+        MongoClient.Free; // will also free MongoDatabase instance
+      {$endif}
     end;
   end;
   Stats.Add(Stat);
