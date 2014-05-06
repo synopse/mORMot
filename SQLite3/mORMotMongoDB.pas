@@ -88,12 +88,16 @@ type
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
     fBatchWriter: TBSONWriter;
+    fBatchIDs: TIntegerDynArray;
+    fBatchCount: integer;
     function EngineNextID: Integer;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): integer;
     procedure JSONFromDoc(var doc: Variant; var result: RawUTF8);
-    function BSONProjectionSet(var Projection: variant; const Fields: TSQLFieldBits;
-      ExtFieldNames: PRawUTF8DynArray): integer;
+    function BSONProjectionSet(var Projection: variant; WithID: boolean;
+      const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+    function GetJSONValues(const Res: TBSONDocument;
+      const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
     // overridden methods calling the MongoDB external server
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
@@ -205,9 +209,9 @@ begin
       'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
-  BSONProjectionSet(fBSONProjectionSimpleFields,
+  BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
-  BSONProjectionSet(fBSONProjectionBlobFields,
+  BSONProjectionSet(fBSONProjectionBlobFields,false,
     fStoredClassRecordProps.BlobFieldsBits,@fBSONProjectionBlobFieldsNames);
   if not IsZero(fIsUnique) then
     for F := 0 to fStoredClassRecordProps.Fields.Count do
@@ -218,16 +222,18 @@ begin
 end;
 
 function TSQLRestServerStaticMongoDB.BSONProjectionSet(var Projection: variant;
-  const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+  WithID: boolean; const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
 var i,n: integer;
     Start: cardinal;
     W: TBSONWriter;
 begin
-  result := 1; // _id is always part of the MongoDB projected fields
   W := TBSONWriter.Create(TRawByteStringStream);
   try
     Start := W.BSONDocumentBegin;
-    W.BSONWrite(fStoredClassProps.ExternalDB.RowIDFieldName,1);
+    if withID then
+      result := 1 else
+      result := 0;
+    W.BSONWrite(fStoredClassProps.ExternalDB.RowIDFieldName,result);
     for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
       if i in Fields then begin
         W.BSONWrite(fStoredClassProps.ExternalDB.FieldNames[i],1);
@@ -238,8 +244,11 @@ begin
     if ExtFieldNames<>nil then
     with fStoredClassProps.ExternalDB do begin
       SetLength(ExtFieldNames^,result);
-      ExtFieldNames^[0] := RowIDFieldName;
-      n := 1;
+      if WithID then begin
+        ExtFieldNames^[0] := RowIDFieldName;
+        n := 1;
+      end else
+        n := 0;
       for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
         if i in Fields then begin
           ExtFieldNames^[n] := FieldNames[i];
@@ -374,8 +383,10 @@ begin
       result := DocFromJSON(SentData,soInsert,Doc);
       if fBatchMethod<>mNone then
         if (fBatchMethod<>mPOST) or (fBatchWriter=nil) then
-          result := 0 else
-          fBatchWriter.BSONWriteDoc(doc) else begin
+          result := 0 else begin
+          inc(fBatchCount);
+          fBatchWriter.BSONWriteDoc(doc);
+        end else begin
         fCollection.Insert([variant(doc)]);
         if Owner<>nil then
           TSQLRestServerStaticMongoDB(Owner). // to access protected method
@@ -473,17 +484,22 @@ end;
 function TSQLRestServerStaticMongoDB.EngineDelete(Table: TSQLRecordClass;
   ID: integer): boolean;
 begin
-  if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
-    result := false else
-    try
+  result := false;
+  if (fCollection<>nil) and (Table=fStoredClass) and (ID>0) then
+  try
+    if fBatchMethod<>mNone then
+      if fBatchMethod<>mDelete then
+        exit else
+        AddInteger(fBatchIDs,fBatchCount,ID) else begin
       fCollection.RemoveOne(ID);
       if Owner<>nil then
         TSQLRestServerStaticMongoDB(Owner).  // to access protected method
           InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
-      result := true;
-    except
-      result := false;
     end;
+    result := true;
+  except
+    result := false;
+  end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
@@ -498,7 +514,8 @@ begin // here we use the pre-computed IDs[]
       for i := 0 to high(IDs) do
         TSQLRestServerStaticMongoDB(Owner).  // to access protected method
           InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil);
-      fCollection.RemoveFmt('{_id:{$in:?}}',[BSONVariantFromIntegers(IDs)]);
+      fCollection.Remove(BSONVariant(
+        ['_id',BSONVariant(['$in',BSONVariantFromIntegers(IDs)])]));
       result := true;
     except
       result := false;
@@ -574,9 +591,9 @@ begin
     doc := fCollection.FindDoc(BSONVariant(['_id',aID]),fBSONProjectionBlobFields,1);
     docv := DocVariantData(doc);
     for f := 0 to high(fStoredClassRecordProps.BlobFields) do begin
-      if docv^.Names[f+1]=fBSONProjectionBlobFieldsNames[f+1] then
-        BSONVariantType.ToBlob(docv^.Values[f+1],blobRaw) else
-      if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f+1],blob) then
+      if docv^.Names[f]=fBSONProjectionBlobFieldsNames[f] then
+        BSONVariantType.ToBlob(docv^.Values[f],blobRaw) else
+      if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f],blob) then
         BSONVariantType.ToBlob(variant(blob),blobRaw) else
         raise EORMMongoDBException.CreateFmt('Field "%s" not found',
           [fBSONProjectionBlobFieldsNames[f]]);
@@ -595,23 +612,11 @@ begin
   result := true; // we do not have any Virtual Table yet -> always accept
 end;
 
-const // see http://docs.mongodb.org/manual/reference/operator/query
-  QUERY_OPS: array[TSynTableStatementOperator] of PUTF8Char = (
-    '{%:?}', '{%:{$ne:?}}', '{%:{$lt:?}}', '{%:{$lte:?}}',
-    '{%:{$gt:?}}', '{%:{$gte:?}}', '{%:{$in:?}}');
-    
-function TSQLRestServerStaticMongoDB.EngineList(const SQL: RawUTF8;
-  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
-var W: TJSONSerializer;
-    MS: TRawByteStringStream;
-    Query,Projection: variant;
-    QueryFieldName: RawUTF8;
-    Res: TBSONDocument;
-    ResCount: PtrInt;
-    col, colCount, colFound: integer;
+function TSQLRestServerStaticMongoDB.GetJSONValues(const Res: TBSONDocument;
+  const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
+var col, colCount, colFound: integer;
     bson: PByte;
     row: TBSONElement;
-    extFieldNames: TRawUTF8DynArray;
     item: array of TBSONElement;
 function itemFind(const aName: RawUTF8): integer;
 begin
@@ -621,6 +626,81 @@ begin
         if IdemPropNameU(aName,Name,NameLen) then
           exit;
   raise EORMMongoDBException.CreateFmt('Unexpected field "%s" in row',[aName]);
+end;
+begin
+  result := 0; // number of data rows in JSON output
+  bson := pointer(Res);
+  if W.Expand then
+    W.Add('[');
+  if Res<>'' then begin
+    BSONParseLength(bson,length(Res));
+    colCount := length(extFieldNames);
+    if colCount<>length(W.ColNames) then
+      raise EORMMongoDBException.Create('Invalid GetJSONValues() call');
+    SetLength(item,colCount);
+    while row.FromNext(bson) do begin
+      // retrieve all values of this BSON document into item[]
+      if row.Kind<>betDoc then
+        raise EORMMongoDBException.CreateFmt('Invalid row %d',[ord(row.Kind)]);
+      col := 0;
+      while (row.Data.DocList^<>byte(betEof)) and (col<colCount) and
+            item[col].FromNext(row.Data.DocList) do
+        inc(col);
+      if col<>colCount then
+        raise EORMMongoDBException.CreateFmt('Invalid field count %d',[col]);
+      // convert this BSON document as JSON, following expected column order
+      if W.Expand then
+        W.Add('{');
+      for col := 0 to colCount-1 do begin
+        if W.Expand then
+          W.AddString(W.ColNames[col]);
+        with item[col] do
+          if IdemPropNameU(extFieldNames[col],Name,NameLen) then
+            colFound := col else
+            colFound := itemFind(extFieldNames[col]);
+        item[colFound].AddMongoJSON(W,modNoMongo);
+        W.Add(',');
+      end;
+      W.CancelLastComma;
+      if W.Expand then
+        W.Add('}',',') else
+        W.Add(',');
+      inc(result);
+    end;
+  end;
+  if (result=0) and W.Expand then begin
+    // we want the field names at least, even with no data
+    W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
+    W.CancelAll;
+    fStoredClassRecordProps.SetJSONWriterColumnNames(W,0);
+  end;
+  W.EndJSONObject(0,result);
+end;
+
+function TSQLRestServerStaticMongoDB.EngineList(const SQL: RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+var W: TJSONSerializer;
+    MS: TRawByteStringStream;
+    Query,Projection: variant;
+    Res: TBSONDocument;
+    ResCount: PtrInt;
+    extFieldNames: TRawUTF8DynArray;
+    Stmt: TSynTableStatement;
+procedure ComputeQuery;
+const // see http://docs.mongodb.org/manual/reference/operator/query
+  QUERY_OPS: array[opNotEqualTo..high(TSynTableStatementOperator)] of RawUTF8 = (
+    '$ne','$lt','$lte','$gt','$gte','$in');
+var QueryFieldName: RawUTF8;
+begin
+  if Stmt.WhereField<0 then begin
+    SetVariantNull(Query);
+    exit;
+  end;
+  QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.WhereField-1);
+  if Stmt.WhereOperator=opEqualTo then
+    Query := BSONVariant([QueryFieldName,Stmt.WhereValueVariant]) else
+    Query := BSONVariant([QueryFieldName,
+      BSONVariant([QUERY_OPS[Stmt.WhereOperator],Stmt.WhereValueVariant])]);
 end;
 procedure SetCount(aCount: integer);
 begin
@@ -646,95 +726,50 @@ begin // same logic as in TSQLRestServerStaticInMemory.EngineList()
         result := '[{"RowID":1}]'#$A;
         ResCount := 1;
       end else begin
-      with fStoredClassRecordProps,
-        TSynTableStatement.Create(SQL,Fields.IndexByName,
-          fStoredClassRecordProps.SimpleFieldsBits[soSelect]) do
+      Stmt := TSynTableStatement.Create(SQL,
+        fStoredClassRecordProps.Fields.IndexByName,
+        fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (WhereValue='') or
-           not IdemPropNameU(TableName,SQLTableName) then
-          // invalid request -> return ''
-          result := '' else
-        if WhereField=SYNTABLESTATEMENTWHERECOUNT then
+        if (Stmt.WhereValue='') or
+           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
+          // invalid request -> return '' to mark error
+          result := '';
+          exit;
+        end;
+        if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if IsZero(Fields) and not WithID then
-          if IsSelectCountWhere then
+        if IsZero(Stmt.Fields) and not Stmt.WithID then begin
+          if Stmt.IsSelectCountWhere then
             // was "SELECT Count(*) FROM TableName WHERE ..."
-            if WhereField<0 then
-              SetCount(TableRowCount(fStoredClass)) else
-              SetCount(fCollection.FindCount('{%:?}',
-                [fStoredClassProps.ExternalDB.FieldNameByIndex(WhereField-1)],
-                [WhereValueVariant],FoundLimit,FoundOffset)) else
-            // invalid "SELECT FROM Table" ?
-            exit else begin
-          // save rows as JSON, with appropriate search according to Where* arguments
-          if WhereField<0 then
-            SetVariantNull(Query) else begin
-            QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(WhereField-1);
-            Query := BSONVariant(QUERY_OPS[WhereOperator],[QueryFieldName],[WhereValueVariant]);
-          end;
-          colCount := BSONProjectionSet(Projection,Fields,@extFieldNames);
-          if FoundLimit=0 then
-            FoundLimit := maxInt;
-          Res := fCollection.FindBSON(Query,Projection,FoundLimit,FoundOffset);
-          ResCount := 0;
-          MS := TRawByteStringStream.Create;
-          try
-            W := fStoredClassRecordProps.CreateJSONWriter(
-              MS,ForceAJAX or (not Owner.NoAJAXJSON),withID,Fields,0);
-            try
-              bson := pointer(Res);
-              if W.Expand then
-                W.Add('[');
-              if Res<>'' then begin
-                BSONParseLength(bson,length(Res));
-                SetLength(item,colCount);
-                while row.FromNext(bson) do begin
-                  if row.Kind<>betDoc then
-                    raise EORMMongoDBException.CreateFmt('Invalid row %d',[ord(row.Kind)]);
-                  if W.Expand then
-                    W.Add('{');
-                  col := 0;
-                  while (row.Data.DocList^<>byte(betEof)) and
-                        (col<colCount) and item[col].FromNext(row.Data.DocList) do
-                    inc(col);
-                  if col<>colCount then
-                    raise EORMMongoDBException.CreateFmt('Invalid field count %d',[col]);
-                  for col := 0 to colCount-1 do begin
-                    if W.Expand then
-                      W.AddString(W.ColNames[col]);
-                    with item[col] do
-                      if IdemPropNameU(extFieldNames[col],Name,NameLen) then
-                        colFound := col else
-                        colFound := itemFind(extFieldNames[col]);
-                    item[colFound].AddMongoJSON(W,modNoMongo);
-                    W.Add(',');
-                  end;
-                  W.CancelLastComma; 
-                  if W.Expand then begin
-                    W.Add('}',',');
-                  end else
-                    W.Add(',');
-                  inc(ResCount);
-                end;
-              end;
-              if (ResCount=0) and W.Expand then begin
-                // we want the field names at least, even with no data
-                W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
-                W.CancelAll;
-                fStoredClassRecordProps.SetJSONWriterColumnNames(W,0);
-              end;
-              W.EndJSONObject(0,ResCount);
-              result := MS.DataString;
-            finally
-              W.Free;
+            if Stmt.WhereField<0 then
+              SetCount(TableRowCount(fStoredClass)) else begin
+              ComputeQuery;
+              SetCount(fCollection.FindCount(Query));
             end;
+          exit; // also invalid "SELECT FROM Table"
+        end;
+        // save rows as JSON, with appropriate search according to Where* arguments
+        ComputeQuery;
+        BSONProjectionSet(Projection,Stmt.WithID,Stmt.Fields,@extFieldNames);
+        if Stmt.FoundLimit=0 then
+          Stmt.FoundLimit := maxInt;
+        Res := fCollection.FindBSON(Query,Projection,Stmt.FoundLimit,Stmt.FoundOffset);
+        MS := TRawByteStringStream.Create;
+        try
+          W := fStoredClassRecordProps.CreateJSONWriter(
+            MS,ForceAJAX or (not Owner.NoAJAXJSON),Stmt.withID,Stmt.Fields,0);
+          try
+            ResCount := GetJSONValues(Res,extFieldNames,W);
+            result := MS.DataString;
           finally
-            MS.Free;
+            W.Free;
           end;
+        finally
+          MS.Free;
         end;
       finally
-        Free;
+        Stmt.Free;
       end;
     end;
   finally
@@ -748,15 +783,17 @@ function TSQLRestServerStaticMongoDB.InternalBatchStart(
   Method: TSQLURIMethod): boolean;
 begin
   result := false; // means BATCH mode not supported
-  if (self<>nil) and (method in [mPOST]) then begin
+  if (self<>nil) and (method in [mPOST,mDELETE]) then begin
     Lock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
         raise EORMException.Create('InternalBatchStop should have been called');
+      fBatchCount := 0;
       fBatchMethod := Method;
       case Method of
-      mPOST: // POST=ADD=INSERT
+      mPOST: // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
         fBatchWriter := TBSONWriter.Create(TRawByteStringStream);
+      //mDELETE: // EngineDelete() will add deleted ID to fBatchIDs[]
       end;
       result := true; // means BATCH mode is supported
     finally
@@ -777,12 +814,19 @@ begin
       fBatchWriter.ToBSONDocument(docs);
       fCollection.Insert(docs);
     end;
+    mDELETE: begin
+      SetLength(fBatchIDs,fBatchCount);
+      fCollection.Remove(BSONVariant(
+        ['_id',BSONVariant(['$in',BSONVariantFromIntegers(fBatchIDs)])]));
+    end;
     else
       raise EORMException.CreateFmt('%s.BatchMethod=%d',
         [fStoredClassRecordProps.SQLTableName,ord(fBatchMethod)]);
     end;
   finally
     FreeAndNil(fBatchWriter);
+    fBatchIDs := nil;
+    fBatchCount := 0;
     fBatchMethod := mNone;
     UnLock;
   end;

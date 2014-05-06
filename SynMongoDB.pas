@@ -1937,7 +1937,7 @@ type
     // selectors as used in the Find() method
     // - to limit the deletion to just one document, set Flags to [mdfSingleRemove] 
     // - to delete all documents matching the deletion criteria, leave it to []
-    procedure Remove(const Query: variant; Flags: TMongoDeleteFlags); overload;
+    procedure Remove(const Query: variant; Flags: TMongoDeleteFlags=[]); overload;
     /// delete an existing document in a collection, by its _id field
     // - _id will identify the unique document to be deleted
     procedure RemoveOne(const _id: TBSONObjectID); overload;
@@ -1987,6 +1987,10 @@ type
     function Count: integer;
     /// calculate the number of documents in the collection that match
     // a specific query
+    // - Criteria can specify the query selector as a BSONVariant/TDocVariant
+    function FindCount(const Query: variant): integer; overload;
+    /// calculate the number of documents in the collection that match
+    // a specific query
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
     // ! FindCount('{name:?,age:{$gt,?}}',[],['John',21]));
@@ -1996,7 +2000,7 @@ type
     // - optional NumberToSkip can specify the number of matching documents
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
-      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer;
+      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
@@ -4976,7 +4980,14 @@ end;
 function TMongoCollection.Count: integer;
 var res: variant;
 begin
-  fDatabase.RunCommand(BSONVariant('{count:?}',[],[Name]),res);
+  fDatabase.RunCommand(BSONVariant(['count',Name]),res);
+  result := DocVariantData(res)^.GetValueOrDefault('n',0);
+end;
+
+function TMongoCollection.FindCount(const Query: variant): integer;
+var res: variant;
+begin
+  fDatabase.RunCommand(BSONVariant(['count',Name,'query',Query]),res);
   result := DocVariantData(res)^.GetValueOrDefault('n',0);
 end;
 

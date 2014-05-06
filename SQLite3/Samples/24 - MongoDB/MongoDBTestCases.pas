@@ -3,7 +3,7 @@ unit MongoDBTestCases;
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
-{.$define ADD5000}
+{$define ADD5000}
 
 uses
   SysUtils,
@@ -75,6 +75,7 @@ type
     procedure Update;
     procedure Blobs;
     procedure Delete;
+    procedure DeleteInBatchMode;
   end;
   TTestORMWithAcknowledge = class(TTestORM);
   TTestORMWithoutAcknowledge = class(TTestORM);
@@ -389,12 +390,13 @@ begin
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
       R.DynArray(1).Add(i);
-      Check(fClient.BatchAdd(R,True)=i-1);
+      Check(fClient.BatchAdd(R,True)>=0);
     end;
   finally
     R.Free;
   end;
   Check(fClient.BatchSend(IDs)=HTML_SUCCESS);
+  Check(length(IDs)=COLL_COUNT);
   NotifyTestSpeed('rows inserted',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
   Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
 end;
@@ -600,6 +602,7 @@ procedure TTestORM.Delete;
 var i,n: integer;
     ExpectedCount: integer;
     bytes: Int64;
+    temp: string;
     R: TSQLORM;
 begin
   Check(fClient.Delete(TSQLORM,'ID in (5,10,15)'),'deletion with IN clause');
@@ -626,8 +629,47 @@ begin
   finally
     R.Free;
   end;
+  temp := fRunConsole;
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  fUpdateOffset := 0;
+  InsertInBatchMode;
+  fRunConsole := temp;
 end;
 
+procedure TTestORM.DeleteInBatchMode;
+var i,n: integer;
+    ExpectedCount: integer;
+    bytes: Int64;
+    IDs: TIntegerDynArray;
+    R: TSQLORM;
+begin
+  bytes := fMongoClient.BytesTransmitted;
+  ExpectedCount := COLL_COUNT;
+  fClient.BatchStart(TSQLORM);
+  for i := 5 to COLL_COUNT do
+    if i mod 5=0 then begin
+      Check(fClient.BatchDelete(i)>=0);
+      dec(ExpectedCount);
+    end;
+  Check(fClient.BatchSend(IDs)=HTML_SUCCESS);
+  Check(length(IDs)=COLL_COUNT-ExpectedCount);
+  NotifyTestSpeed('rows deleted',length(IDs),fMongoClient.BytesTransmitted-bytes);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'');
+  try
+    n := 0;
+    i := 0;
+    while R.FillOne do begin
+      inc(i);
+      if i mod 5=0 then
+        inc(i);
+      inc(n);
+      TestOne(R,i);
+    end;
+    Check(n=ExpectedCount);
+  finally
+    R.Free;
+  end;
+end;
 
 end.
 
