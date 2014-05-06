@@ -26328,6 +26328,11 @@ var ndx: integer;
 begin
   result := true;
   case length(Arguments) of
+  0:if SameText(Name,'Clear') then begin
+      PDocVariantData(@V)^.VCount := 0;
+      PDocVariantData(@V)^.VKind := dvUndefined;
+      exit;
+    end;
   1:if SameText(Name,'Add') then begin
       Data.InternalAddValue('',variant(Arguments[0]));
       exit;
