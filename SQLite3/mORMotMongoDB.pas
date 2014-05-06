@@ -313,6 +313,7 @@ var i, ndx: integer;
     info: TSQLPropInfo;
     js: RawUTF8;
     MissingID: boolean;
+    V: PVarData;
 begin
   doc.InitJSON(JSON,[dvoValueCopiedByReference]);
   if doc.Kind<>dvObject then
@@ -334,23 +335,25 @@ begin
         raise EORMMongoDBException.CreateFmt('Unkwnown field name "%s"',[doc.Names[i]]);
       doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
+      V := @Doc.Values[i];
+      if V^.VType=varString then // handle some TEXT values
       case info.SQLFieldType of
-        sftDateTime: // store as MongoDB date/time
-          doc.Values[i] := Iso8601ToDateTime(VariantToUTF8(Doc.Values[i]));
+        sftDateTime: // store ISO-8601 text as MongoDB date/time
+          Variant(V^) := Iso8601ToDateTime(RawByteString(V^.VAny));
         {$ifdef PUBLISHRECORD}sftBlobRecord,{$endif}
-        sftBlob, sftBlobCustom: begin // store BLOB as binary
-          blob := VariantToUTF8(doc.Values[i]);
-          BSONVariantType.FromBinary(BlobToTSQLRawBlob(pointer(blob)),
-            bbtGeneric,doc.Values[i]);
-        end;
-        sftBlobDynArray: begin // try dynamic array as object from any JSON
-          blob := VariantToUTF8(doc.Values[i]);
-          js := DynArraySaveJSON(
-            (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^,
-            BlobToTSQLRawBlob(pointer(blob)));
-          if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
-            BSONVariantType.FromJSON(pointer(js),doc.Values[i]) else
-            BSONVariantType.FromBinary(blob,bbtGeneric,doc.Values[i]);
+        sftBlob, sftBlobCustom: // store Base64-encoded BLOB as binary
+          BSONVariantType.FromBinary(BlobToTSQLRawBlob(RawByteString(V^.VAny)),
+            bbtGeneric,Variant(V^));
+        sftBlobDynArray: begin // store dynamic array as object (if has any JSON)
+          blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
+          if blob='' then
+            SetVariantNull(Variant(V^)) else begin
+            js := DynArraySaveJSON(
+              (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^,blob);
+            if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
+              BSONVariantType.FromJSON(pointer(js),Variant(V^)) else
+              BSONVariantType.FromBinary(blob,bbtGeneric,Variant(V^));
+          end;
         end;
         // sftObject,sftVariant were already converted to object from JSON
       end;
@@ -366,9 +369,9 @@ function TSQLRestServerStaticMongoDB.EngineAdd(Table: TSQLRecordClass;
 var doc: TDocVariantData;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) then
-    result := 0 else begin
-    result := DocFromJSON(SentData,soInsert,Doc);
+    result := 0 else
     try
+      result := DocFromJSON(SentData,soInsert,Doc);
       if fBatchMethod<>mNone then
         if (fBatchMethod<>mPOST) or (fBatchWriter=nil) then
           result := 0 else
@@ -381,7 +384,6 @@ begin
     except
       result := 0;
     end;
-  end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineUpdate(Table: TSQLRecordClass;
@@ -390,9 +392,9 @@ var doc: TDocVariantData;
     query,update: variant; // use explicit TBSONVariant for type safety
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
-    result := false else begin
-    DocFromJSON(SentData,soUpdate,Doc);
+    result := false else
     try
+      DocFromJSON(SentData,soUpdate,Doc);
       query := BSONVariant(['_id',ID]);
       update := BSONVariant(['$set',variant(Doc)]);
       fCollection.Update(query,update);
@@ -403,7 +405,6 @@ begin
     except
       result := false;
     end;
-  end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineUpdateBlob(
@@ -414,12 +415,12 @@ var query,update,blob: variant; // use explicit TBSONVariant for type safety
     AffectedField: TSQLFieldBits;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (aID<=0) or (BlobField=nil) then
-    result := false else begin
-    query := BSONVariant(['_id',aID]);
-    FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
-    BSONVariantType.FromBinary(BlobData,bbtGeneric,blob);
-    update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
+    result := false else
     try
+      query := BSONVariant(['_id',aID]);
+      FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+      BSONVariantType.FromBinary(BlobData,bbtGeneric,blob);
+      update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
@@ -430,7 +431,6 @@ begin
     except
       result := false;
     end;
-  end;
 end;
 
 function TSQLRestServerStaticMongoDB.UpdateBlobFields(
@@ -457,25 +457,24 @@ begin
       update.AddValue(fStoredClassProps.ExternalDB.FieldNames[f],blob);
     end;
   end;
-  if update.Count=0 then
-    exit;
-  try
-    fCollection.Update(query,BSONVariant(['$set',variant(update)]));
-    if Owner<>nil then
-      TSQLRestServerStaticMongoDB(Owner).  // to access protected method
-        InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
-          @fStoredClassRecordProps.BlobFieldsBits);
-    result := true;
-  except
-    result := false;
-  end;
+  if update.Count>0 then
+    try
+      fCollection.Update(query,BSONVariant(['$set',variant(update)]));
+      if Owner<>nil then
+        TSQLRestServerStaticMongoDB(Owner).  // to access protected method
+          InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
+            @fStoredClassRecordProps.BlobFieldsBits);
+      result := true;
+    except
+      result := false;
+    end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineDelete(Table: TSQLRecordClass;
   ID: integer): boolean;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (ID<=0) then
-    result := false else begin
+    result := false else
     try
       fCollection.RemoveOne(ID);
       if Owner<>nil then
@@ -485,7 +484,6 @@ begin
     except
       result := false;
     end;
-  end;
 end;
 
 function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
@@ -494,7 +492,7 @@ function TSQLRestServerStaticMongoDB.EngineDeleteWhere(
 var i: integer;
 begin // here we use the pre-computed IDs[]
   if (fCollection=nil) or (Table<>fStoredClass) or (IDs=nil) then
-    result := false else begin
+    result := false else
     try
       if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
@@ -505,7 +503,6 @@ begin // here we use the pre-computed IDs[]
     except
       result := false;
     end;
-  end;
 end;
 
 procedure TSQLRestServerStaticMongoDB.JSONFromDoc(var doc: Variant;
@@ -546,9 +543,9 @@ var doc: variant;
     FieldName: RawUTF8;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) or (aID<=0) or (BlobField=nil) then
-    result := false else begin
-    FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+    result := false else
     try
+      FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
       doc := fCollection.FindDoc(BSONVariant(['_id',aID]),BSONVariant([FieldName,1]),1);
       if DocVariantType.IsOfType(doc) and
          DocVariantData(doc)^.GetVarData(FieldName,data) then
@@ -557,7 +554,6 @@ begin
     except
       result := false;
     end;
-  end;
 end;
 
 function TSQLRestServerStaticMongoDB.RetrieveBlobFields(

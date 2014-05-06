@@ -1442,7 +1442,12 @@ function JSONGetObject(var P: PUTF8Char; ExtractID: PInteger;
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob;
+function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
+
+/// fill a TSQLRawBlob from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+function BlobToTSQLRawBlob(const Blob: RawByteString): TSQLRawBlob; overload;
 
 /// create a TBytes from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -13340,7 +13345,7 @@ begin
     ftCurrency:
       aValue.VInt64 := StrToCurr64(pointer(temp));
     ftBlob: begin
-      temp := BlobToTSQLRawBlob(Pointer(temp));
+      temp := BlobToTSQLRawBlob(temp);
       aValue.VBlob := pointer(temp);
       aValue.VBlobLen := length(temp);
     end;
@@ -15831,6 +15836,8 @@ function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob;
 var Len, LenHex: integer;
 begin
   result := '';
+  if P=nil then
+    exit;
   Len := StrLen(P);
   if Len=0 then
     exit;
@@ -15849,6 +15856,32 @@ begin
   end;
   // TEXT format
   SetString(result,PAnsiChar(P),Len);
+end;
+
+function BlobToTSQLRawBlob(const Blob: RawByteString): TSQLRawBlob;
+var Len, LenHex: integer;
+    P: PUTF8Char; 
+begin
+  result := '';
+  if Blob='' then
+    exit;
+  Len := length(Blob);
+  P := pointer(Blob);
+  if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
+    // BLOB literals are string literals containing hexadecimal data and
+    // preceded by a single "x" or "X" character. For example: X'53514C697465'
+    LenHex := (Len-3) shr 1;
+    SetLength(result,LenHex);
+    if HexToBin(@P[2],pointer(result),LenHex) then
+      exit; // valid hexa data
+  end else
+  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
+    // Base-64 encoded content ('\uFFF0base64encodedbinary')
+    result := Base64ToBin(@P[3],Len-3);
+    exit;
+  end;
+  // TEXT format
+  result := Blob;
 end;
 
 function BlobToStream(P: PUTF8Char): TStream;
@@ -18375,7 +18408,7 @@ begin
   if PropType^=TypeInfo(RawUnicode) then
     SetLongStrProp(Instance,pointer(@self),Utf8DecodeToRawUnicode(Value)) else
   if PropType^=TypeInfo(TSQLRawBlob) then
-    SetLongStrProp(Instance,pointer(@self),BlobToTSQLRawBlob(pointer(Value))) else
+    SetLongStrProp(Instance,pointer(@self),BlobToTSQLRawBlob(Value)) else
     // not a known LongStr type -> use generic AnsiString
     SetLongStrProp(Instance,pointer(@self),AnsiString(UTF8ToString(Value)));
 end;
@@ -29703,10 +29736,10 @@ begin
          SetUnicodeStrProp(Value,Pointer(P),UTF8ToString(U));
       {$endif}
       tkDynArray:
-        P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(pointer(U))));
+        P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
 {$ifdef PUBLISHRECORD}
       tkRecord:
-        RecordLoad(P^.GetFieldAddr(Value)^,pointer(BlobToTSQLRawBlob(pointer(U))),P^.PropType^);
+        RecordLoad(P^.GetFieldAddr(Value)^,pointer(BlobToTSQLRawBlob(U)),P^.PropType^);
 {$endif PUBLISHRECORD}
       tkClass: begin
         Obj := pointer(GetOrdProp(Value,pointer(P))); // GetOrdProp() is OK for CPU64

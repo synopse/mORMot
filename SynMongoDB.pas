@@ -219,6 +219,7 @@ type
     procedure FromBSONDocument(const BSONDoc: TBSONDocument; var result: variant;
       Kind: TBSONElementType=betDoc);
     /// convert a BLOB binary content into a TBSONVariant of kind betBinary
+    // - if Bin is '', will store a NULL variant
     procedure FromBinary(const Bin: RawByteString; BinType: TBSONElementBinaryType;
       var result: variant);
     /// convert a JSON content into a TBSONVariant of kind betDoc or betArray
@@ -3263,6 +3264,10 @@ begin // "\x05" e_name int32 subtype (byte*)
   with TBSONVariantData(result) do begin
     if not(VType in VTYPE_STATIC) then
       VarClear(result);
+    if Bin='' then begin
+      VType := varNull; // stores a NULL 
+      exit;
+    end;
     VType := VarType;
     VKind := betBinary;
     VBlob := nil; // avoid GPF here below
