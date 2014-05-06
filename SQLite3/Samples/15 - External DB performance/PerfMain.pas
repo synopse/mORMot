@@ -542,8 +542,8 @@ begin
         if aTrailDesc='MongoDB (no ack)' then
           MongoClient.WriteConcern := wcUnacknowledged;
         MongoDatabase := MongoClient.Database['dbperf'];
-        MongoDatabase.CollectionOrNil['perftest'].Drop;
-        StaticMongoDBRegister(TSQLRecordSample,Client.Server,MongoDatabase,'perftest');
+        StaticMongoDBRegister(TSQLRecordSample,Client.Server,MongoDatabase,'perftest').
+          Drop;
       {$endif}
       end;
       Client.Server.DB.Synchronous := Mode;

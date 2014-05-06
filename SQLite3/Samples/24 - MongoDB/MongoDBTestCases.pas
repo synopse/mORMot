@@ -330,7 +330,7 @@ begin
   Check(fMongoClient.ServerBuildInfoNumber<>0);
   fModel := TSQLModel.Create([TSQLORM]);
   fClient := TSQLRestClientDB.Create(fModel,nil,':memory:',TSQLRestServerDB);
-  Check(StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'mORMot'));
+  Check(StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'mORMot')<>nil);
   fClient.Server.CreateMissingTables;
   (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
   Check(fClient.TableRowCount(TSQLORM)=0);

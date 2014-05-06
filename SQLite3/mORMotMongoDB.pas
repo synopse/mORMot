@@ -51,8 +51,11 @@ unit mORMotMongoDB;
   
   TODO:
   - complex WHERE clause with a MongoDB Query object instead of SQL syntax
+  - allow PolyMorphic schemas: the same MongoDB collection may be able to
+    store a hierarchy of TSQLRecord classes, storing only relevant fields in
+    each document - this may be a huge benefit in common OOP work  
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
-    in a dedicated mORMotDBMongoDB unit 
+    in a dedicated mORMotDBMongoDB unit (but perhaps we may loose interest)
 
 }
 
@@ -167,20 +170,26 @@ type
 // - to be called before Server.CreateMissingTables
 // - by default, the collection name will match TSQLRecord.SQLTableName, but
 // you can customize it with the corresponding parameter
+// - the TSQLRecord.ID (RowID) field is always mapped to MongoDB's _id field
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-// (just a regular external DB as defined in mORMotDB.pas unit)
+// (just a regular external DB as defined in mORMotDB.pas unit) - it may be
+// a good idea to use short field names on MongoDB side, to reduce the space
+// used for storage (since they will be embedded within the document data)
+// - it will return the corresponding TSQLRestServerStaticMongoDB instance -
+// you can access later to it and its associated collection e.g. via:
+// ! (aServer.StaticDataServer[TSQLMyTable] as TSQLRestServerStaticMongoDB)
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): boolean;
+  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestServerStaticMongoDB;
 
 
 implementation
 
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): boolean;
+  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestServerStaticMongoDB;
 var Props: TSQLModelRecordProperties;
 begin
-  result := False;
+  result := nil;
   if (aServer=nil) or (aClass=nil) or (aMongoDatabase=nil) then
     exit; // avoid GPF
   Props := aServer.Model.Props[aClass];
@@ -191,8 +200,8 @@ begin
   Props.ExternalDB.Init(Props,aMongoCollectionName,
     aMongoDatabase.CollectionOrCreate[aMongoCollectionName]);
   Props.ExternalDB.MapField('ID','_id');
-  aServer.StaticDataCreate(aClass,'',false,TSQLRestServerStaticMongoDB);
-  result := true;
+  result := (aServer.StaticDataCreate(aClass,'',false,TSQLRestServerStaticMongoDB)
+    as TSQLRestServerStaticMongoDB);
 end;
 
 
