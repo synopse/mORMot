@@ -29146,7 +29146,7 @@ end;
 
 procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar; QuoteChar: AnsiChar);
 begin
-  if Value^=0 then
+  if (Value^=0) and (QuoteChar=#0) then
     exit;
   if B+21>=BEnd then
     Flush;
