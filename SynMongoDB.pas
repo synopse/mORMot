@@ -1421,6 +1421,12 @@ type
     // - if Query.NumberToReturn=1, then it will return either null or a
     // single TDocVariant instance
     procedure GetDocumentsAndFree(Query: TMongoRequestQuery; var result: variant); overload;
+    /// send a query to the server, returning a dynamic array of TDocVariant
+    // instance containing all the incoming data
+    // - will send the Request message, and any needed TMongoRequestGetMore
+    // messages to retrieve all the data from the server
+    // - the supplied Query instance will be released when not needed any more
+    procedure GetDocumentsAndFree(Query: TMongoRequestQuery; var result: TVariantDynArray); overload;
     /// send a query to the server, returning a TBSONDocument instance containing
     // all the incoming data, as raw binary BSON document containing an array
     // of the returned items
@@ -1754,7 +1760,7 @@ type
     // either null or the single returned document)
     // - if the query does not have any matching record, it will return null
     function FindDoc(const Criteria, Projection: Variant;
-      NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      NumberToReturn: integer=1; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]): variant; overload;
     /// select documents in a collection and returns a dvArray TDocVariant
     // instance containing the selected documents
@@ -1773,6 +1779,23 @@ type
     function FindDoc(Criteria: PUTF8Char; const Params: array of const;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]): variant; overload;
+    /// find an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be retrieved
+    function FindOne(const _id: TBSONObjectID): variant; overload;
+    /// find an existing document in a collection, by its _id field
+    // - _id will identify the unique document to be retrieved
+    function FindOne(const _id: variant): variant; overload;
+    /// returns a dynamic array of TDocVariant instance containing
+    // all documents of a collection
+    procedure FindDocs(var result: TVariantDynArray; const Projection: RawUTF8='';
+      NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      Flags: TMongoQueryFlags=[]); overload;
+    /// select documents in a collection and returns a dynamic array of
+    // TDocVariant instance containing the selected documents
+    procedure FindDocs(Criteria: PUTF8Char; const Params: array of const;
+      var result: TVariantDynArray; const Projection: RawUTF8='';
+      NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      Flags: TMongoQueryFlags=[]); overload; 
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
@@ -1810,6 +1833,14 @@ type
     // for one document - in this case, the returned instance won't be a '[..]'
     // JSON array, but either 'null' or a single '{..}' JSON object)
     function FindJSON(Criteria: PUTF8Char; const Params: array of const;
+      NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+    /// select documents in a collection and returns a JSON array of documents
+    // containing the selected documents
+    // - Criteria and Projection can specify the query selector as (extended)
+    // JSON and parameters
+    function FindJSON(Criteria: PUTF8Char; const CriteriaParams: array of const;
+      const Projection: RawUTF8; 
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
 
@@ -1929,6 +1960,13 @@ type
     procedure Update(Query: PUTF8Char; const QueryParams: array of const;
       Update: PUTF8Char; const UpdateParams: array of const;
       Flags: TMongoUpdateFlags=[]); overload;
+    /// modifies some fields of an existing document in a collection
+    // - by default, Update() or Save() will replace the whole document
+    // - this method will expect the identifier to be supplied as a variant -
+    // may be via the ObjectID() function
+    // - and will replace the specified fields, i.e. it will execute a $set:
+    // with the supplied UpdatedFields value
+    procedure UpdateOne(const _id, UpdatedFields: variant);
 
     /// delete an existing document or several documents in a collection
     // - Query parameter should be TDocVariant (i.e. created via _JsonFast() or
@@ -4262,6 +4300,12 @@ begin
   FreeAndNil(fSocket);
 end;
 
+procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery; var result: TVariantDynArray);
+begin
+  result := nil;
+  GetRepliesAndFree(Query,ReplyDocVariant,result);
+end;
+
 procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery;
   var result: variant);
 var ForceOneInstance: boolean;
@@ -5030,6 +5074,36 @@ begin
     NumberToReturn,NumberToSkip,Flags);
 end;
 
+procedure TMongoCollection.FindDocs(Criteria: PUTF8Char;
+  const Params: array of const; var result: TVariantDynArray;
+  const Projection: RawUTF8; NumberToReturn, NumberToSkip: Integer;
+  Flags: TMongoQueryFlags);
+begin
+  Database.Client.GetOneReadConnection.GetDocumentsAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,
+      BSONVariant(Criteria,[],Params),BSONVariant(Projection),
+      NumberToReturn,NumberToSkip,Flags),result);
+end;
+
+function TMongoCollection.FindOne(const _id: TBSONObjectID): variant;
+begin
+  result := FindOne(_id.ToVariant);
+end;
+
+function TMongoCollection.FindOne(const _id: variant): variant;
+begin
+  result := FindDoc(BSONVariant(['_id',_id]),null,1);
+end;
+
+procedure TMongoCollection.FindDocs(var result: TVariantDynArray;
+  const Projection: RawUTF8; NumberToReturn, NumberToSkip: Integer;
+  Flags: TMongoQueryFlags);
+begin
+  Database.Client.GetOneReadConnection.GetDocumentsAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,null,null,
+      NumberToReturn,NumberToSkip,Flags),result);
+end;
+
 function TMongoCollection.FindJSON(const Criteria, Projection: Variant;
   NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags;
   Mode: TMongoJSONMode): RawUTF8;
@@ -5045,6 +5119,16 @@ function TMongoCollection.FindJSON(Criteria: PUTF8Char;
 begin
   result := FindJSON(BSONVariant(Criteria,[],Params),null,
     NumberToReturn,NumberToSkip,Flags,Mode);
+end;
+
+function TMongoCollection.FindJSON(
+  Criteria: PUTF8Char; const CriteriaParams: array of const;
+  const Projection: RawUTF8; 
+  NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+  Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+begin
+  result := FindJSON(BSONVariant(Criteria,[],CriteriaParams),
+    BSONVariant(Projection),NumberToReturn,NumberToSkip,Flags,Mode);
 end;
 
 procedure TMongoCollection.Insert(const Documents: array of variant;
@@ -5135,6 +5219,11 @@ procedure TMongoCollection.Update(const Query, Update: variant;
 begin
   Database.Client.Connections[0].SendAndFree(TMongoRequestUpdate.Create(
     fFullCollectionName,Query,Update,Flags),false);
+end;
+
+procedure TMongoCollection.UpdateOne(const _id, UpdatedFields: variant);
+begin
+  Update(BSONVariant(['_id',_id]),BSONVariant(['$set',UpdatedFields]));
 end;
 
 procedure TMongoCollection.Remove(const Query: variant;
