@@ -573,7 +573,7 @@ It provides an Open Source {\i self-sufficient set of units} (even Delphi starte
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich Delphi clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (including @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain Delphi objects, including high-level managed types like dynamic arrays or records for Value Objects, or dedicated classes for entities or aggregates;
-- {\i Data persistence infrastructure layer} with ORM persistence over direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB};
+- {\i Data persistence infrastructure layer} with ORM persistence over direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture, ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
@@ -637,6 +637,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
 - Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, GDI messages or in-process as lighter alternatives;
 - Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the Delphi {\f1\fs20 DB.pas} unit nor any third-party (so even the Delphi Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
+- RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
 - Full @*Text Search@ engine included, with enhanced Google-like ranking algorithm;
 - Direct User Interface generation: grids are created on the fly, together with a modern Ribbon ('Office 2007'-like) screen layout - the code just has to define actions, and assign them to the tables, in order to construct the whole interface from a few lines of code, without any IDE usage;
@@ -725,6 +726,7 @@ label="              Server";
 \RESTful Server\Authentication¤(users, sessions)\requires
 \RESTful Server\external tables\makes¤CRUD
 \RESTful Server\in-memory tables¤JSON or binary files\makes¤CRUD
+\RESTful Server\NoSQL¤engine
 \RESTful Server\SQlite3¤engine\REST to SQL
 \RESTful Server\Services¤implementation\runs
 \SQlite3¤engine\in-memory tables¤JSON or binary files
@@ -733,16 +735,21 @@ label="              Server";
 \ORM\SQlite3¤engine
 \ORM\in-memory tables¤JSON or binary files
 \ORM\external tables
+\ORM\NoSQL¤engine
 }
 \external tables\External¤Database 1\SQL
 \external tables\External¤Database 2
+\NoSQL¤engine\MongoDB\direct¤access
 subgraph cluster_2 {
 "External\nDatabase 1";
 }
 subgraph cluster_3 {
 "External\nDatabase 2";
 }
-subgraph cluster_4 {
+subgraph cluster_ {
+"MongoDB";
+}
+subgraph cluster_5 {
 label="Cross-Cutting features";
 "File process\nCompression";
 "Security\nCryptography";
@@ -848,7 +855,7 @@ Both @*ORM@ and @*SOA@ aspects of our @*REST@ful framework make it easy to devel
 \Logic Tier\Data Tier
 \
 The {\i Synopse mORMot Framework} follows this development pattern:
-- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from Delphi classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled - see @27@;
+- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from Delphi classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
 - {\i Logic Tier} is performed by pure ORM aspect and SOA implementation: you write Delphi classes which are mapped by the {\i Data Tier} into the database, and you can write your business logic as Services called as Delphi {\f1\fs20 interface}, up to a {\i @*Domain-Driven@} design - see @54@ - if your project reaches some level of complexity;
 - {\i Presentation Tier} is either a Delphi Client, or an @*AJAX@ application, because the framework can communicate using @*REST@ful @*JSON@ over @*HTTP@/1.1 (the Delphi Client User Interface is generated from Code, by using @*RTTI@ and structures, not as a RAD - and the Ajax applications need to be written by using your own tools and @*JavaScript@ framework, there is no "official" Ajax framework included yet).
 In fact, {\i mORMot} can scales up to a {\i @*Domain-Driven@} Design four-tier architecture - see @54@ - as such:
@@ -1005,6 +1012,87 @@ Of course, you'll find out that our framework implements a Client-Server ORM, wh
 As far as we found out, looking at every language and technology around, almost no other ORM supports such a native Client-Server orientation. Usual practice is to use a @17@ for remote access to the ORM. Some projects allow remote access to an existing ORM, but they are separated projects. Our {\i mORMot} is pretty unique, in respect to its @*REST@ful Client-Server orientation, from the ground up.
 If you entered the Delphi world years ago, you may be pretty fluent with the RAD approach. But you probably also discovered how difficult it is to maintain an application which mixes UI components, business logic and database queries. Today's software users have some huge ergonomic expectations about software usability: some screens with grids and buttons, mapping the database, won't definitively be appealing. Using {\i mORMot}'s ORM /SOA approach will help you focus on your business and your clients expectations, letting the framework perform most of the plumbing for you.
 \page
+:82 NoSQL and Object-Document Mapping (ODM)
+@**SQL@ is the De-Facto standard for data manipulation
+- Schema-based;
+- Relational-based;
+- ACID by transactions;
+- Time proven and efficient;
+- "Almost" standard (each DB has its own column typing system).
+{\i @**NoSQL@} is a new paradigm, named as such in early 2009 (even if some database engines, like {\i Lotus Domino}, may fit the definition since decades):
+- {\i NoSQL} stands for "Not Only SQL" - which is more positive than "no SQL";
+- Designed to scale for the web and @*BigData@ (e.g. Amazon, Google, Facebook), e.g. via easy replication and simple API;
+- Relying on no standard (for both data modeling and querying);
+- A lot of diverse implementations, covering any data use - @http://nosql-database.org lists more than 150 engines.
+We can identify two main families of NoSQL databases:
+- {\i Graph}-oriented databases;
+- {\i Aggregate}-oriented databases.
+{\i Graph}-oriented databases store data by their relations / associations:
+\graph NoSQLGraphDB NoSQL Graph Database
+\Alice\Bob\ID: 100¤Label: knows¤Since: 2001/10/03
+\Bob\Alice\ID: 101¤Label: knows¤Since: 2001/10/04
+\Alice\Group\ID: 102¤Label: is_member¤Since: 2005/07/01
+\Group\Alice\ID: 103¤Label: members
+\Bob\Group\ID: 105¤Label: is_member¤Since: 2011/02/14
+\Group\Bob\ID: 104¤Label: members
+=Alice=ID: 1¤Name: Alice¤Age: 18
+=Bob=ID: 2¤Name: Bob¤Age: 22
+=Group=ID: 3¤Type: Group¤Name: Chess
+\
+Such kind of databases are very useful e.g. for developing any "social" software, which will value its data by the relations between every node. Such data model does not fit well with the relational model, whereas a {\i NoSQL} engine like {\i Neo4j} handles such kind of data natively. Note that by design, {\i Graph}-oriented databases are ACID.
+But the main {\i NoSQL} database family is populated by the {\i Aggregate}-oriented databases. By {\i Aggregate}, we mean the same definition as will be used @54@ for {\i Domain Driven Design}. It is a collection of data that we interact with as a unit, which forms the boundaries for ACID operations in a given model.
+In fact, {\i Aggregate}-oriented databases can be specified as three main implementation/query patterns:
+- Document-based (e.g. {\i @*MongoDB@, CouchDB, RavenDB});
+- Key/Value (e.g. {\i Redis, Riak, Voldemort});
+- Column family (e.g. {\i Cassandra, HiBase}).
+Some of them can be {\i schema-less} (meaning that the data layout is not fixed, and can evolve on the fly without re-indexing the whole database) - but column-driven bases do have a schema, or even storing plain BLOB of data (this is the purpose of Key/Value engines, which focus on storage speed and rely on the client side to process the data).
+In short, RDBMS stores data per table, and need to JOIN the references to get the aggregated information:
+\graph NoSQLAggregJoin NoSQL Aggregate via JOINed tables
+rankdir=LR;
+node [shape=Mrecord];
+struct1 [label="ID|UserName"];
+struct2 [label="ID|<f0>UserID|Phone|Email"];
+struct3 [label="ID|<f0>UserID|Level|Group"];
+struct2:f0 -> struct1;
+struct3:f0 -> struct1;
+\
+Whereas {\i NoSQL} stores its aggregates as documents: the whole data is embedded in one.
+\graph NoSQLAggregNoSQL NoSQL Aggregate as one document
+rankdir=LR;
+node [shape=Mrecord];
+struct1 [label="ID|UserName|Contact.Phone|Contact.Email|Access.Level|Access.Group"];
+\
+Which may be represented as the following @*JSON@ - see @2@ - data:
+µ{
+µ  "ID": 1234,
+µ  "UserName": "John Smith",
+µ  "Contact": {
+µ               "Phone": "123-456-789",
+µ               "Email": "xyz@abc.com"
+µ             },
+µ  "Access": {
+µ              "Level": 5,
+µ              "Group": "dev"
+µ            }
+µ}
+Such a document will fit directly with the object programming model, without the need of thinking about JOINed queries and database plumbing.
+As a result, we can discuss the two data models:
+- {\i Relational data Model} with highly-structured table organization, and rigidly-defined data formats and record structure;
+- {\i Document data Model} as a collection of complex documents with arbitrary, nested data formats and varying "record" format.
+The {\i Relational} model features {\i normalization} of data, i.e. organize the fields and tables of a relational database to minimize redundancy.\line On the other hand, the {\i Document} model features {\i denormalization} of data, to optimize the read performance of a database by adding redundant data or by grouping data. It also features horizontal scaling of the servers, since data can easily be balanced among several servers, without the speed penalty of performing a remote JOIN.
+One of the main difficulties, when working with {\i NoSQL}, is to define how to {\i denormalize} the data, and when to store the data in {\i normalized} format.\line One good habit is to model your data depending on the most current queries you will have to perform. For instance, you may embed sub-documents which will be very likely to be requested by your application most of the time. Note that most {\i NoSQL} engines feature a {\i projection} mechanism, which allows you to return only the needed fields for a query, leaving the sub-documents on the server if you do not need them at this time. The less frequent queries may be executed other separated collections, populated e.g. with consolidated information.\line Since {\i NoSQL} databases have fewer hard-and-fast rules than their relational databases ancestors, you are more likely to tune your model, depending on your expectations. In practice, you may spend less time thinking about "how" to store the data than with a RDBMS, and are still able to {\i normalize} information later, if needed. {\i NoSQL} engines do not fear redundant information, as soon as you follow the rules of letting the client application take care of the whole data consistency (e.g. via one ORM).
+As you may have stated, this {\i Document data Model} is much closer to the OOP paradigm than the classic relational scheme. Even a new family of frameworks did appear together with {\i NoSQL} adoption, named {\i Object Document Mapping} (@*ODM@), which is what @13@ was for RDBMS.
+In short, both approaches have benefits, which are to be weighted.
+|%50%50
+|\b SQL|NoSQL\b0
+|Ubiquitous SQL|Map OOP and complex types\line (e.g. arrays or nested documents)
+|Easy vertical scaling|Uncoupled data: horizontal scaling
+|Data size (avoid duplicates and with no schema)|Schema-less: cleaner evolution
+|Data is stored once, therefore consistent|Version management (e.g. {\i CouchDB})
+|Complex ACID statements|Graph storage (e.g. {\i Redis})
+|Aggregation functions (depends)|Map/Reduce or Aggregation functions
+|%
+With {\i mORMot}, you can switch from a classic SQL engine into a trendy {\i MongoDB} server, just in one line of code, when initializing the data on the server side. You can switch from ORM to ODM at any time, even at runtime, e.g. for a demanding customer.
 :54 Domain-Driven Design
 :  Definition
 @http://domaindrivendesign.org gives the somewhat "official" definition of {\i @**Domain-Driven@} design (DDD):
@@ -1105,6 +1193,10 @@ rankdir=LR;
 \HTTP\SynCrtSock.pas
 \HTTP\mORMot.pas
 \HTTP\SynCommons.pas
+\mORMotMongoDB.pas\SynMongoDB.pas
+\mORMotMongoDB.pas\mORMot.pas
+\SynMongoDB.pas\SynCommons.pas
+\SynMongoDB.pas\SynCrtSock.pas
 =UI=mORMotUI.pas¤mORMotToolBar.pas¤mORMoti18n.pas¤mORMotUILogin.pas¤mORMotUIEdit.pas¤mORMotUIQuery.pas¤mORMotUIOptions.pas
 =HTTP=mORMotHttpClient.pas¤mORMotHttpServer.pas
 \mORMotReport.pas=UI=SynSMAPI.pas¤SynSM.pas
@@ -1122,6 +1214,7 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 mORMotSQLite3.pas}|Bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 @*SynDB@.pas\line SynDB*.pas}|Direct RDBMS access classes
 |{\f1\fs20 mORMotDB.pas}|ORM external {\f1\fs20 SynDB.pas} access, via {\i SQlite3} virtual tables
+|{\f1\fs20 mORMotMongoDB.pas\line SynMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
 |{\f1\fs20 SynCrtSock.pas}|Implements @*HTTP@/1.1 client and server protocol
 |{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas}|@*REST@ful HTTP/1.1 Client and Server
 |{\f1\fs20 mORMotUI*.pas}|Grid and Forms User Interface generation
@@ -1533,7 +1626,7 @@ With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i 
 !  // all commands will write '{"name":"john","year":1982}'
 Of course, you can nest objects or arrays as parameters to the {\f1\fs20 _JsonFmt()} function.
 The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} extended syntax, i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the Delphi code to forget about @*quotes@ around the property names of your JSON.
-Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any MongoDB specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
+Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
 As a with any {\i object} or {\i array} document, the Delphi IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
 :   Per-value or per-reference
 By default, the {\f1\fs20 variant} instance created by {\f1\fs20 _Obj() _Arr() _Json() _JsonFmt()} will use a {\i copy-@**by-value@} pattern. It means that when an instance is affected to another variable, a new {\f1\fs20 variant} document will be created, and all internal values will be copied. Just like a {\f1\fs20 record} type.
@@ -1854,7 +1947,7 @@ A button gives access to the global {\i Stats} about its content (customer-side 
 Just below the "{\i Browse}" button, there is an edit field available, with a ? button. Enter any text within this edit field, and it will be searched within the log events list. Search is case-insensitive, and was designed to be fast. Clicking on the ? button (or pressing the {\f1\fs20 F3} key) allows to repeat the last search.
 In the very same left panel, you can see all existing events, with its own color and an associated check-box. Note that only events really encountered in the {\f1\fs20 .log} file appear in this list, so its content will change between log files. By selecting / un-selecting a check-box, the corresponding events will be instantaneously displayed / or not on the right side list of events. You can right click on the events check-box list to select a predefined set of events.
 The right colored event list follows the events appended to the log, by time order. When you click on an event, its full line content is displayed at the bottom on the screen, in a memo.
-Having all @*SQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
+Having all @*SQL@ / @*NoSQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
 :   Customer-side profiler
 One distinctive feature of the {\f1\fs20 TSynLog} logging class is that it is able to map methods or functions entering/leaving (using the {\f1\fs20 Enter} method), and trace this into the logs. The corresponding timing is also written within the "{\i Leave}" event, and allows application profiling from the customer side. Most of the time, profiling an application is done during the testing, with a test environment and database. But this is not, and will never reproduce the exact nature of the customer use: for instance, hardware is not the same (network, memory, CPU), nor the software (Operating System version, [anti-]virus installed)... By enabling customer-side method profiling, the log will contain all relevant information. Those events are named "{\i Enter}" / "{\i Leave}" in the command panel check-box list, and written as + and - in the right-sided event list.
 The "{\i Methods profiler}" options allow to display the middle optional method calls list. Several sort order are available: by name (alphabetical sort), by occurrence (in running order, i.e. in the same order than in the event log), by time (the full time corresponding to this method, i.e. the time written within the "{\i Leave}" event), and by proper time (i.e. excluding all time spent in the nested methods).
@@ -1874,7 +1967,7 @@ In our @*Client-Server@ ORM, those {\f1\fs20 TSQLRecord} classes can be used for
 This allows to truly implement a Multi-tier architecture - see @7@.
 All @*published properties@ of the {\f1\fs20 TSQLRecord} descendant classes are then accessed via @*RTTI@ in a Client-Server @*REST@ful architecture.
 Following the three previous purposes, these properties will be used:
-- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot};
+- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way;
 - To have business logic objects accessible for both the Client and Server side, in a RESTful approach;
 - To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
 :26 TSQLRecord fields definition
@@ -2011,7 +2104,7 @@ See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} publis
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
-- If some custom {\f1\fs20 variant} types are registered (e.g. @*MongoDB@ custom objects), they will be recognized as such (with extended syntax, if applying);
+- If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with extended syntax, if applying);
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
 - It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 double}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
@@ -2089,7 +2182,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !!  Client.Delete(TSQLBaby,ID);
 !end;
 Of course, you can have a {\f1\fs20 TSQLBaby} instance alive during a longer time. The same {\f1\fs20 TSQLBaby} instance can be used to access several record content, and call {\f1\fs20 Retrieve / Add / Delete / Update} methods on purpose.
-No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. This is the magic of @*ORM@.
+No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. It could even work with @*NoSQL@ databases, like a fast {\f1\fs20 TObjectList} or @*MongoDB@. This is the magic of @*ORM@.
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':
@@ -2631,6 +2724,10 @@ You have two methods to register JSON serialization for any kind of class:
 - Custom serialization via read and write callbacks - see {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} @52@;
 - {\f1\fs20 @*TObjectList@} instances, after a proper call to {\f1\fs20 TJSONSerializer. RegisterClassForJSON} @71@.
 In the database, such kind of objects will be stored as TEXT (serialized as JSON), and transmitted as regular JSON objects or arrays when working in Client-Server mode.
+:     Sharding on NoSQL engines
+This "Shared nothing architecture" matches perfectly with the @82@ design.
+In fact, {\i mORMot}'s integration with {\i @*MongoDB@} has been optimized so that any of those high-level properties (like dynamic arrays, variants and {\i TDocVariant}, or any {\f1\fs20 class}) will be stored as BSON documents on the {\i MongoDB} server.\line If those types are able to be serialized as JSON - which is the case for simple types, {\f1\fs20 variants} and for any dynamic array / record custom types - see @53@, then the {\f1\fs20 mORMotDB.pas} unit will store this data as BSON objects or arrays on the server side, and not as BLOB or JSON text (as with SQL back-ends). You will be able to query by name any nested sub-document or sub-array, in the {\i MongoDB} collection.
+As such, {\i data sharing} with {\i mORMot} will benefit of RDBMS back-end, as a reliable and proven solution, but also of the latest {\i NoSQL} technology.
 :58   ORM implementation via pivot table
 Data sharding just feels natural, from the @*ORM@ point of view.
 But defining a pivot table is a classic and powerful use of relational database, and will unleash its power:
@@ -3470,18 +3567,21 @@ All text has indeed been translated as expected.
 : SQLite3-powered, not SQLite3-limited
 The core database of this framework uses the {\i @**SQLite3@} library, which is a Free, Secure, Zero-Configuration, Server-less, Single Stable Cross-Platform Database File database engine.
 As stated below, you can use any other database access layer, if you wish:
-- A fast in-memory engine is included, which outperforms any SQL-based solution in terms of speed - but to the price of a non ACID behavior;
+- A fast in-memory engine is included, which outperforms any SQL-based solution in terms of speed - but to the price of a non ACID behavior on disk (but ACID in RAM);
 - An integrated {\i SQLite3} engine, which is the best candidate for an embedded solution, even on server side;
-- Any remote database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects.
+- Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects;
+- Direct access to a {\i @*MongoDB@} database, which implements a true @82@ design.
 \graph mORMotDBDesign mORMot Persistence Layer Architecture
 \ORM\SQLite3\direct
 \ORM\TObjectList\direct
 \ORM\External DB\direct
 \SQLite3\TObjectList\virtual
 \SQLite3\External DB
-\External DB\Oracle SQLite3 ODBC OleDB ZDBC\direct
-\External DB\FireDAC AnyDAC UniDAC BDE DBExpress NexusDB\DB.pas¤TDataSet
+\External DB\Oracle SQLite3 ODBC¤OleDB ZDBC\direct
+\External DB\FireDAC AnyDAC UniDAC¤BDE DBExpress NexusDB\DB.pas¤TDataSet
+\ORM\MongoDB\direct
 =ORM=mORMot¤ORM
+\TObjectList=External DB=MongoDB
 \
 {\i SQlite3} will be used as the main SQL engine, able to @*JOIN@ all those tables, thanks to its {\i @*Virtual Table@} unique feature. You can in fact {\i mix} internal and external engines, in the same database model, and access all data in one unique SQL statement.
 :  SQLite3 as core
@@ -3544,7 +3644,8 @@ In these tables:
 - 'FireDAC *' stands for {\i @*FireDAC@} library;
 - 'UniDAC *' stands for {\i @*UniDAC@} library;
 - 'BDE *' when using a {\i @*BDE@} connection;
-- '@*ODBC@ *' for a direct access to ODBC.
+- '@*ODBC@ *' for a direct access to ODBC;
+- '@*MongoDB@ ack/no ack' for direct {\i MongoDB} access ({\f1\fs20 SynMongoDB.pas}) with or without write acknowledge.
 This list of database providers is to be extended in the future. Any feedback is welcome!
 Numbers are expressed in rows/second (or objects/second). This benchmark was compiled with Delphi XE4, since newer compilers tends to give better results, mainly thanks to function in-lining (which was not existing e.g. in Delphi 6-7).
 Note that these tests are not about the relative speed of each database engine, but reflect the current status of the integration of several DB libraries within the {\i mORMot} database access.
@@ -3555,7 +3656,8 @@ Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a sta
 - {\i @*PostgreSQL@} 9.2.7 running locally in 64 bit mode;
 - {\i @*MySQL@} 5.6.16 running locally in 64 bit mode;
 - {\i @*Firebird@} embedded in revision 2.5.2;
-- {\i @*NexusDB@} 3.11 in Free Embedded Version.
+- {\i @*NexusDB@} 3.11 in Free Embedded Version;
+- {\i MongoDB} 2.6 in 64 bit mode.
 So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i Linux} configuration, you can expect even better numbers.
 Tests were compiled with the Delphi XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
@@ -3578,6 +3680,8 @@ Here are some insertion speed values, in objects/second:
 |{\b SQLite3 (ext off)}|830|21406|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
 |{\b SQLite3 (ext mem)}|101440|234576|113530|190142
+|{\b MongoDB (ack)}|10081|84585|9800|85232
+|{\b MongoDB (no ack)}|33223|189186|27974|226355
 |{\b ODBC SQLite3}|492|11746|35367|82425
 |{\b ZEOS SQlite3}|494|11851|56206|85705
 |{\b FireDAC SQlite3}|26369|50306|49755|155115
@@ -3608,7 +3712,7 @@ Here are some insertion speed values, in objects/second:
 |{\b FireDAC MySQL}|3078|43053|10955|45781
 |{\b UniDAC MySQL}|3119|27772|11246|33288
 |%
-Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hardrive instead of a SDD) outside the scope of a transaction.
+Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
 So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows.
 For both our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit and {\i FireDAC} library , BATCH process benefits of the @*array bind@ing feature a lot (known as {\i Array DML} in {\i FireDAC/AnyDAC}).
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
@@ -3616,6 +3720,7 @@ For most engines, our ORM kernel is able to generate the appropriate SQL stateme
 - {\i Oracle} handles {\f1\fs20 INSERT INTO .. INTO .. SELECT 1 FROM DUAL} (weird syntax, isn't it?);
 - {\i @*Firebird@} implements {\f1\fs20 EXECUTE BLOCK}.
 As a result, some engines show a nice speed boost when {\f1\fs20 BatchAdd()} is used. Even {\i SQLite3} is faster when used as external engine, in respect to direct execution! This feature is at ORM/SQL level, so it benefits to any external database library. Of course, if a given library has a better implementation pattern (e.g. our direct {\i Oracle} or {\i FireDAC} with native array binding), it is used instead.
+{\i @*MongoDB@} bulk insertion has been implemented, which shows an amazing speed increase in Batch mode. Depending on the {\i MongoDB} {\i write concern} mode, insertion speed can be very high: by default, every write process will be acknowledge by the server, but you can by-pass this request if you set the {\f1\fs20 wcUnacknowledged} mode - note that in this case, any error (e.g. an unique field duplicated value) will never be notified, so it should not be used in production, unless you need this feature to quickly populate a database, or consolidate some data as fast as possible.
 :   Reading speed
 Now the same data is retrieved via the ORM layer:
 - 'By one' states that one object is read per call (ORM generates a {\f1\fs20 SELECT * FROM table WHERE ID=?} for {\f1\fs20 Client.Retrieve()} method);
@@ -3633,6 +3738,8 @@ Here are some reading speed values, in objects/second:
 |{\b SQLite3 (ext off)}|133696|262977|543065
 |{\b SQLite3 (ext off exc)}|134698|264186|558596
 |{\b SQLite3 (ext mem)}|137487|259713|557475
+|{\b MongoDB (ack)}|8002|262353|271268
+|{\b MongoDB (no ack)}|8234|272079|274582
 |{\b ODBC SQLite3}|19461|136600|201280
 |{\b ZEOS SQlite3}|33541|200835|306955
 |{\b FireDAC SQlite3}|7683|83532|112470
@@ -3663,7 +3770,7 @@ Here are some reading speed values, in objects/second:
 |{\b FireDAC MySQL}|3636|75081|105028
 |{\b UniDAC MySQL}|4798|99940|146968
 |%
-The {\i @*SQLite3@} layer gives amazing reading results, which makes it a perfect fit for most typical ORM use. When running with {\f1\fs20 DB.LockingMode := lmExclusive} defined (i.e. "off exc" rows), reading speed is very high, and benefits from exclusive access to the database file - see @60@. External database access is only required when data is expected to be shared with other processes.
+The {\i @*SQLite3@} layer gives amazing reading results, which makes it a perfect fit for most typical ORM use. When running with {\f1\fs20 DB.LockingMode := lmExclusive} defined (i.e. "off exc" rows), reading speed is very high, and benefits from exclusive access to the database file - see @60@. External database access is only required when data is expected to be shared with other processes, or for better scaling: e.g. for physical n-Tier installation with dedicated database server(s).
 In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling.
 For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestServerStaticInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored AS_UNIQUE} properties.
 As a consequence, search of non-unique values may be slow: the engine has to loop through all rows of data. But for unique values (defined as {\f1\fs20 stored AS_UNIQUE}), both insertion and search speed is awesome, due to its optimized O(1) hash algorithm - see the following benchmark, especially the "{\i By name}" row for "{\i TObjectList}" columns, which correspond to a search of an unique {\f1\fs20 RawUTF8} property value via this hashing method.
@@ -3688,8 +3795,9 @@ Most recognized {\i closed source} databases are available:
 {\i Open Source} databases are worth considering, especially in conjunction with an Open Source framework like {\i mORMot}:
 - {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i Linux Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
 - {\i PostgreSQL} is an Enterprise class database, with amazing features among its Open Source alternatives, and really competes with commercial solutions. Even under Windows, we think it is easy to install and administrate, and uses less resource than the other commercial engines.
-- {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of Delphi programmers are skilled with this free alternative to {\i Interbase}.
-To access those databases, @*OleDB@, @*ODBC@ or @*ZDBC@ providers may also be used, with direct access. {\i mORMot} is a very open-minded roden: you can use any {\f1\fs20 DB.pas} provider, e.g. {\i @*FireDAC@}, {\i @*UniDAC@}, {\i @*DBExpress@}, {\i @*NexusDB@} or even the {\i @*BDE@}, but with the additional layer introduced by using a {\f1\fs20 @*TDataSet@} instance, at reading.
+- {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of Delphi programmers are skilled with this free alternative to {\i Interbase};
+- {\i @*MongoDB@} appears as a serious competitor to SQL databases, with the potential benefit of horizontal scaling and installation/administration ease - performance is very high, and its document-based storage fits perfectly with {\i mORMot}'s advanced ORM features like @29@.
+To access those databases, @*OleDB@, @*ODBC@ or @*ZDBC@ providers may also be used, with direct access. {\i mORMot} is a very open-minded rodent: you can use any {\f1\fs20 DB.pas} provider, e.g. {\i @*FireDAC@}, {\i @*UniDAC@}, {\i @*DBExpress@}, {\i @*NexusDB@} or even the {\i @*BDE@}, but with the additional layer introduced by using a {\f1\fs20 @*TDataSet@} instance, at reading.
 Therefore, the typical use may be the following:
 |%27%73
 |\b Database|Use case\b0
@@ -3704,6 +3812,7 @@ Therefore, the typical use may be the following:
 |external Jet|Created with {\f1\fs20 VirtualTableExternalRegister}\line Could be used as a data exchange format (e.g. with Office applications)
 |external Zeos|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, with direct @*Zeos@/@*ZDBC@ access which will by-pass the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck - and we will also prefer an active Open Source project!
 |external @*FireDAC@/@*UniDAC@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, including the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck
+|external {\i MongoDB}|Created with {\f1\fs20 StaticMongoDBRegister()}\line High-speed document-based storage, with horizontal scaling and advanced query abilities of nested sub-documents
 |%
 Whatever database back-end is used, don't forget that {\i mORMot} design will allow you to switch from one library to another, just by changing a {\f1\fs20 TSQLDBConnectionProperties} class type. And note that you can {\i mix} external engines, on purpose: you are not tied to one single engine, but the database access can be tuned for each ORM table, according to your project needs.
 \page
@@ -4404,7 +4513,7 @@ Once again, this restriction does not apply to @27@.
 : Database agnosticism
 Since revision 1.15, our @*ORM@ @*REST@ful framework is able to access any available database engine, via a set of generic units and classes.
 The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mix those tables content with the native ORM tables of the framework. Thanks to the unique @*Virtual Table@s mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements. See @%%mORMotDesign3@.
-The current list of available external database classes is:
+The current list of available external RDBMS database classes is:
 - Any {\i @*OleDB@} provider (including {\i @*MS SQL@, Jet} or others);
 - Any {\i @*ODBC@} provider (including {\i MS SQL, @*FireBird@, @*MySQL@, @*PostgreSQL@}, @*MySQL@, IBM @*DB2@ or others);
 - Any {\i @*Zeos@Lib} provider (direct {\f1\fs20 @*ZDBC@} access without {\f1\fs20 DB.pas} overhead);
@@ -5099,6 +5208,480 @@ $  - External via virtual table: 133,666 assertions passed  1.12s
 The first run is made with {\f1\fs20 TSQLRestServer.StaticVirtualTableDirect} set to TRUE (which is the default) - i.e. it will call directly {\f1\fs20 TSQLRestServerStaticExternal} for RESTful commands, and the second will set this property to FALSE - i.e. it will call the {\i SQLite3} engine and let its virtual table mechanism convert it into another SQL calls.
 It is worth saying that this test is using an in-memory {\i SQLite3} database (i.e. instantiated via {\f1\fs20 SQLITE_MEMORY_DATABASE_NAME} as pseudo-file name) as its external DB, so what we test here is mostly the ORM overhead, not the external database speed. With real file-based or remote databases (like @*MS SQL@), the overhead of remote connection won't make noticeable the use of Virtual Tables.
 In all cases, letting the default {\f1\fs20 StaticVirtualTableDirect=true} will ensure the best possible performance. As stated by @59@, using a virtual or direct call won't affect the CRUD operation speed: it will by-pass the virtual engine whenever possible.
+\page
+: MongoDB database access
+{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
+Integration is made at two levels:
+- Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
+- Close integration with our ORM (which becomes {\i defacto} an ODM), in the {\f1\fs20 mORMotMongoDB.pas} unit.
+{\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which matches perfectly {\i mORMot}'s @*REST@ful approach.
+:  MongoDB client
+The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
+It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex or Javascript):
+- For instance, a {\f1\fs20 TBSONObjectID} can be used to create some genuine document identifiers on the client side ({\i MongoDB} does not generate the IDs for you: a common way is to generate unique IDs on the client side);
+- Generation of BSON content from any Delphi types (via {\f1\fs20 TBSONWriter});
+- Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
+- A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
+- Interaction with the {\f1\fs20 SynCommons}' @80@ as document storage and late-binding access;
+- Marshalling BSON to and from @*JSON@, with the {\i MongoDB} extended syntax for handling its custom types.
+This unit defines some objects able to connect and manage databases and collections of documents on any {\i MongoDB} servers farm:
+- Connection to one or several servers, including secondary hosts, via the {\f1\fs20 TMongoClient} class;
+- Access to any database instance, via the {\f1\fs20 TMongoDatabase} class;
+- Access to any collection, via the {\f1\fs20 TMongoCollection} class;
+- It features some nice abilities about speed, like BULK insert or delete mode, and explicit {\i Write Concern} settings.
+At collection level, you can have direct access to the data, with high level structures like {\f1\fs20 TDocVariant}/{\f1\fs20 TBSONVariant}, with easy-to-read JSON, or low level BSON content.\line You can also tune most aspects of the client process, e.g. about error handling or {\i write concerns} (i.e. how remote data modifications are acknowledged).
+:   Connecting to a server
+Here is some sample code, which is able to connect to a {\i MongoDB} server, and returns the server time:
+!var Client: TMongoClient;
+!    DB: TMongoDatabase;
+!    serverTime: TDateTime;
+!    res: variant; // we will return the command result as TDocVariant
+!    errmsg: RawUTF8;
+!begin
+!  Client := TMongoClient.Create('localhost',27017);
+!  try
+!    DB := Client.Database['mydb'];
+!    writeln('Connecting to ',DB.Name); // will write 'mydb'
+!    errmsg := DB.RunCommand('hostInfo',res); // run a command
+!    if errmsg<>'' then
+!      exit; // quit on any error
+!    serverTime := res.system.currentTime; // direct conversion to TDateTime
+!    writeln('Server time is ',DateTimeToStr(serverTime));
+!  finally
+!    Client.Free; // will release the DB instance
+!  end;
+!end;
+Note that for this low-level command, we used a {\f1\fs20 TDocVariant}, and its late-binding abilities.
+In fact, if you put your mouse over the {\f1\fs20 res} variable during debugging, you will see the following JSON content:
+µ{"system":{"currentTime":"2014-05-06T15:24:25","hostname":"Acer","cpuAddrSize":64,"memSizeMB":3934,"numCores":4,"cpuArch":"x86_64","numaEnabled":false},"os":{"type":"Windows","name":"Microsoft Windows 7","version":"6.1 SP1 (build 7601)"},"extra":{"pageSize":4096},"ok":1}
+And we simply access to the server time by writing {\f1\fs20 res.system.currentTime}.
+:   Adding some documents to the collection
+We will now explain how to add documents to a given collection.
+We assume that we have a {\f1\fs20 DB: TMongoDatabase} instance available. Then we will create the documents with a {\f1\fs20 TDocVariant} instance, which will be filled via late-binding, and via a {\f1\fs20 doc.Clear} pseudo-method used to flush any previous property value:
+!var Coll: TMongoCollection;
+!    doc: variant;
+!    i: integer;
+!begin
+!  Coll := DB.CollectionOrCreate[COLL_NAME];
+!  TDocVariant.New(doc);
+!  for i := 1 to 10 do
+!  begin
+!    doc.Clear;
+!    doc.Name := 'Name '+IntToStr(i+1);
+!    doc.Number := i;
+!!    Coll.Save(doc);
+!    writeln('Inserted with _id=',doc._id);
+!  end;
+!end;
+Thanks to {\f1\fs20 TDocVariant} late-binding abilities, code is pretty easy to understand and maintain.
+This code will display the following on the console:
+$Inserted with _id=5369029E4F901EE8114799D9
+$Inserted with _id=5369029E4F901EE8114799DA
+$Inserted with _id=5369029E4F901EE8114799DB
+$Inserted with _id=5369029E4F901EE8114799DC
+$Inserted with _id=5369029E4F901EE8114799DD
+$Inserted with _id=5369029E4F901EE8114799DE
+$Inserted with _id=5369029E4F901EE8114799DF
+$Inserted with _id=5369029E4F901EE8114799E0
+$Inserted with _id=5369029E4F901EE8114799E1
+$Inserted with _id=5369029E4F901EE8114799E2
+It means that the {\f1\fs20 Coll.Save()} method was clever enough to understand that the supplied document does not have any {\f1\fs20 _id} field, so will compte one on the client side before sending the document data to the {\i MongoDB} server.
+We may have written:
+!  for i := 1 to 10 do
+!  begin
+!    doc.Clear;
+!!    doc._id := ObjectID;
+!    doc.Name := 'Name '+IntToStr(i+1);
+!    doc.Number := i;
+!    Coll.Save(doc);
+!    writeln('Inserted with _id=',doc._id);
+!  end;
+!end;
+Which will compute the document identifier explicitely before calling {\f1\fs20 Coll.Save()}.\line In this case, we may have called directly {\f1\fs20 Coll.Insert()}, which is somewhat faster.
+Note that you are not obliged to use a {\i MongoDB} ObjectID as identifier. You can use any value, if you are sure that it will be genuine. For instance, you can use an integer:
+!  for i := 1 to 10 do
+!  begin
+!    doc.Clear;
+!!    doc._id := i;
+!    doc.Name := 'Name '+IntToStr(i+1);
+!    doc.Number := i;
+!!    Coll.Insert(doc);
+!    writeln('Inserted with _id=',doc._id);
+!  end;
+!end;
+The console will display now:
+$Inserted with _id=1
+$Inserted with _id=2
+$Inserted with _id=3
+$Inserted with _id=4
+$Inserted with _id=5
+$Inserted with _id=6
+$Inserted with _id=7
+$Inserted with _id=8
+$Inserted with _id=9
+$Inserted with _id=10
+Note that the {\i mORMot} ORM will compute a genuine serie of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
+The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode (close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB} classes - see @28@) can increase the insertion by a factor of 10 times, even when connected to a local instance: imgine how much time it may save over a physical network!
+For instance, you may write:
+!var docs: TVariantDynArray;
+!...
+!  SetLength(docs,COLL_COUNT);
+!  for i := 0 to COLL_COUNT-1 do begin
+!    TDocVariant.New(docs[i]);
+!    docs[i]._id := ObjectID; // compute new ObjectID on the client side
+!    docs[i].Name := 'Name '+IntToStr(i+1);
+!    docs[i].FirstName := 'FirstName '+IntToStr(i+COLL_COUNT);
+!    docs[i].Number := i;
+!  end;
+!  Coll.Insert(docs); // insert all values at once
+!...
+You will find out later for some numbers about the speed increase due to such BULK insert.
+:   Retrieving the documents
+You can retrieve the document as a {\f1\fs20 TDocVariant} instance:
+!var doc: variant;
+!...
+!  doc := Coll.FindOne(5);
+!  writeln('Name: ',doc.Name);
+!  writeln('Number: ',doc.Number);
+Which will write on the console:
+$Name: Name 6
+$Number: 5
+You have access to the whole {\f1\fs20 Query} parameter, if needed:
+!  doc := Coll.FindDoc('{_id:?}',[5]);
+!  doc := Coll.FindOne(5); // same as previous
+This {\f1\fs20 Query} filter is similar to a WHERE clause in SQL. You can write complex search patterns, if needed - see @http://docs.mongodb.org/manual/reference/method/db.collection.find for reference.
+You can retrieve a list of documents, as a dynamic array of {\f1\fs20 TDocVariant}:
+!var docs: TVariantDynArray;
+!...
+!  Coll.FindDocs(docs);
+!  for i := 0 to high(docs) do
+!    writeln('Name: ',docs[i].Name,'  Number: ',docs[i].Number);
+Which will ouput:
+$Name: Name 2  Number: 1
+$Name: Name 3  Number: 2
+$Name: Name 4  Number: 3
+$Name: Name 5  Number: 4
+$Name: Name 6  Number: 5
+$Name: Name 7  Number: 6
+$Name: Name 8  Number: 7
+$Name: Name 9  Number: 8
+$Name: Name 10  Number: 9
+$Name: Name 11  Number: 10
+If you want to retrieve the documents directly as JSON, we can write:
+!var json: RawUTF8;
+!...
+!  json := Coll.FindJSON(null,null);
+!  writeln(json);
+!...
+This will append the following to the console:
+$[{"_id":1,"Name":"Name 2","Number":1},{"_id":2,"Name":"Name 3","Number":2},{"_id
+$":3,"Name":"Name 4","Number":3},{"_id":4,"Name":"Name 5","Number":4},{"_id":5,"N
+$ame":"Name 6","Number":5},{"_id":6,"Name":"Name 7","Number":6},{"_id":7,"Name":"
+$Name 8","Number":7},{"_id":8,"Name":"Name 9","Number":8},{"_id":9,"Name":"Name 1
+$0","Number":9},{"_id":10,"Name":"Name 11","Number":10}]
+You can note that {\f1\fs20 FindJSON()} has two properties, which are the {\f1\fs20 Query} filter, and a {\f1\fs20 Projection} mapping (similar to the column names in a {\f1\fs20 SELECT col1,col2}).\line So we may have written:
+!  json := Coll.FindJSON('{_id:?}',[5]);
+!  writeln(json);
+Which would output:
+$[{"_id":5,"Name":"Name 6","Number":5}]
+Note here than we used an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
+We can specify a projection:
+!  json := Coll.FindJSON('{_id:?}',[5],'{Name:1}');
+!  writeln(json);
+Which will only return the "Name" and "_id" fields (since {\f1\fs20 _id} is, by {\i MongoDB} convention, always returned:
+$[{"_id":5,"Name":"Name 6"}]
+To return only the "Name" field, you can specify {\f1\fs20 '{_id:0,Name:1}'} as extended JSON for the {\i projection} parameter.
+$[{"Name":"Name 6"}]
+There are other methods able to retrieve data, also directly as BSON binary data. They will be used for best speed e.g. in conjuction with our ORM, but for most end-user code, using {\f1\fs20 TDocVariant} is safer and easier to maintain.
+:   Updating or deleting documents
+The {\f1\fs20 TMongoCollection} class has some methods dedicated to alter existing documents.
+At first, the {\f1\fs20 Save()} method can be used to update a document which has been first retrieved:
+!  doc := Coll.FindOne(5);
+!  doc.Name := 'New!';
+!  Coll.Save(doc);
+!  writeln('Name: ',Coll.FindOne(5).Name);
+Which will write:
+$Name: New!
+Note that we used here an integer value (5) as key, but we may use an {\i ObjectID} instead, if needed.
+The {\f1\fs20 Coll.Save()} method could be changed into {\f1\fs20 Coll.Update()}, which expects an explicit {\f1\fs20 Query} operator, in addition to the udpated document content:
+!  doc := Coll.FindOne(5);
+!  doc.Name := 'New!';
+!  Coll.Update(BSONVariant(['_id',5]),doc);
+!  writeln('Name: ',Coll.FindOne(5).Name);
+Note that by {\i MongoDB}'s design, any call to {\f1\fs20 Update()} will {\i replace} the whole document.
+For instance, if you write:
+!  writeln('Before: ',Coll.FindOne(3));
+!  Coll.Update('{_id:?}',[3],'{Name:?}',['New Name!']);
+!  writeln('After:  ',Coll.FindOne(3));
+Then the {\f1\fs20 Number} field will disappear!
+$Before: {"_id":3,"Name":"Name 4","Number":3}
+$After:  {"_id":3,"Name":"New Name!"}
+If you need to update only some fields, you will have to use the {\f1\fs20 $set} modifier:
+!  writeln('Before: ',Coll.FindOne(4));
+!  Coll.Update('{_id:?}',[4],'{$set:{Name:?}}',['New Name!']);
+!  writeln('After:  ',Coll.FindOne(4));
+Which will write on the console the value as expected:
+$Before: {"_id":4,"Name":"Name 5","Number":4}
+$After:  {"_id":4,"Name":"New Name!","Number":4}
+Now the {\f1\fs20 Number} field remains untouched.
+You can also use the {\f1\fs20 Coll.UpdateOne()} method, which will update the supplied fields, and leave the non specified fields untouched:
+!  writeln('Before: ',Coll.FindOne(2));
+!  Coll.UpdateOne(2,_Obj(['Name','NEW']));
+!  writeln('After:  ',Coll.FindOne(2));
+Which will output as expected:
+$Before: {"_id":2,"Name":"Name 3","Number":2}
+$After:  {"_id":2,"Name":"NEW","Number":2}
+You can refer to the documentation of the {\f1\fs20 SynMongoDB.pas} unit, to find out all functions, classes and methods available to work with {\i MongoDB}.
+:   Write Concern and Performance
+You can take a look at the {\f1\fs20 MongoDBTests.dpr} sample - located in the {\f1\fs20 SQLite3\\Samples\\24 - MongoDB} sub-folder of the source code repository, and the {\f1\fs20 TTestDirect} classes, to find out some performance information.
+In fact, this {\f1\fs20 TTestDirect} is inherited twice, to run the same tests with diverse write concern:
+\graph HierTTestDirect MongoDB TTestDirect classes hierarchy
+\TTestDirectWithAcknowledge\TTestDirect
+\TTestDirectWithoutAcknowledge\TTestDirect
+\
+The difference between the two classes will take place at client initialization:
+!procedure TTestDirect.ConnectToLocalServer;
+!...
+!  fClient := TMongoClient.Create('localhost',27017);
+!  if ClassType=TTestDirectWithAcknowledge then
+!!    fClient.WriteConcern := wcAcknowledged else
+!  if ClassType=TTestDirectWithoutAcknowledge then
+!!    fClient.WriteConcern := wcUnacknowledged;
+!...
+{\f1\fs20 wcAcknowledged} is the default safe mode: the {\i MongoDB} server confirms the receipt of the write operation. Acknowledged write concern allows clients to catch network, duplicate key, and other errors. But it adds an additional roundtrip from the client to the server, and wait for the command to be finished before returning the error status: so it will slow down the write process.
+With {\f1\fs20 wcUnacknowledged}, {\i MongoDB} does not acknowledge the receipt of write operation.  Unacknowledged is similar to errors ignored; however, drivers attempt to receive and handle network errors when possible. The driver's ability to detect network errors depends on the system's networking configuration.
+The speed difference between the two is worth mentionning, as stated by the regression tests status, running on a local {\i MongoDB} instance:
+$1. Direct access
+$
+$ 1.1. Direct with acknowledge:
+$  - Connect to local server: 6 assertions passed  4.72ms
+$  - Drop and prepare collection: 8 assertions passed  9.38ms
+$!  - Fill collection: 15,003 assertions passed  558.79ms
+$!     5000 rows inserted in 548.83ms i.e. 9110/s, aver. 109us, 3.1 MB/s
+$  - Drop collection: no assertion  856us
+$!  - Fill collection bulk: 2 assertions passed  74.59ms
+$!     5000 rows inserted in 64.76ms i.e. 77204/s, aver. 12us, 7.2 MB/s
+$  - Read collection: 30,003 assertions passed  2.75s
+$     5000 rows read at once in 9.66ms i.e. 517330/s, aver. 1us, 39.8 MB/s
+$!  - Update collection: 7,503 assertions passed  784.26ms
+$!     5000 rows updated in 435.30ms i.e. 11486/s, aver. 87us, 3.7 MB/s
+$!  - Delete some items: 4,002 assertions passed  370.57ms
+$!     1000 rows deleted in 96.76ms i.e. 10334/s, aver. 96us, 2.2 MB/s
+$  Total failed: 0 / 56,527  - Direct with acknowledge PASSED  4.56s
+$
+$ 1.2. Direct without acknowledge:
+$  - Connect to local server: 6 assertions passed  1.30ms
+$  - Drop and prepare collection: 8 assertions passed  8.59ms
+$!  - Fill collection: 15,003 assertions passed  192.59ms
+$!     5000 rows inserted in 168.50ms i.e. 29673/s, aver. 33us, 4.4 MB/s
+$  - Drop collection: no assertion  845us
+$!  - Fill collection bulk: 2 assertions passed  68.54ms
+$!     5000 rows inserted in 58.67ms i.e. 85215/s, aver. 11us, 7.9 MB/s
+$  - Read collection: 30,003 assertions passed  2.75s
+$     5000 rows read at once in 9.99ms i.e. 500150/s, aver. 1us, 38.5 MB/s
+$!  - Update collection: 7,503 assertions passed  446.48ms
+$!     5000 rows updated in 96.27ms i.e. 51933/s, aver. 19us, 7.7 MB/s
+$!  - Delete some items: 4,002 assertions passed  297.26ms
+$!     1000 rows deleted in 19.16ms i.e. 52186/s, aver. 19us, 2.8 MB/s
+$  Total failed: 0 / 56,527  - Direct without acknowledge PASSED  3.77s
+As you can see, the reading speed is not affected by the {\i Write Concern} settings.\line But data writing can be multiple times faster, when each write command is not acknowledged.
+Since there is no error handling, {\f1\fs20 wcUnacknowledged} is not to be used on production. You may use it for replication, or for data consolidation, e.g. feeding a database with a lot of existing data as fast as possible.
+\page
+:  MongoDB + ORM = ODM
+The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} class be persisted on a remote {\i MongoDB} server.
+As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
+This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
+:   Register the TSQLRecord class
+In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
+!  TSQLORM = class(TSQLRecord)
+!  private
+!    fAge: integer;
+!    fName: RawUTF8;
+!    fDate: TDateTime;
+!    fValue: variant;
+!    fInts: TIntegerDynArray;
+!    fCreateTime: TCreateTime;
+!    fData: TSQLRawBlob;
+!  published
+!    property Name: RawUTF8 read fName write fName stored AS_UNIQUE;
+!    property Age: integer read fAge write fAge;
+!    property Date: TDateTime read fDate write fDate;
+!    property Value: variant read fValue write fValue;
+!    property Ints: TIntegerDynArray index 1 read fInts write fInts;
+!    property Data: TSQLRawBlob read fData write fData;
+!    property CreateTime: TCreateTime read fCreateTime write fCreateTime;
+!  end;
+Note that we did not define any {\f1\fs20 {\b index} ...} values for the RawUTF8 property, as we need for external SQL databases, since {\i MongoDB} does not expect any restriction about text fields length.
+The property values will be stored in the native {\i MongoDB} layout, i.e. with a better coverage than the SQL types:
+|%24%14%64
+|\b Delphi|{\i MongoDB}|Remarks\b0
+|{\f1\fs20 byte}|int32|
+|{\f1\fs20 word}|int32|
+|{\f1\fs20 integer}|int32|
+|{\f1\fs20 cardinal}|N/A|You should use {\f1\fs20 Int64} instead
+|{\f1\fs20 Int64}|int64|
+|{\f1\fs20 boolean}|boolean|0 is {\f1\fs20 false}, anything else is {\f1\fs20 true}
+|enumeration|int32|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
+|set|int32|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
+|{\f1\fs20 single}|double|
+|{\f1\fs20 double}|double|
+|{\f1\fs20 extended}|double|stored as {\f1\fs20 double} (precision lost)
+|{\f1\fs20 @*currency@}|double|safely converted to/from {\f1\fs20 currency} type with fixed decimals, without rounding error
+|{\f1\fs20 @*RawUTF8@}|UTF-8|this is the {\b preferred} field type for storing some textual content in the ORM
+|{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in Delphi
+|{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in Delphi, as {\f1\fs20 AnsiString}
+|{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of Delphi)
+|{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before Delphi 2009, or {\f1\fs20 UnicodeString} later
+|{\f1\fs20 string}|UTF-8|Not to be used before Delphi 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
+|{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
+|{\f1\fs20 TTimeLog}|int64|as proprietary fast {\f1\fs20 Int64} date time
+|{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TSQLRecord@}|int32|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
+|{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
+|{\f1\fs20 TRecordReference}|int32|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)
+|{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
+|{\f1\fs20 @*TCollection@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON})
+|{\f1\fs20 @*TObjectList@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
+|{\f1\fs20 @*TStrings@}|array|BSON array of strings (from {\f1\fs20 ObjectToJSON})
+|{\f1\fs20 @*TRawUTF8List@}|array|BSON array of string (from {\f1\fs20 ObjectToJSON})
+|any {\f1\fs20 @*TObject@}|object|See {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} @52@
+|{\f1\fs20 @*TSQLRawBlob@}|binary|This type is an alias to {\f1\fs20 @*RawByteString@}
+|{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} binary format
+|{\f1\fs20 variant}|array\line object|BSON number, text, object or array, depending on @80@ or {\f1\fs20 TBSONVariant} stored value
+|{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
+|%
+On the server side (there won't be any difference for the client), you define a {\i TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class:
+!  MongoClient := TMongoClient.Create('localhost',27017);
+!  DB := MongoClient.Database['dbname'];
+!  Model := TSQLModel.Create([TSQLORM]);
+!  Client := TSQLRestClientDB.Create(Model,nil,':memory:',TSQLRestServerDB);
+!!  if StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'collectionname')=nil then
+!    raise Exception.Create('Error');
+And... that's all!
+You can then use any ORM command, as usual:
+!  writeln(Client.TableRowCount(TSQLORM)=0);
+:   ORM/ODM CRUD methods
+You can add documents with the standard CRUD methods of the ORM, as usual:
+!  R := TSQLORM.Create;
+!  try
+!    for i := 1 to COLL_COUNT do begin
+!      R.Name := 'Name '+Int32ToUTF8(i);
+!      R.Age := i;
+!      R.Date := 1.0*(30000+i);
+!      R.Value := _ObjFast(['num',i]);
+!      R.Ints := nil;
+!      R.DynArray(1).Add(i);
+!!      assert(Client.Add(R,True)=i);
+!    end;
+!  finally
+!    R.Free;
+!  end;
+The framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 index 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
+The usual {\f1\fs20 Retrieve} / {\f1\fs20 Delete} / {\f1\fs20 Update} methods are available:
+!  R := TSQLORM.Create;
+!  try
+!    for i := 1 to COLL_COUNT do begin
+!!      Check(Client.Retrieve(i,R));
+!      // here R instance contains all values of one document, excluding BLOBs
+!    end;
+!  finally
+!    R.Free;
+!  end;
+You can define a WHERE clause, as if the backend where a regular SQL database:
+!    R := TSQLORM.CreateAndFillPrepare(Client,'ID=?',[i]);
+!    try
+!    ...
+Current implementation understand one condition over one single field, with {\f1\fs20 = > >= < <= IN} clauses. More advanced queries are possible, but won't be handled as SQL, but via direct access to the {\f1\fs20 TMongoDBCollection}.
+To perform a query and retrieve the content of several documents, you can use regular {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods:
+!!  R := TSQLORM.CreateAndFillPrepare(Client,'');
+!  try
+!    n := 0;
+!!    while R.FillOne do begin
+!      // here R instance contains all values of one document, excluding BLOBs
+!      inc(n);
+!    end;
+!    assert(n=COLL_COUNT);
+!  finally
+!    R.Free;
+!  end;
+A WHERE clause can also be defined for {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods.
+:   BATCH mode
+In addition to individual @*CRUD@ operations, our {\i MongoDB} is able to use BATCH mode for adding or deleting documents.
+You can write the exact same code as with any SQL back-end:
+!  Client.BatchStart(TSQLORM);
+!  R := TSQLORM.Create;
+!  try
+!    for i := 1 to COLL_COUNT do begin
+!      R.Name := 'Name '+Int32ToUTF8(i);
+!      R.Age := i;
+!      R.Date := 1.0*(30000+i);
+!      R.Value := _ObjFast(['num',i]);
+!      R.Ints := nil;
+!      R.DynArray(1).Add(i);
+!      assert(Client.BatchAdd(R,True)>=0);
+!    end;
+!  finally
+!    R.Free;
+!  end;
+!  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
+Or for deletion:
+!  Client.BatchStart(TSQLORM);
+!  for i := 5 to COLL_COUNT do
+!    if i mod 5=0 then
+!      assert(fClient.BatchDelete(i)>=0);
+!  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
+Speed benefit may be huge in regard to individual Add/Delete operations, even on a local {\i MongoDB} server. We will see some benchmark numbers now.
+:   ORM/ODM performance
+You can take a look at @59@ to compare {\i MongoDB} as backend for our ORM classes.
+In respect to external @*SQL@ engines, it features very high speed, low CPU use, and almost no difference in use. We interfaced the {\f1\fs20 BatchAdd()} and {\f1\fs20 BatchDelete()} methods to benefit of {\i MongoDB} BULK process, and avoided most memory allocation during the process.
+Here are some numbers, extracted from the {\f1\fs20 MongoDBTests.dpr} sample, which reflects the performance of our ORM/ODM, depending on the {\i Write Concern} mode used:
+$2. ORM
+$
+$ 2.1. ORM with acknowledge:
+$  - Connect to local server: 6 assertions passed  18.65ms
+$  - Insert: 5,002 assertions passed  521.25ms
+$     5000 rows inserted in 520.65ms i.e. 9603/s, aver. 104us, 2.9 MB/s
+$  - Insert in batch mode: 5,004 assertions passed  65.37ms
+$     5000 rows inserted in 65.07ms i.e. 76836/s, aver. 13us, 8.4 MB/s
+$  - Retrieve: 45,001 assertions passed  640.95ms
+$     5000 rows retrieved in 640.75ms i.e. 7803/s, aver. 128us, 2.1 MB/s
+$  - Retrieve all: 40,001 assertions passed  20.79ms
+$     5000 rows retrieved in 20.33ms i.e. 245941/s, aver. 4us, 27.1 MB/s
+$  - Retrieve one with where clause: 45,410 assertions passed  673.01ms
+$     5000 rows retrieved in 667.17ms i.e. 7494/s, aver. 133us, 2.0 MB/s
+$  - Update: 40,002 assertions passed  681.31ms
+$     5000 rows updated in 660.85ms i.e. 7565/s, aver. 132us, 2.4 MB/s
+$  - Blobs: 125,003 assertions passed  2.16s
+$     5000 rows updated in 525.97ms i.e. 9506/s, aver. 105us, 2.4 MB/s
+$  - Delete: 38,003 assertions passed  175.86ms
+$     1000 rows deleted in 91.37ms i.e. 10944/s, aver. 91us, 2.3 MB/s
+$  - Delete in batch mode: 33,003 assertions passed  34.71ms
+$     1000 rows deleted in 14.90ms i.e. 67078/s, aver. 14us, 597 KB/s
+$  Total failed: 0 / 376,435  - ORM with acknowledge PASSED  5.00s
+$
+$ 2.2. ORM without acknowledge:
+$  - Connect to local server: 6 assertions passed  16.83ms
+$  - Insert: 5,002 assertions passed  179.79ms
+$     5000 rows inserted in 179.15ms i.e. 27908/s, aver. 35us, 3.9 MB/s
+$  - Insert in batch mode: 5,004 assertions passed  66.30ms
+$     5000 rows inserted in 31.46ms i.e. 158891/s, aver. 6us, 17.5 MB/s
+$  - Retrieve: 45,001 assertions passed  642.05ms
+$     5000 rows retrieved in 641.85ms i.e. 7789/s, aver. 128us, 2.1 MB/s
+$  - Retrieve all: 40,001 assertions passed  20.68ms
+$     5000 rows retrieved in 20.26ms i.e. 246718/s, aver. 4us, 27.2 MB/s
+$  - Retrieve one with where clause: 45,410 assertions passed  680.99ms
+$     5000 rows retrieved in 675.24ms i.e. 7404/s, aver. 135us, 2.0 MB/s
+$  - Update: 40,002 assertions passed  231.75ms
+$     5000 rows updated in 193.74ms i.e. 25807/s, aver. 38us, 3.6 MB/s
+$  - Blobs: 125,003 assertions passed  1.44s
+$     5000 rows updated in 150.58ms i.e. 33202/s, aver. 30us, 2.6 MB/s
+$  - Delete: 38,003 assertions passed  103.57ms
+$     1000 rows deleted in 19.73ms i.e. 50668/s, aver. 19us, 2.4 MB/s
+$  - Delete in batch mode: 33,003 assertions passed  47.50ms
+$     1000 rows deleted in 364us i.e. 2747252/s, aver. 0us, 23.4 MB/s
+$  Total failed: 0 / 376,435  - ORM without acknowledge PASSED  3.44s
+As for direct {\i MongoDB} access, the {\f1\fs20 wcUnacknowledged} is not to be used on production, but may be very usefull in some particular scenarios.
 :6JSON RESTful Client-Server
 %cartoon07.png
 Before describing the Client-Server design of this framework, we may have to detail some standards it is based on:
@@ -6194,6 +6777,7 @@ subgraph cluster {
 \TSQLRestServer.URI\Http Server\return 200 OK +¤result (JSON)
 \TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticExternal.¤Engine*\Is an external¤Virtual Table?
 \TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticInMemory.¤Engine*\Is an in-memory table?¤(Virtual or static)
+\TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticMongoDB.¤Engine*\Is a MongoDB table?
 \TSQLRestServerStaticExternal.¤Engine*\TSQLDBConnectionProperties¤TSQLDBStatement\compute SQL
 \TSQLDBConnectionProperties¤TSQLDBStatement\OleDB/ODBC¤or other\execute SQL
 \OleDB/ODBC¤or other\TSQLRestServer.URI
@@ -6203,6 +6787,8 @@ subgraph cluster {
 \CRUD¤in-memory¤TSQLRecord\TSQLRestServer.URI
 \TSQLVirtualTableJSON¤TSQLVirtualTableBinary\Process¤in-memory¤TSQLRecord
 \Process¤in-memory¤TSQLRecord\SQLite3 engine
+\TSQLRestServerStaticMongoDB.¤Engine*\TMongoCollection¤MongoDB Client
+\TMongoCollection¤MongoDB Client\TSQLRestServer.URI
 label = "Server";
 }
 \
