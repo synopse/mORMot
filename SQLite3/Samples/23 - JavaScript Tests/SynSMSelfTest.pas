@@ -1365,9 +1365,11 @@ begin
   mSource := AnyTextFileToSynUnicode(mustacheFN);
   if mSource='' then begin
     mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
-    i := PosEx('send(result);',mustache);
-    if i>0 then
-      insert('return ',mustache,i); // fix syntax error in official libary! :)
+    if PosEx('return send(result);',mustache)=0 then begin
+      i := PosEx('send(result);',mustache);
+      if i>0 then
+        insert('return ',mustache,i); // fix syntax error in official libary! :)
+    end;
     FileFromString(mustache,mustacheFN);
     mSource := SynUnicode(mustache);
   end;

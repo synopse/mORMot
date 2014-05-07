@@ -116,6 +116,8 @@ type
   // - msList for non-empty lists
   TSynMustacheSectionType = (msNothing,msSingle,msSinglePseudo,msList);
 
+  TSynMustache = class;
+  
   /// handle {{mustache}} template rendering context, i.e. all values
   // - this abstract class should not be used directly, but rather any
   // other the overriden classes
@@ -123,8 +125,9 @@ type
   protected
     fContextCount: integer;
     fWriter: TTextWriter;
+    fOwner: TSynMustache;
     fOnStringTranslate: TOnStringTranslate;
-    procedure TranslateBlock(Text: PUTF8Char; TextLen: Integer); virtual; 
+    procedure TranslateBlock(Text: PUTF8Char; TextLen: Integer); virtual;
     procedure PopContext; virtual; abstract;
     procedure AppendValue(const ValueName: RawUTF8; UnEscape: boolean);
       virtual; abstract;
@@ -134,7 +137,7 @@ type
       virtual; abstract;
   public
     /// initialize the rendering context for the given text writer
-    constructor Create(WR: TTextWriter);
+    constructor Create(Owner: TSynMustache; WR: TTextWriter);
     /// access to the {{"English text}} translation callback
     property OnStringTranslate: TOnStringTranslate
       read fOnStringTranslate write fOnStringTranslate;
@@ -170,12 +173,10 @@ type
     // lifetime of this TSynMustacheContextVariant instance
     // - you should not use this constructor directly, but the
     // corresponding TSynMustache.Render*() methods
-    constructor Create(WR: TTextWriter; SectionMaxCount: integer;
+    constructor Create(Owner: TSynMustache; WR: TTextWriter; SectionMaxCount: integer;
        const aDocument: variant);
   end;
 
-  TSynMustache = class;
-  
   /// maintain a list of {{mustache}} partials
   // - this list of partials template could be supplied to TSynMustache.Render()
   // method, to render {{>partials}} as expected
@@ -630,12 +631,15 @@ begin
         Context.AppendValue(Value,true);
       mtSection:
         case Context.AppendSection(Value) of
-        msNothing: // e.g. for no key, false value, or empty list
+        msNothing: begin // e.g. for no key, false value, or empty list
           TagStart := SectionOppositeIndex;
+          continue;
+        end;
         msList: begin
           while Context.GotoNextListItem do
             Render(Context,TagStart+1,SectionOppositeIndex-1,Partials,true);
           TagStart := SectionOppositeIndex;
+          continue;
         end;
         // msSingle,msSinglePseudo: process the section once with current context
         end;
@@ -655,7 +659,9 @@ begin
         ; // just ignored
       mtPartial: begin
         partial := fInternalPartials.GetPartial(Value);
-        if partial=nil then
+        if (partial=nil) and (Context.fOwner<>self) then // recursive call
+          partial := Context.fOwner.fInternalPartials.GetPartial(Value);
+        if (partial=nil) and (Partials<>nil) then
           partial := Partials.GetPartial(Value);
         if partial<>nil then
           partial.Render(Context,0,high(partial.fTags),Partials,true);
@@ -684,7 +690,7 @@ var W: TTextWriter;
 begin
   W := TTextWriter.CreateOwnedStream(4096);
   try
-    Ctxt := TSynMustacheContextVariant.Create(W,SectionMaxCount,Context);
+    Ctxt := TSynMustacheContextVariant.Create(self,W,SectionMaxCount,Context);
     try
       Ctxt.OnStringTranslate := OnTranslate;
       Render(Ctxt,0,high(fTags),Partials,false);
@@ -723,8 +729,9 @@ end;
 
 { TSynMustacheContext }
 
-constructor TSynMustacheContext.Create(WR: TTextWriter);
+constructor TSynMustacheContext.Create(Owner: TSynMustache; WR: TTextWriter);
 begin
+  fOwner := Owner;
   fWriter := WR;
 end;
 
@@ -742,10 +749,10 @@ end;
 
 { TSynMustacheContextVariant }
 
-constructor TSynMustacheContextVariant.Create(WR: TTextWriter;
+constructor TSynMustacheContextVariant.Create(Owner: TSynMustache; WR: TTextWriter;
   SectionMaxCount: integer; const aDocument: variant);
 begin
-  inherited Create(WR);
+  inherited Create(Owner,WR);
   SetLength(fContext,SectionMaxCount+1);
   PushContext(TVarData(aDocument)); // weak copy
 end;
