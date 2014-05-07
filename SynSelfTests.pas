@@ -2153,6 +2153,9 @@ begin
   Check(IntToThousandString(-10000)='-10,000');
   Check(IntToThousandString(-100000)='-100,000');
   Check(IntToThousandString(-1000000)='-1,000,000');
+  Check(Int64ToUtf8(-maxInt)='-2147483647');
+  Check(Int64ToUtf8(-1)='-1');
+  Check(Int64ToUtf8(-9223372036854775807)='-9223372036854775807');
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
   d := 22.99999999999997;

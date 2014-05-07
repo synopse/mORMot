@@ -5285,7 +5285,7 @@ $Inserted with _id=5369029E4F901EE8114799DF
 $Inserted with _id=5369029E4F901EE8114799E0
 $Inserted with _id=5369029E4F901EE8114799E1
 $Inserted with _id=5369029E4F901EE8114799E2
-It means that the {\f1\fs20 Coll.Save()} method was clever enough to understand that the supplied document does not have any {\f1\fs20 _id} field, so will compte one on the client side before sending the document data to the {\i MongoDB} server.
+It means that the {\f1\fs20 Coll.Save()} method was clever enough to understand that the supplied document does not have any {\f1\fs20 _id} field, so will compute one on the client side before sending the document data to the {\i MongoDB} server.
 We may have written:
 !  for i := 1 to 10 do
 !  begin
@@ -5297,7 +5297,7 @@ We may have written:
 !    writeln('Inserted with _id=',doc._id);
 !  end;
 !end;
-Which will compute the document identifier explicitely before calling {\f1\fs20 Coll.Save()}.\line In this case, we may have called directly {\f1\fs20 Coll.Insert()}, which is somewhat faster.
+Which will compute the document identifier explicitly before calling {\f1\fs20 Coll.Save()}.\line In this case, we may have called directly {\f1\fs20 Coll.Insert()}, which is somewhat faster.
 Note that you are not obliged to use a {\i MongoDB} ObjectID as identifier. You can use any value, if you are sure that it will be genuine. For instance, you can use an integer:
 !  for i := 1 to 10 do
 !  begin
@@ -5320,8 +5320,8 @@ $Inserted with _id=7
 $Inserted with _id=8
 $Inserted with _id=9
 $Inserted with _id=10
-Note that the {\i mORMot} ORM will compute a genuine serie of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
-The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode (close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB} classes - see @28@) can increase the insertion by a factor of 10 times, even when connected to a local instance: imgine how much time it may save over a physical network!
+Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
+The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
 For instance, you may write:
 !var docs: TVariantDynArray;
 !...
@@ -5356,7 +5356,7 @@ You can retrieve a list of documents, as a dynamic array of {\f1\fs20 TDocVarian
 !  Coll.FindDocs(docs);
 !  for i := 0 to high(docs) do
 !    writeln('Name: ',docs[i].Name,'  Number: ',docs[i].Number);
-Which will ouput:
+Which will output:
 $Name: Name 2  Number: 1
 $Name: Name 3  Number: 2
 $Name: Name 4  Number: 3
@@ -5392,7 +5392,7 @@ Which will only return the "Name" and "_id" fields (since {\f1\fs20 _id} is, by 
 $[{"_id":5,"Name":"Name 6"}]
 To return only the "Name" field, you can specify {\f1\fs20 '{_id:0,Name:1}'} as extended JSON for the {\i projection} parameter.
 $[{"Name":"Name 6"}]
-There are other methods able to retrieve data, also directly as BSON binary data. They will be used for best speed e.g. in conjuction with our ORM, but for most end-user code, using {\f1\fs20 TDocVariant} is safer and easier to maintain.
+There are other methods able to retrieve data, also directly as BSON binary data. They will be used for best speed e.g. in conjunction with our ORM, but for most end-user code, using {\f1\fs20 TDocVariant} is safer and easier to maintain.
 :   Updating or deleting documents
 The {\f1\fs20 TMongoCollection} class has some methods dedicated to alter existing documents.
 At first, the {\f1\fs20 Save()} method can be used to update a document which has been first retrieved:
@@ -5403,7 +5403,7 @@ At first, the {\f1\fs20 Save()} method can be used to update a document which ha
 Which will write:
 $Name: New!
 Note that we used here an integer value (5) as key, but we may use an {\i ObjectID} instead, if needed.
-The {\f1\fs20 Coll.Save()} method could be changed into {\f1\fs20 Coll.Update()}, which expects an explicit {\f1\fs20 Query} operator, in addition to the udpated document content:
+The {\f1\fs20 Coll.Save()} method could be changed into {\f1\fs20 Coll.Update()}, which expects an explicit {\f1\fs20 Query} operator, in addition to the updated document content:
 !  doc := Coll.FindOne(5);
 !  doc.Name := 'New!';
 !  Coll.Update(BSONVariant(['_id',5]),doc);
@@ -5448,9 +5448,9 @@ The difference between the two classes will take place at client initialization:
 !  if ClassType=TTestDirectWithoutAcknowledge then
 !!    fClient.WriteConcern := wcUnacknowledged;
 !...
-{\f1\fs20 wcAcknowledged} is the default safe mode: the {\i MongoDB} server confirms the receipt of the write operation. Acknowledged write concern allows clients to catch network, duplicate key, and other errors. But it adds an additional roundtrip from the client to the server, and wait for the command to be finished before returning the error status: so it will slow down the write process.
+{\f1\fs20 wcAcknowledged} is the default safe mode: the {\i MongoDB} server confirms the receipt of the write operation. Acknowledged write concern allows clients to catch network, duplicate key, and other errors. But it adds an additional round-trip from the client to the server, and wait for the command to be finished before returning the error status: so it will slow down the write process.
 With {\f1\fs20 wcUnacknowledged}, {\i MongoDB} does not acknowledge the receipt of write operation.  Unacknowledged is similar to errors ignored; however, drivers attempt to receive and handle network errors when possible. The driver's ability to detect network errors depends on the system's networking configuration.
-The speed difference between the two is worth mentionning, as stated by the regression tests status, running on a local {\i MongoDB} instance:
+The speed difference between the two is worth mentioning, as stated by the regression tests status, running on a local {\i MongoDB} instance:
 $1. Direct access
 $
 $ 1.1. Direct with acknowledge:
@@ -5511,7 +5511,7 @@ In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !    property Data: TSQLRawBlob read fData write fData;
 !    property CreateTime: TCreateTime read fCreateTime write fCreateTime;
 !  end;
-Note that we did not define any {\f1\fs20 {\b index} ...} values for the RawUTF8 property, as we need for external SQL databases, since {\i MongoDB} does not expect any restriction about text fields length.
+Note that we did not define any {\f1\fs20 {\b index} ...} values for the {\f1\fs20 RawUTF8} property, as we need for external SQL databases, since {\i MongoDB} does not expect any restriction about text fields length.
 The property values will be stored in the native {\i MongoDB} layout, i.e. with a better coverage than the SQL types:
 |%24%14%64
 |\b Delphi|{\i MongoDB}|Remarks\b0
@@ -5551,7 +5551,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 variant}|array\line object|BSON number, text, object or array, depending on @80@ or {\f1\fs20 TBSONVariant} stored value
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
 |%
-On the server side (there won't be any difference for the client), you define a {\i TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class:
+On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class:
 !  MongoClient := TMongoClient.Create('localhost',27017);
 !  DB := MongoClient.Database['dbname'];
 !  Model := TSQLModel.Create([TSQLORM]);
@@ -5561,6 +5561,12 @@ On the server side (there won't be any difference for the client), you define a 
 And... that's all!
 You can then use any ORM command, as usual:
 !  writeln(Client.TableRowCount(TSQLORM)=0);
+As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using for instance:
+! aModel.Props[aClass].ExternalDB.MapField(..)
+Since the field names are stored within the document itself, it may be a good idea to use shorter naming for the {\i MongoDB} collection. It may save some storage space, when working with a huge number of documents.
+Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the {\f1\fs20 TMongoCollection} instance later on, by calling:
+! (aServer.StaticDataServer[aClass] as TSQLRestServerStaticMongoDB).Collection
+This may allow any specific task, including any tuned query or process.
 :   ORM/ODM CRUD methods
 You can add documents with the standard CRUD methods of the ORM, as usual:
 !  R := TSQLORM.Create;
@@ -5577,7 +5583,7 @@ You can add documents with the standard CRUD methods of the ORM, as usual:
 !  finally
 !    R.Free;
 !  end;
-The framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 index 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
+As we already saw, the framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 index 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
 The usual {\f1\fs20 Retrieve} / {\f1\fs20 Delete} / {\f1\fs20 Update} methods are available:
 !  R := TSQLORM.Create;
 !  try
@@ -5588,7 +5594,7 @@ The usual {\f1\fs20 Retrieve} / {\f1\fs20 Delete} / {\f1\fs20 Update} methods ar
 !  finally
 !    R.Free;
 !  end;
-You can define a WHERE clause, as if the backend where a regular SQL database:
+You can define a WHERE clause, as if the back-end where a regular SQL database:
 !    R := TSQLORM.CreateAndFillPrepare(Client,'ID=?',[i]);
 !    try
 !    ...
@@ -5633,7 +5639,7 @@ Or for deletion:
 !  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
 Speed benefit may be huge in regard to individual Add/Delete operations, even on a local {\i MongoDB} server. We will see some benchmark numbers now.
 :   ORM/ODM performance
-You can take a look at @59@ to compare {\i MongoDB} as backend for our ORM classes.
+You can take a look at @59@ to compare {\i MongoDB} as back-end for our ORM classes.
 In respect to external @*SQL@ engines, it features very high speed, low CPU use, and almost no difference in use. We interfaced the {\f1\fs20 BatchAdd()} and {\f1\fs20 BatchDelete()} methods to benefit of {\i MongoDB} BULK process, and avoided most memory allocation during the process.
 Here are some numbers, extracted from the {\f1\fs20 MongoDBTests.dpr} sample, which reflects the performance of our ORM/ODM, depending on the {\i Write Concern} mode used:
 $2. ORM
@@ -5641,13 +5647,13 @@ $
 $ 2.1. ORM with acknowledge:
 $  - Connect to local server: 6 assertions passed  18.65ms
 $  - Insert: 5,002 assertions passed  521.25ms
-$     5000 rows inserted in 520.65ms i.e. 9603/s, aver. 104us, 2.9 MB/s
+$!     5000 rows inserted in 520.65ms i.e. 9603/s, aver. 104us, 2.9 MB/s
 $  - Insert in batch mode: 5,004 assertions passed  65.37ms
-$     5000 rows inserted in 65.07ms i.e. 76836/s, aver. 13us, 8.4 MB/s
+$!     5000 rows inserted in 65.07ms i.e. 76836/s, aver. 13us, 8.4 MB/s
 $  - Retrieve: 45,001 assertions passed  640.95ms
 $     5000 rows retrieved in 640.75ms i.e. 7803/s, aver. 128us, 2.1 MB/s
 $  - Retrieve all: 40,001 assertions passed  20.79ms
-$     5000 rows retrieved in 20.33ms i.e. 245941/s, aver. 4us, 27.1 MB/s
+$!     5000 rows retrieved in 20.33ms i.e. 245941/s, aver. 4us, 27.1 MB/s
 $  - Retrieve one with where clause: 45,410 assertions passed  673.01ms
 $     5000 rows retrieved in 667.17ms i.e. 7494/s, aver. 133us, 2.0 MB/s
 $  - Update: 40,002 assertions passed  681.31ms
@@ -5657,19 +5663,19 @@ $     5000 rows updated in 525.97ms i.e. 9506/s, aver. 105us, 2.4 MB/s
 $  - Delete: 38,003 assertions passed  175.86ms
 $     1000 rows deleted in 91.37ms i.e. 10944/s, aver. 91us, 2.3 MB/s
 $  - Delete in batch mode: 33,003 assertions passed  34.71ms
-$     1000 rows deleted in 14.90ms i.e. 67078/s, aver. 14us, 597 KB/s
+$!     1000 rows deleted in 14.90ms i.e. 67078/s, aver. 14us, 597 KB/s
 $  Total failed: 0 / 376,435  - ORM with acknowledge PASSED  5.00s
 $
 $ 2.2. ORM without acknowledge:
 $  - Connect to local server: 6 assertions passed  16.83ms
 $  - Insert: 5,002 assertions passed  179.79ms
-$     5000 rows inserted in 179.15ms i.e. 27908/s, aver. 35us, 3.9 MB/s
+$!     5000 rows inserted in 179.15ms i.e. 27908/s, aver. 35us, 3.9 MB/s
 $  - Insert in batch mode: 5,004 assertions passed  66.30ms
-$     5000 rows inserted in 31.46ms i.e. 158891/s, aver. 6us, 17.5 MB/s
+$!     5000 rows inserted in 31.46ms i.e. 158891/s, aver. 6us, 17.5 MB/s
 $  - Retrieve: 45,001 assertions passed  642.05ms
 $     5000 rows retrieved in 641.85ms i.e. 7789/s, aver. 128us, 2.1 MB/s
 $  - Retrieve all: 40,001 assertions passed  20.68ms
-$     5000 rows retrieved in 20.26ms i.e. 246718/s, aver. 4us, 27.2 MB/s
+$!     5000 rows retrieved in 20.26ms i.e. 246718/s, aver. 4us, 27.2 MB/s
 $  - Retrieve one with where clause: 45,410 assertions passed  680.99ms
 $     5000 rows retrieved in 675.24ms i.e. 7404/s, aver. 135us, 2.0 MB/s
 $  - Update: 40,002 assertions passed  231.75ms
@@ -5679,9 +5685,9 @@ $     5000 rows updated in 150.58ms i.e. 33202/s, aver. 30us, 2.6 MB/s
 $  - Delete: 38,003 assertions passed  103.57ms
 $     1000 rows deleted in 19.73ms i.e. 50668/s, aver. 19us, 2.4 MB/s
 $  - Delete in batch mode: 33,003 assertions passed  47.50ms
-$     1000 rows deleted in 364us i.e. 2747252/s, aver. 0us, 23.4 MB/s
+$!     1000 rows deleted in 364us i.e. 2747252/s, aver. 0us, 23.4 MB/s
 $  Total failed: 0 / 376,435  - ORM without acknowledge PASSED  3.44s
-As for direct {\i MongoDB} access, the {\f1\fs20 wcUnacknowledged} is not to be used on production, but may be very usefull in some particular scenarios.
+As for direct {\i MongoDB} access, the {\f1\fs20 wcUnacknowledged} is not to be used on production, but may be very useful in some particular scenarios. As expected, the reading process is not impacted by the {\i Write Concern} mode set.
 :6JSON RESTful Client-Server
 %cartoon07.png
 Before describing the Client-Server design of this framework, we may have to detail some standards it is based on:

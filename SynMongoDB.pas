@@ -49,6 +49,10 @@ unit SynMongoDB;
   - first public release, corresponding to mORMot Framework 1.18
 
 
+  TODO:
+  - GridFS support
+
+
 }
 
 interface
