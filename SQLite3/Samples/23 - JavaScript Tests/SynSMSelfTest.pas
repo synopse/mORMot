@@ -46,7 +46,7 @@ unit SynSMSelfTest;
 
   Version 0.1
   - initial release. Use SpiderMonkey 24
-  
+
 }
 
 interface
@@ -55,6 +55,7 @@ interface
 uses
   SysUtils,
   Math,
+  SynCrtSock,
   SynCommons;
 
 /// this is the main entry point of the tests
@@ -1354,10 +1355,22 @@ end;
 procedure TTestSynSM.LoadMustacheTemplate;
 var
   engine: TSMEngine;
+  mustacheFN: TFileName;
+  mustache: RawByteString;
   mSource: SynUnicode;
+  i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
-  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\mustache.js');
+  mustacheFN := ExtractFilePath(ParamStr(0)) + 'js\mustache.js';
+  mSource := AnyTextFileToSynUnicode(mustacheFN);
+  if mSource='' then begin
+    mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
+    i := PosEx('send(result);',mustache);
+    if i>0 then
+      insert('return ',mustache,i); // fix syntax error in official libary! :)
+    FileFromString(mustache,mustacheFN);
+    mSource := SynUnicode(mustache);
+  end;
   Check(mSource <> '', 'exist js\mustache.js');
   engine.Evaluate(mSource, 'mustache.js');
 end;
