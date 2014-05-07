@@ -51,6 +51,8 @@ unit mORMotMongoDB;
   
   TODO:
   - complex WHERE clause with a MongoDB Query object instead of SQL syntax
+  - handle TSQLRawBlob fields optionally with GridFS (and rely on TByteDynArray
+    to store smaller BLOBs within the document)
   - allow PolyMorphic schemas: the same MongoDB collection may be able to
     store a hierarchy of TSQLRecord classes, storing only relevant fields in
     each document - this may be a huge benefit in common OOP work  
@@ -329,6 +331,7 @@ function TSQLRestServerStaticMongoDB.DocFromJSON(const JSON: RawUTF8;
 var i, ndx: integer;
     blob: RawByteString;
     info: TSQLPropInfo;
+    typenfo: pointer;
     js: RawUTF8;
     MissingID: boolean;
     V: PVarData;
@@ -366,8 +369,10 @@ begin
           blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
           if blob='' then
             SetVariantNull(Variant(V^)) else begin
-            js := DynArraySaveJSON(
-              (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^,blob);
+            typenfo := (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType^;
+            if typenfo=TypeInfo(TByteDynArray) then
+              js := '' else // embedded BLOB type stored as BSON binary
+              js := DynArraySaveJSON(typenfo,blob);
             if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
               BSONVariantType.FromJSON(pointer(js),Variant(V^)) else
               BSONVariantType.FromBinary(blob,bbtGeneric,Variant(V^));

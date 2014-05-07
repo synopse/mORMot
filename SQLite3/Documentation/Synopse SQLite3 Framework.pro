@@ -5546,8 +5546,9 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TStrings@}|array|BSON array of strings (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TRawUTF8List@}|array|BSON array of string (from {\f1\fs20 ObjectToJSON})
 |any {\f1\fs20 @*TObject@}|object|See {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} @52@
-|{\f1\fs20 @*TSQLRawBlob@}|binary|This type is an alias to {\f1\fs20 @*RawByteString@}
-|{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} binary format
+|{\f1\fs20 @*TSQLRawBlob@}|binary|This type is an alias to {\f1\fs20 @*RawByteString@} - those properties are not retrieved by default: you need to use {\f1\fs20 RetrieveBlobFields()} or set {\f1\fs20 ForceBlobTransfert} / {\f1\fs20 ForceBlobTransertTable[]} properties
+|{\f1\fs20 TByteDynArray}|binary|Used to embed a BLOB property stored as BSON binary within a document - so that {\f1\fs20 @*TSQLRawBlob@} may be restricted in the future to @*GridFS@ external content
+|{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} BSON binary format
 |{\f1\fs20 variant}|array\line object|BSON number, text, object or array, depending on @80@ or {\f1\fs20 TBSONVariant} stored value
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
 |%
