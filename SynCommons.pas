@@ -1839,7 +1839,7 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 
 {/ internal fast Int64 val to text conversion
    - same calling convention as with StrInt32() above }
-function StrInt64(P: PAnsiChar; val: Int64): PAnsiChar;
+function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
   {$ifdef CPU64}inline;{$endif}
 
 /// fast add some characters to a RawUTF8 string
@@ -7526,8 +7526,10 @@ type
     WhereValueInteger: integer;
     /// used to fast compare with SBF binary compact formatted data
     WhereValueSBF: TSBFString;
+    {$ifndef NOVARIANTS}
     /// the value used for the WHERE clause
     WhereValueVariant: variant;
+    {$endif}
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
     FoundLimit: integer;
@@ -12785,12 +12787,12 @@ begin // this code is faster than the Borland's original str() or IntToStr()
 end;
 
 {$ifdef CPU64}
-function StrInt64(P: PAnsiChar; val: Int64): PAnsiChar;
+function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
 begin // StrInt32 aldready implemented PtrInt=Int64
   result := StrInt32(P,val);
 end;
 {$else}
-function StrInt64(P: PAnsiChar; val: Int64): PAnsiChar;
+function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
 var c,c10: QWord;
     c64: Int64Rec absolute c;
 begin // this code is faster than the Borland's original str() or IntToStr()
@@ -15081,8 +15083,11 @@ Txt:  len := Format-PDeb;
     if (isParam='?') and (P<=high(Params)) then begin // handle ? substitution
       if tmpN=length(tmp) then
         SetLength(tmp,tmpN+8);
+      {$ifndef NOVARIANTS}
       if JSONFormat and (Params[P].VType=vtVariant) then
-        VariantToUTF8(Params[P].VVariant^,tmp[tmpN],wasString) else begin
+        VariantToUTF8(Params[P].VVariant^,tmp[tmpN],wasString) else
+      {$endif}
+      begin
         VarRecToUTF8(Params[P],tmp[tmpN]);
         wasString := not (Params[P].VType in NOTTOQUOTE[JSONFormat]);
       end;
@@ -17739,7 +17744,7 @@ begin
 {$ifdef LINUX}
     result := FileSeek64(F,0,soFromEnd);
 {$else}
-    Int64Rec(result).Lo := GetFileSize(F,@Int64Rec(result).Hi);
+    PInt64Rec(@result)^.Lo := GetFileSize(F,@PInt64Rec(@result)^.Hi);
 {$endif}
     FileClose(F);
   end
@@ -36830,6 +36835,7 @@ begin
            WhereOperator := opLessThanOrEqualTo;
          end else
            WhereOperator := opLessThan;
+    {$ifndef NOVARIANTS}
     'i','I': if P[1] in ['n','N'] then begin
            inc(P,2);
            WhereOperator := opIn;
@@ -36850,6 +36856,7 @@ begin
              pointer(WhereValue),JSON_OPTIONS[true]);
            goto Limit;
          end;
+    {$endif}
     else exit; // unknown operator
     end;
     inc(P); // we had 'WHERE FieldName = '
@@ -36861,7 +36868,9 @@ begin
       P := UnQuoteSQLString(P,WhereValue);
       if P=nil then
         exit; // end of string before end quote -> incorrect
+      {$ifndef NOVARIANTS}
       RawUTF8ToVariant(WhereValue,WhereValueVariant);
+      {$endif}
       if FieldProp<>nil then
         // create a SBF formatted version of the WHERE value
         WhereValueSBF := FieldProp.SBFFromRawUTF8(WhereValue);
@@ -36869,7 +36878,9 @@ begin
     if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
       // NULL statement
       WhereValue := 'null'; // not void
+      {$ifndef NOVARIANTS}
       SetVariantNull(WhereValueVariant);
+      {$endif}
     end else begin
       // numeric statement or 'true' or 'false' (OK for NormalizeValue)
       B := P;
@@ -36877,7 +36888,9 @@ begin
         inc(P);
       until P^ in [#0..' ',';',')'];
       SetString(WhereValue,B,P-B);
+      {$ifndef NOVARIANTS}
       WhereValueVariant := VariantLoadJSON(WhereValue);
+      {$endif}
       WhereValueInteger := GetInteger(pointer(WhereValue),err);
       if FieldProp<>nil then
         if WhereValue<>'?' then

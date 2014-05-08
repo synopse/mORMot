@@ -120,6 +120,7 @@ uses
   Classes,
 {$ifndef NOVARIANTS}
   SynMongoDB,
+  SynMustache,
   Variants,
 {$endif}
 {$ifdef UNICODE}
@@ -147,7 +148,6 @@ uses
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
-  SynMustache,
   SynCommons;
 
 
@@ -225,8 +225,10 @@ type
   /// this test case will test most low-level functions, classes and types
   // defined and implemented in the mORMot.pas unit
   TTestLowLevelTypes = class(TSynTestCase)
+{$ifndef NOVARIANTS}
   protected
     procedure MustacheTranslate(var English: string);
+{$endif}
   published
 {$ifndef DELPHI5OROLDER}
 {$ifndef FPC}
@@ -239,8 +241,10 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+{$ifndef NOVARIANTS}
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
+{$endif}
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
     /// variant-based JSON/BSON document process
@@ -872,7 +876,7 @@ type
     procedure ClientSideREST;
     /// test the client-side in RESTful mode with method results as JSON objects
     procedure ClientSideRESTResultAsObject;
-    /// test the client-side implementation of optExecLockedPerInterface 
+    /// test the client-side implementation of optExecLockedPerInterface
     procedure ClientSideRESTLocked;
     {$ifndef LVCL}
     /// test the client-side implementation of opt*InMainThread option
@@ -886,7 +890,7 @@ type
     procedure ClientSideRESTCustomRecordLayout;
     /// test the client-side implementation in JSON-RPC mode
     procedure ClientSideJSONRPC;
-    /// test REStful mode using HTTP client/server communication 
+    /// test REStful mode using HTTP client/server communication
     procedure TestOverHTTP;
     /// test the security features
     procedure Security;
@@ -2156,6 +2160,17 @@ begin
   Check(Int64ToUtf8(-maxInt)='-2147483647');
   Check(Int64ToUtf8(-1)='-1');
   Check(Int64ToUtf8(-9223372036854775807)='-9223372036854775807');
+  Int64ToUtf8(-maxInt,s);
+  Check(s='-2147483647');
+  Int64ToUtf8(-1,s);
+  Check(s='-1');
+  Int64ToUtf8(-9223372036854775807,s);
+  Check(s='-9223372036854775807');
+  {$ifdef HASINLINE} // bug with MinInt64 with older versions of Delphi
+  Check(Int64ToUtf8(-9223372036854775808)='-9223372036854775808');
+  Int64ToUtf8(-9223372036854775808,s);
+  Check(s='-9223372036854775808');
+  {$endif}
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
   d := 22.99999999999997;
@@ -3227,6 +3242,8 @@ begin
   fInt := Value;
 end;
 
+{$ifndef NOVARIANTS}
+
 type
   TMustacheTest = packed record
     desc: string;
@@ -3390,6 +3407,7 @@ begin
     English := 'Vous venez de gagner';
 end;
 
+{$endif NOVARIANTS}
 
 { TSQLRecordPeople }
 
@@ -6712,7 +6730,7 @@ begin
     DataBase := TSQLRestServerDB.Create(Model,'test.db3');
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
-    Server := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
+    Server := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,16,secSynShaAes);
     fRunConsole := fRunConsole+'using '+Server.HttpServer.APIVersion;
     Database.NoAJAXJSON := true; // expect not expanded JSON from now on
   except
@@ -6902,6 +6920,7 @@ begin
     // release main http client/server and main database instances
     CleanUp;
     assert(Client=nil);
+    assert(Server=nil);
     assert(DataBase=nil);
     // create 3 TSQLRestServerDB + TSQLHttpClient instances (and TSQLModel)
     for i := 0 to high(Instance) do
@@ -6914,11 +6933,14 @@ begin
     // launch one HTTP server for all TSQLRestServerDB instances
     Server := TSQLHttpServer.Create('888',
       [Instance[0].Database,Instance[1].Database,Instance[2].Database],
-      '+',useHttpApi,32,secNone);
+      '+',useHttpApi,4,secNone);
+    // initialize the clients
+    for i := 0 to high(Instance) do
+    with Instance[i] do
+      Client := TSQLHttpClient.Create('127.0.0.1','888',Model);
     // fill remotely all TSQLRestServerDB instances
     for i := 0 to high(Instance) do
     with Instance[i] do begin
-      Client := TSQLHttpClient.Create('127.0.0.1','888',Model);
       Client.TransactionBegin(TSQLRecordPeople);
       Check(Rec.FillRewind);
       while Rec.FillOne do
@@ -7019,7 +7041,9 @@ type
     fData: TSQLRawBlob;
     fYearOfBirth: integer;
     fYearOfDeath: word;
+    {$ifndef NOVARIANTS}
     fValue: TVariantDynArray;
+    {$endif}
     fLastChange: TModTime;
     fCreatedAt: TCreateTime;
   published
@@ -7028,7 +7052,9 @@ type
     property Data: TSQLRawBlob read fData write fData;
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+    {$ifndef NOVARIANTS}
     property Value: TVariantDynArray read fValue write fValue;
+    {$endif}
     property LastChange: TModTime read fLastChange;
     property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
   end;
@@ -7591,7 +7617,9 @@ var RInt: TSQLRecordPeople;
     BatchID,BatchIDUpdate,BatchIDJoined: TIntegerDynArray;
     aExternalClient: TSQLRestClientDB;
     fProperties: TSQLDBConnectionProperties;
+    {$ifndef NOVARIANTS}
     json: RawUTF8;
+    {$endif}
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
 begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
@@ -7639,7 +7667,9 @@ begin
           RExt.LastName := RInt.LastName;
           RExt.YearOfBirth := RInt.YearOfBirth;
           RExt.YearOfDeath := RInt.YearOfDeath;
+          {$ifndef NOVARIANTS}
           RExt.Value := ValuesToVariantDynArray(['text',RInt.YearOfDeath]);
+          {$endif}
           RExt.fLastChange := 0;
           RExt.CreatedAt := 0;
           if RInt.fID>100 then begin
@@ -7654,15 +7684,19 @@ begin
             RExt.ClearProperties;
             Check(RExt.YearOfBirth=0);
             Check(RExt.FirstName='');
+            {$ifndef NOVARIANTS}
             Check(RExt.Value=nil);
+            {$endif}
             Check(aExternalClient.Retrieve(aID,RExt));
             Check(RExt.FirstName=RInt.FirstName);
             Check(RExt.LastName=RInt.LastName);
             Check(RExt.YearOfBirth=RInt.YearOfBirth);
             Check(RExt.YearOfDeath=RInt.YearOfDeath);
             Check(RExt.YearOfBirth<>RExt.YearOfDeath);
+            {$ifndef NOVARIANTS}
             json := FormatUTF8('["text",%]',[RInt.YearOfDeath]);
             Check(VariantDynArrayToJSON(RExt.Value)=json);
+            {$endif}
           end;
           inc(n);
         end;
@@ -7683,7 +7717,9 @@ begin
             Check(RExt.YearOfBirth=RInt.YearOfBirth);
             Check(RExt.YearOfDeath=RInt.YearOfDeath);
             Check(RExt.YearOfBirth<>RExt.YearOfDeath);
+            {$ifndef NOVARIANTS}
             Check(VariantDynArrayToJSON(RExt.Value)=FormatUTF8('["text",%]',[RInt.YearOfDeath]));
+            {$endif}
           end;
         end;
         Updated := aExternalClient.ServerTimeStamp;
@@ -7691,11 +7727,15 @@ begin
           if i mod 100=0 then begin
             RExt.fLastChange := 0;
             RExt.CreatedAt := 0;
+            {$ifndef NOVARIANTS}
             RExt.Value := nil;
+            {$endif}
             Check(aExternalClient.Retrieve(i,RExt,true),'for update');
             Check(RExt.YearOfBirth<>RExt.YearOfDeath);
             Check(RExt.CreatedAt<=Updated);
+            {$ifndef NOVARIANTS}
             Check(VariantDynArrayToJSON(RExt.Value)=FormatUTF8('["text",%]',[RExt.YearOfDeath]));
+            {$endif}
             RExt.YearOfBirth := RExt.YearOfDeath; // YOB=YOD for 1/100 rows
             if i>4000 then begin
               if aExternalClient.BatchCount=0 then
@@ -7706,7 +7746,9 @@ begin
               Check(aExternalClient.UnLock(RExt));
               Check(RExt.LastChange>=Updated);
               RExt.ClearProperties;
+              {$ifndef NOVARIANTS}
               Check(RExt.Value=nil);
+              {$endif}
               Check(RExt.YearOfDeath=0);
               Check(RExt.YearOfBirth=0);
               Check(RExt.CreatedAt=0);
@@ -7715,7 +7757,9 @@ begin
               Check(RExt.CreatedAt>=Start);
               Check(RExt.CreatedAt<=Updated);
               Check(RExt.LastChange>=Updated);
+              {$ifndef NOVARIANTS}
               Check(VariantDynArrayToJSON(RExt.Value)=FormatUTF8('["text",%]',[RExt.YearOfDeath]));
+              {$endif}
             end;
           end;
         Check(aExternalClient.BatchSend(BatchIDUpdate)=HTML_SUCCESS);
@@ -7746,7 +7790,9 @@ begin
           ok := aExternalClient.Retrieve(i,RExt,false);
           Check(ok=(i and 127<>0),'deletion');
           if ok then begin
+            {$ifndef NOVARIANTS}
             Check(VariantDynArrayToJSON(RExt.Value)=FormatUTF8('["text",%]',[RExt.YearOfDeath]));
+            {$endif}
             Check(RExt.CreatedAt>=Start);
             Check(RExt.CreatedAt<=Updated);
             if i mod 100=0 then begin
@@ -7800,9 +7846,11 @@ begin
           Check(RJoin.ID=BatchIDJoined[i]);
           Check(PtrUInt(RJoin.People)>1000);
           Check(GetInteger(pointer(RJoin.Name))=RJoin.People.ID);
+          {$ifndef NOVARIANTS}
           Check(length(RJoin.People.Value)=2);
           Check(RJoin.People.Value[0]='text');
           Check(RJoin.People.Value[1]=RJoin.People.YearOfDeath);
+          {$endif}
           RJoin.ClearProperties;
           Check(RJoin.ID=0);
           Check(RJoin.People.ID=0);

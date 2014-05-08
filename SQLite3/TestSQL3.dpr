@@ -93,11 +93,14 @@ uses
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
+  {$ifndef NOVARIANTS}
+  SynMustache in '..\SynMustache.pas',
   {$ifndef CPU64}
   SynSMAPI in '..\SynSMAPI.pas',
   SynSM in '..\SynSM.pas',
-  {$endif}
-  {$endif}
+  {$endif CPU64}
+  {$endif NOVARIANTS}
+  {$endif LVCL}
   SynBigTable in '..\SynBigTable.pas',
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
@@ -109,8 +112,8 @@ uses
   mORMotHttpServer in 'mORMotHttpServer.pas',
   mORMotService in 'mORMotService.pas',
   //mORMotBigTable,
-{$endif}
-{$endif}
+{$endif FPC}
+{$endif DELPHI5OROLDER}
 {$ifndef FPC}
 {$ifndef LVCL}
   SynPdf in '..\SynPdf.pas',
@@ -128,7 +131,6 @@ uses
 {$endif FPC}
 {$endif LVCL}
 {$endif FPC}
-  SynMustache in '..\SynMustache.pas',
   SynZip in '..\SynZip.pas',
   SynSelfTests in '..\SynSelfTests.pas';
 

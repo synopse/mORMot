@@ -81,10 +81,6 @@ uses
   SynCrtSock,
   SynCommons,
 {$ifndef DELPHI5OROLDER}
-  {$ifndef CPU64}
-  SynSMAPI,
-  //SynSM,
-  {$endif}
   SynBigTable,
   SynSQLite3,
   SynSQLite3Static,
