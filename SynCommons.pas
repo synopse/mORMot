@@ -9839,7 +9839,8 @@ type
 
   /// used to define a logging level
   // - i.e. a combination of none or several logging event
-  // - e.g. use LOG_VERBOSE constant to log all events
+  // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
+  // to log all errors and exceptions
   TSynLogInfos = set of TSynLogInfo;
 
   /// a dynamic array of logging event levels
@@ -38810,10 +38811,16 @@ end;
 
 procedure TSynLog.Log(Level: TSynLogInfo);
 var aCaller: PtrUInt;
+    LastError: DWORD;
 begin
+  if Level=sllLastError then
+    LastError := GetLastError else
+    LastError := 0;
   if (self<>nil) and (Level in fFamily.fLevel) then
   if LogHeaderLock(Level) then
   try
+    if LastError<>0 then
+      AddErrorMessage(LastError);
     {$ifdef CPU64}
     if RtlCaptureStackBackTrace(1,1,@aCaller,nil)=0 then
       aCaller := 0 else
@@ -38946,14 +38953,14 @@ end;
 procedure TSynLog.AddErrorMessage(Error: Cardinal);
 var Len: Integer;
     Buffer: array[byte] of WideChar;
-const LCID_US = $0409;
 begin
   Len := FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY,
-    nil, Error, LCID_US, Buffer, SizeOf(Buffer), nil);
+    nil, Error, 0, Buffer, SizeOf(Buffer), nil);
   while (Len>0) and (ord(Buffer[Len-1]) in [0..32,ord('.')]) do dec(Len);
   Buffer[Len] := #0;
+  fWriter.Add(' ','"');
   fWriter.AddOnSameLineW(@Buffer,Len);
-  fWriter.Add(' ','(');
+  fWriter.AddShort('" (');
   fWriter.Add(Error);
   fWriter.Add(')',' ');
 end;
@@ -39053,9 +39060,9 @@ begin
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ');
+    fWriter.Add(TextFmt,TextArgs,twOnSameLine);
     if LastError<>0 then
       AddErrorMessage(LastError);
-    fWriter.Add(TextFmt,TextArgs,twOnSameLine);
   finally
     LogTrailerUnLock(Level);
   end;
@@ -39064,7 +39071,11 @@ end;
 
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
   Instance: TObject; TextTruncateAtLength: integer);
+var LastError: cardinal;
 begin
+  if Level=sllLastError then
+    LastError := GetLastError else
+    LastError := 0;
   if LogHeaderLock(Level) then
   try
     if Text='' then begin
@@ -39083,6 +39094,8 @@ begin
         fWriter.AddOnSameLine(pointer(Text),TextTruncateAtLength) else
         fWriter.AddOnSameLine(pointer(Text));
     end;
+    if LastError<>0 then
+      AddErrorMessage(LastError);
   finally
     LogTrailerUnLock(Level);
   end;
