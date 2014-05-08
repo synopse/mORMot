@@ -691,7 +691,7 @@ type
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
-  QWord = {$ifdef UNICODE}UInt64{$else}Int64{$endif};
+  QWord = {$ifdef HASINLINE}UInt64{$else}Int64{$endif};
 {$endif}
 
 {$ifdef DELPHI5OROLDER}
@@ -12791,7 +12791,7 @@ begin // StrInt32 aldready implemented PtrInt=Int64
 end;
 {$else}
 function StrInt64(P: PAnsiChar; val: Int64): PAnsiChar;
-var c,c10: Int64;
+var c,c10: QWord;
     c64: Int64Rec absolute c;
 begin // this code is faster than the Borland's original str() or IntToStr()
   if val<0 then
