@@ -178,6 +178,8 @@ unit SynCrtSock;
   - fixed potential Access Violation error at THttpServerResp shutdown
   - removed several compilation hints when assertions are set to off
   - added aRegisterURI optional parameter to THttpApiServer.AddUrl() method
+  - made exception error messages more explicit (tuned per module)
+  - fixed several issues when releasing THttpApiServer and THttpServer instances
 
 }
 
@@ -660,8 +662,6 @@ type
     fClientSock: TSocket;
     /// main thread loop: read request from socket, send back answer
     procedure Execute; override;
-    /// release internal link to fServer instance
-    procedure ResetServer(Internal: boolean);
   public
     /// initialize the response thread for the corresponding incoming socket
     // - this version will get the request directly from an incoming socket
@@ -1731,21 +1731,44 @@ function Utf8ToAnsi(const UTF8: RawByteString): RawByteString;
 begin
   result := UTF8; // no conversion
 end;
+{$endif}
 
-procedure RaiseLastOSError;
-var
-  LastError: Integer;
-  Error: EWin32Error;
+const
+  ENGLISH_LANGID = $0409;
+  
+function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
+var tmpLen: DWORD;
+    err: PChar;
+begin
+  if Code=NO_ERROR then begin
+    result := '';
+    exit;
+  end;
+  tmpLen := FormatMessage(
+    FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
+    pointer(GetModuleHandle(ModuleName)),Code,ENGLISH_LANGID,@err,0,nil);
+  try
+    while (tmpLen>0) and (ord(err[tmpLen-1]) in [0..32,ord('.')]) do
+      dec(tmpLen);
+    SetString(result,err,tmpLen);
+  finally
+    LocalFree(HLOCAL(err));
+  end;
+  if result='' then
+    result := SysErrorMessage(Code);
+end;
+
+procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+var LastError: Integer;
+    Error: Exception;
 begin
   LastError := GetLastError;
-  if LastError <> 0 then
-    Error := EWin32Error.CreateFmt('Error system %d: %s', [LastError,
-      SysErrorMessage(LastError)]) else
-    Error := EWin32Error.Create('Unknown OS Error');
-  Error.ErrorCode := LastError;
+  if LastError<>NO_ERROR then
+    Error := ModuleException.CreateFmt('%s error %d (%s)',
+      [ModuleName,LastError,SysErrorMessagePerModule(LastError,ModuleName)]) else
+    Error := ModuleException.CreateFmt('Undefined %s error',[ModuleName]);
   raise Error;
 end;
-{$endif}
 
 const
   HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
@@ -2804,17 +2827,21 @@ begin
 end;
 
 destructor THttpServer.Destroy;
-var i: integer;
+var StartTick, StopTick: Cardinal;
 begin
-  Terminate; // THttpServerResp.Execute expects Terminated if we reached here
-  EnterCriticalSection(fProcessCS);
-  try
-    for i := 0 to fInternalHttpServerRespList.Count-1 do
-      THttpServerResp(fInternalHttpServerRespList.List[i]).ResetServer(false);
-    FreeAndNil(fInternalHttpServerRespList);
-  finally
+  Terminate; // set Terminated := true for THttpServerResp.Execute
+  StartTick := GetTickCount;
+  StopTick := StartTick+20000;
+  repeat // wait for all THttpServerResp.Execute to be finished
+    EnterCriticalSection(fProcessCS);
+    if fInternalHttpServerRespList.Count=0 then
+      break;
     LeaveCriticalSection(fProcessCS);
-  end;
+    sleep(100);
+  until (GetTickCount>StopTick) or (GetTickCount<StartTick);
+  EnterCriticalSection(fProcessCS);
+  FreeAndNil(fInternalHttpServerRespList);
+  LeaveCriticalSection(fProcessCS);
 {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
 {$endif}
@@ -2898,7 +2925,8 @@ var Context: THttpServerRequest;
     s: RawByteString;
     FileToSend: TFileStream;
 begin
-  if ClientSock.Headers=nil then // we didn't get the request = socket read error
+  if (ClientSock=nil) or (ClientSock.Headers=nil) then
+    // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
@@ -2971,6 +2999,14 @@ begin
       // direct send to socket (no CRLF at the end of data)
       ClientSock.SndLow(pointer(Context.OutContent),length(Context.OutContent));
   finally
+    if Sock<>nil then begin // add transfert stats to main socket
+      EnterCriticalSection(fProcessCS);
+      inc(Sock.BytesIn,ClientSock.BytesIn);
+      inc(Sock.BytesOut,ClientSock.BytesOut);
+      LeaveCriticalSection(fProcessCS);
+      ClientSock.BytesIn := 0;
+      ClientSock.BytesOut := 0;
+    end;
     Context.Free;
   end;
 end;
@@ -3017,45 +3053,18 @@ begin
   end;
 end;
 
-procedure THttpServerResp.ResetServer(Internal: boolean);
-var i: integer;
-begin
-  if (Self<>nil) and (fServer<>nil) then
-  try
-    if Internal then
-      EnterCriticalSection(fServer.fProcessCS); // fServer thread protection
-    try
-      fServer.OnDisconnect;
-      if (fServer.fInternalHttpServerRespList<>nil) and Internal then begin
-        i := fServer.fInternalHttpServerRespList.IndexOf(self);
-        if i>=0 then
-          fServer.fInternalHttpServerRespList.Delete(i);
-      end;
-      if (fServer.Sock<>nil) and (fServerSock<>nil) then begin
-        inc(fServer.Sock.BytesIn,fServerSock.BytesIn);
-        inc(fServer.Sock.BytesOut,fServerSock.BytesOut);
-      end;
-    finally
-      if Internal then
-        LeaveCriticalSection(fServer.fProcessCS);
-      fServer := nil;
-    end;
-  except // ignore any exception at this level
-  end;
-end;
-
 procedure THttpServerResp.Execute;
 procedure HandleRequestsProcess;
 var c: char;
     StartTick, StopTick, Tick: cardinal;
-    Size: integer;
-const LOOPWAIT = 64; // ms sleep beetwen connections
+    Size, nSleep: integer;
 begin
   {$ifdef USETHREADPOOL}
   if fThreadPool<>nil then
     InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
   {$endif}
   try
+    nSleep := 0;
     repeat
       StartTick := GetTickCount;
       StopTick := StartTick+fServer.ServerKeepAliveTimeOut;
@@ -3064,16 +3073,25 @@ begin
           exit; // server is down -> close connection
         Size := Recv(fServerSock.Sock,@c,1,MSG_PEEK);
         // Recv() may return Size=0 if no data is pending, but no TCP/IP error
-        if Size<0 then
-          exit; // socket error -> disconnect the client
         if (fServer=nil) or fServer.Terminated then
           exit; // server is down -> disconnect the client
-        if Size=0 then
+        if Size<0 then
+          exit; // socket error -> disconnect the client
+        if Size=0 then begin
           // no data available -> wait for keep alive timeout
-          sleep(0) else begin
+          inc(nSleep);
+          if nSleep<150 then
+            sleep(0) else
+          if nSleep<160 then
+            sleep(1) else
+          if nSleep<200 then
+            sleep(2) else
+            sleep(10);
+        end else begin
           // get request and headers
+          nSleep := 0;
           if not fServerSock.GetRequest(True) then
-            // fServerSock connection was down or headers not correct
+            // fServerSock connection was down or headers are not correct
             exit;
           // calc answer and send response
           fServer.Process(fServerSock,self);
@@ -3099,6 +3117,7 @@ begin
   {$endif}
 end;
 var aSock: TSocket;
+    i: integer;
 begin
   try
     try
@@ -3119,9 +3138,22 @@ begin
       end;
     finally
       try
-        ResetServer(true);
-        FreeAndNil(fServerSock);
+        assert(fServer<>nil);
+        if fServer<>nil then
+        try
+          EnterCriticalSection(fServer.fProcessCS);
+          fServer.OnDisconnect;
+          if (fServer.fInternalHttpServerRespList<>nil) then begin
+            i := fServer.fInternalHttpServerRespList.IndexOf(self);
+            if i>=0 then
+              fServer.fInternalHttpServerRespList.Delete(i);
+          end;
+        finally
+          LeaveCriticalSection(fServer.fProcessCS);
+          fServer := nil;
+        end;
       finally
+        FreeAndNil(fServerSock);
         if fClientSock<>0 then begin
           // if Destroy happens before fServerSock.GetRequest() in Execute below
           Shutdown(fClientSock,1);
@@ -3435,7 +3467,8 @@ end;
 
 constructor ECrtSocket.Create(const Msg: string; Error: integer);
 begin
-  inherited CreateFmt('%s %d',[Msg,-Error]);
+  Error := abs(Error);
+  inherited CreateFmt('%s %d (%s)',[Msg,Error,SysErrorMessage(Error)]);
 end;
 
 
@@ -4690,7 +4723,7 @@ begin
   fLastError := Error;
   fLastApi := api;
   inherited CreateFmt('%s failed: %s (%d)',
-    [HttpNames[api],SysErrorMessage(Error),Error])
+    [HttpNames[api],SysErrorMessagePerModule(Error,HTTPAPI_DLL),Error])
 end;
 
 
@@ -4862,6 +4895,9 @@ begin
       Http.Terminate(HTTP_INITIALIZE_SERVER);
     end;
     FreeAndNil(fClones);
+    {$ifdef LVCL}
+    Sleep(500); // LVCL TThread does not wait for its completion -> do it now
+    {$endif}
   end;
   inherited Destroy;
 end;
@@ -4974,7 +5010,7 @@ begin
               inc(BufRead,BytesRead);
             until InContentLengthRead=InContentLength;
             if Err<>NO_ERROR then begin
-              SendError(406,SysErrorMessage(Err));
+              SendError(406,SysErrorMessagePerModule(Err,HTTPAPI_DLL));
               continue;
             end;
             with Req^.Headers.KnownHeaders[reqContentEncoding] do
@@ -5008,7 +5044,7 @@ begin
               {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
               fmOpenRead or fmShareDenyNone);
             if PtrInt(FileHandle)<0 then begin
-              SendError(404,SysErrorMessage(GetLastError));
+              SendError(404,SysErrorMessagePerModule(GetLastError,HTTPAPI_DLL));
               continue;
             end;
             try
@@ -5453,20 +5489,10 @@ end;
 
 constructor EWinINet.Create;
 var dwError, tmpLen: DWORD;
-    err: PChar;
     msg, tmp: string;
 begin // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fCode := GetLastError;
-  msg := 'Error';
-  tmpLen := FormatMessage(FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
-    Pointer(GetModuleHandle('wininet.dll')), fCode, 0, @err, 0, nil);
-  try
-    while (tmpLen>0) and (ord(err[tmpLen-1]) in [0..32,ord('.')]) do
-      dec(tmpLen);
-    SetString(msg,err,tmpLen);
-  finally
-    LocalFree(HLOCAL(err));
-  end;
+  msg := SysErrorMessagePerModule(fCode,'wininet.dll');
   if fCode=ERROR_INTERNET_EXTENDED_ERROR then begin
     InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError,nil,tmpLen);
     if tmpLen > 0 then begin
@@ -5626,7 +5652,7 @@ begin
   if (hdr<>'') and
     not WinHttpAddRequestHeaders(FRequest, Pointer(Ansi7ToUnicode(hdr)), length(hdr),
       WINHTTP_ADDREQ_FLAG_COALESCE) then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 procedure TWinHTTP.InternalCloseRequest;
@@ -5646,14 +5672,14 @@ begin
   fSession := WinHttpOpen(pointer(Ansi7ToUnicode(DefaultUserAgent(self))), OpenType,
     pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
   if fSession=nil then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpSetTimeouts(fSession,HTTP_DEFAULT_RESOLVETIMEOUT,
      HTTP_DEFAULT_CONNECTTIMEOUT,SendTimeout,ReceiveTimeout) then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
   fConnection := WinHttpConnect(fSession, pointer(Ansi7ToUnicode(FServer)), fPort, 0);
   if fConnection=nil then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 function TWinHTTP.InternalGetInfo(Info: DWORD): RawByteString;
@@ -5689,7 +5715,7 @@ end;
 function TWinHTTP.InternalReadData(var Data: RawByteString; Read: integer): cardinal;
 begin
   if not WinHttpReadData(fRequest, @PByteArray(Data)[Read], length(Data)-Read, result) then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 procedure TWinHTTP.InternalRequest(const method, aURL: RawByteString);
@@ -5702,11 +5728,13 @@ begin
   fRequest := WinHttpOpenRequest(fConnection, pointer(Ansi7ToUnicode(method)),
     pointer(Ansi7ToUnicode(aURL)), nil, nil, @ALL_ACCEPT, Flags);
   if fRequest=nil then
-    RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
-const
+const // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
   ERROR_WINHTTP_CANNOT_CONNECT = 12029;
+  ERROR_WINHTTP_TIMEOUT = 12002;
+  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
 
 procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
 var L: integer;
@@ -5714,10 +5742,7 @@ begin
   L := length(aData);
   if not WinHttpSendRequest(fRequest, nil, 0, pointer(aData), L, L, 0) or
      not WinHttpReceiveResponse(fRequest,nil) then
-    if GetLastError=ERROR_WINHTTP_CANNOT_CONNECT then
-      raise EWinHTTP.CreateFmt('Unable to connect to %s:%d - server may be down or unavailable',
-        [fServer,fPort]) else
-      RaiseLastOSError;
+    RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
 {$endif}
