@@ -23098,16 +23098,15 @@ const
 function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aParameters: array of const; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: integer; aResponseHead: PRawUTF8): integer;
-var header, params: RawUTF8;
+var url, header: RawUTF8;
 begin
   if self=nil then
     result := HTML_UNAVAILABLE else begin
 {$ifdef WITHLOG}
     SQLite3Log.Enter(Self,pointer(aMethodName),true);
 {$endif}
-    params := UrlEncode(aParameters);
-    result := URI(Model.getURICallBack(aMethodName,aTable,aID)+params,'GET',
-      @aResponse,@header).Lo;
+    url := Model.getURICallBack(aMethodName,aTable,aID)+UrlEncode(aParameters);
+    result := URI(url,'GET',@aResponse,@header).Lo;
     if aResponseHead<>nil then
       aResponseHead^ := header;
 {$ifdef WITHLOG}

@@ -1,7 +1,7 @@
 /// Win NT Service managment classes for mORMot
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit mORmotService;
+unit mORMotService;
 
 {
     This file is part of Synopse mORMot framework.
@@ -63,6 +63,9 @@ unit mORmotService;
     - renamed SQLite3Service.pas to mORMotService.pas
     - changed ServicesRun to return an indicator of success - see [8666906039]
     - TServiceController.CreateOpenService() use lower rights - see [c3ebb6b5d6]
+    - added TServiceSingle class and its global handler (to be used instead of
+      TServer which does not work as expected)
+    - added logging to the Service registration and command process
 
 }
 
@@ -72,7 +75,7 @@ interface
 
 {$ifdef LVCL}
   {$define NOMORMOTKERNEL}
-  // define it if you don't need to include the mORmot.pas unit
+  // define it if you don't need to include the mORMot.pas unit
   // - could save some code size in the final executable
 {$endif}
 
@@ -81,7 +84,7 @@ uses
   {$ifndef LVCL}Contnrs,{$endif}
   SynCommons
   {$ifndef NOMORMOTKERNEL},
-  mORmot
+  mORMot
   {$endif} // translated caption needed only if with full UI
   ;
 
@@ -102,6 +105,7 @@ type
     FSCHandle: THandle;
     FHandle: THandle;
     FStatus: TServiceStatus;
+    FName: RawUTF8;
   private
     function GetStatus: TServiceStatus;
     function GetState: TServiceState;
@@ -205,9 +209,11 @@ type
   TService = class;
 
   /// callback procedure for Windows Service Controller
-  TServiceCtrlHandler = procedure(CtrlCode: DWORD); stdcall;
+  TServiceControlHandler = procedure(CtrlCode: DWORD); stdcall;
+
   /// event triggered for Control handler
   TServiceControlEvent = procedure(Sender: TService; Code: DWORD) of object;
+
   /// event triggered to implement the Service functionality
   TServiceEvent = procedure(Sender: TService) of object;
 
@@ -219,7 +225,7 @@ type
     fStartType: DWORD;
     fServiceType: DWORD;
     fData: DWORD;
-    fCtrlHandler: TServiceCtrlHandler;
+    fControlHandler: TServiceControlHandler;
     fOnControl: TServiceControlEvent;
     fOnInterrogate: TServiceEvent;
     fOnPause: TServiceEvent;
@@ -237,8 +243,8 @@ type
     function GetInstalled: boolean;
     procedure SetStatus(const Value: TServiceStatus);
     procedure CtrlHandle(Code: DWORD);
-    function GetCtrlHandler: TServiceCtrlHandler;
-    procedure SetCtrlHandler(const Value: TServiceCtrlHandler);
+    function GetControlHandler: TServiceControlHandler;
+    procedure SetControlHandler(const Value: TServiceControlHandler);
   public
     /// this method is the main service entrance, from the OS point of view
     // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
@@ -292,8 +298,11 @@ type
       - uses a local TServiceController to check if the current Service Name exists }
     property Installed: boolean read GetInstalled;
     {{ Callback handler for Windows Service Controller
-      - if handler is not set, then auto generated handler calls DoCtrlHandle }
-    property ControlHandler: TServiceCtrlHandler read GetCtrlHandler write SetCtrlHandler;
+      - if handler is not set, then auto generated handler calls DoCtrlHandle
+      (note that this auto-generated stubb is... not working yet - so you should
+      either set your own procedure to this property, or use TServiceSingle) }
+    property ControlHandler: TServiceControlHandler
+      read GetControlHandler write SetControlHandler;
     {{ Start event is executed before the main service thread (i.e. in the Execute method) }
     property OnStart: TServiceEvent read fOnStart write fOnStart;
     {{ custom Execute event
@@ -313,14 +322,28 @@ type
     property OnShutdown: TServiceEvent read fOnShutdown write fOnShutdown;
   end;
 
+  /// inherit from this service if your application has a single service
+  // - note that TService jumper does not work well - so use this instead
+  TServiceSingle = class(TService)
+  public
+    /// will set a global function as service controller
+    constructor Create(const aServiceName, aDisplayName: String); override;
+    /// will release the global service controller
+    destructor Destroy; override;
+  end;
+
+
 var
   /// the internal list of Services handled by this unit
   // - not to be accessed directly: create TService instances, and they will
   // be added/registered to this list
   // - then run the global ServicesRun procedure
   // - every TService instance is to be freed by the main application, when
-  // it's no more used 
+  // it's no more used
   Services: TList = nil;
+
+  /// the main TService instance running 
+  ServiceSingle: TServiceSingle = nil;
 
 {{ launch the registered Services execution
   - the registered list of service provided by the aplication is sent
@@ -348,23 +371,43 @@ constructor TServiceController.CreateNewService(const TargetComputer,
   ErrorControl: DWORD);
 begin
   inherited Create;
+  StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     SC_MANAGER_ALL_ACCESS);
-  if FSCHandle = 0 then Exit;
+  if FSCHandle = 0 then begin
+    {$ifndef NOMORMOTKERNEL}
+    TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    {$endif}
+    Exit;
+  end;
   FHandle := CreateService(FSCHandle, pointer(Name), pointer(DisplayName),
                DesiredAccess, ServiceType, StartType, ErrorControl, pointer(Path),
                pointer(OrderGroup), nil, pointer(Dependances),
                pointer(Username), pointer(Password));
+  {$ifndef NOMORMOTKERNEL}
+  if FHandle=0 then
+    TSQLLog.Add.Log(sllLastError,'CreateService("%","%")',[Name,DisplayName]);
+  {$endif}
 end;
 
 constructor TServiceController.CreateOpenService(const TargetComputer,
   DataBaseName, Name: String; DesiredAccess: DWORD);
 begin
   inherited Create;
+  StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     GENERIC_READ);
-  if FSCHandle = 0 then Exit;
+  if FSCHandle = 0 then begin
+    {$ifndef NOMORMOTKERNEL}
+    TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    {$endif}
+    Exit;
+  end;
   FHandle := OpenService(FSCHandle, pointer(Name), DesiredAccess);
+  {$ifndef NOMORMOTKERNEL}
+  if FHandle=0 then
+    TSQLLog.Add.Log(sllLastError,'OpenService("%")',[Name]);
+  {$endif}
 end;
 
 function TServiceController.Delete: boolean;
@@ -374,7 +417,11 @@ begin
     if DeleteService(FHandle) then begin
       Result := CloseServiceHandle(FHandle);
       FHandle := 0;
-    end;
+    end
+    {$ifndef NOMORMOTKERNEL}
+    else
+      TSQLLog.Add.Log(sllLastError,'DeleteService(%)',[FName]);
+    {$endif}
 end;
 
 destructor TServiceController.Destroy;
@@ -393,6 +440,9 @@ begin
   if FHandle=0 then
     result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
+  {$ifndef NOMORMOTKERNEL}
+  TSQLLog.Add.Log(sllTrace,pointer(FName),TypeInfo(TServiceState),result);
+  {$endif}
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -488,6 +538,10 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
+  {$ifndef NOMORMOTKERNEL}
+  TSQLLog.Add.Log(sllInfo,'% (%) running as "%"',
+    [ServiceName,aDisplayName,ParamStr(0)],self);
+  {$endif}
 end;
 
 procedure TService.CtrlHandle(Code: DWORD);
@@ -512,40 +566,49 @@ end;
 
 procedure TService.DoCtrlHandle(Code: DWORD);
 begin
+  {$ifndef NOMORMOTKERNEL}
+  TSQLLog.Enter(self);
+  TSQLLog.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
+  {$endif}
    case Code of
-      SERVICE_CONTROL_STOP: begin
-         ReportStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
-         if Assigned(fOnStop) then fOnStop(Self);
-         ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
-      end;
-      SERVICE_CONTROL_PAUSE: begin
-         ReportStatus(SERVICE_PAUSE_PENDING, NO_ERROR, 0);
-         if Assigned(fOnPause) then fOnPause(Self);
-         ReportStatus(SERVICE_PAUSED, NO_ERROR, 0)
-      end;
-      SERVICE_CONTROL_CONTINUE: begin
-         ReportStatus(SERVICE_CONTINUE_PENDING, NO_ERROR, 0);
-         if Assigned(fOnResume) then fOnResume(Self);
-         ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
-      end;
-      SERVICE_CONTROL_SHUTDOWN: begin
-         if Assigned(fOnShutdown) then fOnShutdown(Self);
-         Code := 0;
-      end;
-      SERVICE_CONTROL_INTERROGATE: begin
-         SetServiceStatus(FStatusHandle, fStatusRec);
-         if Assigned(fOnInterrogate) then fOnInterrogate(Self);
-      end;
+     SERVICE_CONTROL_STOP: begin
+       ReportStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
+       if Assigned(fOnStop) then
+         fOnStop(Self);
+       ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
+     end;
+     SERVICE_CONTROL_PAUSE: begin
+       ReportStatus(SERVICE_PAUSE_PENDING, NO_ERROR, 0);
+       if Assigned(fOnPause) then
+         fOnPause(Self);
+       ReportStatus(SERVICE_PAUSED, NO_ERROR, 0)
+     end;
+     SERVICE_CONTROL_CONTINUE: begin
+       ReportStatus(SERVICE_CONTINUE_PENDING, NO_ERROR, 0);
+       if Assigned(fOnResume) then
+         fOnResume(Self);
+       ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
+     end;
+     SERVICE_CONTROL_SHUTDOWN: begin
+       if Assigned(fOnShutdown) then
+         fOnShutdown(Self);
+       Code := 0;
+     end;
+     SERVICE_CONTROL_INTERROGATE: begin
+       SetServiceStatus(FStatusHandle, fStatusRec);
+        if Assigned(fOnInterrogate) then
+          fOnInterrogate(Self);
+     end;
    end;
-   if Assigned(fOnControl) then fOnControl(Self, Code);
+   if Assigned(fOnControl) then
+     fOnControl(Self, Code);
 end;
 
 procedure TService.Execute;
 begin
   if Assigned(fOnStart) then
     fOnStart(@Self);
-  ReportStatus(SERVICE_RUNNING, 0, 0);
-  SetServiceStatus(FStatusHandle, fStatusRec);
+  ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
   if Assigned(fOnExecute) then
     fOnExecute(@Self);
 end;
@@ -562,13 +625,15 @@ begin
     result := FArgsList[Idx];
 end;
 
-function TService.GetCtrlHandler: TServiceCtrlHandler;
+function TService.GetControlHandler: TServiceControlHandler;
 var AfterCallAddr: Pointer;
     Offset: Integer;
 begin
-  Result := fCtrlHandler;
+  Result := fControlHandler;
   if not Assigned(Result) then
   begin
+    raise Exception.Create('Automated jumper generation is not working: '+
+     'use TServiceSingle or set a custom ControlHandler');
     if fJumper=nil then begin
       fJumper := VirtualAlloc(nil, 5+sizeof(Pointer), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
       if fJumper=nil then
@@ -580,9 +645,10 @@ begin
       PInteger(@fJumper[1])^ := Offset;       // points to JumpToService
       PPtrUInt(@fJumper[5])^ := PtrUInt(self); // will be set as EAX=self
     end;
-    Result := pointer(fJumper);
+    Result := Pointer(fJumper);
   end;
 end;
+
 
 function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
 begin
@@ -646,34 +712,28 @@ begin
   end;
 end;
 
-{procedure TService.MessageExecute(EndCode: DWORD);
-var aMsg: TMsg;
-begin
-  while fCurrentCode<>EndCode do begin
-    while PeekMessage(aMsg,0,0,0,PM_REMOVE) do begin
-      TranslateMessage(aMsg);
-      DispatchMessage(aMsg);
-    end;
-    if fCurrentCode=EndCode then
-      break;
-    WaitMessage;
-  end;
-end;}
-
 procedure TService.Remove;
 begin
   with TServiceController.CreateOpenService('','',fSName,SERVICE_ALL_ACCESS) do
   try
     if Handle=0 then exit;
     Stop;
-    Delete; 
+    Delete;
   finally
     Free;
   end;
 end;
 
 function TService.ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
+{$ifndef NOMORMOTKERNEL}
+var status: string;
 begin
+  status := ServiceStateText(CurrentStateToServiceState(dwState));
+  TSQLLog.Add.Log(sllInfo,'% ReportStatus(%,%,%)',
+    [ServiceName,status,dwExitCode,dwWait],self);
+{$else}
+begin
+{$endif}
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0 else
     fStatusRec.dwControlsAccepted := 31;
@@ -681,14 +741,19 @@ begin
   fStatusRec.dwWin32ExitCode := dwExitCode;
   fStatusRec.dwWaitHint := dwWait;
   if (dwState = SERVICE_RUNNING) or (dwState = SERVICE_STOPPED) then
-      fStatusRec.dwCheckPoint := 0 else
-      inc(fStatusRec.dwCheckPoint);
-  Result := SetServiceStatus(FStatusHandle, fStatusRec);
+    fStatusRec.dwCheckPoint := 0 else
+    inc(fStatusRec.dwCheckPoint);
+  result := SetServiceStatus(FStatusHandle, fStatusRec);
+  if not result then
+    {$ifndef NOMORMOTKERNEL}
+    TSQLLog.Add.Log(sllLastError,'% ReportStatus(%,%,%)',
+      [ServiceName,status,dwExitCode,dwWait],self);
+    {$endif}
 end;
 
-procedure TService.SetCtrlHandler(const Value: TServiceCtrlHandler);
+procedure TService.SetControlHandler(const Value: TServiceControlHandler);
 begin
-  fCtrlHandler := Value;
+  fControlHandler := Value;
   if Assigned(fJumper) then
     VirtualFree(fJumper, 0, MEM_RELEASE);
 end;
@@ -740,7 +805,8 @@ begin
     SetLength(Srv.FArgsList, length(Srv.FArgsList)+1);
     Srv.FArgsList[high(Srv.FArgsList)] := Args^;
   end;
-  Srv.FStatusHandle := RegisterServiceCtrlHandler(pointer(Srv.fSName), @Srv.ControlHandler);
+  Srv.FStatusHandle := RegisterServiceCtrlHandler(
+    pointer(Srv.fSName), @Srv.ControlHandler);
   if Srv.FStatusHandle = 0 then begin
     Srv.ReportStatus(SERVICE_STOPPED, GetLastError, 0);
     Exit;
@@ -759,6 +825,34 @@ begin
     S[i].lpServiceProc := @ServiceProc;
   end;
   result := StartServiceCtrlDispatcher(S[0]);
+end;
+
+
+{ TServiceSingle }
+
+procedure SingleServiceControlHandler(Opcode: LongWord); stdcall;
+begin
+  if ServiceSingle<>nil then
+    ServiceSingle.DoCtrlHandle(Opcode);
+end;
+
+constructor TServiceSingle.Create(const aServiceName,
+  aDisplayName: String);
+begin
+  inherited;
+  if ServiceSingle<>nil then
+    raise Exception.Create('Only one TServiceSingle is allowed at a time');
+  ServiceSingle := self;
+  ControlHandler := SingleServiceControlHandler;
+end;
+
+destructor TServiceSingle.Destroy;
+begin
+  try
+    inherited;
+  finally
+    ServiceSingle := nil;
+  end;
 end;
 
 end.

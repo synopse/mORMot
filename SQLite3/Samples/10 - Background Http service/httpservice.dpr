@@ -21,11 +21,11 @@ uses
 
 /// if we will run the service with administrator rights
 // - otherwise, ensure you registered the URI /root:8080
-{.$R VistaAdm.res}
+{$R VistaAdm.res}
 
 type
   /// class implementing the background Service
-  TSQLite3HttpService = class(TService)
+  TSQLite3HttpService = class(TServiceSingle)
   public
     /// the associated database model
     Model: TSQLModel;
@@ -60,6 +60,9 @@ const
 constructor TSQLite3HttpService.Create;
 begin
   inherited Create(HTTPSERVICENAME,HTTPSERVICEDISPLAYNAME);
+  TSQLLog.Family.Level := LOG_VERBOSE;
+  TSQLLog.Family.PerThreadLog := ptIdentifiedInOnFile;
+  TSQLLog.Enter(self);
   OnStart := DoStart;
   OnStop := DoStop;
   OnResume := DoStart; // trivial Pause/Resume actions
@@ -68,36 +71,38 @@ end;
 
 constructor TSQLite3HttpService.CreateAsConsole;
 begin
+  // manual switch to console mode
+  AllocConsole;
   // define the log level
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
-    EchoToConsole := LOG_VERBOSE; // log all events to the console
+    EchoToConsole := LOG_STACKTRACE;
   end;
-  // manual switch to console mode
-  AllocConsole;
-  TextColor(ccLightGray);
 end;
 
 destructor TSQLite3HttpService.Destroy;
 begin
-  DoStop(nil);
-  inherited;
+  TSQLLog.Enter(self);
+  if Server<>nil then
+    DoStop(nil); // should not happen
+  inherited Destroy;
 end;
 
 procedure TSQLite3HttpService.DoStart(Sender: TService);
 begin
+  TSQLLog.Enter(self);
   if Server<>nil then
     DoStop(nil); // should never happen
   Model := CreateSampleModel;
   DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'));
   DB.CreateMissingTables(0);
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
-  TSQLLog.Family.Level := LOG_VERBOSE;
   TSQLLog.Add.Log(sllInfo,'Server % started by %',[Server.HttpServer,Server]);
 end;
 
 procedure TSQLite3HttpService.DoStop(Sender: TService);
 begin
+  TSQLLog.Enter(self);
   if Server=nil then
     exit;
   TSQLLog.Add.Log(sllInfo,'Server % stopped by %',[Server.HttpServer,Server]);
@@ -114,18 +119,22 @@ begin
     with TSQLite3HttpService.CreateAsConsole do
     try
       DoStart(nil);
+     TextColor(ccLightGray);
       writeln(#10'Background server is running.'#10);
       writeln('Press [Enter] to close the server.'#10);
       ConsoleWaitForEnterKey;
+      exit;
     finally
       Free;
-    end else
+    end;
+  TSQLLog.Family.Level := LOG_VERBOSE;
   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
   // allow to control the service
   try
     if State<>ssErrorRetrievingState then
       for i := 1 to ParamCount do begin
         param := SysUtils.LowerCase(paramstr(i));
+        TSQLLog.Add.Log(sllInfo,'Controling % with command "%"',[HTTPSERVICENAME,param]);
         if param='/install' then
           TServiceController.CreateNewService('','',HTTPSERVICENAME,
               HTTPSERVICEDISPLAYNAME, paramstr(0),'','','','',
@@ -135,14 +144,27 @@ begin
               SERVICE_AUTO_START).  // auto start at every boot
             Free else
         if param='/uninstall' then begin
-           Stop;
-           Delete;
+          if not Stop then
+            TSQLLog.Add.Log(sllLastError,'Stop');
+          if not Delete then
+            TSQLLog.Add.Log(sllLastError,'Delete');
         end else
-        if param='/stop' then
-          Stop else
-        if param='/start' then
-          Start([]);
+        if param='/stop' then begin
+          if not Stop then
+            TSQLLog.Add.Log(sllLastError,'Stop');
+        end else
+        if param='/start' then begin
+          if not Start([]) then
+            TSQLLog.Add.Log(sllLastError,'Start');
+        end;
       end;
+  finally
+    Free;
+  end;
+  TSQLLog.Add.Log(sllTrace,'Quitting command line');
+  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
+  try
+    State;
   finally
     Free;
   end;
