@@ -112,14 +112,12 @@ begin
 end;
 
 procedure CheckParameters;
-var i: integer;
-    param: string;
 begin
   if SameText(ParamStr(1),'-c') or SameText(ParamStr(1),'/c') then
     with TSQLite3HttpService.CreateAsConsole do
     try
       DoStart(nil);
-     TextColor(ccLightGray);
+      TextColor(ccLightGray);
       writeln(#10'Background server is running.'#10);
       writeln('Press [Enter] to close the server.'#10);
       ConsoleWaitForEnterKey;
@@ -129,42 +127,15 @@ begin
     end;
   TSQLLog.Family.Level := LOG_VERBOSE;
   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  // allow to control the service
   try
-    if State<>ssErrorRetrievingState then
-      for i := 1 to ParamCount do begin
-        param := SysUtils.LowerCase(paramstr(i));
-        TSQLLog.Add.Log(sllInfo,'Controling % with command "%"',[HTTPSERVICENAME,param]);
-        if param='/install' then
-          TServiceController.CreateNewService('','',HTTPSERVICENAME,
-              HTTPSERVICEDISPLAYNAME, paramstr(0),'','','','',
-              SERVICE_ALL_ACCESS,
-              SERVICE_WIN32_OWN_PROCESS
-                {$ifdef USEMESSAGES}or SERVICE_INTERACTIVE_PROCESS{$endif},
-              SERVICE_AUTO_START).  // auto start at every boot
-            Free else
-        if param='/uninstall' then begin
-          if not Stop then
-            TSQLLog.Add.Log(sllLastError,'Stop');
-          if not Delete then
-            TSQLLog.Add.Log(sllLastError,'Delete');
-        end else
-        if param='/stop' then begin
-          if not Stop then
-            TSQLLog.Add.Log(sllLastError,'Stop');
-        end else
-        if param='/start' then begin
-          if not Start([]) then
-            TSQLLog.Add.Log(sllLastError,'Start');
-        end;
-      end;
+    CheckParameters(HTTPSERVICEDISPLAYNAME);
   finally
     Free;
   end;
   TSQLLog.Add.Log(sllTrace,'Quitting command line');
   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
   try
-    State;
+    State; // just to log the service state after handling the /parameters
   finally
     Free;
   end;

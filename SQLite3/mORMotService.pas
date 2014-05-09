@@ -66,6 +66,8 @@ unit mORMotService;
     - added TServiceSingle class and its global handler (to be used instead of
       TServer which does not work as expected)
     - added logging to the Service registration and command process
+    - added TServiceController.CheckParameters() generic method to control
+      a service from the command line 
 
 }
 
@@ -204,6 +206,25 @@ type
      - this version expect PChar pointers, either AnsiString (for FPC and old
       Delphi compiler), either UnicodeString (till Delphi 2009) }
     function Start(const Args: array of PChar): boolean;
+    {{ this method will check the command line parameters, and will let
+       control the service according to it
+      - MyService.exe /install will install the service
+      - MyService.exe /start   will start the service
+      - MyService.exe /stop    will stop the service
+      - MyService.exe /uninstall will uninstall the service
+      - so that you can write in the main block of your .dpr:
+      !begin
+      ! if ParamCount<>0 then
+      !   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
+      !   try
+      !     CheckParameters(HTTPSERVICEDISPLAYNAME);
+      !   finally
+      !     Free;
+      !   end else
+      !   ...
+      !end;
+    }
+    procedure CheckParameters(const DisplayName: string); virtual;
   end;
 
   TService = class;
@@ -276,6 +297,7 @@ type
     procedure Stop;
     {{ this is the main method, in which the Service should implement its run  }
     procedure Execute; virtual;
+
     {{ Name of the service. Must be unique }
     property ServiceName: String read fSName;
     {{ Display name of the service }
@@ -300,7 +322,20 @@ type
     {{ Callback handler for Windows Service Controller
       - if handler is not set, then auto generated handler calls DoCtrlHandle
       (note that this auto-generated stubb is... not working yet - so you should
-      either set your own procedure to this property, or use TServiceSingle) }
+      either set your own procedure to this property, or use TServiceSingle)
+      - a typical control handler may be defined as such:
+      ! var MyGlobalService: TService;
+      !
+      ! procedure MyServiceControlHandler(Opcode: LongWord); stdcall;
+      ! begin
+      !   if MyGlobalService<>nil then
+      !     MyGlobalService.DoCtrlHandle(Opcode);
+      ! end;
+      !
+      ! ...
+      ! MyGlobalService := TService.Create(...
+      ! MyGlobalService.ControlHandler := MyServiceControlHandler;
+    }
     property ControlHandler: TServiceControlHandler
       read GetControlHandler write SetControlHandler;
     {{ Start event is executed before the main service thread (i.e. in the Execute method) }
@@ -486,6 +521,47 @@ begin
   Result := ControlService(FHandle, SERVICE_CONTROL_STOP, FStatus);
 end;
 
+procedure TServiceController.CheckParameters(const DisplayName: string);
+procedure ShowError(const Msg: RawUTF8);
+begin
+  {$ifndef NOMORMOTKERNEL}
+  TSQLLog.Add.Log(sllLastError,Msg,self);
+  {$endif}
+end;
+var param: string;
+    i: integer;
+begin
+  if State=ssErrorRetrievingState then
+    exit;
+  for i := 1 to ParamCount do begin
+    param := SysUtils.LowerCase(paramstr(i));
+    {$ifndef NOMORMOTKERNEL}
+    TSQLLog.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
+    {$endif}
+    if param='/install' then
+      TServiceController.CreateNewService('','',FName,
+          DisplayName, paramstr(0),'','','','',
+          SERVICE_ALL_ACCESS,
+          SERVICE_WIN32_OWN_PROCESS
+            {$ifdef USEMESSAGES}or SERVICE_INTERACTIVE_PROCESS{$endif},
+          SERVICE_AUTO_START).  // auto start at every boot
+        Free else
+    if param='/uninstall' then begin
+      if not Stop then
+        ShowError('Stop');
+      if not Delete then
+        ShowError('Delete');
+    end else
+    if param='/stop' then begin
+      if not Stop then
+        ShowError('Stop');
+    end else
+    if param='/start' then begin
+      if not Start([]) then
+        ShowError('Start');
+    end;
+  end;
+end;
 
 { TService }
 
@@ -649,35 +725,6 @@ begin
   end;
 end;
 
-
-function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
-begin
-  case CurrentState of
-    SERVICE_STOPPED:          result := ssStopped;
-    SERVICE_START_PENDING:    result := ssStarting;
-    SERVICE_STOP_PENDING:     result := ssStopping;
-    SERVICE_RUNNING:          result := ssRunning;
-    SERVICE_CONTINUE_PENDING: result := ssResuming;
-    SERVICE_PAUSE_PENDING:    result := ssPausing;
-    SERVICE_PAUSED:           result := ssPaused;
-    else result := ssNotInstalled; // e.g. SERVICE_CONTROL_SHUTDOWN
-  end;
-end;
-
-{$ifdef NOMORMOTKERNEL} // translated caption needed only if with full UI
-function ServiceStateText(State: TServiceState): string;
-var P: PShortString;
-begin
-  P := GetEnumName(TypeInfo(TServiceState),ord(State));
-  result := string(copy(P^,3,length(P^)-2));
-end;
-{$else}
-function ServiceStateText(State: TServiceState): string;
-begin
-  result := PTypeInfo(TypeInfo(TServiceState))^.EnumBaseType^.GetCaption(State);
-end;
-{$endif}
-
 function TService.GetInstalled: boolean;
 begin
   with TServiceController.CreateOpenService('','',fSName,SERVICE_QUERY_STATUS) do
@@ -785,13 +832,40 @@ begin
   end;
 end;
 
+function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
+begin
+  case CurrentState of
+    SERVICE_STOPPED:          result := ssStopped;
+    SERVICE_START_PENDING:    result := ssStarting;
+    SERVICE_STOP_PENDING:     result := ssStopping;
+    SERVICE_RUNNING:          result := ssRunning;
+    SERVICE_CONTINUE_PENDING: result := ssResuming;
+    SERVICE_PAUSE_PENDING:    result := ssPausing;
+    SERVICE_PAUSED:           result := ssPaused;
+    else result := ssNotInstalled; // e.g. SERVICE_CONTROL_SHUTDOWN
+  end;
+end;
+
+{$ifdef NOMORMOTKERNEL} // translated caption needed only if with full UI
+function ServiceStateText(State: TServiceState): string;
+var P: PShortString;
+begin
+  P := GetEnumName(TypeInfo(TServiceState),ord(State));
+  result := string(copy(P^,3,length(P^)-2));
+end;
+{$else}
+function ServiceStateText(State: TServiceState): string;
+begin
+  result := PTypeInfo(TypeInfo(TServiceState))^.EnumBaseType^.GetCaption(State);
+end;
+{$endif}
+
 {  function that a service process specifies as the entry point function
   of a particular service. The function can have any application-defined name
   - Args points to an array of pointers that point to null-terminated
     argument strings. The first argument in the array is the name of the service,
     and subsequent arguments are any strings passed to the service by the process
     that called the StartService function to start the service.  }
-
 procedure ServiceProc(ArgCount: DWORD; Args: PPChar); stdcall;
 var i: integer;
     Srv: TService;
