@@ -2,12 +2,16 @@ unit TestMustacheUnit;
 
 interface
 
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
   SynCrtSock,
-  SynCommons, SynMustache,
-  SynSM, SynSMAPI;
+  {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
+  SynSM, SynSMAPI,
+  {$endif}
+  SynCommons, SynMustache;
 
 
 type
@@ -30,8 +34,10 @@ type
     { Private declarations }
   public
     { Public declarations }
+    {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
     fEngineManager: TSMEngineManager;
     fEngine: TSMEngine;
+    {$endif}
   end;
 
 var
@@ -47,12 +53,15 @@ uses
 {$R Vista.res}
 
 procedure TMainForm.Render(Sender: TObject);
-var Template, person, Context, Result: RawUTF8;
+var Template, Context, Result: RawUTF8;
     data: variant;
     i,n: Integer;
     Timer: TPrecisionTimer;
     SynMustacheTemplate: TSynMustache;
+    {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
+    person: RawUTF8;
     partial: variant;
+    {$endif}
 begin
   Template := StringToUTF8(mmoTemplate.Lines.Text);
   Context := StringToUTF8(mmoContext.Lines.Text);
@@ -64,6 +73,7 @@ begin
     for i := 1 to n do
       result := SynMustacheTemplate.Render(data);
   end else
+  {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
   if Sender=btnExecSpiderMonkey then begin
     fEngine.MaybeGarbageCollect;
     i := PosEx('{{<person}}',Template);
@@ -79,6 +89,7 @@ begin
     for i := 1 to n do
       result := VariantToUTF8(fEngine.Global.Mustache.render(Template, data, partial));
   end else
+  {$endif}
     exit;
   mmoResult.Lines.Text :=
     Format('Rendered %d times in %s (%d/sec):'#13#10#13#10'%s',
@@ -92,6 +103,11 @@ begin
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
+{$ifdef CPU64} // SpiderMonkey library is not available yet in 64 bit
+begin
+  btnExecSpiderMonkey.Hide;
+end;
+{$else}
 var mustacheFN: TFileName;
     mSource: SynUnicode;
     mustache: RawByteString;
@@ -113,10 +129,13 @@ begin
   end;
   fEngine.Evaluate(mSource,'mustache.js');
 end;
+{$endif}
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
   fEngineManager.Free;
+  {$endif}
 end;
 
 end.
