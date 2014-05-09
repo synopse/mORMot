@@ -31127,15 +31127,18 @@ begin
         {$endif}
         tkClass: begin
           Obj := pointer(GetOrdProp(Value,pointer(P)));  // works also for CPU64
-          if (not TSQLRecord(Value).fFill.JoinedFields) and
-             (P^.PropType^^.ClassSQLFieldType=sftID) then begin
-            HR(P);
-            Add(PtrInt(Obj));
-          end else
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
+          if (IsObj<>oSQLMany) or
+             not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
+            if (IsObj in [oSQLRecord,oSQLMany]) and
+               (P^.PropType^^.ClassSQLFieldType=sftID) and
+               not TSQLRecord(Value).fFill.JoinedFields then begin
+              HR(P);
+              Add(PtrInt(Obj)); // not true instances, but ID
+            end else
+            if Obj<>nil then begin
+              HR(P);
+              WriteObject(Obj,Options);
+            end;
         end;
         // tkString (shortstring) is not handled
       end;
