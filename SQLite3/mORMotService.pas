@@ -539,7 +539,7 @@ begin
     TSQLLog.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
     {$endif}
     if param='/install' then
-      TServiceController.CreateNewService('','',FName,
+      TServiceController.CreateNewService('','',UTF8ToString(FName),
           DisplayName, paramstr(0),'','','','',
           SERVICE_ALL_ACCESS,
           SERVICE_WIN32_OWN_PROCESS
