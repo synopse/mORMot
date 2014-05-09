@@ -17,11 +17,11 @@ type
     AddButton: TButton;
     QuitButton: TButton;
     FindButton: TButton;
-    procedure AddButtonClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure AddButtonClick(Sender: TObject);
     procedure QuitButtonClick(Sender: TObject);
     procedure FindButtonClick(Sender: TObject);
-    procedure FormCreate(Sender: TObject);
   private
   public
     Database: TSQLRest;
@@ -34,6 +34,17 @@ var
 implementation
 
 {$R *.dfm}
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  Model := CreateSampleModel; // from SampleData unit
+end;
+
+procedure TForm1.FormDestroy(Sender: TObject);
+begin
+  Database.Free;
+  Model.Free;
+end;
 
 procedure TForm1.AddButtonClick(Sender: TObject);
 var Rec: TSQLSampleRecord;
@@ -55,12 +66,6 @@ begin
   end;
 end;
 
-procedure TForm1.FormDestroy(Sender: TObject);
-begin
-  Database.Free;
-  Model.Free;
-end;
-
 procedure TForm1.QuitButtonClick(Sender: TObject);
 begin
   Close;
@@ -77,11 +82,6 @@ begin
   finally
     Rec.Free;
   end;
-end;
-
-procedure TForm1.FormCreate(Sender: TObject);
-begin
-  Model := CreateSampleModel; // from SampleData unit
 end;
 
 end.

@@ -332,7 +332,7 @@ begin
   fClient := TSQLRestClientDB.Create(fModel,nil,':memory:',TSQLRestServerDB);
   Check(StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'mORMot')<>nil);
   fClient.Server.CreateMissingTables;
-  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestStorageMongoDB).Drop;
   Check(fClient.TableRowCount(TSQLORM)=0);
   fStartTimeStamp := fClient.ServerTimeStamp;
   Check(fStartTimeStamp>10000);
@@ -369,7 +369,7 @@ begin
   end;
   NotifyTestSpeed('rows inserted',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
   Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
-  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestStorageMongoDB).Drop;
 end;
 
 procedure TTestORM.InsertInBatchMode;
@@ -630,7 +630,7 @@ begin
     R.Free;
   end;
   temp := fRunConsole;
-  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestServerStaticMongoDB).Drop;
+  (fClient.Server.StaticDataServer[TSQLORM] as TSQLRestStorageMongoDB).Drop;
   fUpdateOffset := 0;
   InsertInBatchMode;
   fRunConsole := temp;

@@ -3016,7 +3016,7 @@ The database is just one way of your objects persistence:
 - Don't wonder "How will I store it?", but "Which data do I need?".
 For instance, don't be tempted to always create a pivot table (via a {\f1\fs20 @*TSQLRecordMany@} property), but consider using a {\i @*dynamic array@}, {\f1\fs20 @*TPersistent@, @*TStrings@} or {\f1\fs20 @*TCollection@} @*published properties@ instead.
 Or consider that you can use a {\f1\fs20 TRecordReference} property pointing to any registered class of the {\f1\fs20 @*TSQLModel@}, instead of creating one {\f1\fs20 @*TSQLRecord@} property per potential table.
-The {\i mORMot} framework is even able to persist the object without any SQL database, e.g. via {\f1\fs20 TSQLRestServerStaticInMemory}. In fact, its ORM core is optimized but not tied to SQL.
+The {\i mORMot} framework is even able to persist the object without any SQL database, e.g. via {\f1\fs20 TSQLRestStorageInMemory}. In fact, its ORM core is optimized but not tied to SQL.
 :  Objects, not tables
 With an @*ORM@, you should usually define fewer tables than in a "regular" relational database, because you can use the high-level type of the {\f1\fs20 @*TSQLRecord@} properties to handle some per-row data.
 The first point, which may be shocking for a database architect, is that you should better {\ul not} create @*Master/Detail@ tables, but just one "master" object with the details stored within, as @*JSON@, via {\i @*dynamic array@}, {\f1\fs20 @*TPersistent@, @*TStrings@} or {\f1\fs20 @*TCollection@} properties.
@@ -3135,7 +3135,7 @@ In fact, for {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} / @*ORM@ remote access,
 Having a dedicated class help the layer separation, and therefore a cleaner design. See @68@ for more details about DDD and how {\i mORMot}'s {\f1\fs20 TSQLRecord} can help you reuse existing code, write less and safer.
 :  Several ORMs at once
 To be clear, {\i mORMot} offers three kind of table definitions:
-- Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestServerStaticInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
+- Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
 - Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / ZDBC provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes.
 - Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
 The concern of not being able to persist any class (it needs to inherit from {\f1\fs20 TSQLRecord}) does perfectly make sense.
@@ -3151,7 +3151,7 @@ As can be easily guessed, such design models are far away from a basic ORM built
 Therefore, we may sum up some potential use of ORM, depending of your intent:
 - If your understanding of ORM is just to persist some {\i existing} objects with a lot of existing business code, {\i mORMot} won't help you directly, since it expects objects to inherit from {\f1\fs20 TSQLRecord} - but note that most ORMs, even those allowing to persist any {\f1\fs20 class}, would not be so easy to work with;
 - If you want a very fast low-level Client-Server layer, {\i mORMot} is a first class candidate: we identified that some users are using the built-in JSON serialization and HTTP server features to create their application;
-- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestServerStaticInMemory@} class which is able to persist its content with small files - see @57@;
+- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestStorageInMemory@} class which is able to persist its content with small files - see @57@;
 - If you need (perhaps not now, but probably in the future) to create some kind of scalable {\i @*Domain-Driven@} design architecture, you'll have all needed features at hand with {\i mORMot};
 - If your expectation is to map an existing complex DB, {\i mORMot} will handle it soon (it is planned and prepared within the framework architecture).
 Therefore, {\i mORMot} is not just an ORM, nor just a "classic" ORM.
@@ -3161,7 +3161,7 @@ About how to use {\i mORMot} with existing code, see @66@.
 : Creating a Model
 According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
 The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
-In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestServerStaticInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
+In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestStorageInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
 Each {\f1\fs20 TSQLModel} instance is in fact associated with a {\f1\fs20 TSQLRest} instance. An {\f1\fs20 Owner} property gives access to the current running client or server {\f1\fs20 @*TSQLRest@} instance associated with this model.
 By design, models are used on both Client and Server sides. It is therefore a good practice to use a common unit to define all {\f1\fs20 TSQLRecord} types, and have a common function to create the related {\f1\fs20 TSQLModel} class.
 For instance, here is the corresponding function as defined in the first samples available in the source code repository (unit {\f1\fs20 SampleData.pas}):
@@ -3636,7 +3636,7 @@ In these tables:
 - 'SQLite3 (file full/off/exc)' indicates use of the internal {\i @*SQLite3@} engine, with or without {\f1\fs20 Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} - see @60@;
 - 'SQLite3 (mem)' stands for the internal {\i SQLite3} engine running in memory;
 - 'SQLite3 (ext ...)' is about access to a {\i SQLite3} engine as external database - see @27@, either as file or memory;
-- '{\f1\fs20 TObjectList}' indicates a {\f1\fs20 TSQLRestServerStaticInMemory} instance - see @57@ - either static (with no SQL support) or virtual (i.e. SQL featured via {\i SQLite3} virtual table mechanism) which may persist the data on disk as JSON or compressed binary;
+- '{\f1\fs20 TObjectList}' indicates a {\f1\fs20 TSQLRestStorageInMemory} instance - see @57@ - either static (with no SQL support) or virtual (i.e. SQL featured via {\i SQLite3} virtual table mechanism) which may persist the data on disk as JSON or compressed binary;
 - '@*NexusDB@' is the free embedded edition, available from official site;
 - '@*Jet@' stands for a {\i MSAccess} database engine, accessed via OleDB.
 - 'Oracle' shows the results of our direct OCI access layer ({\f1\fs20 SynDBOracle.pas});
@@ -3772,7 +3772,7 @@ Here are some reading speed values, in objects/second:
 |%
 The {\i @*SQLite3@} layer gives amazing reading results, which makes it a perfect fit for most typical ORM use. When running with {\f1\fs20 DB.LockingMode := lmExclusive} defined (i.e. "off exc" rows), reading speed is very high, and benefits from exclusive access to the database file - see @60@. External database access is only required when data is expected to be shared with other processes, or for better scaling: e.g. for physical n-Tier installation with dedicated database server(s).
 In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling.
-For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestServerStaticInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored AS_UNIQUE} properties.
+For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestStorageInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored AS_UNIQUE} properties.
 As a consequence, search of non-unique values may be slow: the engine has to loop through all rows of data. But for unique values (defined as {\f1\fs20 stored AS_UNIQUE}), both insertion and search speed is awesome, due to its optimized O(1) hash algorithm - see the following benchmark, especially the "{\i By name}" row for "{\i TObjectList}" columns, which correspond to a search of an unique {\f1\fs20 RawUTF8} property value via this hashing method.
 |%9%10%10%10%10%10%10%10%10%9%9
 | |\b SQLite3 (file full)|SQLite3 (file off)|SQLite3 (mem)|TObjectList (static) |TObjectList (virt.)|SQLite3 (ext file full)|SQLite3 (ext file off)|SQLite3 (ext mem)|Oracle|Jet\b0
@@ -4195,7 +4195,7 @@ For instance, here are the default Virtual Table classes deriving from those cla
 \TSQLVirtualTableCursorJSON\TSQLVirtualTableCursorIndex
 \TSQLVirtualTableCursorLog\TSQLVirtualTableCursorIndex
 \
-{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestServerStaticInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as UTF-8 @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
+{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestStorageInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as UTF-8 @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
 Note that the virtual table module name is retrieved from the class name. For instance, the {\f1\fs20 TSQLVirtualTableJSON} class will have its module named as 'JSON' in the SQL code.
 To handle external databases, two dedicated classes, named {\f1\fs20 TSQLVirtualTableExternal} and {\f1\fs20 TSQLVirtualTableCursorExternal} will be defined in a similar manner - see @%%HierExternalTables@ @30@.
 As you probably have already stated, all those Virtual Table mechanism is implemented in {\f1\fs20 mORMot.pas}. Therefore, it is independent from the {\i @*SQLite3@} engine, even if, to my knowledge, there is no other SQL database engine around able to implement this pretty nice feature.
@@ -4235,7 +4235,7 @@ The supplied feature set defines a read-only module (since {\f1\fs20 vtWrite} is
 !    property Content: RawUTF8 read fContent;
 !  end;
 You could have overridden the {\f1\fs20 Structure} method in order to provide the {\f1\fs20 CREATE TABLE} SQL statement expected. But using Delphi class RTTI allows the construction of this SQL statement with the appropriate column type and @*collation@, common to what the rest of the @*ORM@ will expect.
-Of course, this {\f1\fs20 RecordClass} property is not mandatory. For instance, the {\f1\fs20 TSQLVirtualTableJSON.GetTableModuleProperties} method won't return any associated {\f1\fs20 TSQLRecordClass}, since it will depend on the table it is implementing, i.e. the running {\f1\fs20 @*TSQLRestServerStaticInMemory@} instance. Instead, the {\f1\fs20 Structure} method is overridden, and will return the corresponding field layout of each associated table.
+Of course, this {\f1\fs20 RecordClass} property is not mandatory. For instance, the {\f1\fs20 TSQLVirtualTableJSON.GetTableModuleProperties} method won't return any associated {\f1\fs20 TSQLRecordClass}, since it will depend on the table it is implementing, i.e. the running {\f1\fs20 @*TSQLRestStorageInMemory@} instance. Instead, the {\f1\fs20 Structure} method is overridden, and will return the corresponding field layout of each associated table.
 Here is how the {\f1\fs20 Prepare} method is implemented, and will handle the {\f1\fs20 vtWhereIDPrepared} feature:
 !function TSQLVirtualTable.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
 !begin
@@ -4344,19 +4344,19 @@ For instance, the following code will register two {\f1\fs20 TSQLRecord} classes
 !  Model.VirtualTableRegister(TSQLRecordDali2,TSQLVirtualTableBinary);
 This registration should be done on the Server side only, {\i before} calling {\f1\fs20 TSQLRestServer.Create} (or {\f1\fs20 TSQLRestClientDB.Create}, for a @*stand-alone@ application). Otherwise, an exception is raised at virtual table creation.
 :57  In-Memory "static" process
-We have seen that the {\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes implement a @*Virtual Table@ module using a {\f1\fs20 @**TSQLRestServerStaticInMemory@} instance to handle fast @**static@ in-memory database.
+We have seen that the {\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes implement a @*Virtual Table@ module using a {\f1\fs20 @**TSQLRestStorageInMemory@} instance to handle fast @**static@ in-memory database.
 Why use such a database type, when you can create a {\i @*SQLite3@} in-memory table, using the {\f1\fs20 :memory:} file name? That is the question...
 - {\i SQlite3} in-memory tables are not persistent, whereas our {\f1\fs20 JSON} or {\f1\fs20 Binary} virtual table modules can be written on disk on purpose, if the {\f1\fs20 aServer.StaticVirtualTable[aClass].CommitShouldNotUpdateFile} property is set to {\f1\fs20 true} - in this case, file writing should be made by calling explicitly the {\f1\fs20 aServer.StaticVirtualTable[aClass].UpdateToFile} method;
 - {\i SQlite3} in-memory tables will need two database connections, or call to the {\f1\fs20 @*ATTACH DATABASE@} SQL statement - both of them are not handled natively by our @*Client-Server@ framework;
-- {\i SQlite3} in-memory tables are only accessed via SQL statements, whereas {\f1\fs20 @*TSQLRestServerStaticInMemory@} tables can have faster direct access for most common @*REST@ful commands ({\f1\fs20 GET / POST / PUT / DELETE} individual rows) - this could make a difference in server CPU load, especially with the @*Batch@ feature of the framework;
-- On the server side, it could be very convenient to have a direct list of in-memory {\f1\fs20 @*TSQLRecord@} instances to work with in pure Delphi code; this is exactly what {\f1\fs20 TSQLRestServerStaticInMemory} allows, and definitively makes sense for an @*ORM@ framework;
-- On the client or server side, you could create calculated fields easily with {\f1\fs20 TSQLRestServerStaticInMemory} dedicated "getter" methods written in Delphi, whereas {\i SQlite3} in-memory tables would need additional SQL coding;
+- {\i SQlite3} in-memory tables are only accessed via SQL statements, whereas {\f1\fs20 @*TSQLRestStorageInMemory@} tables can have faster direct access for most common @*REST@ful commands ({\f1\fs20 GET / POST / PUT / DELETE} individual rows) - this could make a difference in server CPU load, especially with the @*Batch@ feature of the framework;
+- On the server side, it could be very convenient to have a direct list of in-memory {\f1\fs20 @*TSQLRecord@} instances to work with in pure Delphi code; this is exactly what {\f1\fs20 TSQLRestStorageInMemory} allows, and definitively makes sense for an @*ORM@ framework;
+- On the client or server side, you could create calculated fields easily with {\f1\fs20 TSQLRestStorageInMemory} dedicated "getter" methods written in Delphi, whereas {\i SQlite3} in-memory tables would need additional SQL coding;
 - {\i SQLite3} tables are stored in the main database file - in some cases, it could be much convenient to provide some additional table content in some separated database file (for a round robin table, a configuration table written in JSON, some content to be shared among users...): this is made possible using our {\f1\fs20 JSON} or {\f1\fs20 Binary} virtual table modules (but, to be honest, the {\f1\fs20 @*ATTACH DATABASE@} statement could provide a similar feature);
-- The {\f1\fs20 TSQLRestServerStaticInMemory} class can be used stand-alone, i.e. without the {\i SQLite3} engine so it could be used to produce small efficient server software - see the "{\f1\fs20 SQLite3\\Samples\\01 - In Memory ORM}" folder.
+- The {\f1\fs20 TSQLRestStorageInMemory} class can be used stand-alone, i.e. without the {\i SQLite3} engine so it could be used to produce small efficient server software - see the "{\f1\fs20 SQLite3\\Samples\\01 - In Memory ORM}" folder.
 :   In-Memory tables
 A first way of using @*static@ tables, independently from the {\i SQLite3} engine, is to call the {\f1\fs20 TSQLRestServer. StaticDataCreate} method.
 This method is only to be called server-side, of course. For the Client, there is no difference between a regular and a static table.
-The in-memory {\f1\fs20 @*TSQLRestServerStaticInMemory@} instance handling the storage can be accessed later via the {\f1\fs20 StaticDataServer[]} property array of {\f1\fs20 TSQLRestServer}.
+The in-memory {\f1\fs20 @*TSQLRestStorageInMemory@} instance handling the storage can be accessed later via the {\f1\fs20 StaticDataServer[]} property array of {\f1\fs20 TSQLRestServer}.
 As we just stated, this primitive but efficient database engine can be used without need of the {\i SQLite3} database engine to be linked to the executable, saving some KB of code if necessary. It will be enough to handle most basic @*REST@ful requests.
 :76   In-Memory virtual tables
 A more advanced and powerful way of using @*static@ tables is to define some classes inheriting from {\f1\fs20 @*TSQLRecordVirtualTableAutoID@}, and associate them with some {\f1\fs20 TSQLVirtualTable} classes. The {\f1\fs20 TSQLRecordVirtualTableAutoID} parent class will specify that associated @*virtual table@ modules will behave like normal {\i SQLite3} tables, so will have their {\f1\fs20 RowID} property computed at {\f1\fs20 INSERT}).
@@ -4419,24 +4419,24 @@ From the code point of view, there is no difference in our @*ORM@ with handling 
 !!    aClient.RollBack;
 !  end;
 A {\f1\fs20 Commit} is needed from the Client side to write anything on disk. From the Server side, in order to create disk content, you'll have to explicitly call such code on purpose:
-As we already noticed, data will be written by default on disk with our {\f1\fs20 @*TSQLRestServerStaticInMemory@}-based virtual tables. In fact, the {\f1\fs20 Commit} method in the above code will call {\f1\fs20 TSQLRestServerStaticInMemory.UpdateFile}.
-Please note that the {\i @*SQlite3@} engine will handle any Virtual Table just like regular {\i SQLite3} tables, concerning the @*atomic@ity of the data. That is, if no explicit @*transaction@ is defined (via {\f1\fs20 TransactionBegin / Commit} methods), such a transaction will be performed for every database modification (i.e. all @*CRUD@ operations, as {\f1\fs20 INSERT / UPDATE / DELETE}). The {\f1\fs20 TSQLRestServerStaticInMemory. UpdateToFile} method is not immediate, because it will write all table data each time on disk. It is therefore mandatory, for performance reasons, to nest multiple modification to a Virtual Table with such a transaction, for better performance. And in all cases, it is the standard way of using the ORM. If for some reason, you later change your mind and e.g. move your table from the {\f1\fs20 TSQLVirtualTableJSON / TSQLVirtualTableBinary} engine to the default {\i SQlite3} engine, your code could remain untouched.
+As we already noticed, data will be written by default on disk with our {\f1\fs20 @*TSQLRestStorageInMemory@}-based virtual tables. In fact, the {\f1\fs20 Commit} method in the above code will call {\f1\fs20 TSQLRestStorageInMemory.UpdateFile}.
+Please note that the {\i @*SQlite3@} engine will handle any Virtual Table just like regular {\i SQLite3} tables, concerning the @*atomic@ity of the data. That is, if no explicit @*transaction@ is defined (via {\f1\fs20 TransactionBegin / Commit} methods), such a transaction will be performed for every database modification (i.e. all @*CRUD@ operations, as {\f1\fs20 INSERT / UPDATE / DELETE}). The {\f1\fs20 TSQLRestStorageInMemory. UpdateToFile} method is not immediate, because it will write all table data each time on disk. It is therefore mandatory, for performance reasons, to nest multiple modification to a Virtual Table with such a transaction, for better performance. And in all cases, it is the standard way of using the ORM. If for some reason, you later change your mind and e.g. move your table from the {\f1\fs20 TSQLVirtualTableJSON / TSQLVirtualTableBinary} engine to the default {\i SQlite3} engine, your code could remain untouched.
 It is possible to force the In-Memory virtual table data to stay in memory, and the {\f1\fs20 COMMIT} statement to write nothing on disk, using the following property:
 ! Server.StaticVirtualTable[TSQLRecordDali1].CommitShouldNotUpdateFile := true;
 In order to create disk content, you'll then have to explicitly call the corresponding method on purpose:
 ! Server.StaticVirtualTable[TSQLRecordDali1].UpdateToFile;
 Since {\f1\fs20 StaticVirtualTable} property is only available on the Server side, you are the one to blame if your client updates the table data and this update never reaches the disk!
 :   In-Memory and ACID
-For data stored in memory, the {\f1\fs20 TSQLRestServerStaticInMemory} table is @*ACID@.\line It means that concurrent access will be consistent and work safely, as expected.
+For data stored in memory, the {\f1\fs20 TSQLRestStorageInMemory} table is @*ACID@.\line It means that concurrent access will be consistent and work safely, as expected.
 On disk, this kind of table is ACID only when its content is written to the file.\line I mean, the whole file which will be written in an ACID way. The file will always be consistent.
-The exact process of these in-memory tables is that each time you write some new data to a {\f1\fs20 TSQLRestServerStaticInMemory} table:
+The exact process of these in-memory tables is that each time you write some new data to a {\f1\fs20 TSQLRestStorageInMemory} table:
 - It will be ACID in memory (i.e. work safely in concurrent mode);
 - Individual writes (INSERT/UPDATE/DELETE) won't automatically be written to file;
 - COMMIT will by default write the whole table to file (either as JSON or compressed binary);
 - COMMIT won't write the data to file if the {\f1\fs20 CommitShouldNotUpdateFile} property is set to TRUE;
 - ROLLBACK process won't do anything, so won't be ACID - but since your code may later use a real RDBMS, it is a good habit to always write the command, like in the sample code above, as {\f1\fs20 except aClient.RollBack}.
 When you write the data to file, the whole file is rewritten: it seems not feasible to write the data to disk at every write - in this case, SQLite3 in exclusive mode will be faster, since it will write only the new data, not the whole table content.
-This may sound like a limitation, but on our eyes, it could be seen more like a feature. For a particular table, we do not need nor want to have a whole RDBMS/SQL engine, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestServerStaticInMemory} storage is too limited for your process.
+This may sound like a limitation, but on our eyes, it could be seen more like a feature. For a particular table, we do not need nor want to have a whole RDBMS/SQL engine, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestStorageInMemory} storage is too limited for your process.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
 The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
@@ -5152,7 +5152,7 @@ Note that only the {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} column names were cu
 Due to the design of {\i SQLite3} virtual tables, and mORMot internals in its current state, the database primary key must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM.
 :30  External database ORM internals
 The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@}-based external database for the framework.
-In fact, the {\f1\fs20 TSQLRestServerStaticExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes will implement this feature:
+In fact, the {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes will implement this feature:
 \graph HierExternalTables External Databases classes hierarchy
 \TSQLRecordVirtual\TSQLRecord
 \TSQLRecordVirtualTableAutoID\TSQLRecordVirtual
@@ -5167,7 +5167,7 @@ This procedure will register on the Server-side an external database for an ORM 
 - It will associate the supplied class with a {\f1\fs20 TSQLVirtualTableExternal} module;
 - The {\f1\fs20 TSQLDBConnectionProperties} instance should be shared by all classes, and released globally when the ORM is no longer needed;
 - The full table name, as expected by the external database, should be provided here ({\f1\fs20 SQLTableName} will be used internally as table name when called via the associated {\i SQLite3} Virtual Table) - if no table name is specified (''), will use {\f1\fs20 SQLTableName} (e.g. 'Customer' for a class named {\f1\fs20 TSQLCustomer});
-- Internal adjustments will be made to convert SQL on the fly from internal ORM representation into the expected external SQL format (e.g. table name or {\f1\fs20 ID} property) - see {\f1\fs20 TSQLRestServerStatic. AdaptSQLForEngineList} method.
+- Internal adjustments will be made to convert SQL on the fly from internal ORM representation into the expected external SQL format (e.g. table name or {\f1\fs20 ID} property) - see {\f1\fs20 TSQLRestStorage. AdaptSQLForEngineList} method.
 Typical usage may be for instance:
 !aProps := TOleDBMSSQLConnectionProperties.Create('.\SQLEXPRESS','AdventureWorks2008R2','','');
 !aModel := TSQLModel.Create([TSQLCustomer],'root');
@@ -5178,15 +5178,15 @@ In order to be stored in an external database, the ORM records can inherit from 
 As with any regular {\f1\fs20 TSQLRecord} classes, the ORM core will expect external tables to map an {\f1\fs20 Integer ID} published property, auto-incremented at every record insertion. Since not all databases handle such fields - e.g. {\i @*Oracle@} - auto-increment will be handled via a {\f1\fs20 select max(id) from tablename} statement run at initialization, then computed on the fly via a thread-safe cache of the latest inserted {\i RowID}.
 You do not have to know where and how the data persistence is stored. The framework will do all the low-level DB work for you. And thanks to the {\i Virtual Table} feature of {\i SQlite3}, internal and external tables can be mixed within SQL statements. Depending on the implementation needs, classes could be persistent either via the internal {\i SQLite3} engine, or via external databases, just via a call to {\f1\fs20 VirtualTableExternalRegister()} before server initialization.
 In fact, {\f1\fs20 TSQLVirtualTableCursorExternal} will convert any query on the external table into a proper optimized SQL query, according to the indexes existing on the external database. {\f1\fs20 TSQLVirtualTableExternal} will also convert individual SQL modification statements (like insert / update / delete) at the {\i SQLite3} level into remote SQL statements to the external database.
-Most of the time, all @*REST@ful methods ({\f1\fs20 GET/POST/PUT/DELETE}) will be handled directly by the {\f1\fs20 TSQLRestServerStaticExternal} class, and won't use the virtual table mechanism. In practice, most access to the external database will be as fast as direct access, but the virtual table will always be ready to interpret any cross-database complex request or statement.
+Most of the time, all @*REST@ful methods ({\f1\fs20 GET/POST/PUT/DELETE}) will be handled directly by the {\f1\fs20 TSQLRestStorageExternal} class, and won't use the virtual table mechanism. In practice, most access to the external database will be as fast as direct access, but the virtual table will always be ready to interpret any cross-database complex request or statement.
 Direct REST access will be processed as following - when adding an object, for instance:
 \graph TSQLRecordPeopleExtVirtualRest ORM Access Via REST
 \TSQLRestServerDB.Add\TSQLRestServerDB.EngineAdd\internal¤table
 \TSQLRestServerDB.EngineAdd\TSQLRequest\INSERT INTO...
 \TSQLRequest\SQlite3 engine\internal engine
 \SQlite3 engine\SQLite3 file
-\TSQLRestServerDB.Add\TSQLRestServerStaticExternal.EngineAdd\external¤table¤REST
-\TSQLRestServerStaticExternal.EngineAdd\ISQLDBStatement\INSERT INTO...
+\TSQLRestServerDB.Add\TSQLRestStorageExternal.EngineAdd\external¤table¤REST
+\TSQLRestStorageExternal.EngineAdd\ISQLDBStatement\INSERT INTO...
 \ISQLDBStatement\External DB client\ODBC/ZDBC/OleDB...
 \External DB client\External DB server
 \
@@ -5205,11 +5205,11 @@ Indirect access via virtual tables will be processed as following:
 About speed, here is an extract of the test regression log file (see code above, in previous paragraph), which shows the difference between RESTful call and virtual table call, working with more than 11,000 rows of data:
 $  - External via REST: 133,666 assertions passed  409.82ms
 $  - External via virtual table: 133,666 assertions passed  1.12s
-The first run is made with {\f1\fs20 TSQLRestServer.StaticVirtualTableDirect} set to TRUE (which is the default) - i.e. it will call directly {\f1\fs20 TSQLRestServerStaticExternal} for RESTful commands, and the second will set this property to FALSE - i.e. it will call the {\i SQLite3} engine and let its virtual table mechanism convert it into another SQL calls.
+The first run is made with {\f1\fs20 TSQLRestServer.StaticVirtualTableDirect} set to TRUE (which is the default) - i.e. it will call directly {\f1\fs20 TSQLRestStorageExternal} for RESTful commands, and the second will set this property to FALSE - i.e. it will call the {\i SQLite3} engine and let its virtual table mechanism convert it into another SQL calls.
 It is worth saying that this test is using an in-memory {\i SQLite3} database (i.e. instantiated via {\f1\fs20 SQLITE_MEMORY_DATABASE_NAME} as pseudo-file name) as its external DB, so what we test here is mostly the ORM overhead, not the external database speed. With real file-based or remote databases (like @*MS SQL@), the overhead of remote connection won't make noticeable the use of Virtual Tables.
 In all cases, letting the default {\f1\fs20 StaticVirtualTableDirect=true} will ensure the best possible performance. As stated by @59@, using a virtual or direct call won't affect the CRUD operation speed: it will by-pass the virtual engine whenever possible.
 \page
-: MongoDB database access
+:83 MongoDB database access
 {\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
@@ -5566,7 +5566,7 @@ As with external databases, you can specify the field names mapping between the 
 ! aModel.Props[aClass].ExternalDB.MapField(..)
 Since the field names are stored within the document itself, it may be a good idea to use shorter naming for the {\i MongoDB} collection. It may save some storage space, when working with a huge number of documents.
 Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the {\f1\fs20 TMongoCollection} instance later on, by calling:
-! (aServer.StaticDataServer[aClass] as TSQLRestServerStaticMongoDB).Collection
+! (aServer.StaticDataServer[aClass] as TSQLRestStorageMongoDB).Collection
 This may allow any specific task, including any tuned query or process.
 :   ORM/ODM CRUD methods
 You can add documents with the standard CRUD methods of the ORM, as usual:
@@ -6303,6 +6303,7 @@ This architecture is implemented by a hierarchy of classes, implementing the @*R
 \graph ClientServerRESTClasses RESTful Client-Server classes
 \TSQLRestServer\TSQLRest
 \TSQLRestClient\TSQLRest
+\TSQLRestStorage\TSQLRest
 \
 All ORM operations (aka @*CRUD@ process) are available from the abstract {\f1\fs20 TSQLRest} class definition, which is overridden to implement either a Server (via {\f1\fs20 TSQLRestServer} classes), or a Client (via {\f1\fs20 TSQLRestClientURI} classes) access to the data.
 You should instantiate the classes corresponding to the needed transmission protocol, but should better rely on abstraction, i.e. implement your whole code logic relying on abstract {\f1\fs20 TSQLRestClient / TSQLRestServer} classes. It will then help changing from one protocol or configuration at runtime, depending on your customer's expectations.
@@ -6316,17 +6317,22 @@ The following classes are available to implement a {\i Server} instance:
 \
 In practice, in order to implement the business logic, you should better create a new {\f1\fs20 class}, inheriting from one of the above {\f1\fs20 TSQLRestServer} classes. Having your own inherited class does make sense, especially for implementing your own method-based services - see @49@, or {\f1\fs20 override} internal methods.
 The {\f1\fs20 TSQLRestServerDB} class is the main kingn of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
-If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestServerStaticInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
+If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
 If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
-In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 TSQLRestServer}:
-\graph ServerRESTFakeClasses RESTful Server static classes
-\TSQLRestServerStaticInMemory\TSQLRestServerStaticRecordBased
-\TSQLRestServerStaticInMemoryExternal\TSQLRestServerStaticInMemory
-\TSQLRestServerStaticRecordBased\TSQLRestServerStatic
-\TSQLRestServerStaticExternal\TSQLRestServerStatic
-\TSQLRestServerStatic\TSQLRestServer
+:  Storage classes
+In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 TSQLRestStorage}:
+\graph StorageRESTClasses RESTful storage classes
+\TSQLRestStorageExternal\TSQLRestStorage
+\TSQLRestStorageMongoDB\TSQLRestStorage
+\TSQLRestStorageRecordBased\TSQLRestStorage
+\TSQLRestStorageInMemory\TSQLRestStorageRecordBased
+\TSQLRestStorageInMemoryExternal\TSQLRestStorageInMemory
 \
-In the above class hierarchy, the {\f1\fs20 TSQLRestServerStatic[InMemory][External]} classes are in fact "fake servers". They are used within a main {\f1\fs20 TSQLRestServer} to host some given {\f1\fs20 TSQLRecord} classes, either in-memory, or on external databases. They do not enter in account in our Client-Server presentation, but are implementation details, on the server side.
+In the above class hierarchy, the {\f1\fs20 TSQLRestStorage[InMemory][External]} classes are in fact used to store some {\f1\fs20 TSQLRecord} tables in any non-SQL backend:
+- {\f1\fs20 TSQLRestStorageExternal} maps tables stored in an external database - see @27@;
+- {\f1\fs20 TSQLRestStorageInMemory} stores the data in a {\f1\fs20 TObjectList} - see @57@;
+- {\f1\fs20 TSQLRestStorageMongoDB} will connect to a remote {\i @*MongoDB@} server to store the tables as a @*NoSQL@ collection of documents - see @83@.
+Those classes are used within a main {\f1\fs20 TSQLRestServer} to host some given {\f1\fs20 TSQLRecord} classes, either in-memory, or on external databases. They do not enter in account in our Client-Server presentation, but are implementation details, on the server side.
 :  Client classes
 A full set of {\i client} classes will implement a RESTful access to a remote database, with associated services and business logic:
 \graph ClientRESTClasses RESTful Client classes
@@ -6518,14 +6524,14 @@ We will now focus on the server side, which is the main strategic point (and pot
 In order to achieve this thread-safety without sacrificing performance, the following rules were applied in {\f1\fs20 TSQLRestServer.URI}:
 - Most of this method's logic is to process the URI and parameters of the incoming request (in {\f1\fs20 TSQLRestServerURIContext.URIDecode*} methods), so is thread-safe by design (e.g. {\f1\fs20 Model} and {\f1\fs20 RecordProps} access do not change during process);
 - At @*REST@ful / @*CRUD@ level, {\f1\fs20 Add/Update/Delete/TransactionBegin/Commit/Rollback} methods are locked by default (with a 2 seconds timeout), and {\f1\fs20 Retrieve*} methods are not;
-- {\f1\fs20 TSQLRestServerStatic} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestServerStaticInMemory@} uses a per-Table Critical Section;
+- {\f1\fs20 TSQLRestStorage} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestStorageInMemory@} uses a per-Table Critical Section;
 - {\f1\fs20 TSQLRestServerCallBack} method-based services - i.e. @*published method@s of the inherited {\f1\fs20 TSQLRestServer} class as stated @49@ - must be implemented to be thread-safe by default;
 - {\f1\fs20 Interface}-based services - see @63@ - have several execution modes, including thread safe automated options (see {\f1\fs20 TServiceMethodOption}) or manual thread safety expectation, for better scaling - see @72@;
 - A protected {\f1\fs20 fSessionCriticalSection} is used to protect shared {\f1\fs20 fSession[]} access between clients;
 - The {\i @*SQLite3@} engine access is protected at SQL/JSON @*cache@ level, via {\f1\fs20 DB.LockJSON()} calls in {\f1\fs20 @*TSQLRestServerDB@} methods;
 - Remote external tables - see @27@ - use thread-safe connections and statements when accessing the databases via SQL;
 - Access to {\f1\fs20 fStats} was not made thread-safe, since this data is indicative only: a {\i mutex} was not used to protect this resource.
-We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestServerStaticInMemory}).
+We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
 This default behavior can be tuned, using {\f1\fs20 TSQLRestServerURI.AcquireExecutionMode[]} property and {\f1\fs20 AcquireExecutionLockedTimeOut[]} when {\f1\fs20 amLocked} is set:
 |%25%50%25
 |\b Command|Description|Default\b0
@@ -6741,31 +6747,31 @@ But most of the time, i.e. for RESTful / @*CRUD@ commands, the execution is more
 subgraph cluster {
 \Http Server\TSQLRestServer.URI\dispatch
 \TSQLRestServer.URI\TSQLRestServerDB.EngineAdd\Is a SQLite3 table?
-\TSQLRestServer.URI\TSQLRestServerStaticExternal.EngineAdd\Is a static table?
+\TSQLRestServer.URI\TSQLRestStorageExternal.EngineAdd\Is a static table?
 \TSQLRestServerDB.EngineAdd\SQLite3 SQL\SQL insert
 \SQLite3 SQL\SQLite3 engine\Is a SQLite3 table?
 \SQLite3 engine\SQLite3 BTREE\prepare + execute
 \SQLite3 BTREE\Database file\atomic write
 \SQLite3 BTREE\TSQLRestServer.URI\return new ID
-\TSQLRestServerStaticExternal.EngineAdd\TSQLDBConnectionProperties\external database
+\TSQLRestStorageExternal.EngineAdd\TSQLDBConnectionProperties\external database
 \TSQLDBConnectionProperties\TSQLDBStatement\compute SQL
 \TSQLDBStatement\OleDB/ODBC or other\execute SQL
 \OleDB/ODBC or other\Database Client\store data
 \Database Client\OleDB/ODBC or other
 \OleDB/ODBC or other\TSQLDBStatement
-\TSQLDBStatement\TSQLRestServerStaticExternal.EngineAdd
-\TSQLRestServerStaticExternal.EngineAdd\TSQLRestServer.URI\return new ID
+\TSQLDBStatement\TSQLRestStorageExternal.EngineAdd
+\TSQLRestStorageExternal.EngineAdd\TSQLRestServer.URI\return new ID
 \TSQLRestServer.URI\Http Server\return 200 OK + ID
 label = "Server";
 }
 \
-As stated in @27@, the @*static@ {\f1\fs20 TSQLRestServerStaticExternal} instance is called for most RESTful access. In practice, this design will induce no speed penalty, when compared to a direct database access. It could be even faster, if the server is located on the same computer than the database: in this case, use of JSON and REST could be faster - even faster when using @28@.
+As stated in @27@, the @*static@ {\f1\fs20 TSQLRestStorageExternal} instance is called for most RESTful access. In practice, this design will induce no speed penalty, when compared to a direct database access. It could be even faster, if the server is located on the same computer than the database: in this case, use of JSON and REST could be faster - even faster when using @28@.
 In order to be exhaustive, here is a more complete diagram, showing how native {\i @*SQLite3@}, in-memory or external tables are handled on the server side. You'll find out how CRUD statements are handled directly for better speed, whereas any SQL @*JOIN@ query can also be processed among all kind of tables.
 \graph ArchServerFull Client-Server implementation - Server side
 subgraph cluster {
 \Http Server\TSQLRestServer.URI\dispatch
 \TSQLRestServer.URI\TSQLRestServerDB.Engine*\Refers to¤a SQLite3 table or¤a JOINed query?
-\TSQLRestServer.URI\TSQLRestServerStatic.¤Engine*\CRUD over¤a static table?
+\TSQLRestServer.URI\TSQLRestStorage.¤Engine*\CRUD over¤a static table?
 \TSQLRestServerDB.Engine*\SQLite3 SQL\decode into SQL
 \SQLite3 SQL\SQLite3 engine\prepare + execute
 \SQLite3 engine\SQLite3 BTREE\For any¤SQLite3¤table
@@ -6782,19 +6788,19 @@ subgraph cluster {
 \OleDB/ODBC or other\TSQLDBStatement
 \TSQLDBStatement\SQLite3 engine
 \TSQLRestServer.URI\Http Server\return 200 OK +¤result (JSON)
-\TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticExternal.¤Engine*\Is an external¤Virtual Table?
-\TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticInMemory.¤Engine*\Is an in-memory table?¤(Virtual or static)
-\TSQLRestServerStatic.¤Engine*\TSQLRestServerStaticMongoDB.¤Engine*\Is a MongoDB table?
-\TSQLRestServerStaticExternal.¤Engine*\TSQLDBConnectionProperties¤TSQLDBStatement\compute SQL
+\TSQLRestStorage.¤Engine*\TSQLRestStorageExternal.¤Engine*\Is an external¤Virtual Table?
+\TSQLRestStorage.¤Engine*\TSQLRestStorageInMemory.¤Engine*\Is an in-memory table?¤(Virtual or static)
+\TSQLRestStorage.¤Engine*\TSQLRestStorageMongoDB.¤Engine*\Is a MongoDB table?
+\TSQLRestStorageExternal.¤Engine*\TSQLDBConnectionProperties¤TSQLDBStatement\compute SQL
 \TSQLDBConnectionProperties¤TSQLDBStatement\OleDB/ODBC¤or other\execute SQL
 \OleDB/ODBC¤or other\TSQLRestServer.URI
 \OleDB/ODBC¤or other\Database¤Client\handle data
 \Database¤Client\OleDB/ODBC¤or other
-\TSQLRestServerStaticInMemory.¤Engine*\CRUD¤in-memory¤TSQLRecord
+\TSQLRestStorageInMemory.¤Engine*\CRUD¤in-memory¤TSQLRecord
 \CRUD¤in-memory¤TSQLRecord\TSQLRestServer.URI
 \TSQLVirtualTableJSON¤TSQLVirtualTableBinary\Process¤in-memory¤TSQLRecord
 \Process¤in-memory¤TSQLRecord\SQLite3 engine
-\TSQLRestServerStaticMongoDB.¤Engine*\TMongoCollection¤MongoDB Client
+\TSQLRestStorageMongoDB.¤Engine*\TMongoCollection¤MongoDB Client
 \TMongoCollection¤MongoDB Client\TSQLRestServer.URI
 label = "Server";
 }
@@ -11719,7 +11725,7 @@ Just for fun... I could not resist posting this code here; if you are curious, t
 ; SRS-DI-2.2.1 - The SQLite3 engine must be embedded to the framework
 :Implementation
 It's worth noting that the {\i Synopse mORMot framework}, whatever its previous name stated ("Synopse SQLite3 framework"), is not bound to {\i SQLite3}.
-You can use another database engine for its internal data storage, for example we provide a {\f1\fs20 TSQLRestServerStaticInMemory} class which implements a fast but limited in-memory database engine.
+You can use another database engine for its internal data storage, for example we provide a {\f1\fs20 TSQLRestStorageInMemory} class which implements a fast but limited in-memory database engine.
 Therefore, the {\i SQLite3} engine itself is not implemented in the @!TSQLRestServer!Lib\SQLite3\mORMot.pas@ unit, but in dedicated units.
 The {\i SQLite3} engine is accessed at two levels:
 - A low-level direct access to the {\i SQLite3} library, implemented in @!TSQLite3LibraryDynamic,TSQLite3Library,TSQLRequest.Execute,TSQLDataBase,TSQLTableDB.Create!Lib\SynSQLite3.pas@;

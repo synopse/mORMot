@@ -1219,7 +1219,7 @@ type
 
     /// adapt the LIMIT # clause in the SQL SELECT statement to a syntax
     // matching the underlying DBMS
-    // - e.g. TSQLRestServerStaticExternal.AdaptSQLForEngineList() calls this
+    // - e.g. TSQLRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TSQLRestServer.URI by-pass virtual table mechanism
     // - integer parameters state how the SQL statement has been analysed
     function AdaptSQLLimitForEngineList(var SQL: RawUTF8;
@@ -1850,7 +1850,7 @@ type
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
     // - returns the number of row data returned (excluding field names)
-    // - warning: TSQLRestServerStaticExternal.EngineRetrieve in mORMotDB unit
+    // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
     function FetchAllToJSON(JSON: TStream; Expanded: boolean;
       DoNotFletchBlobs: Boolean=false): PtrInt;
@@ -4999,7 +4999,7 @@ begin
 end;
 
 {
-  tmBackgroundThread should handle TSQLRestServerStaticExternal methods:
+  tmBackgroundThread should handle TSQLRestStorageExternal methods:
   Create: ServerTimeStamp+GetFields
   BeginTransaction
   Commit

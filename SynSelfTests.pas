@@ -431,7 +431,7 @@ type
     procedure _TSQLTableJSON;
     /// test the TSQLRestClientDB, i.e. a local Client/Server driven usage
     // of the framework
-    // - validates TSQLModel, TSQLRestServer and TSQLRestServerStatic by checking
+    // - validates TSQLModel, TSQLRestServer and TSQLRestStorage by checking
     // the coherency of the data between client and server instances, after
     // update from both sides
     // - use all RESTful commands (GET/UDPATE/POST/DELETE...)
@@ -454,7 +454,7 @@ type
   /// this test case will test most functions, classes and types defined and
   // implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself,
   // with a memory-based approach
-  // - this class will also test the TSQLRestServerStatic class, and its
+  // - this class will also test the TSQLRestStorage class, and its
   // 100% Delphi simple database engine
   TTestMemoryBased = class(TTestSQLite3Engine)
   published
@@ -614,7 +614,7 @@ type
     // testpass.db3 file will (after the first 1024 bytes)
     procedure CryptedDatabase;
     /// test external DB implementation via faster REST calls
-    // - will mostly call directly the TSQLRestServerStaticExternal instance,
+    // - will mostly call directly the TSQLRestStorageExternal instance,
     // bypassing the Virtual Table mechanism of SQLite3
     procedure ExternalViaREST;
     /// test external DB implementation via slower Virtual Table calls
@@ -7167,7 +7167,7 @@ type
 
   // class hooks to force DMBS property for TTestExternalDatabase.AutoAdaptSQL
   TSQLDBConnectionPropertiesHook = class(TSQLDBConnectionProperties);
-  TSQLRestServerStaticExternalHook = class(TSQLRestServerStaticExternal);
+  TSQLRestStorageExternalHook = class(TSQLRestStorageExternal);
 
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
@@ -7324,7 +7324,7 @@ begin
   try
     Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,
       Props,'SampleRecord'));
-    with TSQLRestServerStaticExternalHook.Create(TSQLRecordPeopleExt,nil) do
+    with TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,nil) do
     try
       SQL := SQLOrigin;
       TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
@@ -7936,7 +7936,7 @@ var V,V2: TSQLRecordPeople;
     ModelC: TSQLModel;
     Client: TSQLRestClientDB;
     Server: TSQLRestServer;
-    aStatic: TSQLRestServerStaticInMemory;
+    aStatic: TSQLRestStorageInMemory;
     Curr: Currency;
     DaVinci, s: RawUTF8;
     Refreshed: boolean;
@@ -8115,7 +8115,7 @@ procedure TestVirtual(aClient: TSQLRestClient; DirectSQL: boolean; const Msg: st
   aClass: TSQLRecordClass);
 var n, i, ndx: integer;
     VD, VD2: TSQLRecordDali1;
-    Static: TSQLRestServerStatic;
+    Static: TSQLRestStorage;
 begin
   Client.Server.StaticVirtualTableDirect := DirectSQL;
   Check(Client.Server.EngineExecuteAll(FormatUTF8('DROP TABLE %',[aClass.SQLTableName])));
@@ -8170,17 +8170,17 @@ begin
       if CheckFailed(Static<>nil) then
         exit;
       if Static.FileName<>'' then begin // no file content if ':memory' DB
-        (Static as TSQLRestServerStaticInMemoryExternal).
+        (Static as TSQLRestStorageInMemoryExternal).
           UpdateFile; // force update (COMMIT not always calls xCommit)
-        Static := TSQLRestServerStaticInMemoryExternal.Create(aClass,nil,Static.FileName,
+        Static := TSQLRestStorageInMemoryExternal.Create(aClass,nil,Static.FileName,
           aClass=TSQLRecordDali2);
         try
-          Check(TSQLRestServerStaticInMemory(Static).Count=n);
+          Check(TSQLRestStorageInMemory(Static).Count=n);
           for i := 1 to n do begin
-            ndx := TSQLRestServerStaticInMemory(Static).IDToIndex(i);
+            ndx := TSQLRestStorageInMemory(Static).IDToIndex(i);
             if CheckFailed(ndx>=0) then
               continue;
-            VD2 := TSQLRestServerStaticInMemory(Static).Items[ndx] as TSQLRecordDali1;
+            VD2 := TSQLRestStorageInMemory(Static).Items[ndx] as TSQLRecordDali1;
             if CheckFailed(VD2<>nil) then
               continue;
             Check(VD2.ID=i);
@@ -8460,7 +8460,7 @@ begin
           DeleteFile('People.data');
           Server.StaticDataCreate(TSQLRecordPeople,'People.data',true);
           JS := Demo.ExecuteJSON('SELECT * From People');
-          aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestServerStaticInMemory;
+          aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestStorageInMemory;
           Check(aStatic<>nil);
           aStatic.LoadFromJSON(JS); // test Add()
           for i := 0 to aStatic.Count-1 do begin

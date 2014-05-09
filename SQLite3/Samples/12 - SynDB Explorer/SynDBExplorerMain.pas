@@ -79,7 +79,7 @@ begin // just not to be written in plain ascii in .config file
 end;
 
 procedure TDbExplorerMain.FormCreate(Sender: TObject);
-var Conns: TSQLRestServerStaticInMemory;
+var Conns: TSQLRestStorageInMemory;
 function TryConnect(C: TSQLConnection; LoadTableNames: boolean): boolean;
 const CONN_CLASSES: array[TExpConnectionType] of TSQLDBConnectionPropertiesClass =
   (TSQLDBOracleConnectionProperties,
@@ -190,7 +190,7 @@ begin
       C.Free;
     end;
   end else begin
-    Conns := TSQLRestServerStaticInMemory.Create(
+    Conns := TSQLRestStorageInMemory.Create(
       TSQLConnection,nil,ChangeFileExt(paramstr(0),'.config'),false);
     try
       Conns.ExpandedJSON := true; // for better human reading and modification

@@ -6,7 +6,7 @@
 
    - a TRecord class is defined in Unit1.pas
    - a static server (i.e. in-memory database) is initialized (see
-     TSQLRestServerStatic.Create below); 
+     TSQLRestStorage.Create below); 
      it will store the data in a JSON file in the disk and won't require
      the SQLite3 database engine
    - the purpose of the form in Unit1.pas is to add a record to the
@@ -24,7 +24,7 @@
     - Initial Release
 
   Version 1.1 - April 14, 2011
-    - use TSQLRestServerStaticInMemory instead of abstract TSQLRestServerStatic
+    - use TSQLRestStorageInMemory instead of abstract TSQLRestStorage
 
 }
 
@@ -43,7 +43,7 @@ begin
   Application.Initialize;
   Application.CreateForm(TForm1, Form1);
   Form1.Caption := ' Sample 01 - In Memory ORM';
-  Form1.Database := TSQLRestServerStaticInMemory.Create(TSQLSampleRecord,nil,
+  Form1.Database := TSQLRestStorageInMemory.Create(TSQLSampleRecord,nil,
     ChangeFileExt(paramstr(0),'.db'));
   Application.Run;
 end.

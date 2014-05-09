@@ -74,7 +74,7 @@ type
   // - is used by TSQLRestServer.URI for faster RESTful direct access
   // - for JOINed SQL statements, the external database is also defined as
   // a SQLite3 virtual table, via the TSQLVirtualTableBigTable[Cursor] classes
-  TSQLRestServerStaticBigTable = class(TSQLRestServerStaticRecordBased)
+  TSQLRestStorageBigTable = class(TSQLRestStorageRecordBased)
   protected
     /// the associated Big Table instance
     // - either a TSynBigTableMetaData or a TSynBigTableRecord
@@ -101,7 +101,7 @@ type
     // - i.e. the internal TSynBigTableMetaData / TSynBigTableRecord instance
     destructor Destroy; override;
     /// delete a row, calling the current BigTable instance
-    // - made public since a TSQLRestServerStatic instance may be created
+    // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     function EngineDelete(Table: TSQLRecordClass; ID: integer): boolean; override;
     /// search for a numerical field value
@@ -134,9 +134,9 @@ type
 implementation
 
 
-{ TSQLRestServerStaticBigTable }
+{ TSQLRestStorageBigTable }
 
-constructor TSQLRestServerStaticBigTable.Create(aClass: TSQLRecordClass;
+constructor TSQLRestStorageBigTable.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; const aFileName: TFileName;
   aBinaryFile: boolean);
 begin
@@ -149,7 +149,7 @@ begin
     fBig := TSynBigTableRecord.Create(aFileName,fStoredClassProps.SQLTableName);
 end;
 
-function TSQLRestServerStaticBigTable.CreateSQLMultiIndex(
+function TSQLRestStorageBigTable.CreateSQLMultiIndex(
   Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
   Unique: boolean; IndexName: RawUTF8): boolean;
 begin
@@ -159,71 +159,71 @@ begin
 
 end;
 
-destructor TSQLRestServerStaticBigTable.Destroy;
+destructor TSQLRestStorageBigTable.Destroy;
 begin
   FreeAndNil(fBig);
   inherited Destroy;
 end;
 
-function TSQLRestServerStaticBigTable.EngineDelete(Table: TSQLRecordClass;
+function TSQLRestStorageBigTable.EngineDelete(Table: TSQLRecordClass;
   ID: integer): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineList(const SQL: RawUTF8;
+function TSQLRestStorageBigTable.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean): RawUTF8;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineLockedNextID: Integer;
+function TSQLRestStorageBigTable.EngineLockedNextID: Integer;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineRetrieve(TableModelIndex,
+function TSQLRestStorageBigTable.EngineRetrieve(TableModelIndex,
   ID: integer): RawUTF8;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineRetrieveBlob(
+function TSQLRestStorageBigTable.EngineRetrieveBlob(
   Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
   out BlobData: TSQLRawBlob): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineSearchField(
+function TSQLRestStorageBigTable.EngineSearchField(
   const FieldName: ShortString; const FieldValue: array of const;
   var ResultID: TIntegerDynArray): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.EngineUpdateBlob(
+function TSQLRestStorageBigTable.EngineUpdateBlob(
   Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
   const BlobData: TSQLRawBlob): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.SearchField(
+function TSQLRestStorageBigTable.SearchField(
   const FieldName: ShortString; const FieldValue: Integer;
   var ResultID: TIntegerDynArray): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.SearchField(
+function TSQLRestStorageBigTable.SearchField(
   const FieldName: ShortString; FieldValue: RawUTF8;
   var ResultID: TIntegerDynArray): boolean;
 begin
 
 end;
 
-function TSQLRestServerStaticBigTable.UpdateField(Table: TSQLRecordClass;
+function TSQLRestStorageBigTable.UpdateField(Table: TSQLRecordClass;
   Where: integer; const FieldName: shortstring; FieldValue: integer;
   ByID: boolean): boolean;
 begin

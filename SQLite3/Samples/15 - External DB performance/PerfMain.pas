@@ -682,7 +682,7 @@ begin
           {$ifdef USEMONGODB}
           if Server='MongoDB' then
             (Client.Server.StaticDataServer[TSQLRecordSample] as
-              TSQLRestServerStaticMongoDB).Drop else
+              TSQLRestStorageMongoDB).Drop else
           {$endif}
           if not DBIsFile then
             Client.Server.EngineExecuteAll('drop table '+Value.SQLTableName);

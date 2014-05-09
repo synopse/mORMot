@@ -106,7 +106,7 @@ unit mORMotSQLite3;
       to have compatibility with Oracle/MySQL/MSSQL/PostGreSQL engines)
     - protect the TSQLDatabase methods called when self is nil, which could
       occur if the database is not yet initialized (could occur if only a
-      TSQLRestServerStatic exists, like in TTestSQLite3Engine._TSQLRestClientDB)
+      TSQLRestStorage exists, like in TTestSQLite3Engine._TSQLRestClientDB)
     - new SOUNDEX() function available in SQL statements (calling SoundExUTF8)
       and associated SOUNDEXFR/SOUNDEXES for french or spanish Soundex variants
     - fixed an issue found out by WladiD about all collation functions:
@@ -336,18 +336,18 @@ type
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
     /// overriden methods for direct sqlite3 database engine call:
-    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
-    function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
-    function EngineAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(Table: TSQLRecordClass; ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(Table: TSQLRecordClass; ID: integer): boolean; override;
-    function EngineDeleteWhere(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
+    function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
+    function MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
+    function MainEngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function MainEngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function MainEngineDeleteWhere(TableModelIndex: Integer; const SQLWhere: RawUTF8;
       const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(Table: TSQLRecordClass; aID: integer;
+    function MainEngineRetrieveBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(Table: TSQLRecordClass; aID: integer;
+    function MainEngineUpdateBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateField(Table: TSQLRecordClass;
+    function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// execute one SQL statement
     // - intercept any DB exception and return false on error, true on success
@@ -430,7 +430,7 @@ type
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
     // cache used at SQLite3 database level; but some virtual tables (e.g.
-    // TSQLRestServerStaticExternal classes defined in SQLite3DB) could flush
+    // TSQLRestStorageExternal classes defined in SQLite3DB) could flush
     // the database content without proper notification
     // - this overriden implementation will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; override;
@@ -643,24 +643,22 @@ begin
     end;
 end;
 
-function TSQLRestServerDB.EngineAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
 var SQL: RawUTF8;
     LastID: Int64;
 begin
-  if (self=nil) or (Table=nil) then begin
-    result := 0; // avoid GPF
+  result := 0;
+  if TableModelIndex<0 then
     exit;
-  end;
-  SQL := 'INSERT INTO '+Table.RecordProps.SQLTableName;
+  SQL := 'INSERT INTO '+fModel.TableProps[TableModelIndex].Props.SQLTableName;
   if trim(SentData)='' then
     SQL := SQL+' DEFAULT VALUES;' else
     SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
       JSONRetrieveIDField(pointer(SentData)))+';';
   if EngineExecute(SQL,nil,nil,@LastID) then begin
     result := LastID;
-    InternalUpdateEvent(seAdd,Table,result,nil);
-  end else
-    result := 0;
+    InternalUpdateEvent(seAdd,fModel.Tables[TableModelIndex],result,nil);
+  end;
 end;
 
 procedure InternalRTreeIn(Context: TSQLite3FunctionContext;
@@ -793,29 +791,29 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: integer): boolean;
+function TSQLRestServerDB.MainEngineDelete(TableModelIndex, ID: integer): boolean;
 begin
-  if (Table=nil) or (ID<=0) then begin
-    result := false; // avoid GPF
-    exit;
+  if (TableModelIndex<0) or (ID<=0) then
+    result := false else begin
+    // notify BEFORE deletion
+    InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],ID,nil);
+    result := EngineExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',
+      [fModel.TableProps[TableModelIndex].Props.SQLTableName,ID]);
   end;
-  InternalUpdateEvent(seDelete,Table,ID,nil); // notify BEFORE deletion
-  result := EngineExecuteFmt(
-    'DELETE FROM % WHERE RowID=:(%):;',[Table.RecordProps.SQLTableName,ID]);
 end;
 
-function TSQLRestServerDB.EngineDeleteWhere(Table: TSQLRecordClass;
+function TSQLRestServerDB.MainEngineDeleteWhere(TableModelIndex: Integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 var i: integer;
 begin
-  if (Table=nil) or (SQLWhere='') or (IDs=nil) then begin
-    result := false;
-    exit;
+  if (TableModelIndex<0) or (SQLWhere='') or (IDs=nil) then
+    result := false else begin
+    // notify BEFORE deletion
+    for i := 0 to high(IDs) do
+      InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],IDs[i],nil);
+    result := EngineExecuteFmt('DELETE FROM % WHERE %',
+      [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLWhere]);
   end;
-  for i := 0 to high(IDs) do
-    InternalUpdateEvent(seDelete,Table,IDs[i],nil); // notify BEFORE deletion
-  result := EngineExecuteFmt(
-    'DELETE FROM % WHERE %',[Table.RecordProps.SQLTableName,SQLWhere]);
 end;
 
 destructor TSQLRestServerDB.Destroy;
@@ -968,8 +966,8 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false;
-  ReturnedRowCount: PPtrInt=nil): RawUTF8;
+function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
+  ReturnedRowCount: PPtrInt): RawUTF8;
 var Req: PSQLRequest;
     MS: TRawByteStringStream;
     RowCount: integer;
@@ -1009,10 +1007,10 @@ begin
     ReturnedRowCount^ := RowCount;
 end;
 
-function TSQLRestServerDB.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestServerDB.MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 var aSQL: RawUTF8;
 begin
-  if (self=nil) or (cardinal(TableModelIndex)>=cardinal(length(Model.TableProps))) then
+  if (ID<0) or (TableModelIndex<0) or (result<>'') then
     exit;
   with Model.TableProps[TableModelIndex] do
     aSQL := FormatUTF8('SELECT % FROM % WHERE RowID=:(%):;',
@@ -1026,17 +1024,18 @@ begin
       result := copy(result,2,length(result)-3);
 end;
 
-function TSQLRestServerDB.EngineRetrieveBlob(Table: TSQLRecordClass;
-  aID: integer; BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
+function TSQLRestServerDB.MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
     Req: PSQLRequest;
 begin
   result := false;
-  if (self=nil) or (DB=nil) or (aID<=0) or (Table=nil) or not BlobField^.IsBlob then
+  if (aID<0) or (TableModelIndex<0) or not BlobField^.IsBlob then
     exit;
+  // retrieve the BLOB using SQL
   try
     SQL := FormatUTF8('SELECT % FROM % WHERE RowID=?;',
-      [BlobField^.Name,Table.RecordProps.SQLTableName]);
+      [BlobField^.Name,Model.TableProps[TableModelIndex].Props.SQLTableName]);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
       Req := fStatementCache.Prepare(SQL);
@@ -1061,7 +1060,7 @@ begin
 end;
 
 function TSQLRestServerDB.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestServerStatic;
+var Static: TSQLRestStorage;
     SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
@@ -1102,32 +1101,32 @@ begin
   fDB.Cache.Reset; // we changed the JSON format -> cache must be updated
 end;
 
-function TSQLRestServerDB.EngineUpdate(Table: TSQLRecordClass; ID: integer;
+function TSQLRestServerDB.MainEngineUpdate(TableModelIndex, ID: integer;
   const SentData: RawUTF8): boolean;
 begin
-  if (self=nil) or (Table=nil) or (ID<=0) then
+  if (TableModelIndex<0) or (ID<=0) then
     result := false else
-  if SentData='' then // update with no simple field -> valid no-ops
+  if SentData='' then // update with no simple field -> valid no-op
     result := true else begin
     // this SQL statement use :(inlined params): for all values
     result := EngineExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
-      [Table.RecordProps.SQLTableName,GetJSONObjectAsSQL(SentData,true,true),ID]);
-    InternalUpdateEvent(seUpdate,Table,ID,nil);
+      [Model.TableProps[TableModelIndex].Props.SQLTableName,
+       GetJSONObjectAsSQL(SentData,true,true),ID]);
+    InternalUpdateEvent(seUpdate,Model.Tables[TableModelIndex],ID,nil);
   end;
 end;
 
-function TSQLRestServerDB.EngineUpdateBlob(Table: TSQLRecordClass;
-  aID: integer; BlobField: PPropInfo;
-  const BlobData: TSQLRawBlob): boolean;
+function TSQLRestServerDB.MainEngineUpdateBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
     AffectedField: TSQLFieldBits;
 begin
-  result := false;
-  if (self=nil) or (DB=nil) or (aID<=0) or (Table=nil) or not BlobField^.IsBlob then
-    exit;
+  if (aID<0) or (TableModelIndex<0) or not BlobField^.IsBlob then
+    result := false else
+  with Model.TableProps[TableModelIndex].Props do
   try
     SQL := FormatUTF8('UPDATE % SET %=? WHERE RowID=?;',
-             [Table.RecordProps.SQLTableName,BlobField^.Name]);
+             [SQLTableName,BlobField^.Name]);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
       with fStatementCache.Prepare(SQL)^ do begin
@@ -1140,7 +1139,7 @@ begin
     finally
       DB.UnLock;
     end;
-    Table.RecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
+    FieldIndexsFromBlobField(BlobField,AffectedField);
     InternalUpdateEvent(seUpdateBlob,Table,aID,@AffectedField);
   except
     on ESQLite3Exception do
@@ -1148,8 +1147,32 @@ begin
   end;
 end;
 
+function TSQLRestServerDB.MainEngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+var WhereID: integer;
+begin
+  result := false;
+  if (TableModelIndex<0) or (SetFieldName='') then
+    exit;
+  with Model.TableProps[TableModelIndex].Props do
+  if Fields.IndexByName(SetFieldName)>=0 then begin
+    WhereID := 0;
+    if IsRowID(pointer(WhereFieldName)) then begin
+      WhereID := GetInteger(Pointer(WhereValue));
+      if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
+        exit; // limitation: will only check for update from RowID
+    end else
+      if Fields.IndexByName(WhereFieldName)<0 then
+        exit;
+    result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
+      [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
+    if WhereID>0 then
+      InternalUpdateEvent(seUpdate,Table,WhereID,nil);
+  end;
+end;
+
 function TSQLRestServerDB.UpdateBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestServerStatic;
+var Static: TSQLRestStorage;
     SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
@@ -1186,34 +1209,6 @@ begin
       InternalUpdateEvent(seUpdateBlob,PSQLRecordClass(Value)^,Value.ID,@BlobFieldsBits);
     end else
       result := true; // as TSQLRest.UpdateblobFields()
-end;
-
-function TSQLRestServerDB.EngineUpdateField(Table: TSQLRecordClass;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var Static: TSQLRestServerStatic;
-    WhereID: integer;
-begin
-  result := false;
-  if (self=nil) or (Table=nil) then
-    exit;
-  Static := GetStaticDataServerOrVirtualTable(Table);
-  if Static<>nil then
-    result := Static.EngineUpdateField(Table,SetFieldName,SetValue,WhereFieldName,WhereValue) else
-    with Table.RecordProps do 
-    if Fields.IndexByName(SetFieldName)>=0 then begin
-      WhereID := 0;
-      if IsRowID(pointer(WhereFieldName)) then begin
-        WhereID := GetInteger(Pointer(WhereValue));
-        if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
-          exit; // limitation: will only check for update from RowID
-      end else
-        if Fields.IndexByName(WhereFieldName)<0 then
-          exit;
-      result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
-        [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
-      if WhereID>0 then
-        InternalUpdateEvent(seUpdate,Table,WhereID,nil);
-    end;
 end;
 
 procedure TSQLRestServerDB.Commit(SessionID: cardinal=1);
@@ -1465,7 +1460,7 @@ begin
     aSQL := Model.SQLFromSelectWhere(Tables,SQLSelect,SQLWhere);
     if n=1 then
       // InternalListJSON will handle both static and DB tables
-      result := fServer.InternalListJSON(TSQLRecordClass(Tables[0]),aSQL) else
+      result := fServer.ExecuteList(Tables,aSQL) else
       // we access localy the DB -> TSQLTableDB handle Tables parameter
       result := TSQLTableDB.Create(fServer.DB,Tables,aSQL,not fServer.NoAJAXJSON);
     if fServer.DB.InternalState<>nil then

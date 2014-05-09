@@ -77,40 +77,41 @@ unit mORMotDB;
 
   Version 1.18
   - unit SQLite3DB.pas renamed mORMotDB.pas
+  - TSQLRestServerStaticExternal renamed TSQLRestStorageExternal
   - huge performance boost when inserting individual data rows, by maintaining
     the IDs in memory instead of executing "select max(id)" - added new property
     EngineAddUseSelectMaxID to unset this optimization
   - new function VirtualTableExternalRegisterAll(), to register all tables
     of a mORMot model to be handled via a specified database
-  - TSQLRestServerStaticExternal.AdaptSQLForEngineList() will now accept
+  - TSQLRestStorageExternal.AdaptSQLForEngineList() will now accept
     'select count(*) from TableName [where...]' statements directly (virtual
     behavior for count(*) is to loop through all records, which may be slow)
-  - now TSQLRestServerStaticExternal will call TSQLRestServer.OnUpdateEvent and
+  - now TSQLRestStorageExternal will call TSQLRestServer.OnUpdateEvent and
     OnBlobUpdateEvent callbacks, if defined (even in BATCH mode)
   - BatchDelete() will now split its batch statement executed following
     TSQLDBConnectionProperties.BatchMaxSentAtOnce property expectations 
-  - now TSQLRestServerStaticExternal won't create any columns for external
+  - now TSQLRestStorageExternal won't create any columns for external
     tables with unsupported published property types (sftUnknown or sftMany),
     just like TSQLRecord.GetSQLCreate() method
   - now handles TSQLDBConnectionProperties.ForcedSchemaName as expected
-  - fixed issue in TSQLRestServerStaticExternal.EngineDeleteWhere() when
+  - fixed issue in TSQLRestStorageExternal.EngineDeleteWhere() when
     calling commands like MyDB.Delete(TSQLMyClass, 'PLU < ?', [20000])
   - fixed errors when executing JOINed queries (e.g. via FillPrepareMany)
-  - fixed ticket [3c41462594] in TSQLRestServerStaticExternal.ExecuteFromJSON()
-  - fixed ticket [9a821d26ee] in TSQLRestServerStaticExternal.Create() not
+  - fixed ticket [3c41462594] in TSQLRestStorageExternal.ExecuteFromJSON()
+  - fixed ticket [9a821d26ee] in TSQLRestStorageExternal.Create() not
     creating any missing field
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
   - ensure DESC INDEX is created for Firebird ID column, as expected for
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
-  - fixed TSQLRestServerStaticExternal.UpdateBlobFields() to return true
+  - fixed TSQLRestStorageExternal.UpdateBlobFields() to return true
     if no BLOB field is defined, and to proper handle multi-field update
   - fixed ticket [21c2d5ae96] when inserting/updating blob-only table content
-  - handle null binding in TSQLRestServerStaticExternal.ExecuteInlined()
-  - added TSQLRestServerStaticExternal.TableHasRows/TableRowCount overrides
-  - added TSQLRestServerStaticExternal.PrepareInlinedForRows() and
+  - handle null binding in TSQLRestStorageExternal.ExecuteInlined()
+  - added TSQLRestStorageExternal.TableHasRows/TableRowCount overrides
+  - added TSQLRestStorageExternal.PrepareInlinedForRows() and
     PrepareDirectForRows() methods to call new ExecutePreparedAndFetchAllAsJSON()
     method of ISQLDBStatement as expected by TSQLDBProxyStatement
-  - optimized TSQLRestServerStaticExternal.UpdateBlobFields()/RetrieveBlobFields()
+  - optimized TSQLRestStorageExternal.UpdateBlobFields()/RetrieveBlobFields()
     methods, updating/retrieving all BLOB fields at once in the same SQL statement
   - this unit will now set SynDBLog := TSQLLog during its initialization
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
@@ -137,7 +138,7 @@ type
   // - is used by TSQLRestServer.URI for faster RESTful direct access
   // - for JOINed SQL statements, the external database is also defined as
   // a SQLite3 virtual table, via the TSQLVirtualTableExternal[Cursor] classes
-  TSQLRestServerStaticExternal = class(TSQLRestServerStatic)
+  TSQLRestStorageExternal = class(TSQLRestStorage)
   protected
     /// values retrieved from fStoredClassProps.ExternalDB settings
     fTableName: RawUTF8;
@@ -187,15 +188,15 @@ type
     // overriden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
     function EngineLockedNextID: Integer; virtual;
-    function EngineAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(Table: TSQLRecordClass; ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDeleteWhere(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
+    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIntegerDynArray): boolean; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
-    function EngineRetrieveBlob(Table: TSQLRecordClass; aID: integer;
+    function EngineRetrieveBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(Table: TSQLRecordClass; aID: integer;
+    function EngineUpdateBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
       const FieldValue: array of const; var ResultID: TIntegerDynArray): boolean;
@@ -239,9 +240,9 @@ type
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       const aFileName: TFileName = ''; aBinaryFile: boolean=false); override;
     /// delete a row, calling the external engine with SQL
-    // - made public since a TSQLRestServerStatic instance may be created
+    // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function EngineDelete(Table: TSQLRecordClass; ID: integer): boolean; override;
+    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
     /// search for a numerical field value
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
@@ -268,18 +269,13 @@ type
     {{ abort a transaction (implements REST ABORT Member)
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=1); override;
-    /// overriden method for direct external SQL database engine thread-safe process
-    // - this method will in fact call only one (first) statement
-    // - it will convert all inlined parameters (like :(1234): into bound
-    // parameters)
-    function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
-    /// update a field value of the external database
-    function EngineUpdateField(Table: TSQLRecordClass;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
      /// overriden method for direct external database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
      /// overriden method for direct external database engine call
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
+    /// update a field value of the external database
+    function EngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// create one index for all specific FieldNames at once
     // - this method will in fact call the SQLAddIndex method, if the index
     // is not already existing
@@ -298,13 +294,13 @@ type
 
     /// retrieve the REST server instance corresponding to an external TSQLRecord
     // - just map aServer.StaticVirtualTable[] and will return nil if not
-    // a TSQLRestServerStaticExternal
+    // a TSQLRestStorageExternal
     // - you can use it e.g. to call MapField() method in a fluent interface
     class function Instance(aClass: TSQLRecordClass;
-      aServer: TSQLRestServer): TSQLRestServerStaticExternal;
+      aServer: TSQLRestServer): TSQLRestStorageExternal;
     /// retrieve the external database connection associated to a TSQLRecord
     // - just map aServer.StaticVirtualTable[] and will return nil if not
-    // a TSQLRestServerStaticExternal
+    // a TSQLRestStorageExternal
     class function ConnectionProperties(aClass: TSQLRecordClass;
       aServer: TSQLRestServer): TSQLDBConnectionProperties; overload;
     /// the associated external database connection
@@ -365,9 +361,9 @@ type
     /// returns the main specifications of the associated TSQLVirtualTableModule
     // - this is a read/write table, without transaction (yet), associated to the
     // TSQLVirtualTableCursorExternal cursor type, with 'External' as module name
-    // and TSQLRestServerStaticExternal as the related static class
+    // and TSQLRestStorageExternal as the related static class
     // - no particular class is supplied here, since it will depend on the
-    // associated Static TSQLRestServerStaticExternal instance
+    // associated Static TSQLRestStorageExternal instance
     class procedure GetTableModuleProperties(var aProperties: TVirtualTableModuleProperties);
       override;
     /// called to determine the best way to access the virtual table
@@ -487,9 +483,9 @@ begin
 end;
 
 
-{ TSQLRestServerStaticExternal }
+{ TSQLRestStorageExternal }
 
-procedure TSQLRestServerStaticExternal.Commit(SessionID: cardinal);
+procedure TSQLRestStorageExternal.Commit(SessionID: cardinal);
 begin
   inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
   try
@@ -500,7 +496,7 @@ begin
   end;
 end;
 
-constructor TSQLRestServerStaticExternal.Create(aClass: TSQLRecordClass;
+constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; const aFileName: TFileName; aBinaryFile: boolean);
 
   procedure FieldsInternalInit;
@@ -648,7 +644,7 @@ begin
   AdaptSQLForEngineList(fSelectTableHasRowsSQL);
 end;
 
-function TSQLRestServerStaticExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
+function TSQLRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
 var Prop: ShortString; // to avoid any temporary memory allocation
     P: PUTF8Char;
     W: TTextWriter;
@@ -860,7 +856,7 @@ Limit:  Pos.Limit := W.TextLength+1;
   result := true;
 end;
 
-function TSQLRestServerStaticExternal.EngineLockedNextID: Integer;
+function TSQLRestStorageExternal.EngineLockedNextID: Integer;
 // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
 // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
 var Rows: ISQLDBRows;
@@ -877,7 +873,7 @@ begin
   result := fEngineLockedLastID;
 end;
 
-function TSQLRestServerStaticExternal.InternalBatchStart(
+function TSQLRestStorageExternal.InternalBatchStart(
   Method: TSQLURIMethod): boolean;
 const BATCH: array[mPOST..mDELETE] of TSQLDBStatementCRUD = (
   cCreate, cUpdate, cDelete);
@@ -885,7 +881,7 @@ begin
   result := false; // means BATCH mode not supported
   if (self<>nil) and (method in [mPOST..mDELETE]) and
      (BATCH[method] in fProperties.BatchSendingAbilities) then begin
-    Lock(true); // protected by try..finally in TSQLRestServer.RunBatch
+    StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if fBatchMethod<>mNone then
         raise EORMException.Create('InternalBatchStop should have been called');
@@ -897,12 +893,12 @@ begin
       result := true; // means BATCH mode is supported
     finally
       if not result then
-        UnLock;
+        StorageUnLock;
     end;
   end;
 end;
 
-procedure TSQLRestServerStaticExternal.InternalBatchStop;
+procedure TSQLRestStorageExternal.InternalBatchStop;
 var i,j,n,max,BatchBegin,BatchEnd,ValuesMax: integer;
     Query: ISQLDBStatement;
     NotifySQLEvent: TSQLEvent;
@@ -920,8 +916,7 @@ begin
     if fBatchCount>0 then begin
       if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion
         for i := 0 to fBatchCount-1 do
-          TSQLRestServerStaticExternal(Owner). // see protected virtual method
-            InternalUpdateEvent(seDelete,fStoredClass,fBatchIDs[i],nil);
+          Owner.InternalUpdateEvent(seDelete,fStoredClass,fBatchIDs[i],nil);
       with fProperties do
         if BatchMaxSentAtOnce>0 then
           max := BatchMaxSentAtOnce else
@@ -1020,8 +1015,7 @@ begin
           NotifySQLEvent := seAdd else
           NotifySQLEvent := seUpdate;
           for i := 0 to fBatchCount-1 do
-            TSQLRestServerStaticExternal(Owner). // see protected virtual method
-              InternalUpdateEvent(NotifySQLEvent,fStoredClass,fBatchIDs[i],nil);
+            Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClass,fBatchIDs[i],nil);
       end;
     end;
   finally
@@ -1032,11 +1026,11 @@ begin
     fBatchCount := 0;
     fBatchCapacity := 0;
     fBatchMethod := mNone;
-    UnLock;
+    StorageUnLock;
   end;
 end;
 
-function TSQLRestServerStaticExternal.InternalBatchAdd(
+function TSQLRestStorageExternal.InternalBatchAdd(
   const aValue: RawUTF8; aID: integer): integer;
 begin
   result := fBatchAddedID+fBatchCount;
@@ -1054,10 +1048,10 @@ begin
   inc(fBatchCount);
 end;
 
-function TSQLRestServerStaticExternal.EngineAdd(Table: TSQLRecordClass;
+function TSQLRestStorageExternal.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): integer;
 begin
-  if (self=nil) or (Table<>fStoredClass) then
+  if (TableModelIndex<0) or (fModel.Tables[TableModelIndex]<>fStoredClass) then
     result := 0 else // avoid GPF
   if fBatchMethod<>mNone then
     if fBatchMethod<>mPOST then
@@ -1065,15 +1059,14 @@ begin
       result := InternalBatchAdd(SentData,0) else begin
     result := ExecuteFromJSON(SentData,soInsert,0); // UpdatedID=0 -> insert with EngineLockedNextID
     if (result>0) and (Owner<>nil) then
-      TSQLRestServerStaticExternal(Owner). // see protected virtual method
-        InternalUpdateEvent(seAdd,fStoredClass,result,nil);
+      Owner.InternalUpdateEvent(seAdd,fStoredClass,result,nil);
   end;
 end;
 
-function TSQLRestServerStaticExternal.EngineUpdate(Table: TSQLRecordClass;
-  ID: integer; const SentData: RawUTF8): boolean;
+function TSQLRestStorageExternal.EngineUpdate(TableModelIndex, ID: integer;
+  const SentData: RawUTF8): boolean;
 begin
-  if (self=nil) or (Table<>fStoredClass) or (ID<=0) then
+  if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
     if fBatchMethod<>mNone then
       if fBatchMethod<>mPUT then
@@ -1081,15 +1074,13 @@ begin
         result := InternalBatchAdd(SentData,ID)>=0 else begin
       result := ExecuteFromJSON(SentData,soUpdate,ID)=ID;
       if result and (Owner<>nil) then
-        TSQLRestServerStaticExternal(Owner). // see protected virtual method
-          InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
+        Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
     end;
 end;
 
-function TSQLRestServerStaticExternal.EngineDelete(Table: TSQLRecordClass;
-  ID: integer): boolean;
+function TSQLRestStorageExternal.EngineDelete(TableModelIndex, ID: integer): boolean;
 begin
-  if (self=nil) or (Table<>fStoredClass) or (ID<=0) then
+  if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDELETE then
@@ -1098,17 +1089,17 @@ begin
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
       if result and (Owner<>nil) then
-        TSQLRestServerStaticExternal(Owner). // see protected virtual method
-          InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
     end;
 end;
 
-function TSQLRestServerStaticExternal.EngineDeleteWhere(
-  Table: TSQLRecordClass; const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
+  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 var i: integer;
 begin
   result := false;
-  if (self=nil) or (Table<>fStoredClass) or (SQLWhere='') or (IDs=nil) then
+  if (IDs=nil) or (SQLWhere='') or
+     (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   if fBatchMethod<>mNone then
     if fBatchMethod<>mDELETE then
@@ -1117,21 +1108,14 @@ begin
         InternalBatchAdd('',IDs[i]) else begin
     if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
-        TSQLRestServerStaticExternal(Owner). // see protected virtual method
-          InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil);
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil);
     if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
       exit;
   end;
   result := true;
 end;
 
-function TSQLRestServerStaticExternal.EngineExecuteAll(
-  const aSQL: RawUTF8): boolean;
-begin
-  result := ExecuteInlined(aSQL,false)<>nil; // only execute the first statement
-end;
-
-function TSQLRestServerStaticExternal.EngineList(const SQL: RawUTF8;
+function TSQLRestStorageExternal.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 var Stmt: ISQLDBStatement;
 begin
@@ -1140,10 +1124,11 @@ begin
   Stmt := PrepareInlinedForRows(SQL);
   if Stmt=nil then
     result := '' else
-    Stmt.ExecutePreparedAndFetchAllAsJSON(ForceAJAX or (not NoAJAXJSON),result);
+    Stmt.ExecutePreparedAndFetchAllAsJSON(
+      ForceAJAX or (Owner=nil) or (not Owner.NoAJAXJSON),result);
 end;
 
-function TSQLRestServerStaticExternal.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 var Stmt: ISQLDBStatement;
 begin // TableModelIndex is not usefull here
   result := '';
@@ -1160,7 +1145,7 @@ begin // TableModelIndex is not usefull here
   end;
 end;
 
-function TSQLRestServerStaticExternal.TableHasRows(Table: TSQLRecordClass): boolean;
+function TSQLRestStorageExternal.TableHasRows(Table: TSQLRecordClass): boolean;
 var Rows: ISQLDBRows;
 begin
   if (self=nil) or (Table<>fStoredClass) then
@@ -1172,7 +1157,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.TableRowCount(Table: TSQLRecordClass): integer;
+function TSQLRestStorageExternal.TableRowCount(Table: TSQLRecordClass): integer;
 var Rows: ISQLDBRows;
 begin
   if (self=nil) or (Table<>fStoredClass) then
@@ -1184,13 +1169,13 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.EngineRetrieveBlob(
-  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
-  out BlobData: TSQLRawBlob): boolean;
+function TSQLRestStorageExternal.EngineRetrieveBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var Rows: ISQLDBRows;
 begin
   result := false;
-  if (self=nil) or (Table<>fStoredClass) or (aID<=0) or not BlobField^.IsBlob then
+  if (aID<=0) or (not BlobField^.IsBlob) or
+     (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   with StoredClassProps.ExternalDB do
     Rows := ExecuteDirect('select % from % where %=?',
@@ -1206,7 +1191,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.RetrieveBlobFields(Value: TSQLRecord): boolean;
+function TSQLRestStorageExternal.RetrieveBlobFields(Value: TSQLRecord): boolean;
 var Rows: ISQLDBRows;
     f: Integer;
     data: TSQLVar;
@@ -1234,23 +1219,26 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.EngineUpdateField(Table: TSQLRecordClass;
+function TSQLRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 begin
-  with StoredClassProps.ExternalDB do
-    result := ExecuteInlined('update % set %=:(%): where %=:(%):',
-      [fTableName,InternalToExternal(SetFieldName),SetValue,
-       InternalToExternal(WhereFieldName),WhereValue],false)<>nil;
+  if (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+    result := false else
+    with StoredClassProps.ExternalDB do
+      result := ExecuteInlined('update % set %=:(%): where %=:(%):',
+        [fTableName,InternalToExternal(SetFieldName),SetValue,
+         InternalToExternal(WhereFieldName),WhereValue],false)<>nil;
 end;
 
-function TSQLRestServerStaticExternal.EngineUpdateBlob(
-  Table: TSQLRecordClass; aID: integer; BlobField: PPropInfo;
-  const BlobData: TSQLRawBlob): boolean;
+function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var Statement: ISQLDBStatement;
     AffectedField: TSQLFieldBits;
 begin
   result := false;
-  if (Table=fStoredClass) and (aID>0) and BlobField^.IsBlob then
+  if (aID<=0) or (not BlobField^.IsBlob) or
+     (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+    exit;
   try
     if Owner<>nil then
       Owner.FlushInternalDBCache;
@@ -1266,8 +1254,7 @@ begin
       Statement.ExecutePrepared;
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
-        TSQLRestServerStaticExternal(Owner). // see protected virtual method
-          InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,@AffectedField);
+        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,@AffectedField);
       end;
       result := true; // success
     end;
@@ -1277,7 +1264,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.UpdateBlobFields(Value: TSQLRecord): boolean;
+function TSQLRestStorageExternal.UpdateBlobFields(Value: TSQLRecord): boolean;
 var f, aID: integer;
     temp: array of RawByteString;
     Params: TSQLVarDynArray;
@@ -1299,14 +1286,13 @@ begin
       [fTableName,fUpdateBlobFieldsSQL,StoredClassProps.ExternalDB.RowIDFieldName],
       Params,aID,false);
     if result and (Owner<>nil) then
-      TSQLRestServerStaticExternal(Owner). // see protected virtual method
-        InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
+      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
           @fStoredClassRecordProps.BlobFieldsBits);
   end else
     result := true; // as TSQLRest.UpdateblobFields()
 end;
 
-function TSQLRestServerStaticExternal.PrepareInlinedForRows(const aSQL: RawUTF8): ISQLDBStatement;
+function TSQLRestStorageExternal.PrepareInlinedForRows(const aSQL: RawUTF8): ISQLDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self=nil then
@@ -1319,7 +1305,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.ExecuteInlined(const aSQL: RawUTF8;
+function TSQLRestStorageExternal.ExecuteInlined(const aSQL: RawUTF8;
   ExpectResults: Boolean): ISQLDBRows;
 begin
   result := nil; // returns nil interface on error
@@ -1335,13 +1321,13 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.ExecuteInlined(SQLFormat: PUTF8Char;
+function TSQLRestStorageExternal.ExecuteInlined(SQLFormat: PUTF8Char;
   const Args: array of const; ExpectResults: Boolean): ISQLDBRows;
 begin
   result := ExecuteInlined(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
 
-function TSQLRestServerStaticExternal.PrepareDirectForRows(SQLFormat: PUTF8Char;
+function TSQLRestStorageExternal.PrepareDirectForRows(SQLFormat: PUTF8Char;
   const Args, Params: array of const): ISQLDBStatement;
 var Query: ISQLDBStatement;
 begin
@@ -1359,7 +1345,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.ExecuteDirect(SQLFormat: PUTF8Char;
+function TSQLRestStorageExternal.ExecuteDirect(SQLFormat: PUTF8Char;
   const Args, Params: array of const; ExpectResults: Boolean): ISQLDBRows;
 var Query: ISQLDBStatement;
 begin
@@ -1380,7 +1366,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
+function TSQLRestStorageExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
   const Args: array of const; var Params: TSQLVarDynArray; LastIntegerParam: integer;
   ParamsMatchCopiableFields: boolean): boolean;
 var Query: ISQLDBStatement;
@@ -1412,7 +1398,7 @@ begin
   end;
 end;
 
-procedure TSQLRestServerStaticExternal.RollBack(SessionID: cardinal);
+procedure TSQLRestStorageExternal.RollBack(SessionID: cardinal);
 begin
   inherited RollBack(SessionID); // reset fTransactionActive
   try
@@ -1423,7 +1409,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.EngineSearchField(
+function TSQLRestStorageExternal.EngineSearchField(
   const FieldName: ShortString; const FieldValue: array of const;
   var ResultID: TIntegerDynArray): boolean;
 var n: Integer;
@@ -1439,19 +1425,19 @@ begin
   result := n>0;
 end;
 
-function TSQLRestServerStaticExternal.SearchField(const FieldName: RawUTF8;
+function TSQLRestStorageExternal.SearchField(const FieldName: RawUTF8;
   FieldValue: Integer; var ResultID: TIntegerDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;
 
-function TSQLRestServerStaticExternal.SearchField(const FieldName, FieldValue: RawUTF8;
+function TSQLRestStorageExternal.SearchField(const FieldName, FieldValue: RawUTF8;
   var ResultID: TIntegerDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;
 
-function TSQLRestServerStaticExternal.TransactionBegin(
+function TSQLRestStorageExternal.TransactionBegin(
   aTable: TSQLRecordClass; SessionID: cardinal): boolean;
 begin
   result := false;
@@ -1465,7 +1451,7 @@ begin
   end;
 end;
 
-function TSQLRestServerStaticExternal.CreateSQLMultiIndex(
+function TSQLRestStorageExternal.CreateSQLMultiIndex(
   Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
   Unique: boolean; IndexName: RawUTF8): boolean;
 var SQL: RawUTF8;
@@ -1501,32 +1487,32 @@ begin
     result := true;
 end;
 
-class function TSQLRestServerStaticExternal.Instance(
-  aClass: TSQLRecordClass; aServer: TSQLRestServer): TSQLRestServerStaticExternal;
+class function TSQLRestStorageExternal.Instance(
+  aClass: TSQLRecordClass; aServer: TSQLRestServer): TSQLRestStorageExternal;
 begin
   if (aClass=nil) or (aServer=nil) then
     result := nil else begin
-    result := TSQLRestServerStaticExternal(aServer.StaticVirtualTable[aClass]);
+    result := TSQLRestStorageExternal(aServer.StaticVirtualTable[aClass]);
     if result<>nil then
-      if not result.InheritsFrom(TSQLRestServerStaticExternal) then
+      if not result.InheritsFrom(TSQLRestStorageExternal) then
         result := nil;
   end;
 end;
 
-class function TSQLRestServerStaticExternal.ConnectionProperties(
+class function TSQLRestStorageExternal.ConnectionProperties(
   aClass: TSQLRecordClass; aServer: TSQLRestServer): TSQLDBConnectionProperties;
 begin
   result := Instance(aClass,aServer).ConnectionProperties;
 end;
 
-function TSQLRestServerStaticExternal.ConnectionProperties: TSQLDBConnectionProperties;
+function TSQLRestStorageExternal.ConnectionProperties: TSQLDBConnectionProperties;
 begin
   if self=nil then
     result := nil else
     result := fProperties;
 end;
   
-function TSQLRestServerStaticExternal.ExecuteFromJSON(
+function TSQLRestStorageExternal.ExecuteFromJSON(
   const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: integer): integer;
 var Decoder: TJSONObjectDecoder;
     SQL: RawUTF8;
@@ -1536,7 +1522,7 @@ var Decoder: TJSONObjectDecoder;
     Query: ISQLDBStatement;
 begin
   result := 0;
-  Lock(false); // avoid race condition against max(ID)
+  StorageLock(false); // avoid race condition against max(ID)
   try
     case Occasion of
     soInsert: begin
@@ -1580,17 +1566,17 @@ begin
       result := InsertedID else
       result := UpdatedID;
   finally
-    UnLock;
+    StorageUnLock;
   end;
 end;
 
-procedure TSQLRestServerStaticExternal.EndCurrentThread(Sender: TThread);
+procedure TSQLRestStorageExternal.EndCurrentThread(Sender: TThread);
 begin
   if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then
     TSQLDBConnectionPropertiesThreadSafe(fProperties).EndCurrentThread;
 end;
 
-function TSQLRestServerStaticExternal.InternalFieldNameToFieldExternalIndex(
+function TSQLRestStorageExternal.InternalFieldNameToFieldExternalIndex(
   const InternalFieldName: RawUTF8): integer;
 begin
   result := StoredClassRecordProps.Fields.IndexByNameOrExcept(InternalFieldName);
@@ -1598,7 +1584,7 @@ begin
     length(fFieldsExternalToInternal),result);
 end;
 
-function TSQLRestServerStaticExternal.JSONDecodedPrepareToSQL(
+function TSQLRestStorageExternal.JSONDecodedPrepareToSQL(
   var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
   out Types: TSQLDBFieldTypeArray; Occasion: TSQLOccasion): RawUTF8;
 var f,k: Integer;
@@ -1621,11 +1607,11 @@ begin
   end;
 end;
 
-procedure TSQLRestServerStaticExternal.ResetMaxIDCache;
+procedure TSQLRestStorageExternal.ResetMaxIDCache;
 begin
-  Lock(true);
+  StorageLock(true);
   fEngineLockedLastID := 0;
-  UnLock;
+  StorageUnLock;
 end;
 
 
@@ -1680,7 +1666,7 @@ begin
   result := false;
   if (Self=nil) or (Table=nil) or (Table.Static=nil) then
     exit;
-  with Table.Static as TSQLRestServerStaticExternal do begin
+  with Table.Static as TSQLRestStorageExternal do begin
     if fSQL='' then begin
       // compute the SQL query corresponding to this prepared request
       fSQL := fSelectAllDirectSQL;
@@ -1731,14 +1717,14 @@ end;
 function TSQLVirtualTableExternal.Delete(aRowID: Int64): boolean;
 begin
   result := (self<>nil) and (Static<>nil) and
-    (Static as TSQLRestServerStaticExternal).EngineDelete(Static.StoredClass,aRowID);
+    (Static as TSQLRestStorageExternal).EngineDelete(StaticTableIndex,aRowID);
 end;
 
 function TSQLVirtualTableExternal.Drop: boolean;
 begin
   if (self=nil) or (Static=nil) then
     result := false else
-    with Static as TSQLRestServerStaticExternal do
+    with Static as TSQLRestStorageExternal do
       result := ExecuteDirect('drop table %',[fTableName],[],false)<>nil;
 end;
 
@@ -1747,7 +1733,7 @@ class procedure TSQLVirtualTableExternal.GetTableModuleProperties(
 begin
   aProperties.Features := [vtWrite];
   aProperties.CursorClass := TSQLVirtualTableCursorExternal;
-  aProperties.StaticClass := TSQLRestServerStaticExternal;
+  aProperties.StaticClass := TSQLRestStorageExternal;
 end;
 
 function TSQLVirtualTableExternal.Insert(aRowID: Int64;
@@ -1755,8 +1741,8 @@ function TSQLVirtualTableExternal.Insert(aRowID: Int64;
 begin // aRowID is just ignored here since IDs are always auto calculated
   result := false;
   if (self<>nil) and (Static<>nil) then
-  with Static as TSQLRestServerStaticExternal do begin
-    Lock(false); // to avoid race condition against max(RowID)
+  with Static as TSQLRestStorageExternal do begin
+    StorageLock(false); // to avoid race condition against max(RowID)
     try
       insertedRowID := EngineLockedNextID;
       with StoredClassProps.ExternalDB do
@@ -1764,7 +1750,7 @@ begin // aRowID is just ignored here since IDs are always auto calculated
           [fTableName,SQL.InsertSet,RowIDFieldName,CSVOfValue('?',length(Values))],
           Values,insertedRowID,true);
     finally
-      UnLock;
+      StorageUnLock;
     end;
   end;
 end;
@@ -1776,7 +1762,7 @@ var i, col: integer;
 begin
   result := inherited Prepare(Prepared); // Prepared.EstimatedCost := 1E10;
   if result and (Static<>nil) then
-  with Static as TSQLRestServerStaticExternal do begin
+  with Static as TSQLRestStorageExternal do begin
     // mark Where[] clauses will be handled by SQL
     Fields := StoredClassRecordProps.Fields;
     result := false;
@@ -1817,7 +1803,7 @@ function TSQLVirtualTableExternal.Update(oldRowID, newRowID: Int64;
 begin
   if (self<>nil) and (Static<>nil) and
      (oldRowID=newRowID) and (newRowID>0) then // don't allow ID change
-    with Static as TSQLRestServerStaticExternal, StoredClassProps.ExternalDB do
+    with Static as TSQLRestStorageExternal, StoredClassProps.ExternalDB do
       result := ExecuteDirectSQLVar('update % set % where %=?',
         [fTableName,SQL.UpdateSetAll,RowIDFieldName],Values,oldRowID,true) else
     result := false;
