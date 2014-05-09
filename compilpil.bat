@@ -186,6 +186,8 @@ cd "\dev\lib\sqlite3\Samples\22 - JavaScript HTTPApi web server"
 cd "\dev\lib\sqlite3\Samples\23 - JavaScript Tests"
 %DCC% TestSynSM.dpr %Switches%
 @if errorlevel 1 pause
+%DCC% TestMustache.dpr %Switches%
+@if errorlevel 1 pause
 
 cd "\dev\lib\sqlite3\Samples\24 - MongoDB"
 %DCC% MongoDBTests.dpr %Switches%
