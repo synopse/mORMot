@@ -4372,6 +4372,7 @@ type
   /// used to store bit set for all available fields in a Table
   // - with current MAX_SQLFIELDS value, 256 bits uses 64 bytes of memory
   // - see also IsZero() and IsEqual() functions
+  // - you can also use ALL_FIELDS as defined in mORMot.pas
   TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
 
   /// points to a bit set used for all available fields in a Table

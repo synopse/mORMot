@@ -762,6 +762,9 @@ unit mORMot;
     - introduced TSQLRecord.Create(aSimpleFields) constructor
     - introduced 32bit/64bit safe TSQLRecord.AsTSQLRecord property, to be used
       when assigning IDs to a TSQLRecord published property
+    - TSQLRecord.[CreateAnd]FillPrepare() will now handle aCustomFieldsCSV='*'
+      parameter as a all fields selection, including BLOBs (whereas default ''
+      value will continue to return simple fields, excluding BLOBs)
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
@@ -3316,6 +3319,12 @@ type
     /// returns 'COL1,COL2' with all BLOB columns names
     // - used e.g. by TSQLRestServerDB.RetrieveBlobFields()
     SQLTableRetrieveBlobFields: RawUTF8;
+    /// returns 'COL1,COL2' with all COL* set to all field names, including
+    // RowID and BLOBs 
+    // - this won't change depending on the ORM settings: so it can be safely
+    // computed here and not in TSQLModelRecordProperties
+    // - used e.g. by TSQLRest.InternalListJSON()
+    SQLTableRetrieveAllFields: RawUTF8;
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
     // part of the framework (like UI edition), both filters and validation
@@ -4256,12 +4265,14 @@ type
         or call the overloaded CreateAndFillPrepare() contructor directly with
         BoundsSQLWhere array of parameters
       - aCustomFieldsCSV can be used to specify which fields must be retrieved
-        (default is to retrieve all table fields, but you may need to access only
-        one or several fields, and will save remote bandwidth by specifying the
-        needed fields): notice that you should not use this optional parameter
-        if you want to Update the retrieved record content later, since the
-        missing fields will be left with previous values - but BatchUpdate() will
-        set only ID, TModTime and mapped fields }
+      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+        you may need  to access only one or several fields, and will save remote
+        bandwidth by specifying the needed fields
+      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+      - note that you should not use this aCustomFieldsCSV optional parameter if
+        you want to Update the retrieved record content later, since any
+        missing fields will be left with previous values - but BatchUpdate() can be
+        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aSQLWhere: RawUTF8;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object as above, and prepares itself to
@@ -4280,12 +4291,14 @@ type
         framework: array of const used to be ParamsSQLWhere and '%' in the
         FormatSQLWhere statement, whereas it now expects bound parameters as '?'
       - aCustomFieldsCSV can be used to specify which fields must be retrieved
-        (default is to retrieve all table fields, but you may need to access only
-        one or several fields, and will save remote bandwidth by specifying the
-        needed fields): notice that you should not use this optional parameter
-        if you want to Update the retrieved record content later, since the
-        missing fields will be left with previous values - but BatchUpdate() will
-        set only ID, TModTime and mapped fields}
+      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+        you may need  to access only one or several fields, and will save remote
+        bandwidth by specifying the needed fields
+      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+      - note that you should not use this aCustomFieldsCSV optional parameter if
+        you want to Update the retrieved record content later, since any
+        missing fields will be left with previous values - but BatchUpdate() can be
+        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     constructor CreateAndFillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object as above, and prepares itself to
@@ -4299,12 +4312,14 @@ type
         ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
         with BoundsSQLWhere[] values
       - aCustomFieldsCSV can be used to specify which fields must be retrieved
-        (default is to retrieve all table fields, but you may need to access only
-        one or several fields, and will save remote bandwidth by specifying the
-        needed fields): notice that you should not use this optional parameter
-        if you want to Update the retrieved record content later, since the
-        missing fields will be left with previous values - but BatchUpdate() will
-        set only ID, TModTime and mapped fields }
+      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+        you may need  to access only one or several fields, and will save remote
+        bandwidth by specifying the needed fields
+      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+      - note that you should not use this aCustomFieldsCSV optional parameter if
+        you want to Update the retrieved record content later, since any
+        missing fields will be left with previous values - but BatchUpdate() can be
+        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     constructor CreateAndFillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''); overload;
@@ -4316,12 +4331,14 @@ type
       - you should then loop for all rows using 'while Rec.FillOne do ...'
       - the TSQLTableJSON will be freed by TSQLRecord.Destroy
       - aCustomFieldsCSV can be used to specify which fields must be retrieved
-        (default is to retrieve all table fields, but you may need to access only
-        one or several fields, and will save remote bandwidth by specifying the
-        needed fields): notice that you should not use this optional parameter
-        if you want to Update the retrieved record content later, since the
-        missing fields will be left with previous values - but BatchUpdate() will
-        set only ID, TModTime and mapped fields }
+      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+        you may need  to access only one or several fields, and will save remote
+        bandwidth by specifying the needed fields
+      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+      - note that you should not use this aCustomFieldsCSV optional parameter if
+        you want to Update the retrieved record content later, since any
+        missing fields will be left with previous values - but BatchUpdate() can be
+        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: TIntegerDynArray;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object, and prepares itself to loop
@@ -4552,10 +4569,12 @@ type
        or call the overloaded FillPrepare() method directly with  BoundsSQLWhere
        array of parameters
      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-       (default is to retrieve all table fields, but you may need to access only
-       one or several fields, and will save remote bandwidth by specifying the
-       needed fields): notice that you should not use this optional parameter
-       if you want to Update the retrieved record content later, since the
+     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+       you may need  to access only one or several fields, and will save remote
+       bandwidth by specifying the needed fields
+     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs 
+     - note that you should not use this aCustomFieldsCSV optional parameter if
+       you want to Update the retrieved record content later, since any
        missing fields will be left with previous values - but BatchUpdate() can be
        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     function FillPrepare(aClient: TSQLRest; const aSQLWhere: RawUTF8='';
@@ -4576,12 +4595,14 @@ type
        framework: array of const used to be ParamsSQLWhere and '%' in the
        FormatSQLWhere statement, whereas it now expects bound parameters as '?'
      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-       (default is to retrieve all table fields, but you may need to access only
-       one or several fields, and will save remote bandwidth by specifying the
-       needed fields): notice that you should not use this optional parameter
-       if you want to Update the retrieved record content later, since the
-       missing fields will be left with previous values - but BatchUpdate() will
-       set only ID, TModTime and mapped fields }
+     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+       you may need  to access only one or several fields, and will save remote
+       bandwidth by specifying the needed fields
+     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs 
+     - note that you should not use this aCustomFieldsCSV optional parameter if
+       you want to Update the retrieved record content later, since any
+       missing fields will be left with previous values - but BatchUpdate() can be
+       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     function FillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to get values using a specified WHERE clause with '%' and '?' parameters
@@ -4596,12 +4617,14 @@ type
        ParamsSQLWhere[] supplied values, and bind all '?' chars as bound
        parameters with BoundsSQLWhere[] values
      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-       (default is to retrieve all table fields, but you may need to access only
-       one or several fields, and will save remote bandwidth by specifying the
-       needed fields): notice that you should not use this optional parameter
-       if you want to Update the retrieved record content later, since the
-       missing fields will be left with previous values - but BatchUpdate() will
-       set only ID, TModTime and mapped fields }
+     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+       you may need  to access only one or several fields, and will save remote
+       bandwidth by specifying the needed fields
+     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs 
+     - note that you should not use this aCustomFieldsCSV optional parameter if
+       you want to Update the retrieved record content later, since any
+       missing fields will be left with previous values - but BatchUpdate() can be
+       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     function FillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
@@ -4613,12 +4636,14 @@ type
      !   dosomethingwith(Rec);
      - a temporary TSQLTable is created then stored in an internal fTable protected field
      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-       (default is to retrieve all table fields, but you may need to access only
-       one or several fields, and will save remote bandwidth by specifying the
-       needed fields): notice that you should not use this optional parameter
-       if you want to Update the retrieved record content later, since the
-       missing fields will be left with previous values - but BatchUpdate() will
-       set only ID, TModTime and mapped fields }
+     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+       you may need  to access only one or several fields, and will save remote
+       bandwidth by specifying the needed fields
+     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs 
+     - note that you should not use this aCustomFieldsCSV optional parameter if
+       you want to Update the retrieved record content later, since any
+       missing fields will be left with previous values - but BatchUpdate() can be
+       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
     function FillPrepare(aClient: TSQLRest; const aIDs: TIntegerDynArray;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to loop through a JOINed statement including TSQLRecordMany fields
@@ -8312,15 +8337,16 @@ type
     procedure SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions below
-    // - call virtual abstract InternalListJSON() method to get the list content
+    // - call virtual abstract ExecuteList() method to get the list content
     // - FieldName can be a CSV list of needed field names, if needed
+    // - if FieldName is '*', will get ALL fields, including ID and BLOBs
     function InternalListJSON(Table: TSQLRecordClass; const FieldName, WhereClause: RawUTF8): TSQLTableJSON; overload;
     /// retrieve all fields for a list of members JSON encoded data
     // - this special method gets all fields content for a specified table:
     // the resulting TSQLTableJSON content can be used to fill whole records
     // instances by using the TSQLRecord.FillPrepare() and TSQLRecord.FillRow()
     // methods
-    // - call virtual abstract InternalListJSON() method to get the list content
+    // - call virtual abstract ExecuteList() method to get the list content
     function InternalListRecordsJSON(Table: TSQLRecordClass; const WhereClause: RawUTF8): TSQLTableJSON;
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
@@ -8450,7 +8476,7 @@ type
     // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=?',[aID])
     // which is the same as calling:
     // ! aClient.OneFieldValue(TSQLRecord,'Name',FormatUTF8('ID=?',[],[23]))
-    // - call internaly InternalListJSON() to get the value
+    // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
@@ -8458,7 +8484,7 @@ type
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
     // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=?',[aID])
-    // - call internaly InternalListJSON() to get the value
+    // - call internaly ExecuteList() to get the value
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the FormatSQLWhere
     // statement, whereas it now expects bound parameters as '?'
@@ -8470,12 +8496,12 @@ type
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
     // ! OneFieldValue(TSQLRecord,'Name','%=?',['ID'],[aID])
-    // - call internaly InternalListJSON() to get the value
+    // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
       WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const): RawUTF8; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
     // - example of use: OneFieldValue(TSQLRecord,'Name',23)
-    // - call internaly InternalListJSON() to get the value
+    // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass;
       const FieldName: RawUTF8; WhereID: integer): RawUTF8; overload;
     /// get the UTF-8 encoded value of some fields with a Where Clause
@@ -8483,7 +8509,7 @@ type
     // (using inlined parameters via :(...): is always a good idea)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     function MultiFieldValue(Table: TSQLRecordClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       const WhereClause: RawUTF8): boolean; overload;
@@ -8491,7 +8517,7 @@ type
     // - example of use: MultiFieldValue(TSQLRecord,['Name'],Name,23)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     function MultiFieldValue(Table: TSQLRecordClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       WhereID: integer): boolean; overload;
@@ -8499,7 +8525,7 @@ type
     // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TRawUTF8DynArray): boolean; overload;
@@ -8507,7 +8533,7 @@ type
     // - example of use: OneFieldValue(TSQLRecordPeople,'ID','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TIntegerDynArray): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs
@@ -8538,14 +8564,14 @@ type
     // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith")',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8=''; const Separator: RawUTF8=','): RawUTF8; overload;
     /// get the string-encoded values of an unique field into some TStrings
     // - Items[] will be filled with string-encoded values of the given field)
     // - Objects[] will be filled with pointer(ID)
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
     // - if IDToIndex is set, its value will be replaced with the index in
     // Strings.Objects[] where ID=IDToIndex^
@@ -8556,7 +8582,7 @@ type
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
     // - if FieldNames='', all simple fields content is retrieved
-    // - call internaly InternalListJSON() to get the list
+    // - call internaly ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function MultiFieldValues(Table: TSQLRecordClass; FieldNames: RawUTF8;
        const WhereClause: RawUTF8=''): TSQLTableJSON; overload; virtual;
@@ -8611,7 +8637,7 @@ type
     // - Execute 'SELECT * FROM TableName WHERE SQLWhere LIMIT 1' SQL Statememt
     // (using inlined parameters via :(...): in SQLWhere is always a good idea)
     // - since no record is specified, locking is pointless here
-    // - default implementation call InternalListJSON(), and fill Value from a
+    // - default implementation call ExecuteList(), and fill Value from a
     // temporary TSQLTable
     // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
@@ -9724,11 +9750,13 @@ type
     // - TSQLRestServer.URI will make a difference between the a static server
     // or a TSQLVirtualTable, but this method won't - you can set a reference
     // to a TSQLRestServerKind variable to retrieve the database server type
-    function GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass;
-      Kind: PSQLRestServerKind=nil): TSQLRest; overload;
+    function GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass): TSQLRest; overload;
+       {$ifdef HASINLINE}inline;{$endif}
     /// overloaded method using table index in associated Model
+    function GetStaticDataServerOrVirtualTable(aTableIndex: integer): TSQLRest;
+      overload; {$ifdef HASINLINE}inline;{$endif}
     function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
-      Kind: PSQLRestServerKind=nil): TSQLRest; overload;
+      out Kind: TSQLRestServerKind): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
@@ -11141,7 +11169,7 @@ type
     // you can specify your own set of fields to be transmitted when SendData=TRUE
     // (including BLOBs, even if they will be Base64-encoded within JSON content) -
     // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
     function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       const CustomFields: TSQLFieldBits=[]): integer;
     /// update a member in current BATCH sequence
@@ -21894,18 +21922,24 @@ begin
   if (self=nil) or (Table=nil) then
     result := nil else
     with Table.RecordProps do
+    if (FieldName='*') then
+      result := ExecuteList([Table],
+        SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'')) else
     if (PosEx(RawUTF8(','),FieldName,1)=0) and not IsFieldName(FieldName) then
       result := nil else // prevent SQL error
       result := ExecuteList([Table],
         SQLFromSelect(SQLTableName,FieldName,WhereClause,''));
-end;     
+end;
 
 function TSQLRest.InternalListRecordsJSON(Table: TSQLRecordClass;
   const WhereClause: RawUTF8): TSQLTableJSON;
+var sql: RawUTF8;
 begin
   if (self=nil) or (Table=nil) then
-    result := nil else
-    result := ExecuteList([Table],Model.Props[Table].SQLFromSelectWhere('*',WhereClause));
+    result := nil else begin
+    sql := Model.Props[Table].SQLFromSelectWhere('*',WhereClause);
+    result := ExecuteList([Table],sql);
+  end;
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; FieldNames: RawUTF8;
@@ -24085,31 +24119,43 @@ begin
    result := nil;
 end;
 
-function TSQLRestServer.GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass;
-  Kind: PSQLRestServerKind=nil): TSQLRest;
+function TSQLRestServer.GetStaticDataServerOrVirtualTable(
+  aClass: TSQLRecordClass): TSQLRest;
 begin
-  if (aClass=nil) or (fStaticData=nil) and (fStaticVirtualTable=nil) then
+  if (aClass=nil) or ((fStaticData=nil) and (fStaticVirtualTable=nil)) then
     result := nil else
-    result := GetStaticDataServerOrVirtualTable(Model.GetTableIndexExisting(aClass),Kind);
+    result := GetStaticDataServerOrVirtualTable(Model.GetTableIndexExisting(aClass));
 end;
 
-function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer;
-  Kind: PSQLRestServerKind=nil): TSQLRest;
+function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer): TSQLRest;
 begin
   result := nil;
-  if Kind<>nil then
-    Kind^ := sMainEngine;
   if aTableIndex>=0 then begin
     if fStaticData<>nil then
       result := fStaticData[aTableIndex];
-    if result<>nil then begin
-      if Kind<>nil then
-        Kind^ := sStaticDataTable;
-    end else
+    if result=nil then
+      if fVirtualTableDirect and (fStaticVirtualTable<>nil) then
+        result := fStaticVirtualTable[aTableIndex];
+  end;
+end;
+
+function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer;
+  out Kind: TSQLRestServerKind): TSQLRest;
+begin
+  result := nil;
+  Kind := sMainEngine;
+  if aTableIndex>=0 then begin
+    if fStaticData<>nil then begin
+      result := fStaticData[aTableIndex];
+      if result<>nil then begin
+        Kind := sStaticDataTable;
+        exit;
+      end;
+    end;
     if fVirtualTableDirect and (fStaticVirtualTable<>nil) then begin
       result := fStaticVirtualTable[aTableIndex];
-      if Kind<>nil then
-        Kind^ := sVirtualTable;
+      if result<>nil then
+        Kind := sVirtualTable;
     end;
   end;
 end;
@@ -24531,7 +24577,7 @@ begin
   if TableIndex>=0 then begin
     Table := Server.Model.Tables[TableIndex];
     TableRecordProps := Server.Model.TableProps[TableIndex];
-    Static := Server.GetStaticDataServerOrVirtualTable(TableIndex,@StaticKind);
+    Static := Server.GetStaticDataServerOrVirtualTable(TableIndex,StaticKind);
     if Static<>nil then
       TableEngine := Static;
   end;
@@ -25703,7 +25749,7 @@ begin  // TODO: handle Batch() at TSQLRestLevel
           exit;
         end;
         RunTable := Model.Tables[RunTableIndex];
-        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,@RunStaticKind)
+        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind)
            as TSQLRestStorage;
       end;
       if Count>=length(Results) then
@@ -30474,6 +30520,7 @@ begin
       [SQLTableName,Fields.Count,MAX_SQLFIELDS]);
   SetLength(Fields.fList,Fields.Count);
   // generate some internal lookup information
+  SQLTableRetrieveAllFields := 'ID';
   SetLength(ManyFields,MAX_SQLFIELDS);
   SetLength(SimpleFields,MAX_SQLFIELDS);
   SetLength(JoinedFields,MAX_SQLFIELDS);
@@ -30518,6 +30565,7 @@ begin
         include(BlobFieldsBits,i);
         SQLTableUpdateBlobFields := SQLTableUpdateBlobFields+F.Name+'=?,';
         SQLTableRetrieveBlobFields := SQLTableRetrieveBlobFields+F.Name+',';
+        SQLTableRetrieveAllFields := SQLTableRetrieveAllFields+','+F.Name;
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
@@ -30559,6 +30607,7 @@ Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         include(SimpleFieldsBits[soSelect],i);
         SQLTableSimpleFieldsNoRowID := SQLTableSimpleFieldsNoRowID+F.Name+',';
+        SQLTableRetrieveAllFields := SQLTableRetrieveAllFields+','+F.Name;
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
