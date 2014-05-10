@@ -484,6 +484,7 @@ unit SynCommons;
     for direct process of numerical variants (e.g. array indexes)
   - new RawUTF8ToVariant() and VarRecToVariant() procedures
   - added VariantDynArrayToJSON/JSONToVariantDynArray/ValuesToVariantDynArray()
+  - added VariantToInlineValue() and VarRecToInlineValue() functions
   - added VarRecAsChar() and overloaded Int32ToUTF8() Int64ToStr() Curr64ToStr()
     ExtendedToStr() PointerToHex() UInt32ToUtf8() procedures
   - handle binary serialization of variant via FromVarVariant() procedure and
@@ -1505,6 +1506,10 @@ function VariantToUTF8(const V: Variant): RawUTF8; overload;
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
 
+/// convert any Variant into a value encoded as with :(..:) inlined parameters
+// in FormatUTF8(Format,Args,Params)
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
+
 {$endif NOVARIANTS}
 
 { note: those VariantToInteger*() functions are expected to be there }
@@ -1662,7 +1667,14 @@ function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const;
 // encoded text
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
-procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8);
+procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
+  wasString: PBoolean=nil);
+
+/// convert an open array (const Args: array of const) argument to a value
+// encoded as with :(..:) inlined parameters in FormatUTF8(Format,Args,Params)
+// - note that cardinal values should be type-casted to Int64() (otherwise
+// the integer mapped value will be transmitted, therefore wrongly)
+procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 
 /// get an open array (const Args: array of const) character argument
 // - only handle varChar and varWideChar kind of arguments
@@ -12415,6 +12427,14 @@ end;
 
 {$ifndef NOVARIANTS}
 
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
+var wasString: boolean;
+begin
+  VariantToUTF8(V,result,wasString);
+  if wasString then
+    result := QuotedStr(result,'"');
+end;
+
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
 begin
@@ -12501,11 +12521,10 @@ begin
   end;
 end;
 
-procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8);
-{$ifndef NOVARIANTS}
-var wasString: boolean;
-{$endif}
+procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
+var isString: boolean;
 begin
+  isString := not (V.VType in [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended]);
   with V do
   case V.VType of
     vtString:
@@ -12544,10 +12563,23 @@ begin
         result := '';
     {$ifndef NOVARIANTS}
     vtVariant:
-      VariantToUTF8(VVariant^,result,wasString);
+      VariantToUTF8(VVariant^,result,isString);
     {$endif}
-    else result := '';
+    else begin
+      isString := false;
+      result := '';
+    end;
   end;
+  if wasString<>nil then
+    wasString^ := isString;
+end;
+
+procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
+var wasString: boolean;
+begin
+  VarRecToUTF8(V,result,@wasString);
+  if wasString then
+    result := QuotedStr(result,'"');
 end;
 
 {$ifdef UNICODE}
