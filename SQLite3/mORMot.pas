@@ -25176,6 +25176,7 @@ begin
   mBEGIN: begin      // BEGIN TRANSACTION
     // TSQLVirtualTableJSON/External will rely on SQLite3 module
     // and also TSQLRestStorageInMemory, since COMMIT/ROLLBACK have Static=nil
+    // mBEGIN logic is just the opposite of mEND/mABORT: lock main, then static
     if Server.TransactionBegin(Table,Session) then begin
       if (Static<>nil) and (StaticKind=sVirtualTable) then
         Static.TransactionBegin(Table,Session) else
@@ -25189,20 +25190,28 @@ begin
   end;
   mEND: begin        // END=COMMIT
     // this method is called with Root (-> Table=nil -> Static=nil)
-    if Server.fTransactionTable<>nil then
+    // mEND logic is just the opposite of mBEGIN: release static, then main
+    if (Static<>nil) and (StaticKind=sVirtualTable) then
+      Static.Commit(Session) else
+    if (Static=nil) and (Server.fTransactionTable<>nil) then begin
       Static := Server.StaticVirtualTable[Server.fTransactionTable];
+      if Static<>nil then
+        Static.Commit(Session);
+    end;
     Server.Commit(Session);
-    if Static<>nil then
-      Static.Commit(Session);
     Call.OutStatus := HTML_SUCCESS; // 200 OK
   end;
   mABORT: begin      // ABORT=ROLLBACK
     // this method is called with Root (-> Table=nil -> Static=nil)
-    if Server.fTransactionTable<>nil then
+    // mABORT logic is just the opposite of mBEGIN: release static, then main
+    if (Static<>nil) and (StaticKind=sVirtualTable) then
+      Static.RollBack(Session) else
+    if (Static=nil) and (Server.fTransactionTable<>nil) then begin
       Static := Server.StaticVirtualTable[Server.fTransactionTable];
+      if Static<>nil then
+        Static.RollBack(Session);
+    end;
     Server.RollBack(Session);
-    if Static<>nil then
-      Static.RollBack(Session);
     Call.OutStatus := HTML_SUCCESS; // 200 OK
   end;
   end;
