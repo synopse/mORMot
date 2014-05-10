@@ -3776,10 +3776,12 @@ type
     // supplied error text
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
-    procedure Error(const ErrorMessage: RawUTF8=''; Status: integer=HTML_BADREQUEST); overload;
+    procedure Error(const ErrorMessage: RawUTF8='';
+      Status: integer=HTML_BADREQUEST); overload;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
-    procedure Error(Format: PUTF8Char; const Args: array of const; Status: integer=HTML_BADREQUEST); overload;
+    procedure Error(Format: PUTF8Char; const Args: array of const;
+      Status: integer=HTML_BADREQUEST); overload;
 
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overriden
@@ -25899,8 +25901,10 @@ begin  // TODO: handle Batch() at TSQLRestLevel
         if RowCountForCurrentTransaction>0 then
           inc(RowCountForCurrentTransaction) else
           if TransactionBegin(Ctxt.Table,Ctxt.Session) then
-            inc(RowCountForCurrentTransaction) else
-            AutomaticTransactionPerRow := 0; // avoid transactions on init error
+            inc(RowCountForCurrentTransaction) else begin
+            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
+            AutomaticTransactionPerRow := 0; 
+          end;
       end;
       // process CRUD method operation
       case URIMethod of

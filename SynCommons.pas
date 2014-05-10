@@ -1649,6 +1649,7 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // - resulting string has no length limit and uses fast concatenation
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
+// - any supplied TObject instance will be written as their class name
 function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8; overload;
 
 /// fast Format() function replacement, handling % and ? parameters
@@ -1661,6 +1662,7 @@ function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8; ove
 // - resulting string has no length limit and uses fast concatenation
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
+// - any supplied TObject instance will be written as their class name
 function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const;
   JSONFormat: boolean=false): RawUTF8; overload;
 
@@ -1668,6 +1670,7 @@ function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const;
 // encoded text
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
+// - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
 
@@ -1675,6 +1678,7 @@ procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
 // encoded as with :(..:) inlined parameters in FormatUTF8(Format,Args,Params)
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
+// - any supplied TObject instance will be written as their class name
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 
 /// get an open array (const Args: array of const) character argument

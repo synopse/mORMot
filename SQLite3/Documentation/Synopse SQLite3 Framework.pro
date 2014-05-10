@@ -6902,13 +6902,15 @@ If you are making a number of such calls (e.g. add 1000 records), you'll have 10
 The BATCH sequence allows you to regroup those statements into just ONE remote call. Internally, it builds a @*JSON@ stream, then post this stream at once to the server. Then the server answers at once, after having performed all the modifications.
 Some new {\f1\fs20 TSQLRestClientURI} methods have been added to implement BATCH sequences to speed up database modifications: after a call to {\f1\fs20 BatchStart}, database modification statements are added to the sequence via {\f1\fs20 BatchAdd / BatchUpdate / BatchDelete}, then all statements are sent as one to the remote server via {\f1\fs20 BatchSend} - this is MUCH faster than individual calls to {\f1\fs20 Add / Update / Delete} in case of a slow remote connection (typically @*HTTP@ over Internet).
 Since the statements are performed at once, you can't receive the result (e.g. the ID of the added row) on the same time as you append the request to the BATCH sequence. So you'll have to wait for the {\f1\fs20 BatchSend} method to retrieve all results, {\i at once}, in a {\i dynamic} {\f1\fs20 array of integer}.
-As you may guess, it's also a good idea to use a @*transaction@ for the whole process. By default, the BATCH sequence is not embedded into a transaction. It's up to the caller to use a {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block.
+As you may guess, it's also a good idea to use a @*transaction@ for the whole process. By default, the BATCH sequence is not embedded into a transaction.
+You have two possibilities to add a transaction:
+- Either let the caller use an explicit {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block;
+- Or specify a number of rows as {\f1\fs20 AutomaticTransactionPerRow} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emmited (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
+This second method is preferred, since defining transactions from the client side is not a good idea.
 Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelfTests.pas}:
-!// start the transaction
-!!if ClientDist.TransactionBegin(TSQLRecordPeople) then
-!try
 !  // start the BATCH sequence
-!!  Check(ClientDist.BatchStart(TSQLRecordPeople));
+!!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));
+!  // now a transaction will be created by block of 1000 modifications
 !  // delete some elements
 !  for i := 0 to n-1 do
 !!    Check(ClientDist.BatchDelete(IntArray[i])=i);
@@ -6932,6 +6934,7 @@ Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelf
 !  end;
 !  // send the BATCH sequences to the server
 !!  Check(ClientDist.BatchSend(Results)=200);
+!  // now all data has been commited on the server
 !  // now Results[] contains the results of every BATCH statement...
 !  Check(Length(Results)=n+nupd+1001);
 !  // Results[0] to Results[n-1] should be 200 = deletion OK
@@ -6952,12 +6955,6 @@ Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelf
 !          Check(YearOfBirth=1000+i-nupd-n);
 !        end;
 !      end;
-!  // in case of success, apply the Transaction
-!!  ClientDist.Commit;
-!except
-!  // In case of error, rollback the Transaction
-!!  ClientDist.RollBack;
-!end;
 In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 Batch*()} methods instead of plain {\f1\fs20 Add / Delete / Update}. The ORM will take care of all internal process, including serialization.
 :  Implementation details
 As described above, all {\f1\fs20 Batch*()} methods are serialized as JSON on the client side, then sent as once to the server, where it will be processed without any client-server {\i round-trip }and slow latency.
