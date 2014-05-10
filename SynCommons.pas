@@ -385,6 +385,7 @@ unit SynCommons;
   - StrComp/StrIComp/StrLen() functions will now expect blank pointers, to
     circumvent type mismatchs when passing PAnsiChar or PUTF8Char buffers
   - get rid of 12 maximum count of supplied argument in FormatUTF8()
+  - FormatUTF8() and VarRecToUTF8() will append the class name of any TObject
   - added JSONFormat optional parameter to FormatUTF8() to produce valid JSON
     content from a given set of values identified by ? - used e.g. by _JsonFmt()
   - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
@@ -12561,6 +12562,10 @@ begin
       if VClass<>nil then
         result := PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^ else
         result := '';
+    vtObject:
+       if VObject<>nil then
+         result := PShortString(PPointer(PPtrInt(VObject)^+vmtClassName)^)^ else
+         result := '';
     {$ifndef NOVARIANTS}
     vtVariant:
       VariantToUTF8(VVariant^,result,isString);
