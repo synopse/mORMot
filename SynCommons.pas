@@ -12432,7 +12432,7 @@ var wasString: boolean;
 begin
   VariantToUTF8(V,result,wasString);
   if wasString then
-    result := QuotedStr(result,'"');
+    result := QuotedStr(pointer(result),'"');
 end;
 
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
@@ -12579,7 +12579,7 @@ var wasString: boolean;
 begin
   VarRecToUTF8(V,result,@wasString);
   if wasString then
-    result := QuotedStr(result,'"');
+    result := QuotedStr(pointer(result),'"');
 end;
 
 {$ifdef UNICODE}

@@ -924,6 +924,7 @@ unit mORMot;
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
     - added TSQLRest.RetrieveList method to retrieve a TObjectList of TSQLRecord
+    - added TSQLRest.UpdateField() overloaded methods to update a single field
     - "rowCount": is added in TSQLRestStorageInMemory.GetJSONValues,
       TSQLTable.GetJSONValues and in TSQLTableJSON.ParseAndConvert, at the end
       of the non expanded JSON content, if needed - improves client performance
@@ -8448,6 +8449,11 @@ type
     // - SetValue and WhereValue parameters must match our inline format, i.e.
     // by double quoted with " for strings, or be plain text for numbers - e.g.
     // $ Client.EngineUpdateField(TSQLMyRecord,'FirstName','"Smith"','RowID','10')
+    // but you should better use the UpdateField() overload methods instead
+    // - WhereFieldName and WhereValue must be set: for security reasons,
+    // implementations of this method will reject an UPDATE without any WHERE
+    // clause, so you won't be able to use it to execute such statements:
+    // $ UPDATE tablename SET setfieldname=setvalue
     // - this method must be implemented in a thread-safe manner
     function EngineUpdateField(TableModelIndex: integer; 
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
@@ -8742,30 +8748,75 @@ type
     // - on success, returns the new ROWID value; on error, returns 0
     // - call internaly the Add virtual method above
     function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const; ForcedID: integer=0): integer; overload;
-    /// update a record from Value fields content
+    /// update a record from Value simple fields content
     // - implements REST PUT Member
     // - return true on success
-    // - this default method call RecordCanBeUpdated() to check if the action is
-    // allowed - this method must be overriden to provide effective data update
     // - the TSQLRawBlob(BLOB) fields values are not updated by this method, to
     // preserve bandwidth: use the UpdateBlob() methods for handling BLOB fields
     // - the TSQLRecordMany fields are not set either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
+    // - this method will call EngineUpdate() to perform the request
     function Update(Value: TSQLRecord): boolean; overload; virtual;
-    /// update a record from a supplied list of field values
+    /// update a record from a supplied list of simple field values
     // - implements REST PUT Member
-    // - the aSimpleFields parameters must follow explicitely the order of published
-    // properties of the supplied aTable class, excepting the TSQLRawBlob and
-    // TSQLRecordMany kind (i.e. only so called "simple fields")
-    // - the aSimpleFields must have exactly the same count of parameters as there are
-    // "simple fields" in the published properties
+    // - the aSimpleFields parameters MUST follow explicitely both count and
+    // order of published properties of the supplied aTable class, excepting the
+    // TSQLRawBlob and TSQLRecordMany kind (i.e. only so called "simple fields")
     // - return true on success
-    // - call internaly the Update virtual method above
+    // - call internaly the Update() virtual method above
     function Update(aTable: TSQLRecordClass; aID: integer; const aSimpleFields: array of const): boolean; overload;
+    /// update one field in a given record
+    // - implements REST PUT Member with one field value
+    // - only one single field shall be specified in FieldValue, but could
+    // be of any kind of value - for BLOBs, you should better use UpdateBlob()
+    // - return true on success
+    // - call internaly the EngineUpdateField() abstract method
+    // - note that this method won't update the TModTime properties: you should
+    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    function UpdateField(Table: TSQLRecordClass; ID: integer;
+      const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
+    /// update one field in one or several records, depending on a WHERE clause
+    // - implements REST PUT Member with one field value on a one where value
+    // - only one single field shall be specified in FieldValue, but could
+    // be of any kind of value - for BLOBs, you should better use UpdateBlob()
+    // - only one single field shall be specified in WhereFieldValue, but could
+    // be of any kind of value - for security reasons, void WHERE clause will
+    // be rejected
+    // - return true on success
+    // - call internaly the EngineUpdateField() abstract method
+    // - note that this method won't update the TModTime properties: you should
+    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    function UpdateField(Table: TSQLRecordClass;
+      const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
+      const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
+{$ifndef NOVARIANTS}
+    /// update one field in a given record
+    // - implements REST PUT Member with one field value
+    // - any value can be set in FieldValue, but for BLOBs, you should better
+    // use UpdateBlob()
+    // - return true on success
+    // - call internaly the EngineUpdateField() abstract method
+    // - note that this method won't update the TModTime properties: you should
+    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    function UpdateField(Table: TSQLRecordClass; ID: integer;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
+    /// update one field in one or several records, depending on a WHERE clause
+    // - implements REST PUT Member with one field value on a one where value
+    // - any value can be set in FieldValue, but for BLOBs, you should better
+    // use UpdateBlob()
+    // - for security reasons, void WHERE clause will be rejected
+    // - return true on success
+    // - call internaly the EngineUpdateField() abstract method
+    // - note that this method won't update the TModTime properties: you should
+    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    function UpdateField(Table: TSQLRecordClass;
+      const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
+{$endif NOVARIANTS}
     /// delete a member (implements REST DELETE Member)
     // - return true on success
-    // - this default method call RecordCanBeUpdated() to check if it is possible
+    // - call internaly the EngineDelete() abstract method
     function Delete(Table: TSQLRecordClass; ID: integer): boolean; overload; virtual;
     /// delete a member with a WHERE clause (implements REST DELETE Member)
     // - return true on success
@@ -8818,8 +8869,7 @@ type
     /// update a blob field from its record ID and supplied blob field name
     // - implements REST PUT member with a supplied member ID and field name
     // - return true on success
-    // - this default method call RecordCanBeUpdated() to check if the action is
-    // allowed
+    // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as TSQLRawBlob, using
     // EngineUpdateBlob()
     function UpdateBlob(Table: TSQLRecordClass; aID: integer;
@@ -8827,8 +8877,7 @@ type
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT member with a supplied member ID and field name
     // - return true on success
-    // - this default method call RecordCanBeUpdated() to check if the action is
-    // allowed
+    // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as a TStream: it will
     // send the whole stream content (from its beginning position upto its
     // current size) to the database engine
@@ -8837,8 +8886,7 @@ type
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT member with a supplied member ID and field name
     // - return true on success
-    // - this default method call RecordCanBeUpdated() to check if the action is
-    // allowed
+    // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as direct memory pointer
     // and size
     function UpdateBlob(Table: TSQLRecordClass; aID: integer;
@@ -22249,12 +22297,53 @@ begin
   end;
 end;
 
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
+  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+begin
+  result := UpdateField(Table,'ID',[ID],FieldName,FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass;
+  const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
+  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+var TableIndex: integer;
+    SetValue,WhereValue: RawUTF8;
+begin
+  result := false;
+  if (length(FieldValue)<>1) or (WhereFieldName='') or (length(WhereFieldValue)<>1) then
+    exit;
+  VarRecToInlineValue(WhereFieldValue[0],WhereValue);
+  VarRecToInlineValue(FieldValue[0],SetValue);
+  TableIndex := Model.GetTableIndexExisting(Table);
+  result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
+end;
+
+{$ifndef NOVARIANTS}
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
+  const FieldName: RawUTF8; const FieldValue: Variant): boolean;
+begin
+  result := UpdateField(Table,'ID',ID,FieldName,FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass;
+  const WhereFieldName: RawUTF8; const WhereFieldValue: Variant;
+  const FieldName: RawUTF8; const FieldValue: Variant): boolean;
+var TableIndex: integer;
+    SetValue,WhereValue: RawUTF8;
+begin
+  VariantToInlineValue(WhereFieldValue[0],WhereValue);
+  VariantToInlineValue(FieldValue[0],SetValue);
+  TableIndex := Model.GetTableIndexExisting(Table);
+  result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
+end;
+{$endif NOVARIANTS}
+
 function TSQLRest.Add(Value: TSQLRecord; SendData: boolean;
   ForceID: boolean=false): integer;
 var JSONValues: RawUTF8;
     TableIndex: integer;
 begin
-  if (self=nil) or (Value=nil) then begin
+  if Value=nil then begin
     result := 0;
     exit;
   end;
@@ -23800,14 +23889,16 @@ end;
 
 function TSQLRestClientURI.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+var url: RawUTF8;
 begin
   if (self=nil) or (TableModelIndex<0) then
-    result := false else
+    result := false else begin
     // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
-    result := URI(FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
+    url := FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
       [Model.URI[Model.Tables[TableModelIndex]],
-       SetFieldName,UrlEncode(SetValue),
-       WhereFieldName,UrlEncode(WhereValue)]),'PUT').Lo=HTML_SUCCESS;
+       SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)]);
+    result := URI(url,'PUT').Lo=HTML_SUCCESS;
+  end;
 end;
 
 

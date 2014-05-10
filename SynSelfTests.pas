@@ -5373,20 +5373,24 @@ begin
   R.ValWord := i;
   R.ValDate := i+30000;
   R.Data := R.Test;
+{$ifndef NOVARIANTS}
   R.ValVariant := _ObjFast(['id',i]);
+{$endif}
 end;
-procedure CheckRWith(i: Integer);
+procedure CheckRWith(i: Integer; offset: integer=0);
 begin
   Check(R.Int=i);
   Check(R.Test=Int32ToUtf8(i));
   Check(R.Ansi=WinAnsiString(R.Test));
   Check(R.Unicode=WinAnsiToRawUnicode(R.Ansi));
   Check(R.ValFloat=i*2.5);
-  Check(R.ValWord=i);
+  Check(R.ValWord=i+offset);
   Check(R.ValDate=i+30000);
   Check(R.Data=R.Test);
+{$ifndef NOVARIANTS}
   Check(DocVariantType.IsOfType(R.ValVariant));
   Check(VariantSaveJson(R.ValVariant)='{"id":'+R.Test+'}');
+{$endif}
 end;
 begin
   Model := TSQLModel.Create([TSQLRecordTest]);
@@ -5448,6 +5452,29 @@ begin
             CheckRWith(i);
           end;
           Check(i=9999);
+        finally
+          R.Free;
+        end;
+        Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100+10]),
+          'update one field of a given record');
+        R := TSQLRecordTest.Create(Client,100);
+        try
+          CheckRWith(100,10);
+        finally
+          R.Free;
+        end;
+        Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100]));
+        R := TSQLRecordTest.Create(Client,100);
+        try
+          CheckRWith(100);
+        finally
+          R.Free;
+        end;
+        Check(Client.UpdateField(TSQLRecordTest,'Unicode',['110'],'ValWord',[120]),
+          'update one field of a given record');
+        R := TSQLRecordTest.Create(Client,110);
+        try
+          CheckRWith(110,10);
         finally
           R.Free;
         end;
