@@ -918,6 +918,8 @@ unit mORMot;
       should be able to implement interfaces
     - added optional CustomFields parameter to TSQLRestClientURI.BatchUpdate()
       and BatchAdd() methods
+    - implemented automatic transaction generation during BATCH process via
+      a new AutomaticTransactionPerRow parameter in BatchStart()
     - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
       synchronization with the server - can be handy to test the connection 
     - added TSQLRest.TableHasRows/TableRowCount methods, and overriden direct
@@ -8379,6 +8381,22 @@ type
     procedure SetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand; Value: TSQLRestServerAcquireMode);
     function GetAcquireExecutionLockedTimeOut(Cmd: TSQLRestServerURIContextCommand): cardinal;
     procedure SetAcquireExecutionLockedTimeOut(Cmd: TSQLRestServerURIContextCommand; Value: cardinal);
+    /// internal method called by TSQLRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - returns TRUE if this method is handled by the engine, or FALSE if
+    // individual calls to Engine*() are expected
+    // - this default implementation returns FALSE
+    // - an overriden method returning TRUE shall ensure that calls to
+    // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
+    // will properly handle operations until InternalBatchStop() is called
+    function InternalBatchStart(Method: TSQLURIMethod): boolean; virtual;
+    /// internal method called by TSQLRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - this default implementation will raise an EORMException (since
+    // InternalBatchStart returns always FALSE at this TSQLRest level)
+    // - InternalBatchStart/Stop may safely use a lock for multithreading:
+    // implementation in TSQLRestServer.Batch use a try..finally block
+    procedure InternalBatchStop; virtual;
  protected // these abstract methods must be inherited by real database engine
     /// retrieve a list of members as JSON encoded data (implements REST GET Collection)
     // - returns '' on error, or JSON data, even with no result rows
@@ -10318,22 +10336,6 @@ type
     // can be updated or deleted
     function RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; override;
-    /// internal method called by TSQLRestServer.Batch() to process fast sending
-    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
-    // - returns TRUE if this method is handled by the engine, or FALSE if
-    // individual calls to Engine*() are expected
-    // - this default implementation returns FALSE
-    // - an overriden method returning TRUE shall ensure that calls to
-    // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
-    // will properly handle operations until InternalBatchStop is called
-    function InternalBatchStart(Method: TSQLURIMethod): boolean; virtual;
-    /// internal method called by TSQLRestServer.Batch() to process fast sending
-    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
-    // - this default implementation does nothing (since InternalBatchStart
-    // returns always FALSE)
-    // - InternalBatchStart/Stop may safely use a lock for multithreading:
-    // implementation in TSQLRestServer.Batch use a try..finally block
-    procedure InternalBatchStop; virtual;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - this default implementation will return TRUE and replace SQL with
     // SQLSelectAll[true] if it SQL equals SQLSelectAll[false] (i.e. 'SELECT *')
@@ -22717,6 +22719,15 @@ begin
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
+function TSQLRest.InternalBatchStart(Method: TSQLURIMethod): boolean;
+begin
+  result := false;
+end;
+
+procedure TSQLRest.InternalBatchStop;
+begin
+  raise EORMException.CreateFmt('Unexpected %s.InternalBatchStop',[ClassName]);
+end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
 function TSQLRest.Service<T>: T;
@@ -24789,7 +24800,7 @@ procedure TSQLRestServerURIContext.Execute(Command: TSQLRestServerURIContextComm
 procedure TimeOut;
 begin
   {$ifdef WITHLOG}
-  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[ClassName,
+  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,
     GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))^,
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
@@ -25710,10 +25721,8 @@ begin
           // write methods (mPOST, mPUT, mDELETE...) 
           Ctxt.Execute(execORMWrite);
       except
-        on E: Exception do
-          Ctxt.Error('Exception %: %',
-           [PShortString(PPointer(PPtrInt(E)^+vmtClassName)^)^,E.Message],
-           HTML_SERVERERROR); // 500 internal server error
+        on E: Exception do // return 500 internal server error
+          Ctxt.Error('Exception %: %',[E,E.Message],HTML_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -25774,14 +25783,14 @@ var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
     URIMethod, RunningBatchURIMethod: TSQLURIMethod;
-    RunningBatchStatic: TSQLRestStorage; { TODO: allow nested batch between tables? }
+    RunningBatchStatic: TSQLRest; { TODO: allow nested batch between tables? }
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     i, ID, Count: integer;
     Results: TIntegerDynArray;
-    RunTable: TSQLRecordClass;
+    RunTable, PrevRunTable: TSQLRecordClass;
     RunTableIndex: integer;
-    RunStatic: TSQLRestStorage;
+    RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
 begin  // TODO: handle Batch() at TSQLRestLevel
   if Ctxt.Method<>mPUT then begin
@@ -25824,11 +25833,14 @@ begin  // TODO: handle Batch() at TSQLRestLevel
   end else
     AutomaticTransactionPerRow := 0;
   RowCountForCurrentTransaction := 0;
+  RunTable := nil;
+  PrevRunTable := nil;
   RunningBatchStatic := nil;
   RunningBatchURIMethod := mNone;
   Count := 0;
+  try // to protect automatic transactions
   try // to protect InternalBatchStart/Stop locking
-    repeat
+    repeat // main loop: process one POST/PUT/DELETE per iteration
       // retrieve method name and associated (static) table
       Method := GetJSONPropName(Sent);
       if (Sent=nil) or (Method=nil) then begin
@@ -25838,7 +25850,7 @@ begin  // TODO: handle Batch() at TSQLRestLevel
       MethodTable := PosChar(Method,'@');
       if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
         RunTable := Ctxt.Table;
-        RunStatic := Ctxt.Static as TSQLRestStorage;
+        RunStatic := Ctxt.Static;
         RunTableIndex := Ctxt.TableIndex;
         RunStaticKind := Ctxt.StaticKind;
       end else begin                // e.g. '[...,"POST@Table":{object},...]'
@@ -25848,8 +25860,7 @@ begin  // TODO: handle Batch() at TSQLRestLevel
           exit;
         end;
         RunTable := Model.Tables[RunTableIndex];
-        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind)
-           as TSQLRestStorage;
+        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
       end;
       if Count>=length(Results) then
         SetLength(Results,Count+256+Count shr 3);
@@ -25862,7 +25873,7 @@ begin  // TODO: handle Batch() at TSQLRestLevel
         URIMethod := mPUT else
         URIMethod := mNone;
       // handle batch pending request sending (if table or method changed)
-      if (RunningBatchStatic<>nil) and  
+      if (RunningBatchStatic<>nil) and
          ((RunStatic<>RunningBatchStatic) or (RunningBatchURIMethod<>URIMethod)) then begin
         RunningBatchStatic.InternalBatchStop; // send pending statements
         RunningBatchStatic := nil;
@@ -25872,12 +25883,24 @@ begin  // TODO: handle Batch() at TSQLRestLevel
         RunningBatchStatic := RunStatic;
         RunningBatchURIMethod := URIMethod;
       end;
+      // handle auto-committed transaction process
       if AutomaticTransactionPerRow>0 then begin
-        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
-          
-        if RowCountForCurrentTransaction=0 then
+        if PrevRunTable<>RunTable then begin // allow method change for same table
+          if RowCountForCurrentTransaction>0 then begin
+            Commit(Ctxt.Session); // table changed -> commit previous trans
+            RowCountForCurrentTransaction := 0;
+          end;
+          PrevRunTable := RunTable;
+        end;
+        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then begin
+          Commit(Ctxt.Session);
+          RowCountForCurrentTransaction := 0;
+        end;
+        if RowCountForCurrentTransaction>0 then
+          inc(RowCountForCurrentTransaction) else
           if TransactionBegin(Ctxt.Table,Ctxt.Session) then
-            inc(RowCountForCurrentTransaction)
+            inc(RowCountForCurrentTransaction) else
+            AutomaticTransactionPerRow := 0; // avoid transactions on init error
       end;
       // process CRUD method operation
       case URIMethod of
@@ -25922,9 +25945,22 @@ begin  // TODO: handle Batch() at TSQLRestLevel
       end;
       inc(Count);
     until EndOfObject=']';
+    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
+      Commit(Ctxt.Session);
   finally
     if RunningBatchStatic<>nil then
       RunningBatchStatic.InternalBatchStop; // send pending statements
+  end;
+  except
+    on E: Exception do begin
+      Ctxt.Error('Exception % "%" did break process at % for %',
+        [E,E.Message,Method,RunTable]);
+      if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
+        RollBack(Ctxt.Session);
+        InternalLog('PARTIAL rollback of latest auto-commited transaction',sllWarning);
+      end;
+      exit;
+    end;
   end;
   if Ctxt.Table<>nil then begin // '{"Table":["cmd":values,...]}' format
     if Sent=nil then begin
@@ -28142,16 +28178,6 @@ end;
 function TSQLRestStorage.UnLock(Table: TSQLRecordClass; aID: integer): boolean;
 begin
   result := Model.UnLock(Table,aID);
-end;
-
-function TSQLRestStorage.InternalBatchStart(Method: TSQLURIMethod): boolean;
-begin
-  result := false;
-end;
-
-procedure TSQLRestStorage.InternalBatchStop;
-begin
-  // do nothing method
 end;
 
 function TSQLRestStorage.AdaptSQLForEngineList(var SQL: RawUTF8): boolean; 
