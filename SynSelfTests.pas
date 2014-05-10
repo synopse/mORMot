@@ -8115,7 +8115,7 @@ procedure TestVirtual(aClient: TSQLRestClient; DirectSQL: boolean; const Msg: st
   aClass: TSQLRecordClass);
 var n, i, ndx: integer;
     VD, VD2: TSQLRecordDali1;
-    Static: TSQLRestStorage;
+    Static: TSQLRest;
 begin
   Client.Server.StaticVirtualTableDirect := DirectSQL;
   Check(Client.Server.EngineExecuteAll(FormatUTF8('DROP TABLE %',[aClass.SQLTableName])));
@@ -8169,10 +8169,11 @@ begin
       Static := Client.Server.StaticVirtualTable[aClass];
       if CheckFailed(Static<>nil) then
         exit;
-      if Static.FileName<>'' then begin // no file content if ':memory' DB
-        (Static as TSQLRestStorageInMemoryExternal).
-          UpdateFile; // force update (COMMIT not always calls xCommit)
-        Static := TSQLRestStorageInMemoryExternal.Create(aClass,nil,Static.FileName,
+      if TSQLRestStorageInMemoryExternal(Static).FileName<>'' then begin
+        // no file content if ':memory' DB
+        TSQLRestStorageInMemoryExternal(Static).UpdateFile; // force update (COMMIT not always calls xCommit)
+        Static := TSQLRestStorageInMemoryExternal.Create(aClass,nil,
+          TSQLRestStorageInMemoryExternal(Static).FileName,
           aClass=TSQLRecordDali2);
         try
           Check(TSQLRestStorageInMemory(Static).Count=n);

@@ -1079,9 +1079,9 @@ Such a document will fit directly with the object programming model, without the
 As a result, we can discuss the two data models:
 - {\i Relational data Model} with highly-structured table organization, and rigidly-defined data formats and record structure;
 - {\i Document data Model} as a collection of complex documents with arbitrary, nested data formats and varying "record" format.
-The {\i Relational} model features {\i normalization} of data, i.e. organize the fields and tables of a relational database to minimize redundancy.\line On the other hand, the {\i Document} model features {\i denormalization} of data, to optimize the read performance of a database by adding redundant data or by grouping data. It also features horizontal scaling of the servers, since data can easily be balanced among several servers, without the speed penalty of performing a remote JOIN.
+The {\i Relational} model features {\i @**normalization@} of data, i.e. organize the fields and tables of a relational database to minimize redundancy.\line On the other hand, the {\i Document} model features {\i @**denormalization@} of data, to optimize the read performance of a database by adding redundant data or by grouping data. It also features horizontal scaling of the servers, since data can easily be balanced among several servers, without the speed penalty of performing a remote JOIN.
 One of the main difficulties, when working with {\i NoSQL}, is to define how to {\i denormalize} the data, and when to store the data in {\i normalized} format.\line One good habit is to model your data depending on the most current queries you will have to perform. For instance, you may embed sub-documents which will be very likely to be requested by your application most of the time. Note that most {\i NoSQL} engines feature a {\i projection} mechanism, which allows you to return only the needed fields for a query, leaving the sub-documents on the server if you do not need them at this time. The less frequent queries may be executed other separated collections, populated e.g. with consolidated information.\line Since {\i NoSQL} databases have fewer hard-and-fast rules than their relational databases ancestors, you are more likely to tune your model, depending on your expectations. In practice, you may spend less time thinking about "how" to store the data than with a RDBMS, and are still able to {\i normalize} information later, if needed. {\i NoSQL} engines do not fear redundant information, as soon as you follow the rules of letting the client application take care of the whole data consistency (e.g. via one ORM).
-As you may have stated, this {\i Document data Model} is much closer to the OOP paradigm than the classic relational scheme. Even a new family of frameworks did appear together with {\i NoSQL} adoption, named {\i Object Document Mapping} (@*ODM@), which is what @13@ was for RDBMS.
+As you may have stated, this {\i Document data Model} is much closer to the OOP paradigm than the classic relational scheme. Even a new family of frameworks did appear together with {\i NoSQL} adoption, named {\i Object Document Mapping} (@**ODM@), which is what @13@ was for RDBMS.
 In short, both approaches have benefits, which are to be weighted.
 |%50%50
 |\b SQL|NoSQL\b0
@@ -3133,20 +3133,24 @@ The {\i mORMot} point of view (which is not the only one), is to let the DB pers
 About the fact that you need to inherit from {\f1\fs20 @*TSQLRecord@}, and can't persist anything, our purpose was in fact very similar to the "@**Layer Supertype@" pattern of @*Domain-Driven@-Design, as explained by Martin Fowler:\line {\i It is not uncommon for all the objects in a layer to have methods you don't want to have duplicated throughout the system. You can move all of this behavior into a common Layer Supertype.}
 In fact, for {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} / @*ORM@ remote access, you have already all @*Client-Server@ @*CRUD@ operations available. Those classes are abstract common Supertypes, ready to be used in your projects. It has been optimized a lot (e.g. with a cache and other nice features), so I do not think reinventing a CRUD / database service is worth the prize. You have secure access to the ORM classes, with user/group attributes. Almost everything is created by code, just from the {\f1\fs20 TSQLRecord} class definition, via @*RTTI@. So it may be faster (and safer) to rely on it, than defining all your class hierarchy by hand.
 Having a dedicated class help the layer separation, and therefore a cleaner design. See @68@ for more details about DDD and how {\i mORMot}'s {\f1\fs20 TSQLRecord} can help you reuse existing code, write less and safer.
-:  Several ORMs at once
-To be clear, {\i mORMot} offers three kind of table definitions:
-- Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
-- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / ZDBC provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes.
-- Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
 The concern of not being able to persist any class (it needs to inherit from {\f1\fs20 TSQLRecord}) does perfectly make sense.
 On the other hand, from the implementation point of view, it is very powerful, since you have a lot of methods included within this class definition. It does also make sense to have a common ancestor able to identify all three kind of {\i mORMot}'s table definitions: the same abstract ancestor is used, and clients won't even need to know that they are implemented in-memory, using a {\i SQLite3} engine, or any external database. Another benefit of using a parent {\f1\fs20 class} is to enforce code safety using Delphi's {\i @*strong type@} abilities: you won't be able to pass a non-persistent type to methods which expect one.
 From the {\i @*Domain-Driven@} / @*SOA@ point of view, it is now an established rule to make a distinction between {\i Data Transfer Objects} (@*DTO@) and @*Domain Values@ ({\i Entity objects} or {\i Aggregates}). In most implementations, persistence objects (aka ORM objects) should be either the aggregate roots themselves (you do not store Entity objects and even worse DTOs), or dedicated classes. Do not mix layers, unless you like your software to be a maintenance nightmare!
-Some @*Event Sourcing@ architectures even implement {\i several DB back-end at once}:
+:  Several ORMs at once
+To be clear, {\i mORMot} offers several kind of table definitions:
+- Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
+- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / ZDBC provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
+- Via {\f1\fs20 @*TSQLRecord@} "external @*ODM@-managed" classes: after registration via a call to the {\f1\fs20 @*StaticMongoDBRegister@()} function, external {\i @*MongoDB@} collections are created and managed via @82@. In this case, no {\f1\fs20 index} attribute for setting text column length is necessary.
+- Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
+Why have several database back-end at the same time?
+Most of the existing software architecture rely on one dedicated database per domain, since it is more convenient to administrate one single server.\line But there are some cases when it does make sense to have several databases at once.
+In practice, when your data starts to grow, you may need to {\i archive} older data in a dedicated remote database, e.g. using cheap storage (bunch of Hard Drives in RAID). Since this data will be seldom retrieved, it is not an issue to have slower access time. And you will be able to keep your most recent data accessible in a local high-speed engine (running on SSD).
+Another pattern is to use dedicated consolidation DBs for any analysis. In fact, SQL {\i @*normalization@} is good for most common relation work, but sometimes {\i @*denormalization@} is necessary, e.g. for statistic or business analyse purposes. In this case, dedicated consolidation databases, containing the data already prepared and indexed in a ready-to-use denormalized layout.
+Last but not least, some @*Event Sourcing@ architectures even {\i expect} several DB back-end at once:
 - It will store the status on one database (e.g. high-performance in-memory) for most common requests to be immediate;
-- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} or {\i @*NexusDB@});
-- And even sometimes fill some dedicated consolidation DBs for further analysis.
-AFAIK it could be possible to directly access ORM objects remotely (e.g. the consolidation DB), mostly in a read-only way, for dedicated reporting, e.g. from consolidated data - this is one potential @*CQRS@ implementation pattern with {\i mORMot.} Thanks to the framework security, remote access will be safe: your clients won't be able to change the consolidation DB content!
-As can be easily guessed, such design models are far away from a basic ORM built only for class persistence.
+- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} or {\i @*NexusDB@}), even a high-speed @*NoSQL@ engine like {\i @*MongoDB@}.
+It is possible to directly access ORM objects remotely (e.g. the consolidation DB), mostly in a read-only way, for dedicated reporting, e.g. from consolidated data - this is one potential @*CQRS@ implementation pattern with {\i mORMot}. Thanks to the framework security, remote access will be safe: your clients won't be able to change the consolidation DB content!
+As can be easily guessed, such design models are far away from a basic ORM built only for class persistence. And {\i mORMot}'s ORM/ODM offers you all those possibilities.
 :  The best ORM is the one you need
 Therefore, we may sum up some potential use of ORM, depending of your intent:
 - If your understanding of ORM is just to persist some {\i existing} objects with a lot of existing business code, {\i mORMot} won't help you directly, since it expects objects to inherit from {\f1\fs20 TSQLRecord} - but note that most ORMs, even those allowing to persist any {\f1\fs20 class}, would not be so easy to work with;
@@ -3805,14 +3809,14 @@ Therefore, the typical use may be the following:
 |internal SQLite3 in-memory|Created with {\f1\fs20 ':memory:'} file name.\line Fast data handling with no persistence (e.g. for testing or temporary storage)
 |{\f1\fs20 TObjectList} static|Created with {\f1\fs20 StaticDataCreate}.\line Best possible performance for small amount of data, without ACID nor SQL
 |{\f1\fs20 TObjectList} virtual|Created with {\f1\fs20 VirtualTableRegister}.\line Best possible performance for SQL over small amount of data (or even unlimited amount under @*Win64@), if ACID is not required nor complex SQL
-|external SQLite3 file|Created with {\f1\fs20 VirtualTableExternalRegister}\line External back-end, e.g. for disk spanning
+|external SQLite3 file|Created with {\f1\fs20 @*VirtualTableExternalRegister@}\line External back-end, e.g. for disk spanning
 |external SQLite3 in-memory|Created with {\f1\fs20 VirtualTableExternalRegister} and {\f1\fs20 ':memory:'}\line Fast external back-end (e.g. for testing)
 |external @*Oracle@ / @*MS SQL@ / @*DB2@ / @*PostgreSQL@ / @*MySQL@ / @*Firebird@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Fast, secure and industry standard back-ends; data can be shared outside {\i mORMot}
 |external @*NexusDB@|Created with {\f1\fs20 VirtualTableExternalRegister}\line The free embedded version let the whole engine be included within your executable, and use any existing code, but {\i SQlite3} sounds like a better option
 |external Jet|Created with {\f1\fs20 VirtualTableExternalRegister}\line Could be used as a data exchange format (e.g. with Office applications)
 |external Zeos|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, with direct @*Zeos@/@*ZDBC@ access which will by-pass the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck - and we will also prefer an active Open Source project!
 |external @*FireDAC@/@*UniDAC@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, including the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck
-|external {\i MongoDB}|Created with {\f1\fs20 StaticMongoDBRegister()}\line High-speed document-based storage, with horizontal scaling and advanced query abilities of nested sub-documents
+|external {\i MongoDB}|Created with {\f1\fs20 @*StaticMongoDBRegister@()}\line High-speed document-based storage, with horizontal scaling and advanced query abilities of nested sub-documents
 |%
 Whatever database back-end is used, don't forget that {\i mORMot} design will allow you to switch from one library to another, just by changing a {\f1\fs20 TSQLDBConnectionProperties} class type. And note that you can {\i mix} external engines, on purpose: you are not tied to one single engine, but the database access can be tuned for each ORM table, according to your project needs.
 \page
@@ -5213,7 +5217,7 @@ In all cases, letting the default {\f1\fs20 StaticVirtualTableDirect=true} will 
 {\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
-- Close integration with our ORM (which becomes {\i defacto} an ODM), in the {\f1\fs20 mORMotMongoDB.pas} unit.
+- Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
 {\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which matches perfectly {\i mORMot}'s @*REST@ful approach.
 :  MongoDB client
 The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
@@ -5491,6 +5495,7 @@ Since there is no error handling, {\f1\fs20 wcUnacknowledged} is not to be used 
 The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} class be persisted on a remote {\i MongoDB} server.
 As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
 This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
+From the client point of view, there is no difference between a ORM or an @*ODM@: you may use a SQL engine as a storage for ODM - via @29@ - or even a NoSQL database as a regular ORM, with @*denormalization@ (even if it may void most advantages of NoSQL).
 :   Register the TSQLRecord class
 In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !  TSQLORM = class(TSQLRecord)
@@ -5520,13 +5525,13 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 integer}|int32|
 |{\f1\fs20 cardinal}|N/A|You should use {\f1\fs20 Int64} instead
 |{\f1\fs20 Int64}|int64|
-|{\f1\fs20 boolean}|boolean|0 is {\f1\fs20 false}, anything else is {\f1\fs20 true}
+|{\f1\fs20 boolean}|boolean|{\i MongoDB} has a {\f1\fs20 boolean} type
 |enumeration|int32|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
-|set|int32|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
+|set|int64|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
 |{\f1\fs20 single}|double|
 |{\f1\fs20 double}|double|
 |{\f1\fs20 extended}|double|stored as {\f1\fs20 double} (precision lost)
-|{\f1\fs20 @*currency@}|double|safely converted to/from {\f1\fs20 currency} type with fixed decimals, without rounding error
+|{\f1\fs20 @*currency@}|double|stored as {\f1\fs20 double} ({\i MongoDB} does not have a BSD type)
 |{\f1\fs20 @*RawUTF8@}|UTF-8|this is the {\b preferred} field type for storing some textual content in the ORM
 |{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in Delphi
 |{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in Delphi, as {\f1\fs20 AnsiString}
@@ -5545,14 +5550,14 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TObjectList@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
 |{\f1\fs20 @*TStrings@}|array|BSON array of strings (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TRawUTF8List@}|array|BSON array of string (from {\f1\fs20 ObjectToJSON})
-|any {\f1\fs20 @*TObject@}|object|See {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} @52@
+|any {\f1\fs20 @*TObject@}|object|See {\f1\fs20 TJSONSerializer.@*RegisterCustomSerializer@} @52@
 |{\f1\fs20 @*TSQLRawBlob@}|binary|This type is an alias to {\f1\fs20 @*RawByteString@} - those properties are not retrieved by default: you need to use {\f1\fs20 RetrieveBlobFields()} or set {\f1\fs20 ForceBlobTransfert} / {\f1\fs20 ForceBlobTransertTable[]} properties
 |{\f1\fs20 TByteDynArray}|binary|Used to embed a BLOB property stored as BSON binary within a document - so that {\f1\fs20 @*TSQLRawBlob@} may be restricted in the future to @*GridFS@ external content
 |{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} BSON binary format
-|{\f1\fs20 variant}|array\line object|BSON number, text, object or array, depending on @80@ or {\f1\fs20 TBSONVariant} stored value
+|{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID})
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
 |%
-On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class:
+On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
 !  DB := MongoClient.Database['dbname'];
 !  Model := TSQLModel.Create([TSQLORM]);

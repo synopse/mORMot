@@ -686,6 +686,7 @@ unit mORMot;
     - BREAKING CHANGE; TSQLRestServerStatic* classes are now renamed as
       TSQLRestStorage* and do not inherit from TSQLRestServer but plain TSQLRest
       for a much cleaner design
+    - TSQLRestServer.StaticDataServer[] will now return an abstract TSQLRest
     - URI routing for interface-based service is now specified by the two
       TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC classes (inheriting from
       the abstract TSQLRestServerURIContext class) instead of rmJSON and
@@ -3681,7 +3682,7 @@ type
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionGroup: integer;
     /// the static instance corresponding to the associated Table (if any)
-    Static: TSQLRestStorage;
+    Static: TSQLRest;
     /// the kind of static instance corresponding to the associated Table (if any)
     StaticKind: TSQLRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
@@ -8282,6 +8283,9 @@ type
 
   TSQLRestClass = class of TSQLRest;
 
+  /// a dynamic array of TSQLREST instances
+  TSQLRestDynArray = array of TSQLRest;
+
   /// a generic REpresentational State Transfer (REST) client/server class
   TSQLRest = class
   protected
@@ -9679,12 +9683,12 @@ type
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticData[] will contain pure in-memory tables, not declared as
     // SQLite3 virtual tables, therefore not available from joined SQL statements
-    fStaticData: array of TSQLRestStorage;
+    fStaticData: TSQLRestDynArray;
     /// map TSQLRestStorageInMemory or TSQLRestStorageExternal engines
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticVirtualTable[] will contain in-memory or external tables declared
     // as SQLite3 virtual tables, therefore available from joined SQL statements
-    fStaticVirtualTable: array of TSQLRestStorage;
+    fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
     fSessions: TObjectList;
     /// used to compute genuine TAuthSession.ID cardinal value
@@ -9706,13 +9710,13 @@ type
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
     /// fast get the associated static server, if any
-    function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRestStorage;
+    function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
     // - is e.g. TSQLRestStorageInMemory instance associated to a
     // TSQLVirtualTableBinary or TSQLVirtualTableJSON class
     // - may be a TSQLRestStorageExternal (as defined in mORMotDB unit)
     // for a virtual table giving access to an external database
-    function GetVirtualTable(aClass: TSQLRecordClass): TSQLRestStorage;
+    function GetVirtualTable(aClass: TSQLRecordClass): TSQLRest;
     /// fast get the associated static server or Virtual table, if any
     // - this can be used to call directly the TSQLRestStorage instance
     // on the server side
@@ -9721,14 +9725,14 @@ type
     // or a TSQLVirtualTable, but this method won't - you can set a reference
     // to a TSQLRestServerKind variable to retrieve the database server type
     function GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass;
-      Kind: PSQLRestServerKind=nil): TSQLRestStorage; overload;
+      Kind: PSQLRestServerKind=nil): TSQLRest; overload;
     /// overloaded method using table index in associated Model
     function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
-      Kind: PSQLRestServerKind=nil): TSQLRestStorage; overload;
+      Kind: PSQLRestServerKind=nil): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
-    function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRestStorage;
+    function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
     function InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
     /// this method is overriden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
@@ -9953,12 +9957,12 @@ type
     // can be implemented by TSQLRestStorage; to provide full SQL process,
     // you should better use a Virtual Table class, inheriting e.g. from
     // TSQLRecordVirtualTableAutoID associated with TSQLVirtualTableJSON/Binary
-    // via a Model.VirtualTableRegister() call before TSQLRestServer.Create 
+    // via a Model.VirtualTableRegister() call before TSQLRestServer.Create
     // - return nil on any error, or an EModelException if the class is not in
     // the database model
     function StaticDataCreate(aClass: TSQLRecordClass;
       const aFileName: TFileName = ''; aBinaryFile: boolean=false;
-      aServerClass: TSQLRestStorageClass=nil): TSQLRestStorage;
+      aServerClass: TSQLRestStorageClass=nil): TSQLRest;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
@@ -10128,7 +10132,7 @@ type
     /// retrieve the TSQLRestStorage instance used to store and manage
     // a specified TSQLRecordClass in memory
     // - has been associated by the StaticDataCreate method
-    property StaticDataServer[aClass: TSQLRecordClass]: TSQLRestStorage
+    property StaticDataServer[aClass: TSQLRecordClass]: TSQLRest
       read GetStaticDataServer;
     /// retrieve a running TSQLRestStorage virtual table
     // - associated e.g. to a 'JSON' or 'Binary' virtual table module, or may
@@ -10139,7 +10143,7 @@ type
     // accessible only via StaticDataServer[], not via StaticVirtualTable[])
     // - has been associated by the TSQLModel.VirtualTableRegister method or
     // the VirtualTableExternalRegister() global function
-    property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRestStorage
+    property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
       read GetVirtualTable;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
@@ -11654,7 +11658,9 @@ type
   protected
     fModule: TSQLVirtualTableModule;
     fTableName: RawUTF8;
-    fStatic: TSQLRestStorage;
+    fStatic: TSQLRest;
+    fStaticStorage: TSQLRestStorage;
+    fStaticTable: TSQLRecordClass;
     fStaticTableIndex: integer;
   public
     /// create the virtual table access instance
@@ -11737,7 +11743,11 @@ type
     // - can be e.g. a TSQLRestStorageInMemory for TSQLVirtualTableJSON,
     // or a TSQLRestStorageExternal for TSQLVirtualTableExternal, or nil
     // for TSQLVirtualTableLog
-    property Static: TSQLRestStorage read fStatic;
+    property Static: TSQLRest read fStatic;
+    /// the associated virtual table storage instance, if is a TSQLRestStorage
+    property StaticStorage: TSQLRestStorage read fStaticStorage;
+    /// the associated virtual table storage table 
+    property StaticTable: TSQLRecordClass read fStaticTable;
     /// the associated virtual table storage index in its Model.Tables[] array
     property StaticTableIndex: integer read fStaticTableIndex;
   end;
@@ -11841,14 +11851,26 @@ type
      aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
    - file extension is set to '.json' }
   TSQLVirtualTableJSON = class(TSQLVirtualTable)
+  protected
+    fStaticInMemory: TSQLRestStorageInMemory;
   public { overriden methods }
+    /// create the virtual table access instance
+    // - the created instance will be released when the virtual table will be
+    // disconnected from the DB connection (e.g. xDisconnect method for SQLite3)
+    // - shall raise an exception in case of invalid parameters (e.g. if the
+    // supplied module is not associated to a TSQLRestServer instance)
+    // - aTableName will be checked against the current aModule.Server.Model
+    // to retrieve the corresponding TSQLRecordVirtualTableAutoID class and
+    // create any associated Static: TSQLRestStorage instance
+    constructor Create(aModule: TSQLVirtualTableModule; const aTableName: RawUTF8;
+      FieldCount: integer; Fields: PPUTF8CharArray); override;
     /// returns the main specifications of the associated TSQLVirtualTableModule
     // - this is a read/write table, without transaction, associated to the
     // TSQLVirtualTableCursorJSON cursor type, with 'JSON' as module name
     // - no particular class is supplied here, since it will depend on the
     // associated Static instance 
-    class procedure GetTableModuleProperties(var aProperties: TVirtualTableModuleProperties);
-      override;
+    class procedure GetTableModuleProperties(
+      var aProperties: TVirtualTableModuleProperties); override;
     /// called to determine the best way to access the virtual table
     // - will prepare the request for TSQLVirtualTableCursor.Search()
     // - only prepared WHERE statement is for "ID = value"
@@ -24052,12 +24074,11 @@ begin
   fSessions.Free;
   DeleteCriticalSection(fSessionCriticalSection);
   inherited Destroy; // calls fServices.Free which will update fStats
-  if not InheritsFrom(TSQLRestStorage) then
-    InternalLog(Stats.DebugMessage,sllInfo);
+  InternalLog(Stats.DebugMessage,sllInfo);
   fStats.Free; 
 end;
 
-function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRestStorage;
+function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
 begin
   if (self<>nil) and (fStaticData<>nil) then
    result := fStaticData[Model.GetTableIndexExisting(aClass)] else
@@ -24065,7 +24086,7 @@ begin
 end;
 
 function TSQLRestServer.GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass;
-  Kind: PSQLRestServerKind=nil): TSQLRestStorage;
+  Kind: PSQLRestServerKind=nil): TSQLRest;
 begin
   if (aClass=nil) or (fStaticData=nil) and (fStaticVirtualTable=nil) then
     result := nil else
@@ -24073,7 +24094,7 @@ begin
 end;
 
 function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer;
-  Kind: PSQLRestServerKind=nil): TSQLRestStorage;
+  Kind: PSQLRestServerKind=nil): TSQLRest;
 begin
   result := nil;
   if Kind<>nil then
@@ -24093,7 +24114,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.GetVirtualTable(aClass: TSQLRecordClass): TSQLRestStorage;
+function TSQLRestServer.GetVirtualTable(aClass: TSQLRecordClass): TSQLRest;
 var i: integer;
 begin
   result := nil;
@@ -24106,7 +24127,7 @@ end;
 
 function TSQLRestServer.StaticDataCreate(aClass: TSQLRecordClass;
   const aFileName: TFileName; aBinaryFile: boolean;
-  aServerClass: TSQLRestStorageClass): TSQLRestStorage;
+  aServerClass: TSQLRestStorageClass): TSQLRest;
 var i: integer;
 begin
   result := nil;
@@ -24115,7 +24136,7 @@ begin
     result := fStaticData[i];
   if result<>nil then
     // class already registered -> update file name
-    result.fFileName := aFileName else begin
+    (result as aServerClass).fFileName := aFileName else begin
     // class not already registered -> register now
     if aServerClass=nil then
       aServerClass := TSQLRestStorageInMemory; // default in-memory engine
@@ -24155,7 +24176,7 @@ begin
   fNoAJAXJSON := Value;
 end;
 
-function TSQLRestServer.InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRestStorage;
+function TSQLRestServer.InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
 begin
   result := nil;
   if (self<>nil) and (TableIndex>=0) then begin // SQL refers to this unique table
@@ -24166,16 +24187,18 @@ begin
     if (result=nil) and fVirtualTableDirect and (fStaticVirtualTable<>nil) then begin
       result := fStaticVirtualTable[TableIndex];
       // virtual table may need adaptation (e.g. RowID -> ID)
-      if (result<>nil) and not result.AdaptSQLForEngineList(SQL) then
-        // complex request will use SQlite3 virtual engine module
-        result := nil;
+      if result<>nil then
+        if result.InheritsFrom(TSQLRestStorage) and
+           not TSQLRestStorage(result).AdaptSQLForEngineList(SQL) then
+          // complex request will use SQlite3 virtual engine module
+          result := nil;
     end;
   end;
 end;
 
 function TSQLRestServer.InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
 var aSQL: RawUTF8;
-    Static: TSQLRestStorage;
+    Static: TSQLRest;
 begin
   aSQL := SQL;
   Static := InternalAdaptSQL(TableIndex,aSQL);
@@ -24228,7 +24251,7 @@ begin
 end;
 
 function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): integer;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(Table);
   if Static<>nil then // faster direct call
@@ -24237,7 +24260,7 @@ begin
 end;
 
 function TSQLRestServer.TableHasRows(Table: TSQLRecordClass): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(Table);
   if Static<>nil then // faster direct call
@@ -24246,7 +24269,7 @@ begin
 end;
 
 function TSQLRestServer.UpdateBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin // overriden method to update all BLOB fields at once
   if (Value=nil) or (Value.fID<=0) then
     result := false else begin
@@ -24258,7 +24281,7 @@ begin // overriden method to update all BLOB fields at once
 end;
 
 function TSQLRestServer.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin // overriden method to update all BLOB fields at once
   if Value=nil then
     result := false else begin
@@ -24275,7 +24298,7 @@ var T: integer;
     Tab: TSQLRecordClass;
     Where: PtrUInt;
     RecRef: TRecordReference;
-    Static: TSQLRestStorage;
+    Static: TSQLRest;
     W: RawUTF8;
 begin
   result := true; // success if no property found
@@ -24312,18 +24335,19 @@ function TSQLRestServer.CreateSQLMultiIndex(Table: TSQLRecordClass;
 var SQL: RawUTF8;
     i, TableIndex: integer;
     Props: TSQLRecordProperties;
-    Static: TSQLRestStorage;
+    Static: TSQLRest;
 begin
   result := false;
-  if (Self=nil) or InheritsFrom(TSQLRestStorage) or (high(FieldNames)<0) then
+  if high(FieldNames)<0 then
     exit; // avoid endless loop for TSQLRestStorage with no overriden method
   TableIndex := Model.GetTableIndexExisting(Table);
   if fStaticVirtualTable<>nil then begin
     Static := fStaticVirtualTable[TableIndex];
     if Static<>nil then begin
-      if not Static.InheritsFrom(TSQLRestStorageInMemory) then
+      if Static.InheritsFrom(TSQLRestStorage) then
          // will try to create an index on the static table (e.g. for external DB)
-         result := Static.CreateSQLMultiIndex(Table,FieldNames,Unique,IndexName);
+         result := TSQLRestStorage(Static).
+           CreateSQLMultiIndex(Table,FieldNames,Unique,IndexName);
       exit;
     end;
   end;
@@ -24984,8 +25008,9 @@ begin
     // we need a specialized method in order to avoid fStats.Invalid increase
     Call.OutStatus := HTML_SUCCESS;
     for i := 0 to high(Server.fStaticData) do
-      if Server.fStaticData[i]<>nil then
-        if Server.fStaticData[i].RefreshedAndModified then begin
+      if (Server.fStaticData[i]<>nil) and
+         Server.fStaticData[i].InheritsFrom(TSQLRestStorage) then
+        if TSQLRestStorage(Server.fStaticData[i]).RefreshedAndModified then begin
           inc(Server.InternalState); // force refresh
           break;
         end;
@@ -25564,7 +25589,8 @@ begin
        (Call.OutHead[Length(HEADER_CONTENT_TYPE)+1]='!') and
        IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER) then
       inc(fStats.fOutcomingFiles);
-    if (Ctxt.Static<>nil) and Ctxt.Static.fOutInternalStateForcedRefresh then
+    if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
+       TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
       Call.OutInternalState := cardinal(-1) else
       // database state may have changed above
@@ -25612,7 +25638,7 @@ var EndOfObject: AnsiChar;
     RunTableIndex: integer;
     RunStatic: TSQLRestStorage;
     RunStaticKind: TSQLRestServerKind;
-begin
+begin  // TODO: handle Batch() at TSQLRestLevel
   if Ctxt.Method<>mPUT then begin
     Ctxt.Error('PUT only');
     exit;
@@ -25667,7 +25693,7 @@ begin
       MethodTable := PosChar(Method,'@');
       if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
         RunTable := Ctxt.Table;
-        RunStatic := Ctxt.Static;
+        RunStatic := Ctxt.Static as TSQLRestStorage;
         RunTableIndex := Ctxt.TableIndex;
         RunStaticKind := Ctxt.StaticKind;
       end else begin                // e.g. '[...,"POST@Table":{object},...]'
@@ -25677,7 +25703,8 @@ begin
           exit;
         end;
         RunTable := Model.Tables[RunTableIndex];
-        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,@RunStaticKind);
+        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,@RunStaticKind)
+           as TSQLRestStorage;
       end;
       if Count>=length(Results) then
         SetLength(Results,Count+256+Count shr 3);
@@ -25933,8 +25960,9 @@ begin
         RunningThread := Sender;
   if fStaticVirtualTable<>nil then
     for i := 0 to high(fStaticVirtualTable) do
-      if fStaticVirtualTable[i]<>nil then
-        fStaticVirtualTable[i].BeginCurrentThread(Sender);
+      if (fStaticVirtualTable[i]<>nil) and
+         fStaticVirtualTable[i].InheritsFrom(TSQLRestStorage) then
+        TSQLRestStorage(fStaticVirtualTable[i]).BeginCurrentThread(Sender);
 end;
 
 const
@@ -25958,8 +25986,9 @@ begin
       'EndCurrentThread(Thread.ID=%d) and CurrentThreadID=%d',[Sender.ThreadID,CurrentThreadId]);
  if fStaticVirtualTable<>nil then
    for i := 0 to high(fStaticVirtualTable) do
-     if fStaticVirtualTable[i]<>nil then
-       fStaticVirtualTable[i].EndCurrentThread(Sender);
+     if (fStaticVirtualTable[i]<>nil) and
+        fStaticVirtualTable[i].InheritsFrom(TSQLRestStorage) then
+       TSQLRestStorage(fStaticVirtualTable[i]).EndCurrentThread(Sender);
   if Services<>nil then begin
     Inst.InstanceID := GetCurrentThreadId;
     for i := 0 to Services.Count-1 do
@@ -25987,7 +26016,7 @@ begin
 end;
 
 function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -25996,7 +26025,7 @@ begin
 end;
 
 function TSQLRestServer.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26006,7 +26035,7 @@ end;
 
 function TSQLRestServer.EngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
     StaticSQL: RawUTF8;
 begin
   StaticSQL := SQL;
@@ -26018,7 +26047,7 @@ end;
 
 function TSQLRestServer.EngineUpdate(TableModelIndex, ID: integer;
   const SentData: RawUTF8): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26027,7 +26056,7 @@ begin
 end;
 
 function TSQLRestServer.EngineDelete(TableModelIndex, ID: integer): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26037,7 +26066,7 @@ end;
 
 function TSQLRestServer.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26047,7 +26076,7 @@ end;
 
 function TSQLRestServer.EngineRetrieveBlob(TableModelIndex, aID: integer;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26057,7 +26086,7 @@ end;
 
 function TSQLRestServer.EngineUpdateBlob(TableModelIndex, aID: integer;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -26067,7 +26096,7 @@ end;
 
 function TSQLRestServer.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; 
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
   if Static=nil then
@@ -31297,7 +31326,6 @@ end;
 
 constructor TSQLVirtualTable.Create(aModule: TSQLVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
-var aTable: TSQLRecordClass;
 begin
   if (aModule=nil) or (aTableName='') then
     raise EModelException.CreateFmt('Invalid parameters to %s.Create',[ClassName]);
@@ -31310,12 +31338,14 @@ begin
     with fModule.Server do begin
       fStaticTableIndex := Model.GetTableIndex(aTableName);
       if fStaticTableIndex>=0 then begin
-        aTable := Model.Tables[fStaticTableIndex];
-        fStatic := fModule.fFeatures.StaticClass.Create(aTable,fModule.Server,
+        fStaticTable := Model.Tables[fStaticTableIndex];
+        fStatic := fModule.fFeatures.StaticClass.Create(fStaticTable,fModule.Server,
           fModule.FileName(aTableName),self.InheritsFrom(TSQLVirtualTableBinary));
         if length(fStaticVirtualTable)<>length(Model.Tables) then
           SetLength(fStaticVirtualTable,length(Model.Tables));
         fStaticVirtualTable[fStaticTableIndex] := fStatic;
+        if fStatic.InheritsFrom(TSQLRestStorage) then
+          fStaticStorage := TSQLRestStorage(fStatic);
       end;
     end;
 end;
@@ -31412,9 +31442,9 @@ function TSQLVirtualTable.Structure: RawUTF8;
 begin
   result := '';
   if Self<>nil then
-    if Static<>nil then
+    if (Static<>nil) then
       // e.g. for TSQLVirtualTableJSON or TSQLVirtualTableExternal
-      Result := StructureFromClass(Static.StoredClass,TableName) else
+      Result := StructureFromClass(StaticTable,TableName) else
     if (Module<>nil) and (Module.RecordClass<>nil) then
       // e.g. for TSQLVirtualTableLog
       Result := StructureFromClass(Module.RecordClass,TableName);
@@ -31521,23 +31551,27 @@ end;
 
 { TSQLVirtualTableJSON }
 
+constructor TSQLVirtualTableJSON.Create(aModule: TSQLVirtualTableModule;
+  const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
+begin
+  inherited Create(aModule,aTableName,FieldCount,Fields);
+  fStaticInMemory := fStatic as TSQLRestStorageInMemory;
+end;
 
 function TSQLVirtualTableJSON.Delete(aRowID: Int64): boolean;
 begin
-  result := (self<>nil) and (Static<>nil) and
-            Static.Delete(Static.StoredClass,aRowID);
-  if result and (Static.Owner<>nil) then
-    Static.Owner.fCache.NotifyDeletion(Static.StoredClass,aRowID);
+  result := (Static<>nil) and Static.Delete(StaticTable,aRowID);
+  if result and (StaticStorage<>nil) and (StaticStorage.Owner<>nil) then
+    StaticStorage.Owner.fCache.NotifyDeletion(StaticTable,aRowID);
 end;
 
 function TSQLVirtualTableJSON.Drop: boolean;
 begin
-  if (self<>nil) and (Static<>nil) then
-  with Static as TSQLRestStorageInMemory do begin
-    RollBack(0); // close any pending transaction
-    fValue.Clear;
-    Modified := true; // force update file after clear
-    UpdateFile;
+  if (self<>nil) and (Static<>nil) then begin
+    fStaticInMemory.RollBack(0); // close any pending transaction
+    fStaticInMemory.fValue.Clear;
+    fStaticInMemory.Modified := true; // force update file after clear
+    fStaticInMemory.UpdateFile;
     result := true;
   end else
     result := false;
@@ -31561,15 +31595,15 @@ begin
   result := false;
   if (self=nil) or (Static=nil) then
     exit;
-  aRecord := Static.StoredClass.Create;
+  aRecord := StaticTable.Create;
   try
     if aRecord.SetFieldSQLVars(Values) then begin
       if aRowID>0 then
         aRecord.fID := aRowID;
-      insertedRowID := (Static as TSQLRestStorageInMemory).AddOne(aRecord,aRowID>0);
+      insertedRowID := fStaticInMemory.AddOne(aRecord,aRowID>0);
       if insertedRowID>0 then begin
-        if Static.Owner<>nil then
-          Static.Owner.fCache.Notify(aRecord,soInsert);
+        if fStaticInMemory.Owner<>nil then
+          fStaticInMemory.Owner.fCache.Notify(aRecord,soInsert);
         result := true;
       end;
     end;
@@ -31582,18 +31616,18 @@ end;
 function TSQLVirtualTableJSON.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
 begin
   result := inherited Prepare(Prepared); // optimize ID=? WHERE clause
-  if result and (Static<>nil) then
-  with Static as TSQLRestStorageInMemory do begin
+  if result and (Static<>nil) then begin
     if Prepared.IsWhereOneFieldEquals then
     with Prepared.Where[0] do
-    if UniqueFieldHash(Column)<>nil then begin
+    if fStaticInMemory.UniqueFieldHash(Column)<>nil then begin
       Value.VType := ftNull; // mark TSQLVirtualTableCursorJSON expects it
       OmitCheck := true;
       Prepared.EstimatedCost := 1; 
     end;
     if Prepared.EstimatedCost>1E9 then
-      Prepared.EstimatedCost := Count;
-    if fIDSorted and (Prepared.OrderByCount=1) then // check ascending IDs
+      Prepared.EstimatedCost := fStaticInMemory.Count;
+    if fStaticInMemory.fIDSorted and (Prepared.OrderByCount=1) then
+      // ascending IDs ?
       with Prepared.OrderBy[0] do
         if (Column=VIRTUAL_TABLE_ROWID_COLUMN) and not Desc then
           Prepared.OmitOrderBy := true;
@@ -31608,12 +31642,12 @@ begin
   if (self=nil) or (Static=nil) or
      (oldRowID<>newRowID) or (newRowID<=0) then // don't allow ID change
     exit;
-  with Static as TSQLRestStorageInMemory do
-    if UpdateOne(newRowID,Values) then begin
-      if Static.Owner<>nil then begin
-        i := IDToIndex(newRowID);
+    if fStaticInMemory.UpdateOne(newRowID,Values) then begin
+      if (fStaticInMemory.Owner<>nil) then begin
+        i := fStaticInMemory.IDToIndex(newRowID);
         if i>=0 then
-          Static.Owner.fCache.Notify(TSQLRecord(fValue.List[i]),soUpdate);
+          fStaticInMemory.Owner.fCache.Notify(
+            TSQLRecord(fStaticInMemory.fValue.List[i]),soUpdate);
       end;
       result := true;
     end;
@@ -31624,24 +31658,24 @@ end;
 
 function TSQLVirtualTableCursorJSON.Column(aColumn: integer;
   var aResult: TSQLVar): boolean;
-var Static: TSQLRestStorageInMemory;
+var Value: TObjectList;
 begin
   if (self=nil) or (fCurrent>fMax) or
      (TSQLVirtualTableJSON(Table).Static=nil) then begin
     result := false;
     exit;
   end;
-  Static := TSQLRestStorageInMemory(TSQLVirtualTableJSON(Table).Static);
-  if Cardinal(fCurrent)>=Cardinal(Static.fValue.Count) then
+  Value := TSQLVirtualTableJSON(Table).fStaticInMemory.fValue;
+  if Cardinal(fCurrent)>=Cardinal(Value.Count) then
     result := False else begin
     if aColumn=VIRTUAL_TABLE_ROWID_COLUMN then begin
       aResult.VType := ftInt64;
-      aResult.VInt64 := TSQLRecord(Static.fValue.List[fCurrent]).fID;
+      aResult.VInt64 := TSQLRecord(Value.List[fCurrent]).fID;
     end else
-    with Static.fStoredClassRecordProps.Fields do
+    with TSQLVirtualTableJSON(Table).fStaticInMemory.fStoredClassRecordProps.Fields do
       if cardinal(aColumn)>=cardinal(Count) then
         aResult.VType := ftNull else
-        List[aColumn].GetFieldSQLVar(Static.fValue.List[fCurrent],aResult,fColumnTemp);
+        List[aColumn].GetFieldSQLVar(Value.List[fCurrent],aResult,fColumnTemp);
     result := true;
   end;
 end;
@@ -31652,29 +31686,30 @@ var Hash: TListFieldHash;
 begin
   result := inherited Search(Prepared); // mark EOF by default
   if (not result) or (not Table.InheritsFrom(TSQLVirtualTableJSON)) or
-     (TSQLVirtualTableJSON(Table).Static=nil) then
+     (TSQLVirtualTableJSON(Table).fStaticInMemory=nil) then
     result := false else
-    with TSQLRestStorageInMemory(TSQLVirtualTableJSON(Table).Static) do begin
-      if Count>0 then // if something to search in
-        if Prepared.IsWhereIDEquals(false) then begin // ID=?
-          fMax := IDToIndex(Prepared.Where[0].Value.VInt64); // binary search
+    with TSQLVirtualTableJSON(Table).fStaticInMemory do begin
+    if Count>0 then
+      // if something to search in
+      if Prepared.IsWhereIDEquals(false) then begin // ID=?
+        fMax := IDToIndex(Prepared.Where[0].Value.VInt64); // binary search
+        if fMax>=0 then
+          fCurrent := fMax; // ID found
+      end else
+      if Prepared.IsWhereOneFieldEquals then
+      with Prepared.Where[0] do begin
+        Hash := UniqueFieldHash(Column);
+        if Hash<>nil then begin // optimized hash-based search
+          fStoredClassRecordProps.Fields.List[Column].SetFieldSQLVar(fSearchRec,Value);
+          fMax := Hash.Find(fSearchRec);
           if fMax>=0 then
-            fCurrent := fMax; // ID found
+            fCurrent := fMax; // value found with O(1) search
         end else
-        if Prepared.IsWhereOneFieldEquals then
-        with Prepared.Where[0] do begin
-          Hash := UniqueFieldHash(Column); // optimized hash-based search
-          if Hash<>nil then begin
-            fStoredClassRecordProps.Fields.List[Column].SetFieldSQLVar(fSearchRec,Value);
-            fMax := Hash.Find(fSearchRec);
-            if fMax>=0 then
-              fCurrent := fMax; // value found with O(1) search
-          end else
-           fMax := Count-1; // loop all records in ID order
-        end else
-          fMax := Count-1; // loop all records in ID order
-      result := true; // no DB error
-    end;
+         fMax := Count-1; // loop all records in ID order
+      end else
+        fMax := Count-1; // loop all records in ID order
+    result := true; // no DB error
+  end;                            
 end;
 
 

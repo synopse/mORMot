@@ -1060,7 +1060,7 @@ begin
 end;
 
 function TSQLRestServerDB.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
     SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
@@ -1172,7 +1172,7 @@ begin
 end;
 
 function TSQLRestServerDB.UpdateBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRestStorage;
+var Static: TSQLRest;
     SQL: RawUTF8;
     f: integer;
     data: TSQLVar;
