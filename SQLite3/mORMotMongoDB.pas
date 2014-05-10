@@ -94,7 +94,7 @@ type
     fBatchMethod: TSQLURIMethod;
     fBatchWriter: TBSONWriter;
     fBatchIDs: TIntegerDynArray;
-    fBatchCount: integer;
+    fBatchIDsCount: integer;
     function EngineNextID: Integer;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): integer;
@@ -408,7 +408,7 @@ begin
       if fBatchMethod<>mNone then
         if (fBatchMethod<>mPOST) or (fBatchWriter=nil) then
           result := 0 else begin
-          inc(fBatchCount);
+          inc(fBatchIDsCount);
           fBatchWriter.BSONWriteDoc(doc);
         end else begin
         fCollection.Insert([variant(doc)]);
@@ -511,7 +511,7 @@ begin
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDelete then
         exit else
-        AddInteger(fBatchIDs,fBatchCount,ID) else begin
+        AddInteger(fBatchIDs,fBatchIDsCount,ID) else begin
       fCollection.RemoveOne(ID);
       if Owner<>nil then
         Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
@@ -818,7 +818,7 @@ begin
     try
       if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
         raise EORMException.Create('InternalBatchStop should have been called');
-      fBatchCount := 0;
+      fBatchIDsCount := 0;
       fBatchMethod := Method;
       case Method of
       mPOST: // POST=ADD=INSERT -> EngineAdd() will add to fBatchWriter
@@ -845,7 +845,7 @@ begin
       fCollection.Insert(docs);
     end;
     mDELETE: begin
-      SetLength(fBatchIDs,fBatchCount);
+      SetLength(fBatchIDs,fBatchIDsCount);
       fCollection.Remove(BSONVariant(
         ['_id',BSONVariant(['$in',BSONVariantFromIntegers(fBatchIDs)])]));
     end;
@@ -856,7 +856,7 @@ begin
   finally
     FreeAndNil(fBatchWriter);
     fBatchIDs := nil;
-    fBatchCount := 0;
+    fBatchIDsCount := 0;
     fBatchMethod := mNone;
     StorageUnLock;
   end;

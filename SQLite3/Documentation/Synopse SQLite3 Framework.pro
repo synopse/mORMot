@@ -6906,7 +6906,7 @@ As you may guess, it's also a good idea to use a @*transaction@ for the whole pr
 You have two possibilities to add a transaction:
 - Either let the caller use an explicit {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block;
 - Or specify a number of rows as {\f1\fs20 AutomaticTransactionPerRow} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emmited (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
-This second method is preferred, since defining transactions from the client side is not a good idea.
+This second method is preferred, since defining transactions from the client side is not a good idea: it may block other clients attempts to create their own transaction.
 Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelfTests.pas}:
 !  // start the BATCH sequence
 !!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));

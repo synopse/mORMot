@@ -916,12 +916,15 @@ unit mORMot;
     - added TSQLRecord.CreateAndFillPrepare(aJSON) overloaded method
     - introducing TSQLRecordInterfaced class, if your TSQLRecord definition
       should be able to implement interfaces
-    - added optional CustomFields parameter to TSQLRestClientURI.BatchUpdate()
+    - now Batch*() methods are available at TSQLRest level, so will work
+      for TSQLRestClientURI and TSQLRestServer classes (not TSQLRestStorage)
+    - added optional CustomFields parameter to TSQLRest.BatchUpdate()
       and BatchAdd() methods
     - implemented automatic transaction generation during BATCH process via
       a new AutomaticTransactionPerRow parameter in BatchStart()
+    - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
     - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
-      synchronization with the server - can be handy to test the connection 
+      synchronization with the server - can be handy to test the connection
     - added TSQLRest.TableHasRows/TableRowCount methods, and overriden direct
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
@@ -937,8 +940,6 @@ unit mORMot;
       if no BLOB field is defined (as with TSQLRestServer) - ticket [bfa13889d5]
     - fixed issue in TSQLRestStorageInMemory.GetJSONValues(), and handle
       optional LIMIT clause in this very same method
-    - fixed unexpected issue in TSQLRestClientURI.BatchSend() when nothing is
-      to be sent
     - fix potential GDI handle resource leak in TSQLRestClientURIMessage.Create
     - introducing TSQLRestClientURIMessage.DoNotProcessMessages property
     - TSQLRestClientURINamedPipe.InternalCheckOpen/InternalURI refactoring
@@ -8337,6 +8338,9 @@ type
       // see http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
       PaddingForLock: array[0..95-sizeof(cardinal)*2-sizeof(pointer)-sizeof(TRTLCriticalSection)] of byte;
     end;
+    fBatch: TJSONSerializer;
+    fBatchTable, fBatchTablePreviousSendData: TSQLRecordClass;
+    fBatchCount: integer;
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
       {$ifdef HASINLINE}inline;{$endif}
@@ -8477,6 +8481,11 @@ type
     // - this method must be implemented in a thread-safe manner
     function EngineUpdateField(TableModelIndex: integer; 
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
+    /// send/execute the supplied JSON BATCH content, and return the expected array
+    // - this method will be implemented for TSQLRestClient and TSQLRestServer only
+    // - this default implementation will trigger an EORMException
+    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+      var Results: TIntegerDynArray): integer; virtual;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TSQLModel); virtual;
@@ -8987,6 +8996,96 @@ type
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     procedure RollBack(SessionID: cardinal); virtual;
+
+    {/ begin a BATCH sequence to speed up huge database change
+     - each call to normal Add/Update/Delete methods will create a Server request,
+       therefore can be slow (e.g. if the remote server has bad ping timing)
+     - start a BATCH sequence using this method, then call BatchAdd() BatchUpdate()
+       or BatchDelete() methods to make some changes to the database
+     - when BatchSend will be called, all the sequence transactions will be sent
+       as one to the remote server, i.e. in one URI request
+     - if BatchAbort is called instead, all pending BatchAdd/Update/Delete
+       transactions will be aborted, i.e. ignored
+     - expect one TSQLRecordClass as parameter, which will be used for the whole
+       sequence (in this case, you can't mix classes in the same BATCH sequence)
+     - if no TSQLRecordClass is supplied, the BATCH sequence will allow any
+       kind of individual record in BatchAdd/BatchUpdate/BatchDelete
+     - return TRUE on sucess, FALSE if aTable is incorrect or a previous BATCH
+       sequence was already initiated
+     - should normally be used inside a Transaction block: there is no automated
+       TransactionBegin..Commit/RollBack generated in the BATCH sequence if
+       you leave the default AutomaticTransactionPerRow=0 parameter - but
+       this may be a concern with a lot of concurrent clients
+     - you can set AutomaticTransactionPerRow > 0 to execute all BATCH processes
+       within an unique transaction grouped by a given number of rows, on the
+       server side - you can set AutomaticTransactionPerRow=maxInt if you want
+       one huge transaction, or set a convenient value (e.g. 10000) if you want
+       to retain the transaction log file small enough for the database engine }
+    function BatchStart(aTable: TSQLRecordClass;
+      AutomaticTransactionPerRow: cardinal=0): boolean; virtual;
+    /// create a new member in current BATCH sequence
+    // - work in BATCH mode: nothing is sent to the server until BatchSend call
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - if SendData is true, content of Value is sent to the server as JSON
+    // - if ForceID is true, client sends the Value.ID field to use this ID for
+    // adding the record (instead of a database-generated ID)
+    // - if Value is TSQLRecordFTS3, Value.ID is stored to the virtual table
+    // - Value class MUST match the TSQLRecordClass used at BatchStart,
+    // or may be of any kind if no class was specified
+    // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
+    // - if CustomFields is left void, the simple fields will be used; otherwise,
+    // you can specify your own set of fields to be transmitted when SendData=TRUE
+    // (including BLOBs, even if they will be Base64-encoded within JSON content) -
+    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
+    // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
+    function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
+      const CustomFields: TSQLFieldBits=[]): integer;
+    /// update a member in current BATCH sequence
+    // - work in BATCH mode: nothing is sent to the server until BatchSend call
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - Value class MUST match the TSQLRecordClass used at BatchStart,
+    // or may be of any kind if no class was specified
+    // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
+    // - if Value has an opened FillPrepare() mapping, only the mapped fields
+    // will be updated (and also ID and TModTime fields) - FillPrepareMany() is
+    // not handled yet (all simple fields will be updated)
+    // - if CustomFields is left void, the  simple fields will be used, or the
+    // fields retrieved via a previous FillPrepare() call; otherwise, you can
+    // specify your own set of fields to be transmitted (including BLOBs, even
+    // if they will be Base64-encoded within the JSON content) -
+    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
+    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer; virtual;
+    /// delete a member in current BATCH sequence
+    // - work in BATCH mode: nothing is sent to the server until BatchSend call
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - deleted record class is the TSQLRecordClass used at BatchStart()
+    // call: it will fail if no class was specified for this BATCH sequence
+    function BatchDelete(ID: integer): integer; overload;
+    /// delete a member in current BATCH sequence
+    // - work in BATCH mode: nothing is sent to the server until BatchSend call
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - with this overloaded method, the deleted record class is specified:
+    // no TSQLRecordClass shall have been set at BatchStart() call
+    function BatchDelete(Table: TSQLRecordClass; ID: integer): integer; overload;
+    /// retrieve the current number of pending transactions in the BATCH sequence
+    // - every call to BatchAdd/Update/Delete methods increases this count
+    function BatchCount: integer;
+    {/ execute a BATCH sequence started by BatchStart method
+     - send all pending BatchAdd/Update/Delete statements to the remote server
+     - URI is 'ModelRoot/TableName/0' with POST method
+     - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
+     - a dynamic array of integers will be created in Results,
+       containing all ROWDID created for each BatchAdd call, 200 (=HTML_SUCCESS)
+       for all successfull BatchUpdate/BatchDelete, or 0 on error
+     - any error during server-side process MUST be checked against Results[]
+       (the main URI Status is 200 if about communication success, and won't
+       imply that all statements in the BATCH sequence were successfull }
+    function BatchSend(var Results: TIntegerDynArray): integer;
+    {/ abort a BATCH sequence started by BatchStart method
+     - in short, nothing is sent to the remote server, and current BATCH sequence
+       is closed }
+    procedure BatchAbort;
 
     {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
     /// get an instance of one interface-based service
@@ -9867,6 +9966,9 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+       var Results: TIntegerDynArray): integer; override;
+
     /// virtual methods which will perform CRUD operations on the main DB
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; virtual; abstract;
     function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; virtual; abstract;
@@ -10398,6 +10500,11 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
       var ResultID: TIntegerDynArray): boolean; overload; virtual; abstract;
+    /// begin a BATCH sequence to speed up huge database change
+    // - this overriden method will raise an EORMException since BATCH mode is
+    // not supported for TSQLStorageClass: it has no interrest at table level
+    function BatchStart(aTable: TSQLRecordClass;
+      AutomaticTransactionPerRow: cardinal=0): boolean; override;
 
     /// read only access to the file name specified by constructor
     // - you can call the TSQLRestServer.StaticDataCreate method to
@@ -10987,9 +11094,6 @@ type
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   TSQLRestClientURI = class(TSQLRestClient)
   protected
-    fBatch: TJSONSerializer;
-    fBatchTable, fBatchTablePreviousSendData: TSQLRecordClass;
-    fBatchCount: integer;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
     fOnSetUser: TNotifyEvent;
     fMaximumAuthentificationRetry: Integer;
@@ -11013,6 +11117,7 @@ type
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
 {$endif}
+    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
     /// clear session and call the /auth service on the server to notify shutdown
     procedure SessionClose;
     // register the user session to the TSQLRestClientURI instance
@@ -11027,7 +11132,7 @@ type
     // - shall return TRUE on success, FALSE on any connection error
     function InternalCheckOpen: boolean; virtual; abstract;
     /// overriden protected method shall force the connection to be closed,
-    // - a next call to InternalCheckOpen method shall re-open the connection 
+    // - a next call to InternalCheckOpen method shall re-open the connection
     procedure InternalClose; virtual; abstract;
     /// calls 'ModelRoot/TableName/TableID' with appropriate REST method
     // - uses GET method if ForUpdate is false
@@ -11049,7 +11154,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
-    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
+    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+       var Results: TIntegerDynArray): integer; override;
   public
     /// initialize REST client instance
     constructor Create(aModel: TSQLModel); override;
@@ -11180,95 +11286,9 @@ type
     {/ abort a transaction (implements REST ABORT Member)
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
-
-    {/ begin a BATCH sequence to speed up huge database change
-     - each call to normal Add/Update/Delete methods will create a Server request,
-       therefore can be slow (e.g. if the remote server has bad ping timing)
-     - start a BATCH sequence using this method, then call BatchAdd() BatchUpdate()
-       or BatchDelete() methods to make some changes to the database
-     - when BatchSend will be called, all the sequence transactions will be sent
-       as one to the remote server, i.e. in one URI request
-     - if BatchAbort is called instead, all pending BatchAdd/Update/Delete
-       transactions will be aborted, i.e. ignored
-     - expect one TSQLRecordClass as parameter, which will be used for the whole
-       sequence (in this case, you can't mix classes in the same BATCH sequence)
-     - if no TSQLRecordClass is supplied, the BATCH sequence will allow any
-       kind of individual record in BatchAdd/BatchUpdate/BatchDelete
-     - return TRUE on sucess, FALSE if aTable is incorrect or a previous BATCH
-       sequence was already initiated
-     - should normally be used inside a Transaction block: there is no automated
-       TransactionBegin..Commit/RollBack generated in the BATCH sequence if
-       you leave the default AutomaticTransactionPerRow=0 parameter - but
-       this may be a concern with a lot of concurrent clients
-     - you can set AutomaticTransactionPerRow > 0 to execute all BATCH processes
-       within an unique transaction grouped by a given number of rows, on the
-       server side - you can set AutomaticTransactionPerRow=maxInt if you want
-       one huge transaction, or set a convenient value (e.g. 10000) if you want
-       to retain the transaction log file small enough for the database engine }
-    function BatchStart(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0): boolean;
-    /// create a new member in current BATCH sequence
-    // - work in BATCH mode: nothing is sent to the server until BatchSend call
-    // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - if SendData is true, content of Value is sent to the server as JSON
-    // - if ForceID is true, client sends the Value.ID field to use this ID for
-    // adding the record (instead of a database-generated ID)
-    // - if Value is TSQLRecordFTS3, Value.ID is stored to the virtual table
-    // - Value class MUST match the TSQLRecordClass used at BatchStart,
-    // or may be of any kind if no class was specified
-    // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
-    // - if CustomFields is left void, the simple fields will be used; otherwise,
-    // you can specify your own set of fields to be transmitted when SendData=TRUE
-    // (including BLOBs, even if they will be Base64-encoded within JSON content) -
-    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
-    function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      const CustomFields: TSQLFieldBits=[]): integer;
     /// update a member in current BATCH sequence
-    // - work in BATCH mode: nothing is sent to the server until BatchSend call
-    // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - Value class MUST match the TSQLRecordClass used at BatchStart,
-    // or may be of any kind if no class was specified
-    // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
-    // - if Value has an opened FillPrepare() mapping, only the mapped fields
-    // will be updated (and also ID and TModTime fields) - FillPrepareMany() is
-    // not handled yet (all simple fields will be updated)
-    // - if CustomFields is left void, the  simple fields will be used, or the
-    // fields retrieved via a previous FillPrepare() call; otherwise, you can
-    // specify your own set of fields to be transmitted (including BLOBs, even
-    // if they will be Base64-encoded within the JSON content) -
-    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
-    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer;
-    /// delete a member in current BATCH sequence
-    // - work in BATCH mode: nothing is sent to the server until BatchSend call
-    // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - deleted record class is the TSQLRecordClass used at BatchStart()
-    // call: it will fail if no class was specified for this BATCH sequence
-    function BatchDelete(ID: integer): integer; overload;
-    /// delete a member in current BATCH sequence
-    // - work in BATCH mode: nothing is sent to the server until BatchSend call
-    // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - with this overloaded method, the deleted record class is specified:
-    // no TSQLRecordClass shall have been set at BatchStart() call
-    function BatchDelete(Table: TSQLRecordClass; ID: integer): integer; overload;
-    /// retrieve the current number of pending transactions in the BATCH sequence
-    // - every call to BatchAdd/Update/Delete methods increases this count
-    function BatchCount: integer;
-    {/ execute a BATCH sequence started by BatchStart method
-     - send all pending BatchAdd/Update/Delete statements to the remote server
-     - URI is 'ModelRoot/TableName/0' with POST method
-     - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
-     - a dynamic array of integers will be created in Results,
-       containing all ROWDID created for each BatchAdd call, 200 (=HTML_SUCCESS)
-       for all successfull BatchUpdate/BatchDelete, or 0 on error
-     - any error during server-side process MUST be checked against Results[]
-       (the main URI Status is 200 if about communication success, and won't
-       imply that all statements in the BATCH sequence were successfull }
-    function BatchSend(var Results: TIntegerDynArray): integer;
-    {/ abort a BATCH sequence started by BatchStart method
-     - in short, nothing is sent to the remote server, and current BATCH sequence
-       is closed }
-    procedure BatchAbort;
+    // - this overriden method will call BeforeUpdateEvent() method
+    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer; override;
 
     {/ wrapper to the protected URI method to call a method on the server, using
       a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
@@ -22742,6 +22762,194 @@ end;
 {$endif}
 
 
+procedure TSQLRest.BatchAbort;
+begin
+  if self<>nil then begin
+    fBatchCount := 0;
+    fBatchTable := nil;
+    fBatchTablePreviousSendData := nil;
+    FreeAndNil(fBatch);
+  end;
+end;
+
+function TSQLRest.BatchAdd(Value: TSQLRecord; SendData: boolean;
+  ForceID: boolean=false; const CustomFields: TSQLFieldBits=[]): integer;
+var Props: TSQLRecordProperties;
+    FieldBits: PSQLFieldBits;
+begin
+  result := -1;
+  if (self=nil) or (Value=nil) or (fBatch=nil) then
+    exit; // invalid parameters, or not opened BATCH sequence
+  Props := Value.RecordProps;
+  if fBatchTable<>nil then
+    if PSQLRecordClass(Value)^<>fBatchTable then
+      exit else // '{"Table":[...,"POST":{object},...]}'
+      fBatch.AddShort('"POST":') else begin
+      fBatch.AddShort('"POST@'); // '[...,"POST@Table":{object}',...]'
+      fBatch.AddString(Props.SQLTableName);
+      fBatch.Add('"',':');
+    end;
+  if SendData then begin
+    if Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID then
+      ForceID := true; // same format as TSQLRestClient.Add
+    if IsZero(CustomFields) then
+      FieldBits := @Props.SimpleFieldsBits[soInsert] else
+      FieldBits := @CustomFields;
+    Props.SetExpandedJSONWriter(fBatch,
+      fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,
+      (Value.fID<>0) and ForceID,FieldBits^);
+    fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
+    Value.ComputeFieldsBeforeWrite(self,seAdd); // update TModTime/TCreateTime fields
+    Value.GetJSONValues(fBatch);
+    if ForceID then
+      fCache.Notify(Value,soInsert);
+  end else
+    fBatch.Add('{','}'); // '{"Table":[...,"POST":{},...]}'
+  fBatch.Add(',');
+  result := fBatchCount;
+  inc(fBatchCount);
+end;
+
+function TSQLRest.BatchCount: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := fBatchCount;
+end;
+
+function TSQLRest.BatchDelete(ID: integer): integer;
+begin
+  if (self=nil) or (fBatchTable=nil) or
+     (ID<=0) or not RecordCanBeUpdated(fBatchTable,ID,seDelete) then begin
+    result := -1; // invalid parameters, or not opened BATCH sequence
+    exit;
+  end;
+  fCache.NotifyDeletion(fBatchTable,ID);
+  fBatch.AddShort('"DELETE":'); // '{"Table":[...,"DELETE":ID,...]}'
+  fBatch.Add(ID);
+  fBatch.Add(',');
+  result := fBatchCount;
+  inc(fBatchCount);
+end;
+
+function TSQLRest.BatchDelete(Table: TSQLRecordClass; ID: integer): integer;
+begin
+  if (self=nil) or (fBatch=nil) or (Table=nil) or
+     (ID<=0) or not RecordCanBeUpdated(Table,ID,seDelete) then begin
+    result := -1; // invalid parameters, or not opened BATCH sequence
+    exit;
+  end;
+  fCache.NotifyDeletion(Table,ID);
+  fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table":ID,...]}'
+  fBatch.AddString(Table.RecordProps.SQLTableName);
+  fBatch.Add('"',':');
+  fBatch.Add(ID);
+  fBatch.Add(',');
+  result := fBatchCount;
+  inc(fBatchCount);
+end;
+
+function TSQLRest.BatchSend(var Results: TIntegerDynArray): integer;
+var Data: RawUTF8;
+begin
+  if (self=nil) or (fBatch=nil) then // no opened BATCH sequence
+    result := HTML_BADREQUEST else
+  try
+    if fBatchCount>0 then begin // if something to send
+      fBatch.CancelLastComma;
+      fBatch.Add(']');
+      if fBatchTable<>nil then
+        fBatch.Add('}'); // end sequence array '{"Table":["cmd":values,...]}'
+      fBatch.SetText(Data);
+      try
+        result := EngineBatchSend(fBatchTable,Data,Results);
+      except
+        on Exception do // e.g. from TSQLRestServer.EngineBatchSend()
+          result := HTML_NOTMODIFIED;
+      end;
+    end else
+      result := HTML_SUCCESS; // returns OK
+  finally
+    BatchAbort;
+  end;
+end;
+
+const
+  AUTOMATICTRANSACTIONPERROW_PATTERN = '"AUTOMATICTRANSACTIONPERROW":';
+
+function TSQLRest.BatchStart(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal): boolean;
+begin
+  if (fBatchCount>0) or (fBatch<>nil) then begin
+    // already opened BATCH sequence
+    result := false;
+    exit;
+  end;
+  fBatch := TJSONSerializer.CreateOwnedStream;
+  if aTable<>nil then begin
+    fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
+    fBatch.AddFieldName(aTable.SQLTableName);
+  end;
+  fBatch.Add('[');
+  if AutomaticTransactionPerRow>0 then begin // should be the first command
+    fBatch.AddShort(AUTOMATICTRANSACTIONPERROW_PATTERN);
+    fBatch.Add(AutomaticTransactionPerRow);
+    fBatch.Add(',');
+  end;
+  fBatchTable := aTable;
+  fBatchCount := 0;
+  result := true;
+end;
+
+function TSQLRest.BatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits=[]): integer;
+var Props: TSQLRecordProperties;
+    FieldBits: TSQLFieldBits;
+begin
+  result := -1;
+  if (Value=nil) or (fBatch=nil) or (Value.fID<=0) or
+     not RecordCanBeUpdated(Value.RecordClass,Value.fID,seUpdate) then
+    exit; // invalid parameters, or not opened BATCH sequence
+  Props := Value.RecordProps;
+  if fBatchTable<>nil then
+    if PSQLRecordClass(Value)^<>fBatchTable then
+      exit else // '{"Table":[...,"PUT":{object},...]}'
+      fBatch.AddShort('"PUT":') else begin
+      fBatch.AddShort('"PUT@'); // '[...,"PUT@Table":{object}',...]'
+      fBatch.AddString(Props.SQLTableName);
+      fBatch.Add('"',':');
+    end;
+  // same format as TSQLRest.Update, BUT including the ID
+  if IsZero(CustomFields) then
+    if (Value.fFill<>nil) and (Value.fFill.Table<>nil) and
+       (Value.fFill.fTableMapRecordManyInstances=nil) then
+      // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
+      FieldBits := Value.fFill.fTableMapFields+Props.ModTimeFieldsBits else
+      // update all simple/custom fields (also for FillPrepareMany)
+      FieldBits := Props.SimpleFieldsBits[soUpdate] else
+    // update custom fields
+    FieldBits := CustomFields;
+  Props.SetExpandedJSONWriter(fBatch,
+    fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,True,FieldBits);
+  fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
+  Value.ComputeFieldsBeforeWrite(self,seUpdate); // update sftModTime fields
+  Value.GetJSONValues(fBatch);
+  fBatch.Add(',');
+  if FieldBits-Props.SimpleFieldsBits[soUpdate]<>[] then
+    // may not contain all cached fields -> delete from cache
+    fCache.NotifyDeletion(Value.RecordClass,Value.fID) else
+    fCache.Notify(Value,soUpdate);
+  result := fBatchCount;
+  inc(fBatchCount);
+end;
+
+function TSQLRest.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+  var Results: TIntegerDynArray): integer;
+begin
+  raise EORMException.CreateFmt('%s.BatchStart() not supported yet',[ClassName]);
+end;
+
+
 { TSQLRestCacheEntry }
 
 procedure TSQLRestCacheEntry.FlushCacheEntry(Index: Integer);
@@ -23596,215 +23804,7 @@ begin
     result := false;
 end;
 
-procedure TSQLRestClientURI.BatchAbort;
-begin
-  if self<>nil then begin
-    fBatchCount := 0;
-    fBatchTable := nil;
-    fBatchTablePreviousSendData := nil;
-    FreeAndNil(fBatch);
-  end;
-end;
-
-function TSQLRestClientURI.BatchAdd(Value: TSQLRecord; SendData: boolean;
-  ForceID: boolean=false; const CustomFields: TSQLFieldBits=[]): integer;
-var Props: TSQLRecordProperties;
-    FieldBits: PSQLFieldBits;
-begin
-  result := -1;
-  if (self=nil) or (Value=nil) or (fBatch=nil) then
-    exit; // invalid parameters, or not opened BATCH sequence
-  Props := Value.RecordProps;
-  if fBatchTable<>nil then
-    if PSQLRecordClass(Value)^<>fBatchTable then
-      exit else // '{"Table":[...,"POST":{object},...]}'
-      fBatch.AddShort('"POST":') else begin
-      fBatch.AddShort('"POST@'); // '[...,"POST@Table":{object}',...]'
-      fBatch.AddString(Props.SQLTableName);
-      fBatch.Add('"',':');
-    end;
-  if SendData then begin
-    if Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID then
-      ForceID := true; // same format as TSQLRestClient.Add
-    if IsZero(CustomFields) then
-      FieldBits := @Props.SimpleFieldsBits[soInsert] else
-      FieldBits := @CustomFields;
-    Props.SetExpandedJSONWriter(fBatch,
-      fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,
-      (Value.fID<>0) and ForceID,FieldBits^);
-    fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
-    Value.ComputeFieldsBeforeWrite(self,seAdd); // update TModTime/TCreateTime fields
-    Value.GetJSONValues(fBatch);
-    if ForceID then
-      fCache.Notify(Value,soInsert);
-  end else
-    fBatch.Add('{','}'); // '{"Table":[...,"POST":{},...]}'
-  fBatch.Add(',');
-  result := fBatchCount;
-  inc(fBatchCount);
-end;
-
-function TSQLRestClientURI.BatchCount: integer;
-begin
-  if self=nil then
-    result := 0 else
-    result := fBatchCount;
-end;
-
-function TSQLRestClientURI.BatchDelete(ID: integer): integer;
-begin
-  if (self=nil) or (fBatchTable=nil) or
-     (ID<=0) or not RecordCanBeUpdated(fBatchTable,ID,seDelete) then begin
-    result := -1; // invalid parameters, or not opened BATCH sequence
-    exit;
-  end;
-  fCache.NotifyDeletion(fBatchTable,ID);
-  fBatch.AddShort('"DELETE":'); // '{"Table":[...,"DELETE":ID,...]}'
-  fBatch.Add(ID);
-  fBatch.Add(',');
-  result := fBatchCount;
-  inc(fBatchCount);
-end;
-
-function TSQLRestClientURI.BatchDelete(Table: TSQLRecordClass; ID: integer): integer;
-begin
-  if (self=nil) or (fBatch=nil) or (Table=nil) or
-     (ID<=0) or not RecordCanBeUpdated(Table,ID,seDelete) then begin
-    result := -1; // invalid parameters, or not opened BATCH sequence
-    exit;
-  end;
-  fCache.NotifyDeletion(Table,ID);
-  fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table":ID,...]}'
-  fBatch.AddString(Table.RecordProps.SQLTableName);
-  fBatch.Add('"',':');
-  fBatch.Add(ID);
-  fBatch.Add(',');
-  result := fBatchCount;
-  inc(fBatchCount);
-end;
-
-function TSQLRestClientURI.BatchSend(var Results: TIntegerDynArray): integer;
-var Data, Resp: RawUTF8;
-    R: PUTF8Char;
-    i: integer;
-begin
-  if (self=nil) or (fBatch=nil) then // no opened BATCH sequence
-    result := HTML_BADREQUEST else
-  try
-    if fBatchCount>0 then begin // if something to send
-      fBatch.CancelLastComma;
-      fBatch.Add(']');
-      if fBatchTable<>nil then
-        fBatch.Add('}'); // end sequence array '{"Table":["cmd":values,...]}'
-      fBatch.SetText(Data);
-      // URI is 'ModelRoot/Batch' or 'ModelRoot/Batch/TableName' with PUT method
-      result := URI(Model.getURICallBack('Batch',fBatchTable,0),'PUT',@Resp,nil,@Data).Lo;
-      if result<>HTML_SUCCESS then
-        exit;
-      // returned Resp shall be an array of integers: '[200,200,...]'
-      R := pointer(Resp);
-      if R<>nil then
-        while not (R^ in ['[',#0]) do inc(R);
-      result := HTML_BADREQUEST;
-      if (R=nil) or (R^<>'[') then
-        // invalid response
-        exit;
-      SetLength(Results,fBatchCount);
-      if IdemPChar(R,'["OK"]') then begin // to save bandwith if no adding
-        for i := 0 to fBatchCount-1 do
-          Results[i] := HTML_SUCCESS;
-      end else begin
-        inc(R); // jump first '['
-        for i := 0 to fBatchCount-1 do begin
-          Results[i] := GetJSONIntegerVar(R);
-          while R^ in [#1..' '] do inc(R);
-          case R^ of
-            ',': inc(R);
-            ']': break;
-            else exit;
-          end;
-        end;
-        if R^<>']' then
-          exit;
-      end;
-    end;
-    result := HTML_SUCCESS; // returns OK
-  finally
-    BatchAbort;
-  end;
-end;
-
-const
-  AUTOMATICTRANSACTIONPERROW_PATTERN = '"AUTOMATICTRANSACTIONPERROW":';
-
-function TSQLRestClientURI.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal): boolean;
-begin
-  if (self=nil) or (fBatchCount>0) or (fBatch<>nil) then begin
-    // already opened BATCH sequence
-    result := false;
-    exit;
-  end;
-  fBatch := TJSONSerializer.CreateOwnedStream;
-  if aTable<>nil then begin
-    fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
-    fBatch.AddFieldName(aTable.SQLTableName);
-  end;
-  fBatch.Add('[');
-  if AutomaticTransactionPerRow>0 then begin // should be the first command
-    fBatch.AddShort(AUTOMATICTRANSACTIONPERROW_PATTERN);
-    fBatch.Add(AutomaticTransactionPerRow);
-    fBatch.Add(',');
-  end;
-  fBatchTable := aTable;
-  fBatchCount := 0;
-  result := true;
-end;
-
-function TSQLRestClientURI.BatchUpdate(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits=[]): integer;
-var Props: TSQLRecordProperties;
-    FieldBits: TSQLFieldBits;
-begin
-  result := -1;
-  if (self=nil) or (Value=nil) or (fBatch=nil) or (Value.fID<=0) or
-     not RecordCanBeUpdated(Value.RecordClass,Value.fID,seUpdate) or
-     not BeforeUpdateEvent(Value) then
-    exit; // invalid parameters, or not opened BATCH sequence
-  Props := Value.RecordProps;
-  if fBatchTable<>nil then
-    if PSQLRecordClass(Value)^<>fBatchTable then
-      exit else // '{"Table":[...,"PUT":{object},...]}'
-      fBatch.AddShort('"PUT":') else begin
-      fBatch.AddShort('"PUT@'); // '[...,"PUT@Table":{object}',...]'
-      fBatch.AddString(Props.SQLTableName);
-      fBatch.Add('"',':');
-    end;
-  // same format as TSQLRestClientURI.Update, BUT including the ID
-  if IsZero(CustomFields) then
-    if (Value.fFill<>nil) and (Value.fFill.Table<>nil) and
-       (Value.fFill.fTableMapRecordManyInstances=nil) then
-      // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
-      FieldBits := Value.fFill.fTableMapFields+Props.ModTimeFieldsBits else
-      // update all simple/custom fields (also for FillPrepareMany)
-      FieldBits := Props.SimpleFieldsBits[soUpdate] else
-    // update custom fields
-    FieldBits := CustomFields;
-  Props.SetExpandedJSONWriter(fBatch,
-    fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,True,FieldBits);
-  fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
-  Value.ComputeFieldsBeforeWrite(self,seUpdate); // update sftModTime fields
-  Value.GetJSONValues(fBatch);
-  fBatch.Add(',');
-  if FieldBits-Props.SimpleFieldsBits[soUpdate]<>[] then
-    // may not contain all cached fields -> delete from cache
-    fCache.NotifyDeletion(Value.RecordClass,Value.fID) else
-    fCache.Notify(Value,soUpdate);
-  result := fBatchCount;
-  inc(fBatchCount);
-end;
-
-function TSQLRestClientURI.EngineAdd(TableModelIndex: integer; 
+function TSQLRestClientURI.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): integer;
 var P: PUTF8Char;
     url, Head: RawUTF8;
@@ -23912,6 +23912,58 @@ begin
        SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)]);
     result := URI(url,'PUT').Lo=HTML_SUCCESS;
   end;
+end;
+
+function TSQLRestClientURI.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+  var Results: TIntegerDynArray): integer;
+var Resp: RawUTF8;
+    R: PUTF8Char;
+    i: integer;
+begin // TSQLRest.BatchSend() ensured that Batch contains some data
+  try
+    // URI is 'ModelRoot/Batch' or 'ModelRoot/Batch/TableName' with PUT method
+    result := URI(Model.getURICallBack('Batch',Table,0),'PUT',@Resp,nil,@Data).Lo;
+    if result<>HTML_SUCCESS then
+      exit;
+    // returned Resp shall be an array of integers: '[200,200,...]'
+    R := pointer(Resp);
+    if R<>nil then
+      while not (R^ in ['[',#0]) do inc(R);
+    result := HTML_BADREQUEST;
+    if (R=nil) or (R^<>'[') then
+      // invalid response
+      exit;
+    SetLength(Results,fBatchCount);
+    if IdemPChar(R,'["OK"]') then begin // to save bandwith if no adding
+      for i := 0 to fBatchCount-1 do
+        Results[i] := HTML_SUCCESS;
+    end else begin
+      inc(R); // jump first '['
+      for i := 0 to fBatchCount-1 do begin
+        Results[i] := GetJSONIntegerVar(R);
+        while R^ in [#1..' '] do inc(R);
+        case R^ of
+          ',': inc(R);
+          ']': break;
+          else exit;
+        end;
+      end;
+      if R^<>']' then
+        exit;
+    end;
+    result := HTML_SUCCESS; // returns OK
+  finally
+    BatchAbort;
+  end;
+end;
+
+function TSQLRestClientURI.BatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits=[]): integer;
+begin
+  if (Value=nil) or (fBatch=nil) or (Value.fID<=0) or
+     not BeforeUpdateEvent(Value) then
+    result := -1 else
+    result := inherited BatchUpdate(Value,CustomFields);
 end;
 
 
@@ -25781,207 +25833,27 @@ begin
 end;
 
 procedure TSQLRestServer.Batch(Ctxt: TSQLRestServerURIContext);
-var EndOfObject: AnsiChar;
-    wasString, OK: boolean;
-    TableName, Value, ErrMsg: RawUTF8;
-    URIMethod, RunningBatchURIMethod: TSQLURIMethod;
-    RunningBatchStatic: TSQLRest; { TODO: allow nested batch between tables? }
-    Sent, Method, MethodTable: PUTF8Char;
-    AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
-    i, ID, Count: integer;
-    Results: TIntegerDynArray;
-    RunTable, PrevRunTable: TSQLRecordClass;
-    RunTableIndex: integer;
-    RunStatic: TSQLRest;
-    RunStaticKind: TSQLRestServerKind;
-begin  // TODO: handle Batch() at TSQLRestLevel
+var Results: TIntegerDynArray;
+    i: integer;
+begin 
   if Ctxt.Method<>mPUT then begin
     Ctxt.Error('PUT only');
     exit;
   end;
-  Sent := pointer(Ctxt.Call.InBody);
-  if (self=nil) or (Sent=nil) then begin
-    Ctxt.Error;
-    exit;
-  end;
-  if Ctxt.Table<>nil then begin
-    // unserialize expected sequence array as '{"Table":["cmd":values,...]}'
-    while not (Sent^ in ['{',#0]) do inc(Sent);
-    if Sent^<>'{' then begin
-      Ctxt.Error('Missing {');
-      exit;
-    end;
-    inc(Sent);
-    TableName := GetJSONPropName(Sent);
-    if (TableName='') or (Sent=nil) or
-       not IdemPropNameU(Ctxt.TableRecordProps.Props.SQLTableName,TableName) then begin
-      Ctxt.Error('Wrong "Table":');
-      exit;
-    end;
-  end; // or '["cmd@Table":values,...]'
-  while not (Sent^ in ['[',#0]) do inc(Sent);
-  if Sent^<>'[' then begin
-    Ctxt.Error('Missing [');
-    exit;
-  end;
-  inc(Sent);
-  if IdemPChar(Sent,AUTOMATICTRANSACTIONPERROW_PATTERN) then begin
-    inc(Sent,Length(AUTOMATICTRANSACTIONPERROW_PATTERN));
-    AutomaticTransactionPerRow := GetNextItemCardinal(Sent,',');
-    if (AutomaticTransactionPerRow>0) and (TransactionActiveSession<>0) then begin
-      InternalLog('Active Transaction -> ignore AutomaticTransactionPerRow',sllWarning);
-      AutomaticTransactionPerRow := 0;
-    end;
-  end else
-    AutomaticTransactionPerRow := 0;
-  RowCountForCurrentTransaction := 0;
-  RunTable := nil;
-  PrevRunTable := nil;
-  RunningBatchStatic := nil;
-  RunningBatchURIMethod := mNone;
-  Count := 0;
-  try // to protect automatic transactions
-  try // to protect InternalBatchStart/Stop locking
-    repeat // main loop: process one POST/PUT/DELETE per iteration
-      // retrieve method name and associated (static) table
-      Method := GetJSONPropName(Sent);
-      if (Sent=nil) or (Method=nil) then begin
-        Ctxt.Error('Missing CMD');
-        exit;
-      end;
-      MethodTable := PosChar(Method,'@');
-      if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
-        RunTable := Ctxt.Table;
-        RunStatic := Ctxt.Static;
-        RunTableIndex := Ctxt.TableIndex;
-        RunStaticKind := Ctxt.StaticKind;
-      end else begin                // e.g. '[...,"POST@Table":{object},...]'
-        RunTableIndex := Model.GetTableIndex(MethodTable+1);
-        if RunTableIndex<0 then begin
-          Ctxt.Error('Unknown @Table');
-          exit;
-        end;
-        RunTable := Model.Tables[RunTableIndex];
-        RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
-      end;
-      if Count>=length(Results) then
-        SetLength(Results,Count+256+Count shr 3);
-      // get CRUD method (ignoring @ char if appended after method name)
-      if IdemPChar(Method,'DELETE') then
-        URIMethod := mDELETE else
-      if IdemPChar(Method,'POST') then
-        URIMethod := mPOST else
-      if IdemPChar(Method,'PUT') then
-        URIMethod := mPUT else
-        URIMethod := mNone;
-      // handle batch pending request sending (if table or method changed)
-      if (RunningBatchStatic<>nil) and
-         ((RunStatic<>RunningBatchStatic) or (RunningBatchURIMethod<>URIMethod)) then begin
-        RunningBatchStatic.InternalBatchStop; // send pending statements
-        RunningBatchStatic := nil;
-      end;
-      if (RunStatic<>nil) and (RunStatic<>RunningBatchStatic) and
-         RunStatic.InternalBatchStart(URIMethod) then begin
-        RunningBatchStatic := RunStatic;
-        RunningBatchURIMethod := URIMethod;
-      end;
-      // handle auto-committed transaction process
-      if AutomaticTransactionPerRow>0 then begin
-        if PrevRunTable<>RunTable then begin // allow method change for same table
-          if RowCountForCurrentTransaction>0 then begin
-            Commit(Ctxt.Session); // table changed -> commit previous trans
-            RowCountForCurrentTransaction := 0;
-          end;
-          PrevRunTable := RunTable;
-        end;
-        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then begin
-          Commit(Ctxt.Session);
-          RowCountForCurrentTransaction := 0;
-        end;
-        if RowCountForCurrentTransaction>0 then
-          inc(RowCountForCurrentTransaction) else
-          if TransactionBegin(Ctxt.Table,Ctxt.Session) then
-            inc(RowCountForCurrentTransaction) else begin
-            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
-            AutomaticTransactionPerRow := 0; 
-          end;
-      end;
-      // process CRUD method operation
-      case URIMethod of
-      mDELETE: begin // '{"Table":[...,"DELETE":ID,...]}' or '[...,"DELETE@Table":ID,...]'
-        ID := GetInteger(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
-        if (ID<=0) or wasString or
-           not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then begin
-          Ctxt.Error(ErrMsg,HTML_NOTMODIFIED);
-          exit;
-        end;
-        OK := EngineDelete(RunTableIndex,ID);
-        if OK then begin
-          fCache.NotifyDeletion(RunTable,ID);
-          if (RunningBatchStatic<>nil) or
-             AfterDeleteForceCoherency(RunTable,ID) then
-            Results[Count] := HTML_SUCCESS; // 200 OK
-        end;
-      end;
-      mPOST: begin // '{"Table":[...,"POST":{object},...]}' or '[...,"POST@Table":{object},...]'
-        Value := JSONGetObject(Sent,nil,EndOfObject);
-        if (Sent=nil) or
-           not RecordCanBeUpdated(RunTable,0,seAdd,@ErrMsg)  then begin
-          Ctxt.Error(ErrMsg,HTML_NOTMODIFIED);
-          exit;
-        end;
-        ID := EngineAdd(RunTableIndex,Value);
-        Results[Count] := ID;
-        fCache.Notify(RunTable,ID,Value,soInsert);
-      end;
-      mPUT: begin // '{"Table":[...,"PUT":{object},...]}' or '[...,"PUT@Table":{object},...]'
-        Value := JSONGetObject(Sent,@ID,EndOfObject);
-        if (Sent=nil) or (Value='') then
-          exit;
-        OK := EngineUpdate(RunTableIndex,ID,Value);
-        if OK then begin
-          Results[Count] := HTML_SUCCESS; // 200 OK
-          fCache.NotifyDeletion(RunTable,ID); // Value does not have CreateTime e.g.
-          // or may be complete -> update won't work as expected -> delete from cache
-        end;
-      end;
-      else exit; // unknown method
-      end;
-      inc(Count);
-    until EndOfObject=']';
-    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
-      Commit(Ctxt.Session);
-  finally
-    if RunningBatchStatic<>nil then
-      RunningBatchStatic.InternalBatchStop; // send pending statements
-  end;
+  try
+    EngineBatchSend(Ctxt.Table,Ctxt.Call.InBody,Results);
   except
     on E: Exception do begin
-      Ctxt.Error('Exception % "%" did break process at % for %',
-        [E,E.Message,Method,RunTable]);
-      if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
-        RollBack(Ctxt.Session);
-        InternalLog('PARTIAL rollback of latest auto-commited transaction',sllWarning);
-      end;
-      exit;
-    end;
-  end;
-  if Ctxt.Table<>nil then begin // '{"Table":["cmd":values,...]}' format
-    if Sent=nil then begin
-      Ctxt.Error('Truncated');
-      exit;
-    end;
-    while not (Sent^ in ['}',#0]) do inc(Sent);
-    if Sent^<>'}' then begin
-      Ctxt.Error('Missing }');
+      Ctxt.Error('Exception % "%" did break % BATCH process',
+        [E,E.Message,Ctxt.Table]);
       exit;
     end;
   end;
   // send back operation status array
   Ctxt.Call.OutStatus := HTML_SUCCESS;
-  for i := 0 to Count-1 do
+  for i := 0 to length(Results)-1 do
     if Results[i]<>HTML_SUCCESS then begin
-      Ctxt.Call.OutBody := IntegerDynArrayToCSV(Results,Count,'[',']');
+      Ctxt.Call.OutBody := IntegerDynArrayToCSV(Results,length(Results),'[',']');
       exit;
     end;
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
@@ -26280,7 +26152,7 @@ begin
 end;
 
 function TSQLRestServer.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; 
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var Static: TSQLRest;
 begin
   Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
@@ -26289,6 +26161,184 @@ begin
       WhereFieldName,WhereValue) else
     result := Static.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,
       WhereFieldName,WhereValue);
+end;
+
+type
+  EORMBatchException = class(EORMException);
+
+function TSQLRestServer.EngineBatchSend(Table: TSQLRecordClass;
+  const Data: RawUTF8; var Results: TIntegerDynArray): integer;
+var EndOfObject: AnsiChar;
+    wasString, OK: boolean;
+    TableName, Value, ErrMsg: RawUTF8;
+    URIMethod, RunningBatchURIMethod: TSQLURIMethod;
+    RunningBatchStatic: TSQLRest; { TODO: allow nested batch between tables? }
+    Sent, Method, MethodTable: PUTF8Char;
+    AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
+    ID, Count: integer;
+    RunTable, PrevRunTable: TSQLRecordClass;
+    RunTableIndex: integer;
+    RunStatic: TSQLRest;
+    RunStaticKind: TSQLRestServerKind;
+begin
+  Sent := pointer(Data);
+  if (self=nil) or (Sent=nil) then
+    raise EORMBatchException.Create('No data');
+  if Table<>nil then begin
+    // unserialize expected sequence array as '{"Table":["cmd":values,...]}'
+    while not (Sent^ in ['{',#0]) do inc(Sent);
+    if Sent^<>'{' then
+      raise EORMBatchException.Create('Missing {');
+    inc(Sent);
+    TableName := GetJSONPropName(Sent);
+    if (TableName='') or (Sent=nil) then 
+      raise EORMBatchException.CreateFmt('Wrong "Table":"%s"',[TableName]);
+  end; // or '["cmd@Table":values,...]'
+  while not (Sent^ in ['[',#0]) do inc(Sent);
+  if Sent^<>'[' then
+    raise EORMBatchException.Create('Missing [');
+  inc(Sent);
+  if IdemPChar(Sent,AUTOMATICTRANSACTIONPERROW_PATTERN) then begin
+    inc(Sent,Length(AUTOMATICTRANSACTIONPERROW_PATTERN));
+    AutomaticTransactionPerRow := GetNextItemCardinal(Sent,',');
+    if (AutomaticTransactionPerRow>0) and (TransactionActiveSession<>0) then begin
+      InternalLog('Active Transaction -> ignore AutomaticTransactionPerRow',sllWarning);
+      AutomaticTransactionPerRow := 0;
+    end;
+  end else
+    AutomaticTransactionPerRow := 0;
+  RowCountForCurrentTransaction := 0;
+  PrevRunTable := nil;
+  RunningBatchStatic := nil;
+  RunningBatchURIMethod := mNone;
+  Count := 0;
+  try // to protect automatic transactions
+  try // to protect InternalBatchStart/Stop locking
+    repeat // main loop: process one POST/PUT/DELETE per iteration
+      // retrieve method name and associated (static) table
+      Method := GetJSONPropName(Sent);
+      if (Sent=nil) or (Method=nil) then
+        raise EORMBatchException.Create('Missing CMD');
+      MethodTable := PosChar(Method,'@');
+      if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
+        RunTableIndex := Model.GetTableIndexExisting(Table);
+        RunTable := Table;
+      end else begin                // e.g. '[...,"POST@Table":{object},...]'
+        RunTableIndex := Model.GetTableIndex(MethodTable+1);
+        if RunTableIndex<0 then
+          raise EORMBatchException.Create('Unknown @Table');
+        RunTable := Model.Tables[RunTableIndex];
+      end;
+      RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
+      if Count>=length(Results) then
+        SetLength(Results,Count+256+Count shr 3);
+      Results[Count] := HTML_NOTMODIFIED;
+      // get CRUD method (ignoring @ char if appended after method name)
+      if IdemPChar(Method,'DELETE') then
+        URIMethod := mDELETE else
+      if IdemPChar(Method,'POST') then
+        URIMethod := mPOST else
+      if IdemPChar(Method,'PUT') then
+        URIMethod := mPUT else
+        URIMethod := mNone;
+      // handle batch pending request sending (if table or method changed)
+      if (RunningBatchStatic<>nil) and
+         ((RunStatic<>RunningBatchStatic) or (RunningBatchURIMethod<>URIMethod)) then begin
+        RunningBatchStatic.InternalBatchStop; // send pending statements
+        RunningBatchStatic := nil;
+      end;
+      if (RunStatic<>nil) and (RunStatic<>RunningBatchStatic) and
+         RunStatic.InternalBatchStart(URIMethod) then begin
+        RunningBatchStatic := RunStatic;
+        RunningBatchURIMethod := URIMethod;
+      end;
+      // handle auto-committed transaction process
+      if AutomaticTransactionPerRow>0 then begin
+        if PrevRunTable<>RunTable then begin // allow method change for same table
+          if RowCountForCurrentTransaction>0 then begin
+            Commit(CONST_AUTHENTICATION_NOT_USED); // table changed -> commit previous trans
+            RowCountForCurrentTransaction := 0;
+          end;
+          PrevRunTable := RunTable;
+        end;
+        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then begin
+          Commit(CONST_AUTHENTICATION_NOT_USED);
+          RowCountForCurrentTransaction := 0;
+        end;
+        if RowCountForCurrentTransaction>0 then
+          inc(RowCountForCurrentTransaction) else
+          if TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
+            inc(RowCountForCurrentTransaction) else begin
+            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
+            AutomaticTransactionPerRow := 0;
+          end;
+      end;
+      // process CRUD method operation
+      case URIMethod of
+      mDELETE: begin // '{"Table":[...,"DELETE":ID,...]}' or '[...,"DELETE@Table":ID,...]'
+        ID := GetInteger(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
+        if (ID<=0) or wasString then
+          raise EORMBatchException.Create('Wrong DELETE');
+        if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
+          raise EORMBatchException.CreateFmt('DELETE impossible: %s',[ErrMsg]);
+        OK := EngineDelete(RunTableIndex,ID);
+        if OK then begin
+          fCache.NotifyDeletion(RunTable,ID);
+          if (RunningBatchStatic<>nil) or
+             AfterDeleteForceCoherency(RunTable,ID) then
+            Results[Count] := HTML_SUCCESS; // 200 OK
+        end;
+      end;
+      mPOST: begin // '{"Table":[...,"POST":{object},...]}' or '[...,"POST@Table":{object},...]'
+        Value := JSONGetObject(Sent,nil,EndOfObject);
+        if Sent=nil then
+          raise EORMBatchException.Create('Wrong POST');
+        if not RecordCanBeUpdated(RunTable,0,seAdd,@ErrMsg)  then
+          raise EORMBatchException.CreateFmt('POST impossible: %s',[ErrMsg]);
+        ID := EngineAdd(RunTableIndex,Value);
+        Results[Count] := ID;
+        fCache.Notify(RunTable,ID,Value,soInsert);
+      end;
+      mPUT: begin // '{"Table":[...,"PUT":{object},...]}' or '[...,"PUT@Table":{object},...]'
+        Value := JSONGetObject(Sent,@ID,EndOfObject);
+        if (Sent=nil) or (Value='') then
+          raise EORMBatchException.Create('Wrong PUT');
+        OK := EngineUpdate(RunTableIndex,ID,Value);
+        if OK then begin
+          Results[Count] := HTML_SUCCESS; // 200 OK
+          fCache.NotifyDeletion(RunTable,ID); // Value does not have CreateTime e.g.
+          // or may be complete -> update won't work as expected -> delete from cache
+        end;
+      end;
+      else raise EORMBatchException.CreateFmt('Unknown "%s" method',[Method]);
+      end;
+      inc(Count);
+    until EndOfObject=']';
+    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
+      Commit(CONST_AUTHENTICATION_NOT_USED);
+  finally
+    if RunningBatchStatic<>nil then
+      RunningBatchStatic.InternalBatchStop; // send pending statements
+  end;
+  except
+    on Exception do begin
+      if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
+        RollBack(CONST_AUTHENTICATION_NOT_USED);
+        InternalLog('PARTIAL rollback of latest auto-commited transaction',sllWarning);
+      end;
+      raise;
+    end;
+  end;
+  if Table<>nil then begin // '{"Table":["cmd":values,...]}' format
+    if Sent=nil then
+      raise EORMBatchException.Create('Truncated');
+    while not (Sent^ in ['}',#0]) do inc(Sent);
+    if Sent^<>'}' then
+      raise EORMBatchException.Create('Missing }');
+  end;
+  // if we reach here, process was OK
+  SetLength(Results,Count);
+  result := HTML_SUCCESS;
 end;
 
 function CurrentServiceContext: TServiceRunningContext;
@@ -28184,7 +28234,7 @@ begin
   result := Model.UnLock(Table,aID);
 end;
 
-function TSQLRestStorage.AdaptSQLForEngineList(var SQL: RawUTF8): boolean; 
+function TSQLRestStorage.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
 begin
   if fStoredClassProps=nil then
     result := false else begin
@@ -28193,6 +28243,11 @@ begin
       SQL := fStoredClassProps.SQL.SelectAllWithID else
       result := IdemPropNameU(fStoredClassProps.SQL.SelectAllWithID,SQL);
   end;
+end;
+
+function TSQLRestStorage.BatchStart(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0): boolean;
+begin
+  raise EORMException.CreateFmt('%s.BatchStart() does not make sense',[ClassName]);
 end;
 
 
