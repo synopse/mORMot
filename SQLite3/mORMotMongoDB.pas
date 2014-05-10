@@ -528,7 +528,7 @@ var i: integer;
 begin // here we use the pre-computed IDs[]
   result := false;
   if (fCollection<>nil) and (TableModelIndex>=0) and
-     (Model.Tables[TableModelIndex]=fStoredClass) and (IDs=nil) then
+     (Model.Tables[TableModelIndex]=fStoredClass) and (IDs<>nil) then
     try
       if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
