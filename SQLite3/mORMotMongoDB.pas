@@ -357,7 +357,13 @@ begin
       doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
       V := @Doc.Values[i];
-      if V^.VType=varString then // handle some TEXT values
+      case V^.VType of
+      varInteger: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
+      case info.SQLFieldType of
+        sftBoolean:
+          Variant(V^) := boolean(V^.VInteger);
+      end;
+      varString: // handle some TEXT values
       case info.SQLFieldType of
         sftDateTime: // store ISO-8601 text as MongoDB date/time
           Variant(V^) := Iso8601ToDateTime(RawByteString(V^.VAny));
@@ -377,6 +383,7 @@ begin
               BSONVariantType.FromJSON(pointer(js),Variant(V^)) else
               BSONVariantType.FromBinary(blob,bbtGeneric,Variant(V^));
           end;
+        end;
         end;
         // sftObject,sftVariant were already converted to object from JSON
       end;
