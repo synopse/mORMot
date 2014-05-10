@@ -613,7 +613,8 @@ begin
       Check(fClient.Delete(TSQLORM,i));
       dec(ExpectedCount);
     end;
-  NotifyTestSpeed('rows deleted',COLL_COUNT-ExpectedCount,fMongoClient.BytesTransmitted-bytes);
+  NotifyTestSpeed('rows deleted',COLL_COUNT-ExpectedCount,
+    fMongoClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fClient,'');
   try
     n := 0;

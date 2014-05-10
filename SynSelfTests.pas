@@ -269,6 +269,9 @@ type
     procedure _TSQLRecordSigned;
     /// test the TSQLModel class
     procedure _TSQLModel;
+    /// test a full in-memory server over GDI messages
+    // - without any SQLite3 engine linked
+    procedure _TSQLRestServerFullMemory;
   end;
 
   // a record mapping used in the test classes of the framework
@@ -3209,7 +3212,7 @@ type
     fValDate: TDateTime;
     fData: TSQLRawBlob;
     fAnsi: WinAnsiString;
-    fUnicode: RAWUNICODE;
+    fUnicode: RawUnicode;
     {$ifndef NOVARIANTS}
     fVariant: variant;
     {$endif}
@@ -3222,7 +3225,7 @@ type
    // add properties here
    property Int: int64 read fInt write SetInt default 12;
    property Test: RawUTF8 read fTest write fTest;
-   property Unicode: RAWUNICODE read fUnicode write fUnicode;
+   property Unicode: RawUnicode read fUnicode write fUnicode;
    property Ansi: WinAnsiString read fAnsi  write fAnsi;
    property ValFloat: double read fValfloat write fValFloat;
    property ValWord: word read fValWord write fValWord;
@@ -5349,6 +5352,113 @@ begin
     Check(M['TEST']=TSQLRecordTest);
   finally
     M.Free;
+  end;
+end;
+
+procedure TTestBasicClasses._TSQLRestServerFullMemory;
+var Model: TSQLModel;
+    Server: TSQLRestServerFullMemory;
+    Client: TSQLRestClientURIMessage;
+    R: TSQLRecordTest;
+    IDs: TIntegerDynArray;
+    i: integer;
+    dummy: RawUTF8;
+procedure FillRWith(i: Integer);
+begin
+  R.Int := i;
+  R.Test := Int32ToUtf8(i);
+  R.Ansi := WinAnsiString(R.Test);
+  R.Unicode := WinAnsiToRawUnicode(R.Ansi);
+  R.ValFloat := i*2.5;
+  R.ValWord := i;
+  R.ValDate := i+30000;
+  R.Data := R.Test;
+  R.ValVariant := _ObjFast(['id',i]);
+end;
+procedure CheckRWith(i: Integer);
+begin
+  Check(R.Int=i);
+  Check(R.Test=Int32ToUtf8(i));
+  Check(R.Ansi=WinAnsiString(R.Test));
+  Check(R.Unicode=WinAnsiToRawUnicode(R.Ansi));
+  Check(R.ValFloat=i*2.5);
+  Check(R.ValWord=i);
+  Check(R.ValDate=i+30000);
+  Check(R.Data=R.Test);
+  Check(DocVariantType.IsOfType(R.ValVariant));
+  Check(VariantSaveJson(R.ValVariant)='{"id":'+R.Test+'}');
+end;
+begin
+  Model := TSQLModel.Create([TSQLRecordTest]);
+  try
+    DeleteFile('fullmem.data');
+    Check(not FileExists('fullmem.data'));
+    Server := TSQLRestServerFullMemory.Create(Model,'fullmem.data',true,true);
+    try
+      Server.CreateMissingTables;
+      Check(Server.ExportServerMessage('fullmem'));
+      Client := TSQLRestClientURIMessage.Create(Model,'fullmem','fullmemclient',1000);
+      try
+        Client.ForceBlobTransfert := true;
+        Check(Client.ServerTimeStampSynchronize);
+        Check(Client.SetUser('User','synopse'));
+        Client.TransactionBegin(TSQLRecordTest);
+        R := TSQLRecordTest.Create;
+        try
+          for i := 1 to 99 do begin
+            FillRWith(i);
+            Check(Client.Add(R,true)=i);
+          end;
+          Client.BatchStart(TSQLRecordTest);
+          for i := 100 to 9999 do begin
+            FillRWith(i);
+            Check(Client.BatchAdd(R,true,false,ALL_FIELDS)=i-100);
+          end;
+          Check(Client.BatchSend(IDs)=HTML_SUCCESS);
+          Check(Length(IDs)=9900);
+          Check(not FileExists('fullmem.data'));
+          Check(Client.CallBackPut('Flush','',dummy)=HTML_SUCCESS);
+          Check(FileExists('fullmem.data'));
+          Check(Client.Retrieve(200,R));
+          CheckRWith(200);
+        finally
+          R.Free;
+        end;
+      finally
+        Client.Free;
+      end;
+    finally
+      Server.Free;
+    end;
+    Server := TSQLRestServerFullMemory.Create(Model,'fullmem.data',true,true);
+    try
+      Server.CreateMissingTables;
+      Check(Server.ExportServerMessage('fullmem'));
+      Client := TSQLRestClientURIMessage.Create(Model,'fullmem','fullmemclient',1000);
+      try
+        Client.ForceBlobTransfert := true;
+        Check(Client.ServerTimeStampSynchronize);
+        Check(Client.SetUser('User','synopse'));
+        R := TSQLRecordTest.CreateAndFillPrepare(Client,'','*');
+        try
+          Check((R.FillTable<>nil) and (R.FillTable.RowCount=9999));
+          i := 0;
+          while R.FillOne do begin
+            inc(i);
+            CheckRWith(i);
+          end;
+          Check(i=9999);
+        finally
+          R.Free;
+        end;
+      finally
+        Client.Free;
+      end;
+    finally
+      Server.Free;
+    end;
+  finally
+    Model.Free;
   end;
 end;
 

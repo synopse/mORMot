@@ -792,6 +792,7 @@ unit mORMot;
       (HTML_NOTALLOWED) if the supplied URI does not match RestAccessRights
     - TSQLRestServer.URI() will now handle POST/PUT/DELETE ModelRoot/MethodName
       as method-based services
+    - added TSQLRestServerFullMemory.Flush method-based service
     - completed HTML_* constant list and messages - feature request [d8de3eb76a]
     - handle HTML_NOTMODIFIED as successful status - as expected by [5d2634e8a3]
     - enhanced sllAuth session creation/deletion logged information
@@ -10650,26 +10651,13 @@ type
   // separated tables
   // - at least, it will compile as a TSQLRestServer without complaining for
   // pure abstract methods; it can be used to host some services if database
-  // and ORM needs are basic (e.g. if only authentication and CRUD are needed)
+  // and ORM needs are basic (e.g. if only authentication and CRUD are needed),
+  // without the need to link the SQLite3 engine
   TSQLRestServerFullMemory = class(TSQLRestServer)
   protected
     fFileName: TFileName;
     fBinaryFile: Boolean;
     fStaticDataCount: cardinal;
-    function GetStatic(Table: TSQLRecordClass): TSQLRestStorageInMemory;
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
-    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
-    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
-      BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
-      BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
   public
     /// initialize a REST server with a database file
     // - all classes of the model will be created as TSQLRestStorageInMemory
@@ -10677,7 +10665,9 @@ type
     // - if aFileName is left void (''), data will not be persistent
     constructor Create(aModel: TSQLModel; const aFileName: TFileName='';
       aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
-    /// write any modification on file (if needed), and release all used memory
+    /// finalize the REST server
+    // - this overriden destructor will write any modification on file (if
+    // needed), and release all used memory
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -10703,6 +10693,15 @@ type
     // - it will use TSQLRestStorageInMemory LoadFromJSON/LoadFromBinary
     // SaveToJSON/SaveToBinary methods for optimized storage
     property BinaryFile: Boolean read fBinaryFile write fBinaryFile;
+  published
+    /// this method-base service will be accessible from ModelRoot/Flush URI,
+    // and will write any modification into file
+    // - method parameters signature matches TSQLRestServerCallBack type
+    // - do nothing if file name was not assigned
+    // - can be used from a remote client to ensure that any Add/Update/Delete
+    // will be stored to disk, via
+    // ! aClient.CallBackPut('Flush','',dummy)
+    procedure Flush(Ctxt: TSQLRestServerURIContext);
   end;
 
   /// a REST server using a TSQLRestClient for all its ORM process
@@ -26791,7 +26790,7 @@ function TSQLRestStorageRecordBased.EngineAdd(TableModelIndex: integer;
 var Rec: TSQLRecord;
 begin
   result := 0; // mark error
-  if (self=nil) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+  if (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   Rec := fStoredClass.Create;
   try
@@ -27849,21 +27848,32 @@ end;
 
 procedure TSQLRestStorageInMemory.UpdateFile;
 var F: TFileStream;
+    Timer: TPrecisionTimer;
 begin
   if (self=nil) or not Modified or (FileName='') then
     exit;
-  if fValue.Count=0 then
-    DeleteFile(FileName) else begin
-    F := TFileStream.Create(FileName,fmCreate);
-    try
-      if BinaryFile then
-        SaveToBinary(F) else
-        GetJSONValues(F,fExpandedJSON,true,ALL_FIELDS,-1,'',0,0);
-      F.Size := F.Position; // truncate file
-    finally
-      F.Free;
+  Timer.Start;
+  StorageLock(false);
+  try
+    if fValue.Count=0 then
+      DeleteFile(FileName) else begin
+      F := TFileStream.Create(FileName,fmCreate);
+      try
+        if BinaryFile then
+          SaveToBinary(F) else
+          GetJSONValues(F,fExpandedJSON,true,ALL_FIELDS,-1,'',0,0);
+        F.Size := F.Position; // truncate file
+      finally
+        F.Free;
+      end;
     end;
+  finally
+    StorageUnLock;
   end;
+  {$ifdef WITHLOG}
+  SQLite3Log.Add.Log(sllDB,'UpdateFile(%) done in %',
+    [fStoredClassRecordProps.SQLTableName,Timer.Stop],self);
+  {$endif}
   fModified := false;
 end;
 
@@ -28155,6 +28165,7 @@ const CHARS: array[0..6] of AnsiChar = '[{":,}]';
 var S: TFileStream;                //   0123456
     t: integer;
     Modified: boolean;
+    Timer: TPrecisionTimer;
 begin
   if (self=nil) or (FileName='') then
     exit;
@@ -28166,6 +28177,7 @@ begin
     end;
   if not Modified then
     exit;
+  Timer.Start;
   S := TFileStream.Create(FileName,fmCreate);
   try
     if fBinaryFile then begin
@@ -28193,94 +28205,9 @@ begin
   finally
     S.Free;
   end;
-end;
-
-function TSQLRestServerFullMemory.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := '' else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).EngineRetrieve(0,ID);
-end;
-
-function TSQLRestServerFullMemory.EngineList(const SQL: RawUTF8;
-  ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8;
-var TableIndex: integer;
-begin
-  TableIndex := Model.GetTableIndexFromSQLSelect(SQL,true);
-  if TableIndex<0 then
-    result := '' else
-    result := TSQLRestStorageInMemory(fStaticData[TableIndex]).
-      EngineList(SQL,ForceAJAX,ReturnedRowCount);
-end;
-
-function TSQLRestServerFullMemory.GetStatic(Table: TSQLRecordClass): TSQLRestStorageInMemory;
-var t: cardinal;
-begin
-  t := fModel.GetTableIndexExisting(Table);
-  if t<fStaticDataCount then
-    result := TSQLRestStorageInMemory(fStaticData[t]) else
-    result := nil;
-end;
-
-function TSQLRestServerFullMemory.EngineUpdate(TableModelIndex, ID: integer;
-  const SentData: RawUTF8): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineUpdate(TableModelIndex,ID,SentData);
-end;
-
-function TSQLRestServerFullMemory.EngineDelete(TableModelIndex, ID: integer): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineDelete(TableModelIndex,ID);
-end;
-
-function TSQLRestServerFullMemory.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
-end;
-
-function TSQLRestServerFullMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
-  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
-end;
-
-function TSQLRestServerFullMemory.EngineUpdateBlob(TableModelIndex, aID: integer;
-  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
-end;
-
-function TSQLRestServerFullMemory.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := 0 else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineAdd(TableModelIndex,SentData);
-end;
-
-function TSQLRestServerFullMemory.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-begin
-  if cardinal(TableModelIndex)>=fStaticDataCount then
-    result := false else
-    result := TSQLRestStorageInMemory(fStaticData[TableModelIndex]).
-      EngineUpdateField(TableModelIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
+  {$ifdef WITHLOG}
+  SQLite3Log.Add.Log(sllDB,'UpdateToFile done in %',[Timer.Stop],self);
+  {$endif}
 end;
 
 function TSQLRestServerFullMemory.EngineExecuteAll(const aSQL: RawUTF8): boolean;
@@ -28288,6 +28215,13 @@ begin
   result := false; // not implemented in this basic REST server class
 end;
 
+procedure TSQLRestServerFullMemory.Flush(Ctxt: TSQLRestServerURIContext);
+begin
+  if Ctxt.Method=mPUT then begin
+    UpdateToFile;
+    Ctxt.Success;
+  end;
+end;
 
 
 { TSQLRestServerRemoteDB }
@@ -29958,7 +29892,7 @@ begin
   Log := SQLite3Log.Enter(self,nil,true);
 {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
-    Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 
+    Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
     {$ifdef WITHLOG}
     Log.Log(sllClient,'InternalCheckOpen failure',self);
     {$endif}
