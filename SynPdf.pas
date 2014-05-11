@@ -1038,13 +1038,13 @@ type
     /// fast find a textual value by its name
     function PdfTextByName(const AKey: PDFString): TPdfText; {$ifdef HASINLINE}inline;{$endif}
     /// fast find a textual value by its name
-    // - return '' if not found, the TPdfText.Value otherwize
+    // - return '' if not found, the TPdfText.Value otherwise
     function PdfTextValueByName(const AKey: PDFString): PDFString; {$ifdef HASINLINE}inline;{$endif}
     /// fast find a textual value by its name
-    // - return '' if not found, the TPdfTextUTF8.Value otherwize
+    // - return '' if not found, the TPdfTextUTF8.Value otherwise
     function PdfTextUTF8ValueByName(const AKey: PDFString): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
     /// fast find a textual value by its name
-    // - return '' if not found, the TPdfTextString.Value otherwize
+    // - return '' if not found, the TPdfTextString.Value otherwise
     function PdfTextStringValueByName(const AKey: PDFString): string; {$ifdef HASINLINE}inline;{$endif}
     /// fast find a numerical (floating-point) value by its name
     function PdfRealByName(const AKey: PDFString): TPdfReal; {$ifdef HASINLINE}inline;{$endif}
@@ -1167,7 +1167,7 @@ type
   public
     /// create the entry, with the specified value
     // - if the value is nil (e.g. root entry), the type is 'f' (PDF_FREE_ENTRY),
-    // otherwize the entry type is 'n' (PDF_IN_USE_ENTRY)
+    // otherwise the entry type is 'n' (PDF_IN_USE_ENTRY)
     constructor Create(AValue: TPdfObject);
     /// release the memory, and the associated value, if any
     destructor Destroy; override;

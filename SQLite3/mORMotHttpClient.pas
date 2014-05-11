@@ -167,7 +167,7 @@ type
     procedure SetKeepAliveMS(Value: cardinal);
     /// process low-level HTTP/1.1 request
     // - call by URI() public method
-    // - returns 200,202,204 if OK, http status error otherwize in result.Lo
+    // - returns 200,202,204 if OK, http status error otherwise in result.Lo
     // - returns Server-InternalState in result.Hi
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; virtual; abstract;

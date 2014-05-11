@@ -1411,9 +1411,9 @@ type
 // or copy), for faster process - so take care that it is an unique string
 // - P contains the next object start or nil on unexpected end of input
 // - if Fields is void, expects expanded "COL1"="VAL1" pairs in P^, stopping at '}' or ']'
-// - otherwize, Fields[] contains the column names and expects "VAL1","VAL2".. in P^
+// - otherwise, Fields[] contains the column names and expects "VAL1","VAL2".. in P^
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwize (INSERT format)
+// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
 // - escape SQL strings, according to the official SQLite3 documentation
 // (i.e. ' inside a string is stored as '')
 // - if InlinedParams is set, will create prepared parameters like
@@ -1427,7 +1427,7 @@ function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
 // - expect JSON expanded object as "COL1"="VAL1",...} pairs
 // - make its own temporary copy of JSON data before calling GetJSONObjectAsSQL() above
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
-// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwize (INSERT format)
+// - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
 // - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
 function GetJSONObjectAsSQL(JSON: RawUTF8; Update, InlinedParams: boolean;
@@ -1494,7 +1494,7 @@ function isBlobHex(P: PUTF8Char): boolean;
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
 // - if P if nil or 'null', return sftUnknown
-// - otherwize, guess its type from its value characters
+// - otherwise, guess its type from its value characters
 // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
 // (X'53514C697465' e.g.) or with '\uFFF0' magic code
 // - since P is PUTF8Char, string type is sftUTF8Text only
@@ -5094,7 +5094,7 @@ type
     procedure SortBitsFirst(var Bits);
     {/ guess the field type from first non null data row
      - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
-       retrieved from the Delphi RTTI; otherwize, get from the cells content
+       retrieved from the Delphi RTTI; otherwise, get from the cells content
      - return sftUnknown is all data fields are null
      - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
        (X'53514C697465' e.g.)
@@ -10107,7 +10107,7 @@ type
     // - ServerWindowName ('DBSERVER' e.g.) will be used to create a
     // Window name identifier
     // - allows only one ExportServer*() by running process
-    // - returns true on success, false otherwize (ServerWindowName already used?)
+    // - returns true on success, false otherwise (ServerWindowName already used?)
     function ExportServerMessage(const ServerWindowName: string): boolean;
     /// implement a message-based server response
     // - this method is called automaticaly if ExportServerMessage() method

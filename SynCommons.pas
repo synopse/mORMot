@@ -2429,7 +2429,7 @@ function GetNextStringLineToRawUnicode(var P: PChar): RawUnicode;
 
 /// append some text lines with the supplied Values[]
 // - if any Values[] item is '', no line is added
-// - otherwize, appends 'Caption: Value', with Caption taken from CSV
+// - otherwise, appends 'Caption: Value', with Caption taken from CSV
 procedure AppendCSVValues(const CSV: string; const Values: array of string;
   var Result: string; const AppendBefore: string=#13#10);
 
@@ -5162,7 +5162,7 @@ type
       aCaseSensitive: boolean=false);
     /// find a Key in the cache entries
     // - return '' if nothing found
-    // - return the associated Value otherwize, and the associated integer tag
+    // - return the associated Value otherwise, and the associated integer tag
     // if aResultTag address is supplied
     function Find(const aKey: RawUTF8; aResultTag: PPtrInt): RawUTF8;
     /// add a Key and its associated value (and tag) to the cache entries
@@ -6506,7 +6506,7 @@ function DateToSQL(Year,Month,Day: cardinal): RawUTF8; overload;
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as '\uFFF1YYYY-MM-DD'
 // - if DT contains only a time, returns the time encoded as '\uFFF1Thh:mm:ss'
-// - otherwize, returns the ISO-8601 date and time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss'
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
@@ -7018,7 +7018,7 @@ procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean); 
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as 'YYYY-MM-DD'
 // - if DT contains only a time, returns the time encoded as 'Thh:mm:ss'
-// - otherwize, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
 procedure DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
   FirstChar: AnsiChar='T');
 
@@ -7026,7 +7026,7 @@ procedure DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as 'YYYY-MM-DD'
 // - if DT contains only a time, returns the time encoded as 'Thh:mm:ss'
-// - otherwize, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
 // - used e.g. by TPropInfo.GetValue() and TPropInfo.NormalizeValue() methods
 function DateTimeToIso8601Text(DT: TDateTime; FirstChar: AnsiChar='T'): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
@@ -7035,7 +7035,7 @@ function DateTimeToIso8601Text(DT: TDateTime; FirstChar: AnsiChar='T'): RawUTF8;
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as 'YYYY-MM-DD'
 // - if DT contains only a time, returns the time encoded as 'Thh:mm:ss'
-// - otherwize, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
 // - used e.g. by TPropInfo.GetValue() and TPropInfo.NormalizeValue() methods
 procedure DateTimeToIso8601TextVar(DT: TDateTime; FirstChar: AnsiChar; var result: RawUTF8);
 
@@ -7043,7 +7043,7 @@ procedure DateTimeToIso8601TextVar(DT: TDateTime; FirstChar: AnsiChar; var resul
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as 'YYYY-MM-DD'
 // - if DT contains only a time, returns the time encoded as 'Thh:mm:ss'
-// - otherwize, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as 'YYYY-MM-DDThh:mm:ss'
 // - used e.g. by TPropInfo.GetValue() and TPropInfo.NormalizeValue() methods
 procedure DateTimeToIso8601StringVar(DT: TDateTime; FirstChar: AnsiChar; var result: string);
 
@@ -36809,13 +36809,13 @@ begin
     result := 0 else begin // 0 = ID field
     result := GetFieldIndex(Prop);
     if result>=0 then // -1 = no valid field name
-      inc(result);  // otherwize: PropertyIndex+1
+      inc(result);  // otherwise: PropertyIndex+1
   end;
 end;
 function SetFields: boolean;
 var i: integer;
 begin
-  i := GetPropIndex; // 0 = ID, otherwize PropertyIndex+1
+  i := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
   if i<0 then
     result := false else begin // Field not found -> incorrect SQL statement
     if i=0 then
@@ -36863,7 +36863,7 @@ begin
   // 3. get WHERE clause
   GetNextFieldProp(P,Prop);
   if IdemPropName(Prop,'WHERE') then begin
-    WhereField := GetPropIndex; // 0 = ID, otherwize PropertyIndex+1
+    WhereField := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
     if WhereField<0 then
       exit; // incorrect SQL statement
     case P^ of

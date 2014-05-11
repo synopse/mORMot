@@ -8233,7 +8233,7 @@ begin
       FTS.Body := FTS.Subject+' bodY'+IntToStr(FTS.DocID);
       aClient.Add(FTS,true);
     end;
-    aClient.Commit; // Commit must be BEFORE OptimizeFTS3, memory leak otherwize
+    aClient.Commit; // Commit must be BEFORE OptimizeFTS3, memory leak otherwise
     Check(FTS.OptimizeFTS3Index(Client.Server));
     for i := StartID to StartID+COUNT-1 do begin
       Check(IdemPChar(pointer(aClient.OneFieldValue(TSQLFTSTest,'Subject',IntArray[i])),'SALVADOR'));

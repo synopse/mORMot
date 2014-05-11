@@ -140,7 +140,7 @@ type
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
-  // exit;
+   exit;
   AddCase([TTestLowLevelCommon,
 {$ifndef FPC}
     TTestLowLevelTypes,
@@ -165,7 +165,8 @@ type // mORMot.pas unit doesn't compile with Delphi 5 yet
 {$else}
 procedure TTestSynopsemORMotFramework._mORMot;
 begin
-  // exit; // (*
+  AddCase(TTestBasicClasses);
+   exit; // (*
   AddCase([TTestFileBased,TTestFileBasedMemoryMap,TTestFileBasedWAL]);
   AddCase(TTestMemoryBased);
   AddCase(TTestBasicClasses);

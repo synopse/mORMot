@@ -1059,7 +1059,7 @@ type
         characters must be converted to UTF-8 prior to passing them)
       - allocate a sqlite3 object, and return its handle in DB
       - return SQLITE_OK on success
-      - an error code (see SQLITE_* const) is returned otherwize - sqlite3.errmsg()
+      - an error code (see SQLITE_* const) is returned otherwise - sqlite3.errmsg()
         can be used to obtain an English language description of the error
      - Whatever or not an error occurs when it is opened, resources associated with
        the database connection handle should be released by passing it to
@@ -1850,7 +1850,7 @@ type
 
 {/ test the result state of a sqlite3.*() function
   - raise a ESQLite3Exception if the result state is an error
-  - return the result state otherwize (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) }
+  - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) }
 function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
 
 

@@ -136,7 +136,7 @@ type
 /// use this procedure to change the password for an existing SQLite3 database file
 // - use this procedure instead of the "classic" sqlite3.rekey() API call
 // - conversion is done in-place, therefore this procedure can handle very big files
-// - the OldPassWord must be correct, otherwize the resulting file will be corrupted
+// - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption
 // - you may use instead SynCrypto unit for more secure SHA-256 and AES-256 algos
 // - please note that this encryption is compatible only with SQlite3 files

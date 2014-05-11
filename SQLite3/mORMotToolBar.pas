@@ -2731,7 +2731,7 @@ begin
     if (FrameRight<>nil) and (Report<>nil) and
        Retrieve(Client,List.Row) then begin
       // used to recreate the current selected report
-      // use a timer, otherwize marking is buggy and UI experience is poor
+      // use a timer, otherwise marking is buggy and UI experience is poor
       KillTimer(Form.Handle,WM_TIMER_REFRESH_REPORT); // only refresh once
       try
         Report.BeginDoc;

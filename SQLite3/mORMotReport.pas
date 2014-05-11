@@ -2791,7 +2791,7 @@ begin
           GetMetaFileForPage(Page-1),R,ForceInternalAntiAliased,
           ForceInternalAntiAliasedFontFallBack) else
 {$endif} begin // fast direct GDI painting, with no antialiaising:
-        // note: we must use a temporary TMetaFile, otherwize the Pages[] content
+        // note: we must use a temporary TMetaFile, otherwise the Pages[] content
         // is changed (screen dpi is changed but not reset in nested emf) and the
         // resulting report is incorrect on most printers, due to a driver bug :(
         PreviewSurfaceBitmap.Canvas.StretchDraw(R,GetMetaFileForPage(Page-1));

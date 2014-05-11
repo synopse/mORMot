@@ -198,7 +198,7 @@ function lzopas_decompressfile(const srcFile, dstFile: AnsiString): boolean;
 // true if sucess; on error, return false and error code in GetLastError
 
 function lzopas_decompressfilesize(const srcFile: AnsiString): integer;
-// -1 if error, decompressed size otherwize
+// -1 if error, decompressed size otherwise
 function lzopas_decompressfilecheck(const srcFile: AnsiString): boolean;
 // true if file checksum is correct (no transmission fail, e.g.)
 {$endif}
@@ -924,7 +924,7 @@ begin
     pWord(out_p+2)^ := in_len shr 15;
     inc(out_p,4);
   end else begin
-    pWord(out_p)^ := in_len; // in_len<32768 -> stored as word, otherwize as integer
+    pWord(out_p)^ := in_len; // in_len<32768 -> stored as word, otherwise as integer
     if in_len=0 then begin
       result := 2;
       exit;
@@ -1748,7 +1748,7 @@ begin
 end;
 
 function lzopas_decompressfilesize(const srcFile: AnsiString): integer;
-// -1 if error, decompressed size otherwize
+// -1 if error, decompressed size otherwise
 var sf: cardinal;
     W: word;
 begin

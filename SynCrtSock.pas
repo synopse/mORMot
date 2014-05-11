@@ -604,24 +604,24 @@ type
     // - this overriden method will set the UserAgent with some default value
     constructor Create(aTimeOut: cardinal=10000); override;
 
-    /// after an Open(server,port), return 200 if OK, http status error otherwize - get
+    /// after an Open(server,port), return 200 if OK, http status error otherwise - get
     // the page data in Content
     function Get(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
-    /// after an Open(server,port), return 200 if OK, http status error otherwize - only
+    /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
     function Head(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
-    /// after an Open(server,port), return 200,201,204 if OK, http status error otherwize
+    /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Post(const url, Data, DataType: RawByteString; KeepAlive: cardinal=0;
       const header: RawByteString=''): integer;
-    /// after an Open(server,port), return 200,201,204 if OK, http status error otherwize
+    /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Put(const url, Data, DataType: RawByteString; KeepAlive: cardinal=0;
       const header: RawByteString=''): integer;
-    /// after an Open(server,port), return 200,202,204 if OK, http status error otherwize
+    /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
 
     /// low-level HTTP/1.1 request
     // - call by all REST methods above
-    // - after an Open(server,port), return 200,202,204 if OK, http status error otherwize
+    // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
     function Request(const url, method: RawByteString; KeepAlive: cardinal;
       const header, Data, DataType: RawByteString; retry: boolean): integer;
@@ -1120,7 +1120,7 @@ type
 
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
-    // http status error otherwize
+    // http status error otherwise
     function Request(const url, method: RawByteString; KeepAlive: cardinal;
       const InHeader, InData, InDataType: RawByteString;
       out OutHeader, OutData: RawByteString): integer; virtual;

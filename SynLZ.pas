@@ -480,7 +480,7 @@ begin
     pWord(dst+2)^ := size shr 15;
     inc(dst,4);
   end else begin
-    pWord(dst)^ := size ; // src<32768 -> stored as word, otherwize as integer
+    pWord(dst)^ := size ; // src<32768 -> stored as word, otherwise as integer
     if size=0 then begin
       result := 2;
       exit;
@@ -934,7 +934,7 @@ begin
     pWord(dst+2)^ := size shr 15;
     inc(dst,4);
   end else begin
-    pWord(dst)^ := size ; // src<32768 -> stored as word, otherwize as integer
+    pWord(dst)^ := size ; // src<32768 -> stored as word, otherwise as integer
     if size=0 then begin
       result := 2;
       exit;

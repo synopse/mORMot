@@ -4040,7 +4040,7 @@ Then you can add some {\i Body/Subject} content to this FTS3 table, just like an
 !      FTS.Body := FTS.Subject+' bodY'+IntToStr(FTS.DocID);
 !      aClient.Add(FTS,true);
 !    end;
-!    aClient.Commit; // Commit must be BEFORE OptimizeFTS3, memory leak otherwize
+!    aClient.Commit; // Commit must be BEFORE OptimizeFTS3, memory leak otherwise
 !    Check(FTS.OptimizeFTS3Index(Client.fServer));
 The steps above are just typical. The only difference with a "standard" @*ORM@ approach is that the {\f1\fs20 DocID} property must be set {\i before} adding the {\f1\fs20 TSQLRecordFTS3} instance: there is no ID automatically created by {\i SQLite}, but an ID must be specified in order to link the FTS record to the original {\f1\fs20 TSQLRecordPeople} row, from its ID.
 To support full-text queries, FTS maintains an inverted index that maps from each unique term or word that appears in the dataset to the locations in which it appears within the table contents. The dedicated {\f1\fs20 OptimizeFTS3Index} method is called to merge all existing index b-trees into a single large b-tree containing the entire index. This can be an expensive operation, but may speed up future queries: you should not call this method after every modification of the FTS tables, but after some text has been added.
