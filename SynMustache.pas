@@ -158,14 +158,13 @@ type
       ListCurrentDocument: TVarData;
       ListCurrentDocumentType: TSynInvokeableVariantType;
     end;
-    function PushContext(aDoc: TVarData): integer;
+    procedure PushContext(aDoc: TVarData);
     procedure PopContext; override;
     procedure AppendValue(const ValueName: RawUTF8; UnEscape: boolean); override;
     function AppendSection(const ValueName: RawUTF8): TSynMustacheSectionType; override;
     function GotoNextListItem: boolean; override;
     function GetDocumentType(const aDoc: TVarData): TSynInvokeableVariantType;
-    function GetValueFromContext(const ValueName: RawUTF8;
-      var Value: TVarData; FalseAsNull: boolean): boolean;
+    procedure GetValueFromContext(const ValueName: RawUTF8; var Value: TVarData);
     procedure AppendVariant(const Value: variant; UnEscape: boolean);
   public
     /// initialize the context from a custom variant document
@@ -633,25 +632,21 @@ begin
         case Context.AppendSection(Value) of
         msNothing: begin // e.g. for no key, false value, or empty list
           TagStart := SectionOppositeIndex;
-          continue;
+          continue; // ignore whole section
         end;
         msList: begin
           while Context.GotoNextListItem do
             Render(Context,TagStart+1,SectionOppositeIndex-1,Partials,true);
           TagStart := SectionOppositeIndex;
-          continue;
+          continue; // ignore whole section
         end;
         // msSingle,msSinglePseudo: process the section once with current context
         end;
       mtInvertedSection: // display section for no key, false value, or empty list
-        case Context.AppendSection(Value) of
-        msSingle,msList: begin
-          Context.PopContext;
+        if Context.AppendSection(Value)<>msNothing then begin
           TagStart := SectionOppositeIndex;
+          continue; // ignore whole section
         end;
-        msSinglePseudo: // -first/-last/-odd sections didn't push any context
-          TagStart := SectionOppositeIndex;
-        end; // msNothing: process the section once with current context
       mtSectionEnd:
         if (fTags[SectionOppositeIndex].Kind=mtSection) and (Value[1]<>'-') then
           Context.PopContext;
@@ -770,24 +765,19 @@ begin
       result := nil;
 end;
 
-function TSynMustacheContextVariant.PushContext(aDoc: TVarData): integer;
-var aDocType: TSynInvokeableVariantType;
+procedure TSynMustacheContextVariant.PushContext(aDoc: TVarData);
 begin
-  aDocType := GetDocumentType(aDoc);
-  if aDocType=nil then begin
-    result := -1;
-    exit;
-  end;
   if fContextCount>=length(fContext) then
     SetLength(fContext,fContextCount+32); // roughtly set by SectionMaxCount
-  result := fContextCount;
-  inc(fContextCount);
-  with fContext[result] do begin
+  with fContext[fContextCount] do begin
     Document := aDoc;
-    DocumentType := aDocType;
-    ListCount := DocumentType.IterateCount(aDoc);
+    DocumentType := GetDocumentType(aDoc);
     ListCurrent := -1;
+    if DocumentType=nil then
+      ListCount := -1 else
+      ListCount := DocumentType.IterateCount(aDoc);
   end;
+  inc(fContextCount);
 end;
 
 procedure TSynMustacheContextVariant.PopContext;
@@ -796,8 +786,8 @@ begin
     dec(fContextCount);
 end;
 
-function TSynMustacheContextVariant.GetValueFromContext(
-  const ValueName: RawUTF8; var Value: TVarData; FalseAsNull: boolean): boolean;
+procedure TSynMustacheContextVariant.GetValueFromContext(
+  const ValueName: RawUTF8; var Value: TVarData);
 var i: Integer;
 begin
   if ValueName='.' then
@@ -805,41 +795,34 @@ begin
       if ListCount>0 then
         Value := ListCurrentDocument else
         Value := Document;
-      if Value.VType>varNull then
-        if FalseAsNull then
-          result := (Value.VType<>varBoolean) or Value.VBoolean else
-          result := true else
-        result := false;
       exit;
     end;
-  for i := fContextCount-1 downto 0 do begin
+  for i := fContextCount-1 downto 0 do 
     with fContext[i] do
       if DocumentType<>nil then
-        if ListCount<0 then // single item context
-          DocumentType.Lookup(Value,Document,pointer(ValueName)) else
-          if ValueName='-index' then begin
-            Value.VType := varInteger;
-            Value.VInteger := ListCurrent+1;
-          end else
-          if (ListCurrent>=ListCount) or (ListCurrentDocumentType=nil) then
-            continue else
-            ListCurrentDocumentType.Lookup(Value,ListCurrentDocument,pointer(ValueName));
-    if Value.VType>varNull then begin
-      if FalseAsNull then
-        result := (Value.VType<>varBoolean) or Value.VBoolean else
-        result := true;
-      exit;
-    end;
-  end;
-  result := false;
+        if ListCount<0 then begin // single item context
+          DocumentType.Lookup(Value,Document,pointer(ValueName));
+          if Value.VType>varNull then
+            exit;
+         end else
+        if ValueName='-index' then begin
+          Value.VType := varInteger;
+          Value.VInteger := ListCurrent+1;
+          exit;
+        end else
+        if (ListCurrent<ListCount) and (ListCurrentDocumentType<>nil) then begin
+          ListCurrentDocumentType.Lookup(Value,ListCurrentDocument,pointer(ValueName));
+          if Value.VType>varNull then
+            exit;
+        end;
 end;
 
 procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUTF8;
   UnEscape: boolean);
 var Value: TVarData;
 begin
-  if GetValueFromContext(ValueName,Value,false) then
-    AppendVariant(variant(Value),UnEscape);
+  GetValueFromContext(ValueName,Value);
+  AppendVariant(variant(Value),UnEscape);
 end;
 
 procedure TSynMustacheContextVariant.AppendVariant(const Value: variant;
@@ -860,7 +843,6 @@ end;
 function TSynMustacheContextVariant.AppendSection(
   const ValueName: RawUTF8): TSynMustacheSectionType;
 var Value: TVarData;
-    ctxtNdx: Integer;
 begin
   result := msNothing;
   if (fContextCount>0) and (ValueName[1]='-') then
@@ -872,17 +854,17 @@ begin
           result := msSinglePseudo;
         exit;
       end;
-  if not GetValueFromContext(ValueName,Value,true) then
-    exit; // not existing or false key will not display the section
-  ctxtNdx := PushContext(Value);
-  if ctxtNdx<0 then
-    result := msSingle else
-    with fContext[ctxtNdx] do
-      if ListCount=0 then    // empty list will not display the section
-        exit else
+  GetValueFromContext(ValueName,Value);
+  PushContext(Value);
+  if (Value.VType<=varNull) or
+     ((Value.VType=varBoolean) and (not Value.VBoolean)) then
+    exit; // null or false value will not display the section
+  with fContext[fContextCount-1] do
       if ListCount<0 then
         result := msSingle else // single item
-        result := msList;       // non-empty list
+        if ListCount=0 then // empty list will not display the section
+          exit else
+          result := msList;       // non-empty list
 end;
 
 function TSynMustacheContextVariant.GotoNextListItem: boolean;

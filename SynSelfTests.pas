@@ -3372,6 +3372,20 @@ begin
   Check(mustache.SectionMaxCount=0);
   html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
   Check(html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!');
+  mustache := TSynMustache.Parse(
+    '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A+
+    '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A+
+    '{{#link}}'#$D#$A'<li><a href="{{url}}">{{name}}</a></li>'#$D#$A'{{/link}}'#$D#$A+
+    '{{/items}}'#$D#$A#$D#$A'{{#empty}}'#$D#$A'<p>The list is empty.</p>'#$D#$A'{{/empty}}');
+  Check(mustache.SectionMaxCount=2);
+  html := mustache.RenderJSON(
+    '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},'+
+    '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,'+
+    '"link":true,"url":"#Blue"}],"empty":true}');
+  Check(trim(html)=
+      '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A+
+      '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A+
+      '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>');
 
   // run official {{mustache}} regression tests suite
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TMustacheTest),__TMustacheTest).

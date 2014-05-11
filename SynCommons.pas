@@ -8404,6 +8404,10 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 procedure ZeroFill(var Value: TVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  /// a TVarData instance which will have VType=varEmpty (0) 
+  VARDATA_EMPTY: TVarData = (RawData: (0,0,0,0));
+  
 /// retrieve a variant value from variable-length buffer
 // - matches TFileBufferWriter.Write()
 // - how custom type variants are created can be defined via CustomVariantOptions
