@@ -5414,7 +5414,7 @@ begin
             Check(Client.Add(R,true)=i);
           end;
           Client.Commit;
-          Client.BatchStart(TSQLRecordTest,100);
+          Check(Client.BatchStart(TSQLRecordTest,100));
           for i := 100 to 9999 do begin
             FillRWith(i);
             Check(Client.BatchAdd(R,true,false,ALL_FIELDS)=i-100);
@@ -5476,6 +5476,26 @@ begin
         R := TSQLRecordTest.Create(Client,110);
         try
           CheckRWith(110,10);
+          Check(Server.BatchStart(TSQLRecordTest,30));
+          for i := 10000 to 10099 do begin
+            FillRWith(i);
+            Check(Server.BatchAdd(R,true,false,ALL_FIELDS)=i-10000);
+          end;
+          Check(Server.BatchSend(IDs)=HTML_SUCCESS);
+        finally
+          R.Free;
+        end;
+        Check(Length(IDs)=100);
+        R := TSQLRecordTest.CreateAndFillPrepare(Server,'','*');
+        try
+          i := 0;
+          while R.FillOne do begin
+            inc(i);
+            if i=110 then
+              CheckRWith(i,10) else
+              CheckRWith(i);
+          end;
+          Check(i=10099);
         finally
           R.Free;
         end;
