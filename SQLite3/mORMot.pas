@@ -885,6 +885,7 @@ unit mORMot;
     - TSQLRestStorageInMemory.AdaptSQLForEngineList() will now handle
       'select count(*') from TableName' statements directly, and any RESTful
       requests from client
+    - TSQLRestStorageInMemory will now handle SELECT .... WHERE ID IN (...)
     - fixed issue in TSQLRestStorageInMemory.EngineList() when only ID
     - changed TSQLAccessRights and TSQLAuthGroup.SQLAccessRights CSV format
       to use 'first-last,' pattern to regroup set bits (reduce storage size)
@@ -19781,10 +19782,10 @@ begin
       FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
 end;
 
-function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: TIntegerDynArray;
+function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: array of integer;
   const aCustomFieldsCSV: RawUTF8=''): boolean;
 begin
-  if aIDs=nil then
+  if high(aIDs)<0 then
     result := false else
     result := FillPrepare(aClient,
       IntegerDynArrayToCSV(aIDs,length(aIDs),'ID in (',')'),aCustomFieldsCSV);
@@ -20315,7 +20316,7 @@ begin
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
-  const aIDs: TIntegerDynArray; const aCustomFieldsCSV: RawUTF8='');
+  const aIDs: array of integer; const aCustomFieldsCSV: RawUTF8='');
 begin
   Create;
   FillPrepare(aClient,aIDs,aCustomFieldsCSV);
@@ -23882,9 +23883,10 @@ end;
 
 function TSQLRestClientURI.EngineUpdate(TableModelIndex, ID: integer;
   const SentData: RawUTF8): boolean;
+var url: RawUTF8;
 begin
-  result := URI(Model.getURIID(Model.Tables[TableModelIndex],ID),'PUT',
-    nil,nil,@SentData).Lo=HTML_SUCCESS;
+  url := Model.getURIID(Model.Tables[TableModelIndex],ID);
+  result := URI(url,'PUT',nil,nil,@SentData).Lo=HTML_SUCCESS;
 end;
 
 function TSQLRestClientURI.EngineUpdateBlob(TableModelIndex, aID: integer;
@@ -27420,37 +27422,60 @@ begin
 end;
 
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
-  Expand, withID: boolean; const Fields: TSQLFieldBits;
-  WhereField: integer; const WhereValue: RawUTF8;
-  FoundLimit,FoundOffset: integer): PtrInt;
-var i,KnownRowsCount: integer;
+  Expand: boolean; Stmt: TSynTableStatement): PtrInt;
+var i,j,id,KnownRowsCount: integer;
     W: TJSONSerializer;
+label err;
 begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
-  if WhereField<0 then
+  if Stmt.WhereField=SYNTABLESTATEMENTWHEREALL then
     // no WHERE statement -> get all rows -> set rows count
-    if (FoundLimit>0) and (fValue.Count>FoundLimit) then
-      KnownRowsCount := FoundLimit else
+    if (Stmt.FoundLimit>0) and (fValue.Count>Stmt.FoundLimit) then
+      KnownRowsCount := Stmt.FoundLimit else
       KnownRowsCount := fValue.Count else
     KnownRowsCount := 0;
   W := fStoredClassRecordProps.CreateJSONWriter(
-    Stream,Expand,withID,Fields,KnownRowsCount);
+    Stream,Expand,Stmt.withID,Stmt.Fields,KnownRowsCount);
   if W<>nil then
   try
     if Expand then
       W.Add('[');
-    if WhereField<0 then begin
+    if Stmt.WhereField=SYNTABLESTATEMENTWHEREALL then begin
       // no WHERE statement -> all rows
       for i := 0 to KnownRowsCount-1 do begin
         if Expand then
-          W.AddCR; // for better readibility
+          W.AddCR; // for better readability
         TSQLRecord(fValue.List[i]).GetJSONValues(W);
         W.Add(',');
       end;
-      result := fValue.Count;
+      result := KnownRowsCount;
     end else
-      result := FindWhereEqual(WhereField,WhereValue,GetJSONValuesEvent,
-        W,FoundLimit,FoundOffset);
+    case Stmt.WhereOperator of
+    opEqualTo:
+      result := FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,
+        GetJSONValuesEvent,W,Stmt.FoundLimit,Stmt.FoundOffset);
+    {$ifndef NOVARIANTS}
+    opIn:
+      if (Stmt.WhereField<>0) or // only handle ID IN (..) by now
+         (Stmt.FoundLimit>0) or (Stmt.FoundOffset>0) then
+        goto err else
+        with TDocVariantData(Stmt.WhereValueVariant) do
+          for i := 0 to Count-1 do
+            if not VariantToInteger(Values[i],id) then
+              exit else begin
+              j := IDToIndex(id);
+              if j>=0 then begin
+                TSQLRecord(fValue.List[j]).GetJSONValues(W);
+                W.Add(',');
+                inc(result);
+              end;
+            end;
+    {$endif}
+    else begin
+err:  W.CancelAll;
+      exit; // will return '' to indicate error
+    end;
+    end;
     if (result=0) and W.Expand then begin
       // we want the field names at least, even with no data
       W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
@@ -27499,6 +27524,7 @@ function TSQLRestStorageInMemory.EngineList(const SQL: RawUTF8;
 // Note: this is sufficient for OneFieldValue() and MultiFieldValue() to work
 var MS: TRawByteStringStream;
     ResCount: PtrInt;
+    Stmt: TSynTableStatement;
 procedure SetCount(aCount: integer);
 begin
   result := FormatUTF8('[{"Count(*)":%}]'#$A,[aCount]);
@@ -27523,35 +27549,35 @@ begin
         result := '[{"RowID":1}]'#$A;
         ResCount := 1;
       end else begin
-      with fStoredClassRecordProps,
-        TSynTableStatement.Create(SQL,Fields.IndexByName,
-          fStoredClassRecordProps.SimpleFieldsBits[soSelect]) do
+      Stmt := TSynTableStatement.Create(SQL,
+        fStoredClassRecordProps.Fields.IndexByName,
+        fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (WhereValue='') or (WhereOperator<>opEqualTo) or
-           not IdemPropNameU(TableName,SQLTableName) then
+        if (Stmt.WhereValue='') or 
+           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return ''
           result := '' else
-        if WhereField=SYNTABLESTATEMENTWHERECOUNT then
+        if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if IsZero(Fields) and not WithID then
-          if IsSelectCountWhere and (FoundLimit=0) and (FoundOffset=0) then
+        if IsZero(Stmt.Fields) and not Stmt.WithID then
+          if Stmt.IsSelectCountWhere and (Stmt.FoundLimit=0) and (Stmt.FoundOffset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
-            SetCount(FindWhereEqual(WhereField,WhereValue,DoNothingEvent,nil,0,0)) else
+            SetCount(FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,DoNothingEvent,nil,0,0)) else
             // invalid "SELECT FROM Table" ?
             exit else begin
           // save rows as JSON, with appropriate search according to Where* arguments
           MS := TRawByteStringStream.Create;
           try
-            ResCount := GetJSONValues(MS,ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,
-              withID,Fields,WhereField,WhereValue,FoundLimit,FoundOffset);
+            ForceAJAX := ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON;
+            ResCount := GetJSONValues(MS,ForceAJAX,Stmt);
             result := MS.DataString;
           finally
             MS.Free;
           end;
         end;
       finally
-        Free;
+        Stmt.Free;
       end;
     end;
   finally
@@ -27606,9 +27632,26 @@ begin
 end;
 
 procedure TSQLRestStorageInMemory.SaveToJSON(Stream: TStream; Expand: Boolean);
+var i: integer;
+    W: TJSONSerializer;
 begin
-  if self<>nil then
-    GetJSONValues(Stream,Expand,true,ALL_FIELDS,-1,'',0,0);
+  if self=nil then
+    exit;
+  W := fStoredClassRecordProps.CreateJSONWriter(
+    Stream,Expand,true,ALL_FIELDS,fValue.Count);
+  try
+    if Expand then
+      W.Add('[');
+    for i := 0 to fValue.Count-1 do begin
+      if Expand then
+        W.AddCR; // for better readability
+      TSQLRecord(fValue.List[i]).GetJSONValues(W);
+      W.Add(',');
+    end;
+    W.EndJSONObject(fValue.Count,fValue.Count);
+  finally
+    W.Free;
+  end;
 end;
 
 function TSQLRestStorageInMemory.SaveToJSON(Expand: Boolean): RawUTF8;
@@ -28031,7 +28074,7 @@ procedure TSQLRestStorageInMemory.UpdateFile;
 var F: TFileStream;
     Timer: TPrecisionTimer;
 begin
-  if (self=nil) or not Modified or (FileName='') then
+  if (self=nil) or (not Modified) or (FileName='') then
     exit;
   Timer.Start;
   StorageLock(false);
@@ -28042,7 +28085,7 @@ begin
       try
         if BinaryFile then
           SaveToBinary(F) else
-          GetJSONValues(F,fExpandedJSON,true,ALL_FIELDS,-1,'',0,0);
+          SaveToJSON(F,true);
         F.Size := F.Position; // truncate file
       finally
         F.Free;

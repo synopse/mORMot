@@ -3048,7 +3048,7 @@ procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray);
 
 /// return the corresponding CSV text from a dynamic array of integer
 // - you can set some custom Prefix and Suffix text
-function IntegerDynArrayToCSV(const Values: TIntegerDynArray; ValuesCount: integer;
+function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 
 type
@@ -7522,6 +7522,8 @@ type
   // - handle also basic "SELECT Count(*) FROM TableName;" SQL statement
   // - will parse the "LIMIT number OFFSET number" end statement clause
   TSynTableStatement = class
+    /// the SELECT SQL statement parsed
+    SQLStatement: RawUTF8;
     /// the fields selected for the SQL statement
     Fields: TSQLFieldBits;
     /// is TRUE if ID/RowID was set in the WHERE clause
@@ -18133,7 +18135,7 @@ begin
   end;
 end;
 
-function IntegerDynArrayToCSV(const Values: TIntegerDynArray; ValuesCount: integer;
+function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 type
   TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
@@ -36968,6 +36970,7 @@ limit:
     WhereField := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
     WhereValue := '*'; // not void
   end;
+  SQLStatement := SQL;
 end;
 
 
