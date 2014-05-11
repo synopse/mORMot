@@ -5499,6 +5499,39 @@ begin
         finally
           R.Free;
         end;
+        R := TSQLRecordTest.CreateAndFillPrepare(Client,[200,300],'ValWord,ValDate,ID');
+        try
+          i := 0;
+          while R.FillOne do begin
+            inc(i);
+            Check(R.ID>=200);
+            FillRWith(R.ID+10);
+            Check(Client.Update(R,'ValWord,ValDate'),'update only 2 fields');
+          end;
+          Check(i=2);
+        finally
+          R.Free;
+        end;
+        R := TSQLRecordTest.CreateAndFillPrepare(Server,'','*');
+        try
+          i := 0;
+          while R.FillOne do begin
+            inc(i);
+            if i=110 then
+              CheckRWith(i,10) else
+            if (i=200) or (i=300) then begin
+              Check(R.Int=i);
+              Check(R.Test=Int32ToUtf8(i));
+              Check(R.ValFloat=i*2.5);
+              Check(R.ValWord=i+10);
+              Check(R.ValDate=i+30010);
+            end else
+              CheckRWith(i);
+          end;
+          Check(i=10099);
+        finally
+          R.Free;
+        end;
       finally
         Client.Free;
       end;
@@ -8322,6 +8355,8 @@ begin
         Check(VD.YearOfDeath=1989+i);
       end;
       Check(aClient.TableRowCount(aClass)=1001);
+      Static := Client.Server.StaticVirtualTable[aClass];
+      Check((Static as TSQLRestStorageInMemoryExternal).Modified);
       aClient.Commit; // write to file
       // try to read directly from file content
       Static := Client.Server.StaticVirtualTable[aClass];

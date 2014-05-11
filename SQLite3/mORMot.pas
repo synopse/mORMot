@@ -238,8 +238,8 @@ unit mORMot;
       published properties of the supplied table
     - new TSQLRest.Add(aTable: TSQLRecordClass; const aSimpleFields: array of const)
       overloaded method to add a record from a supplied list of const parameters
-    - new TSQLRest.Update(aTable: TSQLRecordClass; aID: integer; const aSimpleFields: array of const)
-      overloaded method to update a record from a supplied list of const parameters
+    - new TSQLRest.Update(aTable,aID,aSimpleFields) overloaded method to update
+      a record from a supplied list of const parameters for each simple field
     - new property TSQLRecord.SimpleFieldsCount
     - FTS3Match method renamed FTSMatch, in order to be used without hesitation
       for both FTS3 and FTS4 classes
@@ -704,6 +704,8 @@ unit mORMot;
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
       valid alternative to default /root/Calculator.Add, if needed
+    - added optional CustomFields parameter to TSQLRest.Update() - and in case
+      of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
       properties, able to define execution plan for all ORM/SOA operations
     - changed RESTful URI to ModelRoot/Table?where=WhereClause to delete members
@@ -920,7 +922,7 @@ unit mORMot;
     - now Batch*() methods are available at TSQLRest level, so will work
       for TSQLRestClientURI and TSQLRestServer classes (not TSQLRestStorage)
     - added optional CustomFields parameter to TSQLRest.BatchUpdate()
-      and BatchAdd() methods
+      and BatchAdd() methods - TModTime fields will always be sent
     - implemented automatic transaction generation during BATCH process via
       a new AutomaticTransactionPerRow parameter in BatchStart()
     - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
@@ -3297,6 +3299,10 @@ type
     /// bit set to 1 for indicating TModTime fields of this TSQLRecord
     // - i.e. sftModTime fields
     ModTimeFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for indicating TModTime and TCreateTime fields
+    // of this TSQLRecord
+    // - i.e. sftModTime and sftCreateTime fields
+    ModCreateTimeFieldsBits: TSQLFieldBits;
     /// bit set to 1 for indicating fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in soUpdate but soInsert and soSelect e.g.
@@ -4273,14 +4279,12 @@ type
         or call the overloaded CreateAndFillPrepare() contructor directly with
         BoundsSQLWhere array of parameters
       - aCustomFieldsCSV can be used to specify which fields must be retrieved
-      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-        you may need  to access only one or several fields, and will save remote
-        bandwidth by specifying the needed fields
+      - default aCustomFieldsCSV='' will retrieve all simple table fields
       - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-      - note that you should not use this aCustomFieldsCSV optional parameter if
-        you want to Update the retrieved record content later, since any
-        missing fields will be left with previous values - but BatchUpdate() can be
-        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+      - aCustomFieldsCSV can also be set to a CSV field list to retrieve only
+        the needed fields, and save remote bandwidth - note that any later
+        Update() will update all simple fields, so potentially with wrong
+        values; but BatchUpdate() can be safely used since it will  }
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aSQLWhere: RawUTF8;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object as above, and prepares itself to
@@ -4347,7 +4351,7 @@ type
         you want to Update the retrieved record content later, since any
         missing fields will be left with previous values - but BatchUpdate() can be
         safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: TIntegerDynArray;
+    constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: array of integer;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object, and prepares itself to loop
        through a specified JSON table
@@ -4486,6 +4490,14 @@ type
       - is not used by the ORM (do not use prepared statements) - only here
         for conveniency }
     function GetSQLSet: RawUTF8;
+    /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
+    // - layout and fields are set at TJSONSerializer construction
+    procedure GetJSONValues(W : TJSONSerializer); overload;
+    /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
+    // - layout and fields are set at TJSONSerializer construction
+    // - the JSON buffer will be finalized if needed (e.g. non expanded mode), 
+  	// and the supplied TJSONSerializer instance will be freed by this method
+    procedure GetJSONValuesAndFree(JSON : TJSONSerializer); overload;
     (** return the UTF-8 encoded JSON objects for the values contained
       in the current published fields of a TSQLRecord child
       - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
@@ -4501,9 +4513,10 @@ type
     // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
     function GetJSONValues(Expand: boolean; withID: boolean; Occasion: TSQLOccasion;
       UsingStream: TCustomMemoryStream=nil): RawUTF8; overload;
-    /// same as above, but in a TJSONWriter (called by the first two overloaded
-    // functions)
-    procedure GetJSONValues(W: TJSONSerializer); overload;
+    /// same as overloaded GetJSONValues(), but allowing to set the fields to
+    // be retrieved, and returning result into a RawUTF8
+    function GetJSONValues(Expand: boolean; withID: boolean;
+      const Fields: TSQLFieldBits): RawUTF8; overload;
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TFileBufferWriter);
@@ -4652,7 +4665,7 @@ type
        you want to Update the retrieved record content later, since any
        missing fields will be left with previous values - but BatchUpdate() can be
        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    function FillPrepare(aClient: TSQLRest; const aIDs: TIntegerDynArray;
+    function FillPrepare(aClient: TSQLRest; const aIDs: array of integer;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to loop through a JOINed statement including TSQLRecordMany fields
      - all TSQLRecordMany.Dest published fields will now contain a true TSQLRecord
@@ -8405,7 +8418,8 @@ type
     // implementation in TSQLRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
  protected // these abstract methods must be inherited by real database engine
-    /// retrieve a list of members as JSON encoded data (implements REST GET Collection)
+    /// retrieve a list of members as JSON encoded data
+    // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
     // - override this method for direct data retrieval from the database engine
     // and direct JSON export, avoiding a TSQLTable which allocates memory for every
@@ -8417,13 +8431,15 @@ type
     // - this method must be implemented in a thread-safe manner
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false;
       ReturnedRowCount: PPtrInt=nil): RawUTF8; virtual; abstract;
-    /// get a member from its ID (implements REST GET member)
+    /// get a member from its ID
+    // - implements REST GET member
     // - returns the data of this object as JSON
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
     // - ForUpdate parameter is used only on Client side
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; virtual; abstract;
-    /// create a new member (implements REST POST Collection)
+    /// create a new member
+    // - implements REST POST collection
     // - SentData can contain the JSON object with field values to be added
     // - class is taken from Model.Tables[TableModelIndex]
     // - returns the TSQLRecord ID/ROWID value, 0 on error
@@ -8432,13 +8448,15 @@ type
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; virtual; abstract;
-    /// update a member (implements REST PUT Member)
+    /// update a member
+    // - implements REST PUT collection
     // - SentData can contain the JSON object with field values to be added
     // - returns true on success
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; virtual; abstract;
-    /// delete a member (implements REST DELETE Member)
+    /// delete a member
+    // - implements REST DELETE collection
     // - returns true on success
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
@@ -8669,7 +8687,8 @@ type
     function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
       var IDs: TIntegerDynArray): boolean;
   public // here are REST basic direct calls (works with Server or Client)
-    /// get a member from a SQL statement (implements REST GET member)
+    /// get a member from a SQL statement
+    // - implements REST GET collection
     // - return true on success
     // - Execute 'SELECT * FROM TableName WHERE SQLWhere LIMIT 1' SQL Statememt
     // (using inlined parameters via :(...): in SQLWhere is always a good idea)
@@ -8684,7 +8703,8 @@ type
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
     function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord): boolean; overload; virtual;
-    /// get a member from a SQL statement (implements REST GET member)
+    /// get a member from a SQL statement
+    // - implements REST GET collection
     // - return true on success
     // - same as Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord) method, but
     // this overloaded function will call FormatUTF8 to create the Where Clause
@@ -8729,7 +8749,8 @@ type
     // - is just a wrapper around Retrieve(aPublishedRecord.ID,aValue)
     // - return true on success
     function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
-    /// get a list of members from a SQL statement (implements REST GET member)
+    /// get a list of members from a SQL statement
+    // - implements REST GET collection
     // - return a TObjectList on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
@@ -8753,9 +8774,10 @@ type
     // - calls internally UnLock() above
     // - returns true on success
     function UnLock(Rec: TSQLRecord): boolean; overload;
-    /// create a new member (implements REST POST Collection)
+    /// create a new member
+    // - implements REST POST collection
     // - if SendData is true, client sends the current content of Value with the
-    // request, otherwize record is created with default values
+    // request, otherwise record is created with default values
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
     // - on success, returns the new ROWID value; on error, returns 0
@@ -8768,6 +8790,7 @@ type
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; overload; virtual;
     /// create a new member, from a supplied list of field values
+    // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
     // properties of the supplied aTable class, excepting the TSQLRawBlob and
     // TSQLRecordMany kind (i.e. only so called "simple fields")
@@ -8778,26 +8801,38 @@ type
     // - on success, returns the new ROWID value; on error, returns 0
     // - call internaly the Add virtual method above
     function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const; ForcedID: integer=0): integer; overload;
-    /// update a record from Value simple fields content
-    // - implements REST PUT Member
+    /// update a member from Value simple fields content
+    // - implements REST PUT collection
     // - return true on success
     // - the TSQLRawBlob(BLOB) fields values are not updated by this method, to
     // preserve bandwidth: use the UpdateBlob() methods for handling BLOB fields
     // - the TSQLRecordMany fields are not set either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
+    // - if CustomFields is left void, the  simple fields will be used, or the
+    // fields retrieved via a previous FillPrepare() call; otherwise, you can
+    // specify your own set of fields to be transmitted (including BLOBs, even
+    // if they will be Base64-encoded within the JSON content) - CustomFields
+    // could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
+    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    // - this method will always compute and send any TModTime fields
     // - this method will call EngineUpdate() to perform the request
-    function Update(Value: TSQLRecord): boolean; overload; virtual;
-    /// update a record from a supplied list of simple field values
-    // - implements REST PUT Member
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): boolean; overload; virtual;
+    /// update a member from Value simple fields content
+    // - implements REST PUT collection
+    // - return true on success
+    // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
+    function Update(Value: TSQLRecord; const CustomCSVFields: RawByteString): boolean; overload;
+    /// update a member from a supplied list of simple field values
+    // - implements REST PUT collection
     // - the aSimpleFields parameters MUST follow explicitely both count and
     // order of published properties of the supplied aTable class, excepting the
     // TSQLRawBlob and TSQLRecordMany kind (i.e. only so called "simple fields")
     // - return true on success
-    // - call internaly the Update() virtual method above
+    // - call internaly the Update() / EngineUpdate() virtual methods 
     function Update(aTable: TSQLRecordClass; aID: integer; const aSimpleFields: array of const): boolean; overload;
-    /// update one field in a given record
-    // - implements REST PUT Member with one field value
+    /// update one field/column value a given member
+    // - implements REST PUT collection with one field value
     // - only one single field shall be specified in FieldValue, but could
     // be of any kind of value - for BLOBs, you should better use UpdateBlob()
     // - return true on success
@@ -8806,8 +8841,8 @@ type
     // rather use a classic Retrieve()/FillPrepare() followed by Update()
     function UpdateField(Table: TSQLRecordClass; ID: integer;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
-    /// update one field in one or several records, depending on a WHERE clause
-    // - implements REST PUT Member with one field value on a one where value
+    /// update one field in one or several members, depending on a WHERE clause
+    // - implements REST PUT collection with one field value on a one where value
     // - only one single field shall be specified in FieldValue, but could
     // be of any kind of value - for BLOBs, you should better use UpdateBlob()
     // - only one single field shall be specified in WhereFieldValue, but could
@@ -8821,8 +8856,8 @@ type
       const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
 {$ifndef NOVARIANTS}
-    /// update one field in a given record
-    // - implements REST PUT Member with one field value
+    /// update one field in a given member with a value specified as variant
+    // - implements REST PUT collection with one field value
     // - any value can be set in FieldValue, but for BLOBs, you should better
     // use UpdateBlob()
     // - return true on success
@@ -8831,8 +8866,9 @@ type
     // rather use a classic Retrieve()/FillPrepare() followed by Update()
     function UpdateField(Table: TSQLRecordClass; ID: integer;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
-    /// update one field in one or several records, depending on a WHERE clause
-    // - implements REST PUT Member with one field value on a one where value
+    /// update one field in one or several members, depending on a WHERE clause,
+    // with both update and where values specified as variant
+    // - implements REST PUT collection with one field value on a one where value
     // - any value can be set in FieldValue, but for BLOBs, you should better
     // use UpdateBlob()
     // - for security reasons, void WHERE clause will be rejected
@@ -8844,16 +8880,19 @@ type
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
 {$endif NOVARIANTS}
-    /// delete a member (implements REST DELETE Member)
+    /// delete a member
+    // - implements REST DELETE collection
     // - return true on success
     // - call internaly the EngineDelete() abstract method
     function Delete(Table: TSQLRecordClass; ID: integer): boolean; overload; virtual;
-    /// delete a member with a WHERE clause (implements REST DELETE Member)
+    /// delete a member with a WHERE clause
+    // - implements REST DELETE collection
     // - return true on success
     // - this default method call OneFieldValues() to retrieve all matching IDs,
     // then will delete each row using protected EngineDeleteWhere() virtual method
     function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; overload; virtual;
-    /// delete a member with a WHERE clause (implements REST DELETE Member)
+    /// delete a member with a WHERE clause
+    // - implements REST DELETE collection
     // - return true on success
     // - for better server speed, the WHERE clause should use bound parameters
     // identified as '?' in the FormatSQLWhere statement, which is expected to
@@ -8880,7 +8919,7 @@ type
     property Cache: TSQLRestCache read GetCache;
 
     /// get a blob field content from its record ID and supplied blob field name
-    // - implements REST GET member with a supplied member ID and a blob field name
+    // - implements REST GET collection with a supplied member ID and a blob field name
     // - return true on success
     // - this method is defined as abstract, i.e. there is no default implementation:
     // it must be implemented 100% RestFul with a
@@ -8890,14 +8929,14 @@ type
     function RetrieveBlob(Table: TSQLRecordClass; aID: integer;
       const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean; overload; virtual;
     /// get a blob field content from its record ID and supplied blob field name
-    // - implements REST GET member with a supplied member ID and a blob field name
+    // - implements REST GET collection with a supplied member ID and field name
     // - return true on success
     // - this method will create a TStream instance (which must be freed by the
     // caller after use) and fill it with the blob data
     function RetrieveBlob(Table: TSQLRecordClass; aID: integer;
       const BlobFieldName: RawUTF8; out BlobStream: THeapMemoryStream): boolean; overload;
     /// update a blob field from its record ID and supplied blob field name
-    // - implements REST PUT member with a supplied member ID and field name
+    // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as TSQLRawBlob, using
@@ -8905,7 +8944,7 @@ type
     function UpdateBlob(Table: TSQLRecordClass; aID: integer;
       const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean; overload; virtual;
     /// update a blob field from its record ID and blob field name
-    // - implements REST PUT member with a supplied member ID and field name
+    // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as a TStream: it will
@@ -8914,7 +8953,7 @@ type
     function UpdateBlob(Table: TSQLRecordClass; aID: integer;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
     /// update a blob field from its record ID and blob field name
-    // - implements REST PUT member with a supplied member ID and field name
+    // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as direct memory pointer
@@ -8922,6 +8961,7 @@ type
     function UpdateBlob(Table: TSQLRecordClass; aID: integer;
       const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
     /// update all BLOB fields of the supplied Value
+    // - call several REST PUT collection (one for each BLOB) for the member
     // - uses the UpdateBlob() method to send the BLOB properties content to the Server
     // - called internaly by Add and Update methods when ForceBlobTransfert /
     // ForceBlobTransertTable[] is set
@@ -8930,20 +8970,24 @@ type
     // - returns FALSE on error (e.g. if Value is invalid or with db/transmission)
     function UpdateBlobFields(Value: TSQLRecord): boolean; virtual;
     /// get all BLOB fields of the supplied value from the remote server
+    // - call several REST GET collection (one for each BLOB) for the member
     // - call internaly e.g. by TSQLRestClient.Retrieve method when
     // ForceBlobTransfert / ForceBlobTransertTable[] is set
     function RetrieveBlobFields(Value: TSQLRecord): boolean; virtual;
 
-    /// begin a transaction (implements REST BEGIN Member)
-    // - to be used to speed up some SQL statements like Add/Update/Delete methods
-    // above
+    /// begin a transaction
+    // - implements REST BEGIN collection
+    // - may be used to speed up CRUD statements like Add/Update/Delete
     // - in the current implementation, nested transactions are not allowed
     // - must be ended with Commit on success
     // - must be aborted with Rollback if any SQL statement failed
     // - default implementation just handle the protected fTransactionActiveSession flag
-    // - return true if no transaction is active, false otherwize
-    // - in a multi-threaded or Client-Server with multiple concurent Client
-    // connections, you should check the returned value, as such:
+    // - return true if no transaction is active, false otherwise
+    // - in aClient-Server environment with multiple Clients connected at the
+    // same time, you should better use BATCH process, specifying a positive
+    // AutomaticTransactionPerRow parameter to BatchStart() 
+    // - in a multi-threaded or Client-Server with multiple concurrent Client
+    // connections, you may check the returned value, as such:
     //  !if Client.TransactionBegin(TSQLRecordPeopleObject) then
     //  !try
     //  !  //.... modify the database content, raise exceptions on error
@@ -8951,9 +8995,7 @@ type
     //  !except
     //  !  Client.RollBack; // in case of error
     //  !end;
-    // - in aClient-Server environment with multiple Clients connected at the
-    // same time, you can use the dedicated TSQLRestClientURI.
-    // TransactionBeginRetry() method
+    // or use the TransactionBeginRetry() method
     // - the supplied SessionID will allow multi-user transaction safety on the
     // Server-Side: all database modification from another session will wait
     // for the global transaction to be finished; on Client-side, the SessionID
@@ -8969,7 +9011,8 @@ type
     // - returns the session ID if a transaction is active
     // - returns 0 if no transaction is active
     function TransactionActiveSession: cardinal;
-    /// end a transaction (implements REST END Member)
+    /// end a transaction
+    // - implements REST END collection
     // - write all pending SQL statements to the disk
     // - default implementation just reset the protected fTransactionActiveSession flag
     // - the supplied SessionID will allow multi-user transaction safety on the
@@ -8983,7 +9026,8 @@ type
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     procedure Commit(SessionID: cardinal); virtual;
-    /// abort a transaction (implements REST ABORT Member)
+    /// abort a transaction
+    // - implements REST ABORT collection
     // - restore the previous state of the database, before the call to TransactionBegin
     // - default implementation just reset the protected fTransactionActiveSession flag
     // - the supplied SessionID will allow multi-user transaction safety on the
@@ -9011,17 +9055,18 @@ type
        sequence (in this case, you can't mix classes in the same BATCH sequence)
      - if no TSQLRecordClass is supplied, the BATCH sequence will allow any
        kind of individual record in BatchAdd/BatchUpdate/BatchDelete
-     - return TRUE on sucess, FALSE if aTable is incorrect or a previous BATCH
+     - return TRUE on success, FALSE if aTable is incorrect or a previous BATCH
        sequence was already initiated
      - should normally be used inside a Transaction block: there is no automated
        TransactionBegin..Commit/RollBack generated in the BATCH sequence if
        you leave the default AutomaticTransactionPerRow=0 parameter - but
        this may be a concern with a lot of concurrent clients
-     - you can set AutomaticTransactionPerRow > 0 to execute all BATCH processes
-       within an unique transaction grouped by a given number of rows, on the
-       server side - you can set AutomaticTransactionPerRow=maxInt if you want
-       one huge transaction, or set a convenient value (e.g. 10000) if you want
-       to retain the transaction log file small enough for the database engine }
+     - you should better set AutomaticTransactionPerRow > 0 to execute all 
+       BATCH processes within an unique transaction grouped by a given number 
+       of rows, on the server side - set AutomaticTransactionPerRow=maxInt if 
+       you want one huge transaction, or set a convenient value (e.g. 10000) 
+	   depending on the back-end database engine abilities, if you want to 
+	   retain the transaction log file small enough for the database engine }
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal=0): boolean; virtual;
     /// create a new member in current BATCH sequence
@@ -9039,6 +9084,7 @@ type
     // (including BLOBs, even if they will be Base64-encoded within JSON content) -
     // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
     // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
+    // - this method will always compute and send TCreateTime/TModTime fields
     function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       const CustomFields: TSQLFieldBits=[]): integer;
     /// update a member in current BATCH sequence
@@ -9053,9 +9099,10 @@ type
     // - if CustomFields is left void, the  simple fields will be used, or the
     // fields retrieved via a previous FillPrepare() call; otherwise, you can
     // specify your own set of fields to be transmitted (including BLOBs, even
-    // if they will be Base64-encoded within the JSON content) -
-    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
+    // if they will be Base64-encoded within the JSON content) - CustomFields
+    // could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
     // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    // - this method will always compute and send any TModTime fields
     function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer; virtual;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
@@ -9242,7 +9289,7 @@ type
   /// function prototype for remotely calling a TSQLRestServer
   // - use PUTF8Char instead of string: no need to share a memory manager, and can
   // be used with any language (even C or .NET, thanks to the cdecl calling convention)
-  // - you can specify some POST/PUT data in SendData (leave as nil otherwize)
+  // - you can specify some POST/PUT data in SendData (leave as nil otherwise)
   // - returns in result.Lo the HTTP STATUS integer error or success code
   // - returns in result.Hi the server database internal status
   // - on success, allocate and store the resulting JSON body into Resp^, headers in Head^
@@ -10064,7 +10111,8 @@ type
     // - locking is handled by TSQLServer.Model
     // - returns true on success
     function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
-    {/ end a transaction (implements REST END Member)
+    {/ end a transaction
+     - implements REST END collection
      - write all pending TSQLVirtualTableJSON data to the disk }
     procedure Commit(SessionID: cardinal); override;
     /// Execute directly all SQL statement (POST SQL on ModelRoot URI)
@@ -10085,7 +10133,7 @@ type
     // - this server identifier may also contain a fully qualified path
     // ('\\.\pipe\ApplicationName' e.g.)
     // - allows only one ExportServer*() by running process
-    // - returns true on success, false otherwize (ServerApplicationName already used?)
+    // - returns true on success, false otherwise (ServerApplicationName already used?)
     function ExportServerNamedPipe(const ServerApplicationName: TFileName): boolean;
     /// end any currently initialized named pipe server
     function CloseServerNamedPipe: boolean;
@@ -10637,7 +10685,7 @@ type
     function GetItem(Index: integer): TSQLRecord;
     function GetID(Index: integer): integer;
     // optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
-    function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
+    function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8; 
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt;
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
@@ -10646,9 +10694,8 @@ type
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
     // - returns the number of data row added (excluding field names)
     // - this method is very fast and optimized (for search and JSON serializing)
-    function GetJSONValues(Stream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits; WhereField: integer; const WhereValue: RawUTF8;
-      FoundLimit,FoundOffset: integer): PtrInt;
+    function GetJSONValues(Stream: TStream; Expand: boolean;
+      Stmt: TSynTableStatement): PtrInt;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overriden method to handle basic queries as handled by EngineList()
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
@@ -10937,7 +10984,8 @@ type
     procedure SetForceBlobTransfert(Value: boolean);
     function GetForceBlobTransfertTable(aTable: TSQLRecordClass): Boolean;
     procedure SetForceBlobTransfertTable(aTable: TSQLRecordClass; aValue: Boolean);
-    /// get a member from its ID (implements REST GET member)
+    /// get a member from its ID 
+    // - implements REST GET collection
     // - returns the data of this object as JSON
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
@@ -10952,7 +11000,8 @@ type
     /// overriden method which will call ClientRetrieve()
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
   public
-    /// create a new member (implements REST POST Collection)
+    /// create a new member
+    // - implements REST POST collection
     // - URI is 'ModelRoot/TableName' with POST method
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID
@@ -10962,25 +11011,32 @@ type
     // - on success, returns the new ROWID value; on error, returns 0
     // - on success, Value.ID is updated with the new ROWID
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
+    // - this overriden method will send BLOB fields, if ForceBlobTransfert is set
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; override;
-    /// update a member (implements REST PUT Collection/Member)
+    /// update a member
+    // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
     // - server must return Status 200/HTML_SUCCESS OK on success
-    function Update(Value: TSQLRecord): boolean; override;
-    /// get a member from its ID (implements REST GET Collection/Member)
+    // - this overriden method will call BeforeUpdateEvent and also update BLOB
+    // fields, if any ForceBlobTransfert is set and CustomFields=[]
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): boolean; override;
+    /// get a member from its ID
+    // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
     // - server must return Status 200/HTML_SUCCESS OK on success
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
     function Retrieve(aID: integer; Value: TSQLRecord; ForUpdate: boolean=false): boolean; override;
-    /// get a member from its ID (implements REST GET Collection/Member)
+    /// get a member from its ID
+    // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
     // - returns true on server returned 200/HTML_SUCCESS OK success, false on error
     // - set Refreshed to true if the content changed
     function Refresh(aID: integer; Value: TSQLRecord; var Refreshed: boolean): boolean;
 
-    /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
+    /// retrieve a list of members as a TSQLTable
+    // - implements REST GET collection
     // - default SQL statement is 'SELECT ID FROM TableName;' (i.e. retrieve
     // the list of all ID of this collection members)
     // - optional SQLSelect parameter to change the returned fields
@@ -10991,7 +11047,8 @@ type
     // - for one TClass, you should better use TSQLRest.MultiFieldValues()
     function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'RowID';
       const SQLWhere: RawUTF8 = ''): TSQLTableJSON; virtual; abstract;
-    /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
+    /// retrieve a list of members as a TSQLTable
+    // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SQLWhereFormat is always a good idea
@@ -10999,7 +11056,8 @@ type
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
       SQLWhereFormat: PUTF8Char; const Args: array of const): TSQLTableJSON; overload;
-    /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
+    /// retrieve a list of members as a TSQLTable
+    // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
@@ -11040,7 +11098,11 @@ type
       const DataTableBlobField: RawByteString; var DataID: TIntegerDynArray): boolean;
     /// begin a transaction (calls REST BEGIN Member)
     // - by default, Client transaction will use here a pseudo session
-    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override;
+    // - in aClient-Server environment with multiple Clients connected at the
+    // same time, you should better use BATCH process, specifying a positive
+    // AutomaticTransactionPerRow parameter to BatchStart() 
+    function TransactionBegin(aTable: TSQLRecordClass; 
+	  SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override; 
     /// end a transaction (calls REST END Member)
     // - by default, Client transaction will use here a pseudo session
     procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
@@ -11197,7 +11259,8 @@ type
     // mostly a time out) if the OnAuthentificationFailed event handler is set
     function URI(const url, method: RawUTF8; Resp: PRawUTF8=nil;
       Head: PRawUTF8=nil; SendData: PRawUTF8=nil): Int64Rec; 
-    /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
+    /// retrieve a list of members as a TSQLTable
+    // - implements REST GET collection
     // - URI is 'ModelRoot/TableName' with GET method
     // - SQLSelect and SQLWhere are encoded as 'select=' and 'where=' URL parameters
     // (using inlined parameters via :(...): in SQLWhere is always a good idea)
@@ -11249,12 +11312,16 @@ type
     // LastErrorException to find out the exact connection error
     function ServerTimeStampSynchronize: boolean;
 
-    {/ begin a transaction (implements REST BEGIN Member)
-     - to be used to speed up some SQL statements like Add/Update/Delete methods above
+    {/ begin a transaction
+     - implements REST BEGIN collection
+     - in aClient-Server environment with multiple Clients connected at the
+      same time, you should better use BATCH process, specifying a positive
+      AutomaticTransactionPerRow parameter to BatchStart()
+     - may be used to speed up some SQL statements as Add/Update/Delete methods 
      - must be ended with Commit on success
      - in the current implementation, the aTable parameter is not used yet
      - must be aborted with Rollback if any SQL statement failed
-     - return true if no transaction is active, false otherwize
+     - return true if no transaction is active, false otherwise
       !if Client.TransactionBegin(TSQLRecordPeopleObject) then
       !try
       !  //.... modify the database content, raise exceptions on error
@@ -11262,10 +11329,14 @@ type
       !except
       !  Client.RollBack; // in case of error
       !end;
-     - you can should better use the dedicated TransactionBeginRetry() method
-      in case of Client concurent access }
+     - you may use the dedicated TransactionBeginRetry() method in case of
+       potiental Client concurent access }
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
-    {/ begin a transaction (implements REST BEGIN Member)
+    {/ begin a transaction
+     - implements REST BEGIN collection
+     - in aClient-Server environment with multiple Clients connected at the
+      same time, you should better use BATCH process, specifying a positive
+      AutomaticTransactionPerRow parameter to BatchStart()
      - this version retries a TranslationBegin() to be successfull within
       a supplied number of times
      - will retry every 100 ms for "Retries" times (excluding the connection
@@ -11281,10 +11352,12 @@ type
       !  Client.RollBack; // in case of error
       !end; }
     function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer=10): boolean;
-    {/ end a transaction (implements REST END Member)
+    {/ end a transaction
+    - implements REST END collection
      - write all pending SQL statements to the disk }
     procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
-    {/ abort a transaction (implements REST ABORT Member)
+    {/ abort a transaction
+     - implements REST ABORT collection
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
     /// update a member in current BATCH sequence
@@ -19933,25 +20006,39 @@ begin
     W.Add('}');
 end;
 
-procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
-  Occasion: TSQLOccasion);
-var W: TJSONSerializer;
+procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
 begin
-  if self=nil then
-    exit;
-  // get col names and types
-  with RecordProps do
-    W := CreateJSONWriter(JSON,Expand,withID,SimpleFieldsBits[Occasion],0);
-  if W<>nil then
+  if JSON<>nil then
   try
     // write the row data
-    GetJSONValues(W);
+    GetJSONValues(JSON);
     // end the JSON object
-    if not Expand then
-      W.AddNoJSONEscape(PAnsiChar(']}'),2);
-    W.Flush;
+    if not JSON.Expand then
+      JSON.AddNoJSONEscape(PAnsiChar(']}'),2);
+    JSON.Flush;
   finally
-    W.Free;
+    JSON.Free;
+  end;
+end;
+
+procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
+  Occasion: TSQLOccasion);
+begin
+  if self<>nil then
+  with RecordProps do
+    GetJSONValuesAndFree(CreateJSONWriter(JSON,Expand,withID,SimpleFieldsBits[Occasion],0));
+end;
+
+function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
+  const Fields: TSQLFieldBits): RawUTF8;
+var J: TRawByteStringStream;
+begin
+  J := TRawByteStringStream.Create;
+  try
+    GetJSONValuesAndFree(RecordProps.CreateJSONWriter(J,Expand,withID,Fields,0));
+    result := J.DataString;
+  finally
+    J.Free;
   end;
 end;
 
@@ -22288,9 +22375,10 @@ begin
   result := Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
 end;
 
-function TSQLRest.Update(Value: TSQLRecord): boolean;
+function TSQLRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits): boolean;
 var JSONValues: RawUTF8;
     TableIndex: integer;
+    FieldBits: TSQLFieldBits;
 begin
   if (self=nil) or (Value=nil) or (Value.fID=0) or
     not RecordCanBeUpdated(PSQLRecordClass(Value)^,Value.fID,seUpdate) then begin
@@ -22299,9 +22387,29 @@ begin
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
   Value.ComputeFieldsBeforeWrite(self,seUpdate); // update sftModTime fields
-  JSONValues := Value.GetJSONValues(true,false,soUpdate); // expanded + without ID
+  if IsZero(CustomFields) then
+    if (Value.fFill<>nil) and (Value.fFill.Table<>nil) and
+       (Value.fFill.fTableMapRecordManyInstances=nil) then
+      // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
+      FieldBits := Value.fFill.fTableMapFields+Value.RecordProps.ModTimeFieldsBits else
+      // update all simple/custom fields (also for FillPrepareMany)
+      FieldBits := Value.RecordProps.SimpleFieldsBits[soUpdate] else
+    // CustomFields<>[] -> update specified and TModTime fields
+    FieldBits := CustomFields+Value.RecordProps.ModTimeFieldsBits;
+  if IsZero(FieldBits) then begin
+    result := true; // a TSQLRecord with NO simple fields (e.g. ID/blob pair)
+    exit;
+  end;
   fCache.Notify(Value,soUpdate); // JSONValues on update may not be enough for cache
+  JSONValues := Value.GetJSONValues(true,false,FieldBits);
   result := EngineUpdate(TableIndex,Value.fID,JSONValues);
+end;
+
+function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawByteString): boolean;
+begin
+  if (self=nil) or (Value=nil) then
+    result := false else
+    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields));
 end;
 
 function TSQLRest.Update(aTable: TSQLRecordClass; aID: integer;
@@ -22776,7 +22884,7 @@ end;
 function TSQLRest.BatchAdd(Value: TSQLRecord; SendData: boolean;
   ForceID: boolean=false; const CustomFields: TSQLFieldBits=[]): integer;
 var Props: TSQLRecordProperties;
-    FieldBits: PSQLFieldBits;
+    FieldBits: TSQLFieldBits;
 begin
   result := -1;
   if (self=nil) or (Value=nil) or (fBatch=nil) then
@@ -22794,11 +22902,11 @@ begin
     if Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID then
       ForceID := true; // same format as TSQLRestClient.Add
     if IsZero(CustomFields) then
-      FieldBits := @Props.SimpleFieldsBits[soInsert] else
-      FieldBits := @CustomFields;
+      FieldBits := Props.SimpleFieldsBits[soInsert] else
+      FieldBits := CustomFields+Props.ModCreateTimeFieldsBits;
     Props.SetExpandedJSONWriter(fBatch,
       fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,
-      (Value.fID<>0) and ForceID,FieldBits^);
+      (Value.fID<>0) and ForceID,FieldBits);
     fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
     Value.ComputeFieldsBeforeWrite(self,seAdd); // update TModTime/TCreateTime fields
     Value.GetJSONValues(fBatch);
@@ -22929,7 +23037,7 @@ begin
       // update all simple/custom fields (also for FillPrepareMany)
       FieldBits := Props.SimpleFieldsBits[soUpdate] else
     // update custom fields
-    FieldBits := CustomFields;
+    FieldBits := CustomFields+Value.RecordProps.ModTimeFieldsBits;
   Props.SetExpandedJSONWriter(fBatch,
     fBatchTablePreviousSendData<>PSQLRecordClass(Value)^,True,FieldBits);
   fBatchTablePreviousSendData := PSQLRecordClass(Value)^;
@@ -24426,7 +24534,7 @@ begin
   if self<>nil then
     for i := 0 to high(fStaticVirtualTable) do
     if fStaticVirtualTable[i]<>nil then
-    with TSQLRestStorageInMemory(fStaticVirtualTable[i]) do 
+    with TSQLRestStorageInMemory(fStaticVirtualTable[i]) do
       if InheritsFrom(TSQLRestStorageInMemory) and not CommitShouldNotUpdateFile then
         UpdateFile; // will do nothing if not Modified
 end;
@@ -27040,7 +27148,50 @@ begin
 end;
 
 
-{ TSQLRestStorage }
+{ TSQLRestStorageInMemory }
+
+constructor TSQLRestStorageInMemory.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
+  const aFileName: TFileName = ''; aBinaryFile: boolean=false);
+var JSON: RawUTF8;
+    Stream: TStream;
+    F: integer;
+begin
+  inherited Create(aClass,aServer,aFileName,aBinaryFile);
+  if (fStoredClassProps<>nil) and (fStoredClassProps.Kind in INSERT_WITH_ID) then
+    raise EModelException.CreateFmt('%s: %s virtual table can''t be static',
+      [fStoredClassRecordProps.SQLTableName,aClass.ClassName]);
+  fBinaryFile := aBinaryFile;
+  fValue := TObjectList.Create;
+  fSearchRec := fStoredClass.Create;
+  fIDSorted := true; // sorted by design of this class (may change in children)
+  if (ClassType<>TSQLRestStorageInMemory) and (fStoredClassProps<>nil) then
+    with fStoredClassProps do begin // used by AdaptSQLForEngineList() method
+      fBasicUpperSQLSelect[false] := UpperCase(SQL.SelectAllWithRowID);
+      SetLength(fBasicUpperSQLSelect[false],length(fBasicUpperSQLSelect[false])-1); // trim right ';'
+      fBasicUpperSQLSelect[true] := StringReplaceAll(fBasicUpperSQLSelect[false],' ROWID,',' ID,');
+    end;
+  if not IsZero(fIsUnique) then begin
+    fUniqueFields := TObjectList.Create;
+    with fStoredClassRecordProps do
+    for F := 0 to Fields.Count-1 do
+      if F in fIsUnique then
+        // CaseInsensitive=true just like
+        fUniqueFields.Add(TListFieldHash.Create(fValue,F,Fields.List[F],true));
+  end;
+  if (fFileName<>'') and FileExists(fFileName) then begin
+    if aBinaryFile then begin
+      Stream := TSynMemoryStreamMapped.Create(fFileName);
+      try
+        LoadFromBinary(Stream)
+      finally
+        Stream.Free;
+      end;
+    end else begin
+      JSON := StringFromFile(fFileName);
+      LoadFromJSON(JSON);
+    end;
+  end;
+end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean): integer;
 var ndx,i: integer;
@@ -27099,55 +27250,6 @@ begin
           exit;
       end;
   result := nil;
-end;
-
-constructor TSQLRestStorageInMemory.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-  const aFileName: TFileName = ''; aBinaryFile: boolean=false);
-var JSON: RawUTF8;
-    Stream: TStream;
-    F: integer;
-begin
-  inherited Create(aClass,aServer,aFileName,aBinaryFile);
-  if (fStoredClassProps<>nil) and (fStoredClassProps.Kind in INSERT_WITH_ID) then
-    raise EModelException.CreateFmt('%s: %s virtual table can''t be static',
-      [fStoredClassRecordProps.SQLTableName,aClass.ClassName]);
-  fBinaryFile := aBinaryFile;
-  fValue := TObjectList.Create;
-  fSearchRec := fStoredClass.Create;
-  fIDSorted := true; // sorted by design of this class (may change in children)
-  if (ClassType<>TSQLRestStorageInMemory) and (fStoredClassProps<>nil) then
-    with fStoredClassProps do begin // used by AdaptSQLForEngineList() method
-      fBasicUpperSQLSelect[false] := UpperCase(SQL.SelectAllWithRowID);
-      SetLength(fBasicUpperSQLSelect[false],length(fBasicUpperSQLSelect[false])-1); // trim right ';'
-      fBasicUpperSQLSelect[true] := StringReplaceAll(fBasicUpperSQLSelect[false],' ROWID,',' ID,');
-    end;
-  if not IsZero(fIsUnique) then begin
-    fUniqueFields := TObjectList.Create;
-    with fStoredClassRecordProps do
-    for F := 0 to Fields.Count-1 do
-      if F in fIsUnique then
-        // CaseInsensitive=true just like
-        fUniqueFields.Add(TListFieldHash.Create(fValue,F,Fields.List[F],true));
-  end;
-  if (fFileName<>'') and FileExists(fFileName) then begin
-    if aBinaryFile then begin
-      Stream := TSynMemoryStreamMapped.Create(fFileName);
-      try
-        LoadFromBinary(Stream)
-      finally
-        Stream.Free;
-      end;
-    end else begin
-      Stream := TFileStream.Create(fFileName,fmOpenRead);
-      try
-        SetLength(JSON,Stream.Size);
-        Stream.Read(pointer(JSON)^,length(JSON));
-        LoadFromJSON(JSON);
-      finally
-        Stream.Free;
-      end;
-    end;
-  end;
 end;
 
 function TSQLRestStorageInMemory.EngineDelete(TableModelIndex, ID: integer): boolean;
@@ -28622,11 +28724,11 @@ begin
   end;
 end;
 
-function TSQLRestClient.Update(Value: TSQLRecord): boolean;
+function TSQLRestClient.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits): boolean;
 begin
-  result := BeforeUpdateEvent(Value) and inherited Update(Value);
+  result := BeforeUpdateEvent(Value) and inherited Update(Value,CustomFields);
   if result then begin
-    if (fForceBlobTransfert<>nil) and
+    if (fForceBlobTransfert<>nil) and IsZero(CustomFields) and
        fForceBlobTransfert[Model.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
       result := UpdateBlobFields(Value);
     if result and assigned(OnRecordUpdate) then
@@ -30759,8 +30861,13 @@ begin
         inc(nBlobCustom);
         goto Simple;
       end;
+      sftCreateTime: begin
+        include(ModCreateTimeFieldsBits,i);
+        goto Simple;
+      end;
       sftModTime: begin
         include(ModTimeFieldsBits,i);
+        include(ModCreateTimeFieldsBits,i);
         goto Simple;
       end;
       else begin
