@@ -8918,8 +8918,8 @@ begin
       if not CheckFailed(Step(true,@row)) then
         repeat
           Check(row.ID=J.GetAsInteger(StepRow,FieldIndex('ID')));
-          Check(row.FirstName=J.GetString(StepRow,FieldIndex('FirstName')));
-          Check(row.LastName=J.GetString(StepRow,FieldIndex('LastName')));
+          Check(row.FirstName=J.GetU(StepRow,FieldIndex('FirstName')));
+          Check(row.LastName=J.GetU(StepRow,FieldIndex('LastName')));
           Check(row.YearOfBirth=J.GetAsInteger(StepRow,FieldIndex('YearOfBirth')));
           Check(row.YearOfDeath=J.GetAsInteger(StepRow,FieldIndex('YearOfDeath')));
           inc(n);

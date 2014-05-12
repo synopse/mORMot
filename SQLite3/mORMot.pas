@@ -1232,6 +1232,7 @@ type
     {$ifndef NOVARIANTS}
     /// a TEXT containing a variant value encoded as JSON
     // - string values are stored between quotes, numerical values directly
+    // - JSON objects or arrays will be handled as TDocVariant custom types  
     sftVariant,
     {$endif}
     /// a BLOB field (TSQLRawBlob Delphi property)
@@ -1239,7 +1240,8 @@ type
     sftBlob,
     /// a dynamic array, stored as BLOB field
     // - is retrieved by default, i.e. is recognized as a "simple" field
-    // - will use Base64 encoding in JSON content
+    // - will use Base64 encoding in JSON content, or a true JSON array,
+    // depending on the database back-end (e.g. MongoDB)
     sftBlobDynArray,
     /// a custom property, stored as BLOB field
     // - defined by overriding TSQLRecord.InternalRegisterCustomProperties
@@ -17425,73 +17427,99 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
 function TSQLTable.GetVariant(Row, Field: integer; Client: TObject): Variant;
 begin
   GetVariant(Row,Field,Client,result);
 end;
 
+const
+  /// map our available types for any SQL field property into variant values
+  SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
+ // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
+    varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
+ // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
+    varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
+ // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
+    varVariant,{$ifndef NOVARIANTS} varVariant, {$endif} varString, varVariant,
+ // sftBlobCustom, sftUTF8Custom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif}
+    varString,      varString,    {$ifdef PUBLISHRECORD} varString, {$endif}
+ // sftMany, sftModTime, sftCreateTime
+    varEmpty, varInt64, varInt64);
+
 procedure TSQLTable.GetVariant(Row,Field: integer; Client: TObject; var result: variant);
 var FT: TSQLFieldType;
+    Value: PUTF8Char;
+    JSON: RawUTF8;
     EnumType: PEnumType;
+    V64: Int64;
     err: integer;
-    Value64: Int64;
-    ValueRef: RecordRef absolute Value64;
-    Value8601: TTimeLogBits absolute Value64;
-    ValueCurrency: Currency absolute Value64;
+label str;
 begin
   if Row=0 then begin // Field Name
-    result := sftUnknown;
     result := GetCaption(0,Field);
     exit;
   end;
+  Value := Get(Row,Field);
   FT := FieldType(Field,@EnumType);
-  case FT of
-  sftCurrency: begin
-    Value64 := StrToCurr64(Get(Row,Field));
-    result := ValueCurrency;
-  end;
-  sftFloat: begin
-    result := GetExtended(Get(Row,Field),err);
-    if err=0 then
-      exit;
-  end;
-  sftDateTime: begin
-    result := Iso8601ToDateTimePUTF8Char(Get(Row,Field),0);
-    exit;
-  end;
-  sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog, sftModTime, sftCreateTime,
-  sftRecord, sftBoolean: begin
-    Value64 := GetInt64(Get(Row,Field),err);
-    if err=0 then begin
+  with TVarData(result) do begin
+    if not (VType in VTYPE_STATIC) then
+      VarClear(result);
+    VType := SQL_ELEMENTTYPES[FT];
+    pointer(VAny) := nil;
+    case FT of
+    sftCurrency:
+      VInt64 := StrToCurr64(Value);
+    sftFloat: begin
+      VDouble := GetExtended(Value,err);
+      if err<>0 then begin
+str:    VType := varString;
+        RawUTF8(VAny) := Value;
+      end;
+    end;
+    sftDateTime:
+      VDate := Iso8601ToDateTimePUTF8Char(Value,0);
+    sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog,
+    sftModTime, sftCreateTime, sftRecord, sftBoolean: begin
+      V64 := GetInt64(Value,err);
+      if err<>0 then
+        goto str;
       case FT of
       sftEnumerate:
         if EnumType=nil then
-          result := Value64 else
-          result := EnumType^.GetCaption(Value64);
-      sftID, sftSet, sftInteger:
-        result := Value64;
-      sftTimeLog, sftModTime, sftCreateTime:
-        result := Value8601.ToDateTime;
+          VInt64 := V64 else begin
+          VType := varNativeString;
+          string(VAny) := EnumType^.GetCaption(V64);
+        end;
+      sftID, sftSet, sftInteger, sftTimeLog, sftModTime, sftCreateTime:
+        VInt64 := V64;
       sftRecord:
-        if (Value64<>0) and
-           (Client<>nil) and Client.InheritsFrom(TSQLRest) then // 'TableName ID'
-          result := {$ifdef UNICODE}Ansi7ToString{$endif}(ValueRef.Text(TSQLRest(Client).Model)) else
-          result := Value64; // display ID number if no table model
+        if (V64<>0) and
+           (Client<>nil) and Client.InheritsFrom(TSQLRest) then begin
+          VType := varString; // 'TableName ID'
+          RawUTF8(VAny) := PRecordRef(@V64).Text(TSQLRest(Client).Model);
+        end else
+          VInt64 := V64; // display ID number if no table model
       sftBoolean:
-        result := boolean(Value64);
+        VBoolean := boolean(V64);
       end;
-      exit;
     end;
-    // err<>0 -> not an integer -> will be displayed with GetString()
+    sftMany:
+      exit;
+    sftAnsiText, sftUTF8Text, sftUTF8Custom:
+      RawUTF8(VAny) := Value;
+    sftBlobCustom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif} sftBlob:
+      RawByteString(VAny) := BlobToTSQLRawBlob(Value);
+    sftObject, sftVariant, sftBlobDynArray: begin
+      JSON := Value; // need a temporary local copy for objects
+      GetVariantFromJSON(pointer(JSON),false,result,@JSON_OPTIONS[true]);
+    end;
+    else raise ESQLTableException.CreateFmt('Unexpected type %d',[ord(FT)]);
+    end;
   end;
-  end;
-  // sftBlob and sftMany are not handled
-  // sftBlobRecord, sftBlobCustom, sftBlobDynArray as binary string
-  // sftUTF8Custom as text
-  // sftObject or sftVariant as JSON serialization
-  result := GetString(Row,Field);
 end;
-{$endif}
+
+{$endif NOVARIANTS}
 
 function TSQLTable.ExpandAsString(Row, Field: integer; Client: TObject;
   out Text: string; const CustomFormat: string): TSQLFieldType;

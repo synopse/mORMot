@@ -8235,6 +8235,10 @@ const
   // - depending on the compiler version
   varSynUnicode = {$ifdef UNICODE}varUString{$else}varOleStr{$endif};
 
+  /// this variant type will map the current string type
+  // - depending on the compiler version
+  varNativeString = {$ifdef UNICODE}varUString{$else}varString{$endif};
+
   /// those TVarData.VType values are un-managed and do not need to be cleared
   // - used mainly in low-level code similar to the folllowing:
   // !  if not(TVarData(aVariant).VType in VTYPE_STATIC) then
@@ -8464,10 +8468,11 @@ function VariantLoad(const Bin: RawByteString;
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
-// (as RawUTF8), guessing the best numeric type according to
-// the textual content, and string in all other cases, except TryCustomVariants
-// points to some options and input is a known object or array, either encoded
-// as strict-JSON (i.e. {..} or [..]), or with some extended (e.g. BSON) syntax
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy or the overloaded functions with RawUTF8 parameter
 // if you need to access it later
@@ -8476,11 +8481,12 @@ function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
 
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
-// - will return either an Integer, Int64, currency, double or string value
-// (as RawUTF8), guessing the best numeric type according to
-// the textual content, and string in all other cases, except TryCustomVariants
-// points to some options and input is a known object or array, either encoded
-// as strict-JSON (i.e. {..} or [..]), or with some extended (e.g. BSON) syntax
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
@@ -8488,11 +8494,12 @@ procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
 
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
-// - will return either an Integer, Int64, currency, double or string value
-// (as RawUTF8), guessing the best numeric type according to
-// the textual content, and string in all other cases, except TryCustomVariants
-// points to some options and input is a known object or array, either encoded
-// as strict-JSON (i.e. {..} or [..]), or with some extended (e.g. BSON) syntax
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
 function VariantLoadJSON(const JSON: RawUTF8;
@@ -8535,10 +8542,12 @@ function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind=twJ
 /// low-level function to set a variant from an unesceped JSON number or string
 // - expect the JSON input buffer to be already unescaped, e.g. by GetJSONField()
 // - is called e.g. by function VariantLoadJSON()
-// - will return either an Integer, Int64, currency, double or string in Value
-// (as RawUTF8), guessing the best numeric type according to
-// the textual content, and string in all other cases, except TryCustomVariants
-// points to some options and input is a strict-JSON { object } or [ array ]
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean; var Value: variant;
   TryCustomVariants: PDocVariantOptions=nil);
 
