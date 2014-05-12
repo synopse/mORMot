@@ -4931,20 +4931,18 @@ type
     function GetS(Row,Field: integer): shortstring;
     {$ifndef NOVARIANTS}
     {/ read-only access to a particular field value, as a Variant
+     - text will be stored as RawUTF8 (as varString type)
      - will try to use the most approriate Variant type for conversion (will
-       use e.g. TDateTime for sftDateTime or sftTimeLog, Extended for sftFloat...)
-     - will handle any necessary conversion to VCL string text, ready to be displayed
-     - the global UTF8ToString() function will be used for the conversion:
-       for proper i18n handling before Delphi 2009, you should use the
-       overloaded method with aUTF8ToString=Language.UTF8ToString }
+       use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
+       in a sftVariant column) - so you should better set the exact field types
+       (e.g. from ORM) before calling this method }
     function GetVariant(Row,Field: integer; Client: TObject): variant; overload;
     {/ read-only access to a particular field value, as a Variant
+     - text will be stored as RawUTF8 (as varString type)
      - will try to use the most approriate Variant type for conversion (will
-       use e.g. TDateTime for sftDateTime or sftTimeLog, Extended for sftFloat...)
-     - will handle any necessary conversion to VCL string text, ready to be displayed
-     - the global UTF8ToString() function will be used for the conversion:
-       for proper i18n handling before Delphi 2009, you should use the
-       overloaded method with aUTF8ToString=Language.UTF8ToString }
+       use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
+       in a sftVariant column) - so you should better set the exact field types
+       (e.g. from ORM) before calling this method }
     procedure GetVariant(Row,Field: integer; Client: TObject; var result: variant); overload;
     {$endif}
     {/ read-only access to a particular field value, as VCL string text
@@ -17435,13 +17433,14 @@ end;
 
 const
   /// map our available types for any SQL field property into variant values
+  // - varNull will be used to store a true variant instance from JSON
   SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
     varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
  // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
-    varVariant,{$ifndef NOVARIANTS} varVariant, {$endif} varString, varVariant,
+    varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif}
     varString,      varString,    {$ifdef PUBLISHRECORD} varString, {$endif}
  // sftMany, sftModTime, sftCreateTime
@@ -17451,8 +17450,6 @@ procedure TSQLTable.GetVariant(Row,Field: integer; Client: TObject; var result: 
 var FT: TSQLFieldType;
     Value: PUTF8Char;
     JSON: RawUTF8;
-    EnumType: PEnumType;
-    V64: Int64;
     err: integer;
 label str;
 begin
@@ -17461,7 +17458,7 @@ begin
     exit;
   end;
   Value := Get(Row,Field);
-  FT := FieldType(Field,@EnumType);
+  FT := FieldType(Field);
   with TVarData(result) do begin
     if not (VType in VTYPE_STATIC) then
       VarClear(result);
@@ -17474,35 +17471,20 @@ begin
       VDouble := GetExtended(Value,err);
       if err<>0 then begin
 str:    VType := varString;
+        VAny := nil; // avoid GPF 
         RawUTF8(VAny) := Value;
       end;
     end;
     sftDateTime:
       VDate := Iso8601ToDateTimePUTF8Char(Value,0);
+    sftBoolean:
+      VBoolean := (Value=nil) or (PWord(Value)^=ord('0')) or
+        (PInteger(Value)^=FALSE_LOW);
     sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog,
-    sftModTime, sftCreateTime, sftRecord, sftBoolean: begin
-      V64 := GetInt64(Value,err);
+    sftModTime, sftCreateTime, sftRecord: begin
+      VInt64 := GetInt64(Value,err);
       if err<>0 then
         goto str;
-      case FT of
-      sftEnumerate:
-        if EnumType=nil then
-          VInt64 := V64 else begin
-          VType := varNativeString;
-          string(VAny) := EnumType^.GetCaption(V64);
-        end;
-      sftID, sftSet, sftInteger, sftTimeLog, sftModTime, sftCreateTime:
-        VInt64 := V64;
-      sftRecord:
-        if (V64<>0) and
-           (Client<>nil) and Client.InheritsFrom(TSQLRest) then begin
-          VType := varString; // 'TableName ID'
-          RawUTF8(VAny) := PRecordRef(@V64).Text(TSQLRest(Client).Model);
-        end else
-          VInt64 := V64; // display ID number if no table model
-      sftBoolean:
-        VBoolean := boolean(V64);
-      end;
     end;
     sftMany:
       exit;
