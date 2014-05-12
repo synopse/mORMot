@@ -1284,7 +1284,14 @@ function UCS4ToUTF8(ucs4: cardinal; Dest: PUTF8Char): integer;
 // UTF-8 encoded String
 // - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
 // - newer UNICODE versions of Delphi will retrieve the code page from string
-procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8);
+procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8); overload;
+
+/// direct conversion of an AnsiString with an unknown code page into an
+// UTF-8 encoded String
+// - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
+// - newer UNICODE versions of Delphi will retrieve the code page from string
+function AnyAnsiToUTF8(const s: RawByteString): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
 // - faster than SysUtils: don't use Utf8Encode(WideString) -> no Windows.Global(),
@@ -11598,6 +11605,11 @@ begin
     {$endif}
       AnsiBufferToRawUTF8(pointer(s),length(s));
   end;
+end;
+
+function AnyAnsiToUTF8(const s: RawByteString): RawUTF8;
+begin
+  AnyAnsiToUTF8(s,result);
 end;
   
 function WinAnsiBufferToUtf8(Dest: PUTF8Char; Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char;
