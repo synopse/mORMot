@@ -3386,6 +3386,15 @@ begin
       '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A+
       '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A+
       '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>');
+  mustache := TSynMustache.Parse('{{#users}}'#$D#$A'{{^Connected}}'#$D#$A+
+    '- {{Name}} {{Firstname}} ({{Connected}})<BR>'#$D#$A'{{/Connected}}'#$D#$A'{{/users}}');
+  Check(mustache.SectionMaxCount=2);
+  html := mustache.RenderJSON('{"users":['+
+    '{"RowID":1,"Login":"safr","Firstname":"Frodon","Name":"Sacquet","Alias":"safr","Connected":true,"Resto":0},' + #13#10 +
+    '{"RowID":2,"Login":"saga","Firstname":"Samsagace","Name":"Gamegie","Alias":"saga","Connected":false,"Resto":0},' + #13#10 +
+    '{"RowID":3,"Login":"peto","Firstname":"Peregrin","Name":"Touque","Alias":"peto","Connected":false,"Resto":0},' + #13#10 +
+    '{"RowID":4,"Login":"mebr","Firstname":"Meriadoc","Name":"Brandebouc","Alias":"mebr","Connected":true,"Resto":0}]}');
+  check(html='- Gamegie Samsagace (false)<BR>'#$D#$A'- Touque Peregrin (false)<BR>'#$D#$A);
 
   // run official {{mustache}} regression tests suite
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TMustacheTest),__TMustacheTest).

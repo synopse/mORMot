@@ -648,7 +648,8 @@ begin
           continue; // ignore whole section
         end;
       mtSectionEnd:
-        if (fTags[SectionOppositeIndex].Kind=mtSection) and (Value[1]<>'-') then
+        if (fTags[SectionOppositeIndex].Kind in [mtSection,mtInvertedSection]) and
+           (Value[1]<>'-') then
           Context.PopContext;
       mtComment:
         ; // just ignored
