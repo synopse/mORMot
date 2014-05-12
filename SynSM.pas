@@ -830,7 +830,7 @@ type
     // - you can call this method just before a thread is finished to ensure
     // that the associated scripting Engine will be released
     // - could be used e.g. in a try...finally block inside a TThread.Execute
-    // overriden method
+    // overridden method
     procedure ReleaseCurrentThreadEngine;
 
     /// internal version of the script files

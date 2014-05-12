@@ -3374,7 +3374,7 @@ In addition to those standard markers, the {\i mORMot} implementation of {\i Mus
 |{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
 |{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
 |{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
-|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very usefull e.g. to display a list with alternating row colors
+|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
 |{\f1\fs20 \{\{<partial\}\}}\line ...\line {\f1\fs20 \{\{/partial\}\}}|Defines an in-lined {\i partial} - to be called later via {\f1\fs20 \{\{>partial\}\}} - within the scope of the current template
 |{\f1\fs20 \{\{"some text\}\}}|This pseudo-variable will supply the given text to a callback, which will for instance transform its content (e.g. translate it), before writing it to the output
 |%
@@ -8883,7 +8883,7 @@ The corresponding description may be:
 |Speed|10% faster|10% slower
 |%
 The routing to be used is defined globally in the {\f1\fs20 TSQLRest.ServiceRouting} property, and should match on both client and server side, of course. By design, you should {\i never} assign the abstract {\f1\fs20 TSQLRestServerURIContext} to this property.
-The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following methods, which will be overriden by inherited implementations to reflect the expected behavior on all aspects of the RESTful routing and transmission:
+The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following methods, which will be overridden by inherited implementations to reflect the expected behavior on all aspects of the RESTful routing and transmission:
 !  TSQLRestServerURIContext = class
 !  protected
 ! ...

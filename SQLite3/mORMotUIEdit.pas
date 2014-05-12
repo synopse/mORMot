@@ -587,7 +587,7 @@ begin
       P.SetVariant(Rec,CNE.Value);
       Include(ModifiedFields,FieldIndex);
     except
-      on E: ESynLabeledEdit do begin // trigerred by CNE.GetValue
+      on E: ESynLabeledEdit do begin // triggered by CNE.GetValue
         CNE.SetFocus;
         ShowMessage(CNE.EditLabel.Caption+':'#13+E.Message,true);
         exit;

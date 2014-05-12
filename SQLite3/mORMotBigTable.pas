@@ -79,7 +79,7 @@ type
     /// the associated Big Table instance
     // - either a TSynBigTableMetaData or a TSynBigTableRecord
     fBig: TSynBigTableTable;
-    // overriden methods calling the fBig instance
+    // overridden methods calling the fBig instance
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineLockedNextID: Integer;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false): RawUTF8; override;

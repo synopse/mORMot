@@ -34,10 +34,10 @@ type
     /// the background Server processing all requests
     Server: TSQLHttpServer;
 
-    /// event trigerred to start the service
+    /// event triggered to start the service
     // - e.g. create the Server instance
     procedure DoStart(Sender: TService);
-    /// event trigerred to stop the service
+    /// event triggered to stop the service
     // - e.g. destroy the Server instance
     procedure DoStop(Sender: TService);
 

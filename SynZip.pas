@@ -88,7 +88,7 @@ unit SynZip;
    Version 1.3.1 - January 23, 2010
     - issue corrected in CompressStream()
     - compilation of TSynZipCompressor under Delphi 2009/2010, without any
-      Internal Error DT5830 (trigerred with my Delphi 2009 Update 3)
+      Internal Error DT5830 (triggered with my Delphi 2009 Update 3)
 
    Version 1.3.2 - February 5, 2010
     - added .zip direct reading class
@@ -636,7 +636,7 @@ type
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipEntry);
     /// append a file content into the destination file
-    // - usefull to add the initial Setup.exe file, e.g.
+    // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: RawByteString);
     /// release associated memory, and close destination file
     destructor Destroy; override;

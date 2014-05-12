@@ -35,7 +35,7 @@ type
   /// class used to create the User interface
   TFileRibbon = class(TSQLRibbon)
   public
-    /// overriden method used customize the report content
+    /// overridden method used customize the report content
     procedure CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
       AlreadyBegan: boolean=false); override;
   end;

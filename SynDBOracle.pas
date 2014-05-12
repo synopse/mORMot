@@ -65,7 +65,7 @@ unit SynDBOracle;
   - fixed issue with SQLT_BIN/RAW kind of columns
   - fixed issue with SQLT_IBFLOAT/SQLT_IBDOUBLE kind of columns
   - fixed issue with CLOB/NCLOB/NVARCHAR kind of columns (including charset)
-  - added TSQLDBOracleStatement.ColumnToVarData() overriden method, for faster
+  - added TSQLDBOracleStatement.ColumnToVarData() overridden method, for faster
     process from mORMot external tables (i.e. SQLite3DB)
   - fixed issue with TDateTime parameter (SQLT_DAT replaced by SQLT_TIMESTAMP)
   - fixed issue with NULL parameter (avoid ORA-01024 error)
@@ -208,7 +208,7 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBOracleConnection instance
+    // - this overridden method will create an TSQLDBOracleConnection instance
     function NewConnection: TSQLDBConnection; override;
     /// extract the TNS listener name from a Oracle full connection string
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
@@ -280,7 +280,7 @@ type
     // - the caller should free the instance after use
     function NewStatement: TSQLDBStatement; override;
     /// initialize a new SQL query statement for the given connection
-    // - if UseCache=true, this overriden implementation will use server-side
+    // - if UseCache=true, this overridden implementation will use server-side
     // Oracle statement cache - in this case, StatementCacheSize will define
     // how many statements are to be cached
     // - this method should return nil in case of error, or a prepared statement
@@ -410,7 +410,7 @@ type
       var Temp: RawByteString; DoNotFetchBlob: boolean=false); override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
-     - fast overriden implementation with no temporary variable (about 20%
+     - fast overridden implementation with no temporary variable (about 20%
        faster when run over high number of data rows) 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
@@ -419,7 +419,7 @@ type
      - Cursors are not handled internally by mORMot, but Oracle usually use
        such structures to get data from strored procedures
      - such columns are mapped as ftUTF8, with the rows converted to JSON
-     - this overriden method will allow direct access to the data rows }
+     - this overridden method will allow direct access to the data rows }
     function ColumnCursor(Col: integer): ISQLDBRows; override;
 
     {/ bind a special CURSOR parameter to be returned as a SynDB result set
@@ -428,7 +428,7 @@ type
      - such parameters are mapped as ftUnknown, and is always of paramOut type
      - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
        execution of the statement
-     - this overriden method will prepare direct access to the data rows }
+     - this overridden method will prepare direct access to the data rows }
     procedure BindCursor(Param: integer); override;
     {/ return a special CURSOR parameter content as a SynDB result set
      - this method is not about a column, but a parameter defined with
@@ -436,7 +436,7 @@ type
      - Cursors are not handled internally by mORMot, but some databases (e.g.
        Oracle) usually use such structures to get data from strored procedures
      - this method allow direct access to the data rows after execution
-     - this overriden method will allow direct access to the data rows }
+     - this overridden method will allow direct access to the data rows }
     function BoundCursor(Param: Integer): ISQLDBRows; override;
 
     /// returns the number of rows updated by the execution of this statement

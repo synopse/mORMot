@@ -101,7 +101,7 @@ type
     destructor Destroy; override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBUniDACConnection instance
+    // - this overridden method will create an TSQLDBUniDACConnection instance
     function NewConnection: TSQLDBConnection; override;
 
     /// compute the UniDAC URI from a given database engine and server name
@@ -123,13 +123,13 @@ type
       aLibraryLocationAppendExePath: boolean=true): RawUTF8;
 
     /// retrieve the column/field layout of a specified table
-    // - this overriden method will use UniDAC metadata to retrieve the information
+    // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
-    // - this overriden method will use UniDAC metadata to retrieve the information
+    // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
-    // - this overriden method will use UniDAC metadata to retrieve the information
+    // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
 
     /// allow to set the options specific to a UniDAC driver

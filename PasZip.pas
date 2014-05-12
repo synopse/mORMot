@@ -285,7 +285,7 @@ type
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipEntry);
     /// append a file content into the destination file
-    // - usefull to add the initial Setup.exe file, e.g.
+    // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: AnsiString);
     /// release associated memory, and close destination file
     destructor Destroy; override;

@@ -69,7 +69,7 @@ unit SynDBSQLite3;
   Version 1.18
   - statement cache refactoring: cache logic is now at SynDB unit level
   - fixed ticket [4c68975022] about broken SQL statement when logging active
-  - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overriden method
+  - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
   - overloaded function RowsToSQLite3() is now moved as generic
     TSQLDBConnection.NewTableFromRows() method
   - TSQLDBSQLite3Statement.BindTextP('') will bind '' text instead of null value
@@ -310,7 +310,7 @@ type
     function ColumnBlob(Col: integer): RawByteString; override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
-     - fast overriden implementation with no temporary variable
+     - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
     procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;

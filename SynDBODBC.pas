@@ -103,7 +103,7 @@ type
   protected
     fDriverDoesNotHandleUnicode: Boolean;
     fSQLDriverConnectPrompt: Boolean;
-    /// this overriden method will retrieve the kind of DBMS from the main connection
+    /// this overridden method will retrieve the kind of DBMS from the main connection
     function GetDBMS: TSQLDBDefinition; override;
   public
     /// initialize the connection properties
@@ -138,7 +138,7 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overriden method will create an TODBCConnection instance
+    // - this overridden method will create an TODBCConnection instance
     function NewConnection: TSQLDBConnection; override;
     /// get all table names
     // - will retrieve the corresponding metadata from ODBC library if SQL
@@ -237,12 +237,12 @@ type
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
     {{ Execute a prepared SQL statement
      - parameters marked as ? should have been already bound with Bind*() functions
-     - this overriden method will log the SQL statement if sllSQL has been
+     - this overridden method will log the SQL statement if sllSQL has been
        enabled in SynDBLog.Family.Level
      - raise an EODBCException or ESQLDBException on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overriden implementation will reset all bindings and the cursor state 
+     - this overridden implementation will reset all bindings and the cursor state 
      - raise an EODBCException on any error }
     procedure Reset; override;
 
@@ -278,7 +278,7 @@ type
     function ColumnBlob(Col: integer): RawByteString; override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
-     - fast overriden implementation with no temporary variable
+     - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
     procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;

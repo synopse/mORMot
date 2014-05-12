@@ -201,7 +201,7 @@ unit SynBigTable;
     - unit now tested with Delphi XE2 (32 Bit)
 
   Version 1.16
-    - new overriden TSynBigTableTable.Clear method which will clear fields
+    - new overridden TSynBigTableTable.Clear method which will clear fields
     - new TSynBigTable.FileFormatCheck class method to recognize file format
     - replaced sbtGetMagic kind of header with InternalMagic class function
     - fixed issue in TSynTableFieldProperties.SaveTo about saving wrong indexes
@@ -541,7 +541,7 @@ type
     fHeaderString: TRawUTF8DynArray;
     /// store associated numerical IDs (in alpha-sorted order)
     fHeaderID: TIntegerDynArray;
-    /// overriden method which handle String ID loading and writing
+    /// overridden method which handle String ID loading and writing
     function CustomHeader(Action: TSynBigTableCustomHeader;
       WriteBuffer: TFileBufferWriter): integer; override;
     class function InternalMagic: integer; override;
@@ -583,7 +583,7 @@ type
     // a custom TSynMemoryStreamMapped is used to access the data from disk
     function GetAsStream(const aID: RawUTF8): TStream; overload;
     /// fast retrieval of all IDs
-    // - this overriden method handle ioFaster order, i.e; the fHeaderID[] content
+    // - this overridden method handle ioFaster order, i.e; the fHeaderID[] content
     // - returns the number of IDs stored in the integer array
     function GetAllIDs(var IDs: TIntegerDynArray;
       Order: TSynBigTableIterationOrder=ioPhysical): integer; override;
@@ -750,7 +750,7 @@ type
     function IndexToID(aIndex: Integer; handleAliases: boolean=true): integer; override;
     /// faster method returning fHeaderCount
     function GetCount: integer; override;
-    /// overriden method which handle field description loading and writing
+    /// overridden method which handle field description loading and writing
     function CustomHeader(Action: TSynBigTableCustomHeader;
       WriteBuffer: TFileBufferWriter): integer; override;
     class function InternalMagic: integer; override;
@@ -775,7 +775,7 @@ type
     // - it could be more convenient to use VariantGet() or even the faster
     // RecordGet() methods
     function GetMetaDataFromID(aID: integer): pointer;
-    /// overriden method to delete an entry from its numerical ID
+    /// overridden method to delete an entry from its numerical ID
     // - this method will handle the metadata fields synchronization
     function Delete(aID: integer; PhysicalIndex: PInteger=nil): boolean; override;
     /// add a data item with its associated metadata record to the table
@@ -842,7 +842,7 @@ type
   // overhead, but is perhaps more convenient)
   TSynBigTableRecord = class(TSynBigTableTable)
   protected
-    /// overriden method which handle field description loading and writing
+    /// overridden method which handle field description loading and writing
     function CustomHeader(Action: TSynBigTableCustomHeader;
       WriteBuffer: TFileBufferWriter): integer; override;
     class function InternalMagic: integer; override;
@@ -867,15 +867,15 @@ type
     // ! aField := Table.Table['FieldName'];
     procedure AddFieldUpdate; override;
   public
-    /// overriden method to add a record to the database
+    /// overridden method to add a record to the database
     // - this method will handle the field indexes synchronization
     // - returns 0 on adding error (e.g. if a tftUnique constraint failed)
     function Add(const aData: RawByteString; ForcedID: integer=0;
       PhysicalIndex: PInteger=nil; OldPhysicalIndex: integer=-1): integer; override;
-    /// overriden method to delete an entry from its numerical ID
+    /// overridden method to delete an entry from its numerical ID
     // - this method will handle the field indexes synchronization
     function Delete(aID: integer; PhysicalIndex: PInteger=nil): boolean; override;
-    /// overriden method to update a record content in the database
+    /// overridden method to update a record content in the database
     // - returns 0 on updating error (e.g. if a tftUnique constraint failed)
     function Update(aID: Integer; const aData: RawByteString;
       PhysicalIndexOldNew: PInt64=nil): integer; override;
@@ -3041,7 +3041,7 @@ begin
     result := InternalUpdateFromIndex(aData,aID,ndx,aliasNdx,newNdx);
     if ndx>=fCount then // was refreshed in memory -> manual index refresh
       Table.FieldIndexModify(ndx,newNdx,nil,nil);
-      // old data was overriden -> no GetPointerFromIndex(ndx,aTemp),pointer(aData));
+      // old data was overridden -> no GetPointerFromIndex(ndx,aTemp),pointer(aData));
      // aIndex<fCount -> TSynBigTableRecord.Add() did call FieldIndexModify
   end;
 end;

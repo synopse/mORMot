@@ -103,7 +103,7 @@ unit mORMotReport;
   - direct PDF export (if a PDF printer is installed, or via SynPdf unit)
   - direct page export to clipboard as text
   - optional Black and White / Duplex mode (with out TPrinterNew custom class)
-  - new usefull methods for easy text adding (especially column definition)
+  - new useful methods for easy text adding (especially column definition)
   - new fast double buffering drawing
   - full Unicode text process (even before Delphi 2009)
   - speed up and various bug fixes to work with Delphi 5 up to XE3
@@ -262,14 +262,14 @@ type
   // - zsPageWidth zooms the page to fit the report width on screen
   TZoomStatus = (zsPercent, zsPageFit, zsPageWidth);
 
-  /// Event trigerred when a new page is added
+  /// Event triggered when a new page is added
   TNewPageEvent = procedure(Sender: TObject; PageNumber: integer) of object;
 
-  /// Event trigerred when the Zoom was changed
+  /// Event triggered when the Zoom was changed
   TZoomChangedEvent = procedure(Sender: TObject;
     Zoom: integer; ZoomStatus: TZoomStatus) of object;
 
-  /// Event trigerred to allow custom unicode character display on the screen
+  /// Event triggered to allow custom unicode character display on the screen
   // - called for all text, whatever the alignment is
   // - Text content can be modified by this event handler to customize
   // some characters (e.g. '>=' can be converted to the one unicode equivalent)
@@ -564,11 +564,11 @@ type
     procedure InternalUnicodeString(const s: SynUnicode;
       var PW: PWideChar; var PWLen: integer; size: PSize);
   public
-    /// Event trigerred when the ReportPopupMenu is displayed
+    /// Event triggered when the ReportPopupMenu is displayed
     // - default handling (i.e. leave this field nil) is to add Page naviguation
     // - you can override this method for adding items to the ReportPopupMenu
     OnPopupMenuPopup: TNotifyEvent;
-    /// Event trigerred when a ReportPopupMenu item is selected
+    /// Event triggered when a ReportPopupMenu item is selected
     // - default handling (i.e. leave this field nil) is for Page navigation
     // - you can override this method for handling additionnal items to the menu
     // - the Tag component of the custom TMenuItem should be 0 or greater than
@@ -583,7 +583,7 @@ type
     /// if true, the PrintPages() method will use a temporary bitmap for printing
     // - some printer device drivers have problems with printing metafiles
     // which contains other metafiles; should have been fixed
-    // - not usefull, since slows the printing a lot and makes huge memory usage
+    // - not useful, since slows the printing a lot and makes huge memory usage
     ForcePrintAsBitmap: boolean;
     /// if true the preview will not use GDI+ library to draw anti-aliaised graphics
     // - this may be slow on old computers, so caller can disable it on demand
@@ -852,10 +852,10 @@ type
     /// retrieve the attributes of a specified column
     function GetColumnInfo(index: integer): TColRec;
     /// individually set column alignment
-    // - usefull after habing used AddColumns([]) method e.g.
+    // - useful after habing used AddColumns([]) method e.g.
     procedure SetColumnAlign(index: integer; align: TColAlign);
     /// individually set column bold state
-    // - usefull after habing used AddColumns([]) method e.g.
+    // - useful after habing used AddColumns([]) method e.g.
     procedure SetColumnBold(index: integer);
     /// erase all columns and the associated headers
     procedure ClearColumns;
@@ -986,7 +986,7 @@ type
     {$ifndef NO_USE_UNISCRIBE}
     /// set if the exporting PDF engine must use the Windows Uniscribe API to
     // render Ordering and/or Shaping of the text
-    // - usefull for Hebrew, Arabic and some Asiatic languages handling
+    // - useful for Hebrew, Arabic and some Asiatic languages handling
     // - set to FALSE by default, for faster content generation
     property ExportPDFUseUniscribe: boolean read fExportPDFUseUniscribe write fExportPDFUseUniscribe;
     {$endif}
@@ -1014,7 +1014,7 @@ type
       read fExportPDFEncryptionUserPassword write fExportPDFEncryptionUserPassword;
     /// set encryption owner password to be used in exporting PDF document
     // - it is mandatory to set it to a non void value - by default, is set to
-    // 'SynopsePDFEngine' by should be overriden for security
+    // 'SynopsePDFEngine' by should be overridden for security
     // - ExportPDFEncryptionLevel = elRC4_40/elRC4_128 expects only ASCII-7 chars
     property ExportPDFEncryptionOwnerPassword: string
       read fExportPDFEncryptionOwnerPassword write fExportPDFEncryptionOwnerPassword;
@@ -1116,7 +1116,7 @@ type
   TRenderPages = class;
 
   /// a TRenderPages additional layout state
-  // - used by the overriden SaveLayout/RestoreSavedLayout methods
+  // - used by the overridden SaveLayout/RestoreSavedLayout methods
   TSavedStateRender = record
     FirstLineIndent: Integer;
     Before: Integer;
@@ -1327,7 +1327,7 @@ type
     // - the paragraph will be flushed to the main document with the RdrParagraph
     // method will be called
     property Rdr: TRenderBox read fRdr;
-  public { some overriden methods }
+  public { some overridden methods }
     /// creates the reporting component
     constructor Create(AOwner: TComponent); override;
     /// finalize the component, releasing all used memory and associated TRenderBox
@@ -4640,7 +4640,7 @@ begin
         if k>PageCount then
           break;
         M2 := NewPopupMenuItem(format(PageFromTo,[k,k+9]),-800,M);
-        // Tag=-800 -> no OnClick event trigerred for this entry
+        // Tag=-800 -> no OnClick event triggered for this entry
         for i := k to k+9 do
           if i>PageCount then
             break else

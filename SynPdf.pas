@@ -107,7 +107,7 @@ unit SynPdf;
   - fixed TextWidth() and TextMeasure()
 
   Version 1.8.5
-  - fixed font enumeration problem (trigerred with asiatic windows)
+  - fixed font enumeration problem (triggered with asiatic windows)
 
   Version 1.8.6
   - system font enumeration is now stored using UTF-8, and any non ASCII font
@@ -211,7 +211,7 @@ unit SynPdf;
     e.g. in TPdfDocumentGDI.SaveToStream() and TGDIPages.ExportPDFStream()
   - TPdfDocumentGDI will now compress (via our SynLZ algorithm) all its page
     content (TMetaFile) for efficiency
-  - TPdfDocumentGDI.SaveToStreamDirectPageFlush overriden method could be used
+  - TPdfDocumentGDI.SaveToStreamDirectPageFlush overridden method could be used
     to reduce the used memory even more, by-passing page content compression
   - therefore, TPdfDocumentGDI will use much less resource and memory with no
     swaping to disk (tested with 200,000 simple text pages)
@@ -276,7 +276,7 @@ unit SynPdf;
 
 {$define USE_UNISCRIBE}
 { - if defined, the PDF engine will use the Windows Uniscribe API to
-  render Ordering and Shaping of the text (usefull for Hebrew, Arabic and
+  render Ordering and Shaping of the text (useful for Hebrew, Arabic and
   some Asiatic languages)
   - this feature need the TPdfDocument.UseUniscribe property to be forced to true
   according to the language of the text you want to render
@@ -444,7 +444,7 @@ type
   /// PDF exception, raised when an invalid value is given to a constructor
   EPdfInvalidValue = class(Exception);
 
-  /// PDF exception, raised when an invalid operation is trigerred
+  /// PDF exception, raised when an invalid operation is triggered
   EPdfInvalidOperation = class(Exception);
 
   /// Page mode determines how the document should appear when opened
@@ -533,7 +533,7 @@ const
   // - to not embedd these fonts in the PDF document, and save some KB,
   // just use the EmbeddedTTFIgnore property of TPdfDocument/TPdfDocumentGDI:
   // !   PdfDocument.EmbeddedTTFIgnore.Text := MSWINDOWS_DEFAULT_FONTS;
-  // - note that this is usefull only if the EmbeddedTTF property was set to TRUE
+  // - note that this is useful only if the EmbeddedTTF property was set to TRUE
   MSWINDOWS_DEFAULT_FONTS: RawUTF8 =
     'Arial'#13#10'Courier New'#13#10'Georgia'#13#10+
     'Impact'#13#10'Lucida Console'#13#10'Roman'#13#10'Symbol'#13#10+
@@ -1489,7 +1489,7 @@ type
 {$ifdef USE_UNISCRIBE}
     /// set if the PDF engine must use the Windows Uniscribe API to
     // render Ordering and/or Shaping of the text
-    // - usefull for Hebrew, Arabic and some Asiatic languages handling
+    // - useful for Hebrew, Arabic and some Asiatic languages handling
     // - set to FALSE by default, for faster content generation
     // - you can set this property temporary to TRUE, when using the Canvas
     // property, but this property must be set appropriately before the content
@@ -2243,7 +2243,7 @@ type
     fhhea,
     fhmtx: TWordDynArray;
   public
-    // these are pointers to the usefull data of the True Type Font:
+    // these are pointers to the useful data of the True Type Font:
     /// Font header
     head: ^TCmapHEAD;
     /// Horizontal header
@@ -2496,10 +2496,10 @@ type
     /// add a Page to the current PDF document
     function AddPage: TPdfPage; override;
     /// save the PDF file content into a specified Stream
-    // - this overriden method draw first the all VCLCanvas content into the PDF
+    // - this overridden method draw first the all VCLCanvas content into the PDF
     procedure SaveToStream(AStream: TStream; ForceModDate: TDateTime=0); override;
     /// save the current page content to the PDF file
-    // - this overriden method flush the content from the VCLCanvas into the PDF
+    // - this overridden method flush the content from the VCLCanvas into the PDF
     // - it will reduce the used memory as much as possible, by-passing page
     // content compression
     // - typical use may be:
@@ -2532,7 +2532,7 @@ type
     /// the VCL Canvas of the current page
     property VCLCanvas: TCanvas read GetVCLCanvas;
     /// the VCL Canvas size of the current page
-    // - usefull to calculate coordinates for the current page
+    // - useful to calculate coordinates for the current page
     // - filled with (0,0) before first call to VCLCanvas property
     property VCLCanvasSize: TSize read GetVCLCanvasSize;
     /// defines how TMetaFile text positioning is rendered

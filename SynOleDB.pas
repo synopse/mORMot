@@ -97,7 +97,7 @@ unit SynOleDB;
     and TOleDBMSSQL2012ConnectionProperties classes to specify every available
     MS SQL Server providers SQLNCLI, SQLNCLI10 or SQLNCLI11
   - now trim any spaces when retrieving database schema text values
-  - added TOleDBStatement.UpdateCount overriden method (dc proposal)
+  - added TOleDBStatement.UpdateCount overridden method (dc proposal)
   - fixed ticket [4c68975022] about broken SQL statement when logging active
   - fixed ticket [a24cbd30e3] about 64 bit compilation
   - now works as expected under Win64 (a lot of previous code was Win32 specific)
@@ -562,7 +562,7 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overriden method will create an TOleDBConnection instance
+    // - this overridden method will create an TOleDBConnection instance
     function NewConnection: TSQLDBConnection; override;
     /// display the OleDB/ADO Connection Settings dialog to customize the
     // OleDB connection string
@@ -643,7 +643,7 @@ type
 
   /// OleDB connection properties to Microsoft SQL Server 2005, via
   // SQL Server Native Client (SQL Server 2005)
-  // - this overriden version will use deprecated SQLNCLI provider, but will
+  // - this overridden version will use deprecated SQLNCLI provider, but will
   // with MS SQL Server 2005
   // - is aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
@@ -653,7 +653,7 @@ type
     procedure SetInternalProperties; override;
   public
     /// initialize the connection properties
-    // - this overriden version will disable the MultipleValuesInsert()
+    // - this overridden version will disable the MultipleValuesInsert()
     // optimization as defined in TSQLDBConnectionProperties.Create(),
     // since INSERT with multiple VALUES (..),(..),(..) is available only
     // since SQL Server 2008
@@ -667,7 +667,7 @@ type
 
   /// OleDB connection properties to Microsoft SQL Server 2012, via
   // SQL Server Native Client 11.0 (SQL Server 2012)
-  // - this overriden version will use newer SQLNCLI11 provider, but won't work
+  // - this overridden version will use newer SQLNCLI11 provider, but won't work
   // under Windows XP - in this case, will fall back to SQLNCLI10 - see
   // http://msdn.microsoft.com/en-us/library/ms131291.aspx
   // - if aUserID='' at Create, it will use Windows Integrated Security
@@ -947,7 +947,7 @@ type
      - raise an EOleDBException on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overriden implementation will reset all bindings and the cursor state 
+     - this overridden implementation will reset all bindings and the cursor state 
      - raise an EOleDBException on any error }
     procedure Reset; override;
     /// gets a number of updates made by latest executed statement
@@ -1009,7 +1009,7 @@ type
     function ColumnBlob(Col: integer): RawByteString; override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
-     - fast overriden implementation with no temporary variable 
+     - fast overridden implementation with no temporary variable 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
     procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;

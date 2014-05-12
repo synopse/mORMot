@@ -343,17 +343,17 @@ type
     {{ custom Execute event
       - launched in the main service thread (i.e. in the Execute method) }
     property OnExecute: TServiceEvent read fOnExecute write fOnExecute;
-    {{ custom event trigerred when a Control Code is received from Windows }
+    {{ custom event triggered when a Control Code is received from Windows }
     property OnControl: TServiceControlEvent read fOnControl write fOnControl;
-    {{ custom event trigerred when the service is stopped }
+    {{ custom event triggered when the service is stopped }
     property OnStop: TServiceEvent read fOnStop write fOnStop;
-    {{ custom event trigerred when the service is paused }
+    {{ custom event triggered when the service is paused }
     property OnPause: TServiceEvent read fOnPause write fOnPause;
-    {{ custom event trigerred when the service is resumed }
+    {{ custom event triggered when the service is resumed }
     property OnResume: TServiceEvent read fOnResume write fOnResume;
-    {{ custom event trigerred when the service receive an Interrogate }
+    {{ custom event triggered when the service receive an Interrogate }
     property OnInterrogate: TServiceEvent read fOnInterrogate write fOnInterrogate;
-    {{ custom event trigerred when the service is shut down }
+    {{ custom event triggered when the service is shut down }
     property OnShutdown: TServiceEvent read fOnShutdown write fOnShutdown;
   end;
 

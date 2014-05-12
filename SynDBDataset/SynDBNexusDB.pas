@@ -120,7 +120,7 @@ type
     procedure GetForeignKeys; override;
   public
     /// initialize the properties to connect to the NexusDB engine
-    // - this overriden method will initialize the protocol to be used as stated
+    // - this overridden method will initialize the protocol to be used as stated
     // by aServerName i.e. nxpTCIP://11.23.34.43
     // - Default protocol is nxpFolder
     // - if protocol is nxpFolder then aDatabaseName will contain the path to the
@@ -145,7 +145,7 @@ type
     function DeleteDatabase: boolean; virtual;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBNexusDBConnection instance
+    // - this overridden method will create an TSQLDBNexusDBConnection instance
     function NewConnection: TSQLDBConnection; override;
   published
     /// the transport protocol used to connect to the NexusDB engine

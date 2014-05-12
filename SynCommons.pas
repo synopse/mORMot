@@ -1068,7 +1068,7 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    // - this overriden version will use internal lookup tables for fast process
+    // - this overridden version will use internal lookup tables for fast process
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
@@ -1382,7 +1382,7 @@ function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode; overload;
 
 /// convert a UTF-8 string into a RawUnicode string
 // - this version doesn't resize the length of the result RawUnicode
-// and is therefore usefull before a Win32 Unicode API call (with nCount=-1)
+// and is therefore useful before a Win32 Unicode API call (with nCount=-1)
 // - if DestLen is not nil, the resulting length (in bytes) will be stored within
 function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger=nil): RawUnicode; overload;
 
@@ -1760,12 +1760,12 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
-// - only usefull if our Enhanced Runtime (or LVCL) library is not installed
+// - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
-// - only usefull if our Enhanced Runtime (or LVCL) library is not installed
+// - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int32ToUtf8(Value: integer): RawUTF8; overload;
 
 /// use our fast RawUTF8 version of IntToStr()
@@ -3843,14 +3843,14 @@ type
   end;
 
   /// abstract class able to use hashing to find an object in O(1) speed
-  // - all protected abstract methods shall be overriden and implemented
+  // - all protected abstract methods shall be overridden and implemented
   TObjectHash = class
   protected
     fHashs: TSynHashDynArray;
     procedure HashInit(aCountToHash: integer);
     function HashFind(aHashCode: cardinal; Item: TObject): integer;
     /// abstract method to hash an item
-    // - note that the overriden method shall not return 0 (mark void fHashs[])
+    // - note that the overridden method shall not return 0 (mark void fHashs[])
     function Hash(Item: TObject): cardinal; virtual; abstract;
     /// abstract method to compare two items
     function Compare(Item1,Item2: TObject): boolean; virtual; abstract;
@@ -4944,7 +4944,7 @@ type
     // - by default, TIntegerDynArray and such known classes are processed as
     // true JSON arrays: but you can specify here some callbacks to perform
     // the serialization process for any kind of dynamic array
-    // - any previous registration is overriden
+    // - any previous registration is overridden
     // - setting both aReader=aWriter=nil will return back to the default
     // binary + Base64 encoding serialization (i.e. undefine custom serializer)
     class procedure RegisterCustomJSONSerializer(aTypeInfo: pointer;
@@ -5067,12 +5067,12 @@ type
     fEchoBuf: RawUTF8;
   public
     /// append CR+LF chars
-    // - this overriden method will send all pending buffer to Echo()
+    // - this overridden method will send all pending buffer to Echo()
     // - note that any manual #13#10 added without calling AddCR won't be
     // notified to Echo() as individual line
     procedure AddCR; override;
     /// flush the internal buffer to the output TStream
-    // - this overriden method will store temporary the content, until AddCR
+    // - this overridden method will store temporary the content, until AddCR
     // method is called
     procedure Flush; override;
     /// callback used to echo each line of TTextWriterEcho class
@@ -5091,7 +5091,7 @@ type
     fFields: TSQLFieldBits;
     fFieldMax: integer;
     /// if not Expanded format, contains the Stream position of the first
-    // usefull Row of data; i.e. ',val11' position in:
+    // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     fStartDataPosition: integer;
   public
@@ -5130,7 +5130,7 @@ type
     // - i.e. the highest bit set in Fields
     property FieldMax: integer read fFieldMax write fFieldMax;
     /// if not Expanded format, contains the Stream position of the first
-    // usefull Row of data; i.e. ',val11' position in:
+    // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     property StartDataPosition: integer read fStartDataPosition;
   end;
@@ -5398,7 +5398,7 @@ type
     // - lines are separated by #13#10 (CRLF) by default; use GetText and
     // SetText methods if you want to use another line delimiter (even a comma)
     property Text: RawUTF8 read GetTextCRLF write SetTextCRLF;
-    /// Event trigerred when an entry is modified
+    /// Event triggered when an entry is modified
     property OnChange: TNotifyEvent read fOnChange write fOnChange;
     /// direct access to the memory of the RawUTF8 array
     property ListPtr: PPUtf8CharArray read GetListPtr;
@@ -5421,7 +5421,7 @@ type
     /// initialize the class instance
     constructor Create(aOwnObjects: boolean=false);
     /// find a RawUTF8 item in the stored Strings[] list
-    // - this overriden method will update the internal hash table (if needed),
+    // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
     function IndexOf(const aText: RawUTF8): PtrInt; override;
   end;
@@ -5443,7 +5443,7 @@ type
     /// release the list for exclusive access
     procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
     /// find a RawUTF8 item in the stored Strings[] list
-    // - this overriden method will update the internal hash table (if needed),
+    // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
     function LockedIndexOf(const aText: RawUTF8): PtrInt; virtual;
   end;
@@ -7066,7 +7066,7 @@ procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
 function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
 
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
-// - usefull for direct on screen logging e.g.
+// - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
 
 /// convert a second-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
@@ -7346,7 +7346,7 @@ type
 
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
-// to contain the overriden code buffer, for further hook disabling
+// to contain the overridden code buffer, for further hook disabling
 procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
   LeaveUnprotected: boolean=false);
 
@@ -7356,7 +7356,7 @@ procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
 
 /// self-modifying code - add an asm JUMP to a redirected function
 // - if Backup is not nil, it should point to a TPatchCode buffer, ready
-// to contain the overriden code buffer, for further hook disabling
+// to contain the overridden code buffer, for further hook disabling
 procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 
 /// self-modifying code - restore a code from its RedirectCode() backup
@@ -7925,12 +7925,12 @@ type
     /// the associated TSQLRest instance
     // - this value is filled by TSynTableFieldProperties.Validate with its
     // self value to be used for the validation
-    // - it can be used in the overriden Process method
+    // - it can be used in the overridden Process method
     property ProcessField: TSynTableFieldProperties read fProcessField write fProcessField;
     /// the associated record index (in case of update)
     // - is set to -1 in case of adding, or the physical index of the updated record
     // - this value is filled by TSynTableFieldProperties.Validate
-    // - it can be used in the overriden Process method
+    // - it can be used in the overridden Process method
     property ProcessRecordIndex: integer read fProcessRecordIndex write fProcessRecordIndex;
   end;
 
@@ -8046,7 +8046,7 @@ type
     // deleted item (i.e. called in case of a data Delete)
     // - will update then sort all existing TSynTableFieldProperties.OrderedIndex
     // values
-    // - the GetDataBuffer protected virtual method must have been overriden to
+    // - the GetDataBuffer protected virtual method must have been overridden to
     // properly return the record data for a given "physical/stored" index
     // - aOldRecordData and aNewRecordData can be specified in order to guess
     // if the field data has really been modified (speed up the update a lot
@@ -8260,7 +8260,7 @@ type
     // - this default implementation will always returns FALSE,
     // meaning that the supplied JSON is not to be handled by this custom
     // (abstract) variant type
-    // - this method could be overriden to identify any custom JSON content
+    // - this method could be overridden to identify any custom JSON content
     // and convert it into a dedicated variant instance, then return TRUE
     // - warning: should NOT modify JSON buffer in-place, unless it returns true
     function TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
@@ -8300,7 +8300,7 @@ type
     // - if the document is an array, will return the items count (0 meaning
     // void array)
     // - this default implementation will return -1 (meaning this is not an array)
-    // - overriden method could implement it, e.g. for TDocVariant of kind dvArray
+    // - overridden method could implement it, e.g. for TDocVariant of kind dvArray
     function IterateCount(const V: TVarData): integer; virtual;
     /// allow to loop over an array value
     // - Index should be in 0..IterateCount-1 range
@@ -8404,10 +8404,6 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 procedure ZeroFill(var Value: TVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
-const
-  /// a TVarData instance which will have VType=varEmpty (0) 
-  VARDATA_EMPTY: TVarData = (RawData: (0,0,0,0));
-  
 /// retrieve a variant value from variable-length buffer
 // - matches TFileBufferWriter.Write()
 // - how custom type variants are created can be defined via CustomVariantOptions
@@ -8727,7 +8723,7 @@ type
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array)
-    // - this overriden method will implement it for dvArray instance kind 
+    // - this overridden method will implement it for dvArray instance kind 
     function IterateCount(const V: TVarData): integer; override;
     /// allow to loop over an array value
     // - Index should be in 0..IterateCount-1 range
@@ -8747,7 +8743,7 @@ type
     procedure Copy(var Dest: TVarData; const Source: TVarData;
       const Indirect: Boolean); override;
     /// copy two variant content by value
-    // - overriden method since instance may use a by-reference copy pattern
+    // - overridden method since instance may use a by-reference copy pattern
     procedure CopyByValue(var Dest: TVarData; const Source: TVarData); override; 
     /// handle type conversion
     // - only types processes by now are string/OleStr/UnicodeString/date
@@ -9551,7 +9547,7 @@ type
     /// create a temporary string random content, using ASCII 7 bit content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
-    /// this method is trigerred internaly - e.g. by Check() - when a test failed
+    /// this method is triggered internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
@@ -9607,11 +9603,11 @@ type
     procedure Failed(const msg: string; aTest: TSynTestCase); virtual;
     /// this method is called before every run
     // - default implementation will just return nil
-    // - can be overriden to implement a per-test case logging for instance
+    // - can be overridden to implement a per-test case logging for instance
     function BeforeRun(const TestName: RawUTF8): IUnknown; virtual;
     /// this method is called during the run, for every testcase
     // - this implementation just report some minimal data to the console
-    // by default, but may be overriden to update a real UI or reporting system
+    // by default, but may be overridden to update a real UI or reporting system
     // - the TestMethodIndex is first -1 before any TestMethod[] method call,
     // then called once after every TestMethod[] run
     procedure DuringRun(TestCaseIndex, TestMethodIndex: integer); virtual;
@@ -9679,7 +9675,7 @@ type
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer read GetFailedCount;
     /// retrieve the TSynTestCase instance associated with this failure
-    // - returns nil if this failure was not trigerred by a TSynTestCase,
+    // - returns nil if this failure was not triggered by a TSynTestCase,
     // but directly by a method
     property FailedCase[Index: integer]: TSynTestCase read GetFailedCase;
     /// retrieve the ident of the case test associated with this failure
@@ -10378,7 +10374,7 @@ type
     procedure Log(Level: TSynLogInfo; aInstance: TObject); overload;
     /// call this method to add the content of most low-level types to the log
     // at a specified level
-    // - this overriden implementation will write the value content,
+    // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSQLLog from mORMot.pas unit will be able to write
     // TObject/TSQLRecord and sets content as JSON
@@ -10405,7 +10401,7 @@ type
     property FileName: TFileName read fFileName;
   end;
 
-  /// this overriden class will create a .log file in case of a test case failure
+  /// this overridden class will create a .log file in case of a test case failure
   // - inherits from TSynTestsLogged instead of TSynTests in order to add
   // logging to your test suite (via a dedicated TSynLogTest instance)
   TSynTestsLogged = class(TSynTests)
@@ -10416,7 +10412,7 @@ type
     /// called when a test case failed: log into the file
     procedure Failed(const msg: string; aTest: TSynTestCase); override;
     /// this method is called before every run
-    // - overriden implementation to implement a per-test case logging 
+    // - overridden implementation to implement a per-test case logging 
     function BeforeRun(const TestName: RawUTF8): IUnknown; override;
   public
     /// create the test instance and initialize associated LogFile instance
@@ -38004,7 +38000,7 @@ begin
   if (result<>nil) and result.fFamily.fHandleExceptions then
     exit;
   if SynLogFileList=nil then begin
-    // we are here is no previous log content was trigerred
+    // we are here is no previous log content was triggered
     for i := 0 to SynLogFamily.Count-1 do
       with TSynLogFamily(SynLogFamily.List[i]) do
       if fHandleExceptions then begin

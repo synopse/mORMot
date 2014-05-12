@@ -366,7 +366,7 @@ type
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..)
-    // - usefull on multi-treaded environnement (as in THttpServer.Process)
+    // - useful on multi-treaded environnement (as in THttpServer.Process)
     // - no temp buffer is used
     // - handle RawByteString, ShortString, Char, Integer parameters
     // - raise ECrtSocket exception on socket error
@@ -521,7 +521,7 @@ type
     /// will contain the data retrieved from the server, after the Request
     Content: RawByteString;
     /// same as HeaderValue('Content-Length'), but retrieved during Request
-    // - is overriden with real Content length during HTTP body retrieval
+    // - is overridden with real Content length during HTTP body retrieval
     ContentLength: integer;
     /// same as HeaderValue('Content-Type'), but retrieved during Request
     ContentType: RawByteString;
@@ -578,7 +578,7 @@ type
     // any exception occured during the process
     function GetRequest(withBody: boolean=true): boolean;
     /// get all Header values at once, as CRLF delimited text
-    // - this overriden version will add the 'RemoteIP: 1.2.3.4' header
+    // - this overridden version will add the 'RemoteIP: 1.2.3.4' header
     function HeaderGetText: RawByteString; override;
   end;
 
@@ -601,7 +601,7 @@ type
     UserAgent: RawByteString;
 
     /// common initialization of all constructors
-    // - this overriden method will set the UserAgent with some default value
+    // - this overridden method will set the UserAgent with some default value
     constructor Create(aTimeOut: cardinal=10000); override;
 
     /// after an Open(server,port), return 200 if OK, http status error otherwise - get
@@ -720,7 +720,7 @@ type
     procedure Task(aCaller: TSynThreadPoolSubThread; aContext: Pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
-    // - Task() overriden method processs the HTTP request set by Push()
+    // - Task() overridden method processs the HTTP request set by Push()
     // - up to 64 threads can be associated to a Thread Pool
     constructor Create(Server: THttpServer; NumberOfThreads: Integer=32); reintroduce;
     /// add an incoming HTTP request to the Thread Pool
@@ -900,7 +900,7 @@ type
     // - maximum value is 256 - higher should not be worth it
     procedure Clone(ChildThreadCount: integer);
     /// returns the API version
-    // - this overriden version will return either 'HTTP API 1.0' or 'HTTP API 2.0'
+    // - this overridden version will return either 'HTTP API 1.0' or 'HTTP API 2.0'
     function APIVersion: string; override;
     /// register the URLs to Listen On
     // - e.g. AddUrl('root','888')
@@ -913,7 +913,7 @@ type
     // running with enough rights (by default, UAC requires administrator rights
     // for adding an URL to http.sys registration list) - solution is to call
     // the THttpApiServer.AddUrlAuthorize class method during program setup
-    // - if this method is not used within an overriden constructor, default
+    // - if this method is not used within an overridden constructor, default
     // Create must have be called with CreateSuspended = TRUE and then call the
     // Resume method after all Url have been added
     // - if aRegisterURI is TRUE, the URI will be registered (need adminitrator
@@ -940,7 +940,7 @@ type
     class function AddUrlAuthorize(const aRoot, aPort: RawByteString; Https: boolean=false;
       const aDomainName: RawByteString='*'; OnlyDelete: boolean=false): string;
     /// will register a compression algorithm
-    // - overriden method which will handle any cloned instances
+    // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer=1024); override;
     /// access to the internal THttpApiServer list cloned by this main instance
@@ -1041,7 +1041,7 @@ type
     destructor Destroy; override;
 
     /// returns the operating system socket layer API revision
-    // - this overriden version will return e.g. 'Winsock 2.514', depending
+    // - this overridden version will return e.g. 'Winsock 2.514', depending
     // on your Windows version
     function APIVersion: string; override;
     {$ifdef USETHREADPOOL}
@@ -1258,11 +1258,11 @@ type
 
 
 /// create a TCrtSocket, returning nil on error
-// (usefull to easily catch socket error exception ECrtSocket)
+// (useful to easily catch socket error exception ECrtSocket)
 function Open(const aServer, aPort: RawByteString): TCrtSocket;
 
 /// create a THttpClientSocket, returning nil on error
-// (usefull to easily catch socket error exception ECrtSocket)
+// (useful to easily catch socket error exception ECrtSocket)
 function OpenHttp(const aServer, aPort: RawByteString): THttpClientSocket;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method

@@ -284,7 +284,7 @@ type
   // @http://www.fastcgi.com/devkit/doc/fcgi-spec.html
   // - this base type has virtual public methods ReadPacked and SendPacket,
   // implementing the named pipe or socket defined by the single file
-  // descriptor sent by the web server which can be overriden by its children
+  // descriptor sent by the web server which can be overridden by its children
   // for proper socket/pipe handling
   TFastCGIServer = class
   protected
@@ -332,11 +332,11 @@ type
     // and expect to write data to the corresponding named pipe or
     // TCP/IP socket
     function SendPacket(Buffer: pointer; BufferLen: integer): boolean; virtual;
-    /// method trigerred when the Web server wants to abort the request
+    /// method triggered when the Web server wants to abort the request
     // - do nothing by default - only to be implemented for Multiplex connection
     // which are not enabled with this class
     procedure LogOut; virtual;
-    /// method trigerred to calculate the response
+    /// method triggered to calculate the response
     // - expect fRequestHeaders, fRequestMethod and fRequestURL properties as input
     // - update fResponseHeaders and fResponseContent properties as output
     procedure ProcessRequest(const Request: RawUTF8);

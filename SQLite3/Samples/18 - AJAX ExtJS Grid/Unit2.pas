@@ -14,7 +14,7 @@ type
     fQuestion: RawUTF8;
     fTimeD: TDateTime;
   public
-    /// overriden to populate a blank database with some data
+    /// overridden to populate a blank database with some data
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
   published
     /// underscored names, as defined in our ExtJS scripts

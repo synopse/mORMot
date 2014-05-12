@@ -79,7 +79,7 @@ type
     fCurrentRow: integer;
     fIsCursorOpen: boolean;
 
-    // TDataSet overriden methods
+    // TDataSet overridden methods
     function AllocRecordBuffer: TRecordBuffer; override;
     procedure FreeRecordBuffer(var Buffer: TRecordBuffer); override;
     procedure InternalInitRecord(Buffer: TRecordBuffer); override;
@@ -111,7 +111,7 @@ type
     function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: Integer;
       OnlyCheckNull: boolean): Pointer; virtual; abstract;
   public
-    /// this overriden constructor will compute an unique Name property
+    /// this overridden constructor will compute an unique Name property
     constructor Create(Owner: TComponent); override;
     /// get BLOB column data for the current active row
     // - handle ftBlob,ftMemo,ftWideMemo via GetRowFieldData()

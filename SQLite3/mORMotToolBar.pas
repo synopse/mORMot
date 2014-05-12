@@ -522,7 +522,7 @@ type
     FReportPopupParams: PEnumType;
     FReportPopupParamsEnabled: pointer;
     FReportPopupValues: TPBooleanDynArray;
-    /// trigerred when a report popup menu is displayed
+    /// triggered when a report popup menu is displayed
     procedure ReportPopup(Sender: TObject);
     /// used internaly to display the report popup menu via the "View" options
     // - can be used to display the same popup menu from another toolbar
@@ -590,7 +590,7 @@ type
       ParamsEnum: PTypeInfo; ParamsEnabled: pointer; const Values: array of PBoolean);
     /// add the report options to the specified menu
     procedure AddReportPopupMenuOptions(Menu: TPopupMenu; OnClick: TNotifyEvent);
-    /// trigerred when a report popup menu item is clicked
+    /// triggered when a report popup menu item is clicked
     procedure ReportClick(Sender: TObject);
     {/// retrieve the Hint value for a particular action
     function ActionHint(const Action): string;}

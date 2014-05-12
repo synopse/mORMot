@@ -87,7 +87,7 @@ type
     fDefaultPageSize: Integer;
     /// opaque protected reference to the corresponding TFirebirdLib instance
     fFirebirdInstance: TObject;
-    // this overriden method will force dFirebird kind of DBMS
+    // this overridden method will force dFirebird kind of DBMS
     procedure SetInternalProperties; override;
   public
     /// initialize the connection properties
@@ -97,7 +97,7 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBFirebirdConnection instance
+    // - this overridden method will create an TSQLDBFirebirdConnection instance
     function NewConnection: TSQLDBConnection; override;
     /// the page size on disk to be used when creating a new database file
     // - only used in embedded mode, if no database file exists
@@ -216,7 +216,7 @@ type
      - raise an EFirebirdException or ESQLDBException on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overriden implementation will reset all bindings and the cursor state 
+     - this overridden implementation will reset all bindings and the cursor state 
      - raise an EFirebirdException on any error }
     procedure Reset; override;
 
@@ -252,7 +252,7 @@ type
     function ColumnBlob(Col: integer): RawByteString; override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
-     - fast overriden implementation with no temporary variable
+     - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
     procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;

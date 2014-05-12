@@ -963,7 +963,7 @@ type
     /// flush the content and return the whole binary encoded stream
     // - expect the TBSONWriter instance to have been created with reintroduced
     // Create() specific constructors inheriting from this TMongoRequest class
-    // - this overriden version will adjust the size in the message header
+    // - this overridden version will adjust the size in the message header
     procedure ToBSONDocument(var result: TBSONDocument); override;
     /// write the main parameters of the request as JSON
     procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); overload; virtual;

@@ -562,35 +562,35 @@ type
       read FSyncMethod write SetSyncMethod default smThreadSync;
     /// the error message
     property ErrorMsg: string read GetErrorMsg write FErrorMsg;
-    /// event trigerred after port opening
+    /// event triggered after port opening
     property OnAfterOpen: TNotifyEvent read FOnAfterOpen write FOnAfterOpen;
-    /// event trigerred after port closing
+    /// event triggered after port closing
     property OnAfterClose: TNotifyEvent read FOnAfterClose write FOnAfterClose;
-    /// event trigerred before port opening
+    /// event triggered before port opening
     property OnBeforeOpen: TNotifyEvent read FOnBeforeOpen write FOnBeforeOpen;
-    /// event trigerred before port closing
+    /// event triggered before port closing
     property OnBeforeClose: TNotifyEvent
       read FOnBeforeClose write FOnBeforeClose;
-    /// event trigerred when some data was received
+    /// event triggered when some data was received
     property OnRxChar: TRxCharEvent read FOnRxChar write FOnRxChar;
-    /// event trigerred when some data was received
+    /// event triggered when some data was received
     property OnRxBuf: TRxBufEvent read FOnRxBuf write FOnRxBuf;
-    /// event trigerred when the transmission buffer is empty
+    /// event triggered when the transmission buffer is empty
     property OnTxEmpty: TNotifyEvent read FOnTxEmpty write FOnTxEmpty;
-    /// event trigerred when a Break event occurs
+    /// event triggered when a Break event occurs
     property OnBreak: TNotifyEvent read FOnBreak write FOnBreak;
-    /// event trigerred when a Ring event occurs
+    /// event triggered when a Ring event occurs
     property OnRing: TNotifyEvent read FOnRing write FOnRing;
-    /// event trigerred when the CTS level changed
+    /// event triggered when the CTS level changed
     property OnCTSChange: TComSignalEvent read FOnCTSChange write FOnCTSChange;
-    /// event trigerred when the DSR level changed
+    /// event triggered when the DSR level changed
     property OnDSRChange: TComSignalEvent read FOnDSRChange write FOnDSRChange;
-    /// event trigerred when the RLSD level changed
+    /// event triggered when the RLSD level changed
     property OnRLSDChange: TComSignalEvent
       read FOnRLSDChange write FOnRLSDChange;
-    /// event trigerred when the RX flag changed
+    /// event triggered when the RX flag changed
     property OnRxFlag: TNotifyEvent read FOnRxFlag write FOnRxFlag;
-    /// event trigerred when an error occured
+    /// event triggered when an error occured
     property OnError: TComErrorEvent read FOnError write FOnError;
   end;
 
@@ -689,14 +689,14 @@ type
     property StopString: TCPortString read FStopString write SetStopString;
     /// the expected packet size
     property Size: Integer read FSize write SetSize default 0;
-    /// event trigerred when some data have been discarded
+    /// event triggered when some data have been discarded
     property OnDiscard: TComStrEvent read FOnDiscard write FOnDiscard;
-    /// event trigerred when a packet data was received
+    /// event triggered when a packet data was received
     property OnPacket: TComStrEvent read FOnPacket write FOnPacket;
-    /// event trigerred when a packet is about to start
+    /// event triggered when a packet is about to start
     property OnCustomStart: TCustPacketEvent
       read FOnCustomStart write FOnCustomStart;
-    /// event trigerred when a packet was finished received
+    /// event triggered when a packet was finished received
     property OnCustomStop: TCustPacketEvent
       read FOnCustomStop write FOnCustomStop;
   end;

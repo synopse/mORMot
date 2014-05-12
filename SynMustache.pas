@@ -120,7 +120,7 @@ type
   
   /// handle {{mustache}} template rendering context, i.e. all values
   // - this abstract class should not be used directly, but rather any
-  // other the overriden classes
+  // other the overridden classes
   TSynMustacheContext = class
   protected
     fContextCount: integer;

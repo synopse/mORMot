@@ -74,7 +74,7 @@ unit SynDB;
     parameters in the SQL statement
   - new TSQLDBStatement.BindNull() method
   - new TSQLDBConnectionProperties.NewThreadSafeStatementPrepared and
-    TSQLDBConnection.NewStatementPrepared methods, able to be overriden to
+    TSQLDBConnection.NewStatementPrepared methods, able to be overridden to
     implement a SQL statement caching (used e.g. for SynDBSQLite3)
   - new TSQLDBConnection.ServerTimeStamp property, which will return the
     external database Server current date and time as TTimeLog/Int64 value
@@ -238,7 +238,7 @@ unit SynDB;
   - added property RollbackOnDisconnect, set to TRUE by default, to ensure
     any pending uncommitted transaction is roll-backed - see [dc64fe169b]
   - added TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed()
-    internal method, used by some overriden GetFields() implementations
+    internal method, used by some overridden GetFields() implementations
 
 
 }
@@ -946,8 +946,8 @@ type
     // numeric precision and scale as 3rd, 4th and 5th columns, and the index
     // count in 6th column
     // - this default implementation just returns nothing
-    // - if this method is overriden, the ColumnTypeNativeToDB() method should
-    // also be overriden in order to allow conversion from native column
+    // - if this method is overridden, the ColumnTypeNativeToDB() method should
+    // also be overridden in order to allow conversion from native column
     // type into the corresponding TSQLDBFieldType
     function SQLGetField(const aTableName: RawUTF8): RawUTF8; virtual;
     /// SQL statement to get advanced information about all indexes for a Table
@@ -968,13 +968,13 @@ type
     // database engines, assuming aField.ColumnType=ftUnknown for ID
     function SQLFieldCreate(const aField: TSQLDBColumnProperty): RawUTF8; virtual;
     /// wrapper around GetIndexes() + set Fields[].ColumnIndexed in consequence
-    // - used by some overriden versions of GetFields() method
+    // - used by some overridden versions of GetFields() method
     procedure GetIndexesAndSetFieldsColumnIndexed(const aTableName: RawUTF8;
       var Fields: TSQLDBColumnDefineDynArray);
     /// check if the exception or its error message is about DB connection error
     // - will be used by TSQLDBConnection.LastErrorWasAboutConnection method
     // - default method will check for the 'conne' sub-string in the message text
-    // - should be overriden depending on the error message returned by the DB
+    // - should be overridden depending on the error message returned by the DB
     function ExceptionIsAboutConnection(aClass: ExceptClass; const aMessage: RawUTF8): boolean; virtual;
 {$ifndef DELPHI5OROLDER}
     /// unique access point from remote TSQLDBProxyConnectionProperties accesses
@@ -1351,13 +1351,13 @@ type
     /// connect to the specified database
     // - should raise an Exception on error
     // - this default implementation will notify OnProgress callback for
-    // sucessfull re-connection: it should be called in overriden methods
+    // sucessfull re-connection: it should be called in overridden methods
     // AFTER actual connection process
     procedure Connect; virtual;
     /// stop connection to the specified database
     // - should raise an Exception on error
     // - this default implementation will release all cached statements: so it
-    // should be called in overriden methods BEFORE actual disconnection
+    // should be called in overridden methods BEFORE actual disconnection
     procedure Disconnect; virtual;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; virtual; abstract;
@@ -1367,7 +1367,7 @@ type
     /// initialize a new SQL query statement for the given connection
     // - this default implementation will call the NewStatement method, and
     // implement handle statement caching is UseCache=true - in this case,
-    // the TSQLDBStatement.Reset method shall have been overriden to allow
+    // the TSQLDBStatement.Reset method shall have been overridden to allow
     // binding and execution of the very same prepared statement
     // - this method should return a prepared statement instance on success
     // - on error, if RaiseExceptionOnError=false (by default), it returns nil
@@ -1439,7 +1439,7 @@ type
 
   /// generic abstract class to implement a prepared SQL query
   // - inherited classes should implement the DB-specific connection in its
-  // overriden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
+  // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
   // and Column*() methods
   TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
   protected
@@ -1684,7 +1684,7 @@ type
      ! stmt.ParamToVariant(5, out2, true);
      - the parameter should have been bound with IO=paramOut or IO=paramInOut
        if CheckIsOutParameter is TRUE
-     - this implementation just check that Param is correct: overriden method
+     - this implementation just check that Param is correct: overridden method
        should fill Value content }
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; virtual;
@@ -1910,7 +1910,7 @@ type
   end;
 
   /// abstract connection created from TSQLDBConnectionProperties
-  // - this overriden class will defined an hidden thread ID, to ensure
+  // - this overridden class will defined an hidden thread ID, to ensure
   // that one connection will be create per thread
   // - e.g. OleDB, ODBC and Oracle connections will inherit from this class
   TSQLDBConnectionThreadSafe = class(TSQLDBConnection)
@@ -1940,20 +1940,20 @@ type
     function CurrentThreadConnection: TSQLDBConnection;
     /// returns -1 if none was defined yet
     function CurrentThreadConnectionIndex: Integer;
-    /// overriden method to properly handle multi-thread
+    /// overridden method to properly handle multi-thread
     function GetMainConnection: TSQLDBConnection; override;
   public
     /// initialize the properties
-    // - this overriden method will initialize the internal per-thread connection pool
+    // - this overridden method will initialize the internal per-thread connection pool
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// release related memory, and all per-thread connections
     destructor Destroy; override;
     /// get a thread-safe connection
-    // - this overriden implementation will define a per-thread TSQLDBConnection
+    // - this overridden implementation will define a per-thread TSQLDBConnection
     // connection pool, via an internal  pool
     function ThreadSafeConnection: TSQLDBConnection; override;
     /// release all existing connections
-    // - this overriden implementation will release all per-thread
+    // - this overridden implementation will release all per-thread
     // TSQLDBConnection internal connection pool
     // - warning: no connection shall be still be used on the background, or
     // some unexpected border effects may occur
@@ -1961,7 +1961,7 @@ type
     /// you can call this method just before a thread is finished to ensure
     // that the associated Connection will be released
     // - could be used e.g. in a try...finally block inside a TThread.Execute
-    // overriden method
+    // overridden method
     // - could be used e.g. to call CoUnInitialize from thread in which
     // CoInitialize was made, for instance via a method defined as such:
     // ! procedure TMyServer.OnHttpThreadTerminate(Sender: TObject);
@@ -2035,11 +2035,11 @@ type
     function CheckParam(Param: Integer; NewType: TSQLDBFieldType;
       IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam; overload;
     /// append the inlined value of a given parameter
-    // - faster overriden method
+    // - faster overridden method
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter); override;
   public
     /// create a statement instance
-    // - this overriden version will initialize the internal fParam* fields
+    // - this overridden version will initialize the internal fParam* fields
     constructor Create(aConnection: TSQLDBConnection); override;
     {/ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1
@@ -2160,7 +2160,7 @@ type
     {/ retrieve the parameter content, after SQL execution
      - the leftmost SQL parameter has an index of 1
      - to be used e.g. with stored procedures
-     - this overriden function will retrieve the value stored in the protected
+     - this overridden function will retrieve the value stored in the protected
        fParams[] array: the ExecutePrepared method should have updated its
        content as exepcted}
     function ParamToVariant(Param: Integer; var Value: Variant;
@@ -2168,7 +2168,7 @@ type
     {$endif}
 
     {/ Reset the previous prepared statement
-     - this overriden implementation will just do reset the internal fParams[] }
+     - this overridden implementation will just do reset the internal fParams[] }
     procedure Reset; override;
   end;
 
@@ -2182,7 +2182,7 @@ type
     fColumn: TDynArrayHashed;
   public
     /// create a statement instance
-    // - this overriden version will initialize the internal fColumn* fields
+    // - this overridden version will initialize the internal fColumn* fields
     constructor Create(aConnection: TSQLDBConnection); override;
     {/ retrieve a column name of the current Row
      - Columns numeration (i.e. Col value) starts with 0
@@ -2307,7 +2307,7 @@ type
     // - for TSQLDBProxyStatement, preparation and execution are processed in
     // one step, when this method is executed - as such, Prepare() won't call
     // the remote process, but will just set fSQL
-    // - this overriden implementation will use out optimized binary format
+    // - this overridden implementation will use out optimized binary format
     //  as generated by TSQLDBStatement.FetchAllToBinary(), and not JSON
     procedure ExecutePrepared; override;
     /// execute a prepared SQL statement and return all rows content as a JSON string
@@ -2319,7 +2319,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - this overriden implementation will use JSON for transmission, and
+    // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
     // when called from mORMotDB.pas)
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8); override;
@@ -2379,10 +2379,10 @@ type
       DataRowPosition: PCardinalDynArray=nil); reintroduce;
 
     /// Execute a prepared SQL statement
-    // - this unexpected overriden method will raise a ESQLDBException
+    // - this unexpected overridden method will raise a ESQLDBException
     procedure ExecutePrepared; override;
     /// Change cursor position to the next available row
-    // - this unexpected overriden method will raise a ESQLDBException
+    // - this unexpected overridden method will raise a ESQLDBException
     function Step(SeekFirst: boolean=false): boolean; override;
 
     /// change the current data Row
@@ -5414,7 +5414,7 @@ begin
   if (self=nil) or (cardinal(Param)>=cardinal(fParamCount)) then
     raise ESQLDBException.CreateFmt('%s.ParamToVariant(%d)',
       [fStatementClassName,Param]);
-  // overriden method should fill Value with proper data
+  // overridden method should fill Value with proper data
   result := ftUnknown;
 end;
 {$endif}

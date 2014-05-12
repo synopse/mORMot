@@ -62,7 +62,7 @@ unit SynBz;
       - under Win32, use fast bzip.dll (provided in bzasm.zip) + assembler
       - under Linux, use default libbz2.so
        (Linux can use faster assembler version - must be checked if this 
-        is really usefull)
+        is really useful)
 
   The contents of this file are subject to the Mozilla Public License
   Version 1.1 (the "License"); you may not use this file except in

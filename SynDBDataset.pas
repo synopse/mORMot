@@ -84,7 +84,7 @@ type
     fForceUseWideString: boolean;
   public
     /// initialize the properties to connect via TDataSet database access
-    // - this overriden method will enable the BATCH process (emulated in
+    // - this overridden method will enable the BATCH process (emulated in
     // TSQLDBDatasetStatement.ExecutePrepared, native e.g. for FireDAC)
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     {$ifndef UNICODE}
@@ -164,12 +164,12 @@ type
       - parameters marked as ? should have been already bound with Bind*() functions
       - this implementation will also loop through all internal bound array
       of values (if any), to implement BATCH mode
-      - this overriden method will log the SQL statement if sllSQL has been
+      - this overridden method will log the SQL statement if sllSQL has been
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBDataset on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overriden implementation will reset all bindings and the cursor state
+     - this overridden implementation will reset all bindings and the cursor state
      - raise an ESQLDBDataset on any error }
     procedure Reset; override;
 
@@ -203,7 +203,7 @@ type
 
   ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
   // - you should not use this abstract class directly, but one inherited
-  // implementation with overriden Dataset*() protected methods to handle the
+  // implementation with overridden Dataset*() protected methods to handle the
   // internal fQuery: TDataSet property
   TSQLDBDatasetStatement = class(TSQLDBDatasetStatementAbstract)
   protected

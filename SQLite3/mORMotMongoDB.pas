@@ -122,7 +122,7 @@ type
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
-    // overriden method returning TRUE for next calls to EngineAdd/Update/Delete
+    // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast
@@ -138,9 +138,9 @@ type
     /// release used memory
     destructor Destroy; override;
 
-     /// overriden method for one single update call to the MongoDB server
+     /// overridden method for one single update call to the MongoDB server
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
-     /// overriden method for one single read call to the MongoDB server
+     /// overridden method for one single read call to the MongoDB server
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
     /// get the row count of a specified table
     // - return -1 on error

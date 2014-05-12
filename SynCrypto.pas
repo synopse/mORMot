@@ -3480,7 +3480,7 @@ destructor TAESWriteStream.Destroy;
 begin
   Finish;
 {$ifdef USEPADLOCK}
-  AES.Done; // usefull for padlock only
+  AES.Done; // useful for padlock only
 {$endif}
   inherited;
 end;

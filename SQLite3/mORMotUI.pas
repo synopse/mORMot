@@ -150,7 +150,7 @@ type
     procedure VisibleChanging; override;
     /// used to hide the popup hint after a delay
     procedure WMTimer(var Msg: TWMTimer); message WM_TIMER;
-    /// overriden method, Unicode ready
+    /// overridden method, Unicode ready
     procedure Paint; override;
   public
     /// initializes the component
@@ -180,7 +180,7 @@ type
     procedure ShowDelayedString(const Text: string; Origin: TControl;
       X,Y,Time: integer; FontColor: TColor; AlignLeft: boolean=false); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// overriden method, Unicode ready
+    /// overridden method, Unicode ready
     function CalcHintRect(MaxWidth: Integer; const AHint: RawUTF8; AData: Pointer): TRect; reintroduce;
     /// the column number when the hint is displayed
     property Col: integer read fCol;
@@ -210,7 +210,7 @@ type
   /// a hidden component, used for displaying a TSQLTable in a TDrawGrid
   // - just call  TSQLTableToGrid.Create(Grid,Table)  to initiate the association
   // - the Table will be released when no longer necessary
-  // - any former association by TSQLTableToGrid.Create() will be overriden
+  // - any former association by TSQLTableToGrid.Create() will be overridden
   // - handle unicode, column size, field sort, incremental key lookup, hide ID
   // - Ctrl + click on a cell to display its full unicode content
   TSQLTableToGrid = class(TComponent)
@@ -273,7 +273,7 @@ type
     // - will be called by the parent Grid when it is destroyed
     // - will be called by any future TSQLTableToGrid.Create() association
     // - free the associated TSQLTable and its memory content
-    // - will reset the Grid overriden events to avoid GPF
+    // - will reset the Grid overridden events to avoid GPF
     destructor Destroy; override;
     /// called by the owner TDrawGrid to draw a Cell from the TSQLTable data
     // - the cell is drawn using direct Win32 Unicode API
@@ -314,7 +314,7 @@ type
     // - if ACol=-1, then the Marked[] rows are shown first, in current sort
     procedure SortForce(ACol: integer; Ascending: boolean; ARow: integer=-1);
     /// get the ID of the first selected row, 0 on error (no ID field e.g.)
-    // - usefull even if ID column was hidden with IDColumnHide
+    // - useful even if ID column was hidden with IDColumnHide
     function SelectedID: integer;
     /// retrieve the record content of the first selected row, nil on error
     // - record type is retrieved via Table.QueryTables[0] (if defined)
@@ -327,7 +327,7 @@ type
     // ! finally
     // !   Rec.Free;
     // ! end;
-    // - usefull even if ID column was hidden with IDColumnHide
+    // - useful even if ID column was hidden with IDColumnHide
     function SelectedRecordCreate: TSQLRecord;
     /// set individual column alignment
     property Aligned[aCol: cardinal]: TSQLTableToGridAlign read GetAlign write SetAlign;
@@ -942,7 +942,7 @@ constructor TSQLTableToGrid.Create(aOwner: TDrawGrid; aTable: TSQLTable;
 begin
   if aTable=nil then
     raise Exception.CreateFmt(sErrorTSQLTableToGridNoData,[ClassName,aOwner.Name]);
-  From(aOwner).Free; // any old association will be overriden by this instance
+  From(aOwner).Free; // any old association will be overridden by this instance
   inherited Create(aOwner);
   fTable := aTable;
   fClient := aClient;
@@ -976,7 +976,7 @@ end;
 destructor TSQLTableToGrid.Destroy;
 begin
   if (Owner<>nil) and Owner.InheritsFrom(TDrawGrid) then
-  with TDrawGrid(Owner) do begin // reset the Grid overriden events to avoid GPF
+  with TDrawGrid(Owner) do begin // reset the Grid overridden events to avoid GPF
     OnDrawCell := nil;
     OnMouseMove := nil;
     OnMouseDown := nil;

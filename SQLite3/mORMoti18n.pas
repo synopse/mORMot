@@ -157,7 +157,7 @@ unit mORMoti18n;
       TLanguageFile.Create() will set CurrentAnsiConvert global instance,
       applications should use CurrentAnsiConvert instead of previous
       TLanguageFile methods
-    - now Iso2S() - i.e. overriden i18nDateText global function pointer - will
+    - now Iso2S() - i.e. overridden i18nDateText global function pointer - will
       handle a date-only or time-only supplied value as expected
 
     Version 1.17
@@ -277,7 +277,7 @@ const
 {$ifdef WITHUXTHEME}
 var
   /// international settings from US English $0409
-  // - usefull in any software, if you want to save some content
+  // - useful in any software, if you want to save some content
   // with the default english encoding (e.g. floating point values with '.')
   SettingsUS: TFormatSettings;
 {$endif}
@@ -512,17 +512,17 @@ type
     /// format string used to convert a date value to a text
     // - the expected format is the one used by the FormatDateTime() function
     // - the current system format, depending on the current language, is used,
-    // then overriden by a DateFmt= entry in the .msg file content
+    // then overridden by a DateFmt= entry in the .msg file content
     DateFmt: string;
     /// format string used to convert a time value to a text
     // - the expected format is the one used by the FormatDateTime() function
     // - the current system format, depending on the current language, is used,
-    // then overriden by a TimeFmt= entry in the .msg file content
+    // then overridden by a TimeFmt= entry in the .msg file content
     TimeFmt: string;
     /// format string used to convert a date and time value to a text
     // - the expected format is the one used by the FormatDateTime() function
     // - the current system format, depending on the current language, is used,
-    // then overriden by a DateTimeFmt= entry in the .msg file content
+    // then overridden by a DateTimeFmt= entry in the .msg file content
     DateTimeFmt: string;
     /// string used for displaying boolean values
     fBooleanToString: array[boolean] of string;
@@ -613,7 +613,7 @@ type
 (*
 /// export the translation file into a .PO format
 // - the .PO format is used by the GNU gettext tool, and allow to use some
-// very usefull translation tools
+// very useful translation tools
 // (see @http://www.gnu.org/software/hello/manual/gettext/PO-Files.html
 // for documentation about the .PO format itself)
 //  - the .PO is created from two .msg files, both contained in the SourceMsgPath
@@ -2148,7 +2148,7 @@ end;
 var
   // expect english text, converted into WinAnsi before Hash32()
   // - Delphi 2009 and up will do the implicit codepage conversion
-  // (usefull for chars with unicode value >255, e.g. '€')
+  // (useful for chars with unicode value >255, e.g. '€')
   CB_EnumStrings: TWinAnsiDynArray;
   /// number of items in CB_EnumStrings[]
   CB_EnumStringsCount: integer;
@@ -2453,7 +2453,7 @@ begin
         // add custom captions for all tables of a database model
         with TSQLModel(Objects[i]) do
         for index := 0 to high(Tables) do
-        with Tables[index] do begin // TSQLRecord.CaptionName() may be overriden 
+        with Tables[index] do begin // TSQLRecord.CaptionName() may be overridden 
           AddOnceDynArray(StringToWinAnsi(CaptionName(nil))); // add table name
           // for Delphi 2009 and up, CaptionName(): string will be converted into a WinAnsiString
           with InternalClassProp(Tables[index])^ do begin

@@ -196,7 +196,7 @@ unit mORMotSQLite3;
 
     Version 1.17
     - updated SQLite3 engine to version 3.7.14
-    - added overriden TSQLRestServerDB.FlushInternalDBCache method
+    - added overridden TSQLRestServerDB.FlushInternalDBCache method
     - added TSQLRestServerDB.BackupGZ method for live database backup into a
       compressed .gz archive file
 
@@ -335,7 +335,7 @@ type
     function GetAndPrepareStatement(const SQL: RawUTF8): PSQLRequest;
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
-    /// overriden methods for direct sqlite3 database engine call:
+    /// overridden methods for direct sqlite3 database engine call:
     function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
     function MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
@@ -390,13 +390,13 @@ type
     {{ abort a transaction (implements REST ABORT Member)
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=1); override;
-     /// overriden method for direct SQLite3 database engine call
+     /// overridden method for direct SQLite3 database engine call
      // - it will update all BLOB fields at once, in one SQL statement
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
-     /// overriden method for direct SQLite3 database engine call
+     /// overridden method for direct SQLite3 database engine call
      // - it will retrieve all BLOB fields at once, in one SQL statement
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
-     /// overriden method for direct SQLite3 database engine call
+     /// overridden method for direct SQLite3 database engine call
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     {{ backup of the opened Database into an external stream (e.g. a file,
       compressed or not)
@@ -432,7 +432,7 @@ type
     // cache used at SQLite3 database level; but some virtual tables (e.g.
     // TSQLRestStorageExternal classes defined in SQLite3DB) could flush
     // the database content without proper notification
-    // - this overriden implementation will call TSQLDataBase.CacheFlush method
+    // - this overridden implementation will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; override;
   public
     /// initialize a REST server with a database
@@ -476,9 +476,9 @@ type
   protected
     /// method calling the RESTful server fServer
     procedure InternalURI(var Call: TSQLRestURIParams); override;
-    /// overriden protected method do nothing (direct DB access has no connection)
+    /// overridden protected method do nothing (direct DB access has no connection)
     function InternalCheckOpen: boolean; override;
-    /// overriden protected method do nothing (direct DB access has no connection)
+    /// overridden protected method do nothing (direct DB access has no connection)
     procedure InternalClose; override;
   public
     /// initializes the class, and creates an internal TSQLRestServerDB to
@@ -504,7 +504,7 @@ type
     destructor Destroy; override;
 
     /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
-    // - this overriden method call directly the database to get its result,
+    // - this overridden method call directly the database to get its result,
     // without any URI() call, but with use of DB JSON cache if available
     // - other TSQLRestClientDB methods use URI() function and JSON conversion
     // of only one record properties values, which is very fast
@@ -536,7 +536,7 @@ type
     // TSQLVirtualTableModuleSQLite3 instance
     procedure Attach(aDB: TSQLDataBase);
     /// retrieve the file name to be used for a specific Virtual Table
-    // - overriden method returning a file located in the DB file folder, and
+    // - overridden method returning a file located in the DB file folder, and
     // '' if the main DB was created as SQLITE_MEMORY_DATABASE_NAME (i.e.
     // ':memory:' so that no file should be written)
     // - of course, if a custom FilePath property value is specified, it will be

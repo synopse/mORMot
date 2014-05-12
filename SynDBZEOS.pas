@@ -198,14 +198,14 @@ type
     destructor Destroy; override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBZEOSConnection instance
+    // - this overridden method will create an TSQLDBZEOSConnection instance
     function NewConnection: TSQLDBConnection; override;
 
     /// retrieve the column/field layout of a specified table
-    // - this overriden method will use ZDBC metadata to retrieve the information
+    // - this overridden method will use ZDBC metadata to retrieve the information
     procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
-    // - this overriden method will use ZDBC metadata to retrieve the information
+    // - this overridden method will use ZDBC metadata to retrieve the information
     // - PostgreSQL note: it was reported that some table names expects to be
     // quoted for this DB engine - and ZDBC won't do it for yourself - please
     // ensure you specify the correct quoted table name e.g. when you register
@@ -286,12 +286,12 @@ type
       - parameters marked as ? should have been already bound with Bind*() functions
       - this implementation will also loop through all internal bound array
       of values (if any), to implement BATCH mode
-      - this overriden method will log the SQL statement if sllSQL has been
+      - this overridden method will log the SQL statement if sllSQL has been
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBZeos on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overriden implementation will reset all bindings and the cursor state
+     - this overridden implementation will reset all bindings and the cursor state
      - raise an ESQLDBZeos on any error }
     procedure Reset; override;
 

@@ -84,7 +84,7 @@ type
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now (BDE metadata may be used in the future)
     procedure GetForeignKeys; override;
-    /// this overriden method will retrieve the kind of DBMS from the main connection
+    /// this overridden method will retrieve the kind of DBMS from the main connection
     function GetDBMS: TSQLDBDefinition; override;
   public
     /// initialize the properties to connect to the BDE engine
@@ -93,7 +93,7 @@ type
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overriden method will create an TSQLDBBDEConnection instance
+    // - this overridden method will create an TSQLDBBDEConnection instance
     function NewConnection: TSQLDBConnection; override;
   end;
 

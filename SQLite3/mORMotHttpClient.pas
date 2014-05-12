@@ -104,7 +104,7 @@ unit mORMotHttpClient;
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
        exception on connection error (as expected by TSQLRestClientURI.URI)
      - TSQLHttpClient* classes will now handle properly reconnection in case
-       of connection break via overriden InternalCheckOpen/InternalClose methods
+       of connection break via overridden InternalCheckOpen/InternalClose methods
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
        compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
@@ -210,9 +210,9 @@ type
     /// call fSocket.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
-    /// overriden protected method to handle HTTP connection
+    /// overridden protected method to handle HTTP connection
     function InternalCheckOpen: boolean; override;
-    /// overriden protected method to close HTTP connection
+    /// overridden protected method to close HTTP connection
     procedure InternalClose; override;
   public
     /// internal HTTP/1.1 compatible client
@@ -224,7 +224,7 @@ type
   /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet
   // or WinHTTP API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
-  // better) TSQLHttpClientWinHTTP overriden classes
+  // better) TSQLHttpClientWinHTTP overridden classes
   TSQLHttpClientWinGeneric = class(TSQLHttpClientGeneric)
   protected
     fWinAPI: TWinHttpAPI;
@@ -235,12 +235,12 @@ type
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
-    /// overriden protected method to close HTTP connection
+    /// overridden protected method to close HTTP connection
     procedure InternalClose; override;
-    /// overriden protected method to handle HTTP connection
+    /// overridden protected method to handle HTTP connection
     function InternalCheckOpen: boolean; override;
     /// set the fWinAPI class
-    // - the overriden implementation should set the expected fWinAPIClass 
+    // - the overridden implementation should set the expected fWinAPIClass 
     procedure InternalSetClass; virtual; abstract;
   public
     /// connect to TSQLHttpServer on aServer:aPort

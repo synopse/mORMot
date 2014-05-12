@@ -653,7 +653,7 @@ unit mORMot;
     - 'SELECT *' statements on virtual/external tables will by-pass the SQLite3
       virtual table module: TSQLRecord.FillPrepare can be up to 30% faster -
       added TSQLRestServerStatic.AdaptSQLForEngineList virtual method to
-      handle most generic SELECT cases (overriden e.g. in SQLite3DB unit)
+      handle most generic SELECT cases (overridden e.g. in SQLite3DB unit)
     - TSQLRestServerStaticInMemory.GetJSONValues will now generate expanded
       JSON content, if specified (only non-expanded format was implemented),
       via the new TSQLRestServerStaticInMemory.ExpandedJSON property
@@ -663,7 +663,7 @@ unit mORMot;
     - fixed issue in TSQLRestClientURI.EngineAdd() when server returned -1
     - changed TSQLRestServerCallBackParams content to be used as a generic
       parameters wrapper for both method callbacks and interface-based services:
-      now aParams.Context.ID is to be used insted of aParams.ID
+      now aParams.Context.ID is to be used instead of aParams.ID
     - added TJSONObjectDecoder record/object helper for JSON object decoding
       (used e.g. by GetJSONObjectAsSQL() function, and for SQlite3DB process)
     - removed TSQLRecordExternal class type, to allow any TSQLRecord (e.g.
@@ -733,11 +733,11 @@ unit mORMot;
       when ID equals 0
     - interface-based services can now return the result value as JSON object
       instead of JSON array if TServiceFactoryServer.ResultAsJSONObject is set
-      (can be usefull e.g. when consuming services from JavaScript)
+      (can be useful e.g. when consuming services from JavaScript)
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
     - method-based services are now able to handle "304 Not Modified" optimized
-      response to save bandwith, in TSQLRestServerURIContext.Returns/Results
+      response to save bandwidth, in TSQLRestServerURIContext.Returns/Results
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be available also within
@@ -745,7 +745,7 @@ unit mORMot;
     - to make the implicit explicit, TSQLRestServerURIContext.ID has been
       renamed TableID, and a new ServiceInstanceID instance has been added
     - fixed TSQLRestServer.BeginCurrentThread/EndCurrentThread process to be
-      trigerred as expected (and checking that it is from the thread itself)
+      triggered as expected (and checking that it is from the thread itself)
     - new function CurrentServiceContext, to be used from packages instead of
       direct ServiceContext threadvar access - circumvent Delphi RTL/compiler
       restriction (bug?) as reported by [155b09dc1b]
@@ -928,7 +928,7 @@ unit mORMot;
     - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
     - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
       synchronization with the server - can be handy to test the connection
-    - added TSQLRest.TableHasRows/TableRowCount methods, and overriden direct
+    - added TSQLRest.TableHasRows/TableRowCount methods, and overridden direct
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
     - added TSQLRest.RetrieveList method to retrieve a TObjectList of TSQLRecord
@@ -1303,7 +1303,7 @@ type
   end;
 
   /// used to define the triggered Event types for TNotifySQLEvent
-  // - some Events can be trigerred via TSQLRestServer.OnUpdateEvent when
+  // - some Events can be triggered via TSQLRestServer.OnUpdateEvent when
   // a Table is modified, and actions can be authorized via overriding the
   // TSQLRest.RecordCanBeUpdated method
   // - OnUpdateEvent is called BEFORE deletion, and AFTER insertion or update; it
@@ -1437,7 +1437,7 @@ function GetJSONObjectAsSQL(JSON: RawUTF8; Update, InlinedParams: boolean;
   RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 
 /// get the FIRST field value of the FIRST row, from a JSON content
-// - e.g. usefull to get an ID without converting a JSON content into a TSQLTableJSON
+// - e.g. useful to get an ID without converting a JSON content into a TSQLTableJSON
 function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 
 /// returns TRUE if the JSON content is in expanded format
@@ -1683,7 +1683,7 @@ procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
  - allows easy published properties enumeration with ClassProp()
  - if a property doesn't have a write attribute (i.e. no setter), its value
   is set using the field adress itself (from read f* getter)
- - some usefull but not implemented functions were added in optimized assembler }
+ - some useful but not implemented functions were added in optimized assembler }
 
 type
 {$ifdef FPC}
@@ -1795,7 +1795,7 @@ type
     /// same as ord(high(type)): not the enumeration count, but the highest index
     MaxValue: Longint;
     /// the base type of this enumeration
-    /// - always use PEnumType(typeinfo(TEnumType))^.BaseType or more usefull
+    /// - always use PEnumType(typeinfo(TEnumType))^.BaseType or more useful
     // method PTypeInfo(typeinfo(TEnumType))^.EnumBaseType before calling
     // any of the methods below
     BaseType: PPTypeInfo;
@@ -2211,7 +2211,7 @@ type
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
-    // class function TSQLPropInfoRTTI.CreateFrom() or overriden constructors
+    // class function TSQLPropInfoRTTI.CreateFrom() or overridden constructors
     constructor Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
       aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer); reintroduce; virtual;
     /// the property definition Name
@@ -2258,7 +2258,7 @@ type
     /// convert the property value into an UTF-8 encoded text
     // - this method is the same as GetValue(), but avoid assigning the result
     // string variable (some speed up on multi-core CPUs, since avoid a CPU LOCK)
-    // - this virtual method is the one to be overriden by the implementing classes
+    // - this virtual method is the one to be overridden by the implementing classes
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); virtual; abstract;
     /// retrieve a field value into a TSQLVar value
@@ -2864,7 +2864,7 @@ type
     // - by default, TSQLRecord, TPersistent, TStrings, TCollection classes
     // are processed: but you can specify here some callbacks to perform
     // the serialization process for any class
-    // - any previous registration is overriden
+    // - any previous registration is overridden
     // - setting both aReader=aWriter=nil will return back to the default class
     // serialization (i.e. published properties serialization)
     // - note that any inherited classes will be serialized as the parent class
@@ -2914,7 +2914,7 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
 
 /// retrieve an object's component from its property name and class
-// - usefull to set User Interface component, e.g.
+// - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
   ComponentClass: TClass): pointer;
 
@@ -3403,7 +3403,7 @@ type
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE 
     // - do nothing if FieldIndex is not valid, and returns false
-    // - to be set in overriden class procedure
+    // - to be set in overridden class procedure
     // TSQLRecord.InternalRegisterCustomProperties() so that it will be common
     // to all database models, for both client and server
     function SetCustomCollation(FieldIndex: integer; const aCollationName: RawUTF8): boolean;
@@ -3412,7 +3412,7 @@ type
     // and let the generated SQLite3 file be available outside
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE 
-    // - to be set in overriden class procedure InternalRegisterCustomProperties()
+    // - to be set in overridden class procedure InternalRegisterCustomProperties()
     // so that it will be common to all database models, for both client and server
     procedure SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
     /// return the UTF-8 encoded SQL statement source to alter the table for
@@ -3458,7 +3458,7 @@ type
     // - simple kind of records (i.e. those not containing reference-counted
     // members) do not have RTTI generated, at least in older versions of Delphi
     // - use this method within TSQLRecord.InternalRegisterCustomProperties
-    // overriden method to define a custom record property with no
+    // overridden method to define a custom record property with no
     // reference-counted types within (like strings) - typical use may be TGUID
     // - main parameters are the record size, in bytes, and the property pointer
     // - add an TSQLPropInfoRecordFixedSize instance to the internal list
@@ -3477,7 +3477,7 @@ type
     /// add a custom record property from its RTTI definition
     // - handle any kind of record with TypeInfo() generated, including
     // text-based JSON serialization
-    // - use this method within InternalRegisterCustomProperties overriden method
+    // - use this method within InternalRegisterCustomProperties overridden method
     // to define a custom record property containing reference-counted types 
     // - main parameters are the record RTTI information, and the property pointer
     // - add an TSQLPropInfoRecordRTTI instance to the internal list
@@ -3570,7 +3570,7 @@ type
   // - instantiated by the TSQLRestServer.URI() method using its ServicesRouting
   // property
   // - see TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC
-  // for overriden methods - NEVER set this abstract TSQLRestServerURIContext
+  // for overridden methods - NEVER set this abstract TSQLRestServerURIContext
   // class on TSQLRest.ServicesRouting property !
   TSQLRestServerURIContext = class
   protected
@@ -3608,7 +3608,7 @@ type
     procedure URIDecodeSOAByMethod; virtual;
     /// retrieve interface-based SOA 
     // - should set Service member (and possibly ServiceMethodIndex)
-    // - abstract implementation which is to be overriden
+    // - abstract implementation which is to be overridden
     procedure URIDecodeSOAByInterface; virtual; abstract;
     /// process authentication
     // - return FALSE in case of invalid signature, TRUE if authenticated
@@ -3618,7 +3618,7 @@ type
     procedure ExecuteSOAByMethod; virtual;
     /// direct launch of an interface-based service
     // - URI() will ensure that Service<>nil before calling it
-    // - abstract implementation which is to be overriden
+    // - abstract implementation which is to be overridden
     procedure ExecuteSOAByInterface; virtual; abstract;
     /// handle GET/LOCK/UNLOCK/STATE verbs for ORM/CRUD process
     procedure ExecuteORMGet; virtual;
@@ -3792,7 +3792,7 @@ type
       Status: integer=HTML_BADREQUEST); overload;
 
     /// at Client Side, compute URI and BODY according to the routing scheme
-    // - abstract implementation which is to be overriden
+    // - abstract implementation which is to be overridden
     // - as input, method should be the method name to be executed,
     // params should contain the incoming parameters as JSON CSV (without []),
     // and clientDriven ID should contain the optional Client ID value 
@@ -3826,12 +3826,12 @@ type
   protected
     /// retrieve interface-based SOA with URI RESTful routing
     // - should set Service member (and possibly ServiceMethodIndex)
-    // - this overriden implementation expects an URI encoded with
+    // - this overridden implementation expects an URI encoded with
     // '/Model/Interface.Method[/ClientDrivenID]' for this class, and
     // will set ServiceMethodIndex for next ExecuteSOAByInterface method call
     procedure URIDecodeSOAByInterface; override;
     /// direct launch of an interface-based service with URI RESTful routing
-    // - this overriden implementation expects parameters to be sent as one JSON
+    // - this overridden implementation expects parameters to be sent as one JSON
     // array body (Delphi/AJAX way) or optionally with URI decoding (HTML way):
     // ! function TServiceCalculator.Add(n1, n2: integer): integer;
     // would accept such requests:
@@ -3862,13 +3862,13 @@ type
   TSQLRestRoutingJSON_RPC = class(TSQLRestServerURIContext)
   protected
     /// retrieve interface-based SOA with URI JSON/RPC routing
-    // - this overriden implementation expects an URI encoded with
+    // - this overridden implementation expects an URI encoded with
     // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
     // set ServiceMethodIndex at this level (but in ExecuteSOAByInterface)
     procedure URIDecodeSOAByInterface; override;
     /// direct launch of an interface-based service with URI JSON/RPC routing
     // - URI() will ensure that Service<>nil before calling it
-    // - this overriden implementation expects parameters to be sent as part
+    // - this overridden implementation expects parameters to be sent as part
     // of a JSON object body:
     // $ {"method":"Add","params":[20,30],"id":1234}
     procedure ExecuteSOAByInterface; override;
@@ -4094,7 +4094,7 @@ type
     /// trick to typecast the ID on 64 bit platform
     function GetIDAsPointer: pointer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// virtual method to be overriden to register some custom properties
+    /// virtual method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
     // properties, by adding some TSQLPropInfo instances to Props.Fields list,
     // or calling Props.RegisterCustomFixedSizeRecordProperty() or
@@ -4538,14 +4538,14 @@ type
     {/ retrieve a field value from a given property name, as encoded UTF-8 text
       - you should use strong typing and direct property access, following
         the ORM approach of the framework; but in some cases (a custom Grid
-        display, for instance), it could be usefull to have this method available
+        display, for instance), it could be useful to have this method available
       - will return '' in case of wrong property name
       - BLOB and dynamic array fields are returned as '\uFFF0base64encodedbinary'  }
     function GetFieldValue(const PropName: RawUTF8): RawUTF8;
     {/ set a field value of a given property name, from some encoded UTF-8 text
       - you should use strong typing and direct property access, following
         the ORM approach of the framework; but in some cases (a custom Grid
-        display, for instance), it could be usefull to have this method available
+        display, for instance), it could be useful to have this method available
        - won't do anything in case of wrong property name 
        - expect BLOB and dynamic array fields encoded as SQlite3 BLOB literals
         ("x'01234'" e.g.) or '\uFFF0base64encodedbinary' }
@@ -5205,7 +5205,7 @@ type
     function SearchFieldEquals(const aValue: RawUTF8; FieldIndex: integer): integer;
 
     /// if the ID column is available, hides it from fResults[]
-    // - usefull for simplier UI, with a hidden ID field
+    // - useful for simplier UI, with a hidden ID field
     // - use IDColumnHiddenValue() to get the ID of a specific row
     // - return true is ID was succesfully hidden, false if not possible
     function IDColumnHide: boolean;
@@ -5755,7 +5755,7 @@ type
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
-    // - equals SQLTableName by default (may be overriden e.g. by mORMotDB's
+    // - equals SQLTableName by default (may be overridden e.g. by mORMotDB's
     // VirtualTableExternalRegister procedure)
     property TableName: RawUTF8 read fTableName;
     /// pre-computed SQL statements for this external TSQLRecord in this model
@@ -6060,7 +6060,7 @@ type
 
   PRecordRef = ^RecordRef;
   
-  /// usefull object to type cast TRecordReference type value into explicit
+  /// useful object to type cast TRecordReference type value into explicit
   // TSQLRecordClass and ID
   // - use RecordRef(Reference).TableIndex/Table/ID/Text methods to retrieve
   // the details of a TRecordReference encoded value
@@ -6585,7 +6585,7 @@ type
   // RESTful authentication is enabled) - since it may be shared among users or
   // groups, the sicPerUser and sicPerGroup implementation should be thread-safe
   // - sicPerThread will maintain one object instance per calling thread - it
-  // may be usefull instead of sicShared mode if the service process expects
+  // may be useful instead of sicShared mode if the service process expects
   // some per-heavy thread initialization, for instance
   TServiceInstanceImplementation = (
     sicSingle, sicShared, sicClientDriven, sicPerSession, sicPerUser, sicPerGroup,
@@ -7632,7 +7632,7 @@ type
       aInstanceCreation: TServiceInstanceImplementation;
       const aContractExpected: RawUTF8);
     /// retrieve an instance of this interface
-    // - this virtual method will be overriden to reflect the expected
+    // - this virtual method will be overridden to reflect the expected
     // behavior of client or server side
     // - can be used as such to resolve an I: ICalculator interface
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
@@ -7726,7 +7726,7 @@ type
   TServiceFactoryServerInstanceDynArray = array of TServiceFactoryServerInstance;
 
   /// abstract parent class with threadsafe implementation of IInterface and
-  // a virtual constructor, ready to be overriden to initialize the instance
+  // a virtual constructor, ready to be overridden to initialize the instance
   // - you can specify such a class to TSQLRestServer.ServiceRegister() if
   // you need an interfaced object with a virtual constructor
   TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
@@ -7738,7 +7738,7 @@ type
     constructor Create; virtual;
   end;
 
-  /// abstract parent class with a virtual constructor, ready to be overriden
+  /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an interfaced object with a
   // virtual constructor
@@ -7841,7 +7841,7 @@ type
     /// initialize the service provider on the server side
     // - expect an direct server-side implementation class (inheriting from
     // TInterfacedClass or from TInterfacedObjectWithCustomCreate if you need
-    // an overriden constructor)
+    // an overridden constructor)
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes,
     // a time out (in seconds) can be defined - if the time out is 0, interface
     // will be forced in sicSingle mode
@@ -7989,7 +7989,7 @@ type
     // useful e.g. when working with JavaScript clients
     // - Delphi clients (i.e. TServiceFactoryClient/TInterfacedObjectFake) will
     // transparently handle both formats
-    // - this value can be overriden by setting ForceServiceResultAsJSONObject
+    // - this value can be overridden by setting ForceServiceResultAsJSONObject
     // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
     property ResultAsJSONObject: boolean read fResultAsJSONObject write fResultAsJSONObject;
   end;
@@ -8173,7 +8173,7 @@ type
   protected
   public
     /// retrieve a service provider from its type information
-    // - this overriden method will register the interface, if was not yet made
+    // - this overridden method will register the interface, if was not yet made
     // - in this case, the interface will be registered with sicClientDriven
     // implementation method
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; override;
@@ -8406,7 +8406,7 @@ type
     // - returns TRUE if this method is handled by the engine, or FALSE if
     // individual calls to Engine*() are expected
     // - this default implementation returns FALSE
-    // - an overriden method returning TRUE shall ensure that calls to
+    // - an overridden method returning TRUE shall ensure that calls to
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; virtual;
@@ -9672,7 +9672,7 @@ type
     property ConnectionID: RawUTF8 read fConnectionID;
   end;
 
-  /// used to define overriden session instances
+  /// used to define overridden session instances
   // - this all sessions remain in memory, ensure they are not taking too
   // much resource (memory or process time)
   TAuthSessionClass = class of TAuthSession;
@@ -9731,7 +9731,7 @@ type
     // - you can define several authentication schemes for the same server
     constructor Create(aServer: TSQLRestServer); virtual;
     /// called by the Server to implement the Auth RESTful method
-    // - overriden method shall return TRUE if the request has been handled
+    // - overridden method shall return TRUE if the request has been handled
     // - returns FALSE to let the next registered TSQLRestServerAuthentication
     // class to try implementing the content
     // - Ctxt.Parameters has been tested to contain an UserName=... value
@@ -9776,7 +9776,7 @@ type
     // - check session_signature=... parameter to be a valid digital signature
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// class method to be called on client side to sign an URI
-    // - generate the digital signature as expected by overriden RetrieveSession()
+    // - generate the digital signature as expected by overridden RetrieveSession()
     // - will use the TAuthSession.IsValidURL() format; in particular, timestamp
     // resolution is about 256 ms in the current implementation
     // - append '&session_signature=SessionID+....' to the url
@@ -9790,7 +9790,7 @@ type
   TSQLRestServerAuthenticationDefault = class(TSQLRestServerAuthenticationSignedURI)
   protected
     /// check a supplied password content
-    // - will match ClientComputeSessionKey() algorithm as overriden here, i.e.
+    // - will match ClientComputeSessionKey() algorithm as overridden here, i.e.
     // a SHA-256 based signature with a 10 minutes activation window
     function CheckPassword(Ctxt: TSQLRestServerURIContext;
       User: TSQLAuthUser; const aClientNonce, aPassWord: RawUTF8): boolean; virtual;
@@ -9978,7 +9978,7 @@ type
     // and MultiFieldValue() public functions
     function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
     function InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
-    /// this method is overriden for setting the NoAJAXJSON field
+    /// this method is overridden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
     procedure SetNoAJAXJSON(const Value: boolean); virtual;
     /// add a new session to the internal session list
@@ -9997,9 +9997,9 @@ type
     // - this method is not thread-safe: caller should use fSessionCriticalSection
     procedure SessionDelete(aSessionIndex: integer; Ctxt: TSQLRestServerURIContext);
     /// returns TRUE if this table is worth caching (e.g. already in memory)
-    // - this overriden implementation returns FALSE for TSQLRestStorageInMemory
+    // - this overridden implementation returns FALSE for TSQLRestStorageInMemory
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; override;
-    /// overriden methods which will perform CRUD operations
+    /// overridden methods which will perform CRUD operations
     // - will call any static TSQLRestStorage, or call MainEngine*() virtual methods
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
@@ -10076,9 +10076,9 @@ type
     // - will process all ORM-level validation, coherency checking and
     // notifications together with a low-level SQL deletion work (if possible)
     function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; override;
-    /// overriden method for direct static class call (if any)
+    /// overridden method for direct static class call (if any)
     function TableRowCount(Table: TSQLRecordClass): integer; override;
-    /// overriden method for direct static class call (if any)
+    /// overridden method for direct static class call (if any)
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
     /// virtual method called when a record is updated
     // - default implementation will call the OnUpdateEvent/OnBlobUpdateEvent
@@ -10100,10 +10100,10 @@ type
     // error-prone, and more cross-database engine compatible)S
     function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; virtual;
     /// update all BLOB fields of the supplied Value
-    // - this overriden method will execute the direct static class, if any
+    // - this overridden method will execute the direct static class, if any
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
     /// get all BLOB fields of the supplied value from the remote server
-    // - this overriden method will execute the direct static class, if any
+    // - this overridden method will execute the direct static class, if any
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
     /// implement Server-Side TSQLRest unlocking
     // - to be called e.g. after a Retrieve() with forupdate=TRUE
@@ -10188,7 +10188,7 @@ type
     // has been modified; only field adding is mandatory, field renaming or
     // field deleting are not allowed in the FrameWork (in such cases, you must
     // create a new TSQLRecord type)
-    // - this virtual method do nothing by default - overriden versions should
+    // - this virtual method do nothing by default - overridden versions should
     // implement it as expected by the underlying storage engine (e.g. SQLite3
     // or TSQLRestServerFullInMemory)
     procedure CreateMissingTables(user_version: cardinal=0); virtual;
@@ -10243,7 +10243,7 @@ type
     /// implement a generic local, piped or HTTP/1.1 provider
     // - this is the main entry point of the server, from the client side
     // - default implementation calls protected methods EngineList() Retrieve()
-    // Add() Update() Delete() UnLock() EngineExecute() above, which must be overriden by
+    // Add() Update() Delete() UnLock() EngineExecute() above, which must be overridden by
     // the TSQLRestServer child
     // - for 'GET ModelRoot/TableName', url parameters can be either "select" and
     // "where" (to specify a SQL Query, from the SQLFromSelectWhere function),
@@ -10300,7 +10300,7 @@ type
     // interfaces to be registered to the server (e.g. [TypeInfo(IMyInterface)])
     // and implemented by this class
     // - class can be any TInterfacedObject, but TInterfacedObjectWithCustomCreate
-    // can be used if you need an overriden constructor
+    // can be used if you need an overridden constructor
     // - instance implementation pattern will be set by the appropriate parameter
     // - will return the first of the registered TServiceFactoryServer created
     // on success (i.e. the one corresponding to the first item of the aInterfaces
@@ -10456,7 +10456,7 @@ type
 
   /// REST class with direct access to an external database engine
   // - you can set an alternate per-table database engine by using this class
-  // - this abstract class is to be overriden with a proper implementation (like
+  // - this abstract class is to be overridden with a proper implementation (like
   // our TSQLRestStorageInMemory class or TSQLRestStorageExternal
   // as defined in mORMotDB unit)
   TSQLRestStorage = class(TSQLRest)
@@ -10485,7 +10485,7 @@ type
     // - returns TRUE if the table has been refreshed and its content was modified:
     // therefore the client will know he'll need to refresh some content
     function RefreshedAndModified: boolean; virtual;
-    /// overriden method calling the owner (if any) to guess if this record
+    /// overridden method calling the owner (if any) to guess if this record
     // can be updated or deleted
     function RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; override;
@@ -10499,7 +10499,7 @@ type
     /// initialize the storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true (this virtual
-    // method will just ignore this parameter, which will be used for overriden
+    // method will just ignore this parameter, which will be used for overridden
     // constructor only)
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       const aFileName: TFileName = ''; aBinaryFile: boolean=false); reintroduce; virtual;
@@ -10507,14 +10507,14 @@ type
     destructor Destroy; override;
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
-    // - this overriden method will do nothing (should have been already made
+    // - this overridden method will do nothing (should have been already made
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
     // a third party process (like proper OLE initialization)
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
-    // - this overriden method will do nothing (should have been already made
+    // - this overridden method will do nothing (should have been already made
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
     // a third party process (like proper OLE initialization)
@@ -10525,7 +10525,7 @@ type
     // - locking is handled at (Owner.)Model level
     // - returns true on success
     function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     // - do nothing method: will return FALSE (aka error)
@@ -10550,7 +10550,7 @@ type
     function SearchField(const FieldName, FieldValue: RawUTF8;
       var ResultID: TIntegerDynArray): boolean; overload; virtual; abstract;
     /// begin a BATCH sequence to speed up huge database change
-    // - this overriden method will raise an EORMException since BATCH mode is
+    // - this overridden method will raise an EORMException since BATCH mode is
     // not supported for TSQLStorageClass: it has no interrest at table level
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal=0): boolean; override;
@@ -10623,15 +10623,15 @@ type
     fField: integer;
     fProp: TSQLPropInfo;
     fCaseInsensitive: boolean;
-    /// overriden method to hash an item
+    /// overridden method to hash an item
     function Hash(Item: TObject): cardinal; override;
-    /// overriden method to compare two items
+    /// overridden method to compare two items
     function Compare(Item1,Item2: TObject): boolean; override;
-    /// overriden method to get an item
+    /// overridden method to get an item
     // - shall return nil if Index is out of range (e.g. >= Count)
     // - will be called e.g. by Find() with Compare() to avoid collision
     function Get(Index: integer): TObject; override;
-    /// overriden method to retrieve the number of items
+    /// overridden method to retrieve the number of items
     function Count: integer; override;
   public
     /// initialize a hash for a record array field
@@ -10697,9 +10697,9 @@ type
     function GetJSONValues(Stream: TStream; Expand: boolean;
       Stmt: TSynTableStatement): PtrInt;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
-    // - overriden method to handle basic queries as handled by EngineList()
+    // - overridden method to handle basic queries as handled by EngineList()
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
-    /// overriden methods for direct in-memory database engine thread-safe process
+    /// overridden methods for direct in-memory database engine thread-safe process
     function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
@@ -10785,22 +10785,22 @@ type
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     function UpdateOne(ID: integer; const Values: TSQLVarDynArray): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     function EngineDelete(TableModelIndex, ID: integer): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     function TableRowCount(Table: TSQLRecordClass): integer; override;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
@@ -10818,7 +10818,7 @@ type
     /// read-only access to the ID of a TSQLRecord values
     property ID[Index: integer]: integer read GetID;
     /// if set to true, file content on disk will expect binary format
-    // - default format on disk is JSON but can be overriden at constructor call
+    // - default format on disk is JSON but can be overridden at constructor call
     // - binary format should be more efficient in term of speed and disk usage,
     // but can be proprietary
     property BinaryFile: boolean read fBinaryFile write fBinaryFile;
@@ -10840,13 +10840,13 @@ type
   // in order to be consistent with the internal DB cache
   TSQLRestStorageInMemoryExternal = class(TSQLRestStorageInMemory)
   public
-    /// this overriden method will notify the Owner when the internal DB content
+    /// this overridden method will notify the Owner when the internal DB content
     // is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
     // cache used at SQLite3 database level; but TSQLVirtualTableJSON virtual
     // tables could flush the database content without proper notification
-    // - this overriden implementation will call Owner.FlushInternalDBCache
+    // - this overridden implementation will call Owner.FlushInternalDBCache
     procedure StorageLock(WillModifyContent: boolean); override;
   end;
 
@@ -10865,6 +10865,20 @@ type
     fFileName: TFileName;
     fBinaryFile: Boolean;
     fStaticDataCount: cardinal;
+    /// overridden methods which will return error (no main DB here)
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
+    function MainEngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function MainEngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+      const IDs: TIntegerDynArray): boolean; override;
+    function MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
+    function MainEngineUpdateBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
+    function MainEngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
   public
     /// initialize a REST server with a database file
     // - all classes of the model will be created as TSQLRestStorageInMemory
@@ -10873,7 +10887,7 @@ type
     constructor Create(aModel: TSQLModel; const aFileName: TFileName='';
       aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
     /// finalize the REST server
-    // - this overriden destructor will write any modification on file (if
+    // - this overridden destructor will write any modification on file (if
     // needed), and release all used memory
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
@@ -10891,7 +10905,7 @@ type
     /// write any modification into file
     // - do nothing if file name was not assigned
     procedure UpdateToFile; virtual;
-    /// overriden method for direct in-memory database engine call
+    /// overridden method for direct in-memory database engine call
     // - not implemented: always return false
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     /// the file name used for data persistence
@@ -10943,7 +10957,7 @@ type
     constructor Create(aRemoteClient: TSQLRestClient;
       aHandleUserAuthentication: boolean=false); reintroduce; virtual;
     /// implement Server-Side TSQLRest deletion
-    /// overriden method for remote database engine call
+    /// overridden method for remote database engine call
     // - will return false - i.e. not implemented - since it is a server side
     // operation
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
@@ -10953,7 +10967,7 @@ type
     function ExecuteList(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): TSQLTableJSON; override;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
-    // - this overriden method will just return TRUE: in this remote access,
+    // - this overridden method will just return TRUE: in this remote access,
     // true coherency will be performed on the ORM server side
     function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; override;
     /// the remote ORM client used for data persistence
@@ -10997,7 +11011,7 @@ type
     // (e.g. for digital signing purpose)
     // - this default method just return TRUE (i.e. OK to update)
     function BeforeUpdateEvent(Value: TSQLRecord): Boolean; virtual;
-    /// overriden method which will call ClientRetrieve()
+    /// overridden method which will call ClientRetrieve()
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
   public
     /// create a new member
@@ -11011,13 +11025,13 @@ type
     // - on success, returns the new ROWID value; on error, returns 0
     // - on success, Value.ID is updated with the new ROWID
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
-    // - this overriden method will send BLOB fields, if ForceBlobTransfert is set
+    // - this overridden method will send BLOB fields, if ForceBlobTransfert is set
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; override;
     /// update a member
     // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
     // - server must return Status 200/HTML_SUCCESS OK on success
-    // - this overriden method will call BeforeUpdateEvent and also update BLOB
+    // - this overridden method will call BeforeUpdateEvent and also update BLOB
     // fields, if any ForceBlobTransfert is set and CustomFields=[]
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): boolean; override;
     /// get a member from its ID
@@ -11191,10 +11205,10 @@ type
     // - return the execution result in Call.OutStatus
     // - for clients, RestAccessRights is never used
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
-    /// overriden protected method shall check if not connected to reopen it
+    /// overridden protected method shall check if not connected to reopen it
     // - shall return TRUE on success, FALSE on any connection error
     function InternalCheckOpen: boolean; virtual; abstract;
-    /// overriden protected method shall force the connection to be closed,
+    /// overridden protected method shall force the connection to be closed,
     // - a next call to InternalCheckOpen method shall re-open the connection
     procedure InternalClose; virtual; abstract;
     /// calls 'ModelRoot/TableName/TableID' with appropriate REST method
@@ -11202,7 +11216,7 @@ type
     // - uses LOCK method if ForUpdate is true
     function URIGet(Table: TSQLRecordClass; ID: integer; var Resp: RawUTF8;
       ForUpdate: boolean=false): Int64Rec;
-    // overriden methods
+    // overridden methods
     function ClientRetrieve(TableModelIndex, ID: integer; ForUpdate: boolean;
       var InternalState: cardinal; var Resp: RawUTF8): boolean; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
@@ -11250,7 +11264,7 @@ type
     function SetUser(const aUserName, aPassword: RawUTF8;
       aHashedPassword: Boolean=false): boolean;
     /// method calling the remote Server via a RESTful command
-    // - calls the InternalURI abstract method, which should be overriden with a
+    // - calls the InternalURI abstract method, which should be overridden with a
     // local, piped or HTTP/1.1 provider
     // - this method will add sign the url with the appropriate digital signature
     // according to the current SessionUser property
@@ -11361,7 +11375,7 @@ type
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
     /// update a member in current BATCH sequence
-    // - this overriden method will call BeforeUpdateEvent() method
+    // - this overridden method will call BeforeUpdateEvent() method
     function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer; override;
 
     {/ wrapper to the protected URI method to call a method on the server, using
@@ -11505,9 +11519,9 @@ type
     /// method calling the RESTful server through a DLL or executable, using
     // direct memory
     procedure InternalURI(var Call: TSQLRestURIParams); override;
-    /// overriden protected method do nothing (direct DLL access has no connection)
+    /// overridden protected method do nothing (direct DLL access has no connection)
     function InternalCheckOpen: boolean; override;
-    /// overriden protected method do nothing (direct DLL access has no connection)
+    /// overridden protected method do nothing (direct DLL access has no connection)
     procedure InternalClose; override;
   public
     /// connect to a server from a remote function
@@ -11546,9 +11560,9 @@ type
     fCurrentResponse: RawUTF8;
     /// method calling the RESTful server by using Windows WM_COPYDATA messages
     procedure InternalURI(var Call: TSQLRestURIParams); override;
-    /// overriden protected method to handle GDI message loop connection
+    /// overridden protected method to handle GDI message loop connection
     function InternalCheckOpen: boolean; override;
-    /// overriden protected method to close GDI message
+    /// overridden protected method to close GDI message
     procedure InternalClose; override;
   public
     /// connect to a server from its window name
@@ -11567,7 +11581,7 @@ type
       ClientWindowName: string; TimeOutMS: cardinal); reintroduce; overload;
     /// release the internal Window class created, if any
     destructor Destroy; override;
-    /// event to be trigerred when a WM_COPYDATA message is received from the server
+    /// event to be triggered when a WM_COPYDATA message is received from the server
     // - to be called by the corresponding message WM_COPYDATA; method in the
     // client window
     procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA;
@@ -11599,9 +11613,9 @@ type
     // - return database internal state in result.Hi
     // - status code 501 HTML_NOTIMPLEMENTED if no server is available
     procedure InternalURI(var Call: TSQLRestURIParams); override;
-    /// overriden protected method to handle named-pipe connection
+    /// overridden protected method to handle named-pipe connection
     function InternalCheckOpen: boolean; override;
-    /// overriden protected method to close named-pipe connection
+    /// overridden protected method to close named-pipe connection
     procedure InternalClose; override;
   public
     /// connect to a server contained in a running application
@@ -11634,12 +11648,12 @@ type
     /// the associated TSQLRest instance
     // - this value is updated by TSQLRecord.Validate with the current
     // TSQLRest used for the validation
-    // - it can be used in the overriden Process method
+    // - it can be used in the overridden Process method
     property ProcessRest: TSQLRest read fProcessRest;
     /// the associated TSQLRecord instance
     // - this value is updated by TSQLRecord.Validate with the current
     // TSQLRecord instance to be validated
-    // - it can be used in the overriden Process method
+    // - it can be used in the overridden Process method
     property ProcessRec: TSQLRecord read fProcessRec;
   end;
 
@@ -11863,7 +11877,7 @@ type
     /// the name of the Virtual Table, as specified following the TABLE keyword
     // in the CREATE VIRTUAL TABLE statement
     property TableName: RawUTF8 read fTableName;
-  public { virtual methods to be overriden }
+  public { virtual methods to be overridden }
     /// should return the main specifications of the associated TSQLVirtualTableModule
     class procedure GetTableModuleProperties(
       var aProperties: TVirtualTableModuleProperties); virtual; abstract;
@@ -11950,7 +11964,7 @@ type
     constructor Create(aTable: TSQLVirtualTable); virtual;
     /// the associated Virtual Table class instance
     property Table: TSQLVirtualTable read fTable;
-  public { abstract methods to be overriden }
+  public { abstract methods to be overridden }
     /// called to begin a search in the virtual table
     // - the TSQLVirtualTablePrepared parameters were set by
     // TSQLVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
@@ -12026,7 +12040,7 @@ type
   TSQLVirtualTableJSON = class(TSQLVirtualTable)
   protected
     fStaticInMemory: TSQLRestStorageInMemory;
-  public { overriden methods }
+  public { overridden methods }
     /// create the virtual table access instance
     // - the created instance will be released when the virtual table will be
     // disconnected from the DB connection (e.g. xDisconnect method for SQLite3)
@@ -12263,7 +12277,7 @@ procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);
 // - this function is bit slower than SetWeak, but will avoid any GPF, by
 // maintaining a list of per-instance weak interface field reference, and
 // hook the FreeInstance virtual method in order to reset any reference to nil:
-// FreeInstance will be overriden for this given class VMT only (to avoid
+// FreeInstance will be overridden for this given class VMT only (to avoid
 // unnecessary slowdown of other classes), calling the previous method afterward
 // (so will work even with custom FreeInstance implementations)
 // - for faster possible retrieval, it will assign the unused vmtAutoTable VMT
@@ -12289,7 +12303,7 @@ type
 var
   /// if this variable is TRUE, the URIRequest() function won't use
   // Win32 API GlobalAlloc() function, but fastest native Getmem()
-  // - can be also usefull for debugg
+  // - can be also useful for debugg
   USEFASTMM4ALLOC: boolean = false;
 
 /// this function can be exported from a DLL to remotely access to a TSQLRestServer
@@ -19763,7 +19777,7 @@ begin
 end;
 
 procedure TSQLRecord.FillFrom(P: PUTF8Char);
-(* two possible formats = first not expanded, 2nd is expanded (most usefull)
+(* two possible formats = first not expanded, 2nd is expanded (most useful)
  {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
   "ValDate","Next",0,0,"abcde+¬ef+á+¬","abcde+¬ef+á+¬","abcde+¬ef+á+¬",
   3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0]}
@@ -24225,7 +24239,7 @@ begin
   with Msg.CopyDataStruct^ do
     SetString(call.InBody,P,PtrInt(cbData)-(P-lpData));
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
-  // note: it's up to URI overriden method to implement access rights
+  // note: it's up to URI overridden method to implement access rights
   URI(call);
   Res.Magic := MAGIC_SYN;
   Res.Status := call.OutStatus;
@@ -24581,7 +24595,7 @@ end;
 
 function TSQLRestServer.UpdateBlobFields(Value: TSQLRecord): boolean;
 var Static: TSQLRest;
-begin // overriden method to update all BLOB fields at once
+begin // overridden method to update all BLOB fields at once
   if (Value=nil) or (Value.fID<=0) then
     result := false else begin
     Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
@@ -24593,7 +24607,7 @@ end;
 
 function TSQLRestServer.RetrieveBlobFields(Value: TSQLRecord): boolean;
 var Static: TSQLRest;
-begin // overriden method to update all BLOB fields at once
+begin // overridden method to update all BLOB fields at once
   if Value=nil then
     result := false else begin
     Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
@@ -24650,7 +24664,7 @@ var SQL: RawUTF8;
 begin
   result := false;
   if high(FieldNames)<0 then
-    exit; // avoid endless loop for TSQLRestStorage with no overriden method
+    exit; // avoid endless loop for TSQLRestStorage with no overridden method
   TableIndex := Model.GetTableIndexExisting(Table);
   if fStaticVirtualTable<>nil then begin
     Static := fStaticVirtualTable[TableIndex];
@@ -26804,7 +26818,7 @@ begin
           call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
           call.OutHead := ''; // may not be reset explicitly by fServer.URI()
           call.OutBody := '';
-          // it's up to URI overriden method to implement access rights
+          // it's up to URI overridden method to implement access rights
           fServer.URI(call);
           FileWrite(fPipe,call.OutStatus,sizeof(cardinal)*2);
           WriteString(fPipe,call.OutHead);
@@ -27505,7 +27519,7 @@ begin
       end;
       exit;
     end;
-    // generic search of any value, using fast CompareValue() overriden method
+    // generic search of any value, using fast CompareValue() overridden method
     P.SetValue(fSearchRec,pointer(WhereValue),false);
     for i := 0 to fValue.Count-1 do  // ..,true)=SYSTEMNOCASE
       if P.CompareValue(fValue.List[i],fSearchRec,true)=0 then begin
@@ -27875,7 +27889,7 @@ end;
 
 function TSQLRestStorageInMemory.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 var i: integer;
-begin // TableModelIndex is not usefull here
+begin // TableModelIndex is not useful here
   StorageLock(false);
   try
     i := IDToIndex(ID);
@@ -28542,6 +28556,59 @@ begin
     UpdateToFile;
     Ctxt.Success;
   end;
+end;
+
+function TSQLRestServerFullMemory.MainEngineAdd(TableModelIndex: integer;
+  const SentData: RawUTF8): integer; 
+begin 
+  result := 0; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineRetrieve(TableModelIndex: integer; 
+  ID: integer): RawUTF8; 
+begin 
+  result := ''; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineList(const SQL: RawUTF8; 
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; 
+begin 
+  result := ''; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineUpdate(TableModelIndex, ID: integer;
+  const SentData: RawUTF8): boolean; 
+begin 
+  result := false; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineDelete(TableModelIndex, ID: integer): boolean; 
+begin 
+  result := false; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineDeleteWhere(TableModelIndex: integer; 
+  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean; 
+begin 
+  result := false; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; 
+begin 
+  result := false; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineUpdateBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; 
+begin 
+  result := false; 
+end;
+
+function TSQLRestServerFullMemory.MainEngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; 
+begin 
+  result := false; 
 end;
 
 
@@ -34851,7 +34918,7 @@ end;
 { TInterfacedObjectWithCustomCreate }
 
 constructor TInterfacedObjectWithCustomCreate.Create;
-begin // nothing to do by default - overriden constructor may add custom code
+begin // nothing to do by default - overridden constructor may add custom code
 end;
 
 procedure TInterfacedObjectWithCustomCreate.InternalRelease;
@@ -34864,7 +34931,7 @@ end;
 { TPersistentWithCustomCreate }
 
 constructor TPersistentWithCustomCreate.Create;
-begin // nothing to do by default - overriden constructor may add custom code
+begin // nothing to do by default - overridden constructor may add custom code
 end;
 
 

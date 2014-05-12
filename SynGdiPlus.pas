@@ -53,7 +53,7 @@ unit SynGdiPlus;
    - first public release on http://synopse.info blog
 
   Version 1.6b
-   - new TGDIPlusFull with most usefull GDI+ primitives (ancestor TGDIPLus only
+   - new TGDIPlusFull with most useful GDI+ primitives (ancestor TGDIPLus only
      handles pictures)
    - TGDIPlusFull loads dynamicaly the latest GDI+ version available on the system,
      i.e. the 1.1 version bundled with Office 2003/2007 (all the other pascal
@@ -133,7 +133,7 @@ uses
 
 {.$define USEDPI}
 { if defined, the DrawAt() method is available, which respect dpi on drawing
-  - should not be usefull on most applications }
+  - should not be useful on most applications }
 
 {$define NOTSYNPICTUREREGISTER}
 { if NOT defined, the TSynPicture type is registered to handle PNG JPG TIF in TGraphic }
@@ -315,7 +315,7 @@ type
     procedure RegisterPictures;
     /// draw the corresponding EMF metafile into a given device context
     // - this default implementation uses GDI drawing only
-    // - use TGDIPlusFull overriden method for true GDI+ AntiAliaised drawing
+    // - use TGDIPlusFull overridden method for true GDI+ AntiAliaised drawing
     procedure DrawAntiAliased(Source: TMetafile; Dest: HDC; R: TRect;
       aSmoothing: TSmoothingMode=smAntiAlias;
       aTextRendering: TTextRenderingHint=trhClearTypeGridFit); overload; virtual;
@@ -452,7 +452,7 @@ type
   /// sub class to handle .TIF file extension
   // - GDI+ seems not able to load all Tiff file formats, depending on the
   // Windows version and third-party libraries installed
-  // - this overriden class implements multiple pages
+  // - this overridden class implements multiple pages
   TTiffImage = class(TSynPicture)
   protected
     fActivePage: integer;
@@ -575,7 +575,7 @@ type
     // available only since Vista and Seven; XP only shipped with version 1.1)
     constructor Create(aDllFileName: TFileName='');
     /// draw the corresponding EMF metafile into a given device context
-    // - this overriden implementation handles GDI+ AntiAliased drawing
+    // - this overridden implementation handles GDI+ AntiAliased drawing
     // - if GDI+ is not available, it will use default GDI32 function
     procedure DrawAntiAliased(Source: TMetafile; Dest: HDC; R: TRect;
       aSmoothing: TSmoothingMode=smAntiAlias;

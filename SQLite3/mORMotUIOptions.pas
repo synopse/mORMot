@@ -442,7 +442,7 @@ begin // update the properties of the settings object from screen
       try
         P^.SetOrdValue(Obj,CNE.Value); // call CNE.GetValue for range checking
       except
-        on E: ESynLabeledEdit do begin // trigerred by CNE.GetValue
+        on E: ESynLabeledEdit do begin // triggered by CNE.GetValue
           List.Selected := List.Items[i]; // focus corresponding scroll
           ListClick(nil);
           Application.ProcessMessages;

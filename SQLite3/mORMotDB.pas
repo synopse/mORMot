@@ -55,9 +55,9 @@ unit mORMotDB;
   - external direct insert, update or delete actions (i.e. when the
     TSQLRestServerStaticExternal instance is called directly) will now
     flush the low-level SQLite3 DB cache, as expected by the virtual tables
-  - added TSQLRestServerStaticExternal.AdaptSQLForEngineList overriden method to
+  - added TSQLRestServerStaticExternal.AdaptSQLForEngineList overridden method to
     handle most generic SELECT to by-pass the SQLite3 virtual module for speed
-  - added TSQLRestServerStaticExternal.EndCurrentThread overriden method which
+  - added TSQLRestServerStaticExternal.EndCurrentThread overridden method which
     will be called e.g. by TSQLite3HttpServer or TSQLRestServerNamedPipeResponse
     for each terminating threads, to release external connection resource
     (calling TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread method)
@@ -185,7 +185,7 @@ type
     /// overloaded method using FormatUTF8() and binding SynDB parameters
     function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
        var Params: TSQLVarDynArray; LastIntegerParam: integer; ParamsMatchCopiableFields: boolean): boolean;
-    // overriden methods calling the external engine with SQL via Execute
+    // overridden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
     function EngineLockedNextID: Integer; virtual;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
@@ -200,7 +200,7 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
       const FieldValue: array of const; var ResultID: TIntegerDynArray): boolean;
-    // overriden method returning TRUE for next calls to EngineAdd/Update/Delete 
+    // overridden method returning TRUE for next calls to EngineAdd/Update/Delete 
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast sending
@@ -209,7 +209,7 @@ type
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
     function InternalBatchAdd(const aValue: RawUTF8; aID: integer): integer;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
-    // - overriden method to handle most potential simple queries, e.g. like
+    // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
     // - change 'RowID' into 'ID' column name, internal field names into
     // mapped external field names ('AS [InternalFieldName]' if needed), and
@@ -253,9 +253,9 @@ type
     // - store the results into the ResultID dynamic array
     function SearchField(const FieldName, FieldValue: RawUTF8;
       var ResultID: TIntegerDynArray): boolean; overload; override;
-    /// overriden method for direct external database engine call
+    /// overridden method for direct external database engine call
     function TableRowCount(Table: TSQLRecordClass): integer; override;
-    /// overriden method for direct external database engine call
+    /// overridden method for direct external database engine call
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
      {{ begin a transaction (implements REST BEGIN Member)
      - to be used to speed up some SQL statements like Insert/Update/Delete
@@ -269,9 +269,9 @@ type
     {{ abort a transaction (implements REST ABORT Member)
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=1); override;
-     /// overriden method for direct external database engine call
+     /// overridden method for direct external database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
-     /// overriden method for direct external database engine call
+     /// overridden method for direct external database engine call
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
     /// update a field value of the external database
     function EngineUpdateField(TableModelIndex: integer;
@@ -284,7 +284,7 @@ type
     /// this method is called by TSQLRestServer.EndCurrentThread method just
     // before a thread is finished to ensure that the associated external DB
     // connection will be released for this thread
-    // - this overriden implementation will clean thread-specific connections,
+    // - this overridden implementation will clean thread-specific connections,
     // i.e. call TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread method
     // - this method shall be called directly, nor from the main thread
     procedure EndCurrentThread(Sender: TThread); override;
@@ -357,7 +357,7 @@ type
      associated this virtual table module to any TSQLRecord class
    - transactions are handled by this module, according to the external database }
   TSQLVirtualTableExternal = class(TSQLVirtualTable)
-  public { overriden methods }
+  public { overridden methods }
     /// returns the main specifications of the associated TSQLVirtualTableModule
     // - this is a read/write table, without transaction (yet), associated to the
     // TSQLVirtualTableCursorExternal cursor type, with 'External' as module name
@@ -368,7 +368,7 @@ type
       override;
     /// called to determine the best way to access the virtual table
     // - will prepare the request for TSQLVirtualTableCursor.Search()
-    // - this overriden method will let the external DB engine perform the search,
+    // - this overridden method will let the external DB engine perform the search,
     // using a standard SQL "SELECT * FROM .. WHERE .. ORDER BY .." statement
     // - in Where[], Expr must be set to not 0 if needed for Search method,
     // and OmitCheck always set to true since double check is not necessary
@@ -1130,7 +1130,7 @@ end;
 
 function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 var Stmt: ISQLDBStatement;
-begin // TableModelIndex is not usefull here
+begin // TableModelIndex is not useful here
   result := '';
   if (self=nil) or (ID<=0) then
     exit;
