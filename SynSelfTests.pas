@@ -5435,6 +5435,9 @@ var readonly: boolean;
     docs: variant;
     T: TSQLTable;
 {$endif}
+{$ifdef ISDELPHI2010}
+var List: TObjectList<TSQLRecordTest>;
+{$endif}
 begin
   Model := TSQLModel.Create([TSQLRecordTest]);
   try
@@ -5499,6 +5502,21 @@ begin
         finally
           R.Free;
         end;
+        {$ifdef ISDELPHI2010}
+        List := Client.RetrieveList<TSQLRecordTest>('*');
+        if not CheckFailed(List<>nil) then
+          try
+            Check(List.Count=9999);
+            for R in List do
+              CheckRWith(R.ID);
+            for i := 0 to List.Count-1 do begin
+              R := List[i];
+              CheckRWith(i+1);
+            end;
+          finally
+            List.Free;
+          end;
+        {$endif}
         {$ifndef NOVARIANTS}
         for readonly := false to true do begin
           T := Client.MultiFieldValues(TSQLRecordTest,'*');

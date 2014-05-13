@@ -935,6 +935,7 @@ unit mORMot;
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
     - added TSQLRest.RetrieveList method to retrieve a TObjectList of TSQLRecord
+    - added TSQLRest.RetrieveList<T> generic method to retrieve a TObjectList<T>
     - added TSQLRest.UpdateField() overloaded methods to update a single field
     - "rowCount": is added in TSQLRestStorageInMemory.GetJSONValues,
       TSQLTable.GetJSONValues and in TSQLTableJSON.ParseAndConvert, at the end
@@ -5376,7 +5377,7 @@ type
       -sizeof(integer)] of byte;
     /// reference to the associated TSQLTable
     VTable: TSQLTable;
-    /// the row number corresponding of this value
+    /// the row number corresponding to this value
     // - equals -1 if should follow StepRow property value
     VRow: integer;
   end;
@@ -8692,7 +8693,7 @@ type
       IDToIndex: PInteger=nil): Boolean; overload;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - FieldNames can be a CSV list of needed field names, if needed
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - call internaly ExecuteList() to get the list
@@ -8701,7 +8702,7 @@ type
        const WhereClause: RawUTF8=''): TSQLTableJSON; overload; virtual;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - FieldNames can be a CSV list of needed field names, if needed
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - this overloaded function will call FormatUTF8 to create the Where Clause
@@ -8716,7 +8717,7 @@ type
       WhereClauseFormat: PUTF8Char; const BoundsSQLWhere: array of const): TSQLTableJSON; overload;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - FieldNames can be a CSV list of needed field names, if needed
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - in this version, the WHERE clause can be created with the same format
@@ -8813,28 +8814,48 @@ type
     function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
     /// get a list of members from a SQL statement
     // - implements REST GET collection
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
     // - return nil on error
     function RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
-      const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): TObjectList;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): TObjectList; overload;
     {$ifndef NOVARIANTS}
-    /// get a list of members from a SQL statement as a TDocVariant
+    /// get a list of all members from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - if ObjectName='', it will return a TDocVariant of dvArray kind
     // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
     // with one property containing the array of values: this returned variant
     // can be pasted e.g. directly as parameter to TSynMustache.Render() 
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName, CustomFieldsCSV: RawUTF8): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get a list of members from a SQL statement as a TDocVariant
-    // - implements REST GET collection
+    // - implements REST GET collection over a specified WHERE clause
     // - if ObjectName='', it will return a TDocVariant of dvArray kind
     // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
     // with one property containing the array of values: this returned variant
     // can be pasted e.g. directly as parameter to TSynMustache.Render()
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
@@ -9223,6 +9244,44 @@ type
     /// get an instance of one interface-based service
     // - may return nil if this service interface is not available
     function Service<T: IInterface>: T;
+    /// get a list of members from a SQL statement
+    // - implements REST GET collection
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
+    // responsible of freeing the instance
+    // - return nil on error
+    // - you can write for instance:
+    // !var List: TObjectList<TSQLRecordTest>;
+    // !    R: TSQLRecordTest;
+    // ! ...
+    // !    List := Client.RetrieveList<TSQLRecordTest>('ID,Test');
+    // !    if List<>nil then
+    // !    try
+    // !      for R in List do
+    // !        writeln(R.ID,'=',R.Test);
+    // !    finally
+    // !      List.Free;
+    // !    end;
+    function RetrieveList<T: TSQLRecord>(const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
+       {$ifdef HASINLINE}inline;{$endif}
+    /// get a list of members from a SQL statement
+    // - implements REST GET collection with a WHERE clause
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
+    // responsible of freeing the instance
+    // - return nil on error
+    function RetrieveList<T: TSQLRecord>(FormatSQLWhere: PUTF8Char;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
     {$endif}
 
     /// how this class execute its internal commands
@@ -22353,7 +22412,7 @@ begin
 end;
 
 function TSQLRest.RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
-  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): TObjectList;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList;
 var T: TSQLTable;
 begin
   result := nil;
@@ -23051,6 +23110,7 @@ begin
 end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+
 function TSQLRest.Service<T>: T;
 var service: TServiceFactory;
 begin
@@ -23058,8 +23118,29 @@ begin
   if (service=nil) or not service.Get(result) then
     result := Default(T);
 end;
-{$endif}
 
+function TSQLRest.RetrieveList<T>(const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+begin
+  result := RetrieveList<T>(nil,[],aCustomFieldsCSV);
+end;
+
+function TSQLRest.RetrieveList<T>(FormatSQLWhere: PUTF8Char;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+var Table: TSQLTable;
+begin
+  result := nil;
+  if self=nil then
+    exit;
+  Table := MultiFieldValues(TSQLRecordClass(T),aCustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
+  if Table<>nil then
+  try
+    result := Table.ToObjectList<T>;
+  finally
+    Table.Free;
+  end;
+end;
+
+{$endif}
 
 procedure TSQLRest.BatchAbort;
 begin
