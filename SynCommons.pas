@@ -8880,6 +8880,12 @@ type
     // - will be almost immediate, since TVariantDynArray is reference-counted
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
       aOptions: TDocVariantOptions=[]);
+    /// initialize a variant instance to store some document-based array content
+    // - array will be initialized with data supplied as variant dynamic array
+    // - if Items is [], the variant will be set as null
+    // - will be almost immediate, since TVariantDynArray is reference-counted
+    procedure InitObjectFromVariants(const aNames: TRawUTF8DynArray;
+       const aValues: TVariantDynArray; aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - warning: the incoming JSON buffer will be modified in-place: so you
@@ -25975,6 +25981,20 @@ begin
     VValue := Items; // direct by-reference copy
   end;
 end;
+
+procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUTF8DynArray;
+  const aValues: TVariantDynArray; aOptions: TDocVariantOptions=[]);
+begin
+  if (aNames=nil) or (aValues=nil) or (length(aNames)<>length(aValues)) then
+    VType := varNull else begin
+    Init(aOptions);
+    VCount := length(aNames);
+    VKind := dvObject;
+    VName := aNames; // direct by-reference copy
+    VValue := aValues;
+  end;
+end;
+
 
 function TDocVariantData.InitJSONInPlace(JSON: PUTF8Char;
   aOptions: TDocVariantOptions; aEndOfObject: PUTF8Char): PUTF8Char;
