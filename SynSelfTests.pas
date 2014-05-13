@@ -3707,7 +3707,7 @@ type
     fork: boolean;
     owner: record
       login: RawUTF8;
-      id: cardinal;
+      id: currency;
     end;
   end;
   TTestCustomJSONGitHubs = array of TTestCustomJSONGitHub;
@@ -3753,7 +3753,7 @@ const // convention may be to use __ before the type name
     'A,B Int64 C array of TGUID D RawUTF8 E [F RawUTF8 G array of RawUTF8] H RawUTF8';
   __TTestCustomJSONArrayVariant =  'A,B Int64 C array of variant D RawUTF8';
   __TTestCustomJSONGitHub = 'name RawUTF8 id cardinal description RawUTF8 '+
-    'fork boolean owner{login RawUTF8 id cardinal}';
+    'fork boolean owner{login RawUTF8 id currency}';
   __TTestCustomJSON2Title = 'TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL RawUTF8';
   __TTestCustomJSON2 = 'Transactions [TRTYPE RawUTF8 TRDATE TDateTime TRAA RawUTF8 '+
     'TRCAT1,TRCAT2,TRCAT3,TRACID TTestCustomJSON2Title '+

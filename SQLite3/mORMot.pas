@@ -13579,33 +13579,85 @@ begin
   result := true;
 end;
 
+const
+  NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
+  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
+  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
+
 {$ifndef NOVARIANTS}
-procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
-var result: RawUTF8;
-    I64: Int64;
+procedure ValueVarToVariant(Value: PUTF8Char; FT: TSQLFieldType;
+  var result: TVarData; createValueTempCopy: boolean);
+const
+  /// map our available types for any SQL field property into variant values
+  // - varNull will be used to store a true variant instance from JSON
+  SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
+ // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
+    varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
+ // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
+    varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
+ // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
+    varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
+ // sftBlobCustom, sftUTF8Custom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif}
+    varString,      varString,    {$ifdef PUBLISHRECORD} varString, {$endif}
+ // sftMany, sftModTime, sftCreateTime
+    varEmpty, varInt64, varInt64);
+var tempCopy: RawUTF8;
+    err: integer;
+label str;
 begin
-  GetValueVar(Instance,true,result,nil);
-  case fSQLFieldType of
-    sftBoolean:
-      Dest := boolean(GetInteger(pointer(result)));
-    sftEnumerate, sftSet, sftInteger, sftID, sftRecord,
-    sftTimeLog, sftModTime, sftCreateTime: begin
-      I64 := GetInt64(pointer(result));
-      if (I64<=high(integer)) and (I64>=low(integer)) then
-        Dest := integer(I64) else
-        Dest := I64;
+  if not (result.VType in VTYPE_STATIC) then
+    VarClear(variant(result));
+  result.VType := SQL_ELEMENTTYPES[FT];
+  case FT of
+  sftCurrency:
+    result.VInt64 := StrToCurr64(Value);
+  sftFloat: begin
+    result.VDouble := GetExtended(Value,err);
+    if err<>0 then begin
+str:  result.VType := varString;
+      result.VAny := nil; // avoid GPF
+      RawUTF8(result.VAny) := Value;
     end;
-    sftFloat:
-      Dest := GetExtended(pointer(result));
-    sftCurrency: begin
-      I64 := StrToCurr64(Pointer(result));
-      Dest := PCurrency(@I64)^;
-    end;
-    sftDateTime:
-      Dest := Iso8601ToDateTime(result);
-  else
-    Dest := UTF8ToString(result); // other types will be converted to string
   end;
+  sftDateTime:
+    result.VDate := Iso8601ToDateTimePUTF8Char(Value,0);
+  sftBoolean:
+    result.VBoolean := (Value=nil) or (PWord(Value)^=ord('0')) or
+      (PInteger(Value)^=FALSE_LOW);
+  sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog,
+  sftModTime, sftCreateTime, sftRecord: begin
+    result.VInt64 := GetInt64(Value,err);
+    if err<>0 then
+      goto str;
+    if (result.VInt64<=high(integer)) and (result.VInt64>=low(integer)) then
+      result.VType := varInteger;
+  end;
+  sftMany:
+    exit;
+  sftAnsiText, sftUTF8Text, sftUTF8Custom: begin
+    pointer(result.VAny) := nil;
+    RawUTF8(result.VAny) := Value;
+  end;
+  sftBlobCustom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif} sftBlob: begin
+    pointer(result.VAny) := nil;
+    RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
+  end;
+  sftObject, sftVariant, sftBlobDynArray: begin
+    if createValueTempCopy then begin
+      tempCopy := Value;
+      Value := pointer(tempCopy);
+    end;
+    GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
+  end;
+  else raise ESQLTableException.CreateFmt('Unexpected type %d',[ord(FT)]);
+  end;
+end;
+
+procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
+var temp: RawUTF8;
+begin
+  GetValueVar(Instance,true,temp,nil);
+  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false);
 end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
@@ -13908,11 +13960,6 @@ procedure TSQLPropInfoRTTIChar.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be UTF-8 encoded
 end;
 
-const
-  NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
-  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
-  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
-
 procedure TSQLPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
 var i: integer;
 begin
@@ -14112,7 +14159,7 @@ end;
 
 procedure TSQLPropInfoRTTICurrency.NormalizeValue(var Value: RawUTF8);
 begin
-  Value := CurrencyToStr(StrToCurr64(pointer(Value)));
+  Value := Curr64ToStr(StrToCurr64(pointer(Value)));
 end;
 
 procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
@@ -17431,74 +17478,11 @@ begin
   GetVariant(Row,Field,Client,result);
 end;
 
-const
-  /// map our available types for any SQL field property into variant values
-  // - varNull will be used to store a true variant instance from JSON
-  SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
- // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
- // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
- // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
-    varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
- // sftBlobCustom, sftUTF8Custom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif}
-    varString,      varString,    {$ifdef PUBLISHRECORD} varString, {$endif}
- // sftMany, sftModTime, sftCreateTime
-    varEmpty, varInt64, varInt64);
-
 procedure TSQLTable.GetVariant(Row,Field: integer; Client: TObject; var result: variant);
-var FT: TSQLFieldType;
-    Value: PUTF8Char;
-    JSON: RawUTF8;
-    err: integer;
-label str;
 begin
-  if Row=0 then begin // Field Name
-    result := GetCaption(0,Field);
-    exit;
-  end;
-  Value := Get(Row,Field);
-  FT := FieldType(Field);
-  with TVarData(result) do begin
-    if not (VType in VTYPE_STATIC) then
-      VarClear(result);
-    VType := SQL_ELEMENTTYPES[FT];
-    pointer(VAny) := nil;
-    case FT of
-    sftCurrency:
-      VInt64 := StrToCurr64(Value);
-    sftFloat: begin
-      VDouble := GetExtended(Value,err);
-      if err<>0 then begin
-str:    VType := varString;
-        VAny := nil; // avoid GPF 
-        RawUTF8(VAny) := Value;
-      end;
-    end;
-    sftDateTime:
-      VDate := Iso8601ToDateTimePUTF8Char(Value,0);
-    sftBoolean:
-      VBoolean := (Value=nil) or (PWord(Value)^=ord('0')) or
-        (PInteger(Value)^=FALSE_LOW);
-    sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog,
-    sftModTime, sftCreateTime, sftRecord: begin
-      VInt64 := GetInt64(Value,err);
-      if err<>0 then
-        goto str;
-    end;
-    sftMany:
-      exit;
-    sftAnsiText, sftUTF8Text, sftUTF8Custom:
-      RawUTF8(VAny) := Value;
-    sftBlobCustom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif} sftBlob:
-      RawByteString(VAny) := BlobToTSQLRawBlob(Value);
-    sftObject, sftVariant, sftBlobDynArray: begin
-      JSON := Value; // need a temporary local copy for objects
-      GetVariantFromJSON(pointer(JSON),false,result,@JSON_OPTIONS[true]);
-    end;
-    else raise ESQLTableException.CreateFmt('Unexpected type %d',[ord(FT)]);
-    end;
-  end;
+  if Row=0 then // Field Name
+    RawUTF8ToVariant(GetU(0,Field),result) else
+    ValueVarToVariant(Get(Row,Field),FieldType(Field),TVarData(result),true);
 end;
 
 {$endif NOVARIANTS}
