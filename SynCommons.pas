@@ -24556,7 +24556,7 @@ var EndOfObject: AnsiChar;
                      PBoolean(Data)^ := GetInteger(PropValue)<>0;
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
-      ptCurrency:  PCurrency(Data)^ := StrToCurr64(PropValue);
+      ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
       ptInt64:     PInt64(Data)^ := GetInt64(PropValue);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
