@@ -5402,6 +5402,7 @@ begin
 end;
 procedure CheckRWith(i: Integer; offset: integer=0);
 begin
+  Check(R.ID=i);
   Check(R.Int=i);
   Check(R.Test=Int32ToUtf8(i));
   Check(R.Ansi=WinAnsiString(R.Test));
@@ -5415,6 +5416,25 @@ begin
   Check(VariantSaveJson(R.ValVariant)='{"id":'+R.Test+'}');
 {$endif}
 end;
+{$ifndef NOVARIANTS}
+procedure CheckVariantWith(const V: Variant; i: Integer; offset: integer=0);
+begin
+  Check(V.ID=i);
+  Check(V.Int=i);
+  Check(V.Test=Int32ToUtf8(i));
+  Check(V.Ansi=V.Test);
+  Check(V.Unicode=V.Test);
+  Check(V.ValFloat=i*2.5);
+  Check(V.ValWord=i+offset);
+  Check(V.ValDate=i+30000);
+  Check(V.Data=V.Test);
+  Check(DocVariantType.IsOfType(V.ValVariant));
+  Check(VariantSaveJson(V.ValVariant)='{"id":'+V.Test+'}');
+end;
+var readonly: boolean;
+    docs: variant;
+    T: TSQLTable;
+{$endif}
 begin
   Model := TSQLModel.Create([TSQLRecordTest]);
   try
@@ -5479,6 +5499,24 @@ begin
         finally
           R.Free;
         end;
+        {$ifndef NOVARIANTS}
+        for readonly := false to true do begin
+          T := Client.MultiFieldValues(TSQLRecordTest,'*');
+          if CheckFailed(T<>nil) then
+            Continue;
+          Check(T.RowCount=9999);
+          T.ToDocVariant(docs,readonly);
+          with DocVariantData(docs)^ do
+            for i := 0 to Count-1 do
+              CheckVariantWith(Values[i],i+1);
+          T.Free;
+        end;
+        dummy := TSynMustache.Parse(
+          '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
+          Client.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
+        check(IdemPChar(pointer(dummy),'1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
+        check(Hash32(dummy)=$BC89CA72);
+        {$endif}
         Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100+10]),
           'update one field of a given record');
         R := TSQLRecordTest.Create(Client,100);
@@ -5517,11 +5555,18 @@ begin
             if i=110 then
               CheckRWith(i,10) else
               CheckRWith(i);
+            {$ifdef NOVARIANTS} // FillPrepare([200,300]) below not available
+            if (i=200) or (i=300) then begin
+              FillRWith(R.ID+10);
+              Check(Client.Update(R,'ValWord,ValDate'),'update only 2 fields');
+            end;
+            {$endif}
           end;
           Check(i=10099);
         finally
           R.Free;
         end;
+        {$ifndef NOVARIANTS} // SELECT .. IN ... is implemented via a TDocVariant
         R := TSQLRecordTest.CreateAndFillPrepare(Client,[200,300],'ValWord,ValDate,ID');
         try
           i := 0;
@@ -5535,6 +5580,7 @@ begin
         finally
           R.Free;
         end;
+        {$endif}
         R := TSQLRecordTest.CreateAndFillPrepare(Server,'','*');
         try
           i := 0;

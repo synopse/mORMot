@@ -875,7 +875,7 @@ unit mORMot;
     - TSQLAuthUser and TSQLAuthGroup have now "index ..." attributes to their
       RawUTF8 properties, to allow direct handling in external databases
     - new protected TSQLRestServer.InternalAdaptSQL method, extracted from URI()
-      process to also be called by TSQLRestServer.InternalListJSON() for proper
+      process to also be called by TSQLRestServer.MultiFieldValues() for proper
       TSQLRestStorage.AdaptSQLForEngineList(SQL) call
     - new TSQLRestStorage.fOutInternalStateForcedRefresh protected field to
       optionally force the refresh of the content
@@ -916,6 +916,9 @@ unit mORMot;
     - added TSQLTable.Step(), FieldBuffer() and Field() methods, handling a
       cursor at TSQLTable level, with optional late-binding column access
     - added TSQLTable.GetSynUnicode() method
+    - added TSQLTable.ToDocVariant() and TSQLRest.RetrieveDocVariantArray()
+      overloaded methods, which can be used e.g. to process directly some data
+      retrieved from the ORM with TSynMustache.Render()
     - added TSQLRecord.CreateAndFillPrepare(aJSON) overloaded method
     - introducing TSQLRecordInterfaced class, if your TSQLRecord definition
       should be able to implement interfaces
@@ -4859,14 +4862,15 @@ type
   // - contain all result in memory, until destroyed
   // - first row contains the field names
   // - following rows contains the data itself
-  // - GetA() or GetW() can be used in a TDrawString
-  // - will be implemented as TSQLTableDB for direct SQLite3 database engine call,
-  //  or as TSQLTableJSON for remote access through optimized JSON messages
+  // - GetString() can be used in a TDrawString
+  // - will be implemented as TSQLTableJSON for remote access through optimized
+  // JSON content
   TSQLTable = class
   private
     fQueryTables: TSQLRecordClassDynArray;
     fQueryColumnTypes: array of TSQLFieldType;
     fQuerySQL: RawUTF8;
+    fFieldNames: TRawUTF8DynArray;
     fFieldLengthMean: TIntegerDynArray;
     fFieldLengthMeanSum: integer;
   protected
@@ -4886,7 +4890,7 @@ type
       // the corresponding index in fQueryTables[]
       TableIndex: integer;
     end;
-    /// used by FieldIndex() for fast binary searcg
+    /// used by FieldIndex() for fast binary search
     fFieldNameOrder: TCardinalDynArray;
     /// contain the fResults[] pointers, after a IDColumnHide() call
     fIDColumn, fNotIDColumn: array of PUTF8Char;
@@ -4906,6 +4910,8 @@ type
     fStepRow: integer;
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
+    /// fill the fFieldNames[] array
+    procedure InitFieldNames;
   public
     /// initialize the result table
     // - you can optionaly associate the corresponding TSQLRecordClass types,
@@ -5053,6 +5059,34 @@ type
     {/ get all values for a specified field as CSV
      - don't perform any conversion, but create a CSV from raw PUTF8Char data }
     function GetRowValues(Field: integer; Sep: AnsiChar=','): RawUTF8; overload;
+    {$ifndef NOVARIANTS}
+    {/ retrieve a row value as a variant, ready to be accessed via late-binding
+    - Row parameter numbering starts from 1 to RowCount
+    - this method will return a TDocVariant containing a copy of all
+      field values of this row, uncoupled to the TSQLTable instance life time }
+    procedure ToDocVariant(Row: integer; out doc: variant); overload;
+    {/ retrieve all row values as a dynamic array of variants, ready to be
+      accessed via late-binding
+    - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
+      will point directly to the TSQLTable, which should remain allocated
+    - if readonly is FALSE, will contain an array of TDocVariant, containing
+      a copy of all field values of this row, uncoupled to the TSQLTable instance
+    - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
+      may be slightly slower to access than readonly=FALSE, if all values are
+      likely be accessed later in the process }
+    procedure ToDocVariant(out docs: TVariantDynArray; readonly: boolean); overload;
+    {/ retrieve all row values as a TDocVariant of kind dvArray, ready to be
+      accessed via late-binding
+    - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
+      will point directly to the TSQLTable, which should remain allocated
+    - if readonly is FALSE, will contain an array of TDocVariant, containing
+      a copy of all field values of this row, uncoupled to the TSQLTable instance
+    - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
+      may be slightly slower to access than readonly=FALSE, if all values are
+      likely be accessed later in the process }
+    procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif NOVARIANTS}
 
     /// save the table values in JSON format
     // - JSON data is added to TStream, with UTF-8 encoding
@@ -5113,7 +5147,15 @@ type
      - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
        (X'53514C697465' e.g.)
      - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only }
-    function FieldType(Field: integer; EnumTypeInfo: PPointer=nil): TSQLFieldType;
+    function FieldType(Field: integer): TSQLFieldType; overload;
+    {/ guess the field type from first non null data row
+     - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
+       retrieved from the Delphi RTTI; otherwise, get from the cells content
+     - return sftUnknown is all data fields are null
+     - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+       (X'53514C697465' e.g.)
+     - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only }
+    function FieldType(Field: integer; EnumTypeInfo: PPointer): TSQLFieldType; overload;
     {/ get the appropriate Sort comparaison function for a field,
       nil if not available (bad field index or field is blob)
       - field type is guessed from first data row }
@@ -5229,8 +5271,7 @@ type
     // nor modify the internal DataSet
     procedure DeleteRow(Row: integer);
     /// delete the specified Column text from the Table
-    // - don't delete the Column: only delete UTF-8 text in all rows for this
-    // field
+    // - don't delete the Column: only delete UTF-8 text in all rows for this field
     procedure DeleteColumnValues(Field: integer);
 
     /// retrieve QueryTables[0], if existing
@@ -5324,13 +5365,41 @@ type
   end;
 
 {$ifndef NOVARIANTS}
+  /// memory structure used for our TSQLTableRowVariant custom variant type
+  // used to have direct access to TSQLTable content
+  // - the associated TSQLTable must stay allocated as long as this variant
+  // is used, otherwise random GPF issues may occur
+  TSQLTableRowVariantData = packed record
+    /// the custom variant type registered number
+    VType: TVarType;
+    VFiller: array[1..sizeof(TVarData)-sizeof(TVarType)-sizeof(TSQLTable)
+      -sizeof(integer)] of byte;
+    /// reference to the associated TSQLTable
+    VTable: TSQLTable;
+    /// the row number corresponding of this value
+    // - equals -1 if should follow StepRow property value
+    VRow: integer;
+  end;
+
+  /// pointer to the memory structure used for TSQLTableRowVariant storage
+  PSQLTableRowVariantData = ^TSQLTableRowVariantData;
+
   /// a custom variant type used to have direct access to TSQLTable content
   // - use TSQLTable.Step(..,@Data) method to initialize such a Variant
-  // - the variant members/fields are read-only by design 
-  TSQLTableRowVariantType = class(TSynInvokeableVariantType)
+  // - the variant members/fields are read-only by design
+  // - the associated TSQLTable must stay allocated as long as this variant
+  // is used, otherwise random GPF issues may occur
+  TSQLTableRowVariant = class(TSynInvokeableVariantType)
   protected
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
+  public
+    /// handle type conversion to string
+    procedure Cast(var Dest: TVarData; const Source: TVarData); override;
+    /// handle type conversion to string
+    procedure CastTo(var Dest: TVarData; const Source: TVarData;
+      const AVarType: TVarType); override;
   end;
 {$endif NOVARIANTS}
 
@@ -8359,19 +8428,6 @@ type
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
-    /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
-    // and MultiFieldValue() public functions below
-    // - call virtual abstract ExecuteList() method to get the list content
-    // - FieldName can be a CSV list of needed field names, if needed
-    // - if FieldName is '*', will get ALL fields, including ID and BLOBs
-    function InternalListJSON(Table: TSQLRecordClass; const FieldName, WhereClause: RawUTF8): TSQLTableJSON; overload;
-    /// retrieve all fields for a list of members JSON encoded data
-    // - this special method gets all fields content for a specified table:
-    // the resulting TSQLTableJSON content can be used to fill whole records
-    // instances by using the TSQLRecord.FillPrepare() and TSQLRecord.FillRow()
-    // methods
-    // - call virtual abstract ExecuteList() method to get the list content
-    function InternalListRecordsJSON(Table: TSQLRecordClass; const WhereClause: RawUTF8): TSQLTableJSON;
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
     // - e.g. you can add digital signature to a record to disallow record editing
@@ -8636,19 +8692,23 @@ type
       IDToIndex: PInteger=nil): Boolean; overload;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - if FieldNames='', all simple fields content is retrieved
+    // - FieldNames can be a CSV list of needed field names, if needed
+    // - if FieldNames is '', will get all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - call internaly ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
-    function MultiFieldValues(Table: TSQLRecordClass; FieldNames: RawUTF8;
+    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
        const WhereClause: RawUTF8=''): TSQLTableJSON; overload; virtual;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - if FieldNames='', all simple fields content is retrieved
+    // - FieldNames can be a CSV list of needed field names, if needed
+    // - if FieldNames is '', will get all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
     // ! aList := aClient.MultiFieldValues(TSQLRecord,'Name,FirstName','Salary>=?',[aMinSalary]);
-    // - call internaly MultiFieldValues() to get the list
+    // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the WhereClauseFormat
     // statement, whereas it now expects bound parameters as '?'
@@ -8656,13 +8716,15 @@ type
       WhereClauseFormat: PUTF8Char; const BoundsSQLWhere: array of const): TSQLTableJSON; overload;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
-    // - if FieldNames='', all simple fields content is retrieved
+    // - FieldNames can be a CSV list of needed field names, if needed
+    // - if FieldNames is '', will get all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
     // ! Table := MultiFieldValues(TSQLRecord,'Name','%=?',['ID'],[aID]);
-    // - call internaly MultiFieldValues() to get the list
+    // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
       WhereClauseFormat: PUTF8Char; const Args, Bounds: array of const): TSQLTableJSON; overload;
     /// retrieve the main field (mostly 'Name') value of the specified record
@@ -8757,6 +8819,28 @@ type
     // - return nil on error
     function RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): TObjectList;
+    {$ifndef NOVARIANTS}
+    /// get a list of members from a SQL statement as a TDocVariant
+    // - implements REST GET collection
+    // - if ObjectName='', it will return a TDocVariant of dvArray kind
+    // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
+    // with one property containing the array of values: this returned variant
+    // can be pasted e.g. directly as parameter to TSynMustache.Render() 
+    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+      const ObjectName, CustomFieldsCSV: RawUTF8): variant; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// get a list of members from a SQL statement as a TDocVariant
+    // - implements REST GET collection
+    // - if ObjectName='', it will return a TDocVariant of dvArray kind
+    // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
+    // with one property containing the array of values: this returned variant
+    // can be pasted e.g. directly as parameter to TSynMustache.Render()
+    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+      const ObjectName: RawUTF8;
+      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const CustomFieldsCSV: RawUTF8): variant; overload;
+    {$endif}
+
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -13603,7 +13687,6 @@ const
     varEmpty, varInt64, varInt64);
 var tempCopy: RawUTF8;
     err: integer;
-label str;
 begin
   if not (result.VType in VTYPE_STATIC) then
     VarClear(variant(result));
@@ -13614,7 +13697,7 @@ begin
   sftFloat: begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
-str:  result.VType := varString;
+      result.VType := varString;
       result.VAny := nil; // avoid GPF
       RawUTF8(result.VAny) := Value;
     end;
@@ -13624,14 +13707,10 @@ str:  result.VType := varString;
   sftBoolean:
     result.VBoolean := (Value=nil) or (PWord(Value)^=ord('0')) or
       (PInteger(Value)^=FALSE_LOW);
-  sftEnumerate, sftID, sftSet, sftInteger, sftTimeLog,
-  sftModTime, sftCreateTime, sftRecord: begin
-    result.VInt64 := GetInt64(Value,err);
-    if err<>0 then
-      goto str;
-    if (result.VInt64<=high(integer)) and (result.VInt64>=low(integer)) then
-      result.VType := varInteger;
-  end;
+  sftEnumerate, sftID, sftRecord, sftInteger:
+    result.VInteger := GetInteger(Value);
+  sftSet, sftTimeLog, sftModTime, sftCreateTime:
+    result.VInt64 := GetInt64(Value);
   sftMany:
     exit;
   sftAnsiText, sftUTF8Text, sftUTF8Custom: begin
@@ -15828,6 +15907,71 @@ begin
   dec(fRowCount);
 end;
 
+procedure TSQLTable.InitFieldNames;
+var f: integer;
+    P: PUTF8Char;
+begin
+  SetLength(fFieldNames,fFieldCount); // share one TRawUTF8DynArray
+  for f := 0 to fFieldCount-1 do begin
+    P := Get(0,f);
+    if IsRowID(P) then // normalize RowID field name to ID
+      fFieldNames[f] := 'ID' else
+      fFieldNames[f] := P;
+  end;
+end;
+
+{$ifndef NOVARIANTS}
+
+var
+  SQLTableRowVariantType: TCustomVariantType = nil;
+
+procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant);
+var Values: TVariantDynArray;
+    V: PPUtf8CharArray;
+    f: integer;
+begin
+  if (self=nil) or (Row<1) or (Row>RowCount) then
+    exit; // out of range
+  if length(fFieldNames)<>fFieldCount then
+    InitFieldNames;
+  if not Assigned(fFieldType) then
+    InitFieldTypes;
+  SetLength(Values,fFieldCount);
+  V := @fResults[Row*FieldCount];
+  for f := 0 to fFieldCount-1 do
+    ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true);
+  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,JSON_OPTIONS[true]);
+end;
+
+procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
+var r: integer;
+begin
+  if (self=nil) or (RowCount=0) then
+    exit;
+  SetLength(docs,RowCount);
+  if readonly then begin
+    if SQLTableRowVariantType=nil then
+      SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariant);
+    for r := 0 to RowCount-1 do
+    with TSQLTableRowVariantData(docs[r]) do begin
+      VType := SQLTableRowVariantType.VarType;
+      VTable := self;
+      VRow := r+1;
+    end;
+  end else
+    for r := 0 to RowCount-1 do
+      ToDocVariant(r+1,docs[r]);
+end;
+
+procedure TSQLTable.ToDocVariant(out docarray: variant; readonly: boolean);
+var Values: TVariantDynArray;
+begin
+  ToDocVariant(Values,readonly);
+  TDocVariantData(docarray).InitArrayFromVariants(Values,JSON_OPTIONS[true]);
+end;
+
+{$endif NOVARIANTS}
+
 procedure TSQLTable.DeleteColumnValues(Field: integer);
 var i: integer;
     U: PPUTF8Char;
@@ -15970,6 +16114,16 @@ begin
       EnumTypeInfo := P;
     end;
   end;
+end;
+
+function TSQLTable.FieldType(Field: integer): TSQLFieldType;
+begin
+  if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
+    if not Assigned(fFieldType) then
+      InitFieldTypes;
+    result := fFieldType[Field].ContentType;
+  end else
+    result := sftUnknown;
 end;
 
 function TSQLTable.FieldType(Field: integer; EnumTypeInfo: PPointer): TSQLFieldType;
@@ -16952,7 +17106,8 @@ begin
   fFieldIndexID := -1;
 end;
 
-constructor TSQLTable.CreateFromTables(const Tables: array of TSQLRecordClass; const aSQL: RawUTF8);
+constructor TSQLTable.CreateFromTables(const Tables: array of TSQLRecordClass;
+  const aSQL: RawUTF8);
 var n: integer;
 begin
   Create(aSQL);
@@ -16963,7 +17118,8 @@ begin
   end;
 end;
 
-constructor TSQLTable.CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType; const aSQL: RawUTF8);
+constructor TSQLTable.CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType;
+  const aSQL: RawUTF8);
 begin
   Create(aSQL);
   SetLength(fQueryColumnTypes,length(ColumnTypes));
@@ -17067,11 +17223,6 @@ begin
   ToObjectList(result,RecordType);
 end;
 
-{$ifndef NOVARIANTS}
-var
-  SQLTableRowVariantType: TCustomVariantType = nil;
-{$endif}
-
 function TSQLTable.Step(SeekFirst: boolean=false; RowVariant: PVariant=nil): boolean;
 begin
   result := false;
@@ -17087,13 +17238,15 @@ begin
   if RowVariant=nil then
     exit;
   if SQLTableRowVariantType=nil then
-    SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariantType);
+    SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariant);
   if (PVarData(RowVariant)^.VType=SQLTableRowVariantType.VarType) and
-     (PVarData(RowVariant)^.VPointer=self) then
+     (PSQLTableRowVariantData(RowVariant)^.VTable=self) and
+     (PSQLTableRowVariantData(RowVariant)^.VRow<0) then
     exit; // already initialized -> quick exit
   VarClear(RowVariant^);
-  PVarData(RowVariant)^.VType := SQLTableRowVariantType.VarType;
-  PVarData(RowVariant)^.VPointer := self;
+  PSQLTableRowVariantData(RowVariant)^.VType := SQLTableRowVariantType.VarType;
+  PSQLTableRowVariantData(RowVariant)^.VTable := self;
+  PSQLTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 {$endif NOVARIANTS}
 end;
 
@@ -17592,27 +17745,64 @@ end;
 
 {$ifndef NOVARIANTS}
 
-{ TSQLTableRowVariantType }
+{ TSQLTableRowVariant }
 
-procedure TSQLTableRowVariantType.IntGet(var Dest: TVarData;
+procedure TSQLTableRowVariant.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
-var ndx: integer;
+var r,f: integer;
 begin
-  if (TVarData(V).VPointer=nil) or (Name=nil) then
-    ESQLTableException.CreateFmt('Invalid TSQLTableRowVariantType.%s call',[Name]);
-  with TSQLTable(TVarData(V).VPointer) do begin
-    if (fStepRow=0) or (fStepRow>fRowCount) then
-      raise ESQLTableException.CreateFmt('TSQLTableRowVariantType.%s: no prior valid Step',[Name]);
-    ndx := FieldIndex(PUTF8Char(Name));
-    if cardinal(ndx)>=cardinal(fFieldCount) then
-      raise ESQLTableException.CreateFmt('TSQLTableRowVariantType.%s: unknown field',[Name]);
-    GetVariant(fStepRow,ndx,nil,Variant(Dest));
+  if (TSQLTableRowVariantData(V).VTable=nil) or (Name=nil) then
+    ESQLTableException.CreateFmt('Invalid TSQLTableRowVariant.%s call',[Name]);
+  r := TSQLTableRowVariantData(V).VRow;
+  if r<0 then begin
+    r := TSQLTableRowVariantData(V).VTable.fStepRow;
+    if (r=0) or (r>TSQLTableRowVariantData(V).VTable.fRowCount) then
+      raise ESQLTableException.CreateFmt('TSQLTableRowVariant.%s: no prior valid Step',[Name]);
+  end;
+  f := TSQLTableRowVariantData(V).VTable.FieldIndex(PUTF8Char(Name));
+  if cardinal(f)>=cardinal(TSQLTableRowVariantData(V).VTable.fFieldCount) then
+    raise ESQLTableException.CreateFmt('TSQLTableRowVariant.%s: unknown field',[Name]);
+  TSQLTableRowVariantData(V).VTable.GetVariant(r,f,nil,Variant(Dest));
+end;
+
+procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+begin
+  ESQLTableException.Create('TSQLTableRowVariant is read-only');
+end;
+
+procedure TSQLTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
+begin
+  CastTo(Dest,Source,VarType);
+end;
+
+procedure TSQLTableRowVariant.CastTo(var Dest: TVarData;
+  const Source: TVarData; const AVarType: TVarType);
+var r: integer;
+    tmp: variant; // use a temporary TDocVariant for the conversion
+begin
+  if AVarType=VarType then begin
+    RaiseCastError;
+  end else begin
+    if Source.VType<>VarType then
+      RaiseCastError;
+    r := TSQLTableRowVariantData(Source).VRow;
+    if r<0 then
+      r := TSQLTableRowVariantData(Source).VTable.fStepRow;
+    TSQLTableRowVariantData(Source).VTable.ToDocVariant(r,tmp);
+    RawUTF8ToVariant(VariantSaveJSON(tmp),Dest,AVarType);
   end;
 end;
 
-procedure TSQLTableRowVariantType.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+procedure TSQLTableRowVariant.ToJSON(W: TTextWriter; const Value: variant;
+  Escape: TTextWriterKind);
+var r: integer;
+    tmp: variant; // write row via a TDocVariant
 begin
-  ESQLTableException.Create('TSQLTableRowVariantType is read-only');
+  r := TSQLTableRowVariantData(Value).VRow;
+  if r<0 then
+    r := TSQLTableRowVariantData(Value).VTable.fStepRow;
+  TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
+  W.AddVariantJSON(tmp,Escape);
 end;
 
 {$endif NOVARIANTS}
@@ -19834,9 +20024,7 @@ begin
   FillClose; // so that no further FillOne will work
   if (self=nil) or (aClient=nil) then
     exit;
-  if aCustomFieldsCSV='' then
-    T := aClient.InternalListRecordsJSON(RecordClass,aSQLWhere) else
-    T := aClient.InternalListJSON(RecordClass,aCustomFieldsCSV,aSQLWhere);
+  T := aClient.MultiFieldValues(RecordClass,aCustomFieldsCSV,aSQLWhere);
   if T=nil then
     exit;
   T.OwnerMustFree := true;
@@ -20385,9 +20573,7 @@ constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
 var aTable: TSQLTable;
 begin
   Create;
-  if aCustomFieldsCSV='' then
-    aTable := aClient.InternalListRecordsJSON(RecordClass,aSQLWhere) else
-    aTable := aClient.InternalListJSON(RecordClass,aCustomFieldsCSV,aSQLWhere);
+  aTable := aClient.MultiFieldValues(RecordClass,aCustomFieldsCSV,aSQLWhere);
   if aTable=nil then
     exit;
   aTable.OwnerMustFree := true;
@@ -21248,7 +21434,7 @@ end;
 function TSQLModelRecordProperties.SQLFromSelectWhere(
   const SelectFields, Where: RawUTF8): RawUTF8;
 begin
-  result := SQLFromSelect(Props.Table.SQLTableName,SelectFields,Where,
+  result := SQLFromSelect(Props.SQLTableName,SelectFields,Where,
     SQL.TableSimpleFields[true,false]);
 end;
 
@@ -21942,7 +22128,7 @@ var i: integer;
 begin
   SetLength(Data,0);
   result := false;
-  T := InternalListJSON(Table,FieldName,WhereClause);
+  T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
     if (T.FieldCount<>1) or (T.RowCount<=0) then
@@ -22003,7 +22189,7 @@ var i, Len, SepLen, L: integer;
     P: PUTF8Char;
 begin
   result := '';
-  T := InternalListJSON(Table,FieldName,WhereClause);
+  T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
     if (T.FieldCount<>1) or (T.RowCount<=0) then
@@ -22071,7 +22257,7 @@ begin
   end;
   // retrieve the content from database
   result := false;
-  T := InternalListJSON(Table,FieldName,WhereClause);
+  T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
     if (T.FieldCount<>1) or (T.RowCount<=0) then
@@ -22083,52 +22269,22 @@ begin
   end;
 end;
 
-function TSQLRest.InternalListJSON(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8): TSQLTableJSON;
-begin
-  if (self=nil) or (Table=nil) then
-    result := nil else
-    with Table.RecordProps do
-    if (FieldName='*') then
-      result := ExecuteList([Table],
-        SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'')) else
-    if (PosEx(RawUTF8(','),FieldName,1)=0) and not IsFieldName(FieldName) then
-      result := nil else // prevent SQL error
-      result := ExecuteList([Table],
-        SQLFromSelect(SQLTableName,FieldName,WhereClause,''));
-end;
-
-function TSQLRest.InternalListRecordsJSON(Table: TSQLRecordClass;
-  const WhereClause: RawUTF8): TSQLTableJSON;
+function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
+  const FieldNames, WhereClause: RawUTF8): TSQLTableJSON;
 var sql: RawUTF8;
 begin
+  result := nil;
   if (self=nil) or (Table=nil) then
-    result := nil else begin
-    sql := Model.Props[Table].SQLFromSelectWhere('*',WhereClause);
-    result := ExecuteList([Table],sql);
-  end;
-end;
-
-function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; FieldNames: RawUTF8;
-  const WhereClause: RawUTF8): TSQLTableJSON;
-var P: PUTF8Char;
-    aFieldName: RawUTF8;
-begin
-  Result := nil;
-  if (self<>nil) and (Table<>nil) then
-  with Model.Props[Table] do begin
-    if FieldNames='' then
-      // true,false -> include 'ID,'
-      FieldNames := SQL.TableSimpleFields[true,false] else begin
-      P := pointer(FieldNames);
-      repeat
-        aFieldName := Trim(GetNextItem(P));
-        if not Props.IsFieldName(aFieldName) then
-          exit; // invalid field name
-      until P=nil;
-    end;
-    result := ExecuteList([Table],SQLFromSelectWhere(FieldNames,WhereClause));
-  end;
+    exit;
+  if FieldNames='' then
+    sql := Model.Props[Table].SQLFromSelectWhere('*',WhereClause) else
+  with Table.RecordProps do
+  if FieldNames='*' then
+    sql := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
+  if (PosEx(RawUTF8(','),FieldNames,1)=0) and not IsFieldName(FieldNames) then
+    exit else // prevent SQL error
+    sql := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
+  result := ExecuteList([Table],sql);
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
@@ -22198,16 +22354,12 @@ end;
 
 function TSQLRest.RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): TObjectList;
-var SQL: RawUTF8;
-    T: TSQLTable;
+var T: TSQLTable;
 begin
   result := nil;
   if (self=nil) or (Table=nil) then
     exit;
-  SQL := FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere);
-  if aCustomFieldsCSV<>'' then
-    T := InternalListJSON(Table,aCustomFieldsCSV,SQL) else
-    T := InternalListRecordsJSON(Table,SQL);
+  T := MultiFieldValues(Table,aCustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
   if T<>nil then
   try
     result := TObjectList.Create;
@@ -22216,6 +22368,36 @@ begin
     T.Free;
   end;
 end;
+
+{$ifndef NOVARIANTS}
+function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+  const ObjectName: RawUTF8;
+  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const CustomFieldsCSV: RawUTF8): variant;
+var T: TSQLTable;
+    res: variant;
+begin
+  TVarData(res).VType := varNull;
+  if (self<>nil) and (Table<>nil) then begin
+    T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
+    if T<>nil then
+    try
+      T.ToDocVariant(res,false); // readonly=false -> TDocVariant dvArray
+    finally
+      T.Free;
+    end;
+  end;
+  if ObjectName<>'' then
+    result := _ObjFast([ObjectName,res]) else
+    result := res;
+end;
+
+function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+  const ObjectName, CustomFieldsCSV: RawUTF8): variant;
+begin
+  result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV);
+end;
+{$endif}
 
 function TSQLRest.Retrieve(aID: integer; Value: TSQLRecord;
   ForUpdate: boolean): boolean;
@@ -27533,7 +27715,10 @@ end;
 
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
-var i,j,id,KnownRowsCount: integer;
+var i,KnownRowsCount: integer;
+    {$ifndef NOVARIANTS}
+    j,id: integer;
+    {$endif}
     W: TJSONSerializer;
 label err;
 begin // exact same format as TSQLTable.GetJSONValues()
@@ -30714,7 +30899,7 @@ begin
   Where := IDWhereSQL(aClient,aID,isDest,aAndWhereSQL);
   if Where='' then
     exit;
-  aTable := aClient.InternalListRecordsJSON(RecordClass,Where);
+  aTable := aClient.MultiFieldValues(RecordClass,'',Where);
   if aTable=nil then
     exit;
   aTable.OwnerMustFree := true;

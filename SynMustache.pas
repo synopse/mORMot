@@ -285,8 +285,12 @@ type
     // !  doc.value := 10000;
     // !  html := mustache.Render(doc);
     // !  // here html='Hello Chris'#13#10'You have just won 10000 dollars!'
-    function Render(const Context: variant;
-      Partials: TSynMustachePartials=nil; OnTranslate: TOnStringTranslate=nil): RawUTF8; overload;
+    // - you can also retrieve the context from an ORM query of mORMot.pas:
+    // ! dummy := TSynMustache.Parse(
+    // !   '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
+    // !   aClient.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
+    function Render(const Context: variant; Partials: TSynMustachePartials=nil;
+      OnTranslate: TOnStringTranslate=nil): RawUTF8; overload;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined from UTF-8 buffer
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
@@ -294,9 +298,8 @@ type
     // - is just a wrapper around Render(_JsonFast())
     // - you can write e.g. with the extended JSON syntax:
     // ! html := mustache.RenderJSON('{things:["one", "two", "three"]}');
-    function RenderJSON(const JSON: RawUTF8;
-      Partials: TSynMustachePartials=nil; OnTranslate: TOnStringTranslate=nil): RawUTF8;
-       overload;
+    function RenderJSON(const JSON: RawUTF8; Partials: TSynMustachePartials=nil;
+      OnTranslate: TOnStringTranslate=nil): RawUTF8; overload;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined with parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
@@ -759,7 +762,8 @@ begin
   result := nil;
   if aDoc.VType<=varAny then
     exit;
-  if (fContextCount>0) and (aDoc.VType=fContext[0].DocumentType.VarType) then
+  if (fContextCount>0) and (fContext[0].DocumentType<>nil) and
+     (aDoc.VType=fContext[0].DocumentType.VarType) then
     result := fContext[0].DocumentType else
     if not (FindCustomVariantType(aDoc.VType,TCustomVariantType(result)) and
        result.InheritsFrom(TSynInvokeableVariantType)) then

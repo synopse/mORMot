@@ -50,6 +50,8 @@ unit SynMongoDB;
 
 
   TODO:
+  - handle BULK commands support for MongoDB >=2.6 for faster writes
+    see http://blog.mongodb.org/post/84922794768
   - GridFS support
 
 
@@ -199,10 +201,10 @@ type
     procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
   public
     /// handle type conversion
-    // - only types processes by now are string/OleStr/UnicodeString/date
+    // - only types processed by now are string/OleStr/UnicodeString/date
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion
-    // - only types processes by now are string/OleStr/UnicodeString/date
+    // - only types processed by now are string/OleStr/UnicodeString/date
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// clear the instance

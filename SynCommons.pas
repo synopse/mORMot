@@ -8767,10 +8767,10 @@ type
     // - overridden method since instance may use a by-reference copy pattern
     procedure CopyByValue(var Dest: TVarData; const Source: TVarData); override; 
     /// handle type conversion
-    // - only types processes by now are string/OleStr/UnicodeString/date
+    // - only types processed by now are string/OleStr/UnicodeString/date
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion
-    // - only types processes by now are string/OleStr/UnicodeString/date
+    // - only types processed by now are string/OleStr/UnicodeString/date
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// compare two variant values
