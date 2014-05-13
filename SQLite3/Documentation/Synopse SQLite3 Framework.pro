@@ -2186,6 +2186,8 @@ No @*SQL@ statement to write, nothing to care about database engine expectations
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':
+!var aMale: TSQLBaby;
+!...
 !!aMale := TSQLBaby.CreateAndFillPrepare(Client,
 !!  'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !try
@@ -2197,6 +2199,19 @@ You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateA
 This request loops through all matching records, accessing each row content via a {\f1\fs20 TSQLBaby} instance.
 The {\f1\fs20 mORMot} engine will create a SQL statement with the appropriate SELECT query, retrieve all data as JSON, transmit it between the Client and the Server (if any), then convert the values into properties of our {\f1\fs20 TSQLBaby} object instance. Internally, the {\f1\fs20 [CreateAnd]FillPrepare} / {\f1\fs20 FillOne} methods use a list of records, retrieved as @*JSON@ from the Server, and parsed in memory one row a time (using an internal {\f1\fs20 @*TSQLTableJSON@} instance).
 Note that there is an optional {\f1\fs20 aCustomFieldsCSV} parameter available in all {\f1\fs20 FillPrepare / CreateAndFillPrepare} methods, by which you may specify a CSV list of field names to be retrieved. It may save some remote bandwidth, if not all record fields values are needed in the loop. Note that you should use this {\f1\fs20 aCustomFieldsCSV} parameter only to retrieve some data, and that the other fields will remain untouched (i.e. void in case of {\f1\fs20 CreateAndFillPrepare}): any later call to {\f1\fs20 Update} should lead into a data loss, since the method will know that is has been called during a {\f1\fs20 FillPrepare / CreateAndFillPrepare} process, and only the retrieved filled will be updated on the server side.
+You could also create a {\f1\fs20 TObjectList}, or - even better for newer versions of Delphi supporting the generics syntax - a {\f1\fs20 TObjectList<T>} instance to retrieve all values of a table:
+!var aList: TObjectList<TSQLBaby>;
+!    aMale: TSQLBaby;
+!...
+!!aList := Client.RetrieveObjectList<TSQLBaby>(
+!!  'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
+!try
+!!  for aMale in aList do
+!     DoSomethingWith(aMale);
+!finally
+!  aList.Free;
+!end;
+Note that this method will use more memory and resources than a {\f1\fs20 *FillPrepare} call followed by a {\f1\fs20 while ...FillOne do} loop, since the later will only allocate one instance of the {\f1\fs20 TSQLRecord}, then fill the properties of this single instance directly from the returned JSON content, one at a time. For huge lists, or in multi-threaded environement, it may make a difference.\line But the generics syntax can make cleaner code, or more integrated with your business logic.
 :36  Query parameters
 For safer and faster database process, the WHERE clause of the request expects some parameters to be specified. They are bound in the {\f1\fs20 ?} appearance order in the WHERE clause of the {\f1\fs20 [CreateAnd]FillPrepare} query method.
 Standard simple kind of parameters ({\f1\fs20 RawUTF8, integer, double}..) can be bound directly - as in the sample code above for {\f1\fs20 Name} or {\f1\fs20 Sex} properties. The first parameter will be bound as {\f1\fs20 'A%' RawUTF8} TEXT, and the second as the {\f1\fs20 1} INTEGER value.
@@ -3566,6 +3581,26 @@ Then, you will be able to define your template as such:
 !  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
 !  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
 All text has indeed been translated as expected.
+:   Integration with the ORM
+You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
+For instance, you may write:
+!var template: TSynMustache;
+!    html: RawUTF8;
+! ...
+!  template := TSynMustache.Parse(
+!    '<ul>{{#items}}<li>{{Name}} was born on {{BirthDate}}</li>{{/items}}</ul>');
+!  html := template.Render(
+!    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
+!  // now html will contain a ready-to-be-displayed unordered list
+Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
+In conjunction with method-based services - see @49@ - which can return directly HTML content to a HTTP client, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern:
+- {\i Model} will be the ORM and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions;
+- {\i View} will be {\i Mustache} templates (which may be stored as separated files or within the database);
+- {\i Controller} will be implemented in method-based services.
+In the future, this MVC design will probably be enhanced, and benefit from interface-based services - see @63@ - to write:
+- Some part of the {\i Model} (i.e. the business logic);
+- Some part of the {\i Controller} (i.e. the application logic).
+Both {\i Model} and {\i Controller} logic, even if defined via {\f1\fs20 interface}, may be implemented in {\i Delphi} or even in {\i JavaScript} - see @79@. Delphi code would gives strong typing, full integration to the framework, and the best performance possible. {\i JavaScript} code may be changed on the fly, and even stored as separated files.
 :42Database layer
 %cartoon05.png
 : SQLite3-powered, not SQLite3-limited
