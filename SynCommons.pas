@@ -25403,10 +25403,8 @@ begin
       VType := varDouble;
       VDouble := V.VExtended^;
     end;
-    vtVariant: begin
-      VType := varVariant or varByRef;
-      VPointer := V.VVariant;
-    end;
+    vtVariant:
+      result := V.VVariant^;
     vtAnsiString: begin
       VType := varString;
       VAny := nil;
