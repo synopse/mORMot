@@ -1279,12 +1279,13 @@ type
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
     procedure FetchAllToJSON(W: TTextWriter; Mode: TMongoJSONMode=modMongoStrict;
-      WithHeader: boolean=false);
+      WithHeader: boolean=false; MaxSize: Cardinal=0);
     /// return all documents content as a JSON array, or one JSON object
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
-    function ToJSON(Mode: TMongoJSONMode=modMongoStrict; WithHeader: boolean=false): RawUTF8;
+    function ToJSON(Mode: TMongoJSONMode=modMongoStrict; WithHeader: boolean=false;
+      MaxSize: Cardinal=0): RawUTF8;
     /// append all documents content to a dynamic array of TDocVariant
     // - return the new size of the Dest[] array
     function AppendAllToDocVariantDynArray(var Dest: TVariantDynArray): integer;
@@ -1574,6 +1575,7 @@ type
     fLog: TSynLog;
     fLogRequestEvent: TSynLogInfo;
     fLogReplyEvent: TSynLogInfo;
+    fLogReplyEventMaxSize: cardinal;
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
     fLatestReadConnectionIndex: integer;
@@ -1603,6 +1605,14 @@ type
     /// close the connection and release all associated TMongoDatabase,
     // TMongoCollection and TMongoConnection instances
     destructor Destroy; override;
+    /// define an optional logging instance to be used
+    // - you can also specify the event types to be used for requests or
+    // replay: by default, a verbose log with sllSQL and sllDB will be set
+    // - e.g. mORMotMongoDB.pas will call Client.SetLog(SQLite3Log) for you
+    procedure SetLog(LogClass: TSynLogClass;
+      RequestEvent: TSynLogInfo=sllSQL; ReplyEvent: TSynLogInfo=sllDB;
+      ReplyEventMaxSize: cardinal=1024);
+
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
     // ! ServerBuildInfo.version = '2.4.9'
@@ -1611,12 +1621,6 @@ type
     // - you may easier use ServerBuildInfoNumber to check for available
     // features at runtime
     property ServerBuildInfo: variant read GetServerBuildInfo;
-    /// retrieve the server version and build information
-    // - return the content as a TDocVariant document, e.g.
-    // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6
-    // - this property is cached, so can be used to check for available
-    // features at runtime
-    property ServerBuildInfoNumber: cardinal read GetServerBuildInfoNumber;
     /// access to a given MongoDB database
     // - try to open it via a non-authenticated connection it if not already:
     // will raise an exception on error, or will return an instance
@@ -1627,8 +1631,17 @@ type
     // - other items [1..] are the Secondary members
     property Connections: TMongoConnectionDynArray read fConnections;
     /// define the logging instance to be used for LogRequestEvent/LogReplyEvent
+    // - you may also call the SetLog() method to set all options at once
     property Log: TSynLog read fLog write fLog;
   published
+    /// the connection definition used to connect to this MongoDB server
+    property ConnectionString: RawUTF8 read fConnectionString;
+    /// retrieve the server version and build information
+    // - return the content as a TDocVariant document, e.g.
+    // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6
+    // - this property is cached, so can be used to check for available
+    // features at runtime
+    property ServerBuildInfoNumber: cardinal read GetServerBuildInfoNumber;
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
     // - default is rpPrimary, i.e. reading from the main primary instance
@@ -1643,8 +1656,6 @@ type
     // - default is wcAcknowledged, i.e. to acknowledge all write operations
     property WriteConcern: TMongoClientWriteConcern
       read fWriteConcern write fWriteConcern;
-    /// the connection definition used to connect to this MongoDB server
-    property ConnectionString: RawUTF8 read fConnectionString;
     /// the connection time out, in milli seconds
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
@@ -1657,14 +1668,20 @@ type
     /// if set to something else than default sllNone, will log each request
     // with the corresponding logging event kind
     // - will use the Log property for the destination log
+    // - you may also call the SetLog() method to set all options at once
     property LogRequestEvent: TSynLogInfo read fLogRequestEvent write fLogRequestEvent;
     /// if set to something else than default sllNone, will log each reply
     // with the corresponding logging event kind
     // - WARNING: logging all incoming data may be very verbose, e.g. when
     // retrieving a document list - use it with care, not on production, but
-    // only for debugging purposes
+    // only for debugging purposes - or set LogReplyEventMaxSize to a low value
     // - will use the Log property for the destination log
+    // - you may also call the SetLog() method to set all options at once
     property LogReplyEvent: TSynLogInfo read fLogReplyEvent write fLogReplyEvent;
+    /// defines how many characters a LogReplyEvent entry may append in the log
+    // - is set by default to 1024, which sounds somewhat good for debugging
+    property LogReplyEventMaxSize: cardinal
+      read fLogReplyEventMaxSize write fLogReplyEventMaxSize;
   end;
 
   /// remote access to a MondoDB database
@@ -1714,8 +1731,6 @@ type
     /// register an user to the given database
     procedure AddUser(const User: variant);
 
-    /// the associated MongoDB client instance
-    property Client: TMongoClient read fClient;
     /// access to a given MongoDB collection
     // - raise an EMongoDatabaseException if the collection name does not exist
     property Collection[const Name: RawUTF8]: TMongoCollection
@@ -1732,6 +1747,8 @@ type
   published
     /// the database name
     property Name: RawUTF8 read fName;
+    /// the associated MongoDB client instance
+    property Client: TMongoClient read fClient;
   end;
 
   /// remote access to a MondoDB collection
@@ -2074,12 +2091,12 @@ type
     function AggregateJSON(Operators: PUTF8Char; const Params: array of const;
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
   published
-    /// the associated MongoDB database instance
-    property Database: TMongoDatabase read fDatabase;
     /// the collection name
     property Name: RawUTF8 read fName;
     /// the full collection name, e.g. 'dbname.collectionname'
     property FullCollectionName: RawUTF8 read fFullCollectionName;
+    /// the associated MongoDB database instance
+    property Database: TMongoDatabase read fDatabase;
   end;
 
   /// exception type used for MongoDB process, once connected
@@ -3882,14 +3899,14 @@ begin
     exit;
   end;
   W.Add('{');
-  W.AddShort('"collection":');
+  W.AddShort('collection:"');
   W.AddJSONEscape(pointer(fFullCollectionName));
-  W.AddShort(',"opCode":');
+  W.AddShort('",opCode:');
   W.AddTypedJSON(TypeInfo(TMongoOperation),fRequestOpCode);
-  W.AddShort(',"requestID":');
+  W.AddShort(',requestID:');
   W.AddU(fRequestID);
   if fResponseTo<>0 then begin
-    W.AddShort(',"responseTo":');
+    W.AddShort(',responseTo:');
     W.AddU(fResponseTo);
   end;
   W.Add('}');
@@ -3927,10 +3944,10 @@ begin
   inherited;
   if W.LastChar='}' then
     W.CancelLastChar;
-  W.AddShort(',"selector":');
-  W.AddVariantJSON(variant(fSelector));
-  W.AddShort(',"update":');
-  W.AddVariantJSON(variant(fUpdate));
+  W.AddShort(',selector:');
+  AddMongoJSON(variant(fSelector),W,modMongoShell);
+  W.AddShort(',update:');
+  AddMongoJSON(variant(fUpdate),W,modMongoShell);
   W.Add('}');
 end;
 
@@ -3982,8 +3999,8 @@ begin
   inherited;
   if W.LastChar='}' then
     W.CancelLastChar;
-  W.AddShort(',"query":');
-  W.AddVariantJSON(variant(fQuery));
+  W.AddShort(',query:');
+  AddMongoJSON(variant(fQuery),W,modMongoShell);
   W.Add('}');
 end;
 
@@ -4010,12 +4027,14 @@ begin
   inherited;
   if W.LastChar='}' then
     W.CancelLastChar;
-  W.AddShort(',"query":');
-  W.AddVariantJSON(variant(fQuery));
-  W.AddShort(',"projection":');
-  W.AddVariantJSON(variant(fReturnFieldsSelector));
-  W.AddShort(',"numberToReturn":');
-  W.Add(fNumberToReturn);
+  W.AddShort(',query:');
+  AddMongoJSON(variant(fQuery),W,modMongoShell);
+  W.AddShort(',projection:');
+  AddMongoJSON(variant(fReturnFieldsSelector),W,modMongoShell);
+  W.AddShort(',numberToReturn:');
+  if fNumberToReturn=maxInt then
+    W.Add('-','1') else
+    W.Add(fNumberToReturn);
   W.Add('}');
 end;
 
@@ -4204,39 +4223,41 @@ begin
 end;
 
 procedure TMongoReplyCursor.FetchAllToJSON(W: TTextWriter; Mode: TMongoJSONMode;
-  WithHeader: boolean);
+  WithHeader: boolean; MaxSize: Cardinal);
 var b: PByte;
 begin
   if (fReply='') or (DocumentCount<=0) then begin
     W.AddShort('null');
     exit;
   end;
-  if WithHeader then begin
-    W.AddShort('{"ReplyHeader":');
-    W.AddJSONEscape(['ResponseFlags',byte(ResponseFlags),'RequestID',RequestID,
-      'ResponseTo',ResponseTo,'CursorID',CursorID,
-      'StartingFrom',StartingFrom,'NumberReturned',DocumentCount]);
-    W.AddShort(',"ReplyDocuments":[');
-  end;
+  if WithHeader and (Mode=modMongoShell) then
+    W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,CursorID:%,'+
+      'StartingFrom:%,NumberReturned:%,ReplyDocuments:[',
+      [byte(ResponseFlags),RequestID,ResponseTo,CursorID,StartingFrom,DocumentCount]);
   Rewind;
   while Next(b) do begin
     inc(b,sizeof(integer)); // points to the "e_list" of "int32 e_list #0"
     BSONToJSON(b,betDoc,W,Mode);
     W.Add(',');
+    if (MaxSize>0) and (W.TextLength>MaxSize) then begin
+      W.AddShort('...');
+      break;
+    end;
   end;
   W.CancelLastComma;
   if WithHeader then
     W.Add(']','}');
 end;
 
-function TMongoReplyCursor.ToJSON(Mode: TMongoJSONMode; WithHeader: boolean): RawUTF8;
+function TMongoReplyCursor.ToJSON(Mode: TMongoJSONMode; WithHeader: boolean;
+  MaxSize: Cardinal): RawUTF8;
 var W: TTextWriter;
 begin
-  if (fReply='') or (DocumentCount<=0) then 
+  if (fReply='') or (DocumentCount<=0) then
     result := 'null' else begin
     W := TTextWriter.CreateOwnedStream;
     try
-      FetchAllToJSON(W,Mode,WithHeader);
+      FetchAllToJSON(W,Mode,WithHeader,MaxSize);
       W.SetText(result);
     finally
       W.Free;
@@ -4286,7 +4307,7 @@ begin
     raise EMongoConnectionException.Create('Duplicate Open',self);
   try
     fSocket := TCrtSocket.Open(fServerAddress,UInt32ToUtf8(fServerPort),
-      cslTCP,fClient.ConnectionTimeOut);
+      cslTCP,Client.ConnectionTimeOut);
   except
     on E: Exception do
       raise EMongoException.CreateFmt(
@@ -4450,8 +4471,8 @@ begin
   if Request=nil then
     raise EMongoRequestException.Create('LockAndSend(nil)',self);
   Request.ToBSONDocument(doc);
-  if (fClient.fLogRequestEvent<>sllNone) and (fClient.fLog<>nil) then
-    fClient.fLog.Log(fClient.fLogRequestEvent,Request.ToJSON(modMongoShell));
+  if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) then
+    Client.Log.Log(Client.fLogRequestEvent,Request.ToJSON(modMongoShell));
   result := fSocket.TrySndLow(pointer(doc),length(doc));
 end;
 
@@ -4466,20 +4487,20 @@ begin
     try
       if Send(Request) then begin
         if NoAcknowledge or
-           (fClient.WriteConcern in [wcErrorsIgnored,wcUnacknowledged]) then
+           (Client.WriteConcern in [wcErrorsIgnored,wcUnacknowledged]) then
           exit;
-        case fClient.WriteConcern of
+        case Client.WriteConcern of
           wcAcknowledged:        cmd := 'getLastError';
           wcJournaled:           cmd := BSONVariant(['getLastError',1,'j',true]);
           wcReplicaAcknowledged: cmd := BSONVariant(['getLastError',1,'w',2]);
           else raise EMongoRequestException.CreateFmt('SendAndFree WriteConcern=%d',
-            [ord(fClient.WriteConcern)],self,Request);
+            [ord(Client.WriteConcern)],self,Request);
         end;
         RunCommand(Request.DatabaseName,cmd,result);
         if not VarIsNull(result.err) then
           raise EMongoRequestException.Create('SendAndFree',self,Request,TDocVariantData(result));
       end else // socket error on sending
-        if fClient.WriteConcern=wcErrorsIgnored then
+        if Client.WriteConcern=wcErrorsIgnored then
           exit else
           raise EMongoRequestOSException.Create('SendAndFree',self,Request);
     finally
@@ -4495,8 +4516,9 @@ var reply: TMongoReply;
 begin
   GetReply(Request,reply);
   Result.Init(reply);
-  if (fClient.fLogRequestEvent<>sllNone) and (fClient.fLog<>nil) then
-    fClient.fLog.Log(fClient.fLogRequestEvent,Result.ToJSON(modMongoShell));
+  if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) then
+    Client.Log.Log(Client.LogReplyEvent,
+      Result.ToJSON(modMongoShell,True,Client.LogReplyEventMaxSize));
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure',self,Request,Result);
 end;
@@ -4636,7 +4658,8 @@ begin
   fErrorDoc := variant(aErrorDoc);
 end;
 
-function EMongoRequestException.CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
+function EMongoRequestException.CustomLog(WR: TTextWriter;
+  const Context: TSynLogExceptionContext): boolean;
 begin
   inherited CustomLog(WR,Context);
   if fRequest<>nil then begin
@@ -4647,7 +4670,7 @@ begin
     fError.FetchAllToJSON(WR,modMongoShell,True) else
   if TVarData(fErrorDoc).VType<>varEmpty then begin
     WR.AddShort(' ReplyDocument:');
-    WR.AddVariantJSON(fErrorDoc);
+    AddMongoJSON(variant(fErrorDoc),WR,modMongoShell);
   end;
   result := false; // log stack trace
 end;
@@ -4707,6 +4730,8 @@ var secHost: TRawUTF8DynArray;
     nHost, i: integer;
 begin
   fConnectionTimeOut := 30000;
+  fLogReplyEventMaxSize := 1024;
+  fConnectionString := FormatUTF8('mongodb://%:%',[Host,Port]);
   CSVToRawUTF8DynArray(pointer(SecondaryHostCSV),secHost);
   nHost := length(secHost);
   SetLength(fConnections,nHost+1);
@@ -4718,6 +4743,7 @@ begin
         Port := MONGODB_DEFAULTPORT else
         Port := secPort[i];
       fConnections[i+1] := TMongoConnection.Create(self,secHost[i],Port);
+      fConnectionString := FormatUTF8('%,%:%',[secHost[i],Port]);
     end;
   end;
   fDatabases := TRawUTF8ListHashed.Create(true);
@@ -4730,6 +4756,15 @@ begin
     FreeAndNil(fConnections[i]);
   FreeAndNil(fDatabases);
   inherited;
+end;
+
+procedure TMongoClient.SetLog(LogClass: TSynLogClass;
+  RequestEvent, ReplyEvent: TSynLogInfo; ReplyEventMaxSize: cardinal);
+begin
+  fLog := LogClass.Add;
+  LogRequestEvent := RequestEvent;
+  LogReplyEvent := ReplyEvent;
+  LogReplyEventMaxSize := ReplyEventMaxSize;
 end;
 
 function TMongoClient.GetOneReadConnection: TMongoConnection;
@@ -4858,7 +4893,7 @@ var colls: PByte;
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  colls := pointer(fClient.Connections[0].GetBSONAndFree(
+  colls := pointer(Client.Connections[0].GetBSONAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt)));
   // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
   fCollections := TRawUTF8ListHashed.Create(true);
@@ -4870,7 +4905,7 @@ begin
       if db<>aDatabaseName then
         raise EMongoConnectionException.CreateFmt(
           'Invalid "%s" collection name for DB "%s"',
-          [full,aDatabaseName],fClient.Connections[0]);
+          [full,aDatabaseName],Client.Connections[0]);
       fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
     end;
 end;
@@ -4964,11 +4999,16 @@ end;
 function TMongoCollection.Drop: RawUTF8;
 var res: Variant;
 begin
-  if self=nil then
-    result := 'No collection' else
-    result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
+  if self=nil then begin
+    result := 'No collection';
+    exit;
+  end;
+  if Database.Client.Log<>nil then
+    Database.Client.Log.Enter(self);
+  result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
+  Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res]);
   if result='' then
-    fDatabase.fCollections.Delete(fDatabase.fCollections.IndexOf(Name));
+    Database.fCollections.Delete(fDatabase.fCollections.IndexOf(Name));
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys, Options: variant);
@@ -4977,6 +5017,10 @@ var doc,res: variant;
     i,order: integer;
     useCommand: Boolean;
 begin
+  if (self=nil) or (Database=nil) then
+    exit;
+  if Database.Client.Log<>nil then
+    Database.Client.Log.Enter(self);
   if DocVariantData(Keys)^.Kind<>dvObject then
     raise EMongoException.CreateFmt('%s.EnsureIndex(Keys?)',[FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber>=2060000;
@@ -5010,7 +5054,8 @@ begin
   if useCommand then
     fDatabase.RunCommand(BSONVariant(
       '{ createIndexes: ?, indexes: [?] }',[],[Name,doc]),res) else
-    fDatabase.Collection['system.indexes'].Insert([doc]);
+    fDatabase.GetCollectionOrCreate('system.indexes').Insert([doc]);
+  Database.Client.Log.Log(sllTrace,'EnsureIndex("%",%)->%',[Name,doc,res]);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUTF8;
@@ -5270,4 +5315,5 @@ begin
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
 end.
+
 

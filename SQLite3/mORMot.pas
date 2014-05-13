@@ -10489,6 +10489,27 @@ type
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
       const aContractExpected: RawUTF8=''): boolean; overload; virtual;
 
+    /// read-only access to the list of registered server-side authentication
+    // methods, used for session creation
+    property AuthenticationSchemes: TSQLRestServerAuthenticationDynArray
+      read fSessionAuthentication;
+    /// retrieve the TSQLRestStorage instance used to store and manage
+    // a specified TSQLRecordClass in memory
+    // - has been associated by the StaticDataCreate method
+    property StaticDataServer[aClass: TSQLRecordClass]: TSQLRest
+      read GetStaticDataServer;
+    /// retrieve a running TSQLRestStorage virtual table
+    // - associated e.g. to a 'JSON' or 'Binary' virtual table module, or may
+    // return a TSQLRestStorageExternal instance (as defined in mORMotDB)
+    // - this property will return nil if there is no Virtual Table associated
+    // or if the corresponding module is not a TSQLVirtualTable
+    // (e.g. "pure" static tables registered by StaticDataCreate would be
+    // accessible only via StaticDataServer[], not via StaticVirtualTable[])
+    // - has been associated by the TSQLModel.VirtualTableRegister method or
+    // the VirtualTableExternalRegister() global function
+    property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
+      read GetVirtualTable;
+  published
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
     // used in AJAX environnement (like in TSQLite3HttpServer)
@@ -10514,28 +10535,8 @@ type
     // - i.e. if the associated TSQLModel contains TSQLAuthUser and
     // TSQLAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean read fHandleAuthentication;
-    /// read-only access to the list of registered server-side authentication
-    // methods, used for session creation
-    property AuthenticationSchemes: TSQLRestServerAuthenticationDynArray
-      read fSessionAuthentication;
     /// access to the Server statistics
     property Stats: TSQLRestServerStats read fStats;
-    /// retrieve the TSQLRestStorage instance used to store and manage
-    // a specified TSQLRecordClass in memory
-    // - has been associated by the StaticDataCreate method
-    property StaticDataServer[aClass: TSQLRecordClass]: TSQLRest
-      read GetStaticDataServer;
-    /// retrieve a running TSQLRestStorage virtual table
-    // - associated e.g. to a 'JSON' or 'Binary' virtual table module, or may
-    // return a TSQLRestStorageExternal instance (as defined in mORMotDB)
-    // - this property will return nil if there is no Virtual Table associated
-    // or if the corresponding module is not a TSQLVirtualTable
-    // (e.g. "pure" static tables registered by StaticDataCreate would be
-    // accessible only via StaticDataServer[], not via StaticVirtualTable[])
-    // - has been associated by the TSQLModel.VirtualTableRegister method or
-    // the VirtualTableExternalRegister() global function
-    property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
-      read GetVirtualTable;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
@@ -24644,7 +24645,9 @@ begin
   fSessions.Free;
   DeleteCriticalSection(fSessionCriticalSection);
   inherited Destroy; // calls fServices.Free which will update fStats
-  InternalLog(Stats.DebugMessage,sllInfo);
+  {$ifdef WITHLOG}
+  SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
+  {$endif}
   fStats.Free; 
 end;
 

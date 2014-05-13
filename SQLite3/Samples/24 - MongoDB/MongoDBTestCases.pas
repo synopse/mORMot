@@ -105,8 +105,8 @@ end;
 { TTestDirect }
 
 const
-  DB_NAME = 'mwx1';
-  COLL_NAME = 'test24';
+  DB_NAME = 'test24';
+  COLL_NAME = 'direct';
   {$ifndef ADD5000}
   COLL_COUNT = 100;
   HASH1 = $44D5AC3E;
@@ -134,6 +134,7 @@ begin
   if ClassType=TTestDirectWithoutAcknowledge then
     fClient.WriteConcern := wcUnacknowledged else
     assert(false);
+  fClient.SetLog(SQLite3Log); // define some verbose log
   fDB := fClient.Database[DB_NAME];
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);

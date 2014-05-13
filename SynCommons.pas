@@ -4631,7 +4631,7 @@ type
   // - woHumanReadableEnumSetAsComment will add a comment at the end of the
   // line, containing all available values of the enumaration or set, e.g:
   // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
-  TTextWriterWriteObjectOption = (
+  TTextWriterWriteObjectOption = ( 
     woHumanReadable, woDontStoreDefault, woFullExpand, woStoreClassName,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment);
   /// options set for TTextWriter.WriteObject() method
@@ -29587,6 +29587,8 @@ procedure TTextWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjec
 var i: integer;
 begin
   if Value<>nil then
+    if Value.InheritsFrom(Exception) then
+      Add('{"%":"%"}',[Value.ClassType,Exception(Value).Message]) else
     if Value.InheritsFrom(TRawUTF8List) then
     with TRawUTF8List(Value) do begin
       self.Add('[');
@@ -29914,17 +29916,7 @@ write:  if B>=BEnd then
          vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
          vtPointer:      AddPointer(PtrUInt(VPointer));
          vtPChar:        Add(PUTF8Char(VPChar),Escape);
-         vtObject:
-           if VObject<>nil then begin
-             AddShort(PShortString(PPointer(PPtrInt(VObject)^+vmtClassName)^)^);
-             Add('(');
-             if VObject.InheritsFrom(Exception) then
-               with Exception(VObject) do
-               {$ifdef UNICODE}AddW{$else}Add{$endif}(
-                 pointer(Message),length(Message),Escape) else
-               AddPointer(PtrUInt(VObject));
-             Add(')');
-           end;
+         vtObject:       WriteObject(VObject,[woFullExpand]);
          vtClass:
            if VClass<>nil then
              AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);

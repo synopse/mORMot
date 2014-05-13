@@ -95,7 +95,9 @@ type
     fBatchWriter: TBSONWriter;
     fBatchIDs: TIntegerDynArray;
     fBatchIDsCount: integer;
+    fIndexesCreated: Boolean;
     function EngineNextID: Integer;
+    procedure CreateIndexes;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): integer;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
@@ -194,6 +196,9 @@ begin
   result := nil;
   if (aServer=nil) or (aClass=nil) or (aMongoDatabase=nil) then
     exit; // avoid GPF
+  if aMongoDatabase.Client.Log=nil then
+    aMongoDatabase.Client.SetLog(SQLite3Log);
+  SQLite3Log.Enter;
   Props := aServer.Model.Props[aClass];
   if Props=nil then
     exit; // if aClass is not part of the model
@@ -212,7 +217,6 @@ end;
 constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; const aFileName: TFileName;
   aBinaryFile: boolean);
-var F: integer;
 begin
   inherited;
   if fStoredClassProps=nil then
@@ -220,16 +224,24 @@ begin
       'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
+  SQLite3Log.Add.Log(sllInfo,'will store % using %',[aClass,Collection],self);
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
     fStoredClassRecordProps.BlobFieldsBits,@fBSONProjectionBlobFieldsNames);
-  if not IsZero(fIsUnique) then
-    for F := 0 to fStoredClassRecordProps.Fields.Count do
-      if F in fIsUnique then
-        fCollection.EnsureIndex(
-          [fStoredClassProps.ExternalDB.FieldNames[f]],true,true);
+  CreateIndexes;
+end;
 
+procedure TSQLRestStorageMongoDB.CreateIndexes;
+var F: integer;
+begin
+  fIndexesCreated := true;
+  if IsZero(fIsUnique) then
+    exit;
+  for F := 0 to fStoredClassRecordProps.Fields.Count-1 do
+    if F in fIsUnique then
+      fCollection.EnsureIndex(
+        [fStoredClassProps.ExternalDB.FieldNames[f]],true,true);
 end;
 
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
@@ -290,12 +302,14 @@ begin
   Collection.Drop;
   fCollection := DB.CollectionOrCreate[CollName];
   fEngineLastID := 0;
+  fIndexesCreated := false;
 end;
 
 destructor TSQLRestStorageMongoDB.Destroy;
 begin
   inherited;
   FreeAndNil(fBatchWriter);
+  SQLite3Log.Add.Log(sllInfo,'Destroy for % using %',[fStoredClass,Collection],self);
 end;
 
 function TSQLRestStorageMongoDB.TableHasRows(
@@ -316,9 +330,12 @@ function TSQLRestStorageMongoDB.EngineNextID: Integer;
 procedure ComputeMax_ID;
 var res: variant;
 begin
+  if not fIndexesCreated then
+    CreateIndexes;
   res := fCollection.AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]);
   if DocVariantType.IsOfType(res) then
     fEngineLastID := VariantToIntegerDef(res.max,0);
+  SQLite3Log.Add.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
 end;
 begin
   if fEngineLastID=0 then

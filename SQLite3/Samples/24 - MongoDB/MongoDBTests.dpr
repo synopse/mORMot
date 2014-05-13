@@ -5,9 +5,13 @@ program MongoDBTests;
 
 uses
   {$I SynDprUses.inc}
+  SynCommons,
+  mORMot,
   MongoDBTestCases;
 
 begin
+  //SQLite3Log.Family.Level := LOG_VERBOSE;
+  TSynLogTestLog := SQLite3Log;
   with TTestMongoDB.Create do
   try
     Run;
