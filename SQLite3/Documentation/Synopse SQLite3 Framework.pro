@@ -567,19 +567,19 @@ DisplayName=mORMot Framework Overview
 {\i Synopse mORMot} is a @*Client-Server@ @*ORM@ and Service Oriented Architecture framework (@*SOA@) for Delphi 6 up to XE6, targeting {\i Win32} and {\i Win64} platforms.
 %IamLost.png
 The main two features of {\i mORMot} are therefore:
-- Client-Server {\i ORM}: objects persistence and remote access;
+- Client-Server {\i ORM/ODM}: objects persistence and remote access;
 - Client-Server {\i Services}: remote call of high-level data process.
 It provides an Open Source {\i self-sufficient set of units} (even Delphi starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich Delphi clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
-- {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (including @*HTTP@/1.1 and @*HTTPS@);
-- {\i Domain Model layer} handling all the needed business logic in plain Delphi objects, including high-level managed types like dynamic arrays or records for Value Objects, or dedicated classes for entities or aggregates;
-- {\i Data persistence infrastructure layer} with ORM persistence over direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection;
+- {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
+- {\i Domain Model layer} handling all the needed business logic in plain Delphi objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents;
+- {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture, ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in Delphi or any other mean, including AJAX).
-The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD or AJAX clients.
-No dependency is needed at the client level (no DB driver, nor third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Endpoints are configured automatically for each published interface on the server side, and creating a load-balancing proxy is a matter of one method call.\line Speed and scalability has been implemented from the ground up - see @59@: a single server is able to handle a lot of clients, and our rich SOA architecture is able to implement both vertical and horizontal scalable @*hosting@.
+The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
+No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call.\line Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than DataSnap, WCF or node.js, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
 In short, with {\i mORMot}, your ROI is maximized.
 \page
 :41 Client-Server ORM/SOA framework
@@ -660,16 +660,16 @@ Benefits of {\i mORMot} are therefore:
 - Open Source, documented and maintained: project is developed since years, with some active members - {\i mORMot} won't leave you soon!
 \page
 :66 Legacy code and existing projects
-Even if {\i mORMot} will be more easily used in a project designed from scratch, it fits very well the purpose of evolving any existing Delphi project, or even creating the server side part of an AJAX application. One benefit of such a framework is to facilitate the transition from a @*Client-Server@ architecture to a N-@*Tier@ layered pattern.
+Even if {\i mORMot} will be more easily used in a project designed from scratch, it fits very well the purpose of evolving any existing Delphi project, or creating the server side part of an AJAX application.\line One benefit of such a framework is to facilitate the transition from a traditional @*Client-Server@ architecture to a N-@*Tier@ layered pattern.
 Due to its modular design, you can integrate some framework bricks to your existing application:
-- You may add logging to your code - see @16@, to track issues and customer-side profiling;
-- Use low-level classes like {\f1\fs20 record} or {\i dynamic array} wrappers - see @48@, including @*JSON@ or binary persistence;
-- You can use the direct DB layers, including the {\f1\fs20 TQuery} emulation class, to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@;
+- You may add logging to your code - see @16@, to track unresolved issues, and add customer-side performance profiling;
+- Use low-level classes like {\f1\fs20 record} or {\i dynamic array} wrappers - see @48@, or our dynamic document storage via {\f1\fs20 variant} - see @80@, including @*JSON@ or binary persistence;
+- You can use the direct DB layers, including the {\f1\fs20 TQuery} emulation class, to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@, or switch to a @*NoSQL@ database - see @83@;
 - Reports could benefit of the {\f1\fs20 mORMotReport.pas} code-based system, which is very easy to use even on the server side (serving @*PDF@ files), when your business logic heavily relies on objects, not direct DB - see @67@;
-- HTTP request may be made available using Client-Server services via methods - see @49@, e.g. for retrieving HTML pages generated on the fly, pictures or @*PDF@ reports;
-- You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migrating into @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
+- HTTP requests may be made available using Client-Server services via methods - see @49@, e.g. for rendering HTML pages generated on the fly with {\i @*Mustache@} templates- see @81@, pictures or @*PDF@ reports;
+- You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migration to @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
 - Make your application ready to offer a RESTful interface, e.g. for consuming JSON content via AJAX or mobile clients;
-- New tables may be defined via the ORM features of {\i mORMot}, still hosted in your external SQL server - see @27@, as any previous data; in particular, mixed pure-ORM and regular-SQL requests may coexist;
+- New tables may be defined via the ORM/ODM features of {\i mORMot}, still hosted in your external SQL server - see @27@, as any previous data; in particular, mixed pure-ORM and regular-SQL requests may coexist; or {\i mORMot}'s data modeling may balance your storage among several servers (and technologies, like NoSQL);
 - You may benefit from our very fast in-memory engine, a dedicated {\i @*SQLite3@}-based consolidation database or even the caching features - see @38@, shared on the server side, when performance is needed - it may help integrating some @*CQRS@ pattern ({\i Command Query Responsibility Segregation}) into your application via a @*REST@ful interface, and delegate some queries from your main database;
 - If you are still using an old version of Delphi, and can't easily move up due to some third party components or existing code base, {\i mORMot} will offer all the needed features to start ORM, N-Tier and SOA, starting with a Delphi 6 edition.
 {\i mORMot} implements the needed techniques for introducing what Michael Feathers calls, in his book {\i Working Effectively With Legacy Code}, a @**seam@. A seam is an area where you can start to cleave off some legacy code and begin to introduce changes. Even mocking abilities of {\i mORMot} - see @62@ - will help you in this delicate task - see @http://www.infoq.com/articles/Utilizing-Logging
@@ -686,8 +686,8 @@ Feel free to give your feedback in the very same forum, asking new questions or 
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the Delphi IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it  be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database, you would need additional work, since we do not offer direct access to VCL data-sources.
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart@ Mobile Studio} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode.
-{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server}.
-{\b Have you considered using a popular source coding host like Github or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a KISS approach. Note that you can get a daily snapshot of the repository directly from @http://synopse.info/files/mORMotNightlyBuild.zip
+{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server} - and integrated {\i @*Mustache@} logic-less templates rendering - see @81@.
+{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a KISS approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of the repository directly from @http://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 :40Architecture principles
@@ -697,8 +697,9 @@ This framework tries to implement some "best-practice" patterns, among them:
 - {\i Multi-@*tier@ architecture} - see @7@;
 - {\i @*Test@-Driven Design} - see @12@;
 - {\i @*Stateless@} @*CRUD@/@*REST@ - see @9@;
-- {\i Object-relational mapping} - see @13@;
-- {\i @*Service@-oriented architecture} - see @17@.
+- {\i Object-Relational Mapping} - see @13@;
+- {\i Object-Document Mapping} - see @82@;
+- {\i @*Service@-Oriented Architecture} - see @17@.
 All those points render possible any project implementation, up to complex {\i @*Domain-Driven@} design - see @54@.
 \page
 : General design
@@ -1201,7 +1202,7 @@ rankdir=LR;
 =HTTP=mORMotHttpClient.pas¤mORMotHttpServer.pas
 \mORMotReport.pas=UI=SynSMAPI.pas¤SynSM.pas
 \
-When you will finish reading this document, you won't be afraid any more! :)
+;When you will finish reading this document, you won't be afraid any more! :)
 \page
 : Main units
 The main units you have to be familiar with are the following:
@@ -1214,7 +1215,7 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 mORMotSQLite3.pas}|Bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 @*SynDB@.pas\line SynDB*.pas}|Direct RDBMS access classes
 |{\f1\fs20 mORMotDB.pas}|ORM external {\f1\fs20 SynDB.pas} access, via {\i SQlite3} virtual tables
-|{\f1\fs20 mORMotMongoDB.pas\line SynMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
+|{\f1\fs20 SynMongoDB.pas\line mORMotMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
 |{\f1\fs20 SynCrtSock.pas}|Implements @*HTTP@/1.1 client and server protocol
 |{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas}|@*REST@ful HTTP/1.1 Client and Server
 |{\f1\fs20 mORMotUI*.pas}|Grid and Forms User Interface generation
@@ -1222,7 +1223,7 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 mORMotReport.pas}|Integrated Reporting engine
 |%
 Other units are available in the framework source code repository, but are either expected by those files above (e.g. like {\f1\fs20 SynDB*.pas} database providers), or used only optionally in end-user client applications.
-In the following pages, the features offered by those units will be presented. Do not forget to take a look at all sample projects available in the {\f1\fs20 SQLite3\\Samples} sub-folders - nothing is better than some simple code to look at.
+In the following pages, the features offered by those units will be presented.\line Do not forget to take a look at all sample projects available in the {\f1\fs20 SQLite3\\Samples} sub-folders - nothing is better than some simple code to look at.
 Then detailed information will be available in the second part of this document - see @44@.
 :45SynCommons unit
 %cartoon01.png
@@ -1241,7 +1242,7 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - Unicode and @*UTF-8@;
 - {\f1\fs20 @*Currency@} type;
 - {\i @*Dynamic array@} wrappers ({\f1\fs20 TDynArray} and {\f1\fs20 TDynArrayHashed});
-- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for schema-less {\i object} or {\i array} storage;
+- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage;
 - @*Log@ging.
 :32 Unicode and UTF-8
 Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under Delphi 2009 and up (including latest XE6 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from Delphi 6 up to Delphi 2007.
@@ -1687,16 +1688,16 @@ You can use the {\f1\fs20 _Unique()} global function to force a variant instance
 !  // both commands will write '["root",{"name":"Jim","year":1972}]'
 The easiest is to stick to one set of options in your code, i.e.:
 - Either using the {\f1\fs20 _*()} global functions if your business code does send some {\f1\fs20 TDocVariant} instances to any other part of your logic, for further storage: in this case, the {\i by-value} pattern does make sense;
-- Or using the {\f1\fs20 _*Fast()} global functions if the {\f1\fs20 TDocVariant} instances are local to a small part of your code, e.g. used as schema-less {\i Data Transfer Objects} ({\i @*DTO@}).
+- Or using the {\f1\fs20 _*Fast()} global functions if the {\f1\fs20 TDocVariant} instances are local to a small part of your code, e.g. used as dynamic schema-less {\i Data Transfer Objects} ({\i @*DTO@}).
 In all cases, be aware that, like any {\f1\fs20 class} type, the {\f1\fs20 const}, {\f1\fs20 var} and {\f1\fs20 out} specifiers of method parameters does not behave to the {\f1\fs20 TDocVariant} value, but to its reference.
 :   Integration with other mORMot units
-In fact, whenever a {\i schema-less} storage structure is needed, you may use a {\f1\fs20 TDocVariant} instance instead of {\f1\fs20 class} or {\f1\fs20 record} strong-typed types:
-- Client-Server ORM - see @3@ - will support {\f1\fs20 TDocVariant} in any of the {\f1\fs20 TSQLRecord variant} published properties;
+In fact, whenever a dynamic {\i schema-less} storage structure is needed, you may use a {\f1\fs20 TDocVariant} instance instead of {\f1\fs20 class} or {\f1\fs20 record} strong-typed types:
+- Client-Server ORM - see @3@ - will support {\f1\fs20 TDocVariant} in any of the {\f1\fs20 TSQLRecord variant} published properties (and store them as @*JSON@ in a text column);
 - Interface-based services - see  @63@ - will support {\f1\fs20 TDocVariant} as {\f1\fs20 variant} parameters of any method, which make them as perfect {\i DTO};
 - Since JSON support is implemented with any {\f1\fs20 TDocVariant} value from the ground up, it makes a perfect fit for working with AJAX clients, in a script-like approach;
-- If you use our {\f1\fs20 SynMongoDB.pas} unit to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access @*BSON@ arrays or objects documents;
+- If you use our {\f1\fs20 SynMongoDB.pas mORMotMongoDB.pas} units to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access nested @*BSON@ arrays or objects documents - that is, it will allow proper @*ODM@ storage;
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
-We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and schema-less patterns to your application, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like Python or JavaScript to have this feature, if you need it.
+We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like Python or JavaScript: Delphi is perfectly able to handle dynamic coding!
 \page
 :16 Enhanced logging
 A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
@@ -2526,7 +2527,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed aggregation values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i map/reduce} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed aggregation values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i map/reduce} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
 :     Dynamic arrays fields
 :      Dynamic arrays from Delphi Code
 For instance, here is how the regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\i @*dynamic array@s} fields:
@@ -3503,7 +3504,7 @@ Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} tem
 - Performance has been tuned and grounded in {\f1\fs20 SynCommons}'s optimized code;
 - Each parsed template is thread-safe and re-entrant;
 - It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
-- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@;
+- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
 - API is flexible and easy to use.
 :    Variables
 Now, let's see some code.\line First, we define our needed variables:
@@ -3581,6 +3582,7 @@ Then, you will be able to define your template as such:
 !  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
 !  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
 All text has indeed been translated as expected.
+\page
 :   Integration with the ORM
 You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
 For instance, you may write:
@@ -3594,9 +3596,12 @@ For instance, you may write:
 !  // now html will contain a ready-to-be-displayed unordered list
 Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
 In conjunction with method-based services - see @49@ - which can return directly HTML content to a HTTP client, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern:
-- {\i Model} will be the ORM and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions;
-- {\i View} will be {\i Mustache} templates (which may be stored as separated files or within the database);
-- {\i Controller} will be implemented in method-based services.
+|%20%80
+|\b MVC|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i Controller}|Method-based services - see @49@
+|%
 In the future, this MVC design will probably be enhanced, and benefit from interface-based services - see @63@ - to write:
 - Some part of the {\i Model} (i.e. the business logic);
 - Some part of the {\i Controller} (i.e. the application logic).
@@ -5526,7 +5531,7 @@ $  Total failed: 0 / 56,527  - Direct without acknowledge PASSED  3.77s
 As you can see, the reading speed is not affected by the {\i Write Concern} settings.\line But data writing can be multiple times faster, when each write command is not acknowledged.
 Since there is no error handling, {\f1\fs20 wcUnacknowledged} is not to be used on production. You may use it for replication, or for data consolidation, e.g. feeding a database with a lot of existing data as fast as possible.
 \page
-:  MongoDB + ORM = ODM
+:84  MongoDB + ORM = ODM
 The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} class be persisted on a remote {\i MongoDB} server.
 As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
 This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
@@ -10277,10 +10282,12 @@ Of course, this interactive console refresh slows down the process a lot. It is 
 \page
 : Availability
 As a true {\i Open Source} project, all source code of the framework is available, and latest version can be retrieved from our online repository at @http://synopse.info/fossil
+As an alternative, you can monitor or fork our projects from our @*GitHub@ repository, at @http://github.com/synopse/mORMot
 The source has been commented following the scheme used by our {\i @*SynProject@} documentation tool. That is all interface definition of the units have special comments, which were extracted then incorporated into this @SAD@, in the following pages.
 :  Obtaining the Source Code
 Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official http://synopse.info web site, but you may want to use the latest version available.
-You can obtain a {\f1\fs20 .zip} archive containing a snapshot of the latest version of the whole source code tree directly from this repository.
+The easiest is to download a nightly-generated archive of the latest version of the trunk, from @http://synopse.info/files/mORMotNightlyBuild.zip
+As an alternative, you can manually obtain a {\f1\fs20 .zip} archive containing a snapshot of the latest version of the whole source code tree directly from this repository.
 Follow these steps:
 - Pointer your web browser at @http://synopse.info/fossil
 - Click on the "{\i Login}" menu button.
@@ -10307,23 +10314,25 @@ For native @*64 bit@ applications (since Delphi XE2), an external {\f1\fs20 .dll
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
 You can download the needed files from @http://synopse.info/files/synsm.7z
 Do not forget to copy both files in the executable folder. For instance, put both {\f1\fs20 mozjs.dll} and {\f1\fs20 nspr4.dll} files with your {\f1\fs20 JSHttpApiServer.exe}.
+\page
 :  Folder layout
-As retrieved from our source code repository, you'll find the following file layout.
+As retrieved from our source code repository, you'll find the following folder layout:
 \graph mORMotSourceCodeFolders mORMot Source Code Folders
 \root\SQlite3
 \SQlite3\Samples
 \SQlite3\Documentation
 \root\SynDBDataset
 \
+In fact, you will get:
 |%30%70
 |\b Directory|Description\b0
 |{\f1\fs20 /}|Root folder, containing common files
 |{\f1\fs20 HtmlView/}|A fork of the freeware {\f1\fs20 THtmlView} component, used as a demo of the {\f1\fs20 SynPdf} unit - not finished, and not truly Unicode ready
 |{\f1\fs20 LVCL/}|{\i Light VCL} replacement files for standard VCL (for Delphi 6-7 only)
 |{\f1\fs20 RTL7/}|Enhanced RTL .dcu for Delphi 7 (not mandatory at all), and {\i FastMM4} memory manager to be used before Delphi 2006
-|{\f1\fs20 SQLite3/}|Contains all @*ORM@ / @*SOA@ related files of the framework (i.e. {\i mORMot} itself)
+|{\f1\fs20 SQLite3/}|Contains all @*ORM@ / @*SOA@ related files of the framework (i.e. {\i mORMot} itself) and its documentation
 |{\f1\fs20 SynDBDataset/}|{\f1\fs20 DB.pas}-based external database providers
-|{\f1\fs20 SynProject/}|Source code of the {\i @*SynProject@} tool, used to create e.g. this documentation
+|{\f1\fs20 SynProject/}|Source code of the {\i @*SynProject@} tool, used to edit and generate this documentation
 ;|{\f1\fs20 zeos/}|A fork of the freeware {\i Zeos} library - not finished, and not truly Unicode ready
 |%
 In the {\i Root folder}, some common files are defined:
@@ -10342,22 +10351,25 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
 |{\f1\fs20 SynLZO.pas}|LZO compression decompression unit
 |{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode Delphi only
+|{\f1\fs20 SynMongoDB.pas}|Direct {\i @*MongoDB@} @*NoSQL@ database access
+|{\f1\fs20 SynMustache.pas}|{\i @*Mustache@} logic-less template engine
 |{\f1\fs20 SynPdf.pas}|@*PDF@ file generation unit
 |{\f1\fs20 SynScaleMM.pas}|multi-thread friendly memory manager unit - not finished yet
 |{\f1\fs20 SynSelfTests.pas}|automated @*test@s for {\i mORMot} Framework
 |{\f1\fs20 SynSMAPI.pas}|{\i SpiderMonkey} JavaScript engine API definition
 |{\f1\fs20 SynSM.pas}|{\i SpiderMonkey} JavaScript engine higher level classes
 |{\f1\fs20 SynSQLite3.pas}|{\i @*SQLite3@} embedded Database engine
-|{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine
+|{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine (for Win32)
 |{\f1\fs20 SynSSPIAuth.pas}|low level access to Windows Authentication
 |{\f1\fs20 SynTaskDialog.*}|implement TaskDialog window\line (native on Vista/Seven, emulated on XP)
-|{\f1\fs20 SynWinSock.pas}|low level access to network Sockets for the Win32 platform
+|{\f1\fs20 SynWinSock.pas}|low level access to network Sockets for the Windows platform
 |{\f1\fs20 SynZip.pas deflate.obj trees.obj}|low-level access to ZLib compression, 1.2.5
 |{\f1\fs20 SynZipFiles.pas}|high-level access to .zip archive file compression
 |{\f1\fs20 Synopse.inc}|generic header to be included in all units to set some global conditional definitions
 |{\f1\fs20 vista.*}|A resource file enabling theming under XP
 |{\f1\fs20 vistaAdm.*}|A resource file enabling theming under XP and Administrator rights under Vista
 |%
+\page
 In the same {\i Root folder}, the external database-agnostic units are located:
 |%30%70
 |\b File|Description\b0
@@ -10378,10 +10390,10 @@ In a {\f1\fs20 SynDBDataset} folder, some external database providers are availa
 |{\f1\fs20 SynDBFireDAC.pas}|{\i @*FireDAC@} / {\i @*AnyDAC@} library access classes
 |{\f1\fs20 SynDBUniDAC.pas}|{\i @*UniDAC@} library access classes
 |%
-In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot framework} itself, i.e. its @*ORM@ and @*SOA@ features (using {\f1\fs20 SynCommons, SynLZ, SynSQLite3*, SynDB*, SynGdiPlus, SynCrtSock, SynPdf, SynTaskDialog} and {\f1\fs20 SynZip} from the {\i Root folder}):
+In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot framework} itself, i.e. its @*ORM@ and @*SOA@ features (using units from the {\i Root folder}):
 |%30%70
 |\b File|Description\b0
-|{\f1\fs20 Documentation/}|Sub folder containing the source of the Synopse documentation
+|{\f1\fs20 Documentation/}|Sub folder containing the source of the framework documentation
 |{\f1\fs20 Samples/}|Sub folders containing some sample code
 |{\f1\fs20 mORMot.pas}|Main @*ORM@ / @*SOA@ unit of the framework
 |{\f1\fs20 mORMotDB.pas}|Virtual Tables for ORM external {\f1\fs20 SynDB} access
@@ -10392,6 +10404,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 mORMotService.pas}|Stand-alone Service
 |{\f1\fs20 mORMotSQLite3.pas}|{\i SQLite3} kernel bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 mORMoti18n.pas}|internationalization (@*i18n@) routines and classes
+|{\f1\fs20 mORMotMongoDB.pas}|@*ODM@ integration of {\i @*MongoDB@} @*NoSQL@ database
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotUI.*}|Grid to display Database content
 |{\f1\fs20 mORMotUIEdit.*}|Record edition dialog, used to edit record content on the screen
@@ -10418,9 +10431,28 @@ In short, add the following paths to your Delphi IDE (in {\i Tools/Environment/L
 - {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
 - {\i Search path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
 Note that before Delphi 2006, you would need to download and install {\i FastMM4} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with Delphi 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
-Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder. You should be able to compile it and run all regression @*test@s on your computer.
+Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder. You should be able to compile it and run all regression @*test@s on your computer.\line If you want to run the tests with the fast @*http.sys@ kernel-based HTTP server, you'll need to compile and run (as administrator) {\f1\fs20 TestSQL3Register.dpr} once before launching {\f1\fs20 TestSQL3.dpr}.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
+\page
+: Upgrading from a 1.17 revision
+If you are upgrading from an older revision of the framework, your own source code should be updated.
+For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
+To properly upgrade to the latest revision:
+1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
+2. Download latest 1.18 revision files as stated just above.
+3. Change your references to {\i mORMot} units:
+- Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot};
+- Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3};
+- Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
+- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static} unit (for {\i Win32}).
+4. Consult the units' headers about 1.18 for breaking changes, mainly:
+- Renamed @*Iso8601@ low-level structure as {\f1\fs20 TTimeLogBits};
+- {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
+- {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 TSQLRestServerURIContext} class;
+- {\f1\fs20 rmJSON*} enumerates replaced by {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes;
+- Changed '{\f1\fs20 ¤}' into '{\f1\fs20 ~}' character for {\f1\fs20 mORMoti18n.pas} (formerly {\f1\fs20 SQlite3i18n.pas}) language files.
+Feel free to get support from our forum, if needed.
 
 [SAD-SynFile]
 SourcePath=Lib\SQLite3\Samples\MainDemo
