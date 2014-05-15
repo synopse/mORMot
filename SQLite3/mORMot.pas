@@ -1701,7 +1701,7 @@ type
     tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
     tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,tkHelper);
 {$else}
-  /// available type families for Delphi 6 up to XE values
+  /// available type families for Delphi 6 and up 
   TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
@@ -13895,7 +13895,9 @@ begin
     end;
   end;
   if C=nil then
-    raise EORMException.CreateFmt('Unhanled type for property %s',[aPropInfo^.Name]);
+    raise EORMException.CreateFmt('Unhanled %s/%s type for property %s',
+      [GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
+       GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,aPropInfo^.Name]);
   result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
 end;
 
@@ -22284,7 +22286,7 @@ function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; var Data: TIntegerDynArray): boolean;
 var T: TSQLTableJSON;
     V,err: integer;
-    Prop: ShortString;
+    Prop: RawUTF8;
     P: PUTF8Char;
 begin
   Data := nil;
@@ -31900,11 +31902,6 @@ begin
     CancelLastComma;
     Add(']');
   end;
-  tkEnumeration: begin
-    Add('"');
-    AddShort(PTypeInfo(aTypeInfo)^.EnumBaseType^.GetEnumName(aValue)^);
-    Add('"');
-  end;
   else
     inherited; // handle other types
   end else
@@ -31920,11 +31917,6 @@ begin
     AddTypedJSON(aTypeInfo,aValue) else
   if aTypeInfo<>nil then
     case PTypeInfo(aTypeInfo)^.Kind of
-      tkEnumeration: begin
-        Add('"');
-        AddShort(PTypeInfo(aTypeInfo)^.EnumBaseType^.GetEnumName(aValue)^);
-        Add('"');
-      end;
       tkSet: begin
         Add('[');
         with PTypeInfo(aTypeInfo)^.SetEnumType^  do begin
@@ -31943,7 +31935,8 @@ begin
       end;
     else
       inherited AddTypedJSON(aTypeInfo, aValue);
-  end else
+    end
+  else
     AddShort('null');
 end;
 
@@ -33728,7 +33721,7 @@ begin
   tkClass:
     if JSONObject(P^.ClassType^.ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
        [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-         oSQLRecord,oSQLMany,oPersistent,oCustom] then
+        oSQLRecord,oSQLMany,oPersistent,oCustom] then
       result := smvObject; // JSONToObject/ObjectToJSON types
   tkRecord:   // Base64 encoding of our RecordLoad / RecordSave binary format
     result := smvRecord;

@@ -2065,6 +2065,12 @@ begin
     Check(not IsEqualGUID(g2,g));
     Check(not IsEqualGUID(RawUTF8ToGUID(s),g));
   end;
+  {$ifdef ISDELPHI2010}
+  s := RecordSaveJSON(g,TypeInfo(TGUID));
+  fillchar(g2,sizeof(g2),0);
+  Check(RecordLoadJSON(g2,pointer(s),TypeInfo(TGUID))<>nil);
+  Check(IsEqualGUID(g2,g));
+  {$endif}
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
@@ -3984,7 +3990,6 @@ begin
     end;
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),'');
 end;
-
 {$ifndef DELPHI5OROLDER}
 var O,O2: TPersistentToJSON;
     E: TSynBackgroundThreadProcessStep;
@@ -3996,9 +4001,186 @@ var O,O2: TPersistentToJSON;
 var Va, Vb: Variant;
     c: currency;
 {$endif}
+procedure TestJSONSerialization;
 var ab0,ab1: TSubAB;
     cd0,cd1,cd2: TSubCD;
     agg,agg2: TAggregate;
+{$ifndef NOVARIANTS}
+    i: Integer;
+{$endif}
+{$ifdef ISDELPHI2010}
+    nav,nav2: TConsultaNav;
+{$endif}
+begin
+  Finalize(JR);
+  Finalize(JR2);
+  Finalize(JA);
+  Finalize(JA2);
+  fillchar(JR,sizeof(JR),0);
+  fillchar(JR2,sizeof(JR2),0);
+  fillchar(JA,sizeof(JA),0);
+  fillchar(JA2,sizeof(JA2),0);
+  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
+  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
+  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  JR2.A := 10;
+  JR2.D := '**';
+  JR2.F := 1;
+  JR := JR2;
+  RecordLoadJSON(JR2,pointer(U),TypeInfo(TTestCustomJSONRecord));
+  Check(JR2.A=0);
+  Check(JR2.D='');
+  Check(JR2.F=0);
+  U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
+  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
+  Check(U='{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
+  JA2.A := 10;
+  JA2.D := '**';
+  SetLength(JA2.E,2);
+  JA2.F := 1;
+  RecordLoadJSON(JA2,pointer(J),TypeInfo(TTestCustomJSONArray));
+  Check(JA2.A=0);
+  Check(JA2.D='');
+  check(Length(JA2.E)=0);
+  Check(JA2.F=0);
+  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  JA2.A := 100;
+  JA2.F := 1;
+  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
+  SetLength(JA2.E,2);
+  JA2.E[0].E1 := 1;
+  JA2.E[0].E2 := '2';
+  JA2.E[1].E1 := 3;
+  JA2.E[1].E2 := '4';
+  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
+  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
+  RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
+  Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
+  J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
+  RecordLoadJSON(JA,@J[1],TypeInfo(TTestCustomJSONArray));
+  U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
+  Check(length(JA.E)=1);
+  Check(U='{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+
+  ab0.a := 'AB0';
+  ab0.b := 0;
+  ab1.a := 'AB1';
+  ab1.b := 1;
+  cd0.c := 0;
+  cd0.d := 'CD0';
+  cd1.c := 1;
+  cd1.d := 'CD1';
+  cd2.c := 2;
+  cd2.d := 'CD2';
+  SetLength(agg.abArr,2);
+  agg.abArr[0] := ab0;
+  agg.abArr[1] := ab1;
+  SetLength(agg.cdArr,3);
+  agg.cdArr[0] := cd0;
+  agg.cdArr[1] := cd1;
+  agg.cdArr[2] := cd2;
+  u := '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},'+
+    '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
+  Check(Hash32(u)=$E3AC9C44);
+  Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
+  RecordLoadJSON(agg2,@u[1],TypeInfo(TAggregate));
+  j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
+  Check(Hash32(j)=$E3AC9C44);
+
+  Finalize(JAS);
+  FillChar(JAS,sizeof(JAS),0);
+  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
+  Check(U='{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
+  U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
+    '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
+  J := U;
+  RecordLoadJSON(JAS,@U[1],TypeInfo(TTestCustomJSONArraySimple));
+  Check(JAS.A=1);
+  Check(JAS.B=2);
+  Check(length(JAS.C)=2);
+  Check(GUIDToRawUTF8(JAS.C[0])='{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+  Check(GUIDToRawUTF8(JAS.C[1])='{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
+  Check(JAS.D='4');
+  Check(length(JAS.E)=1);
+  Check(JAS.E[0].F='f');
+  Check(Length(JAS.E[0].G)=2);
+  Check(JAS.E[0].G[0]='g1');
+  Check(JAS.E[0].G[1]='g2');
+  Check(JAS.H='h');
+  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
+  Check(SameTextU(J,U));
+
+{$ifndef NOVARIANTS}
+  Finalize(JAV);
+  FillChar(JAV,sizeof(JAV),0);
+  U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
+  Check(U='{"A":0,"B":0,"C":[],"D":""}');
+  assert(DocVariantType<>nil);
+  U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
+  RecordLoadJSON(JAV,@U[1],TypeInfo(TTestCustomJSONArrayVariant));
+  Check(JAV.A=1);
+  Check(JAV.B=2);
+  if not CheckFailed(length(JAV.C)=4) then begin
+    Check(JAV.C[0]='one');
+    Check(JAV.C[1]=2);
+    CheckSame(JAV.C[2],2.5);
+    Check(JAV.C[3]._Kind=ord(dvObject));
+    Check(JAV.C[3]._Count=1);
+    Check(JAV.C[3].Name(0)='four');
+    Check(VariantSaveJSON(JAV.C[3].four)='[1,2,3,4]');
+    with DocVariantData(JAV.C[3])^ do begin
+      Check(Kind=dvObject);
+      Check(Count=1);
+      Check(Names[0]='four');
+      Check(Values[0]._Kind=ord(dvArray));
+      Check(Values[0]._Count=4);
+      with DocVariantData(Values[0])^ do begin
+        Check(Kind=dvArray);
+        Check(Count=4);
+        for i := 0 to Count-1 do
+          Check(Values[i]=i+1);
+      end;
+    end;
+  end;
+  Check(JAV.D='4');
+{$endif}
+
+  Finalize(Cache);
+  FillChar(Cache,sizeof(Cache),0);
+  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
+  Check(U='{"ID":0,"JSON":"","TimeStamp64":0}');
+  Cache.ID := 10;
+  Cache.TimeStamp64 := 200;
+  Cache.JSON := 'test';
+  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
+  Check(U='{"ID":10,"JSON":"test","TimeStamp64":200}');
+  U := '{"ID":210,"TimeStamp64":2200,"JSON":"test2"}';
+  RecordLoadJSON(Cache,@U[1],TypeInfo(TSQLRestCacheEntryValue));
+  Check(Cache.ID=210);
+  Check(Cache.TimeStamp64=2200);
+  Check(Cache.JSON='test2');
+
+  {$ifdef ISDELPHI2010}
+  fillchar(nav,sizeof(nav),0);
+  fillchar(nav2,sizeof(nav2),1);
+  Check(not CompareMem(@nav,@nav2,sizeof(nav)));
+  Check(nav2.MaxRows<>0);
+  check(nav2.EOF);
+  U := RecordSaveJSON(nav,TypeInfo(TConsultaNav));
+  J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
+  Check(U<>J);
+  RecordLoadJSON(nav2,@U[1],TypeInfo(TConsultaNav));
+  Check(nav2.MaxRows=0);
+  check(not nav2.EOF);
+  J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
+  Check(J=RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
+  Check(CompareMem(@nav,@nav2,sizeof(nav)));
+  {$endif}
+end;
 begin
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto"')))='"');
   Check(GotoEndOfJSONString(PUTF8Char(PAnsiChar('"toto",')))='",');
@@ -4436,58 +4618,47 @@ begin
     Check(NestedProperty[1].PropertyName='E2');
     Check(NestedProperty[1].PropertyType=ptDouble);
   end;
+
+  {$ifdef ISDELPHI2010}
+  // test JSON serialization defined by Enhanced RTTI
+  TestJSONSerialization;
+  {$endif}
+
   // test TJSONCustomParserFromTextDefinition JSON serialization
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),__TSubAB);
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),__TSubCD);
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),__TAggregate);
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONRecord),__TTestCustomJSONRecord);
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArray),__TTestCustomJSONArray);
-  fillchar(JR,sizeof(JR),0);
-  fillchar(JR2,sizeof(JR2),0);
-  fillchar(JA,sizeof(JA),0);
-  fillchar(JA2,sizeof(JA2),0);
-  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
-  J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
-  JR2.A := 10;
-  JR2.D := '**';
-  JR2.F := 1;
-  JR := JR2;
-  RecordLoadJSON(JR2,pointer(U),TypeInfo(TTestCustomJSONRecord));
-  Check(JR2.A=0);
-  Check(JR2.D='');
-  Check(JR2.F=0);
-  U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
-  U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
-  Check(U='{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
-  JA2.A := 10;
-  JA2.D := '**';
-  JA2.F := 1;
-  RecordLoadJSON(JA2,pointer(J),TypeInfo(TTestCustomJSONArray));
-  Check(JA2.A=0);
-  Check(JA2.D='');
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
-  JA2.A := 100;
-  JA2.F := 1;
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[],"F":"1899-12-31"}');
-  SetLength(JA2.E,2);
-  JA2.E[0].E1 := 1;
-  JA2.E[0].E2 := '2';
-  JA2.E[1].E1 := 3;
-  JA2.E[1].E2 := '4';
-  J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
-  Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
-  RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
-  Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
-  J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
-  RecordLoadJSON(JA,@J[1],TypeInfo(TTestCustomJSONArray));
-  U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
-  Check(length(JA.E)=1);
-  Check(U='{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+  TTextWriter.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TTestCustomJSONArraySimple),__TTestCustomJSONArraySimple);
+  {$ifndef NOVARIANTS}
+  TTextWriter.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TTestCustomJSONArrayVariant),__TTestCustomJSONArrayVariant);
+  {$endif}
+  TTextWriter.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TSQLRestCacheEntryValue),__TSQLRestCacheEntryValue);
+  TestJSONSerialization;
+  TestJSONSerialization; // test twice for safety
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSQLRestCacheEntryValue),'');
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),'');
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),'');
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONRecord),'');
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArray),'');
+  {$ifndef NOVARIANTS}
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayVariant),'');
+  {$endif}
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArraySimple),'');
+
+  {$ifdef ISDELPHI2010}
+  // test JSON serialization defined by Enhanced RTTI
+  TestJSONSerialization;
+  {$endif}
+
+  // tests parsing options
   Parser := TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONRecord),
     copy(__TTestCustomJSONRecord,1,PosEx('}',__TTestCustomJSONRecord))) as TJSONCustomParserFromTextDefinition;
@@ -4508,7 +4679,8 @@ begin
   Check(JR2.D='A');
   Check(JR2.E.E1=4);
   Check(JR2.E.E2=5);
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArray),'');
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONRecord),'');
+
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayWithoutF),
     copy(__TTestCustomJSONArray,1,PosEx(']',__TTestCustomJSONArray)));
   U := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArrayWithoutF));
@@ -4529,69 +4701,8 @@ begin
   RecordLoadJSON(JA,pointer(U),TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(length(JA.E)=2);
   Check(JA.D='1234');
-  TTextWriter.RegisterCustomJSONSerializerFromText(
-    TypeInfo(TTestCustomJSONArraySimple),__TTestCustomJSONArraySimple);
-  Finalize(JAS);
-  FillChar(JAS,sizeof(JAS),0);
-  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(U='{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
-  U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
-    '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
-  J := U;
-  RecordLoadJSON(JAS,@U[1],TypeInfo(TTestCustomJSONArraySimple));
-  Check(JAS.A=1);
-  Check(JAS.B=2);
-  Check(length(JAS.C)=2);
-  Check(GUIDToRawUTF8(JAS.C[0])='{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-  Check(GUIDToRawUTF8(JAS.C[1])='{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
-  Check(JAS.D='4');
-  Check(length(JAS.E)=1);
-  Check(JAS.E[0].F='f');
-  Check(Length(JAS.E[0].G)=2);
-  Check(JAS.E[0].G[0]='g1');
-  Check(JAS.E[0].G[1]='g2');
-  Check(JAS.H='h');
-  U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
-  Check(SameTextU(J,U));
-{$ifndef NOVARIANTS}
-  TTextWriter.RegisterCustomJSONSerializerFromText(
-    TypeInfo(TTestCustomJSONArrayVariant),__TTestCustomJSONArrayVariant);
-  FillChar(JAV,sizeof(JAV),0);
-  U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
-  Check(U='{"A":0,"B":0,"C":[],"D":""}');
-  assert(DocVariantType<>nil);
-  U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
-  RecordLoadJSON(JAV,@U[1],TypeInfo(TTestCustomJSONArrayVariant));
-  Check(JAV.A=1);
-  Check(JAV.B=2);
-  if not CheckFailed(length(JAV.C)=4) then begin
-    Check(JAV.C[0]='one');
-    Check(JAV.C[1]=2);
-    CheckSame(JAV.C[2],2.5);
-    Check(JAV.C[3]._Kind=ord(dvObject));
-    Check(JAV.C[3]._Count=1);
-    Check(JAV.C[3].Name(0)='four');
-    Check(VariantSaveJSON(JAV.C[3].four)='[1,2,3,4]');
-    with DocVariantData(JAV.C[3])^ do begin
-      Check(Kind=dvObject);
-      Check(Count=1);
-      Check(Names[0]='four');
-      Check(Values[0]._Kind=ord(dvArray));
-      Check(Values[0]._Count=4);
-      with DocVariantData(Values[0])^ do begin
-        Check(Kind=dvArray);
-        Check(Count=4);
-        for i := 0 to Count-1 do
-          Check(Values[i]=i+1);
-      end;
-    end;
-  end;
-  Check(JAV.D='4');
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayVariant),'');
-  {$endif}
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONRecord),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayWithoutF),'');
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArraySimple),'');
+
   zendframeworkJson := StringFromFile(zendframeworkFileName);
   if zendframeworkJson='' then begin
     zendframeworkJson := TWinINet.Get(
@@ -4680,54 +4791,6 @@ begin
     Check(Disco.releases[0].id=2);
   end;
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomDiscogs),'');
-
-  TTextWriter.RegisterCustomJSONSerializerFromText(
-    TypeInfo(TSQLRestCacheEntryValue),__TSQLRestCacheEntryValue);
-  FillChar(Cache,sizeof(Cache),0);
-  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":0,"JSON":"","TimeStamp64":0}');
-  Cache.ID := 10;
-  Cache.TimeStamp64 := 200;
-  Cache.JSON := 'test';
-  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":10,"JSON":"test","TimeStamp64":200}');
-  U := '{"ID":210,"TimeStamp64":2200,"JSON":"test2"}';
-  RecordLoadJSON(Cache,@U[1],TypeInfo(TSQLRestCacheEntryValue));
-  Check(Cache.ID=210);
-  Check(Cache.TimeStamp64=2200);
-  Check(Cache.JSON='test2');
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSQLRestCacheEntryValue),'');
-
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),__TSubAB);
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),__TSubCD);
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),__TAggregate);
-  ab0.a := 'AB0';
-  ab0.b := 0;
-  ab1.a := 'AB1';
-  ab1.b := 1;
-  cd0.c := 0;
-  cd0.d := 'CD0';
-  cd1.c := 1;
-  cd1.d := 'CD1';
-  cd2.c := 2;
-  cd2.d := 'CD2';
-  SetLength(agg.abArr,2);
-  agg.abArr[0] := ab0;
-  agg.abArr[1] := ab1;
-  SetLength(agg.cdArr,3);
-  agg.cdArr[0] := cd0;
-  agg.cdArr[1] := cd1;
-  agg.cdArr[2] := cd2;
-  u := '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},'+
-    '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
-  Check(Hash32(u)=$E3AC9C44);
-  Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
-  RecordLoadJSON(agg2,@u[1],TypeInfo(TAggregate));
-  j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
-  Check(Hash32(j)=$E3AC9C44);
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),'');
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),'');
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),'');
 end;
 
 
