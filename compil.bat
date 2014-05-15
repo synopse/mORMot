@@ -1,6 +1,8 @@
 @echo off
 cls
 
+goto SkipOldDelphi
+
 set DCC=c:\progs\delphi5\bin\dcc32.exe
 set DelphiVersion=Delphi 5
 call compilpil.bat
@@ -8,6 +10,8 @@ call compilpil.bat
 set DCC=c:\progs\delphi6\bin\dcc32.exe
 set DelphiVersion=Delphi 6
 call compilpil.bat
+
+:SkipOldDelphi
 
 set DelphiVersion=
 set LVCL=LVCL
@@ -35,6 +39,16 @@ call compilpil.bat
 set DCC="c:\progs\Embarcadero\RAD Studio\11.0\bin\dcc64.exe"
 if not exist %DCC% set DCC="c:\progs\DelphiXE4\bin\dcc64.exe"
 set DelphiVersion=Delphi XE4 Win64
+call compilpil.bat
+
+set DCC="c:\progs\Embarcadero\Studio\14.0\bin\dcc32.exe"
+if not exist %DCC% set DCC="c:\progs\DelphiXE6\bin\dcc32.exe"
+set DelphiVersion=Delphi XE6 Win32
+call compilpil.bat
+
+set DCC="c:\progs\Embarcadero\Studio\14.0\bin\dcc64.exe"
+if not exist %DCC% set DCC="c:\progs\DelphiXE6\bin\dcc64.exe"
+set DelphiVersion=Delphi XE6 Win64
 call compilpil.bat
 
 pause
