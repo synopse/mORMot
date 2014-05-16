@@ -8433,6 +8433,9 @@ type
   // to avoid memory allocations, BUT it may break internal process if you change
   // some values in place (since VValue/VName and VCount won't match) - as such,
   // if you set this option, ensure that you use the content as read-only
+  // - any registered custom types may have an extended JSON syntax (e.g.
+  // TBSONVariant does for MongoDB types), and will be searched during JSON
+  // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster) 
   // - by default, it will only handle direct JSON [array] of {object}: but if
   // you define dvoJSONObjectParseWithinString, it will also try to un-escape
   // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
@@ -8441,7 +8444,7 @@ type
   TDocVariantOption =
     (dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
      dvoReturnNullForUnknownProperty, dvoReturnNullForOutOfRangeIndex,
-     dvoValueCopiedByReference,
+     dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
      dvoJSONObjectParseWithinString);
 
   /// set of options for a TDocVariant storage
@@ -9356,6 +9359,12 @@ const
   JSON_OPTIONS: array[Boolean] of TDocVariantOptions = (
     [dvoReturnNullForUnknownProperty],
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
+
+  /// TDocVariant options which may be used for plain JSON parsing
+  // - this won't recognize any extended syntax 
+  JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =  
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoJSONParseDoNotTryCustomVariants];
 
 {$endif NOVARIANTS}
 
@@ -12937,7 +12946,7 @@ type
     {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
     NumOps: Byte;
     //RecOps: array[0..0] of Pointer;
-    AllCount: Integer;
+    AllCount: Integer; // !!!! may need {$RTTI EXPLICIT FIELDS([vcPublic])}
     AllFields: array[0..0] of TEnhancedFieldInfo;
     {$endif ISDELPHI2010}
   end;
@@ -17176,6 +17185,7 @@ const
   // - our enhanced SysUtils.pas (normal and LVCL) contains the same array
   // - should be local for better code generation
   HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j, v: cardinal;
@@ -24212,8 +24222,8 @@ begin
     end;
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(aDynArrayTypeInfo,aRecordTypeInfo);
-    if (result>=0) and (self<>nil) then
-      fLastRecordIndex := result;
+    if result>=0 then
+      GlobalJSONCustomParsers.fLastRecordIndex := result;
   end else
     result := -1;
 end;
@@ -24223,8 +24233,8 @@ function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: po
 var ndx: integer;
 begin
   ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and (self<>nil) and Assigned(fParser[ndx].Reader) then begin
-    Reader := fParser[ndx].Reader;
+  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Reader) then begin
+    Reader := GlobalJSONCustomParsers.fParser[ndx].Reader;
     result := true;
   end else
     result := false;
@@ -24235,10 +24245,10 @@ function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: po
 var ndx: integer;
 begin
   ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and (self<>nil) and Assigned(fParser[ndx].Writer) then begin
-    Writer := fParser[ndx].Writer;
+  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Writer) then begin
+    Writer := GlobalJSONCustomParsers.fParser[ndx].Writer;
     if PParser<>nil then
-      PParser^ := fParser[ndx].RecordCustomParser;
+      PParser^ := GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser;
     result := true;
   end else
     result := false;
@@ -24264,8 +24274,8 @@ begin
       end;
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(nil,aRecordTypeInfo);
-    if (result>=0) and (self<>nil) then
-      fLastRecordIndex := result;
+    if result>=0 then
+      GlobalJSONCustomParsers.fLastRecordIndex := result;
   end else
     result := -1;
 end;
@@ -24287,8 +24297,8 @@ function TJSONCustomParsers.RecordSearch(aRecordTypeInfo: pointer;
 var ndx: integer;
 begin
   ndx := RecordSearch(aRecordTypeInfo);
-  if (ndx>=0) and (self<>nil) and Assigned(fParser[ndx].Reader) then begin
-    Reader := fParser[ndx].Reader;
+  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Reader) then begin
+    Reader := GlobalJSONCustomParsers.fParser[ndx].Reader;
     result := true;
   end else
     result := false;
@@ -24300,10 +24310,10 @@ var ndx: integer;
 begin
   result := false;
   ndx := RecordSearch(aRecordTypeInfo);
-  if (ndx>=0) and (self<>nil) and Assigned(fParser[ndx].Writer) then begin
-    Writer := fParser[ndx].Writer;
+  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Writer) then begin
+    Writer := GlobalJSONCustomParsers.fParser[ndx].Writer;
     if PParser<>nil then
-      PParser^ := fParser[ndx].RecordCustomParser;
+      PParser^ := GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser;
     result := true;
   end;
 end;
@@ -24674,7 +24684,7 @@ var ndx: integer;
 begin
   if not GetNextFieldProp(P,TypIdent) then
     raise ESynException.Create('Expected type');
-  TypIdent := UpperCase(TypIdent);
+  TypIdent := SynCommons.UpperCase(TypIdent);
   ndx := FastFindPUTF8CharSorted(@JSONCUSTOMPARSERRTTITYPE_NAMES,
     ord(pred(ptCustom)),pointer(TypIdent));
   if ndx<0 then
@@ -24799,7 +24809,14 @@ var EndOfObject: AnsiChar;
       result := true;
       exit;
     end;
-    ptArray: begin
+    ptArray:
+    if PInteger(P)^=NULL_LOW then begin // null -> void array
+      P := GotoNextNotSpace(P+4);
+      EndOfObject := P^;
+      if P^<>#0 then //if P^=',' then
+        inc(P);
+      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
+    end else begin
       if P^<>'[' then
         exit; // we expect a true array here
       repeat inc(P) until P^<>' ';
@@ -24873,12 +24890,12 @@ var EndOfObject: AnsiChar;
     end;
     else begin
       PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
-      if (PropValue=nil) or
+      if (PropValue<>nil) and // PropValue=nil for null
          (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
            ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
         exit;
       case Prop.PropertyType of
-      ptBoolean:   if PInteger(PropValue)^=TRUE_LOW then
+      ptBoolean:   if (PropValue<>nil) and (PInteger(PropValue)^=TRUE_LOW) then
                      PBoolean(Data)^ := true else
                      PBoolean(Data)^ := GetInteger(PropValue)<>0;
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
@@ -24907,9 +24924,15 @@ var i,j: integer;
     Values: array of PUTF8Char;
 begin
   result := false;
-  if (P=nil) or (PInteger(P)^=NULL_LOW) then // a record is never null
+  if P=nil then
     exit;
   P := GotoNextNotSpace(P);
+  if PInteger(P)^=NULL_LOW then begin // a record stored as null
+    P := GotoNextNotSpace(P+4);
+    inc(Data,fDataSize);
+    result := true;
+    exit;
+  end;
   if not (PropertyType in [ptRecord,ptArray]) then begin
     result := ProcessValue(Self,P,Data);
     exit;
@@ -25880,21 +25903,27 @@ var itemName: RawUTF8;
     DestVar: TVarData;
 begin
   Dest.VType := varNull;
+  DestVar := V;
+  repeat
   itemName := GetNextItem(FullName,'.');
   if itemName='' then
     exit;
-  DestVar.VType := varEmpty;
-  IntGet(DestVar,V,pointer(itemName));
+    if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
+      exit;
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
-  if FullName=nil then // found full name scope
-    Dest := DestVar else
+    if FullName=nil then begin // found full name scope
+      Dest := DestVar;
+      exit;
+    end;
     // if we reached here, we should try for the next scope within Dest
     if DestVar.VType=VarType then // most likely to be of the same exact type
-      Lookup(Dest,DestVar,FullName) else
+      continue;
     if FindCustomVariantType(DestVar.VType,TCustomVariantType(Handler)) and
        Handler.InheritsFrom(TSynInvokeableVariantType) then
       Handler.Lookup(Dest,DestVar,FullName);
+    break;
+  until false;
 end;
 
 function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
@@ -26040,7 +26069,8 @@ begin
       ToBeParsed := JSON;
       wasParsedWithinString := false;
     end;
-  if SynVariantTypes<>nil then begin
+  if (SynVariantTypes<>nil) and
+     not (dvoJSONParseDoNotTryCustomVariants in Options^) then begin
     VariantType := pointer(SynVariantTypes.List);
     for i := 1 to SynVariantTypes.Count do
       if VariantType^.TryJSONToVariant(ToBeParsed,Value,EndOfObject) then begin
@@ -26716,18 +26746,66 @@ end;
 
 function TDocVariantData.GetVarData(const aName: RawUTF8;
   var aValue: TVarData): boolean;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found =nil then
+    result := false else begin
+    aValue := found^;
+    result := true;
+  end;
+end;
+
+function TDocVariantData.GetVarData(const aName: RawUTF8): PVarData;
 var ndx: Integer;
 begin
   if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
      (Kind<>dvObject) then
-    result := false else begin
-    ndx := GetValueIndex(aName);
-    if ndx>=0 then begin
-      aValue := TVarData(VValue[ndx]);
-      result := true;
-    end else
-      result := false;
+    result := nil else begin
+    ndx := FindRawUTF8(VName,VCount,aName,not(dvoNameCaseSensitive in VOptions));
+    if ndx>=0 then
+      result := @VValue[ndx] else
+      result := nil;
   end;
+end;
+
+function TDocVariantData.GetValueByPath(const aPath: RawUTF8): variant;
+var Dest: TVarData;
+begin
+  SetVariantNull(result);
+  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+     (Kind<>dvObject) then
+    exit;
+  DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
+  if Dest.VType<>varNull then
+    result := variant(Dest); // copy
+end;
+
+function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
+var found: PVarData;
+    P: integer;
+begin
+  SetVariantNull(result);
+  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+     (Kind<>dvObject) or (high(aDocVariantPath)<0) then
+    exit;
+  found := @self;
+  P := 0;
+  repeat
+    found := PDocVariantData(found).GetVarData(aDocVariantPath[P]);
+    if found=nil then
+      exit;
+    if P=high(aDocVariantPath) then
+      break; // we found the item!
+    inc(P);
+    while found^.VType=varByRef or varVariant do
+      found := found^.VPointer;
+    // if we reached here, we should try for the next scope within Dest
+    if found^.VType=VarType then
+      continue;
+    break; // this version only handle nested TDocVariant values
+  until false;
+  result := PVariant(found)^; // copy
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
@@ -26956,7 +27034,9 @@ begin
     dvObject: begin
       W.Add('{');
       for i := 0 to VCount-1 do begin
-        W.AddFieldName(pointer(VName[i]),Length(VName[i]));
+        W.Add('"');
+        W.AddJSONEscape(pointer(VName[i]),Length(VName[i]));
+        W.Add('"',':');
         W.AddVariantJSON(VValue[i],twJSONEscape);
         W.Add(',');
       end;
@@ -30822,7 +30902,7 @@ Esc:  B^ := '\';
     else begin // characters below ' ', #7 e.g. -> // 'u0007'
       B^ := '\';
       AddShort('u00');
-      Add(HexChars[c shr 4],HexChars[c and $F]);
+      Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
       goto nxt;
     end;
     end;
@@ -30875,7 +30955,7 @@ Escape: B^ := '\';
         AddShort('u00');
         v := byte(PAnsiChar(P)^);
         inc(P);
-        Add(HexChars[v shr 4],HexChars[v and $F]);
+        Add(HexCharsLower[v shr 4],HexCharsLower[v and $F]);
         if PtrUInt(P)<PEnd then continue else break;
       end;
       else begin // characters higher than #126 -> UTF-8 encode
@@ -31937,7 +32017,7 @@ function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Cha
 label Prop;
 begin // should match GetJSONPropName()
   result := nil; // mark error or unexpected end (#0)
-  while P^ in [#1..' '] do inc(P);
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   if EndChar=#0 then begin
     case P^ of
     '[': EndChar := ']';
@@ -31966,9 +32046,9 @@ begin // should match GetJSONPropName()
       repeat
         inc(P);
       until not (P^ in ['0'..'9','.','E','e']);
-    't','T': if IdemPChar(P+1,'RUE') then inc(P,4) else goto Prop;
-    'f','F': if IdemPChar(P+1,'ALSE') then inc(P,5) else goto Prop;
-    'n','N': if IdemPChar(P+1,'ULL') then inc(P,4) else goto Prop;
+    't': if PInteger(P)^=TRUE_LOW then inc(P,4) else goto Prop;
+    'f': if PInteger(P)^=FALSE_LOW then inc(P,5) else goto Prop;
+    'n': if PInteger(P)^=NULL_LOW then inc(P,4) else goto Prop;
     '''': begin
       repeat inc(P); if P^<=' ' then exit; until P^='''';
       repeat inc(P) until not(P^ in [#1..' ']);
@@ -31984,7 +32064,7 @@ Prop: if not (P^ in ['_','A'..'Z','a'..'z','0'..'9','$']) then
        if P^<>':' then exit;
     end;
     end;
-    while P^ in [#1..' '] do inc(P);
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   until P^=EndChar;
   result := P+1;
 end;
@@ -32341,7 +32421,7 @@ end;
 
 procedure TSynFilterUpperCase.Process(aFieldIndex: integer; var Value: RawUTF8);
 begin
-  Value := UpperCase(Value);
+  Value := SynCommons.UpperCase(Value);
 end;
 
 
