@@ -375,7 +375,7 @@ ShortName=Communication via diverse protocols
 In computing and telecommunications, a protocol or communications protocol is a formal description of message formats and the rules for exchanging those messages.
 The {\i Synopse mORMot Framework} shall support the following protocols for remote access, according to the Client-Server architecture defined in @SRS-DI-2.1.1@:
 - Direct in-process communication;
-- Using GDI messages;
+- Using Windows Messages;
 - Using Named pipe;
 - Using HTTP/1.1 over TCP/IP.
 
@@ -391,7 +391,7 @@ ShortName=Named Pipe protocol
 
 [SRS-DI-2.1.1.2.3]
 Parent=DI-2.1.1.2
-Ident=Client-Server Windows GDI Messages communication shall be made available by some dedicated classes
+Ident=Client-Server Windows Messages communication shall be made available by some dedicated classes
 ShortName=Windows Messages protocol
 
 [SRS-DI-2.1.1.2.4]
@@ -635,7 +635,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - {\i Service-Oriented-Architecture} model, using custom RESTful JSON services - you can send as JSON any {\f1\fs20 TStrings, TCollection, TPersistent} or {\f1\fs20 TObject} (via registration of a custom serializer) instance, or even a {\i dynamic array}, or any record content, with integrated JSON @*serialization@, via an @*interface@-based contract shared on both client and server sides;
 - Truly RESTful authentication with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
-- Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, GDI messages or in-process as lighter alternatives;
+- Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
 - Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the Delphi {\f1\fs20 DB.pas} unit nor any third-party (so even the Delphi Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
 - RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
@@ -1294,7 +1294,7 @@ With {\f1\fs20 TDynArray}, you can access any {\i dynamic array} (like {\f1\fs20
 One benefit of {\i dynamic arrays} is that they are reference-counted, so they do not need any {\f1\fs20 Create/try..finally...Free} code, and are well handled by the Delphi compiler (access is optimized, and all array content will be allocated at once, therefore reducing the memory fragmentation and CPU cache slow-down).
 They are no replacement to a {\f1\fs20 @*TCollection@} nor a {\f1\fs20 TList} (which are the standard and efficient way of storing class instances, and are also handled as @*published properties@ since revision 1.13 of the framework), but they are very handy way of having a list of content or a dictionary at hand, with no previous class nor properties definition.
 You can look at them like Python's list, tuples (via records handling) and dictionaries (via {\f1\fs20 Find} method, especially with the dedicated {\f1\fs20 TDynArrayHashed} wrapper), in pure Delphi. Our new methods (about searching and serialization) allow most usage of those script-level structures in your Delphi code.
-In order to handle {\i dynamic arrays} in our @*ORM@, some @*RTTI@-based structure were designed for this task. Since {\i dynamic array of records} should be necessary, some low-level fast access to the record content, using the common RTTI, has also been implemented (much faster than the "new" enhanced RTTI available since Delphi 2010).
+In order to handle {\i dynamic arrays} in our @*ORM@, some @*RTTI@-based structure were designed for this task. Since {\i dynamic array of records} should be necessary, some low-level fast access to the record content, using the common RTTI, has also been implemented (much faster than the "new" @*enhanced RTTI@ available since Delphi 2010).
 :  TList-like properties
 Here is how you can have method-driven access to the {\i dynamic array}:
 !type
@@ -2140,7 +2140,7 @@ In fact, several kind of properties will be stored as @**BLOB@ in the database b
 - {\f1\fs20 @*TSQLRawBlob@} properties are how you store your binary data, e.g. images or documents;
 - {\i @*dynamic array@s} (saved in the {\f1\fs20 TDynArray.SaveTo} binary format);
 - {\f1\fs20 record} which were explicitly registered as BLOB columns.
-By default, both {\i dynamic arrays} and BLOB {\i record} content will be retrieved from the database, endoded as @*Base64@ text.
+By default, both {\i dynamic arrays} and BLOB {\i record} content will be retrieved from the database, encoded as @*Base64@ text.
 But {\f1\fs20 @*TSQLRawBlob@} properties will be transmitted as @*REST@ful separate resources, as required by the REST scheme. For instance, it means that a first request will retrieve all "simple" fields as JSON, then some other requests are needed to retrieve each BLOB fields as a binary buffer. As a result, {\f1\fs20 @*TSQLRawBlob@} won't be transmitted by default, to spare transmission bandwidth and resources.
 You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
@@ -3022,7 +3022,7 @@ Another good impact is the naming consistency. For example, what about if you wa
 Another risk-related improvement is about the @**strong type@ checking, included into the Delphi language during compile time, and only during execution time for the SQL. You will avoid most runtime exceptions for your database access: your clients will thank you for that. In one word, forget about field typing mismatch or wrong type assignment in your database tables. Strong typing is great in such cases for code SQA, and if you worked with some scripting languages (like @*JavaScript@, Python or Ruby), you should have wished to have this feature in your project!
 It is worth noting that our framework allows writing triggers and stored procedures (or like @*stored procedure@s) in Delphi code, and can create key indexing and perform foreign key checking in class definition.
 Another interesting feature is the enhanced Grid component supplied with this framework, and the @*AJAX@-ready orientation, by using natively @*JSON@ flows for @*Client-Server@ data streaming. The @*REST@ protocol can be used in most application, since the framework provides you with an easy to use "Refresh" and caching mechanism. You can even work off line, with a local database replication of the remote data.
-For Client-Server - see @6@ - you do not have to open a connection to the database, just create an instance of a {\f1\fs20 TSQLRestClient} object (with the communication layer you want to use: direct access, GDI messages, named pipe or @*HTTP@), and use it as any normal Delphi object. All the @*SQL@ coding or communication and error handling will be done by the framework. The same code can be used in the Client or Server side: the parent {\f1\fs20 @*TSQLRest@} object is available on both sides, and its properties and methods are strong enough to access the data.
+For Client-Server - see @6@ - you do not have to open a connection to the database, just create an instance of a {\f1\fs20 TSQLRestClient} object (with the communication layer you want to use: direct access, Windows Messages, named pipe or @*HTTP@), and use it as any normal Delphi object. All the @*SQL@ coding or communication and error handling will be done by the framework. The same code can be used in the Client or Server side: the parent {\f1\fs20 @*TSQLRest@} object is available on both sides, and its properties and methods are strong enough to access the data.
 : ORM is not Database
 It is worth emphasizing that you should not think about the @*ORM@ like a mapping of an existing DB schema. This is an usual mistake in ORM design.
 The database is just one way of your objects persistence:
@@ -5797,13 +5797,25 @@ In Delphi, the {\f1\fs20 @**record@} has some nice advantages:
 - {\f1\fs20 record} variables can be allocated on stack, so won't solicited the global heap;
 - {\f1\fs20 record} instances automatically freed by the compiler when they come out of scope, so you won't need to write any {\f1\fs20 try..finally Free; end} block.
 Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}.
-:   Default Binary/Base64 serialization
-By default, any {\f1\fs20 @*record@} value will be serialized with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
+:   Automatic serialization via Enhanced RTTI
+Since Delphi 2010, the compiler generates additional RTTI at compilation, so that all {\f1\fs20 record} fields are described, and available at runtime.\line By the way, this @**enhanced RTTI@ is one of the reasons why executables did grow so much in newer versions of the compiler.
+Our {\f1\fs20 SynCommons.pas} unit is able to use this enhanced information, and let any {\f1\fs20 record} be serialized via {\f1\fs20 RecordLoad()} and {\f1\fs20 RecordSave()} functions, and all internal JSON marshalling process.
+In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with Delphi 2010 and up, they will be serialized as valid JSON objects.
+:   Serialization for older Delphi versions
+Sadly, the information needed to serialize a {\f1\fs20 record} is available only since Delphi 2010.
+If your application is developped on any older revision (e.g. Delphi 7, Delphi 2007 or Delphi 2009), you won't be able to automatically serialize {\f1\fs20 records} as plain JSON objects directly.
+You have several paths available:
+- By default, the {\f1\fs20 record} will be serialized as binary, and encoded as {\i Base64} text;
+- Or you can define method callbacks which will write or read the data as you expect;
+- Or you can define the {\f1\fs20 record} layout as plain text.
+Note that any custom serialization (either via callbacks, or via text definition), will override any previous registrated method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
+:    Default Binary/Base64 serialization
+On any version of the compiler prior to Delphi 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
 A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
 $ { "MyRecord": "￰w6nDoMOnYQ==" }
 You will find in {\f1\fs20 SynCommons} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
 When working with most part of the framework, you do not have anything to do: any record will by default follow this {\i Base64} serialization, so you will be able e.g. to publish or consume interface-based services with records.
-:   Custom serialization
+:    Custom serialization
 {\i Base64} encoding is pretty convenient for a computer (it is a compact and efficient format), but it is very limited about its interoperability. Our format is proprietary, and will use the internal Delphi serialization scheme: it means that it won't be readable nor writable outside the scope of your own {\i mORMot} applications. In a @*REST@ful/@*SOA@ world, this sounds not like a feature, but a limitation.
 Custom {\f1\fs20 record} @*JSON@ serialization can therefore be defined, as with any {\f1\fs20 class} - see @52@. It will allow writing and parsing {\f1\fs20 record} variables as regular JSON objects, ready to be consumed by any client or server. Internally, some callbacks will be used to perform the serialization.
 In fact, there are two entry points to specify a custom JSON serialization for {\f1\fs20 record}:
@@ -5995,23 +6007,31 @@ Or void {\f1\fs20 TTestCustomJSONArraySimple} may be serialized as:
 $ {"A":0,"B":0,"C":[],"D":""}
 You can refer to the supplied regression tests (in {\f1\fs20 TTestLowLevelTypes.EncodeDecodeJSON}) for some more examples of custom JSON serialization.
 :53  Dynamic array serialization
+:   Standard JSON arrays
 Note that @*dynamic array@s are handled in two separated contexts:
 - Within the @*ORM@ part of the framework, they are stored as BLOB and always transmitted after {\i Base64} encoding - see @26@;
-- Within the scope of {\f1\fs20 interface}-based services, dynamic arrays values and parameters are using the advanced JSON serialization made available in the {\f1\fs20 @*TDynArray@} wrapper, i.e. could be either a true JSON array, or, in default, use generic binary and {\i Base64} encoding.
-In fact, this {\f1\fs20 @*TDynArray@} wrapper - see @48@ - recognizes most common kind of {\i dynamic arrays}, like {\f1\fs20 array of byte, word, integer, cardinal, Int64, double, @*currency@, @*RawUTF8@, @*SynUnicode@, WinAnsiString, string}. They will be serialized as a valid JSON array, i.e. a list of valid JSON elements of the matching type (number, floating-point value or string).
-If you have any ideas of standard {\i dynamic arrays} which should be handled, feel free to post your proposal in the forum!
-Other not-known {\i dynamic arrays} (like any {\f1\fs20 array of packed record}) will be serialized by default as binary, then {\i Base64} encoded. This method will always work, but won't be easy to deal with from an AJAX client.
-But applications can also supply a custom JSON serialization for any other dynamic array, via the {\f1\fs20 TTextWriter.@**RegisterCustomJSONSerializer@()} class method, just like @51@. Two callbacks are to be defined in association with dynamic array type information, in order to handle proper serialization and un-serialization of the JSON array. As an alternative, you can call the {\f1\fs20 @*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format - see above.
+- Within the scope of {\f1\fs20 interface}-based services, dynamic arrays values and parameters are using the advanced JSON serialization made available in the {\f1\fs20 @*TDynArray@} wrapper, i.e. could be either a true JSON array, or, in default, use generic binary and {\i Base64} encoding, prior to Delphi 2010.
+In fact, this {\f1\fs20 @*TDynArray@} wrapper - see @48@ - recognizes most common kind of {\i dynamic arrays}, like {\f1\fs20 array of byte, word, integer, cardinal, Int64, double, @*currency@, @*RawUTF8@, @*SynUnicode@, WinAnsiString, string}. They will be serialized as a valid JSON array, i.e. a list of valid JSON elements of the matching type (number, floating-point value or string).\line If you have any ideas of standard {\i dynamic arrays} which should be handled, feel free to post your proposal in the forum!
+Since Delphi 2010, the framework will use the @*enhanced RTTI@ to create a JSON array corresponding to the data layout of each {\i dynamic array} item, just as for @51@.
+For version of the compiler up to Delphi 2009, not-known {\i dynamic arrays} (like any {\f1\fs20 array of packed record}) will be serialized by default as binary, then {\i Base64} encoded. This method will always work, but won't be easy to deal with from an AJAX client.
+Of course, your applications can supply a custom JSON serialization for any other dynamic array, via the {\f1\fs20 TTextWriter.@**RegisterCustomJSONSerializer@()} class method. Two callbacks are to be defined in association with dynamic array type information, in order to handle proper serialization and un-serialization of the JSON array.\line As an alternative, you can call the {\f1\fs20 @*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format - see above.
 In fact, if you register a {\i dynamic array} custom serializer, it will also be used for the associated internal {\f1\fs20 record}.
+:   Customized serialization
+As we already stated, it may be handy to change the default serialization.
 For instance, we would like to serialize a dynamic array of the following record:
 !  TFV = packed record
 !    Major, Minor, Release, Build: integer;
 !    Main, Detailed: string;
 !  end;
 !  TFVs = array of TFV;
-With the default serialization, such a dynamic array will be serialized as a {\i Base64} encoded binary buffer. This won't be easy to understand from an AJAX client, for instance.
-In order to add a custom serialization for this kind of record, we need to implement the two needed callbacks. Our expected format will be a JSON array of all fields, i.e.:
+With the default serialization, such a dynamic array will be serialized either:
+- As a {\i Base64} encoded binary buffer, before Delphi 2010 - this won't be easy to understand from an AJAX client, for instance;
+- As a JSON array of JSON object, with all property names listed within each object, since Delphi 2010 and its enhanced RTTI.
+This default serialization can be overriden, by defining callbacks. It could be handy, e.g. if you do not like the fact that all field names are written in the data, which may be a waste of space:
+# {"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"}
+In order to add a custom serialization for this kind of record, we need to implement the two needed callbacks.\line Our expected format will be a JSON array of all fields, i.e.:
 ! [1,2001,3001,4001,"1","1001"]
+This layout is more than two times shorter than the default JSON object format.
 We may have used another layout, e.g. using {\f1\fs20 JSONEncode()} function and a JSON object layout, or any other valid JSON content.
 Here comes the writer:
 !class procedure TCollTstDynArray.FVWriter(const aWriter: TTextWriter; const aValue);
@@ -6047,7 +6067,7 @@ The registration process itself is as simple as:
 !  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
 !    TCollTstDynArray.FVReader,TCollTstDynArray.FVWriter);
 Then, from the user code point of view, this dynamic array handling won't change: once registered, the JSON serializers are used everywhere in the framework, as soon as this type is globally registered.
-Here is a {\i Writer} method using a JSON object layout:
+Here is a {\i Writer} method using a JSON object layout, which may be used for Delphi up to 2009, to obtain a serialization similar to the one generated via the enhanced RTTI.
 !class procedure TCollTstDynArray.FVWriter2(const aWriter: TTextWriter; const aValue);
 !var V: TFV absolute aValue;
 !begin
@@ -6056,6 +6076,7 @@ Here is a {\i Writer} method using a JSON object layout:
 !end;
 This will create some JSON content as such:
 # {"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"}
+We may also use similar callbacks, e.g. if we want the property names to be changed, or ignored depending on some default values.
 Then the corresponding {\i Reader} callback could be written as:
 !class function TCollTstDynArray.FVReader2(P: PUTF8Char; var aValue;
 !  out aValid: Boolean): PUTF8Char;
@@ -6080,7 +6101,7 @@ If you want to go back to the default binary + {\i Base64} encoding serializatio
 Or calling the text-based registration with a void definition:
 ! TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),'');
 You can define now your custom JSON serializers, starting for the above code as reference, or via the {\f1\fs20 RegisterCustomJSONSerializerFromText()} method text-based definition.
-Note that if the {\i record} corresponding to its item dynamic array has some associated RTTI (i.e. if it contains some reference-counted types, like any {\f1\fs20 string}), it will be serialized as JSON during the {\i mORMot} Service process, just as stated with @51@.
+Note that if the {\i record} corresponding to its item dynamic array has some associated RTTI (i.e. if it contains some reference-counted types, like any {\f1\fs20 string}), it will be serialized as JSON during the {\i mORMot} service process, just as stated with @51@.
 :  TSQLRecord TPersistent TStrings TRawUTF8List
 Classes with {\f1\fs20 published} properties, i.e. every class inheriting from {\f1\fs20 @*TPersistent@} or our ORM-dedicated {\f1\fs20 @*TSQLRecord@} class will be serialized as a true JSON object, containing all their {\f1\fs20 published} properties values. See @26@ for a corresponding table with the ORM database types and the JSON content.
 List of delphi strings, i.e. {\f1\fs20 @*TStrings@} kind of classes will be serialized as a JSON array of strings. This is the reason why we also introduced a dedicated {\f1\fs20 @**TRawUTF8List@} class, for direct @*UTF-8@ content storage, via our dedicated {\f1\fs20 RawUTF8} type, reducing the need of encoding conversion, therefore increasing process speed.
@@ -6148,7 +6169,7 @@ If you want to disable the custom serialization, you may call the same method as
 This will reset the JSON serialization of the specified class to the default serializer (i.e. writing of {\f1\fs20 published} properties).
 The above code uses some low-level functions of the framework (i.e. {\f1\fs20 AddJSONEscape} and {\f1\fs20 JSONDecode}) to implement serialization as a JSON object, but you may use any other serialization scheme, on need. That is, you may serialize the whole class instance just as one JSON string or numerical value, or even a JSON array. It will depend of the implementation of the {\i Reader} and {\i Writer} registered callbacks.
 :71  TObjectList serialization
-You can even serialize {\f1\fs20 @**TObjectList@} instances, after a proper call to {\f1\fs20 TJSONSerializer.RegisterClassForJSON()} method.
+You can even serialize {\f1\fs20 @**TObjectList@} instances as a valid JSON array, with the ability to store each instance class name, so allowing the storage of non uniformous lists of objects.\line Calling {\f1\fs20 TJSONSerializer.RegisterClassForJSON()} is just needed to register each {\f1\fs20 TObject} class in its internal tables, and be able to create instances from a {\f1\fs20 class} name serialized in each JSON object.
 In fact, if {\f1\fs20 ObjectToJSON()} or {\f1\fs20 TJSONWriter.WriteObject()} have their {\f1\fs20 woStoreClassName} option defined, a new {\f1\fs20 "ClassName":} field will be written as first field of the serialized JSON object.
 This new {\f1\fs20 "ClassName"} field will be recognized:
 - by {\f1\fs20 JSONToObject()} for {\f1\fs20 TObjectList} members,
@@ -6169,6 +6190,7 @@ As a consequence, this kind of code can now work:
 !// do not forget to free the memory (Comp can be nill if JSON was not valid)
 !Comp.Free;
 Internal {\f1\fs20 TObjectList} process will therefore rely on a similar process, creating the proper class instances on the fly. You can even have several classes appearing in one {\f1\fs20 TObjectList}: the only prerequisite is that all class types shall have been previously registered on both sides, by a call to {\f1\fs20 TJSONSerializer. RegisterClassForJSON()}.
+\page
 :9 REST
 :  What is REST?
 {\i Representational state transfer} (@**REST@) is a style of software architecture for distributed hypermedia systems such as the World Wide Web. As such, it is not just a method for building "web @*service@s". The terms "representational state transfer" and "REST" were introduced in 2000 in the doctoral dissertation of Roy Fielding, one of the principal authors of the Hypertext Transfer Protocol (@**HTTP@) specification, on which the whole Internet rely.
@@ -6227,6 +6249,7 @@ See @2@ for the reasons why in {\i mORMot}, we prefer to use JSON format.
 Every request should be an independent request so that we can scale up using load balancing techniques.
 Independent request means with the data also send the state of the request so that the server can carry forward the same from that level to the next level.
 See @15@ for more details.
+\page
 :  RESTful mORMot
 The {\i Synopse mORMot Framework} was designed in accordance with Fielding's REST architectural style without using HTTP and without interacting with the World Wide Web. Such Systems which follow REST principles are often referred to as "RESTful". Optionally, the Framework is able to serve standard HTTP/1.1 pages over the Internet (by using the {\f1\fs20 mORMotHttpClient / mORMotHttpServer} units and the {\f1\fs20 TSQLHttpServer} and {\f1\fs20 TSQLHttpClient} classes), in an embedded low resource and fast HTTP server.
 The standard RESTful methods are implemented, i.e. {\f1\fs20 GET/PUT/POST/DELETE}.
@@ -6283,6 +6306,7 @@ Our framework is implementing @*REST@ as a @**stateless@ protocol, just as the @
 A {\i stateless} server is a server that treats each request as an independent @*transaction@ that is unrelated to any previous request.
 At first, you could find it a bit disappointing from a classic @*Client-Server@ approach. In a stateless world, you are never sure that your Client data is up-to-date. The only place where the data is safe is the server. In the web world, it's not confusing. But if you are coming from a rich Client background, this may concern you: you should have the habit of writing some synchronization code from the server to replicate all changes to all its clients. This is not necessary in a stateless architecture any more.
 The main rule of this architecture is to ensure that the Server is the only reference, and that the Client is able to retrieve any pending update from the Server side. That is, always modify a record content on a server side, then refresh the client to retrieve the modified value. Do {\i not} modify the client side directly, but always pass through the Server. The UI components of the framework follow these principles. Client-side modification could be performed, but must be made in a separated autonomous table/database. This will avoid any synchronization problem in case of concurrent client modification.
+\page
 : REST and JSON
 :  JSON format density
 Most common @*REST@ful @*JSON@ used a verbose format for the JSON content: see for example @http://bitworking.org/news/restful_json which proposed to put whole URI in the JSON content;
@@ -6328,21 +6352,26 @@ In practice, this global cache was found to be efficient, even if its implementa
 %cartoon08.png
 The {\i mORMot} framework can be used either @*stand-alone@, or in a @**Client-Server@ model, via several communication layers:
 - Fast in-process access (an executable file using a common library, for instance);
-- GDI messages, only locally on the same computer, which is very fast;
+- Windows Messages, only locally on the same computer, which are very fast for small content;
 - Named pipes, which can be used locally between a Server running as a Windows service and some Client instances;
 - @*HTTP@/1.1 over TCP/IP, for remote access.
 See @%%mORMotDesign1@ about this Client-Server architecture.
 The framework allow you to create either a {\f1\fs20 TSQLHttpClient}, {\f1\fs20 TSQLRestClientURIDll, TSQLRestClientURINamedPipe} or {\f1\fs20 TSQLRestClientURIMessage} instance to access to your data according to the communication protocol used for the server.
+Abilities will depend on the protocol used. For instance, HTTP may sounds slower than alternatives, but it is the best protocol for remote access of concurrent clients, even running locally. For instance, {\i mORMot}'s {\f1\fs20 http.sys} based server is able to serve 50,000 concurrent connections without any problem, but you should better not attempt connecting more than a dozen clients via named pipes or messages...
+\page
+Here are some general information about available communication layers:
 |%18%20%20%25%18
-| |\b In-process|GDI messages|Named pipes|HTTP\b0
+| |\b In-process|Windows Messages|Named pipes|HTTP\b0
 |Unit|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMotHttp Server/Client}
 |Speed|****|***|**|*
+|Scaling|****|*|*|***
 |Hosting|In-process|Local|Local|Remote
 |Protocol|Method call|{\f1\fs20 WM_COPYDATA}|\\\\.\\pipe\\mORMot_|Standard
 |Data|JSON|JSON|JSON|JSON
 |Run as service|Stand alone|No|Yes|Yes
 |%
 Note that you can have {\i several} protocols exposing the same {\f1\fs20 TSQLRestServer} instance. You may expose the same server over HTTP and over named pipes, at the same time, depending on your speed requirements.
+\page
 : TSQLRest classes
 This architecture is implemented by a hierarchy of classes, implementing the @*REST@ful pattern - see @9@ - for either stand-alone, client or server side, all inheriting from a {\f1\fs20 @*TSQLRest@} common ancestor, as two main branches:
 \graph ClientServerRESTClasses RESTful Client-Server classes
@@ -6395,12 +6424,14 @@ rankdir=LR;
 \TSQLRestClient\TSQLRest
 \
 Of course, all those {\f1\fs20 TSQLRestClient*} classes expect a {\f1\fs20 TSQLRestServer} to be available, via the corresponding transmission protocol.
+\page
 : In-process/stand-alone application
 For a @*stand-alone@ application, create a {\f1\fs20 @*TSQLRestClientDB@}. This particular class will initialize an internal {\f1\fs20 @*TSQLRestServerDB@} instance, and you'll have full access to the {\i @*SQLite3@} database in the same process, with no speed penalty.
 Content will still be converted to and from JSON, but there will be no delay due to the transmission of the data. Having JSON at hand will enable internal cache - see @39@ - and allow to combine this in-process direct process with other transmission protocols (like named pipes or HTTP).
-: Local access via named pipes or GDI messages
-For a @*Client-Server@ local application, that is some executable running on the same physical machine, create a {\f1\fs20 TSQLRestServerDB} instance, then use the corresponding {\f1\fs20 ExportServer, ExportServerNamedPipe, ExportServerMessage} method to instantiate either a in-process, Named-Pipe or GDI messages server.
-The GDI messages layer has the lowest overhead and is the fastest transport layer available between several applications on the same computer. But it has the problem of being reserved to desktop applications (since Windows Vista), so you a GDI message server won't be accessible when run as a background service.
+You may also directly work with a {\f1\fs20 TSQLRestServerDB} instance, but you may loose some handy User-Interface features of the {\f1\fs20 TSQLRestClientURI} class.
+: Local access via named pipes or Windows messages
+For a @*Client-Server@ local application, that is some executable running on the same physical machine, create a {\f1\fs20 TSQLRestServerDB} instance, then use the corresponding {\f1\fs20 ExportServer, ExportServerNamedPipe, ExportServerMessage} method to instantiate either a in-process, Named-Pipe or Windows Messages server.
+The Windows Messages layer has the lowest overhead and is the fastest transport layer available between several applications on the same computer. But it has the problem of being reserved to desktop applications (since Windows Vista), so you a Windows Messages server won't be accessible when run as a background service.
 A named pipe communication is able to be served from a Windows service, and is known to be more efficient when transmitting big messages. So it is the preferred mean of communication for a local application sharing data between clients.
 Due to security restriction of newer versions of Windows (i.e. starting with Vista), named pipes are not available by default over a network. This is the reason why this protocol is listed as local access mean only.
 \page
@@ -6594,7 +6625,7 @@ At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs
 From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
 :  By proof
 When we are talking about thread-safety, nothing compares to a dedicated stress test program. An average human brain (like ours) is not good enough to ensure proper design of such a complex process. So we have to prove the abilities of our little {\i mORMot}.
-In the supplied regression tests, we designed a whole class of multi-thread testing, named {\f1\fs20 TTestMultiThreadProcess}. Its methods will run every and each Client-Server protocols available (direct access via {\f1\fs20 TSQLRestServerDB} or {\f1\fs20 TSQLRestCLientDB}, GDI messages, named pipes, and both HTTP servers - i.e. {\f1\fs20 http.sys} based or WinSock-based)- see @35@.
+In the supplied regression tests, we designed a whole class of multi-thread testing, named {\f1\fs20 TTestMultiThreadProcess}. Its methods will run every and each Client-Server protocols available (direct access via {\f1\fs20 TSQLRestServerDB} or {\f1\fs20 TSQLRestCLientDB}, Windows Messages, named pipes, and both HTTP servers - i.e. {\f1\fs20 http.sys} based or WinSock-based)- see @35@.
 Each protocol will execute in parallel a list of INSERTs - i.e. {\f1\fs20 TSQLRest.Add()} - followed by a list of SELECTs - i.e. {\f1\fs20 TSQLRest.Retrieve()}. Those requests will be performed in 1 thread, then 2, 5, 10, 30 and 50 concurrent threads. The very same {\i SQLite3} database (in {\f1\fs20 lmExclusive} locking mode) is accessed at once by all those clients. Then the IDs generated by each thread are compared together, to ensure no cross-insertion did occur during the process.
 Those automated tests did already reveal some issues in the initial implementation of the framework. We fixed any encountered problems, as soon as possible. Feel free to send us any feedback, with code to reproduce the issue: but do not forget that multi-threading is also difficult to test - problems may occur not in the framework, but in the testing code itself!
 When setting {\f1\fs20 OperationCount} to 1000 instead of the default 200, i.e. running 1000 INSERTions and 1000 SELECTs in concurrent threads, the numbers are the following, on the local machine (compiled with Delphi XE4):
@@ -6614,7 +6645,7 @@ $  - TSQLHttpClientWinSock_WinSock: 24,061 assertions passed  1.10s
 $     1=11528/s  2=10941/s  5=12014/s  10=12039/s  30=9443/s  50=10831/s
 $  Total failed: 0 / 124,275  - Multi thread process PASSED  6.31s
 For direct in-process access, {\f1\fs20 TSQLRestClientDB} sounds the best candidate: its abstraction layer is very thin, and much more multi-thread friendly than straight {\f1\fs20 TSQLRestServerDB} calls. It also will feature a cache, on need - see @38@. And it will allow your code to switch between {\f1\fs20 TSQLRestClientURI} kind of classes, from its shared abstract methods.
-Named pipes and GDI messages are a bit constrained in highly parallel mode, but HTTP does pretty good. The server based on {\f1\fs20 http.sys} (HTTP API) is even impressive: the more clients, the more responsive it is. It is known to scale much better than the WinSock-based class supplied, which shines with one unique local client (i.e. in the context of those in-process regression tests), but sounds less reliable on production.
+Named pipes and Windows Messages are a bit constrained in highly parallel mode, but HTTP does pretty good. The server based on {\f1\fs20 http.sys} (HTTP API) is even impressive: the more clients, the more responsive it is. It is known to scale much better than the WinSock-based class supplied, which shines with one unique local client (i.e. in the context of those in-process regression tests), but sounds less reliable on production.
 :  Check yourself before you wreck yourself
 In addition, you can make yourself an idea, and run the "{\i 21 - HTTP Client-Server performance}" sample programs, locally or over a network, to check the {\i mORMot} abilities to scale and serve a lot of clients with as few resources as possible.
 Compile both client and server projects, then launch {\f1\fs20 Project21HttpServer.exe}. The server side will execute as a console window.
@@ -6745,7 +6776,7 @@ label = "Server";
 }
 \
 Of course, several clients can access to the same server.
-The same server is also able to publish its RESTful services over several communication protocol at once, e.g. HTTP/1.1 for remote access over a network (either corporate or the Internet), named pipes or GDI messages for fast local access.
+The same server is also able to publish its RESTful services over several communication protocol at once, e.g. HTTP/1.1 for remote access over a network (either corporate or the Internet), named pipes or Windows Messages for fast local access.
 The above diagram describes a direct INSERT into the Server's main {\i @*SQLite3@} engine, but other database back-ends are available - see @42@.
 It is possible to by-pass the whole Client-Server architecture, and let the application be @*stand-alone@, by defining a {\f1\fs20 @*TSQLRestClientDB@} class, which will embed a {\f1\fs20 @*TSQLRestServerDB@} instance in the same executable:
 \graph ArchStandAlone Client-Server implementation - Stand-Alone application
@@ -6851,6 +6882,7 @@ label = "Server";
 }
 \
 You will find out some speed numbers resulting from this unique architecture in the supplied @59@.
+\page
 : Stateless design
 :  Server side synchronization
 Even if @15@, it's always necessary to have some event triggered on the server side when a record is edited.
@@ -7158,6 +7190,7 @@ According to the current state of our framework, there are several ways of handl
 - Write your own @*SQL function@ to be used in {\i @*SQLite3@} WHERE statements;
 - Low-level dedicated Delphi stored procedures;
 - External databases stored procedures.
+\page
 :22 Custom SQL functions
 The {\i @*SQLite3@} engine defines some standard @**SQL function@s, like {\f1\fs20 abs() min() max()} or {\f1\fs20 upper()}. A complete list is available at @http://www.sqlite.org/lang_corefunc.html
 One of the greatest {\i SQLite3} feature is the ability to define custom SQL functions in high-level language. In fact, its C API allows implementing new functions which may be called within a SQL query. In other database engine, such functions are usually named UDF (for {\i User Defined Functions}).
@@ -8132,7 +8165,7 @@ Here are the key features of the current implementation of services using interf
 |Safe|Using extended RESTful authentication - see @18@
 |Multi-hosted\line (with DMZ)|Services are hosted by default within the main @*ORM@ server, but can have their own process, with a dedicated connection to the ORM core
 |Broker ready|Service meta-data can be optionally revealed by the server
-|Multiple transports|All Client-Server protocols of {\i mORMot} are available, i.e. direct in-process connection, GDI messages, named pipes, TCP/IP-HTTP
+|Multiple transports|All Client-Server protocols of {\i mORMot} are available, i.e. direct in-process connection, Windows Messages, named pipes, TCP/IP-HTTP
 |JSON based|Transmitted data uses JavaScript Object Notation
 |Routing choice|Services are identified either at the URI level (the @*REST@ful way), or in a @*JSON-RPC@ model (the @*AJAX@ way), or via any custom format (using {\f1\fs20 class} inheritance)
 |AJAX and RESTful|JSON and HTTP combination allows services to be consumed from AJAX rich clients
@@ -8189,7 +8222,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*TObjectList@}|Transmitted as a JSON array of JSON objects, with a {\f1\fs20 "ClassName": "TMyClass"} field to identify the type - see @71@
 |any {\f1\fs20 @*TObject@}|See @52@
 |dynamic arrays|Transmitted as JSON arrays - see @48@
-|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular Delphi {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding or custom JSON serialization - see @51@
+|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular Delphi {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding before Delphi 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
 |{\f1\fs20 variant}|Transmitted as JSON, with support of @80@ for objects and arrays; OLE {\f1\fs20 variant} arrays are not handled: use {\f1\fs20 _Arr([]) _ArrFast([])} instead
 |{\f1\fs20 @*TServiceCustomAnswer@}|If used as a {\f1\fs20 function} result (not as parameter), the supplied content will be transmitted directly to the client (with no JSON @*serialization@); in this case, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed in the method - it will be compatible with both our {\f1\fs20 TServiceFactoryClient} implementation, and any other service consumers (e.g. @*AJAX@)
 |%
@@ -8218,7 +8251,7 @@ You can therefore define complex {\f1\fs20 interface} types, as such:
 !    /// test variant kind of parameters
 !    function TestVariants(const Text: RawUTF8; V1: variant; var V2: variant): variant;
 !  end;
-Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. And simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way.
+Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. And simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way, thanks to the enhanced RTTI available since to Delphi 2010.
 :  TPersistent / TSQLRecord parameters
 As stated above, {\i mORMot} does not allow a method {\f1\fs20 function} to return a {\f1\fs20 class} instance.
 That is, you can't define such a method:
@@ -8913,9 +8946,9 @@ As stated above, there are several available modes of routing, defined by a give
 \TSQLRestRoutingREST\TSQLRestServerURIContext
 \
 The corresponding description may be:
-|%20%57%33
+|%13%56%33
 ||\b {\f1\fs20 TSQLRestRoutingREST}|{\f1\fs20 TSQLRestRoutingJSON_RPC}\b0
-|Description|@*REST@ful mode|@*JSON-RPC@ mode
+|Mode|@*REST@ful|@*JSON-RPC@
 |Default|Yes|No
 |URI scheme|{\f1\fs20 /Model/Interface.Method[/ClientDrivenID]}\line or {\f1\fs20 /Model/Interface/Method[/ClientDrivenID]}\line + optional URI-encoded params|{\f1\fs20 /Model/Interface}
 |Body content|JSON array of parameters\line or void if parameters were encoded at URI|{\f1\fs20 \{"method":"{\i MethodName}",\line  "params":[...]\line [,"id":{\i ClientDrivenID}]\}}
@@ -9255,7 +9288,7 @@ This is the most complex configuration.
 In this case, only one physical server is deployed:
 - A dedicated "HTTP server 2" instance will serve service content over the Internet (via a DMZ configuration of the associated network card);
 - "PC Client 1" will access to the ORM via "HTTP server 1", or to services via "HTTP server 3";
-- For performance reasons, since ORM and Services are on the same computer, using named pipes (or even local GDI messages) instead of slower HTTP-TCP/IP is a good idea: in such case, ORM will access services via "Named Pipe server 2", whereas Services will serve their content to the ORM via "Named Pipe server 1".
+- For performance reasons, since ORM and Services are on the same computer, using named pipes (or even local Windows Messages) instead of slower HTTP-TCP/IP is a good idea: in such case, ORM will access services via "Named Pipe server 2", whereas Services will serve their content to the ORM via "Named Pipe server 1".
 \graph mORMotServices3 Service Hosting on mORMot - one server, two instances
 "Internet (VPN)";
 "Local Network";
@@ -9411,7 +9444,7 @@ In {\i mORMot}, a very light in-memory set of sessions is implemented:
 - {\i In-memory} session allows very fast process and reactivity, on Server side;
 - An {\f1\fs20 integer} {\i session identifier} is used for all authorization process, independently from the underlying authentication scheme (i.e. {\i mORMot} is not tied to cookies, and its session process is much more generic).
 Those sessions are in-memory {\f1\fs20 TAuthSession} class instances. Note that this class does not inherit from a {\f1\fs20 TSQLRecord} table so won't be remotely accessible, for performance and security reasons.
-The server methods should not have to access those instances directly, but rely on the {\f1\fs20 SessionID} identifier. The only access available is via the {\f1\fs20 function TSQLRestServer.SessionGetUser(aSessionID: Cardinal): TSQLAuthUser} method.
+The server methods should not have to access those {\f1\fs20 TAuthSession} instances directly, but rely on the {\f1\fs20 SessionID} identifier.\line You should rather use methods like {\f1\fs20 TSQLRestServer.SessionGetUser(): TSQLAuthUser}.
 When the Client is about to close (typically in {\f1\fs20 TSQLRestClientURI.Destroy}), a {\f1\fs20 GET ModelRoot/auth?UserName=...&Session=...} request is sent to the remote server, in order to explicitly close the corresponding session in the server memory (avoiding most {\i re-play} attacks).
 Note that each opened session has an internal {\i TimeOut} parameter (retrieved from the associated {\f1\fs20 TSQLAuthGroup} table content): after some time of inactivity, sessions are closed on the Server Side.
 In addition, sessions are used to manage safe cross-client @**transaction@s:
@@ -9577,7 +9610,7 @@ This will allow checking of access right for all @*CRUD@ operations, according t
 !!        Call.OutStatus := HTML_FORBIDDEN else
 !      (...)
 Making access rights a parameter allows this method to be handled as pure stateless, @*thread-safe@ and @*session@-free, from the bottom-most level of the framework.
-On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, GDI messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to {\f1\fs20 true}.
+On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to {\f1\fs20 true}.
 The light session process, as implemented by @18@, is used to override the access rights with the one defined in the {\f1\fs20 TSQLAuthGroup.AccessRights} field.
 Be aware than this per-table access rights depend on the table order as defined in the associated {\f1\fs20 TSQLModel}. So if you add some tables to your database model, please take care to add the new tables {\i after} the existing. If you insert the new tables within current tables, you will need to update the access rights values.
 :19  Additional safety
@@ -10009,7 +10042,7 @@ In Delphi, the {\f1\fs20 @*record@} type (and deprecated {\f1\fs20 object} type 
 - Factory is in fact the {\f1\fs20 record} / {\f1\fs20 object} type definition itself, which will force each instance to have the same members and methods.
 We propose to use either one of the two kinds of object types, depending on the behavior expected by DDD patterns.
 :  Defining DDD objects in mORMot
-DDD's {\i @*Value Objects@} are probably meant to be defined as {\f1\fs20 record}, with methods (i.e. in this case as {\f1\fs20 object} for older versions of Delphi). You may also use {\f1\fs20 TComponent} or {\f1\fs20 TSQLRecord} classes, ensuring the {\f1\fs20 published} properties do not have setters but just {\f1\fs20 read F...} definition, to make them read-only, and, at the same time, directly serializable.\line If you use {\f1\fs20 record} / {\f1\fs20 object} types, you may need to customize the JSON serialization - see @51@ - when targeting AJAX clients (by default, {\f1\fs20 record}s are serialized as binary + @*Base64@ encoding, but you can define easily the record serialization e.g. from text). Note that since {\f1\fs20 record} / {\f1\fs20 object} defines in Delphi {\i by-value} types (whereas {\f1\fs20 class} defines {\i by-reference} types - see previous paragraph), they are probably the cleanest way of defining {\i Value Objects}.
+DDD's {\i @*Value Objects@} are probably meant to be defined as {\f1\fs20 record}, with methods (i.e. in this case as {\f1\fs20 object} for older versions of Delphi). You may also use {\f1\fs20 TComponent} or {\f1\fs20 TSQLRecord} classes, ensuring the {\f1\fs20 published} properties do not have setters but just {\f1\fs20 read F...} definition, to make them read-only, and, at the same time, directly serializable.\line If you use {\f1\fs20 record} / {\f1\fs20 object} types, you may need to customize the JSON serialization - see @51@ - when targeting AJAX clients, especially for any version prior to Delphi 2010 (by default, {\f1\fs20 record}s are serialized as binary + @*Base64@ encoding due to the lack of @*enhanced RTTI@, but you can define easily the record serialization e.g. from text). Note that since {\f1\fs20 record} / {\f1\fs20 object} defines in Delphi {\i by-value} types (whereas {\f1\fs20 class} defines {\i by-reference} types - see previous paragraph), they are probably the cleanest way of defining {\i Value Objects}.
 DDD's {\i @**Entity objects@} could be either regular Delphi classes, or inherit from {\f1\fs20 TSQLRecord}:
 - Using PODOs ({\i Plain Old Delphi Object} - see so-called POJO or POCO for Java or C#) has some advantages. Since your domain has to be uncoupled from the rest of your code, using plain {\f1\fs20 class} helps keeping your code clean and maintainable.
 - Inheriting from {\f1\fs20 TSQLRecord} will give it access to a whole set of methods supplied by {\i mORMot}. It will implement the "@**Layer Supertype@" pattern, as explained by Martin Fowler.
@@ -11378,7 +11411,7 @@ The in-process communication is implemented by using a global function, named {\
 This function can be exported from a DLL to remotely access to a {\f1\fs20 TSQLRestServer}, or used in the same process:
 - Use {\f1\fs20 TSQLRestServer.ExportServer} to assign a server to this function;
 - Return {\i 501 NOT IMPLEMENTED} error if no {\f1\fs20 TSQLRestServer.ExportServer} has been assigned yet;
-- Memory for {\f1\fs20 Resp} and {\f1\fs20 Head} parameters are allocated with {\f1\fs20 GlobalAlloc()} Win32 API function: client must release this pointers with {\f1\fs20 GlobalFree()} after having retrieved their content - you can force using the Delphi heap (and {\f1\fs20 GetMem} function which is much faster than {\f1\fs20 GlobalAlloc}) by setting the {\f1\fs20 USEFASTMM4ALLOC} variable to TRUE: in this case, client must release this pointers with {\f1\fs20 Freemem()}.
+- Memory for {\f1\fs20 Resp} and {\f1\fs20 Head} parameters are allocated with {\f1\fs20 GlobalAlloc()} Windows API function: client must release this pointers with {\f1\fs20 GlobalFree()} after having retrieved their content - you can force using the Delphi heap (and {\f1\fs20 GetMem} function which is much faster than {\f1\fs20 GlobalAlloc}) by setting the {\f1\fs20 USEFASTMM4ALLOC} variable to TRUE: in this case, client must release this pointers with {\f1\fs20 Freemem()}.
 : Client-Side
 The Client should simply use a {\f1\fs20 TSQLRestClientURIDll} instance to access to an exported {\f1\fs20 URIRequest()} function.
 
@@ -11394,12 +11427,12 @@ A dedicated {\f1\fs20 TSQLRestClientURINamedPipe} class has been defined. It inh
 [SDD-DI-2.1.1.2.3]
 ; SRS-DI-2.1.1.2.3 - Client-Server Windows Messages communication
 :Implementation
-Communication using Win32 GDI messages is very handy and efficient on the same computer. It's also perfectly safe, because, by design, it can't be access remotely. Performances for small messages is also excellent. Named pipe could be faster only when bigger messages are transmitted.
+Communication using Windows Messages is very handy and efficient on the same computer. It's also perfectly safe, because, by design, it can't be access remotely. Performances for small messages is also excellent. Named pipe could be faster only when bigger messages are transmitted.
 : Server-Side
 The communication is implemented by using the {\f1\fs20 TSQLRestServer} class, defined in @!TSQLRestClientURI,TSQLRestServer.ExportServerMessage,TSQLRestClientURIMessage.Create!Lib\SQLite3\mORMot.pas@.
-This class implements a server over Win32 GDI messages communication, when its {\f1\fs20 ExportServerMessage} method is called.
+This class implements a server over Windows Messages communication, when its {\f1\fs20 ExportServerMessage} method is called.
 : Client-Side
-A dedicated {\f1\fs20 TSQLRestClientURIMessage} class has been defined. It inherits from {\f1\fs20 TSQLRestClientURI}, and override its {\f1\fs20 URI} protected method so that it communicates using Win32 GDI messages.
+A dedicated {\f1\fs20 TSQLRestClientURIMessage} class has been defined. It inherits from {\f1\fs20 TSQLRestClientURI}, and override its {\f1\fs20 URI} protected method so that it communicates using Windows Messages.
 
 [SDD-DI-2.1.1.2.4]
 ; SRS-DI-2.1.1.2.4 - Client-Server HTTP/1.1 protocol communication
