@@ -131,6 +131,7 @@ unit SynZip;
    Version 1.18
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
+   - added DestDirIsFileName optional parameter to TZipRead.UnZip() methods
    - fixed CompressDeflate() function, which was in fact creating zlib content
    - fixed TZipWrite.AddDeflated() to handle data > 200 MB - thanks jpdk!
    - fixed unexpected error when adding files e.g. via TZipWrite.CreateForm()
@@ -581,11 +582,13 @@ type
     /// uncompress a file stored inside the .zip archive into memory
     function UnZip(aIndex: integer): RawByteString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
-    function UnZip(aIndex: integer; const DestDir: TFileName): boolean; overload;
+    function UnZip(aIndex: integer; const DestDir: TFileName;
+      DestDirIsFileName: boolean=false): boolean; overload;
     /// uncompress a file stored inside the .zip archive into memory
     function UnZip(const aName: TFileName): RawByteString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
-    function UnZip(const aName, DestDir: TFileName): boolean; overload;
+    function UnZip(const aName, DestDir: TFileName;
+      DestDirIsFileName: boolean=false): boolean; overload;
   end;
 {$endif Linux}
 
@@ -938,7 +941,7 @@ var lhr: ^TLastHeader;
     tmp: RawByteString;
     {$endif}
 begin
-  for i := 0 to 31 do begin // resources size may be rounded up to alignment
+  for i := 0 to 127 do begin // resources size may be rounded up to alignment
     lhr := @BufZip[Size-sizeof(TLastHeader)];
     if lhr^.signature+1=(LASTHEADER_SIGNATURE+1) then
       break;
@@ -1103,7 +1106,8 @@ begin
   end;
 end;
 
-function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName): boolean;
+function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
+  DestDirIsFileName: boolean): boolean;
 var FS: TFileStream;
     Path: TFileName;
     CRC: Cardinal;
@@ -1112,10 +1116,14 @@ begin
   if (self=nil) or (cardinal(aIndex)>=cardinal(Count)) then
     exit;
   with Entry[aIndex] do begin
-    Path := DestDir+ExtractFilePath(zipName); // include sub directories
-    if not EnsurePath(Path) then
-      exit;
-    FS := TFileStream.Create(Path+ExtractFileName(zipName),fmCreate);
+    if DestDirIsFileName then
+      Path := DestDir else begin
+      Path := DestDir+ExtractFilePath(zipName); // include sub directories
+      if not EnsurePath(Path) then
+        exit;
+      Path := Path+ExtractFileName(zipName);
+    end;
+    FS := TFileStream.Create(Path,fmCreate);
     try
       if info^.zZipMethod=0 then begin
         FS.Write(data^,info^.zfullsize);
@@ -1138,13 +1146,14 @@ begin
   end;
 end;
 
-function TZipRead.UnZip(const aName, DestDir: TFileName): boolean;
+function TZipRead.UnZip(const aName, DestDir: TFileName;
+  DestDirIsFileName: boolean): boolean;
 var aIndex: integer;
 begin
   aIndex := NameToIndex(aName);
   if aIndex<0 then
     result := false else
-    result := UnZip(aIndex,DestDir);
+    result := UnZip(aIndex,DestDir,DestDirIsFileName);
 end;
 
 function TZipRead.UnZip(const aName: TFileName): RawByteString;
