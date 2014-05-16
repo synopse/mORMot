@@ -571,6 +571,7 @@ unit SynCommons;
   - declared PByteArray, PWordArray, PPointerArray here - see [d6b38a96e6]
   - fixed IdemPChar() in pure pascal to behave like the asm version (i.e.
     if up parameter is nil, will return TRUE)
+  - added IdemPCharWithoutWhiteSpace() function
   - confusing-named RoundTo2Digits() function renamed into Trunc2ToDigit()
   - added simple, non banker rounding SimpleRoundTo2Digits() function
   - fixed potential comparison error in TSynTableFieldProperties.SortCompare()
@@ -2103,6 +2104,16 @@ function IdemPropNameU(const P1,P2: RawUTF8): boolean; overload;
 // - if up is nil, will return TRUE
 function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// returns true if the beginning of p^ is the same as up^, ignoring white spaces
+// - ignore case - up^ must be already Upper
+// - any white space in the input p^ buffer is just ignored
+// - chars are compared as 7 bit Ansi only (no accentuated characters): but when
+// you only need to search for field names e.g. IdemPChar() is prefered, because
+// it'll be faster than IdemPCharU(), if UTF-8 decoding is not mandatory
+// - if p is nil, will return FALSE
+// - if up is nil, will return TRUE
+function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 
 /// returns the index of a matching beginning of p^ in upArray[]
 // - returns -1 if no item matched
@@ -19312,6 +19323,25 @@ begin
       result := false;
   end else
     result := false;
+end;
+
+function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
+begin
+  result := False;
+  if p=nil then
+    exit;
+  if up<>nil then
+    while up^<>#0 do begin
+      while p<=' ' do // trim white space
+        if p^=#0 then
+          exit else
+        inc(p);
+      if up^<>NormToUpperAnsi7[p^] then
+        exit;
+      inc(up);
+      inc(p);
+    end;
+  result := true;
 end;
 
 {$ifdef PUREPASCAL}
