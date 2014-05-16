@@ -1770,7 +1770,14 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(AFP);
   U := W.Text;
+  {$ifdef ISDELPHI2010} // thanks to enhanced RTTI
+  Check(IdemPChar(pointer(U),'[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,'+
+    '"MAIN":"1000","DETAILED":"2000","BUILDDATETIME":"1999-02-24T02:52:48",'+
+    '"BUILDYEAR":2011},{"MAJOR":1,"MINOR":2,"RELEASE":3,"BUILD":4,'));
+  Check(Hash32(U)=$74523E0F);
+  {$else}
   Check(U='['+JSON_BASE64_MAGIC_UTF8+BinToBase64(Test)+'"]');
+  {$endif}
   AFP.Clear;
   Check(AFP.LoadFrom(pointer(Test))-pointer(Test)=length(Test));
   for i := 0 to 1000 do begin
