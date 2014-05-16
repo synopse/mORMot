@@ -9576,6 +9576,10 @@ type
     fAssertionsFailedBeforeRun: integer;
     fMethodIndex: integer;
     fTestCaseIndex: integer;
+    /// any number not null assigned to this field will display a "../s" stat
+    fRunConsoleOccurenceNumber: cardinal;
+    /// any number not null assigned to this field will display a "using .. MB" stat
+    fRunConsoleMemoryUsed: Int64;
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
     /// override this method to process some clean-up before Destroy call
@@ -9656,14 +9660,9 @@ type
 
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
-  private
-    function GetTestCase(Index: integer): TSynTestCase;
-    function GetTestCaseCount: Integer;
-    function GetFailedCaseIdent(Index: integer): string;
-    function GetFailedCount: integer;
-    function GetFailedMessage(Index: integer): string;
-    function GetFailedCase(Index: integer): TSynTestCase;
   protected
+    /// any number not null assigned to this field will display a "../sec" stat
+    fRunConsoleOccurenceNumber: cardinal;
     /// a list containing all failed tests after a call to the Run method
     // - if integer(Objects[]) is equal or higher than InternalTestsCount,
     // the Objects[] points to the TSynTestCase, and the Strings[] to the
@@ -9677,6 +9676,12 @@ type
     fAssertionsFailed: integer;
     fCurrentMethod, fCurrentMethodIndex: integer;
     fSaveToFile: Text;
+    function GetTestCase(Index: integer): TSynTestCase;
+    function GetTestCaseCount: Integer;
+    function GetFailedCaseIdent(Index: integer): string;
+    function GetFailedCount: integer;
+    function GetFailedMessage(Index: integer): string;
+    function GetFailedCase(Index: integer): TSynTestCase;
     procedure CreateSaveToFile; virtual;
     procedure Color(aColor: TConsoleColor);
     /// called when a test case failed: default is to add item to fFailed[]
@@ -9719,7 +9724,6 @@ type
     // - example of use (code from a TSynTests published method):
     // !  AddCase(TOneTestCase.Create(self));
     procedure AddCase(TestCase: TSynTestCase); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// register a specified Test case from its class name
     // - all these instances will be freed by the TSynTests.Destroy
     // - the published methods of the children must call this method in order
@@ -9727,7 +9731,6 @@ type
     // - example of use (code from a TSynTests published method):
     // !  AddCase(TOneTestCase);
     procedure AddCase(TestCase: TSynTestCaseClass); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// register a specified Test case from its class name
     // - an instance of the supplied class is created, and will be freed by
     // TSynTests.Destroy
@@ -20055,16 +20058,24 @@ begin
 end;
 
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
-var tmp: RawUTF8;
-    err: integer;
+var tmp: array[0..63] of AnsiChar;
+    i,err: integer;
 begin
+  result := 0;
   if P=nil then
-    result := 0 else begin
-    tmp := GetNextItem(P,Sep);
-    result := GetExtended(pointer(tmp),err);
-    if err<>0 then
-      result := 0;
+    exit;
+  i := 0;
+  while (P[i]<>#0) and (P[i]<>Sep) do begin
+    tmp[i] := P[i];
+    inc(i);
+    if i>=sizeof(tmp) then
+      exit;
   end;
+  tmp[i] := #0;
+  inc(P,i+1); // P[i]=Sep
+  result := GetExtended(tmp,err);
+  if err<>0 then
+    result := 0;
 end;
 
 function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8;
@@ -32567,7 +32578,7 @@ function KB(bytes: Int64): RawUTF8;
 begin
   if bytes>=1024*1024 then begin
     if bytes>=1024*1024*1024 then begin
-      bytes := bytes shr 20;
+      bytes := bytes shr 10;
       result := ' GB';
     end else
       result := ' MB';
@@ -33164,7 +33175,15 @@ begin
         IntToThousandString(Failed),' / ',
         IntToThousandString(Run),' FAILED'); // ! to highlight the line
     end;
-    Writeln(fSaveToFile,'  ',TestTimer.Stop);
+    Write(fSaveToFile,'  ',TestTimer.Stop);
+    if C.fRunConsoleOccurenceNumber>0 then
+      Write(fSaveToFile,'  ',
+        IntToThousandString(TestTimer.PerSec(C.fRunConsoleOccurenceNumber)),'/s');
+    if C.fRunConsoleMemoryUsed>0 then begin
+      Write(fSaveToFile,'  ',KB(C.fRunConsoleMemoryUsed));
+      C.fRunConsoleMemoryUsed := 0; // display only once
+    end;
+    Writeln(fSaveToFile);
     if C.fRunConsole<>'' then begin
       Writeln(fSaveToFile,'     ',C.fRunConsole);
       C.fRunConsole := '';
@@ -33291,6 +33310,7 @@ begin
       for t := 0 to C.Count-1 do begin
         C.fAssertionsBeforeRun := C.fAssertions;
         C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
+        C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
         fCurrentMethod := i;
         fCurrentMethodIndex := t;
         ILog := BeforeRun(C.fTests[t].TestNameUTF8);
