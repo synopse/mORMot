@@ -457,7 +457,6 @@ type
     /// write an element with no value
     // - elemType can be either betNull, betMinKey or betMaxKey
     procedure BSONWrite(const name: RawUTF8; elemtype: TBSONElementType); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// write an element with no value
     procedure BSONWrite(const name: RawUTF8; const elem: TBSONElement); overload;
     /// write a BSONVariant instance value
