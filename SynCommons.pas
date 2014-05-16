@@ -5786,6 +5786,10 @@ type
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
     function Flush: Int64; 
+    /// rewind the Stream to the position when Create() was called
+    // - note that this does not clear the Stream content itself, just
+    // move back its writing position to its initial place
+    procedure CancelAll; virtual;
     /// the associated writing stream
     property Stream: TStream read fStream;
     /// get the byte count written since last Flush
@@ -8993,7 +8997,7 @@ type
     procedure ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
 
     /// find an item index in this document from its name
-    // - search will follow dvoNameCaseSensitive option of this document 
+    // - search will follow dvoNameCaseSensitive option of this document
     // - returns -1 if not found
     function GetValueIndex(const aName: RawUTF8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -9012,7 +9016,24 @@ type
     // - return false if aName is not found, or if the instance is not
     // a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetVarData(const aName: RawUTF8; var aValue: TVarData): boolean;
+    function GetVarData(const aName: RawUTF8; var aValue: TVarData): boolean; overload;
+    /// find an item in this document, and returns its value as TVarData pointer
+    // - return nil if aName is not found, or if the instance is not
+    // a TDocVariant
+    // - return a pointer to the value if the name has been found
+    function GetVarData(const aName: RawUTF8): PVarData; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve a value, given its path
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - it will return null if the path does not match the data
+    function GetValueByPath(const aPath: RawUTF8): variant; overload;
+    /// retrieve a value, given its path
+    // - path is defined as a list of names, e.g. ['doc','glossary','title']
+    // - it will return null if the path does not match the data
+    // - this method will only handle nested TDocVariant values: use the
+    // slightly slower GetValueByPath() overloaded method, if any nested object
+    // may be of another type (e.g. a TBSONVariant)
+    function GetValueByPath(const aDocVariantPath: array of RawUTF8): variant; overload;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -9157,7 +9178,7 @@ type
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
 
-/// direct access to a TDocVariantData from a given variant instance 
+/// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
 // - raise an EDocVariant exception if the instance is not a TDocVariant
@@ -24893,7 +24914,7 @@ var EndOfObject: AnsiChar;
       if (PropValue<>nil) and // PropValue=nil for null
          (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
            ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
-        exit;
+         exit;
       case Prop.PropertyType of
       ptBoolean:   if (PropValue<>nil) and (PInteger(PropValue)^=TRUE_LOW) then
                      PBoolean(Data)^ := true else
@@ -25905,13 +25926,13 @@ begin
   Dest.VType := varNull;
   DestVar := V;
   repeat
-  itemName := GetNextItem(FullName,'.');
-  if itemName='' then
-    exit;
+    itemName := GetNextItem(FullName,'.');
+    if itemName='' then
+      exit;
     if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
       exit;
-  while DestVar.VType=varByRef or varVariant do
-    DestVar := PVarData(DestVar.VPointer)^;
+    while DestVar.VType=varByRef or varVariant do
+      DestVar := PVarData(DestVar.VPointer)^;
     if FullName=nil then begin // found full name scope
       Dest := DestVar;
       exit;
@@ -34422,6 +34443,13 @@ begin
   end;
   result := fTotalWritten;
   fTotalWritten := 0;
+end;
+
+procedure TFileBufferWriter.CancelAll;
+begin
+  fTotalWritten := 0;
+  fPos := 0;
+  fStream.Seek(0,soFromBeginning);
 end;
 
 procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);
