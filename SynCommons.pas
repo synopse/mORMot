@@ -2545,6 +2545,11 @@ function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
 
 /// return the index of Value in Values[], -1 if not found
+// - can optionally call IdemPropNameU() for property matching
+function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
+  const Value: RawUTF8; SearchPropName: boolean): integer; overload;
+
+/// return the index of Value in Values[], -1 if not found
 function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
 
@@ -17276,6 +17281,20 @@ begin
   end else
     for result := 0 to high(Values) do
       if UTF8IComp(pointer(Values[result]),pointer(Value))=0 then
+        exit;
+  result := -1;
+end;
+
+function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
+  const Value: RawUTF8; SearchPropName: boolean): integer;
+begin
+  if SearchPropName then begin
+    for result := 0 to ValuesCount-1 do
+      if IdemPropNameU(Values[result],Value) then
+        exit;
+  end else
+    for result := 0 to ValuesCount-1 do
+      if Values[result]=Value then
         exit;
   result := -1;
 end;
