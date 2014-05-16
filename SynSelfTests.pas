@@ -2432,15 +2432,15 @@ begin
     WA := IsWinAnsi(pointer(Unic));
     Check(IsWinAnsi(pointer(Unic),length(Unic)shr 1)=WA);
     Check(IsWinAnsiU(pointer(U))=WA);
-    Up := UpperCase(U);
-    Check(UpperCase(LowerCase(U))=Up);
+    Up := SynCommons.UpperCase(U);
+    Check(SynCommons.UpperCase(LowerCase(U))=Up);
     Check(UTF8IComp(pointer(U),pointer(U))=0);
     Check(UTF8IComp(pointer(U),pointer(Up))=0);
     Check(UTF8ILComp(pointer(U),pointer(U),length(U),length(U))=0);
     Check(UTF8ILComp(pointer(U),pointer(Up),length(U),length(Up))=0);
     {$ifndef ENHANCEDRTL}
     Check(LowerCase(U)=RawUTF8(SysUtils.LowerCase(string(U))));
-    Check(UpperCase(U)=RawUTF8(SysUtils.UpperCase(string(U))));
+    Check(SynCommons.UpperCase(U)=RawUTF8(SysUtils.UpperCase(string(U))));
     {$endif}
     L := Length(U);
     SetString(Up,nil,L);

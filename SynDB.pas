@@ -4071,7 +4071,7 @@ begin
       ' and i.rdb$relation_name=a.rdb$relation_name) as index_count '+
       'from rdb$relation_fields a left join rdb$fields b on a.rdb$field_source=b.rdb$field_name'+
       ' left join rdb$relations c on a.rdb$relation_name=c.rdb$relation_name '+
-      'where a.rdb$relation_name='''+UpperCase(aTableName)+'''';
+      'where a.rdb$relation_name='''+SynCommons.UpperCase(aTableName)+'''';
     exit;
   end;
   dNexusDB: begin
@@ -4082,7 +4082,7 @@ begin
   else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver 
   end;
   SQLSplitTableName(aTableName,Owner,Table);
-  result := FormatUTF8(FMT,[UpperCase(Owner),UpperCase(Table)]);
+  result := FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Table)]);
 end;
 
 function TSQLDBConnectionProperties.SQLGetIndex(const aTableName: RawUTF8): RawUTF8;
@@ -4132,7 +4132,7 @@ begin
     Table := Owner;
     Owner := UserID;
   end;
-  result := FormatUTF8(FMT, [UpperCase(Table)]);
+  result := FormatUTF8(FMT, [SynCommons.UpperCase(Table)]);
 end;
 
 function TSQLDBConnectionProperties.SQLGetTableNames: RawUTF8;

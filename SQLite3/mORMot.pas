@@ -27442,7 +27442,7 @@ begin
   fIDSorted := true; // sorted by design of this class (may change in children)
   if (ClassType<>TSQLRestStorageInMemory) and (fStoredClassProps<>nil) then
     with fStoredClassProps do begin // used by AdaptSQLForEngineList() method
-      fBasicUpperSQLSelect[false] := UpperCase(SQL.SelectAllWithRowID);
+      fBasicUpperSQLSelect[false] := SynCommons.UpperCase(SQL.SelectAllWithRowID);
       SetLength(fBasicUpperSQLSelect[false],length(fBasicUpperSQLSelect[false])-1); // trim right ';'
       fBasicUpperSQLSelect[true] := StringReplaceAll(fBasicUpperSQLSelect[false],' ROWID,',' ID,');
     end;
@@ -31098,7 +31098,7 @@ begin
   fModelMax := -1;
   Table := aTable;
   SQLTableName := GetDisplayNameFromClass(aTable);
-  SQLTableNameUpperWithDot := UpperCase(SQLTableName)+'.';
+  SQLTableNameUpperWithDot := SynCommons.UpperCase(SQLTableName)+'.';
   isTSQLRecordMany := aTable.InheritsFrom(TSQLRecordMany);
   // add properties to internal Fields list
   ClassProp := InternalClassProp(aTable);

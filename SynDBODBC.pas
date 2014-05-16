@@ -1738,8 +1738,8 @@ begin
     Table := Schema;
     Schema := '%';
   end;
-  Table := UpperCase(Table);
-  Schema := UpperCase(Schema);
+  Table := SynCommons.UpperCase(Table);
+  Schema := SynCommons.UpperCase(Schema);
   try
     // get column definitions
     with TODBCStatement.Create(MainConnection) do
