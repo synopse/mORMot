@@ -71,7 +71,7 @@ uses
 
 const
   // number of iterations for TTestJSONBenchmarking.SmallContent
-  SAMPLE_JSON_1_COUNT = 2500;
+  SAMPLE_JSON_1_COUNT = 50000;
 
 type
   TTestJSONBenchmarking = class(TSynTestsLogged)
@@ -1398,11 +1398,22 @@ end;
 procedure TTestTableContent.DBXJSON;
 var json: UTF8String;
     obj: TJSONArray;
+    i: integer;
 begin
   json := StringFromFile(fFileName);
   Owner.TestTimer.Start;
   obj := TJSONObject.ParseJSONValue(json) as TJSONArray;
   json := '';
+  for i := 0 to obj.Size-1 do
+  with obj.Get(i) as TJSONObject do begin
+    Check(GetValue('FirstName').Value<>'');
+    Check(GetValue('LastName').Value<>'');
+    Check(StrToInt(GetValue('YearOfBirth').Value)<10000);
+    Check((StrToInt(GetValue('YearOfDeath').Value)>1400)and
+          (StrToInt(GetValue('YearOfDeath').Value)<2000));
+    Check((StrToInt(GetValue('RowID').Value)>11011) or
+        (GetValue('Data').Value<>''));
+  end;
   fRunConsoleOccurenceNumber := obj.Size;
   check(fRunConsoleOccurenceNumber>8000);
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
