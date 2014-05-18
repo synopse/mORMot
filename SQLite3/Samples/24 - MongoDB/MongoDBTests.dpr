@@ -3,6 +3,8 @@ program MongoDBTests;
 
 {$APPTYPE CONSOLE}
 
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+
 uses
   {$I SynDprUses.inc}
   SynCommons,
@@ -10,8 +12,10 @@ uses
   MongoDBTestCases;
 
 begin
+  {$ifdef WITHLOG}
   //SQLite3Log.Family.Level := LOG_VERBOSE;
   TSynLogTestLog := SQLite3Log;
+  {$endif}
   with TTestMongoDB.Create do
   try
     Run;

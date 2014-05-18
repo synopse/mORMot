@@ -196,9 +196,11 @@ begin
   result := nil;
   if (aServer=nil) or (aClass=nil) or (aMongoDatabase=nil) then
     exit; // avoid GPF
+  {$ifdef WITHLOG}
   if aMongoDatabase.Client.Log=nil then
     aMongoDatabase.Client.SetLog(SQLite3Log);
   SQLite3Log.Enter;
+  {$endif}
   Props := aServer.Model.Props[aClass];
   if Props=nil then
     exit; // if aClass is not part of the model
@@ -224,7 +226,9 @@ begin
       'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
+  {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllInfo,'will store % using %',[aClass,Collection],self);
+  {$endif}
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
@@ -309,7 +313,9 @@ destructor TSQLRestStorageMongoDB.Destroy;
 begin
   inherited;
   FreeAndNil(fBatchWriter);
+  {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllInfo,'Destroy for % using %',[fStoredClass,Collection],self);
+  {$endif}
 end;
 
 function TSQLRestStorageMongoDB.TableHasRows(
@@ -335,7 +341,9 @@ begin
   res := fCollection.AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]);
   if DocVariantType.IsOfType(res) then
     fEngineLastID := VariantToIntegerDef(res.max,0);
+  {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
+  {$endif}
 end;
 begin
   if fEngineLastID=0 then

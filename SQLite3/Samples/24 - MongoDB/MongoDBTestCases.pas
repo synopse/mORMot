@@ -1,5 +1,7 @@
 unit MongoDBTestCases;
 
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+
 interface
 
 // if defined, will test with 5000 records instead of the default 100 records
@@ -134,7 +136,9 @@ begin
   if ClassType=TTestDirectWithoutAcknowledge then
     fClient.WriteConcern := wcUnacknowledged else
     assert(false);
+  {$ifdef WITHLOG}
   fClient.SetLog(SQLite3Log); // define some verbose log
+  {$endif}
   fDB := fClient.Database[DB_NAME];
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
