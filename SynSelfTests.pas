@@ -269,7 +269,7 @@ type
     procedure _TSQLRecordSigned;
     /// test the TSQLModel class
     procedure _TSQLModel;
-    /// test a full in-memory server over GDI messages
+    /// test a full in-memory server over Windows Messages
     // - without any SQLite3 engine linked
     procedure _TSQLRestServerFullMemory;
   end;
@@ -542,8 +542,8 @@ type
     // - it then runs 1000 remote SQL queries, and check the JSON data retrieved
     // - the time elapsed for this step is computed, and displayed on the report
     procedure NamedPipeAccess;
-    /// validate the Windows GDI Messages based client implementation
-    // - it first launch the Server to handle GDI messages
+    /// validate the Windows Windows Messages based client implementation
+    // - it first launch the Server to handle Windows Messages
     // - it then runs 1000 remote SQL queries, and check the JSON data retrieved
     // - the time elapsed for this step is computed, and displayed on the report
     procedure LocalWindowMessages;

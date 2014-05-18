@@ -14,7 +14,7 @@ uses
   mORMotHTTPServer,
   SampleData in '..\01 - In Memory ORM\SampleData.pas';
 
-// define this conditional if you want the GDI messages to be accessible
+// define this conditional if you want the Windows Messages to be accessible
 // from the background service
 {.$define USEMESSAGES}
 

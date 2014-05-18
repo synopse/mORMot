@@ -5808,7 +5808,7 @@ You have several paths available:
 - By default, the {\f1\fs20 record} will be serialized as binary, and encoded as {\i Base64} text;
 - Or you can define method callbacks which will write or read the data as you expect;
 - Or you can define the {\f1\fs20 record} layout as plain text.
-Note that any custom serialization (either via callbacks, or via text definition), will override any previous registrated method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
+Note that any custom serialization (either via callbacks, or via text definition), will override any previous registered method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
 :    Default Binary/Base64 serialization
 On any version of the compiler prior to Delphi 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
 A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
@@ -7513,7 +7513,7 @@ If called from an AJAX client, or a browser, this content should be easy to inte
 Note that the framework core will catch any exception during the method execution, and will return a {\f1\fs20 "Internal Server Error" / HTML_SERVERERROR} = 500 error code with the associated textual exception details.
 \page
 : Benefits and limitations of this implementation
-Method-based services allow fast and direct access to all {\f1\fs20 mORMot} Client-Server {\f1\fs20 RESTful} features, over all usual protocols of our framework: @*HTTP@/1.1, Named Pipe, Windows GDI messages, direct in-memory/in-process access.
+Method-based services allow fast and direct access to all {\f1\fs20 mORMot} Client-Server {\f1\fs20 RESTful} features, over all usual protocols of our framework: @*HTTP@/1.1, Named Pipe, Windows Messages, direct in-memory/in-process access.
 The {\i mORMot} implementation of method-based services gives full access to the lowest-level of the framework core, so it has some advantages:
 - It can be tuned to fit any purpose (such as retrieving or returning some HTML or binary data, or modifying the HTTP headers on the fly);
 - It is integrated into the @*REST@ful URI model, so it can be related to any table/class of our @*ORM@ framework (like {\f1\fs20 DataAsHex} service above), or it can handle any remote query (e.g. any @*AJAX@ or @*SOAP@ requests);
@@ -9186,7 +9186,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Encryption|at Service level|at communication level
 |Compression|at Service level|at communication level
 |Serialization|XML/binary/JSON|JSON (customizable)
-|Communication protocol|HTTP/HTTPS/TCP/pipe/MSMQ|HTTP/HTTPS/TCP/pipe/GDI/in-process
+|Communication protocol|HTTP/HTTPS/TCP/pipe/MSMQ|HTTP/HTTPS/TCP/pipe/messages/in-process
 |HTTP/HTTPS server|{\i @*http.sys@}|{\i http.sys}/native (winsock)
 |Authentication|Windows or custom|Windows, ORM-based, or class-driven
 |Authorization|by attribute or config files|per user group, or class-driven
@@ -9202,7 +9202,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Runtime required|.Net framework (+ISS/WAS)|none (blank OS)
 |%
 About instance life time, note that in WCF {\f1\fs20 InstanceContextMode.Single} is in fact the same as {\f1\fs20 sicShared} within {\i mORMot} context: only one instance is used for all incoming calls and is not recycled subsequent to the calls. Therefore, {\f1\fs20 sicSingle} mode (which is {\i mORMot}'s default) maps {\f1\fs20 InstanceContextMode.PerCall} in WCF, meaning that one instance is used per call.
-We may be tempted to say that {\i mORMot} SOA architecture is almost complete, even for a young and {\i Open Source} project. Some features (like {\i per user}, {\i per group} or {\i client-driven} instance life time, or GDI local communication) are even unique to {\i mORMot}. In fact, {\f1\fs20 sicClientDriven} is pretty convenient when implementing a Service Oriented Architecture.
+We may be tempted to say that {\i mORMot} SOA architecture is almost complete, even for a young and {\i Open Source} project. Some features (like {\i per user}, {\i per group} or {\i client-driven} instance life time, or Windows Messages local communication) are even unique to {\i mORMot}. In fact, {\f1\fs20 sicClientDriven} is pretty convenient when implementing a Service Oriented Architecture.
 Of course, WCF features its @**SOAP@-based architecture. But WCF also suffers from it: due to this ground-up message design, it will always endure its SOAP overweight, which is "Simple" only by name, not by reputation.
 If you need to communicate with an external service provider, you can easily create a SOAP @*gateway@ from Delphi, as such:
 - Import the WSDL (Web Service Definition Language) definition of a web service and turn it into a Delphi import unit;

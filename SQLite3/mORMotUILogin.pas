@@ -114,12 +114,12 @@ type
     /// display the password dialog window
     class function PassWord(const aTitle, aText: string; var aPassWord: string): boolean;
   public
-    /// TOnIdleSQLRestClient-like event to process GDI messages
+    /// TOnIdleSQLRestClient-like event to process Windows Messages
     // - to be assigned e.g. to TSQLRestClientURI.OnIdle property
     // - global OnIdleProcessCursorChangeTimeout variable is used to display
     // the crHourGlass cursor after a given time elapsed
     class procedure OnIdleProcess(Sender: TSynBackgroundThreadAbstract; ElapsedMS: Integer);
-    /// TOnIdleSQLRestClient-like event to process GDI messages and write a
+    /// TOnIdleSQLRestClient-like event to process Windows Messages and write a
     // temporary form on screen if it takes too long
     // - to be assigned e.g. to TSQLRestClientURI.OnIdle property
     // - global OnIdleProcessCursorChangeTimeout variable is used to display

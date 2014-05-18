@@ -52,7 +52,7 @@ unit mORMot;
       **********************************************************
 
 	- Client-Server classes using a RESTful model via JSON, over named pipes
-	  or GDI messages  (HTTP/1.1 protocol with unit mORMotHttpServer/Client)
+	  or Windows messages  (HTTP/1.1 protocol with unit mORMotHttpServer/Client)
 	- Client-Server ORM via TSQLRecord classes definition
 	- Client-Server interface-based services for SOA process
 	- optimized low-level RTTI and JSON process (TSQLTable)
@@ -11695,7 +11695,7 @@ type
     fClientWindowName: string;
     /// the time out to be used, in mili seconds
     fTimeOutMS: cardinal;
-    /// if InternalURI will process the GDI messages loop
+    /// if InternalURI will process the Windows Messages loop
     fDoNotProcessMessages: boolean;
     /// the expected current response
     // - this value is set from the incoming WM_COPYDATA
@@ -11704,9 +11704,9 @@ type
     fCurrentResponse: RawUTF8;
     /// method calling the RESTful server by using Windows WM_COPYDATA messages
     procedure InternalURI(var Call: TSQLRestURIParams); override;
-    /// overridden protected method to handle GDI message loop connection
+    /// overridden protected method to handle Windows Message loop connection
     function InternalCheckOpen: boolean; override;
-    /// overridden protected method to close GDI message
+    /// overridden protected method to close Windows Message
     procedure InternalClose; override;
   public
     /// connect to a server from its window name
@@ -11729,7 +11729,7 @@ type
     // - to be called by the corresponding message WM_COPYDATA; method in the
     // client window
     procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA;
-    /// define if the client will process the GDI messages loop
+    /// define if the client will process the Windows Messages loop
     // - set to TRUE if the client is used outside the main GUI application thread
     property DoNotProcessMessages: boolean read fDoNotProcessMessages write fDoNotProcessMessages;
   end;

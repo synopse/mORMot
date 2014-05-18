@@ -68,7 +68,7 @@
   - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     http://synopse.info/forum/viewtopic.php?id=1394
-  - now handles Delphi XE3 and XE4 (32 and 64 bit)
+  - now handles Delphi XE3, XE4, XE5 and XE6 (32 and 64 bit)
 
 }
 
@@ -114,15 +114,15 @@
 // version) - you are free to use it, but we have unset it by default
 
 {.$define NOX64PATCHRTL}
-// if define, with Win64 Delphi XE2+ compilers, FillChar() and Move() WON'T use
+// if defined, with Win64 Delphi XE2+ compilers, FillChar() and Move() WON'T use
 // optimized x64 assembler implementation instead of slower purepascal version
 // - is not defined by default, since speed gain is noticeable
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
 // the executable: resulting file size will be much smaller, and mORMot won't
-// be affected (since it uses only "classic" RTTI) - left undefined by default
-// to ensure other units are not affected
+// be affected (unless you use the enhanced RTTI for record/dynamic array JSON
+// serialization) - left undefined by default to ensure minimal impact
 
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL

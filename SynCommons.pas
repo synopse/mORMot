@@ -112,7 +112,7 @@ unit SynCommons;
   - new TTextWriter.AddBinToHex method
   - new CompareOperator() functions and associated TCompareOperator type
   - new IntToThousandString() function (used for TSynTests e.g.)
-  - new CreateInternalWindow() for creating a GDI message handler in any object
+  - new CreateInternalWindow() for creating a Windows Message handler in any object
 
   Version 1.13
   - unit now compiles and works with Delphi 5 compiler
@@ -7394,15 +7394,15 @@ var
 procedure ExeVersionRetrieve(DefaultVersion: integer=0);
 
 {/ this function can be used to create a GDI compatible window, able to
-  receive GDI messages for fast local communication
+  receive Windows Messages for fast local communication
   - will return 0 on failure (window name already existing e.g.), or
     the created HWND handle on success
-  - it will call the supplied message handler defined for a given GDI message:
+  - it will call the supplied message handler defined for a given Windows Message:
     for instance, define such a method in any object definition:
   !  procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA; }
 function CreateInternalWindow(const aWindowName: string; aObject: TObject): HWND;
 
-{/ delete the window resources used to receive GDI messages
+{/ delete the window resources used to receive Windows Messages
   - must be called for each CreateInternalWindow() function
   - both parameter values are then reset to ''/0 }
 function ReleaseInternalWindow(var aWindowName: string; var aWindow: HWND): boolean;
@@ -7464,7 +7464,7 @@ procedure TextColor(Color: TConsoleColor);
 procedure TextBackground(Color: TConsoleColor);
 
 /// will wait for the ENTER key to be pressed, processing the internal
-// GDI message loop and any Synchronize() pending notification
+// Windows Message loop and any Synchronize() pending notification
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
