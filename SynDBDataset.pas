@@ -541,20 +541,26 @@ begin
     {$endif}
     ftAutoInc,ftBoolean, ftSmallint,ftInteger,ftLargeint,ftWord:
       result := SynCommons.ftInt64;
+    {$ifdef UNICODE}
+    ftSingle,ftExtended,
+    {$endif}
     ftFloat:
       result := SynCommons.ftDouble;
     ftCurrency, ftBCD, ftFMTBcd:
       result := SynCommons.ftCurrency;
-    ftDate,ftTime,ftDateTime:
+    {$ifdef UNICODE}
+    ftOraTimeStamp,ftOraInterval,
+    {$endif}
+    ftDate,ftTime,ftDateTime,ftTimeStamp:
       result := SynCommons.ftDate;
-    ftBlob:
+    ftBytes,ftVarBytes,ftBlob,ftGraphic,ftOraBlob:
       result := SynCommons.ftBlob;
     {$ifdef UNICODE}
     ftFixedWideChar,ftWideMemo,
     {$endif}
-    ftString,ftFixedChar,ftWideString,ftMemo,ftFmtMemo:
+    ftString,ftFixedChar,ftWideString,ftMemo,ftFmtMemo,ftOraClob,ftVariant,ftGuid:
       result := SynCommons.ftUTF8;
-  else
+  else // will use TEXT for other fields (any feedback is welcome!)
       result := SynCommons.ftUTF8;
   end;
 end;
