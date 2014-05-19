@@ -673,6 +673,12 @@ type // DBXJSON is indeed an half-backed library!
   public
     function GetValue(const Name: string): TJSONValue;
   end;
+  TJSONArrayHook = class helper for DBXJSON.TJSONArray
+  public // Size and Get() are marked as deprecated since XE6
+    function Count: integer;
+    function GetItem(const Index: Integer): TJSONValue;
+    property Items[const Index: Integer]: TJSONValue read GetItem;
+  end;
 
 function TJSONObjectHook.GetValue(const Name: string): TJSONValue;
 var i: integer;
@@ -683,7 +689,17 @@ begin
       exit(JsonValue);
   result := nil;
 end;
-{$endif}
+
+function TJSONArrayHook.GetItem(const Index: Integer): TJSONValue;
+begin
+  result := Get(Index);
+end;
+
+function TJSONArrayHook.Count: integer;
+begin
+  result := Size;
+end;
+{$endif ISDELPHIXE6}
 
 procedure TTestDBXJSON.Read;
 var obj: TJSONObject;
@@ -713,7 +729,7 @@ begin
                     GetValue('GlossList') as TJSONObject).
                     GetValue('GlossEntry') as TJSONObject).
                     GetValue('GlossDef') as TJSONObject).
-                    GetValue('GlossSeeAlso') as TJSONArray).Get(0).Value='GML');
+                    GetValue('GlossSeeAlso') as TJSONArray).Items[0].Value='GML');
   end;
   obj.Free;
 end;
@@ -995,7 +1011,7 @@ begin
   Owner.TestTimer.Start;
   obj := TJSONObject.ParseJSONValue(json) as TJSONObject;
   check(obj.GetValue('type').Value='FeatureCollection');
-  fRunConsoleOccurenceNumber := (obj.GetValue('features') as TJSONArray).Size;
+  fRunConsoleOccurenceNumber := (obj.GetValue('features') as TJSONArray).Count;
   check(fRunConsoleOccurenceNumber=206560);
   json := '';
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
@@ -1404,8 +1420,8 @@ begin
   Owner.TestTimer.Start;
   obj := TJSONObject.ParseJSONValue(json) as TJSONArray;
   json := '';
-  for i := 0 to obj.Size-1 do
-  with obj.Get(i) as TJSONObject do begin
+  for i := 0 to obj.Count-1 do
+  with obj.Items[i] as TJSONObject do begin
     Check(GetValue('FirstName').Value<>'');
     Check(GetValue('LastName').Value<>'');
     Check(StrToInt(GetValue('YearOfBirth').Value)<10000);
@@ -1414,7 +1430,7 @@ begin
     Check((StrToInt(GetValue('RowID').Value)>11011) or
         (GetValue('Data').Value<>''));
   end;
-  fRunConsoleOccurenceNumber := obj.Size;
+  fRunConsoleOccurenceNumber := obj.Count;
   check(fRunConsoleOccurenceNumber>8000);
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
   obj.Free;
