@@ -2025,11 +2025,41 @@ end;
 procedure TTestLowLevelCommon.UrlEncoding;
 var i: integer;
     s: RawByteString;
+    name,value: RawUTF8;
+    P: PUTF8Char;
 const GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
+procedure Test(const decoded,encoded: RawUTF8);
 begin
-  Check(UrlEncode('abcdef')='abcdef');
-  Check(UrlEncode('abcdefyzABCDYZ01239_-.~ ')='abcdefyzABCDYZ01239_-.~+');
-  Check(UrlEncode('"Aardvarks lurk, OK?"')='%22Aardvarks+lurk%2C+OK%3F%22');
+  Check(UrlEncode(decoded)=encoded);
+  Check(UrlDecode(encoded)=decoded);
+  Check(UrlDecode(PUTF8Char(encoded))=decoded);
+end;
+begin
+  Test('abcdef','abcdef');
+  Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.~+');
+  Test('"Aardvarks lurk, OK?"','%22Aardvarks+lurk%2C+OK%3F%22');
+  Test('"Aardvarks lurk, OK%"','%22Aardvarks+lurk%2C+OK%25%22');
+  Test('where=name like :(''Arnaud%'')','where%3Dname+like+%3A%28%27Arnaud%25%27%29');
+  Check(UrlDecode('where=name%20like%20:(%27Arnaud%%27):')=
+    'where=name like :(''Arnaud%''):','URI from browser');
+  P := UrlDecodeNextNameValue('where=name+like+%3A%28%27Arnaud%25%27%29%3A',
+    name,value);
+  Check(P<>nil);
+  Check(P^=#0);
+  Check(name='where');
+  Check(value='name like :(''Arnaud%''):');
+  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%25%27%29%3A',
+    name,value);
+  Check(P<>nil);
+  Check(P^=#0);
+  Check(name='where');
+  Check(value='name like :(''Arnaud%''):');
+  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%%27%29%3A',
+    name,value);
+  Check(P<>nil);
+  Check(P^=#0);
+  Check(name='where');
+  Check(value='name like :(''Arnaud%''):','URI from browser');
   for i := 0 to 100 do begin
     s := RandomString(i*5);
     Check(UrlDecode(UrlEncode(s))=s,string(s));

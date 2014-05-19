@@ -545,6 +545,8 @@ unit SynCommons;
   - fixed rouding issue e.g. for ExtendedToString(double(22.99999999999997))
   - fixed potential GPF in TRawUTF8List.SetTextPtr() - ticket [d947b36cf9]
   - fixed potential GPF in function UrlDecodeNeedParameters()
+  - fixed ticket [c8a8c71b12] allowing decoding of URI computed by browsers,
+    even if they do not follow the RFC 3986 specifications
   - fixed potential GPF in serveral functions, when working with WideString
     (WideString aka OleStr do store their length in bytes, not WideChars)
   - fixed TDynArray.AddArray() method when Count parameter is not specified
@@ -7258,6 +7260,13 @@ const
   // - this char set matches the classical pascal definition of identifiers
   IsIdentifier: set of byte =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
+
+  /// used internaly for fast URI "unreserved" characters identifier
+  // - defined as unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
+  // in @http://tools.ietf.org/html/rfc3986#section-2.3
+  IsURIUnreserved: set of byte =
+    [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
+     ord('-'),ord('.'),ord('_'),ord('~')];
 
 
 {$ifdef MSWINDOWS}
@@ -20284,7 +20293,7 @@ end;
 function Size(s: PUTF8Char): PtrInt;
 begin
   result := 0;
-  if s<>nil then 
+  if s<>nil then
   repeat
     case s^ of
       #0: exit;
@@ -20326,11 +20335,9 @@ begin
   while i<len do begin
     case s[i+1] of
       #0: break; // reached end of s
-      '%': if i+3>len then
-        break else begin
-        inc(i,2);
-        P^ := AnsiChar(ConvertHexToBin[ord(s[i])] shl 4+ConvertHexToBin[ord(s[i+1])]);
-      end;
+      '%': if not HexToBin(PAnsiChar(pointer(s))+i+1,PByte(P),1) then
+        P^ := s[i+1] else
+        inc(i,2); // browsers do not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
     else
       P^ := s[i+1];
@@ -20360,11 +20367,9 @@ begin
   repeat
     case U^ of
       #0: break; // reached end of URI
-      '%': if (U[1]=#0) or (U[2]=#0) then
-        break else begin
-        P^ := AnsiChar(ConvertHexToBin[ord(U[1])] shl 4+ConvertHexToBin[ord(U[2])]);
-        inc(U,2);
-      end;
+      '%': if not HexToBin(PAnsiChar(U+1),PByte(P),1) then
+        P^ := U^ else
+        inc(U,2); // browsers do not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
     else
       P^ := U^;
@@ -20385,10 +20390,8 @@ begin
   Beg := U;
   len := 0;
   while not(U^ in [#0,'&']) do begin
-    if U^='%' then
-      if (U[1]=#0) or (U[2]=#0) then // avoid buffer overflow
-        break else
-        inc(U,3) else
+    if (U^='%') and HexToBin(PAnsiChar(U+1),nil,1) then
+      inc(U,3) else
       inc(U);
     inc(len);
   end;
@@ -20397,8 +20400,7 @@ begin
   V := pointer(Value);
   U := Beg;
   for i := 1 to len do
-    if U^='%' then begin
-      V^ := AnsiChar(ConvertHexToBin[ord(U[1])] shl 4+ConvertHexToBin[ord(U[2])]);
+    if (U^='%') and HexToBin(PAnsiChar(U+1),PByte(V),1) then begin
       inc(V);
       inc(U,3);
     end else begin
@@ -20419,12 +20421,14 @@ begin
     exit;
   // get name
   Beg := U;
-  while U^<>'=' do
-    if U^=#0 then
-      exit else
-      inc(U);
+  while ord(U^) in IsURIUnreserved do
+    inc(U);
   SetString(Name,PAnsiChar(Beg),U-Beg);
-  inc(U); // jump '='
+  if U^<>'=' then
+    if (U^='%') and (U[1]='3') and (U[2] in ['D','d']) then
+      inc(U,3) else // jump %3d (which means = according to the RFC)
+      exit else
+    inc(U); // jump '='
   // decode value
   U := UrlDecodeNextValue(U,Value);
   if U^=#0 then
