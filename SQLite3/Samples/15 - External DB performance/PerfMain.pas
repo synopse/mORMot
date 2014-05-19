@@ -27,7 +27,7 @@ uses
   Dialogs, StdCtrls, Contnrs, ShellApi,
   SynCommons,
   mORMot, mORMotSQLite3, mORMotDB,
-  SynDB, SynDBSQLite3, SynDBOracle, SynOleDB, SynDBODBC,
+  SynDB, SynDBSQLite3, SynDBOracle, SynOleDB, SynDBODBC, SynDBDataSet,
   {$ifdef USENEXUSDB}
     SynDBNexusDB,
   {$endif}

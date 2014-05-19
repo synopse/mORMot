@@ -66,7 +66,8 @@ uses
   SynMongoDB,
   {$endif}
   mORMot,
-  SynCommons;
+  SynCommons,
+  SynCrossPlatformJSON;
 
 
 const
@@ -88,6 +89,14 @@ type
   end;
 
   TTestSynopseVariant = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure AccessDirect;
+    procedure AccessLateBinding;
+    procedure Write;
+  end;
+
+  TTestSynopseCrossPlatformVariant = class(TSynTestCase)
   published
     procedure Read;
     procedure AccessDirect;
@@ -164,6 +173,7 @@ type
     {$ifdef TESTBSON}
     procedure SynopseReadToBSON;
     {$endif}
+    procedure SynopseCrossPlatform;
     {$ifdef USESUPEROBJECT}
     procedure SuperObjectRead;
     {$endif}
@@ -209,6 +219,7 @@ type
     procedure DownloadFilesIfNecessary; override;
     procedure SynopseReadRecord;
     procedure SynopseReadVariant;
+    procedure SynopseCrossPlatform;
     {$ifdef TESTBSON}
     procedure SynopseReadToBSON;
     {$endif}
@@ -232,7 +243,7 @@ implementation
 procedure TTestJSONBenchmarking.SmallContent;
 begin
   fRunConsoleOccurenceNumber := SAMPLE_JSON_1_COUNT;
-  AddCase([TTestSynopseRecord,TTestSynopseVariant
+  AddCase([TTestSynopseRecord,TTestSynopseVariant, TTestSynopseCrossPlatformVariant
   {$ifdef USESUPEROBJECT},
     {$ifdef ISDELPHI2010}
     TTestSuperObjectRecord,
@@ -374,7 +385,7 @@ begin
 end;
 
 
-{ TTestSynopseRecord }
+{ TTestSynopseVariant }
 
 procedure TTestSynopseVariant.Read;
 var doc: variant;
@@ -420,6 +431,58 @@ begin
   Owner.TestTimer.Start;
   for i := 1 to SAMPLE_JSON_1_COUNT do begin
     json := VariantToUTF8(doc._json);
+    check(Hash32(json)=$293BAAA1);
+  end;
+end;
+
+
+{ TTestSynopseCrossPlatformVariant }
+
+procedure TTestSynopseCrossPlatformVariant.Read;
+var doc: variant;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    doc := JSONVariant(SAMPLE_JSON_1);
+    Check(doc.glossary.title='example glossary');
+  end;
+end;
+
+procedure TTestSynopseCrossPlatformVariant.AccessDirect;
+var doc: TJSONVariantData;
+    i: integer;
+begin
+  doc.Init(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(doc.Data('glossary').Value['title']='example glossary');
+    Check(doc.Data('glossary').Data('GlossDiv').Data('GlossList').
+      Data('GlossEntry').Data('GlossDef').Data('GlossSeeAlso').Values[0]='GML');
+  end;
+end;
+
+procedure TTestSynopseCrossPlatformVariant.AccessLateBinding;
+var doc: variant;
+    i: integer;
+begin
+  doc := JSONVariant(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(doc.glossary.title='example glossary');
+    Check(JSONVariantData(
+      doc.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso).Values[0]='GML');
+  end;
+end;
+
+procedure TTestSynopseCrossPlatformVariant.Write;
+var doc: variant;
+    i: integer;
+    json: RawUTF8;
+begin
+  doc := JSONVariant(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := StringToUTF8(doc);
     check(Hash32(json)=$293BAAA1);
   end;
 end;
@@ -976,6 +1039,20 @@ begin
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
 end;
 
+procedure TTestHugeContent.SynopseCrossPlatform;
+var json: string;
+    doc: TJSONVariantData;
+begin
+  json := AnyTextFileToString(fFileName);
+  Owner.TestTimer.Start;
+  doc.Init(json);
+  json := '';
+  check(doc.Value['type']='FeatureCollection');
+  fRunConsoleOccurenceNumber := doc.Data('features').Count;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
 {$ifdef USESUPEROBJECT}
 procedure TTestHugeContent.SuperObjectRead;
 var f: TStream;
@@ -1061,6 +1138,18 @@ begin
   doc.InitJSONInPlace(Pointer(json),JSON_OPTIONS_FAST_STRICTJSON);
   json := '';
   check(doc.GetValueByPath('a.obj.key')='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+procedure TTestDepthContent.SynopseCrossPlatform;
+var json: string;
+    doc: TJSONVariantData;
+begin
+  json := AnyTextFileToString(fFileName);
+  Owner.TestTimer.Start;
+  doc.Init(json);
+  json := '';
+  check(doc.Data('a').Data('obj').Value['key']='wrong value');
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
 end;
 
