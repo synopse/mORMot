@@ -4529,6 +4529,7 @@ type
     procedure FinalizeNestedRecord(var Data: PByte);
     procedure FinalizeNestedArray(var Data: PtrUInt);
     procedure AllocateNestedArray(var Data: PtrUInt; NewLength: integer);
+    procedure ReAllocateNestedArray(var Data: PtrUInt; NewLength: integer);
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
       Options: TJSONCustomParserSerializationOptions): boolean; virtual;
     procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
@@ -6091,12 +6092,28 @@ function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal=1;
 // - or you can specify ']' or '}' as the expected EndChar
 // - will return nil in case of parsing error or unexpected end (#0)
 // - will return the next character after ending ] or { - i.e. may be , } ]
-function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
+function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char; 
+
+/// reach the position of the next JSON object of JSON array
+// - first char is expected to be either '[' either '{'
+// - this version expects a maximum position in PMax: it may be handy to break
+// the parsing for HUGE content - used e.g. by JSONArrayCount(P,PMax)
+// - will return nil in case of parsing error or if P reached PMax limit
+// - will return the next character after ending ] or { - i.e. may be , } ]
+function GotoNextJSONObjectOrArrayMax(P,PMax: PUTF8Char): PUTF8Char;
 
 /// compute the number of elements of a JSON array
 // - this will handle any kind of arrays, including those with nested
 // JSON objects or arrays
-function JSONArrayCount(P: PUTF8Char): integer;
+function JSONArrayCount(P: PUTF8Char): integer; overload;
+
+/// compute the number of elements of a JSON array
+// - this will handle any kind of arrays, including those with nested
+// JSON objects or arrays
+// - this overloaded method will abort if P reaches a certain position: for
+// really HUGE arrays, it is faster to allocate the content within the loop,
+// not in-head
+function JSONArrayCount(P,PMax: PUTF8Char): integer; overload;
 
 /// remove comments from a text buffer before passing it to JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -24522,11 +24539,20 @@ constructor TJSONCustomParserCustomSimple.Create(
 begin
   inherited Create(aPropertyName,aCustomTypeName);
   fCustomTypeInfo := aCustomType;
-  if IdemPropNameU(aCustomTypeName,'TGUID') then
-    fKnownType := ktGUID else
+  if IdemPropNameU(aCustomTypeName,'TGUID') then begin
+    fKnownType := ktGUID;
+    fDataSize := sizeof(TGUID);
+  end else
     case PTypeKind(fCustomTypeInfo)^ of
-    tkEnumeration:
+    tkEnumeration: begin
       fKnownType := ktEnumeration;
+      with PDynArrayTypeInfo(fCustomTypeInfo)^ do
+        case TOrdType(PByte(PtrUInt(@elSize)+NameLen)^) of
+        otSByte,otUByte: fDataSize := 1;
+        otSWord,otUWord: fDataSize := 2;
+        otSLong,otULong: fDataSize := 4;
+        end;
+    end;
     else
       raise ESynException.CreateFmt(
         'TJSONCustomParserCustomSimple.Create("%s" non supported type: %d)',
@@ -24540,6 +24566,7 @@ begin
   inherited Create(aPropertyName,UInt32ToUtf8(aFixedSize));
   fKnownType := ktFixedArray;
   fFixedSize := aFixedSize;
+  fDataSize := aFixedSize;
 end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
@@ -24564,7 +24591,7 @@ var PropValue: PUTF8Char;
     wasString: boolean;
 begin
   result := nil;
-  PropValue := GetJSONField(P,result,@wasString,@EndOfObject);
+  PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
   if PropValue=nil then
     exit;
   case fKnownType of
@@ -24798,7 +24825,8 @@ begin
   Data := 0;
 end;
 
-procedure TJSONCustomParserRTTI.AllocateNestedArray(var Data: PtrUInt; NewLength: integer);
+procedure TJSONCustomParserRTTI.AllocateNestedArray(var Data: PtrUInt;
+  NewLength: integer);
 begin
   FinalizeNestedArray(Data);
   if NewLength<=0 then
@@ -24809,18 +24837,32 @@ begin
   inc(Data,sizeof(TDynArrayRec));
 end;
 
+procedure TJSONCustomParserRTTI.ReAllocateNestedArray(var Data: PtrUInt;
+  NewLength: integer);
+var OldLength: integer;
+begin
+  if Data=0 then
+    raise ESynException.Create('ReAllocateNestedArray(nil)');
+  dec(Data,sizeof(TDynArrayRec));
+  ReAllocMem(pointer(Data),sizeof(TDynArrayRec)+fNestedDataSize*NewLength);
+  OldLength := PDynArrayRec(Data)^.length;
+  if NewLength>OldLength then
+    fillchar(PByteArray(Data)[sizeof(TDynArrayRec)+fNestedDataSize*OldLength],
+      fNestedDataSize*(NewLength-OldLength),0);
+  PDynArrayRec(Data)^.length := NewLength;
+  inc(Data,sizeof(TDynArrayRec));
+end;
+
 function TJSONCustomParserRTTI.ReadOneLevel(var P: PUTF8Char; var Data: PByte;
   Options: TJSONCustomParserSerializationOptions): boolean;
 var EndOfObject: AnsiChar;
   function ProcessValue(const Prop: TJSONCustomParserRTTI; var P: PUTF8Char;
     var Data: PByte): boolean;
   var DynArray: PByte;
-      {$ifdef ALIGNCUSTOMREC}
-      BegDynArray: PByte;
-      {$endif}
-      j, ArrayLen: integer;
+      ArrayLen, ArrayCapacity, n: integer;
       wasString: boolean;
       PropValue: PUTF8Char;
+  label Error;
   begin
     result := false;
     P := GotoNextNotSpace(P);
@@ -24845,47 +24887,61 @@ var EndOfObject: AnsiChar;
       if P^<>'[' then
         exit; // we expect a true array here
       repeat inc(P) until P^<>' ';
-      // allocate nested array at once
-      ArrayLen := JSONArrayCount(P);
-      if ArrayLen<0 then
-        exit; // invalid JSON array
-      Prop.AllocateNestedArray(PPtrUInt(Data)^,ArrayLen);
+      // try to allocate nested array at once (if not too slow)
+      ArrayLen := JSONArrayCount(P,P+131072); // parse up to 128 KB here
+      if ArrayLen<0 then // mostly JSONArrayCount()=nil due to PMax -> 512
+        ArrayCapacity := 512 else
+        ArrayCapacity := ArrayLen;
+      Prop.AllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
       // read array content
-      if ArrayLen>0 then begin
+      if ArrayLen=0 then begin
+        P := GotoNextNotSpace(P);
+        if P^<>']' then
+          exit;
+        inc(P);
+      end else begin
+        n := 0;
         DynArray := PPointer(Data)^;
-        for j := 1 to ArrayLen do begin
-          {$ifdef ALIGNCUSTOMREC}
-          BegDynArray := DynArray; // for 8 byte alignment of arrays
-          {$endif}
+        repeat
+          inc(n);
+          if (ArrayLen<0) and (n>ArrayCapacity) then begin
+            inc(ArrayCapacity,512+ArrayCapacity shr 3);
+            Prop.ReAllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
+            DynArray := PPointer(Data)^;
+            inc(DynArray,pred(n)*Prop.fNestedDataSize);
+          end;
           if Prop.NestedProperty[0].PropertyName='' then begin
-            // array of integer/string/array/custom...
+            // array of simple type
             if not ProcessValue(Prop.NestedProperty[0],P,DynArray) or (P=nil) then
-              exit else
-              if EndOfObject=']' then begin
-                if j<>ArrayLen then
-                  exit;
-              end else
-                if EndOfObject<>',' then
-                  exit;
+              goto Error;
           end else // array of record
-          if not Prop.ReadOneLevel(P,DynArray,Options) or (P=nil) then
-            exit else
-            if P^=',' then
+            if not Prop.ReadOneLevel(P,DynArray,Options) or (P=nil) then
+              goto Error else begin
+              P := GotoNextNotSpace(P);
+              EndOfObject := P^;
+              if not(P^ in [',',']']) then
+                goto Error;
               inc(P);
-          {$ifdef ALIGNCUSTOMREC}
-          inc(DynArray,(PtrUInt(DynArray)-PtrUInt(BegDynArray)) and 7);
-          {$endif}
-        end;
+            end;
+          case EndOfObject of
+          ',': continue;
+          ']': begin
+            if ArrayLen<0 then
+              Prop.ReAllocateNestedArray(PPtrUInt(Data)^,n) else
+              if n<>ArrayLen then
+                goto Error;
+            break; // we reached end of array
+          end;
+          else begin
+Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
+            exit;
+           end;
+          end;
+        until false;
       end;
       if P=nil then
         exit;
-      if (Prop.NestedProperty[0].PropertyName<>'') then begin
-        P := GotoNextNotSpace(P);
-        if P^<>']' then
-          exit; // we expect a true array here
-        repeat inc(P) until not(P^ in [#1..' ']);
-      end else
-        P := GotoNextNotSpace(P);
+      P := GotoNextNotSpace(P);
       EndOfObject := P^;
       if P^<>#0 then //if P^=',' then
         inc(P);
@@ -25131,6 +25187,7 @@ begin
   if GlobalCustomJSONSerializerFromTextSimpleType_=nil then begin
     GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
       TRawUTF8ListHashed.Create(false));
+    GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
     GlobalCustomJSONSerializerFromTextSimpleType_.AddObject(
       'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
   end;
@@ -25476,7 +25533,8 @@ begin // only tkRecord is needed here
       inc(PByte(ItemField),ItemField^.NameLen);
       {$ifdef FPC}ItemField := AlignToPtr(ItemField);{$endif}
       ItemArray := AddItemFromEnhancedRTTI('',ItemField^.elType2^,ItemField^.elSize);
-      if ItemArray.PropertyType=ptCustom then
+      if (ItemArray.PropertyType=ptCustom) and
+         (ItemArray.ClassType=TJSONCustomParserRTTI) then
         FromEnhancedRTTI(Item,ItemField^.elType2^) else begin
         SetLength(Item.fNestedProperty,1);
         Item.fNestedProperty[0] := ItemArray;
@@ -25484,7 +25542,7 @@ begin // only tkRecord is needed here
       end;
     end;
     ptCustom:
-      if ItemField<>nil then
+      if (ItemField<>nil) and (Item.ClassType=TJSONCustomParserRTTI) then
         FromEnhancedRTTI(Item,ItemField);
     end;
   end;
@@ -27930,6 +27988,36 @@ begin
     if P^<>',' then break;
     repeat inc(P) until not(P^ in [#1..' ']);
   until false;
+  if P^=']' then
+    result := n;
+end;
+
+function JSONArrayCount(P,PMax: PUTF8Char): integer;
+var n: integer;
+begin
+  result := -1;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+  while P<PMax do begin
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArrayMax(P,PMax);
+      if P=nil then
+        exit; // invalid content or PMax reached
+      end;
+    end;
+    while not (P^ in [#0,',',']']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  end;
   if P^=']' then
     result := n;
 end;
@@ -32038,23 +32126,16 @@ next:
  result := P;
 end;
 
-function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
+function GotoNextJSONObjectOrArrayInternal(P,PMax: PUTF8Char; EndChar: AnsiChar): PUTF8Char;
 label Prop;
-begin // should match GetJSONPropName()
-  result := nil; // mark error or unexpected end (#0)
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  if EndChar=#0 then begin
-    case P^ of
-    '[': EndChar := ']';
-    '{': EndChar := '}';
-    else exit;
-    end;
-    repeat inc(P) until not(P^ in [#1..' ']);
-  end;
+begin
+  result := nil;
   repeat
     case P^ of
     '{','[': begin
-      P := GotoNextJSONObjectOrArray(P);
+      if PMax=nil then
+        P := GotoNextJSONObjectOrArray(P) else
+        P := GotoNextJSONObjectOrArrayMax(P,PMax);
       if P=nil then exit;
     end;
     ':': if EndChar<>'}' then exit else inc(P); // syntax for JSON object only
@@ -32090,8 +32171,40 @@ Prop: if not (P^ in ['_','A'..'Z','a'..'z','0'..'9','$']) then
     end;
     end;
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    if (PMax<>nil) and (P>=PMax) then
+      exit; 
   until P^=EndChar;
   result := P+1;
+end;
+
+function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
+label Prop;
+begin // should match GetJSONPropName()
+  result := nil; // mark error or unexpected end (#0)
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  if EndChar=#0 then begin
+    case P^ of
+    '[': EndChar := ']';
+    '{': EndChar := '}';
+    else exit;
+    end;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  end;
+  result := GotoNextJSONObjectOrArrayInternal(P,nil,EndChar);
+end;
+
+function GotoNextJSONObjectOrArrayMax(P,PMax: PUTF8Char): PUTF8Char;
+var EndChar: AnsiChar;
+begin // should match GetJSONPropName()
+  result := nil; // mark error or unexpected end (#0)
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  case P^ of
+  '[': EndChar := ']';
+  '{': EndChar := '}';
+  else exit;
+  end;
+  repeat inc(P) until not(P^ in [#1..' ']);
+  result := GotoNextJSONObjectOrArrayInternal(P,PMax,EndChar);
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
