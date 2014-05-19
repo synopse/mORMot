@@ -1,0 +1,1424 @@
+/// benchmarks of JSON process, using several librairies (including mORMot)
+unit JSONPerfTestCases;
+
+interface
+
+{$I Synopse.inc}
+
+// download from https://code.google.com/p/superobject
+{.$define USESUPEROBJECT}
+
+{$ifdef ISDELPHI2010}
+  // download from https://code.google.com/p/x-superobject
+  {.$define USEXSUPEROBJECT}
+{$endif}
+
+{$ifdef USEXSUPEROBJECT}
+  {$undef USESUPEROBJECT} // both libraries are exclusive! :(
+{$endif}
+
+{$ifdef CPU64}
+  {$undef USESUPEROBJECT}   // SuperObject  just explodes under Win64 :(
+  {$undef USEXSUPEROBJECT}  // XSuperObject just explodes under Win64 :(
+{$endif}
+
+{$ifdef ISDELPHI2010}
+  // download from https://code.google.com/p/dwscript
+  {.$define USEDWSJSON}
+{$endif}
+
+{$ifdef ISDELPHI2010}
+  {$define USEDBXJSON}
+{$endif}
+
+{$define TESTBSON}
+
+uses
+  {$I SynDprUses.inc} // link FastMM4 for older versions of Delphi
+  Windows,
+  SysUtils,
+  Classes,
+  Variants,
+  {$ifdef ISDELPHI2010}
+  Generics.Collections,
+  {$else}
+  Contnrs,
+  {$endif}
+  {$ifdef USEXSUPEROBJECT}
+  xsuperobject,
+  {$endif}
+  {$ifdef USESUPEROBJECT}
+  superobject,
+  {$endif}
+  {$ifdef USEDWSJSON}
+  dwsJSON,
+  {$endif}
+  {$ifdef USEDBXJSON}
+  {$ifdef ISDELPHIXE6}
+  JSON,
+  {$else}
+  DBXJSON,
+  {$endif}
+  {$endif}
+  SynCrtSock,
+  SynZip,
+  {$ifdef TESTBSON}
+  SynMongoDB,
+  {$endif}
+  mORMot,
+  SynCommons;
+
+
+const
+  // number of iterations for TTestJSONBenchmarking.SmallContent
+  SAMPLE_JSON_1_COUNT = 50000;
+
+type
+  TTestJSONBenchmarking = class(TSynTestsLogged)
+  published
+    procedure SmallContent;
+    procedure BigContent;
+  end;
+
+  TTestSynopseRecord = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+
+  TTestSynopseVariant = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure AccessDirect;
+    procedure AccessLateBinding;
+    procedure Write;
+  end;
+
+  {$ifdef USESUPEROBJECT}
+  {$ifdef ISDELPHI2010} // TSuperRttiContext expects enhanced RTTI
+  TTestSuperObjectRecord = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+  TTestSuperObjectProperties = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif USESUPEROBJECT}
+
+  {$ifdef USEXSUPEROBJECT}
+  {$ifdef ISDELPHI2010} // TSuperRttiContext expects enhanced RTTI
+  TTestXSuperObjectRecord = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+  TTestXSuperObjectProperties = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif USEXSUPEROBJECT}
+
+  {$ifdef USEDWSJSON}
+  TTestdwsJSON = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+
+  {$ifdef USEDBXJSON}
+  TTestDBXJSON = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+
+  TTestBigContentRead = class(TSynTestCase)
+  protected
+    fFileName, fZipFileName: TFileName;
+    fDownloadURI: RawByteString;
+    fMemoryAtStart: Cardinal;
+    procedure DownloadFilesIfNecessary; virtual;
+  published
+  end;
+
+  TTestDepthContent = class(TTestBigContentRead)
+  protected
+  published
+    procedure DownloadFilesIfNecessary; override;
+    procedure SynopseReadVariant;
+    {$ifdef TESTBSON}
+    procedure SynopseReadToBSON;
+    {$endif}
+    {$ifdef USESUPEROBJECT}
+    procedure SuperObjectRead;
+    {$endif}
+    {$ifdef USEDWSJSON}
+    procedure dwsJSONRead;
+    {$endif}
+    {$ifdef USEDBXJSON}
+    procedure DBXJSONRead;
+    {$endif}
+  end;
+
+  TTestTableContent = class(TTestBigContentRead)
+  protected
+  published
+    procedure DownloadFilesIfNecessary; override;
+    procedure SynopseParse;
+    procedure SynopseORMLoop;
+    procedure SynopseORMList;
+    procedure SynopseTableDirect;
+    procedure SynopseTableVariant;
+    procedure SynopseDocVariant;
+    procedure SynopseLateBinding;
+    {$ifdef TESTBSON}
+    procedure SynopseToBSON;
+    {$endif}
+    {$ifdef USESUPEROBJECT}
+    procedure SuperObjectProperties;
+    procedure SuperObjectRecord;
+    {$endif}
+    {$ifdef USEDWSJSON}
+    procedure dwsJSON;
+    {$endif}
+    {$ifdef USEDBXJSON}
+    procedure DBXJSON;
+    {$endif}
+  end;
+
+  TTestHugeContent = class(TTestBigContentRead)
+  protected
+    procedure CityCoordWriter(const aWriter: TTextWriter; const aValue);
+    function CityCoordReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+  published
+    procedure DownloadFilesIfNecessary; override;
+    procedure SynopseReadRecord;
+    procedure SynopseReadVariant;
+    {$ifdef TESTBSON}
+    procedure SynopseReadToBSON;
+    {$endif}
+    {$ifdef USESUPEROBJECT}
+    procedure SuperObjectRead;
+    {$endif}
+    {$ifdef USEDWSJSON}
+    procedure dwsJSONRead;
+    {$endif}
+    {$ifdef USEDBXJSON}
+    procedure DBXJSONRead; 
+    {$endif}
+  end;
+
+
+implementation
+
+
+{ TTestJSONBenchmarking }
+
+procedure TTestJSONBenchmarking.SmallContent;
+begin
+  fRunConsoleOccurenceNumber := SAMPLE_JSON_1_COUNT;
+  AddCase([TTestSynopseRecord,TTestSynopseVariant
+  {$ifdef USESUPEROBJECT},
+    {$ifdef ISDELPHI2010}
+    TTestSuperObjectRecord,
+    {$endif}
+    TTestSuperObjectProperties
+  {$endif}
+  {$ifdef USEXSUPEROBJECT},
+    {$ifdef ISDELPHI2010}
+    TTestXSuperObjectRecord,
+    {$endif}
+    TTestXSuperObjectProperties
+  {$endif}
+  {$ifdef USEDWSJSON},
+    TTestdwsJSON
+  {$endif}
+  {$ifdef USEDBXJSON},
+    TTestDBXJSON
+  {$endif}
+  ]);
+end;
+
+procedure TTestJSONBenchmarking.BigContent;
+begin
+  AddCase([TTestDepthContent,TTestTableContent]);
+  AddCase(TTestHugeContent);
+end;
+
+
+
+function MemoryUsed: cardinal; // directly from FastMM4
+var st: TMemoryManagerState;
+    sb: Integer;
+begin
+  GetMemoryManagerState(st);
+  result := st.TotalAllocatedMediumBlockSize + st.TotalAllocatedLargeBlockSize;
+  for sb := Low(st.SmallBlockTypeStates) to High(st.SmallBlockTypeStates) do
+  with st.SmallBlockTypeStates[sb] do
+      result := result + UseableBlockSize * AllocatedBlockCount;
+end;
+
+
+{ TTestSynopseRecord }
+
+const
+  SAMPLE_JSON_1 = // from http://json.org/example.html
+    '{' + #13#10 + 
+    '"glossary": {' + #13#10 + 
+        '"title": "example glossary",' + #13#10 + 
+        '		"GlossDiv": {' + #13#10 + 
+            '"title": "S",' + #13#10 +
+            '			"GlossList": {' + #13#10 +
+                '"GlossEntry": {' + #13#10 + 
+                    '"ID": "SGML",' + #13#10 + 
+                    '					"SortAs": "SGML",' + #13#10 +
+                    '					"GlossTerm": "Standard Generalized Markup Language",' + #13#10 +
+                    '					"Acronym": "SGML",' + #13#10 +
+                    '					"Abbrev": "ISO 8879:1986",' + #13#10 +
+                    '					"GlossDef": {' + #13#10 +
+                        '"para": "A meta-markup language, used to create markup languages such as DocBook.",' + #13#10 +
+                        '						"GlossSeeAlso": ["GML", "XML"]' + #13#10 +
+                    '},' + #13#10 +
+                    '					"GlossSee": "markup"' + #13#10 +
+                '}' + #13#10 +
+            '}' + #13#10 +
+        '}' + #13#10 +
+    '}' + #13#10 +
+    '}';
+
+{$ifdef ISDELPHI2010}
+  {$RTTI EXPLICIT FIELDS([vcPublic])} // needed e.g. on Delphi XE4
+{$endif}
+
+type
+  TGlossary = packed record
+    glossary: record
+      title: string;
+      GlossDiv: record
+        title: string;
+        GlossList: record
+          GlossEntry: record
+            ID, SortAs, GlossTerm, Acronym, Abbrev: string;
+            GlossDef: record
+              para: string;
+              GlossSeeAlso: array of string;
+            end;
+            GlossSee: string;
+           end;
+        end;
+      end;
+    end;
+  end;
+
+const // if we don't have Enhanced RTTI
+  __TGlossary = 'glossary{title string;GlossDiv{title string;GlossList{'+
+    'GlossEntry{ID,SortAs,GlossTerm,Acronym,Abbrev string;GlossDef{'+
+    'para string;GlossSeeAlso array of string}GlossSee string}}}}}';
+
+procedure TTestSynopseRecord.Read;
+var gloss: TGlossary;
+    i: integer;
+    json: RawUTF8;
+begin
+  {$ifndef ISDELPHI2010}
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TGlossary),__TGlossary);
+  {$endif}
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := SAMPLE_JSON_1;
+    RecordLoadJSON(gloss,@json[1],TypeInfo(TGlossary));
+    Check(gloss.glossary.title='example glossary');
+  end;
+end;
+
+procedure TTestSynopseRecord.Access;
+var gloss: TGlossary;
+    i: integer;
+    json: RawUTF8;
+begin
+  json := SAMPLE_JSON_1;
+  RecordLoadJSON(gloss,@json[1],TypeInfo(TGlossary));
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(gloss.glossary.title='example glossary');
+    Check(gloss.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0]='GML');
+  end;
+end;
+
+procedure TTestSynopseRecord.Write;
+var gloss: TGlossary;
+    i: Integer;
+    json: RawUTF8;
+begin
+  json := SAMPLE_JSON_1;
+  RecordLoadJSON(gloss,@json[1],TypeInfo(TGlossary));
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := RecordSaveJSON(gloss,TypeInfo(TGlossary));
+    check(Hash32(json)=$293BAAA1);
+  end;
+end;
+
+
+{ TTestSynopseRecord }
+
+procedure TTestSynopseVariant.Read;
+var doc: variant;
+    i: integer;
+begin
+   for i := 1 to SAMPLE_JSON_1_COUNT do begin
+     doc := _JsonFast(SAMPLE_JSON_1);
+    Check(TDocVariantData(doc).GetValueByPath(['glossary','title'])='example glossary');
+   end;
+end;
+
+procedure TTestSynopseVariant.AccessDirect;
+var doc: TDocVariantData;
+    i: integer;
+begin
+  doc.InitJSON(SAMPLE_JSON_1,JSON_OPTIONS_FAST_STRICTJSON);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(doc.GetValueByPath(['glossary','title'])='example glossary');
+    Check(DocVariantData(doc.GetValueByPath([
+      'glossary','GlossDiv','GlossList','GlossEntry','GlossDef','GlossSeeAlso'])).Value[0]='GML');
+  end;
+end;
+
+procedure TTestSynopseVariant.AccessLateBinding;
+var doc: variant;
+    i: integer;
+begin
+  doc := _JsonFast(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(doc.glossary.title='example glossary');
+    Check(doc.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso._(0)='GML');
+  end;
+end;
+
+procedure TTestSynopseVariant.Write;
+var doc: variant;
+    i: integer;
+    json: RawUTF8;
+begin
+  doc := _JsonFast(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := VariantToUTF8(doc._json);
+    check(Hash32(json)=$293BAAA1);
+  end;
+end;
+
+
+{$ifdef USESUPEROBJECT}
+
+{ TTestSuperObjectProperties }
+
+procedure TTestSuperObjectProperties.Read;
+var obj: superobject.ISuperObject;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := superobject.SO(SAMPLE_JSON_1);
+    check(obj['glossary.title'].AsString='example glossary');
+  end;
+end;
+
+procedure TTestSuperObjectProperties.Access;
+var obj: superobject.ISuperObject;
+    i: integer;
+begin
+  obj := superobject.SO(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(obj['glossary.title'].AsString='example glossary');
+    check(obj['glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0]'].AsString='GML');
+// slower: check(obj['glossary']['GlossDiv']['GlossList']['GlossEntry']['GlossDef']['GlossSeeAlso'].AsArray[0].AsString='GML');
+  end;
+end;
+
+procedure TTestSuperObjectProperties.Write;
+var obj: superobject.ISuperObject;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := superobject.SO(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := StringToUTF8(obj.AsJSon);
+    check(Hash32(json)=$B9D3630E);
+  end;
+end;
+
+{$ifdef ISDELPHI2010}
+
+{ TTestSuperObjectRecord }
+
+procedure TTestSuperObjectRecord.Access;
+var obj: superobject.ISuperObject;
+    ctx: superobject.TSuperRttiContext;
+    gloss: TGlossary;
+    i: integer;
+begin
+  ctx := superobject.TSuperRttiContext.Create;
+  try
+    obj := superobject.SO(SAMPLE_JSON_1);
+    gloss := ctx.AsType<TGlossary>(obj);
+  finally
+    ctx.Free;
+  end;
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(gloss.glossary.title='example glossary');
+    Check(gloss.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0]='GML');
+  end;
+end;
+
+procedure TTestSuperObjectRecord.Read;
+var obj: superobject.ISuperObject;
+    ctx: superobject.TSuperRttiContext;
+    gloss: TGlossary;
+    i: integer;
+begin
+  ctx := superobject.TSuperRttiContext.Create;
+  try
+    for i := 1 to SAMPLE_JSON_1_COUNT do begin
+      obj := superobject.SO(SAMPLE_JSON_1);
+      gloss := ctx.AsType<TGlossary>(obj);
+      Check(gloss.glossary.title='example glossary');
+    end;
+  finally
+    ctx.Free;
+  end;
+end;
+
+procedure TTestSuperObjectRecord.Write;
+var obj: superobject.ISuperObject;
+    ctx: superobject.TSuperRttiContext;
+    gloss: TGlossary;
+    json: RawUTF8;
+    i: integer;
+begin
+  ctx := superobject.TSuperRttiContext.Create;
+  try
+    obj := superobject.SO(SAMPLE_JSON_1);
+    gloss := ctx.AsType<TGlossary>(obj);
+    Owner.TestTimer.Start;
+    for i := 1 to SAMPLE_JSON_1_COUNT do begin
+      obj := ctx.AsJson<TGlossary>(gloss);
+      json := SynUnicodeToUtf8(obj.AsJSon);
+      check(Hash32(json)=$B9D3630E); // SuperObject does change the ordering! :(
+    end;
+  finally
+    ctx.Free;
+  end;
+end;
+
+{$endif ISDELPHI2010}
+
+{$endif USESUPEROBJECT}
+
+
+{$ifdef USEXSUPEROBJECT}
+
+{ TTestSuperObjectProperties }
+
+procedure TTestXSuperObjectProperties.Read;
+var obj: xsuperobject.ISuperObject;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := xsuperobject.SO(SAMPLE_JSON_1);
+    check(obj['glossary.title'].AsString='example glossary');
+  end;
+end;
+
+procedure TTestXSuperObjectProperties.Access;
+var obj: xsuperobject.ISuperObject;
+    i: integer;
+begin
+  obj := xsuperobject.SO(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(obj['glossary.title'].AsString='example glossary');
+    check(obj['glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0]'].AsString='GML');
+  end;
+end;
+
+procedure TTestXSuperObjectProperties.Write;
+var obj: xsuperobject.ISuperObject;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := xsuperobject.SO(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    json := StringToUTF8(obj.AsJSon);
+    check(Hash32(json)=$293BAAA1);
+  end;
+end;
+
+{$ifdef ISDELPHI2010}
+
+{ TTestXSuperObjectRecord }
+
+procedure TTestXSuperObjectRecord.Read;
+var gloss: TGlossary;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    gloss := TSuperRecord<TGlossary>.FromJSON(SAMPLE_JSON_1);
+    Check(gloss.glossary.title='example glossary');
+  end;
+end;
+
+procedure TTestXSuperObjectRecord.Access;
+var gloss: TGlossary;
+    i: integer;
+begin
+  gloss := TSuperRecord<TGlossary>.FromJSON(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(gloss.glossary.title='example glossary');
+    Check(gloss.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0]='GML');
+  end;
+end;
+
+procedure TTestXSuperObjectRecord.Write;
+var gloss: TGlossary;
+    i: Integer;
+    json: RawUTF8;
+begin
+  gloss := TSuperRecord<TGlossary>.FromJSON(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(TSuperRecord<TGlossary>.AsJSON(gloss),json);
+    check(Hash32(json)=$293BAAA1);
+  end;
+end;
+
+{$endif ISDELPHI2010}
+
+{$endif USEXSUPEROBJECT}
+
+
+{$ifdef USEDWSJSON}
+
+{ TTestdwsJSON }
+
+procedure TTestdwsJSON.Read;
+var obj: TdwsJSONValue;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := TdwsJSONValue.ParseString(SAMPLE_JSON_1);
+    check(obj['glossary']['title'].AsString='example glossary');
+    obj.Free;
+  end;
+end;
+
+procedure TTestdwsJSON.Access;
+var obj: TdwsJSONValue;
+    i: integer;
+begin
+  obj := TdwsJSONValue.ParseString(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(obj['glossary']['title'].AsString='example glossary');
+    check(obj['glossary']['GlossDiv']['GlossList']['GlossEntry']['GlossDef']['GlossSeeAlso'][0].AsString='GML');
+  end;
+  obj.Free;
+end;
+
+procedure TTestdwsJSON.Write;
+var obj: TdwsJSONValue;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := TdwsJSONValue.ParseString(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(obj.ToString,json);
+    check(Hash32(json)=$293BAAA1);
+  end;
+  obj.Free;
+end;
+
+{$endif USEDWSJSON}
+
+
+
+{$ifdef USEDBXJSON}
+
+{ TTestDBXJSON }
+
+{$ifndef ISDELPHIXE6}
+type // DBXJSON is indeed an half-backed library!
+  TJSONObjectHook = class helper for DBXJSON.TJSONObject
+  public
+    function GetValue(const Name: string): TJSONValue;
+  end;
+
+function TJSONObjectHook.GetValue(const Name: string): TJSONValue;
+var i: integer;
+begin
+  for i := 0 to Size-1 do
+  with Get(i) do
+    if JsonString.Value=Name then
+      exit(JsonValue);
+  result := nil;
+end;
+{$endif}
+
+procedure TTestDBXJSON.Read;
+var obj: TJSONObject;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := TJSONObject.ParseJSONValue(UTF8String(SAMPLE_JSON_1)) as TJSONObject;
+    check(
+      (obj.GetValue('glossary') as TJSONObject).
+           GetValue('title').Value='example glossary');
+    obj.Free;
+  end;
+end;
+
+procedure TTestDBXJSON.Access;
+var obj: TJSONObject;
+    i: integer;
+begin
+  obj := TJSONObject.ParseJSONValue(UTF8String(SAMPLE_JSON_1)) as TJSONObject;
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(
+      (obj.GetValue('glossary') as TJSONObject).
+           GetValue('title').Value='example glossary');
+    check(((((((obj.GetValue('glossary') as TJSONObject).
+                    GetValue('GlossDiv') as TJSONObject).
+                    GetValue('GlossList') as TJSONObject).
+                    GetValue('GlossEntry') as TJSONObject).
+                    GetValue('GlossDef') as TJSONObject).
+                    GetValue('GlossSeeAlso') as TJSONArray).Get(0).Value='GML');
+  end;
+  obj.Free;
+end;
+
+procedure TTestDBXJSON.Write;
+var obj: TJSONObject;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := TJSONObject.ParseJSONValue(UTF8String(SAMPLE_JSON_1)) as TJSONObject;
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(obj.ToString,json);
+    check(Hash32(json)=$293BAAA1);
+  end;
+  obj.Free;
+end;
+
+{$endif USEDBXJSON}
+
+{ TTestBigContentRead }
+
+procedure TTestBigContentRead.DownloadFilesIfNecessary;
+var download: RawByteString;
+begin // overriden method should have been set fFileName+fZipFileName+fDownloadURI
+  fRunConsoleOccurenceNumber := 0;
+  fMemoryAtStart := MemoryUsed;
+  fFileName := ExtractFilePath(ParamStr(0))+fFileName;
+  if not FileExists(fFileName) then begin
+    download := TWinINet.Get(fDownloadURI);
+    if not CheckFailed(download<>'') then begin
+      with TZipRead.Create(pointer(download),length(download)) do
+      try
+        UnZip(fZipFileName,fFileName,true);
+      finally
+        Free;
+      end;
+    end;
+    if not FileExists(fFileName) then
+      MessageBox(0,Pointer('Impossible to find '+fFileName+
+        #13#13'Please download it from '+string(fDownloadURI)),nil,MB_ICONEXCLAMATION);
+  end;
+end;
+
+
+{ TTestHugeContent }
+
+procedure TTestHugeContent.DownloadFilesIfNecessary;
+begin
+  fFileName := 'citylots.json';
+  fDownloadURI := 'https://github.com/zemirco/sf-city-lots-json/archive/master.zip';
+  fZipFileName := 'sf-city-lots-json-master\citylots.json';
+  inherited; // perform the download
+end;
+
+type
+  TCityCoord = packed record
+    a,b,c: double;
+  end;
+  TCityCoords = packed record
+    values: array of array of TCityCoord;
+    multipolygon: boolean;
+  end;
+  {$ifdef ISDELPHI2010}
+  TCity = packed record
+    &type: RawUTF8;
+    features: array of record
+      &type: RawUTF8;
+      properties: record
+        MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;
+        FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8;
+      end;
+      geometry: record
+        &type: RawUTF8;
+        coordinates: array of TCityCoords;
+      end;
+    end;
+  end;
+  {$else} // &type not allowed? not a problem, since we use text-based definition
+  TCity = packed record
+    _type: RawUTF8;
+    features: array of record
+      _type: RawUTF8;
+      properties: record
+        MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;
+        FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8;
+      end;
+      geometry: record
+        _type: RawUTF8;
+        coordinates: array of TCityCoords;
+      end;
+    end;
+  end;
+  {$endif}
+
+const
+  __TCity = 'type RawUTF8 features[type RawUTF8 properties{'+
+    'MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;'+
+    'FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8}'+
+    'geometry{type RawUTF8 coordinates array of TCityCoords}]';
+
+function TTestHugeContent.CityCoordReader(P: PUTF8Char; var aValue;
+  out aValid: Boolean): PUTF8Char;
+var V: TCityCoords absolute aValue;
+    i1,i2: integer;
+begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
+  aValid := false;
+  result := nil;
+  if (P=nil) or (P^<>'[') then
+    exit;
+  P := GotoNextNotSpace(P+1);
+  if P^<>'[' then
+    exit;
+  if GotoNextNotSpace(P+1)^='[' then begin // MultiPolygon '[ [ [ -122.461...'
+    SetLength(V.values,JSONArrayCount(P));
+    P := GotoNextNotSpace(P+1);
+    V.multipolygon := true;
+  end else begin
+    SetLength(V.values,1);
+    V.multipolygon := false;
+  end;
+  for i1 := 0 to high(V.values) do begin
+    SetLength(V.values[i1],JSONArrayCount(P));
+    for i2 := 0 to high(V.values[i1]) do begin
+      P := GotoNextNotSpace(P);
+      if P^<>'[' then
+        exit;
+      inc(P);
+      V.values[i1,i2].a := GetNextItemDouble(P);
+      V.values[i1,i2].b := GetNextItemDouble(P);
+      V.values[i1,i2].c := GetNextItemDouble(P,']');
+      if P=nil then
+        exit;
+      if P^=',' then
+        inc(P);
+    end;
+    if V.multipolygon then begin 
+      P := GotoNextNotSpace(P);
+      if P^<>']' then
+        exit;
+      P := GotoNextNotSpace(P+1);
+      if P^=',' then begin
+        P := GotoNextNotSpace(P+1);
+        if P^<>'[' then
+          exit;
+        P := GotoNextNotSpace(P+1);
+      end;
+    end;
+  end;
+  if P=nil then
+    exit;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+    exit;
+  result := GotoNextNotSpace(P+1);
+  aValid := true;
+end;
+
+procedure TTestHugeContent.CityCoordWriter(const aWriter: TTextWriter;
+  const aValue);
+var i1,i2: integer;
+begin // '[ [ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ] ]'
+  aWriter.Add('[','[');
+  with TCityCoords(aValue) do begin
+    for i1 := 0 to high(values) do begin
+      if multipolygon then
+        aWriter.Add('[');
+      for i2 := 0 to high(values[i1]) do
+        with values[i1,i2] do
+          aWriter.Add('[%,%,%],',[a,b,c]);
+      if multipolygon then begin
+        aWriter.CancelLastComma;
+        aWriter.Add(']',',');
+      end;
+    end;
+  end;
+  aWriter.CancelLastComma;
+  aWriter.Add(']',']');
+end;
+
+procedure TTestHugeContent.SynopseReadRecord;
+var json: RawUTF8;
+    data: TCity;
+begin
+  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TCityCoords),CityCoordReader,CityCoordWriter);
+  {$ifndef ISDELPHI20102}
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TCity),__TCity);
+  {$endif}
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  RecordLoadJSON(data,pointer(JSON),TypeInfo(TCity));
+  json := '';
+  {$ifdef ISDELPHI2010}
+  check(data.&type='FeatureCollection');
+  {$else}
+  check(data._type='FeatureCollection');
+  {$endif}
+  fRunConsoleOccurenceNumber := length(data.features);
+  with data.features[high(data.features)] do begin
+    check(properties.MAPBLKLOT='VACSTWIL');
+    checksame(geometry.coordinates[0].values[0,0].a,-122.424,1E-1);
+  end;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+{$ifdef TESTBSON}
+procedure TTestHugeContent.SynopseReadToBSON;
+var json: RawUTF8;
+    docs: TBSONDocumentDynArray;
+    start: integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  start := PosEx('[',json);
+  if CheckFailed(start>0) then
+    exit;
+  Check(JSONBufferToBSONArray(@json[start],docs,true));
+  fRunConsoleOccurenceNumber := length(docs);
+  check(fRunConsoleOccurenceNumber=206560);
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+{$endif}
+
+procedure TTestHugeContent.SynopseReadVariant;
+var json: RawUTF8;
+    doc: TDocVariantData;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  doc.InitJSONInPlace(Pointer(json),JSON_OPTIONS_FAST_STRICTJSON);
+  json := '';
+  check(doc.Value['type']='FeatureCollection');
+  fRunConsoleOccurenceNumber := doc.Value['features']._count;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+{$ifdef USESUPEROBJECT}
+procedure TTestHugeContent.SuperObjectRead;
+var f: TStream;
+    obj: ISuperObject;
+begin
+  f := TFileStream.Create(fFileName,fmOpenRead);
+  Owner.TestTimer.Start;
+  obj := TSuperObject.ParseStream(f, False);
+  f.Free;
+  check(obj['type'].AsString='FeatureCollection');
+  fRunConsoleOccurenceNumber := obj['features'].AsArray.Length;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+{$endif}
+
+{$ifdef USEDWSJSON}
+procedure TTestHugeContent.dwsJSONRead;
+var obj: TdwsJSONValue;
+begin
+  obj := TdwsJSONValue.ParseFile(fFileName);
+  check(obj['type'].AsString='FeatureCollection');
+  fRunConsoleOccurenceNumber := obj['features'].ElementCount;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEDBXJSON}
+procedure TTestHugeContent.DBXJSONRead;
+var json: UTF8String;
+    obj: TJSONObject;
+begin
+  {$ifndef CPU64}
+  fRunConsole := 'DBXJSON will raise EOutOfMemory for 185 MB JSON in Win32 -> skip';
+  exit;
+  {$endif}
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := TJSONObject.ParseJSONValue(json) as TJSONObject;
+  check(obj.GetValue('type').Value='FeatureCollection');
+  fRunConsoleOccurenceNumber := (obj.GetValue('features') as TJSONArray).Size;
+  check(fRunConsoleOccurenceNumber=206560);
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+
+{ TTestDepthContent }
+
+procedure TTestDepthContent.DownloadFilesIfNecessary;
+begin
+  fRunConsoleOccurenceNumber := 3315; // line numbers in file
+  fFileName := 'sample.json';
+  fDownloadURI := 'https://json-test-suite.googlecode.com/files/sample.zip';
+  fZipFileName := 'sample.json';
+  inherited; // perform the download
+end;
+
+{$ifdef TESTBSON}
+procedure TTestDepthContent.SynopseReadToBSON;
+var json: RawUTF8;
+    doc: TBSONDocument;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  Check(JSONBufferToBSONDocument(pointer(json),doc,true)=betDoc);
+  Check(length(doc)>150000);
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+{$endif}
+
+procedure TTestDepthContent.SynopseReadVariant;
+var json: RawUTF8;
+    doc: TDocVariantData;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  doc.InitJSONInPlace(Pointer(json),JSON_OPTIONS_FAST_STRICTJSON);
+  json := '';
+  check(doc.GetValueByPath('a.obj.key')='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+{$ifdef USESUPEROBJECT}
+procedure TTestDepthContent.SuperObjectRead;
+var f: TStream;
+    obj: ISuperObject;
+begin
+  // by default, SuperObject is NOT able to handle such a depth
+  // you have to set SUPER_TOKENER_MAX_DEPTH = 1000 in the libary source! 
+  f := TFileStream.Create(fFileName,fmOpenRead);
+  Owner.TestTimer.Start;
+  obj := TSuperObject.ParseStream(f, False);
+  f.Free;
+  if CheckFailed(obj<>nil,'please set SUPER_TOKENER_MAX_DEPTH = 1000 in superobject.pas') then
+    exit;
+  check(obj['a.obj.key'].AsString='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+{$endif}
+
+{$ifdef USEDWSJSON}
+procedure TTestDepthContent.dwsJSONRead;
+var obj: TdwsJSONValue;
+begin
+  obj := TdwsJSONValue.ParseFile(fFileName);
+  check(obj['a']['obj']['key'].AsString='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEDBXJSON}
+procedure TTestDepthContent.DBXJSONRead;
+var json: UTF8String;
+    obj: TJSONObject;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := TJSONObject.ParseJSONValue(json) as TJSONObject;
+  check(((obj.GetValue('a') as TJSONObject).
+           GetValue('obj') as TJSONObject).
+           GetValue('key').Value='wrong value');
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+
+{ TTestTableContent }
+
+procedure TTestTableContent.DownloadFilesIfNecessary;
+var i: integer;
+begin
+  fMemoryAtStart := MemoryUsed;
+  fFileName := ExtractFilePath(paramstr(0));
+  i := pos('\Samples\',fFileName);
+  if i>0 then begin
+    Setlength(fFileName,i);
+    if FileExists(fFileName+'exe\people.json') then
+      fFileName := fFileName+'exe\people.json' else
+      fFileName  := fFileName+'people.json'
+  end;
+  fRunConsoleOccurenceNumber := 8228; // row numbers in file
+  if not FileExists(fFileName) then
+    MessageBox(0,Pointer('Impossible to find '+fFileName+
+      #13#13'Please run at least once TestSQL3.dpr'),nil,MB_ICONEXCLAMATION);
+end;
+
+procedure TTestTableContent.SynopseParse;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  fRunConsoleOccurenceNumber := list.RowCount;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableVariant;
+var json: RawUTF8;
+    people: variant;
+    list: TSQLTableJSON;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  while list.Step(false,@people) do begin
+    Check(people.FirstName<>'');
+    Check(people.LastName<>'');
+    Check(people.YearOfBirth<10000);
+    Check((people.YearOfDeath>1400)and(people.YearOfDeath<2000));
+    Check((people.ID>11011) or (people.Data<>''));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableDirect;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  while list.Step do begin
+    Check(list.Field('FirstName')<>'');
+    Check(list.Field('LastName')<>'');
+    Check(list.Field('YearOfBirth')<10000);
+    Check((list.Field('YearOfDeath')>1400)and(list.Field('YearOfDeath')<2000));
+    Check((list.Field('ID')>11011) or (list.Field('Data')<>''));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+type
+  TSQLRecordPeople = class(TSQLRecord)
+  private
+    fData: TSQLRawBlob;
+    fFirstName: RawUTF8;
+    fLastName: RawUTF8;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property FirstName: RawUTF8 read fFirstName write fFirstName;
+    property LastName: RawUTF8 read fLastName write fLastName;
+    property Data: TSQLRawBlob read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
+procedure TTestTableContent.SynopseORMLoop;
+var people: TSQLRecordPeople;
+    json: RawUTF8;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  people := TSQLRecordPeople.CreateAndFillPrepare(json);
+  json := '';
+  while people.FillOne do begin
+    Check(people.FirstName<>'');
+    Check(people.LastName<>'');
+    Check(people.YearOfBirth<10000);
+    Check((people.YearOfDeath>1400)and(people.YearOfDeath<2000));
+    Check((people.ID>11011) or (people.Data<>''));
+  end;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  fRunConsoleOccurenceNumber := people.FillTable.RowCount;
+  people.Free;
+end;
+
+procedure TTestTableContent.SynopseORMList;
+{$ifdef ISDELPHI2010} // use generic syntax ;)
+var json: RawUTF8;
+    people: TSQLRecordPeople;
+    table: TSQLTableJSON;
+    list: TObjectList<TSQLRecordPeople>;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  table := TSQLTableJSON.Create('',pointer(json),length(json));
+  list := table.ToObjectList<TSQLRecordPeople>;
+  table.Free;
+  json := '';
+  for people in list do begin
+    Check(people.FirstName<>'');
+    Check(people.LastName<>'');
+    Check(people.YearOfBirth<10000);
+    Check((people.YearOfDeath>1400)and(people.YearOfDeath<2000));
+    Check((people.ID>11011) or (people.Data<>''));
+  end;
+  fRunConsoleOccurenceNumber := list.Count;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+{$else}
+var json: RawUTF8;
+    i: integer;
+    list: TSQLTableJSON;
+    doc: TObjectList;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  doc := list.ToObjectList(TSQLRecordPeople);
+  list.Free;
+  json := '';
+  for i := 0 to doc.Count-1 do
+    with TSQLRecordPeople(doc.List[i]) do begin
+      Check(FirstName<>'');
+      Check(LastName<>'');
+      Check(YearOfBirth<10000);
+      Check((YearOfDeath>1400)and(YearOfDeath<2000));
+      Check((ID>11011) or (Data<>''));
+    end;
+  fRunConsoleOccurenceNumber := doc.Count;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  doc.Free;
+end;
+{$endif}
+
+{$ifdef TESTBSON}
+procedure TTestTableContent.SynopseToBSON;
+var json: RawUTF8;
+    docs: TBSONDocumentDynArray;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  Check(JSONBufferToBSONArray(pointer(json),docs,true));
+  json := '';
+  fRunConsoleOccurenceNumber := Length(docs);
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+{$endif}
+
+procedure TTestTableContent.SynopseDocVariant;
+var json: RawUTF8;
+    doc: TDocVariantData;
+    i: integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  doc.InitJSONInPlace(Pointer(json),JSON_OPTIONS_FAST_STRICTJSON);
+  json := '';
+  check(doc.Kind=dvArray);
+  for i := 0 to doc.Count-1 do
+  with DocVariantData(doc.Value[i])^ do begin
+    Check(Value['FirstName']<>'');
+    Check(Value['LastName']<>'');
+    Check(Value['YearOfBirth']<10000);
+    Check((Value['YearOfDeath']>1400)and(Value['YearOfDeath']<2000));
+    Check((Value['ID']>11011) or (Value['Data']<>''));
+  end;
+  fRunConsoleOccurenceNumber := doc.Count;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+procedure TTestTableContent.SynopseLateBinding;
+var json: RawUTF8;
+    doc: TDocVariantData;
+    i: integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  doc.InitJSONInPlace(Pointer(json),JSON_OPTIONS_FAST_STRICTJSON);
+  json := '';
+  check(doc.Kind=dvArray);
+  for i := 0 to doc.Count-1 do begin
+    Check(doc.Values[i].FirstName<>'');
+    Check(doc.Values[i].LastName<>'');
+    Check(doc.Values[i].YearOfBirth<10000);
+    Check((doc.Values[i].YearOfDeath>1400)and(doc.Values[i].YearOfDeath<2000));
+    Check((doc.Values[i].ID>11011) or (doc.Values[i].Data<>''));
+  end;
+  fRunConsoleOccurenceNumber := doc.Count;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+{$ifdef USESUPEROBJECT}
+procedure TTestTableContent.SuperObjectProperties;
+var f: TStream;
+    obj: ISuperObject;
+    ndx: integer;
+begin
+  f := TFileStream.Create(fFileName,fmOpenRead);
+  Owner.TestTimer.Start;
+  obj := TSuperObject.ParseStream(f, False);
+  with obj.AsArray do
+    for ndx := 0 to Length-1 do
+    with O[ndx] do begin
+      Check(S['FirstName']<>'');
+      Check(S['LastName']<>'');
+      Check(I['YearOfBirth']<10000);
+      Check((I['YearOfDeath']>1400)and(I['YearOfDeath']<2000));
+      Check((I['RowID']>11011) or (S['Data']<>''));
+    end;
+  f.Free;
+  fRunConsoleOccurenceNumber := obj.AsArray.Length;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+type // SuperObject does not work as expected with TSQLRecord
+  TPeople = record
+    RowID: integer;
+    FirstName: RawUTF8;
+    LastName: RawUTF8;
+    Data: TSQLRawBlob;
+    YearOfBirth: integer;
+    YearOfDeath: word;
+  end;
+
+procedure TTestTableContent.SuperObjectRecord;
+var f: TStream;
+    obj: ISuperObject;
+    ndx: integer;
+    ctx: superobject.TSuperRttiContext;
+    people: TPeople;
+begin
+  f := TFileStream.Create(fFileName,fmOpenRead);
+  Owner.TestTimer.Start;
+  obj := TSuperObject.ParseStream(f, False);
+  f.Free;
+  ctx := superobject.TSuperRttiContext.Create;
+  try
+    with obj.AsArray do
+    for ndx := 0 to Length-1 do begin
+      people := ctx.AsType<TPeople>(O[ndx]);
+      Check(people.FirstName<>'');
+      Check(people.LastName<>'');
+      Check(people.YearOfBirth<10000);
+      Check((people.YearOfDeath>1400)and(people.YearOfDeath<2000));
+      //Check((people.RowID>11011) or (people.Data<>'')); SO has issue with Data
+      Check(people.RowID>0);
+    end;
+  finally
+    ctx.Free;
+  end;
+  fRunConsoleOccurenceNumber := obj.AsArray.Length;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
+{$endif}
+
+{$ifdef USEDWSJSON}
+procedure TTestTableContent.dwsJSON;
+var obj: TdwsJSONValue;
+    i: integer;
+begin
+  obj := TdwsJSONValue.ParseFile(fFileName);
+  fRunConsoleOccurenceNumber := obj.ElementCount;
+  for i := 0 to fRunConsoleOccurenceNumber-1 do
+    with obj.Elements[i] do begin
+      Check(Values['FirstName'].AsString<>'');
+      Check(Values['LastName'].AsString<>'');
+      Check(Values['YearOfBirth'].AsInteger<10000);
+      Check((Values['YearOfDeath'].AsInteger>1400)and(Values['YearOfDeath'].AsInteger<2000));
+      Check((Values['RowID'].AsInteger>11011) or (Values['Data'].AsString<>''));
+    end;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEDBXJSON}
+procedure TTestTableContent.DBXJSON;
+var json: UTF8String;
+    obj: TJSONArray;
+    i: integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := TJSONObject.ParseJSONValue(json) as TJSONArray;
+  json := '';
+  for i := 0 to obj.Size-1 do
+  with obj.Get(i) as TJSONObject do begin
+    Check(GetValue('FirstName').Value<>'');
+    Check(GetValue('LastName').Value<>'');
+    Check(StrToInt(GetValue('YearOfBirth').Value)<10000);
+    Check((StrToInt(GetValue('YearOfDeath').Value)>1400)and
+          (StrToInt(GetValue('YearOfDeath').Value)<2000));
+    Check((StrToInt(GetValue('RowID').Value)>11011) or
+        (GetValue('Data').Value<>''));
+  end;
+  fRunConsoleOccurenceNumber := obj.Size;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+end.
