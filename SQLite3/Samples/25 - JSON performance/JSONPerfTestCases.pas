@@ -203,8 +203,8 @@ type
 
   TTestHugeContent = class(TTestBigContentRead)
   protected
-    procedure CityCoordWriter(const aWriter: TTextWriter; const aValue);
-    function CityCoordReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    procedure GeoJSONCoordWriter(const aWriter: TTextWriter; const aValue);
+    function GeoJSONCoordReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   published
     procedure DownloadFilesIfNecessary; override;
     procedure SynopseReadRecord;
@@ -786,54 +786,59 @@ begin
 end;
 
 type
-  TCityCoord = packed record
-    a,b,c: double;
+  TGeoJSONCoord = packed record
+    x,y,z: double;
   end;
-  TCityCoords = packed record
-    values: array of array of TCityCoord;
+  // only handle "Polygon" and "MultiPolygon" yet
+  TGeoJSONCoords = packed record
+    values: array of array of TGeoJSONCoord;
     multipolygon: boolean;
   end;
+  TGeoJSONObjectType = (
+    Point,MultiPoint,LineString,MultiLineString,
+    Polygon,MultiPolygon,GeometryCollection,
+    Feature,FeatureCollection);
   {$ifdef ISDELPHI2010}
   TCity = packed record
-    &type: RawUTF8;
+    &type: TGeoJSONObjectType;
     features: array of record
-      &type: RawUTF8;
-      properties: record
+      &type: TGeoJSONObjectType;
+      properties: record // we may define a variant here (TDocVariant)
         MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;
         FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8;
       end;
       geometry: record
-        &type: RawUTF8;
-        coordinates: array of TCityCoords;
+        &type: TGeoJSONObjectType;
+        coordinates: array of TGeoJSONCoords;
       end;
     end;
   end;
   {$else} // &type not allowed? not a problem, since we use text-based definition
   TCity = packed record
-    _type: RawUTF8;
+    _type: TGeoJSONObjectType;
     features: array of record
-      _type: RawUTF8;
+      _type: TGeoJSONObjectType;
       properties: record
         MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;
         FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8;
       end;
       geometry: record
-        _type: RawUTF8;
-        coordinates: array of TCityCoords;
+        _type: TGeoJSONObjectType;
+        coordinates: array of TGeoJSONCoords;
       end;
     end;
   end;
   {$endif}
 
 const
-  __TCity = 'type RawUTF8 features[type RawUTF8 properties{'+
-    'MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;'+
+  __TCity = 'type TGeoJSONObjectType features[type TGeoJSONObjectType '+
+    ' properties{MAPBLKLOT, BLKLOT, BLOCK_NUM, LOT_NUM: RawUTF8;'+
     'FROM_ST, TO_ST, STREET, ST_TYPE, ODD_EVEN: RawUTF8}'+
-    'geometry{type RawUTF8 coordinates array of TCityCoords}]';
+    'geometry{type TGeoJSONObjectType coordinates array of TGeoJSONCoords}]';
 
-function TTestHugeContent.CityCoordReader(P: PUTF8Char; var aValue;
+function TTestHugeContent.GeoJSONCoordReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
-var V: TCityCoords absolute aValue;
+var V: TGeoJSONCoords absolute aValue;
     i1,i2: integer;
 begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
   aValid := false;
@@ -858,9 +863,9 @@ begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
       if P^<>'[' then
         exit;
       inc(P);
-      V.values[i1,i2].a := GetNextItemDouble(P);
-      V.values[i1,i2].b := GetNextItemDouble(P);
-      V.values[i1,i2].c := GetNextItemDouble(P,']');
+      V.values[i1,i2].x := GetNextItemDouble(P);
+      V.values[i1,i2].y := GetNextItemDouble(P);
+      V.values[i1,i2].z := GetNextItemDouble(P,']');
       if P=nil then
         exit;
       if P^=',' then
@@ -888,18 +893,18 @@ begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
   aValid := true;
 end;
 
-procedure TTestHugeContent.CityCoordWriter(const aWriter: TTextWriter;
+procedure TTestHugeContent.GeoJSONCoordWriter(const aWriter: TTextWriter;
   const aValue);
 var i1,i2: integer;
 begin // '[ [ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ] ]'
   aWriter.Add('[','[');
-  with TCityCoords(aValue) do begin
+  with TGeoJSONCoords(aValue) do begin
     for i1 := 0 to high(values) do begin
       if multipolygon then
         aWriter.Add('[');
       for i2 := 0 to high(values[i1]) do
         with values[i1,i2] do
-          aWriter.Add('[%,%,%],',[a,b,c]);
+          aWriter.Add('[%,%,%],',[x,y,z]);
       if multipolygon then begin
         aWriter.CancelLastComma;
         aWriter.Add(']',',');
@@ -914,8 +919,9 @@ procedure TTestHugeContent.SynopseReadRecord;
 var json: RawUTF8;
     data: TCity;
 begin
-  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TCityCoords),CityCoordReader,CityCoordWriter);
-  {$ifndef ISDELPHI20102}
+  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TGeoJSONCoords),GeoJSONCoordReader,GeoJSONCoordWriter);
+  {$ifndef ISDELPHI2010}
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TGeoJSONObjectType));
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TCity),__TCity);
   {$endif}
   json := StringFromFile(fFileName);
@@ -923,15 +929,16 @@ begin
   RecordLoadJSON(data,pointer(JSON),TypeInfo(TCity));
   json := '';
   {$ifdef ISDELPHI2010}
-  check(data.&type='FeatureCollection');
+  check(data.&type=FeatureCollection);
   {$else}
-  check(data._type='FeatureCollection');
+  check(data._type=FeatureCollection);
   {$endif}
   fRunConsoleOccurenceNumber := length(data.features);
-  with data.features[high(data.features)] do begin
-    check(properties.MAPBLKLOT='VACSTWIL');
-    checksame(geometry.coordinates[0].values[0,0].a,-122.424,1E-1);
-  end;
+  if data.features<>nil then
+    with data.features[high(data.features)] do begin
+      check(properties.MAPBLKLOT='VACSTWIL');
+      checksame(geometry.coordinates[0].values[0,0].x,-122.424,1E-1);
+    end;
   check(fRunConsoleOccurenceNumber=206560);
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
 end;
