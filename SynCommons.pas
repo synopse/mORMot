@@ -2688,13 +2688,13 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
 // Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
 // 2009 and up) according to any BOM marker at the beginning of the file
 // - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
-function AnyTextFileToString(const FileName: TFileName): string;
+function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean=false): string;
 
 /// get text file contents (even Unicode or UTF8) and convert it into an
 // Unicode string according to any BOM marker at the beginning of the file
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
 // case, the current string code page is used (i.e. CurrentAnsiConvert class)
-function AnyTextFileToSynUnicode(const FileName: TFileName): SynUnicode;
+function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean=false): SynUnicode;
 
 /// read an UTF-8 text from a TStream
 // - format is Length(Integer):Text, i.e. the one used by WriteStringToStream
@@ -17918,12 +17918,14 @@ begin
       result := isUTF8;
 end;
 
-function AnyTextFileToSynUnicode(const FileName: TFileName): SynUnicode;
+function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
 var Map: TMemoryMap;
 begin
   result := '';
   if Map.Map(FileName) then
   try
+    if ForceUTF8 then
+      UTF8ToSynUnicode(PUTF8Char(Map.Buffer),Map.Size,Result) else
     case TextFileKind(Map) of
     isUnicode:
       SetString(result,PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1);
@@ -17937,12 +17939,18 @@ begin
   end;
 end;
 
-function AnyTextFileToString(const FileName: TFileName): string;
+function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean): string;
 var Map: TMemoryMap;
 begin
   result := '';
   if Map.Map(FileName) then
   try
+    if ForceUTF8 then
+{$ifdef UNICODE}
+      UTF8DecodeToString(PUTF8Char(Map.Buffer),Map.Size,result)
+{$else}
+      result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer),Map.Size)
+{$endif} else
     case TextFileKind(Map) of
 {$ifdef UNICODE}
     isUnicode:
