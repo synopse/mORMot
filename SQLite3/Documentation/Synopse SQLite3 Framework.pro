@@ -1157,9 +1157,9 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 
 [SAD-Main]
 SourcePath=Lib\SQLite3
-IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Zeos\src
+IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
-SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas
+SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas
 ;Samples\MainDemo\SynFile.dpr
 Version=1.18
 TitleOffset=0
@@ -1222,7 +1222,7 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotReport.pas}|Integrated Reporting engine
 |%
-Other units are available in the framework source code repository, but are either expected by those files above (e.g. like {\f1\fs20 SynDB*.pas} database providers), or used only optionally in end-user client applications.
+Other units are available in the framework source code repository, but are either expected by those files above (e.g. like {\f1\fs20 SynDB*.pas} database providers), or used only optionally in end-user client applications (e.g. the {\f1\fs20 CrossPlatform} folder).
 In the following pages, the features offered by those units will be presented.\line Do not forget to take a look at all sample projects available in the {\f1\fs20 SQLite3\\Samples} sub-folders - nothing is better than some simple code to look at.
 Then detailed information will be available in the second part of this document - see @44@.
 :45SynCommons unit
@@ -10355,11 +10355,13 @@ As retrieved from our source code repository, you'll find the following folder l
 \SQlite3\Samples
 \SQlite3\Documentation
 \root\SynDBDataset
+\root\CrossPlatform
 \
 In fact, you will get:
 |%30%70
 |\b Directory|Description\b0
 |{\f1\fs20 /}|Root folder, containing common files
+|{\f1\fs20 CrossPlatform}|Contains code for cross-platform clients
 |{\f1\fs20 HtmlView/}|A fork of the freeware {\f1\fs20 THtmlView} component, used as a demo of the {\f1\fs20 SynPdf} unit - not finished, and not truly Unicode ready
 |{\f1\fs20 LVCL/}|{\i Light VCL} replacement files for standard VCL (for Delphi 6-7 only)
 |{\f1\fs20 RTL7/}|Enhanced RTL .dcu for Delphi 7 (not mandatory at all), and {\i FastMM4} memory manager to be used before Delphi 2006
@@ -10449,6 +10451,12 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 TestSQL3.dpr\line mORMotSelfTests.pas}|Main @*test@ing program of the Synopse {\i mORMot} framework
 |{\f1\fs20 TestSQL3Register.dpr}|Run as administrator for {\i TestSQL3} to use {\i @*http.sys@} on Vista/Seven
 |{\f1\fs20 c.bat sqlite3.c}|Source code of the {\i SQLite3} embedded Database engine
+|%
+In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} client for compilers or platforms not supported by the main branch:
+|%30%70
+|\b File|Description\b0
+|{\f1\fs20 SynCrossPlatform.inc}|Generic header used for cross-platform and cross-compiler support
+|{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for Delphi and FPC
 |%
 \page
 : Installation
