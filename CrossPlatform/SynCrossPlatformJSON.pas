@@ -371,16 +371,17 @@ begin
     '"': begin
       str := copy(JSON,Index,i-Index);
       Index := i+1;
-      break;
+      result := true;
+      exit;
     end;
     '\': begin
       str := copy(JSON,Index,i-Index);
       Index := i;
       UnEscape;
-      break;
+      result := true;
+      exit;
     end;
     end;
-  result := true;
 end;
 
 type
@@ -657,7 +658,7 @@ end;
 
 initialization
   {$ifdef ISDELPHIXE}
-  SettingsUS := TFormatSettings.Create($0409);
+  SettingsUS := TFormatSettings.Create('en-US');
   {$else}
   GetLocaleFormatSettings($0409,SettingsUS);
   {$endif}
