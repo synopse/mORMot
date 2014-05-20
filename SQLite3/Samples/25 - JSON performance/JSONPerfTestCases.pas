@@ -196,6 +196,7 @@ type
     procedure SynopseTableVariant;
     procedure SynopseDocVariant;
     procedure SynopseLateBinding;
+    procedure SynopseCrossplatform;
     {$ifdef TESTBSON}
     procedure SynopseToBSON;
     {$endif}
@@ -1043,7 +1044,7 @@ procedure TTestHugeContent.SynopseCrossPlatform;
 var json: string;
     doc: TJSONVariantData;
 begin
-  json := AnyTextFileToString(fFileName);
+  json := AnyTextFileToString(fFileName,true);
   Owner.TestTimer.Start;
   doc.Init(json);
   json := '';
@@ -1145,7 +1146,7 @@ procedure TTestDepthContent.SynopseCrossPlatform;
 var json: string;
     doc: TJSONVariantData;
 begin
-  json := AnyTextFileToString(fFileName);
+  json := AnyTextFileToString(fFileName,true);
   Owner.TestTimer.Start;
   doc.Init(json);
   json := '';
@@ -1265,11 +1266,32 @@ begin
     Check(list.Field('LastName')<>'');
     Check(list.Field('YearOfBirth')<10000);
     Check((list.Field('YearOfDeath')>1400)and(list.Field('YearOfDeath')<2000));
-    Check((list.Field('ID')>11011) or (list.Field('Data')<>''));
+    Check((list.Field('RowID')>11011) or (list.Field('Data')<>null));
   end;
   fRunConsoleOccurenceNumber := list.RowCount;
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
   list.Free;
+end;
+
+procedure TTestTableContent.SynopseCrossplatform;
+var json: string;
+    table: TJSONTable;
+begin
+  json := AnyTextFileToString(fFileName,true);
+//  json := AnyTextFileToString('d:\Dev\Lib\SQLite3\exe\test1.json',true);
+  Owner.TestTimer.Start;
+  table := TJSONTable.Create(json);
+  fRunConsoleOccurenceNumber := 0;
+  while table.Step do begin
+    Check(table['FirstName']<>'');
+    Check(table['LastName']<>'');
+    Check(table['YearOfBirth']<10000);
+    Check((table['YearOfDeath']>1400)and(table['YearOfDeath']<2000));
+    Check((table['RowID']>11011) or (table['Data']<>null));
+    inc(fRunConsoleOccurenceNumber);
+  end;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  table.Free;
 end;
 
 type
@@ -1389,7 +1411,7 @@ begin
     Check(Value['LastName']<>'');
     Check(Value['YearOfBirth']<10000);
     Check((Value['YearOfDeath']>1400)and(Value['YearOfDeath']<2000));
-    Check((Value['ID']>11011) or (Value['Data']<>''));
+    Check((Value['RowID']>11011) or (Value['Data']<>null));
   end;
   fRunConsoleOccurenceNumber := doc.Count;
   check(fRunConsoleOccurenceNumber>8000);
@@ -1411,7 +1433,7 @@ begin
     Check(doc.Values[i].LastName<>'');
     Check(doc.Values[i].YearOfBirth<10000);
     Check((doc.Values[i].YearOfDeath>1400)and(doc.Values[i].YearOfDeath<2000));
-    Check((doc.Values[i].ID>11011) or (doc.Values[i].Data<>''));
+    Check((doc.Values[i].RowID>11011) or (doc.Values[i].Data<>''));
   end;
   fRunConsoleOccurenceNumber := doc.Count;
   check(fRunConsoleOccurenceNumber>8000);
