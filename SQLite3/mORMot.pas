@@ -13895,7 +13895,7 @@ begin
     end;
   end;
   if C=nil then
-    raise EORMException.CreateFmt('Unhanled %s/%s type for property %s',
+    raise EORMException.CreateFmt('Unhandled %s/%s type for property %s',
       [GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
        GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,aPropInfo^.Name]);
   result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
