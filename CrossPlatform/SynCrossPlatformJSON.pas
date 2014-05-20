@@ -61,6 +61,9 @@ uses
   Variants;
 
 type
+  TStringDynArray = array of string;
+  TVariantDynArray = array of variant;
+
   /// exception used during standand-alone cross-platform JSON process
   EJSONException = class(Exception);
 
@@ -76,8 +79,13 @@ type
   // - it is in fact already faster (and using less memory) than DBXJSON and
   // SuperObject / XSuperObject libraries - of course, mORMot's TDocVariant
   // is faster, as dwsJSON is, but those are not cross-platform
+  {$ifdef UNICODE}
+  TJSONVariantData = record
+  private
+  {$else}
   TJSONVariantData = object
   protected
+  {$endif}
     VType: TVarType;
     _Align: byte;
     VKind: TJSONVariantKind;
@@ -87,13 +95,11 @@ type
     function GetVarData(const aName: string; var Dest: TVarData): boolean;
     function GetValue(const aName: string): variant;
     procedure SetValue(const aName: string; const aValue: variant);
-    function ParseJSONObject(const JSON: string; var Index: integer): boolean;
-    function ParseJSONArray(const JSON: string; var Index: integer): boolean;
   public
     /// names of this jvObject
-    Names: array of string;
+    Names: TStringDynArray;
     /// values of this jvObject or jvArray
-    Values: array of variant;
+    Values: TVariantDynArray;
     /// initialize the low-level memory structure
     procedure Init; overload;
     /// initialize the low-level memory structure with a given JSON content
@@ -143,6 +149,37 @@ type
       const AVarType: TVarType); override;
   end;
 
+  /// handle a JSON result table, as returned by mORMot's server
+  // - handle both expanded and non expanded layout
+  // - will be used on client side for ORM data parsing
+  TJSONTable = class
+  protected
+    fJSON: string;
+    fFieldNames: TStringDynArray;
+    fJSONExpanded: boolean;
+    fJSONIndexFirstValue: integer;
+    fJSONCurrentIndex: integer;
+    fRowValues: TVariantDynArray;
+    function Get(const FieldName: string): variant;
+  public
+    /// parse the supplied JSON content
+    constructor Create(const aJSON: string);
+    /// case-insensitive search for a field name
+    function FieldIndex(const FieldName: string): integer;
+    /// to be called in a loop to iterate through all data rows
+    // - if returned true, Value[] contains the fields of this row
+    function Step(SeekFirst: boolean=false): boolean;
+    /// after Step() returned true, can be used to retrieve a field value by name
+    property Value[const FieldName: string]: variant read Get; default;
+    /// after Step() returned true, can be used to retrieve a field value by index
+    property RowValue: TVariantDynArray read fRowValues;
+    /// the recognized field names
+    property FieldNames: TStringDynArray read fFieldNames;
+    /// the associated JSON content
+    property JSON: string read fJSON;
+  end;
+
+  
 /// create a TJSONVariant instance from a given JSON content
 // - typical usage may be:
 //! var doc: variant;
@@ -162,6 +199,7 @@ function JSONVariant(const JSON: string): variant;
 function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
 
 var
+  /// the custom variant type definition registered for TJSONVariant
   JSONVariantType: TInvokeableVariantType;
 
 /// compute the quoted JSON string corresponding to the supplied text 
@@ -254,7 +292,253 @@ begin
 end;
 
 
+{ TJSONParser }
+
+type
+  /// the JSON node types, as recognized by TJSONParser
+  TJSONParserKind = (
+    kNone, kNull, kFalse, kTrue, kString, kInteger, kFloat, kObject, kArray);
+
+  /// used to parse any JSON content
+  TJSONParser = {$ifdef UNICODE}record{$else}object{$endif}
+    JSON: string;
+    Index: integer;
+    JSONLength: integer;
+    procedure Init(const aJSON: string; aIndex: integer);
+    function GetNextChar: char;                {$ifdef HASINLINE}inline;{$endif}
+    function GetNextNonWhiteChar: char;        {$ifdef HASINLINE}inline;{$endif}
+    function GetNextString(out str: string): boolean; overload;
+    function GetNextString: string; overload;  {$ifdef HASINLINE}inline;{$endif}
+    function GetNextJSON(out Value: variant): TJSONParserKind;
+    function CheckNextIdent(const ExpectedIdent: string): Boolean;
+    function ParseJSONObject(var Data: TJSONVariantData): boolean;
+    function ParseJSONArray(var Data: TJSONVariantData): boolean;
+    procedure GetNextStringUnEscape(var str: string);
+  end;
+
+
+procedure TJSONParser.Init(const aJSON: string; aIndex: integer);
+begin
+  JSON := aJSON;
+  JSONLength := length(JSON);
+  Index := aIndex;
+end;
+
+function TJSONParser.GetNextChar: char;
+begin
+  if Index<=JSONLength then begin
+    result := JSON[Index];
+    inc(Index);
+  end else
+    result := #0;
+end;
+
+function TJSONParser.GetNextNonWhiteChar: char;
+begin
+  if Index<=JSONLength then
+    repeat
+      if JSON[Index]>' ' then begin
+        result := JSON[Index];
+        inc(Index);
+        exit;
+      end;
+      inc(Index);
+    until Index>JSONLength;
+  result := #0;
+end;
+
+procedure TJSONParser.GetNextStringUnEscape(var str: string);
+var c: char;
+    u: string;
+    unicode,err: integer;
+begin
+  repeat
+    c := GetNextChar;
+    case c of
+    #0: exit;
+    '"': break;
+    '\': begin
+      c := GetNextChar;
+      case c of
+      #0: exit;
+      'b': AppendChar(str,#08);
+      't': AppendChar(str,#09);
+      'n': AppendChar(str,#$0a);
+      'f': AppendChar(str,#$0c);
+      'r': AppendChar(str,#$0d);
+      'u': begin
+        u := Copy(JSON,Index,4);
+        if length(u)<>4 then
+          exit;
+        inc(Index,4);
+        val('$'+u,unicode,err);
+        if err<>0 then
+          exit;
+        AppendChar(str,char(unicode));
+      end;
+      else AppendChar(str,c);
+      end;
+    end;
+    else AppendChar(str,c);
+    end;
+  until false;
+end;
+
+function TJSONParser.GetNextString(out str: string): boolean;
+var i: integer;
+begin
+  for i := Index to JSONLength do
+    case JSON[i] of
+    '"': begin // end of string without escape -> direct copy
+      str := copy(JSON,Index,i-Index);
+      Index := i+1;
+      result := true;
+      exit;
+    end;
+    '\': begin // need unescaping
+      str := copy(JSON,Index,i-Index);
+      Index := i;
+      GetNextStringUnEscape(str);
+      result := true;
+      exit;
+    end;
+    end;
+  result := false;
+end;
+
+function TJSONParser.GetNextString: string; 
+begin
+  if not GetNextString(result) then
+    result := '';
+end;
+
+function TJSONParser.GetNextJSON(out Value: variant): TJSONParserKind;
+var str: string;
+    i64: Int64;
+    d: double;
+    start,err: integer;
+begin
+  result := kNone;
+  case GetNextNonWhiteChar of
+  'n': if copy(JSON,Index,3)='ull' then begin
+         inc(Index,3);
+         result := kNull;
+         Value := null;
+       end;
+  'f': if copy(JSON,Index,4)='alse' then begin
+         inc(Index,4);
+         result := kFalse;
+         Value := false;
+       end;
+  't': if copy(JSON,Index,3)='rue' then begin
+         inc(Index,3);
+         result := kTrue;
+         Value := true;
+       end;
+  '"': if GetNextString(str) then begin
+         result := kString;
+         Value := str;
+       end;
+  '{': if ParseJSONObject(TJSONVariantData(Value)) then
+         result := kObject;
+  '[': if ParseJSONArray(TJSONVariantData(Value)) then
+         result := kArray;
+  '-','0'..'9': begin
+    start := Index-1;
+    while true do
+      case JSON[Index] of
+      '-','+','0'..'9','.','E','e': inc(Index);
+      else break;
+      end;
+    str := copy(JSON,start,Index-start);
+    val(str,i64,err);
+    if err=0 then begin
+      Value := i64;
+      result := kInteger;
+    end else begin
+      val(str,d,err);
+      if err<>0 then
+        exit;
+      Value := d;
+      result := kFloat;
+    end;
+  end;
+  end;
+end;
+
+function TJSONParser.CheckNextIdent(const ExpectedIdent: string): Boolean;
+begin
+  result := (GetNextNonWhiteChar='"') and
+            (CompareText(GetNextString,ExpectedIdent)=0) and
+            (GetNextNonWhiteChar=':');
+end;
+
+function TJSONParser.ParseJSONArray(var Data: TJSONVariantData): boolean;
+var item: variant;
+begin
+  result := false;
+  Data.Init;
+  repeat
+    if GetNextJSON(item)=kNone then
+      exit;
+    Data.AddValue(item);
+    case GetNextNonWhiteChar of
+    ',': continue;
+    ']': break;
+    else exit;
+    end;
+  until false;
+  SetLength(Data.Values,Data.VCount);
+  Data.VKind := jvArray;
+  result := true;
+end;
+
+function TJSONParser.ParseJSONObject(var Data: TJSONVariantData): boolean;
+var key: string;
+    val: variant;
+begin
+  result := false;
+  Data.Init;
+  repeat
+    if (GetNextNonWhiteChar<>'"') or
+       not GetNextString(key) then
+      exit;
+    if (GetNextNonWhiteChar<>':') or
+       (GetNextJSON(val)=kNone) then
+      exit; // writeln(Copy(JSON,Index-10,30));
+    Data.AddNameValue(key,val);
+    case GetNextNonWhiteChar of
+    ',': continue;
+    '}': break;
+    else exit;
+    end;
+  until false;
+  SetLength(Data.Names,Data.VCount);
+  SetLength(Data.Values,Data.VCount);
+  Data.VKind := jvObject;
+  result := true;
+end;
+
+
 { TJSONVariantData }
+
+procedure TJSONVariantData.Init;
+begin
+  VType := JSONVariantType.VarType;
+  {$ifdef UNICODE} // makes compiler happy
+  _Align := 0;
+  {$endif}
+  VKind := jvUndefined;
+  VCount := 0;
+  pointer(Names) := nil;
+  pointer(Values) := nil;
+end;
+
+procedure TJSONVariantData.Init(const JSON: string);
+begin
+  Init;
+  FromJSON(JSON);
+end;
 
 procedure TJSONVariantData.AddNameValue(const aName: string;
   const aValue: variant);
@@ -284,174 +568,11 @@ begin
   inc(VCount);
 end;
 
-function GetNextChar(const JSON: string; var Index: integer): char;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  if Index>length(JSON) then
-    result := #0 else begin
-    result := JSON[Index];
-    inc(Index);
-  end;
-end;
-
-function GetNextNonWhite(const JSON: string; var Index: integer): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := false;
-  while Index<length(JSON) do begin
-    if JSON[Index]=#0 then
-      exit;
-    if JSON[Index]>' ' then begin
-      result := true;
-      exit;
-    end;
-    inc(Index);
-  end;
-end;
-
-function GetNextNonWhiteChar(const JSON: string; var Index: integer): char;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := #0;
-  while Index<length(JSON) do begin
-    if JSON[Index]=#0 then
-      exit;
-    if JSON[Index]>' ' then begin
-      result := JSON[Index];
-      inc(Index);
-      exit;
-    end;
-    inc(Index);
-  end;
-end;
-
-function GetNextString(const JSON: string; var Index: integer; out str: string): boolean;
-procedure UnEscape;
-var c: char;
-    u: string;
-    unicode,err: integer;
-begin
-  repeat
-    c := GetNextChar(JSON,Index);
-    case c of
-    #0: exit;
-    '"': break;
-    '\': begin
-      c := GetNextChar(JSON,Index);
-      case c of
-      #0: exit;
-      'b': AppendChar(str,#08);
-      't': AppendChar(str,#09);
-      'n': AppendChar(str,#$0a);
-      'f': AppendChar(str,#$0c);
-      'r': AppendChar(str,#$0d);
-      'u': begin
-        u := Copy(JSON,Index,4);
-        if length(u)<>4 then
-          exit;
-        inc(Index,4);
-        val('$'+u,unicode,err);
-        if err<>0 then
-          exit;
-        AppendChar(str,char(unicode));
-      end;
-      else AppendChar(str,c);
-      end;
-    end;
-    else AppendChar(str,c);
-    end;
-  until false;
-end;
-var i: integer;
-begin
-  result := false;
-  for i := Index to length(JSON) do
-    case JSON[i] of
-    #0: exit;
-    '"': begin
-      str := copy(JSON,Index,i-Index);
-      Index := i+1;
-      result := true;
-      exit;
-    end;
-    '\': begin
-      str := copy(JSON,Index,i-Index);
-      Index := i;
-      UnEscape;
-      result := true;
-      exit;
-    end;
-    end;
-end;
-
-type
-  TJSONKind = (kNone, kNull, kFalse, kTrue, kString, kNumber, kObject, kArray);
-
-function GetNextJSON(const JSON: string; var Index: integer; out Value: variant): TJSONKind;
-var str: string;
-    i64: Int64;
-    d: double;
-    start,err: integer;
-begin
-  result := kNone;
-  case GetNextNonWhiteChar(JSON,Index) of
-  'n': if copy(JSON,Index,3)='ull' then begin
-         inc(Index,3);
-         result := kNull;
-         Value := null;
-       end;
-  'f': if copy(JSON,Index,4)='alse' then begin
-         inc(Index,4);
-         result := kFalse;
-         Value := false;
-       end;
-  't': if copy(JSON,Index,3)='rue' then begin
-         inc(Index,3);
-         result := kTrue;
-         Value := true;
-       end;
-  '"': begin
-    if not GetNextString(JSON,Index,str) then
-      exit;
-    result := kString;
-    Value := str;
-  end;
-  '{': begin
-    if not TJSONVariantData(Value).ParseJSONObject(JSON,Index) then
-      exit;
-    result := kObject;
-  end;
-  '[': begin
-    if not TJSONVariantData(Value).ParseJSONArray(JSON,Index) then
-      exit;
-    result := kArray;
-  end;
-  '-','0'..'9': begin
-    start := Index-1;
-    while true do
-      case JSON[Index] of
-      '-','+','0'..'9','.','E','e': inc(Index);
-      else break;
-      end;
-    str := copy(JSON,start,Index-start);
-    val(str,i64,err);
-    if err=0 then
-      Value := i64 else begin
-      val(str,d,err);
-      if err<>0 then
-        exit;
-      Value := d;
-    end;
-    result := kNumber;
-  end;
-  end;
-end;
-
 function TJSONVariantData.FromJSON(const JSON: string): boolean;
-var i: Integer;
+var Parser: TJSONParser;
 begin
-  i := 1;
-  result := GetNextJSON(JSON,i,variant(self)) in [kObject,kArray];
+  Parser.Init(JSON,1);
+  result := Parser.GetNextJSON(variant(self)) in [kObject,kArray];
 end;
 
 function TJSONVariantData.Data(const aName: string): PJSONVariantData;
@@ -488,27 +609,12 @@ function TJSONVariantData.GetVarData(const aName: string;
 var i: integer;
 begin
   i := NameIndex(aName);
-  if cardinal(i)<cardinal(length(Values)) then begin
+  if (i>=0) and (i<length(Values)) then begin
     Dest.VType := varVariant or varByRef;
     Dest.VPointer := @Values[i];
     result := true;
   end else
     result := false;
-end;
-
-procedure TJSONVariantData.Init(const JSON: string);
-begin
-  Init;
-  FromJSON(JSON);
-end;
-
-procedure TJSONVariantData.Init;
-begin
-  VType := JSONVariantType.VarType;
-  VKind := jvUndefined;
-  VCount := 0;
-  pointer(Names) := nil;
-  pointer(Values) := nil;
 end;
 
 function TJSONVariantData.NameIndex(const aName: string): integer;
@@ -518,54 +624,6 @@ begin
       if Names[result]=aName then
         exit;
   result := -1;
-end;
-
-function TJSONVariantData.ParseJSONArray(const JSON: string;
-  var Index: integer): boolean;
-var item: variant;
-begin
-  result := false;
-  Init;
-  repeat
-    if GetNextJSON(JSON,Index,item)=kNone then
-      exit;
-    AddValue(item);
-    case GetNextNonWhiteChar(JSON,Index) of
-    ',': continue;
-    ']': break;
-    else exit;
-    end;
-  until false;
-  SetLength(Values,VCount);
-  VKind := jvArray;
-  result := true;
-end;
-
-function TJSONVariantData.ParseJSONObject(const JSON: string;
-  var Index: integer): boolean;
-var key: string;
-    val: variant;
-begin
-  result := false;
-  Init;
-  repeat
-    if (GetNextNonWhiteChar(JSON,Index)<>'"') or
-       not GetNextString(JSON,Index,key) then
-      exit;
-    if (GetNextNonWhiteChar(JSON,Index)<>':') or
-       (GetNextJSON(JSON,Index,val)=kNone) then
-      exit; // writeln(Copy(JSON,Index-10,30));
-    AddNameValue(key,val);
-    case GetNextNonWhiteChar(JSON,Index) of
-    ',': continue;
-    '}': break;
-    else exit;
-    end;
-  until false;
-  SetLength(Names,VCount);
-  SetLength(Values,VCount);
-  VKind := jvObject;
-  result := true;
 end;
 
 procedure TJSONVariantData.SetValue(const aName: string;
@@ -655,6 +713,124 @@ begin
   TJSONVariantData(V).SetValue(Name,variant(Value));
   result := true;
 end;
+
+
+{ TJSONTable }
+
+constructor TJSONTable.Create(const aJSON: string);
+var f,firstValue: integer;
+    EndOfField: char;
+    fieldCount, fieldName, dummy: variant;
+    Parser: TJSONParser;
+begin
+  Parser.Init(aJSON,1);
+  fJSON := aJSON;
+  EndOfField := #0;
+  if (Parser.GetNextNonWhiteChar='{') and
+      Parser.CheckNextIdent('fieldCount') and
+     (Parser.GetNextJSON(fieldCount)=kInteger) and
+     (Parser.GetNextNonWhiteChar=',') and
+      Parser.CheckNextIdent('values') and
+     (Parser.GetNextNonWhiteChar='[') then begin
+    // non expanded format: {"fieldCount":2,"values":["ID","Int",1,0,2,0,3,...]
+    SetLength(fFieldNames,integer(fieldCount));
+    for f := 0 to high(fFieldNames) do begin
+      if Parser.GetNextJSON(fieldName)<>kString then
+        exit;
+      fFieldNames[f] := fieldName;
+      EndOfField := Parser.GetNextNonWhiteChar;
+      if EndOfField<>',' then
+        if (EndOfField<>']') or (f<>High(FieldNames)) then
+          exit
+    end;
+    if EndOfField=',' then
+      fJSONIndexFirstValue := Parser.Index;
+  end else begin
+    // expanded format: [{"ID":1,"Int":0},{"ID":2,"Int":0},{"ID":3,...]
+    Parser.Index := 1;
+    if (Parser.GetNextNonWhiteChar='[') and
+       (Parser.GetNextNonWhiteChar='{') then begin
+      firstValue := Parser.Index;
+      f := 0;
+      repeat
+        if (Parser.GetNextJSON(fieldName)<>kString) or
+           (Parser.GetNextNonWhiteChar<>':') then
+          exit;
+        if Parser.GetNextJSON(dummy)=kNone then
+          exit;
+        SetLength(fFieldNames,f+1);
+        fFieldNames[f] := fieldName;
+        inc(f);
+        EndOfField := Parser.GetNextNonWhiteChar;
+        if EndOfField<>',' then
+          if EndOfField='}' then
+            break else
+            exit;
+      until false;
+      fJSONIndexFirstValue := firstValue;
+      fJSONExpanded := true;
+    end;    
+  end;
+  SetLength(fRowValues,length(fFieldNames));
+end;
+
+function TJSONTable.FieldIndex(const FieldName: string): integer;
+begin
+  for result := 0 to high(fFieldNames) do
+    if CompareText(fFieldNames[result],FieldName)=0 then
+      exit;
+  result := -1;
+end;
+
+function TJSONTable.Get(const FieldName: string): variant;
+var ndx: integer;
+begin
+  ndx := FieldIndex(FieldName);
+  if ndx<0 then
+    result := null else
+    result := fRowValues[ndx];
+end;
+
+function TJSONTable.Step(SeekFirst: boolean): boolean;
+var f: integer;
+    EndOfField: char;
+    Parser: TJSONParser;
+begin
+  result := false;
+  if SeekFirst or (fJSONCurrentIndex=0) then
+    fJSONCurrentIndex := fJSONIndexFirstValue;
+  if fJSONCurrentIndex<=0 then
+    exit;
+  Parser.Init(fJSON,fJSONCurrentIndex);
+  fJSONCurrentIndex := -1; // indicates end of content in case of exit below
+  EndOfField := #0;
+  for f := 0 to high(fRowValues) do begin
+    if fJSONExpanded and not Parser.CheckNextIdent(fFieldNames[f]) then
+      exit;
+    if Parser.GetNextJSON(fRowValues[f])=kNone then
+      exit;
+    EndOfField := Parser.GetNextNonWhiteChar;
+    if EndOfField<>',' then
+      if f<>High(fRowValues) then
+        exit else
+      if ((EndOfField=']') and (not fJSONExpanded)) or
+         ((EndOfField='}') and fJSONExpanded) then
+        break else
+        exit;
+  end;
+  if fJSONExpanded then begin
+    if EndOfField<>'}' then
+      exit;
+    EndOfField := Parser.GetNextNonWhiteChar;
+    if (EndOfField=',') and
+       (Parser.GetNextNonWhiteChar<>'{') then
+      exit;
+  end;
+  if EndOfField=',' then
+    fJSONCurrentIndex := Parser.Index; // indicates next Step() has data 
+  result := true;
+end;
+
 
 initialization
   {$ifdef ISDELPHIXE}

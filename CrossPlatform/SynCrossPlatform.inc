@@ -60,13 +60,17 @@
 
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$if CompilerVersion >= 18}    // Delphi 2006 or newer
-      {$define HASINLINE}     
+      {$define HASINLINE}
     {$ifend}
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
     {$ifend}
     {$if CompilerVersion >= 22.0}
       {$define ISDELPHIXE}
+    {$ifend}
+    {$if CompilerVersion >= 25.0}
+      {$define ISDELPHIXE4}
+      {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$ifend}
   {$endif}
 
