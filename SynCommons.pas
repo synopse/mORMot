@@ -621,7 +621,9 @@ unit SynCommons;
     TSynBackgroundThreadMethod inherited classes
   - added TSynFPUException class to allow per-method customization of the FPU
     exception mapping: to be used e.g. when mixing code between external
-    libraries and Delphi code 
+    libraries and Delphi code
+  - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
+    MaxUpperCount properties to TSynValidateText class
   - if DOPATCHTRTL is defined, will enable asm-optimized RecordClear and
     _InitializeRecord functions in replacement to the slower RTL version, and
     patch TObject.CleanupInstance before Delphi 2009 (since TMonitor.Destroy
@@ -917,6 +919,8 @@ type
   PPointerDynArray = ^TPointerDynArray;
   TMethodDynArray = array of TMethod;
   PMethodDynArray = ^TMethodDynArray;
+  TObjectListDynArray = array of TObjectList;
+  PObjectListDynArray = ^TObjectListDynArray;
 
   PByteArray = ^TByteArray;
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
@@ -5995,6 +5999,8 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 // copy first if you want to reuse the JSON content
 // - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
 // JSON arrays or objects
+// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
+// just like '{"name":'"John","year":1972}' 
 procedure JSONDecode(var JSON: RawUTF8;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
@@ -6276,9 +6282,6 @@ type
 
   /// text validation to be applied to a Record field content
   // (typicaly a TSQLRecord)
-  // - expects optional JSON parameters of the allowed text length range as
-  // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
-  // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1}
   // - default MinLength value is 1, MaxLength is maxInt: so you can specify a
   // blank TSynValidateText to avoid any void textual field
   // - MinAlphaCount, MinDigitCount, MinPunctCount, MinLowerCount and
@@ -6288,7 +6291,7 @@ type
   TSynValidateText = class(TSynValidate)
   private
     /// used to store internal the associated validation properties
-    fProps: array[0..10] of cardinal;
+    fProps: array[0..15] of cardinal;
   protected
     /// use sInvalidTextChar resourcestring to create a translated error message
     function ErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer): string;
@@ -6296,10 +6299,15 @@ type
     procedure SetParameters(Value: RawUTF8); override;
   public
     /// initialize the validation instance
+    // - expects optional JSON parameters of the allowed text length range as
+    // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
+    // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1}
+    // - you can use MongoDB enhanced syntax e.g. '{MinLength:5,MaxLength:10}'
     constructor Create(const aParameters: RawUTF8='');
     /// perform the text length validation action to the specified value
     function Process(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string): boolean; override;
+  published
     /// Minimal length value allowed for the text content
     // - the length is calculated with Unicode glyphs, not with UTF-8 encoded
     // char count
@@ -6313,30 +6321,45 @@ type
     /// Minimal alphabetical character [a-zA-Z] count
     // - default is 0, i.e. no minimum set
     property MinAlphaCount: cardinal read fProps[2] write fProps[2];
+    /// Maximal alphabetical character [a-zA-Z] count
+    // - default is maxInt, i.e. no Maximum set
+    property MaxAlphaCount: cardinal read fProps[10] write fProps[10];
     /// Minimal digit character [0-9] count
     // - default is 0, i.e. no minimum set
     property MinDigitCount: cardinal read fProps[3] write fProps[3];
+    /// Maximal digit character [0-9] count
+    // - default is maxInt, i.e. no Maximum set
+    property MaxDigitCount: cardinal read fProps[11] write fProps[11];
     /// Minimal punctuation sign [_!;.,/:?%$="#@(){}+-*] count
     // - default is 0, i.e. no minimum set
     property MinPunctCount: cardinal read fProps[4] write fProps[4];
+    /// Maximal punctuation sign [_!;.,/:?%$="#@(){}+-*] count
+    // - default is maxInt, i.e. no Maximum set
+    property MaxPunctCount: cardinal read fProps[12] write fProps[12];
     /// Minimal alphabetical lower case character [a-z] count
     // - default is 0, i.e. no minimum set
     property MinLowerCount: cardinal read fProps[5] write fProps[5];
+    /// Maximal alphabetical lower case character [a-z] count
+    // - default is maxInt, i.e. no Maximum set
+    property MaxLowerCount: cardinal read fProps[13] write fProps[13];
     /// Minimal alphabetical upper case character [A-Z] count
     // - default is 0, i.e. no minimum set
     property MinUpperCount: cardinal read fProps[6] write fProps[6];
+    /// Maximal alphabetical upper case character [A-Z] count
+    // - default is maxInt, i.e. no Maximum set
+    property MaxUpperCount: cardinal read fProps[14] write fProps[14];
     /// Minimal space count inside the value text
     // - default is 0, i.e. any space number allowed
     property MinSpaceCount: cardinal read fProps[7] write fProps[7];
     /// Maximal space count inside the value text
     // - default is maxInt, i.e. any space number allowed
-    property MaxSpaceCount: cardinal read fProps[8] write fProps[8];
+    property MaxSpaceCount: cardinal read fProps[15] write fProps[15];
     /// Maximal space count allowed on the Left side
     // - default is maxInt, i.e. any Left space allowed
-    property MaxLeftTrimCount: cardinal read fProps[9] write fProps[9];
+    property MaxLeftTrimCount: cardinal read fProps[8] write fProps[8];
     /// Maximal space count allowed on the Right side
     // - default is maxInt, i.e. any Right space allowed
-    property MaxRightTrimCount: cardinal read fProps[10] write fProps[10];
+    property MaxRightTrimCount: cardinal read fProps[9] write fProps[9];
   end;
 
   /// strong password validation for a Record field content (typicaly a TSQLRecord)
@@ -26576,7 +26599,6 @@ begin
   end;
 end;
 
-
 function TDocVariantData.InitJSONInPlace(JSON: PUTF8Char;
   aOptions: TDocVariantOptions; aEndOfObject: PUTF8Char): PUTF8Char;
 var EndOfObject: AnsiChar;
@@ -31990,7 +32012,7 @@ begin  // should match GotoNextJSONObjectOrArray()
       inc(P);
     end;
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-    if P^<>':' then
+    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
       exit;
     P^ :=#0;
     inc(P);
@@ -32703,6 +32725,11 @@ begin
   MaxSpaceCount := maxInt;
   MaxLeftTrimCount := maxInt;
   MaxRightTrimCount := maxInt;
+  MaxAlphaCount := maxInt;
+  MaxDigitCount := maxInt;
+  MaxPunctCount := maxInt;
+  MaxLowerCount := maxInt;
+  MaxUpperCount := maxInt;
   inherited;
 end;
 
@@ -32753,11 +32780,11 @@ begin
       if Min[i]<fProps[i] then begin
         ErrorMsg := self.ErrorMsg(i,i,0);
         exit;
+      end else
+      if Min[i]>fProps[i+8] then begin
+        ErrorMsg := self.ErrorMsg(i+8,i,1);
+        exit;
       end;
-    if Min[7]>MaxSpaceCount then begin
-      ErrorMsg := self.ErrorMsg(8,7,1);
-      exit;
-    end;
     if Value<>'' then begin
       if MaxLeftTrimCount<cardinal(maxInt) then begin
         // if MaxLeftTrimCount is set, check against Value
@@ -32787,10 +32814,16 @@ var V: TPUtf8CharDynArray;
     i: integer;
 begin
   inherited;
+  if Value='' then
+    exit;
   JSONDecode(Value,['MinLength','MaxLength',
     'MinAlphaCount','MinDigitCount','MinPunctCount',
-    'MinLowerCount','MinUpperCount','MaxSpaceCount','MaxSpaceCount',
-    'MaxLeftTrimCount','MaxRightTrimCount'],V);
+    'MinLowerCount','MinUpperCount','MinSpaceCount',
+    'MaxLeftTrimCount','MaxRightTrimCount',
+    'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
+    'MaxLowerCount','MaxUpperCount','MaxSpaceCount'],V);
+  if length(fProps)<>length(V) then
+    exit;
   for i := 0 to high(fProps) do
     fProps[i] := GetCardinalDef(V[i],fProps[i]);
 end;
