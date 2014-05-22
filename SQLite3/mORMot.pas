@@ -738,6 +738,8 @@ unit mORMot;
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
     - method-based services are now able to handle "304 Not Modified" optimized
       response to save bandwidth, in TSQLRestServerURIContext.Returns/Results
+    - added TSQLRestServerURIContext.ReturnFile() method, for direct fast
+      transmission to a HTTP client, handling "304 Not Modified" and mime type
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be available also within
@@ -889,6 +891,7 @@ unit mORMot;
       requests from client
     - TSQLRestStorageInMemory will now handle SELECT .... WHERE ID IN (...)
     - fixed issue in TSQLRestStorageInMemory.EngineList() when only ID
+    - added TSQLRestServerFullMemory.Storage[] and Storages[] properties
     - changed TSQLAccessRights and TSQLAuthGroup.SQLAccessRights CSV format
       to use 'first-last,' pattern to regroup set bits (reduce storage size)
     - added overloaded TSQLAccessRights.Edit() method using TSQLOccasions set
@@ -3784,7 +3787,7 @@ type
     // or as a JSON object containing an array of values:
     // $ {"result":["One","two"]}
     // - expects Status to be either HTML_SUCCESS or HTML_CREATED
-    // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS 
+    // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
     procedure Results(const Values: array of const; Status: integer=HTML_SUCCESS;
       Handle304NotModified: boolean=false);
     /// use this method if the caller expect no data, just a status
@@ -10835,6 +10838,7 @@ type
     function UniqueFieldHash(aFieldIndex: integer): TListFieldHash;
     function GetCount: integer;
     function GetItem(Index: integer): TSQLRecord;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): integer;
     // optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8; 
@@ -11002,6 +11006,9 @@ type
     procedure StorageLock(WillModifyContent: boolean); override;
   end;
 
+  /// a dynamic array of TSQLRestStorageInMemory instances
+  TSQLRestStorageInMemoryDynArray = array of TSQLRestStorageInMemory;
+
   /// a REST server using only in-memory tables
   // - this server will use TSQLRestStorageInMemory instances to handle
   // the data in memory, and optionally persist the data on disk as JSON or
@@ -11017,6 +11024,8 @@ type
     fFileName: TFileName;
     fBinaryFile: Boolean;
     fStaticDataCount: cardinal;
+    fStorage: TSQLRestStorageInMemoryDynArray;
+    function GetStorage(aTable: TSQLRecordClass): TSQLRestStorageInMemory;
     /// overridden methods which will return error (no main DB here)
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
@@ -11034,7 +11043,8 @@ type
   public
     /// initialize a REST server with a database file
     // - all classes of the model will be created as TSQLRestStorageInMemory
-    // - then data persistence will be created using aFileName
+    // - then data persistence will be initialized using aFileName, but no
+    // file will be written to disk, unless you call explicitly UpdateToFile 
     // - if aFileName is left void (''), data will not be persistent
     constructor Create(aModel: TSQLModel; const aFileName: TFileName='';
       aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
@@ -11062,6 +11072,12 @@ type
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     /// the file name used for data persistence
     property FileName: TFileName read fFileName write fFileName;
+    /// direct access to the storage TObjectList storage instances
+    // - you can then access to Storage[Table].Count and Storage[Table].Items[]
+    property Storage[aTable: TSQLRecordClass]: TSQLRestStorageInMemory read GetStorage;
+    /// direct access to the storage TObjectList storage instances
+    // - you can then access via Storage[TableIndex].Count and Items[]
+    property Storages: TSQLRestStorageInMemoryDynArray read fStorage;
     /// set if the file content is to be compressed binary, or standard JSON
     // - it will use TSQLRestStorageInMemory LoadFromJSON/LoadFromBinary
     // SaveToJSON/SaveToBinary methods for optimized storage
@@ -18471,7 +18487,11 @@ begin
     "ValDate":"2009-03-10T21:19:36","Next":0},{..}] *)
     // 1. get fields count from first row
     while P^<>'[' do if P^=#0 then exit else inc(P); // need an array of objects
-    repeat inc(P); if P^=#0 then exit; until P^='{'; // go to object beginning
+    repeat inc(P); if P^=#0 then exit; until P^ in ['{',']']; // go to object beginning
+    if P^=']' then begin // [] -> void data
+      result := true;
+      exit;
+    end;
     inc(P);
     nfield := GetFieldCountExpanded(P);
     if nField=0 then
@@ -28721,11 +28741,12 @@ begin
   fBinaryFile := aBinaryFile;
   inherited Create(aModel,aHandleUserAuthentication);
   fStaticDataCount := length(fModel.Tables);
+  SetLength(fStorage,fStaticDataCount);
   for t := 0 to fStaticDataCount-1 do
-    StaticDataCreate(fModel.Tables[t]);
+    fStorage[t] := (StaticDataCreate(fModel.Tables[t]) as TSQLRestStorageInMemory);
   LoadFromFile;
   CreateMissingTables(0);
-end;
+end; 
 
 procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0);
 var t: integer;
@@ -28857,6 +28878,15 @@ begin
     UpdateToFile;
     Ctxt.Success;
   end;
+end;
+
+function TSQLRestServerFullMemory.GetStorage(aTable: TSQLRecordClass): TSQLRestStorageInMemory;
+var i: cardinal;
+begin
+  i := fModel.GetTableIndex(aTable);
+  if i>=cardinal(length(fStorage)) then
+    result := nil else
+    result := fStorage[i];
 end;
 
 function TSQLRestServerFullMemory.MainEngineAdd(TableModelIndex: integer;
