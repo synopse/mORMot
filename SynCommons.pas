@@ -409,7 +409,7 @@ unit SynCommons;
   - added StringDynArrayToRawUTF8DynArray() and StringListToRawUTF8DynArray()
   - added CSVToRawUTF8DynArray() overloaded functions
   - added GetLastCSVItem() function and dedicated HashPointer() function
-  - added DirectoryDelete() function
+  - added DirectoryDelete() and EnsureDirectoryExists() function
   - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy()
   - added GetEnumNameValue() function 
   - added JSONEncodeArrayOfConst() function
@@ -2721,6 +2721,11 @@ function FileSize(const FileName: TFileName): Int64;
 // but just the files found in it
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
   DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
+
+/// creates a directory if not already existing
+// - returns the full expanded directory name, including trailing backslash
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
 {$ifdef DELPHI5OROLDER}
 /// DirectoryExists returns a boolean value that indicates whether the
@@ -18080,6 +18085,17 @@ begin
   end;
   if (not DeleteOnlyFilesNotDirectory) and (not RemoveDir(Dir)) then
     result := false;
+end;
+
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean=false): TFileName;
+begin
+  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+  if not DirectoryExists(result) then
+    if not CreateDir(result) then
+      if not RaiseExceptionOnCreationFailure then
+        result := '' else
+        raise ESynException.CreateFmt('Impossible to create "%s" folder',[Directory]);
 end;
 
 {$ifdef DELPHI5OROLDER}
