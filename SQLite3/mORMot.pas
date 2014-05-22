@@ -3767,6 +3767,14 @@ type
     // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS 
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTML_SUCCESS;
       Handle304NotModified: boolean=false); overload;
+    /// use this method to send back a file to the caller
+    // - this method will let the HTTP server return the file content
+    // - if Handle304NotModified is TRUE, will check the file age to ensure
+    // that the file content will be sent back to the server only if it changed 
+    // - if ContentType is left to default '', method will guess the expected
+    // mime-type from the file name extension 
+    procedure ReturnFile(const FileName: TFileName;
+      Handle304NotModified: boolean=false; const ContentType: RawUTF8='');
     /// use this method to send back a JSON object with a "result" field
     // - this method will encode the supplied values as a {"result":"...}
     // JSON object, as such for one value:
@@ -25839,6 +25847,34 @@ begin
     end;
   end else
     Error(Result,Status);
+end;
+
+procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
+  Handle304NotModified: boolean; const ContentType: RawUTF8);
+var FileTime: TDateTime;
+    clientHash, serverHash: RawUTF8;
+begin
+  FileTime := FileAgeToDateTime(FileName);
+  if FileTime=0 then
+    Error('',HTML_NOTFOUND) else begin
+    if ContentType<>'' then
+      Call.OutHead := HEADER_CONTENT_TYPE+ContentType else
+      Call.OutHead := HEADER_CONTENT_TYPE+GetMimeContentType(nil,0,FileName);
+    Call.OutStatus := HTML_SUCCESS;
+    if Handle304NotModified then begin
+      clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
+      serverHash := '"'+DateTimeToIso8601(FileTime,false)+'"';
+      if clientHash<>serverHash then
+        Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
+        Call.OutBody := ''; // save bandwidth for "304 Not Modified"
+        Call.OutStatus := HTML_NOTMODIFIED;
+        exit;
+      end;
+    end;
+    // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
+    Call.OutHead := STATICFILE_CONTENT_TYPE_HEADER+#13#10+Call.OutHead;
+    StringToUTF8(FileName,Call.OutBody);
+  end;
 end;
 
 procedure TSQLRestServerURIContext.Returns(const NameValuePairs: array of const;
