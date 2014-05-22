@@ -259,7 +259,12 @@ const
   HTTP_DEFAULT_RECEIVETIMEOUT = 30000;
 
 type
-{$ifndef UNICODE}
+{$ifdef UNICODE}
+  /// define the fastest Unicode string type of the compiler
+  SynUnicode = UnicodeString;
+{$else}
+  /// define the fastest Unicode string type of the compiler
+  SynUnicode = WideString;
   /// define RawByteString, as it does exist in Delphi 2009 and up
   // - to be used for byte storage into an AnsiString
   RawByteString = AnsiString;
@@ -729,7 +734,9 @@ type
   
 {$endif USETHREADPOOL}
 
+{$M+} // to have existing RTTI for published properties
   THttpServerGeneric = class;
+{$M-}
 
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
@@ -786,6 +793,7 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
+{$M+} // to have existing RTTI for published properties
   /// generic HTTP server
   THttpServerGeneric = class(TNotifiedThread)
   protected
@@ -796,6 +804,7 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: RawByteString;
     fOnHttpThreadStart: TNotifyThreadEvent;
+    function GetAPIVersion: string; virtual; abstract;
     procedure NotifyThreadStart(Sender: TNotifiedThread);
   public
     /// override this function to customize your http server
@@ -812,8 +821,6 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
-    /// returns the API version used by the inherited implementation
-    function APIVersion: string; virtual; abstract;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlzo/synlz) protocols
@@ -841,6 +848,9 @@ type
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
     property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write fOnTerminate;
+  published
+    /// returns the API version used by the inherited implementation
+    property APIVersion: string read GetAPIVersion;
   end;
 
   ULONGLONG = Int64;
@@ -865,16 +875,21 @@ type
 		fReqQueue: THandle;
     /// contain list of THttpApiServer cloned instances
     fClones: TObjectList;
-    /// list of all registered URL (Unicode-encoded)
-    fRegisteredUnicodeUrl: array of RawByteString;
+    // if fClones=nil, fOwner contains the main THttpApiServer instance
+    fOwner: THttpApiServer;
+    /// list of all registered URL
+    fRegisteredUnicodeUrl: array of SynUnicode;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
+    function GetRegisteredUrl: SynUnicode;
+    function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal;
     procedure SetHTTPQueueLength(aValue: Cardinal);
     function GetMaxBandwidth: Cardinal;
     procedure SetMaxBandwidth(aValue: Cardinal);
     function GetMaxConnections: Cardinal;
     procedure SetMaxConnections(aValue: Cardinal);
+    function GetAPIVersion: string; override;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -899,9 +914,6 @@ type
     // e.g. in TSQLHttpServer.Create() constructor)
     // - maximum value is 256 - higher should not be worth it
     procedure Clone(ChildThreadCount: integer);
-    /// returns the API version
-    // - this overridden version will return either 'HTTP API 1.0' or 'HTTP API 2.0'
-    function APIVersion: string; override;
     /// register the URLs to Listen On
     // - e.g. AddUrl('root','888')
     // - aDomainName could be either a fully qualified case-insensitive domain
@@ -946,6 +958,15 @@ type
     /// access to the internal THttpApiServer list cloned by this main instance
     // - as created by Clone() method
     property Clones: TObjectList read fClones;
+    /// read-only access to the low-level Session ID of this server instance
+    property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
+    /// read-only access to the low-level URI Group ID of this server instance
+    property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
+  published
+    /// TRUE if this instance is in fact a cloned instance for the thread pool
+    property Cloned: boolean read GetCloned;
+    /// return the list of registered URL on this server instance
+    property RegisteredUrl: SynUnicode read GetRegisteredUrl;
     /// HTTP.sys requers/responce queue length (via HTTP API 2.0)
     // - default value if 1000, which sounds fine for most use cases
     // - increase this value in case of many 503 HTTP answers or if many
@@ -953,8 +974,8 @@ type
     // C:\Windows\System32\LogFiles\HTTPERR\httperr*.log) - may appear with
     // thousands of concurrent clients accessing at once the same server
   	// - see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa364501
-    // - will raise a EHttpApiServer exception if the system does not support
-    // HTTP API 2.0 (i.e. under Windows XP or Server 2003)
+    // - will return 0 if the system does not support HTTP API 2.0 (i.e.
+    // under Windows XP or Server 2003)
     // - this method will also handle any cloned instances, so you can write e.g.
     // ! if aSQLHttpServer.HttpServer.InheritsFrom(THttpApiServer) then
     // !   THttpApiServer(aSQLHttpServer.HttpServer).HTTPQueueLength := 5000;
@@ -962,19 +983,15 @@ type
     /// the maximum allowed bandwidth rate in bytes per second (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited bandwidth
     // - by default Windows not limit bandwidth (actually limited to 4 Gbit/sec).
-    // - will raise a EHttpApiServer exception if the system does not support
-    // HTTP API 2.0 (i.e. under Windows XP or Server 2003)
+    // - will return 0 if the system does not support HTTP API 2.0 (i.e.
+    // under Windows XP or Server 2003)
     property MaxBandwidth: Cardinal read GetMaxBandwidth write SetMaxBandwidth;
     /// the maximum number of HTTP connections allowed (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited number of connections
     // - by default Windows not limit number of allowed connections
-    // - will raise a EHttpApiServer exception if the system does not support
-    // HTTP API 2.0 (i.e. under Windows XP or Server 2003)
+    // - will return 0 if the system does not support HTTP API 2.0 (i.e.
+    // under Windows XP or Server 2003)
     property MaxConnections: Cardinal read GetMaxConnections write SetMaxConnections;
-    /// read-only access to the low-level Session ID of this server instance
-    property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
-    /// read-only access to the low-level URI Group ID of this server instance
-    property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
   end;
 
   /// main HTTP server Thread using the standard Sockets library (e.g. WinSock)
@@ -998,6 +1015,8 @@ type
     fThreadPoolContentionAbortCount: cardinal;
 {$endif}
     fInternalHttpServerRespList: TList;
+    // this overridden version will return e.g. 'Winsock 2.514'
+    function GetAPIVersion: string; override;
     /// server main loop - don't change directly
     procedure Execute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -1039,11 +1058,7 @@ type
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
     /// release all memory and handlers
     destructor Destroy; override;
-
-    /// returns the operating system socket layer API revision
-    // - this overridden version will return e.g. 'Winsock 2.514', depending
-    // on your Windows version
-    function APIVersion: string; override;
+  published
     {$ifdef USETHREADPOOL}
     /// number of times there was no availibility in the internal thread pool
     // to handle an incoming request
@@ -1054,12 +1069,13 @@ type
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
     {$endif}
   end;
+{$M-}
 
   /// structure used to parse an URI into its components
   // - ready to be supplied e.g. to a TWinHttpAPI sub-class
   // - used e.g. by class function TWinHttpAPI.Get()
   TURI = {$ifdef UNICODE}record{$else}object{$endif}
-    /// if the server is accessible via http:// or https:// 
+    /// if the server is accessible via http:// or https://
     Https: boolean;
     /// the server name
     // - e.g. 'www.somewebsite.com'
@@ -1073,7 +1089,7 @@ type
     /// fill the members from a supplied URI
     function From(aURI: RawByteString): boolean;
   end;
-  
+
 {$ifdef USEWININET}
   {/ a class to handle HTTP/1.1 request using either WinINet, either WinHTTP API
     - has a common behavior as THttpClientSocket()
@@ -2821,7 +2837,7 @@ begin
 {$endif}
 end;
 
-function THttpServer.APIVersion: string;
+function THttpServer.GetAPIVersion: string;
 begin
   result := Format('%s.%d',[WsaDataOnce.szDescription,WsaDataOnce.wVersion]);
 end;
@@ -4635,7 +4651,7 @@ const
     );
 
 function RegURL(aRoot, aPort: RawByteString; Https: boolean;
-  aDomainName: RawByteString): RawByteString;
+  aDomainName: RawByteString): SynUnicode;
 const Prefix: array[boolean] of RawByteString = ('http://','https://');
 begin
   if aPort='' then
@@ -4654,7 +4670,7 @@ begin
   end else
     aRoot := '/'; // allow for instance 'http://*:2869/'
   aRoot := Prefix[Https]+aDomainName+':'+aPort+aRoot;
-  result := Ansi7ToUnicode(aRoot);
+  result := SynUnicode(aRoot);
 end;
 
 const
@@ -4731,44 +4747,44 @@ end;
 
 function THttpApiServer.AddUrl(const aRoot, aPort: RawByteString; Https: boolean;
   const aDomainName: RawByteString; aRegisterURI: boolean): integer;
-var s: RawByteString;
+var uri: SynUnicode;
     n: integer;
 begin
   result := -1;
   if (Self=nil) or (fReqQueue=0) or (Http.Module=0) then
     exit;
-  s := RegURL(aRoot, aPort, Https, aDomainName);
-  if s='' then
+  uri := RegURL(aRoot, aPort, Https, aDomainName);
+  if uri='' then
     exit; // invalid parameters
   if aRegisterURI then
     AddUrlAuthorize(aRoot,aPort,Https,aDomainName);
   if Http.Version.MajorVersion>1 then
-    result := Http.AddUrlToUrlGroup(fUrlGroupID,pointer(s)) else
-    result := Http.AddUrl(fReqQueue,pointer(s));
+    result := Http.AddUrlToUrlGroup(fUrlGroupID,pointer(uri)) else
+    result := Http.AddUrl(fReqQueue,pointer(uri));
   if result=NO_ERROR then begin
     n := length(fRegisteredUnicodeUrl);
     SetLength(fRegisteredUnicodeUrl,n+1);
-    fRegisteredUnicodeUrl[n] := s;
+    fRegisteredUnicodeUrl[n] := uri;
   end;
 end;
 
 function THttpApiServer.RemoveUrl(const aRoot, aPort: RawByteString; Https: boolean;
   const aDomainName: RawByteString): integer;
-var s: RawByteString;
+var uri: SynUnicode;
     i,j,n: integer;
 begin
   result := -1;
   if (Self=nil) or (fReqQueue=0) or (Http.Module=0) then
     exit;
-  s := RegURL(aRoot, aPort, Https, aDomainName);
-  if s='' then
+  uri := RegURL(aRoot, aPort, Https, aDomainName);
+  if uri='' then
     exit; // invalid parameters
   n := High(fRegisteredUnicodeUrl);
   for i := 0 to n do
-    if fRegisteredUnicodeUrl[i]=s then begin
+    if fRegisteredUnicodeUrl[i]=uri then begin
       if Http.Version.MajorVersion>1 then
-        result := Http.RemoveUrlFromUrlGroup(fUrlGroupID,pointer(s),0) else
-        result := Http.RemoveUrl(fReqQueue,pointer(s));
+        result := Http.RemoveUrlFromUrlGroup(fUrlGroupID,pointer(uri),0) else
+        result := Http.RemoveUrl(fReqQueue,pointer(uri));
       if result<>0 then
         exit; // shall be handled by caller
       for j := i to n-1 do
@@ -4785,7 +4801,7 @@ const
   // - 'GA' (GENERIC_ALL) to grant all access
   // - 'S-1-1-0'	defines a group that includes all users
   HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
-var prefix: RawByteString;
+var prefix: SynUnicode;
     Error: HRESULT;
     Config: HTTP_SERVICE_CONFIG_URLACL_SET;
 begin
@@ -4831,7 +4847,7 @@ begin
     fClones.Add(THttpApiServer.CreateClone(self));
 end;
 
-function THttpApiServer.APIVersion: string;
+function THttpApiServer.GetAPIVersion: string;
 begin
   result := Format('HTTP API %d.%d',[Http.Version.MajorVersion,Http.Version.MinorVersion]);
 end;
@@ -4865,6 +4881,7 @@ end;
 constructor THttpApiServer.CreateClone(From: THttpApiServer);
 begin
   inherited Create(false);
+  fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
   fCompress := From.fCompress;
@@ -4882,19 +4899,22 @@ begin
        if fUrlGroupID<>0 then begin
          Http.RemoveUrlFromUrlGroup(fUrlGroupID,nil,HTTP_URL_FLAG_REMOVE_ALL);
          Http.CloseUrlGroup(fUrlGroupID);
+         fUrlGroupID := 0;
        end;
-       CloseHandle(FReqQueue); 
-       if fServerSessionID<>0 then
+       CloseHandle(FReqQueue);
+       if fServerSessionID<>0 then begin
          Http.CloseServerSession(fServerSessionID);
+         fServerSessionID := 0;
+       end;
       end else begin
         for i := 0 to high(fRegisteredUnicodeUrl) do
           Http.RemoveUrl(fReqQueue,pointer(fRegisteredUnicodeUrl[i]));
         CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
       end;
       fReqQueue := 0;
+      FreeAndNil(fClones);
       Http.Terminate(HTTP_INITIALIZE_SERVER);
     end;
-    FreeAndNil(fClones);
     {$ifdef LVCL}
     Sleep(500); // LVCL TThread does not wait for its completion -> do it now
     {$endif}
@@ -5136,25 +5156,41 @@ end;
 function THttpApiServer.GetHTTPQueueLength: Cardinal;
 var returnLength: ULONG;
 begin
-  if Http.Version.MajorVersion<2 then
-    raise EHttpApiServer.Create(hQueryRequestQueueProperty,ERROR_OLD_WIN_VERSION);
-  if (self=nil) or (fReqQueue=0) then begin
-    result := 0;
-    exit;
+  if (Http.Version.MajorVersion<2) or (self=nil) then
+    result := 0 else begin
+    if fOwner<>nil then
+      self := fOwner;
+    if fReqQueue=0 then
+      result := 0 else
+      EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
+        Http.QueryRequestQueueProperty(fReqQueue,HttpServerQueueLengthProperty,
+          @Result, sizeof(Result), 0, @returnLength, nil));
   end;
-  EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
-    Http.QueryRequestQueueProperty(fReqQueue,HttpServerQueueLengthProperty,
-      @Result, sizeof(Result), 0, @returnLength, nil));
 end;
 
 procedure THttpApiServer.SetHTTPQueueLength(aValue: Cardinal);
 begin
   if Http.Version.MajorVersion<2 then
-    raise EHttpApiServer.Create(hSetRequestQueueProperty,ERROR_OLD_WIN_VERSION);
+    raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
   if (self<>nil) and (fReqQueue<>0) then
     EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue,HttpServerQueueLengthProperty,
         @aValue, sizeof(aValue), 0, nil));
+end;
+
+function THttpApiServer.GetRegisteredUrl: SynUnicode;
+var i: integer;
+begin
+  if fRegisteredUnicodeUrl=nil then
+    result := '' else
+    result := fRegisteredUnicodeUrl[0];
+  for i := 1 to high(fRegisteredUnicodeUrl) do
+    result := result+','+fRegisteredUnicodeUrl[i];
+end;
+
+function THttpApiServer.GetCloned: boolean;
+begin
+  result := (fOwner<>nil);
 end;
 
 procedure THttpApiServer.SetMaxBandwidth(aValue: Cardinal);
@@ -5162,9 +5198,9 @@ var
    qosInfo: HTTP_QOS_SETTING_INFO;
    limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
 begin
-  if Http.Version.MajorVersion < 2 then
+  if Http.Version.MajorVersion<2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and (fUrlGroupID <> 0) then begin
+  if (self<>nil) and (fUrlGroupID<>0) then begin
     if AValue = 0 then
       limitInfo.MaxBandwidth := HTTP_LIMIT_INFINITE
     else if AValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
@@ -5192,10 +5228,14 @@ var qosInfoGet: record
       limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
     end;
 begin
-  if Http.Version.MajorVersion<2 then
-    raise EHttpApiServer.Create(hQueryUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self=nil) or (fUrlGroupID=0) then begin
-    Result := 0;
+  if (Http.Version.MajorVersion<2) or (self=nil) then begin
+    result := 0;
+    exit;
+  end;
+  if fOwner<>nil then
+    self := fOwner;
+  if fUrlGroupID=0 then begin
+    result := 0;
     exit;
   end;
   qosInfoGet.qosInfo.QosType := HttpQosSettingTypeBandwidth;
@@ -5213,10 +5253,14 @@ var qosInfoGet: record
     end;
     returnLength: ULONG;
 begin
-  if Http.Version.MajorVersion<2 then
-    raise EHttpApiServer.Create(hQueryUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self=nil) or (fUrlGroupID=0) then begin
-    Result := 0;
+  if (Http.Version.MajorVersion<2) or (self=nil) then begin
+    result := 0;
+    exit;
+  end;
+  if fOwner<>nil then
+    self := fOwner;
+  if fUrlGroupID=0 then begin
+    result := 0;
     exit;
   end;
   qosInfoGet.qosInfo.QosType := HttpQosSettingTypeConnectionLimit;

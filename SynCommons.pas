@@ -6280,6 +6280,7 @@ type
     - same as TSynValidatePattern, but is NOT case sensitive }
   TSynValidatePatternI = class(TSynValidatePattern);
 
+{$M+} // to have existing RTTI for published properties
   /// text validation to be applied to a Record field content
   // (typicaly a TSQLRecord)
   // - default MinLength value is 1, MaxLength is maxInt: so you can specify a
@@ -6361,6 +6362,7 @@ type
     // - default is maxInt, i.e. any Right space allowed
     property MaxRightTrimCount: cardinal read fProps[9] write fProps[9];
   end;
+{$M-}
 
   /// strong password validation for a Record field content (typicaly a TSQLRecord)
   // - the following parameters are set by default to
