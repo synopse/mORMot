@@ -301,7 +301,7 @@ begin
       sftDateTime:
         Field.AsDateTime := Iso8601ToDateTimePUTF8Char(aTable.Get(i,F),0);
       sftTimeLog, sftModTime, sftCreateTime:
-        Field.AsDateTime := aTable.GetVariant(i,F,aClient);
+        Field.AsDateTime := TimeLogToDateTime(aTable.GetAsInt64(i,F));
       sftBlob: begin
         blob := aTable.GetBlob(i,F);
         if blob='' then
