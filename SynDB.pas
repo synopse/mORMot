@@ -159,6 +159,7 @@ unit SynDB;
     update the new TSQLDBConnection.TotalConnectionCount property
   - TSQLDBConnection.Disconnect will now flush internal statement cache
   - TQuery.Execute() is now able to try to re-connect once in case of failure
+  - fixed issue with bound parameter in TQuery.Execute() for Unicode Delphi
   - introducing new ISQLDBStatement interface, used by SQL statement cache
   - avoid syntax error for some engines which do not accept an ending ';' in
     SQL statements
@@ -3331,7 +3332,8 @@ const
      paramIn,  paramIn, paramOut, paramInOut,    paramIn);
  // ptUnknown, ptInput, ptOutput, ptInputOutput, ptResult
 var req, new, tmp: RawUTF8;
-    P, B: PAnsiChar;
+    paramName: string; // just like TQueryValue.Name: string
+    P, B: PUTF8Char;
     col, i: Integer;
     cols: TIntegerDynArray;
 begin
@@ -3361,7 +3363,7 @@ begin
       end;
       inc(P);
     end;
-    SetString(tmp,B,P-B);
+   SetString(tmp,PAnsiChar(B),P-B);
     if P^=#0 then begin
       new := new+tmp;
       break;
@@ -3371,10 +3373,10 @@ begin
     B := P;
     while ord(P^) in IsIdentifier do
       inc(P); // go to end of parameter name
-    SetString(tmp,B,P-B);
-    i := fParam.FindHashed(tmp);
+    paramName := UTF8DecodeToString(B,P-B);
+    i := fParam.FindHashed(paramName);
     if i<0 then
-      raise ESQLQueryException.CreateFmt('Parameter "%s" not bound for "%s"',[tmp,req]);
+      raise ESQLQueryException.CreateFmt('Parameter "%s" not bound for "%s"',[paramName,req]);
     if col=length(cols) then
       SetLength(cols,col+64);
     cols[col] := i;
