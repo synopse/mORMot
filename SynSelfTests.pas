@@ -607,6 +607,8 @@ type
     /// release used instances (e.g. server) and memory
     procedure CleanUp; override;
   published
+    /// test TQuery emulation class
+    procedure _TQuery;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -7866,6 +7868,36 @@ begin
 end;
 {$endif}
 {$endif}
+
+procedure TTestExternalDatabase._TQuery;
+var Props: TSQLDBConnectionProperties;
+    Query: TQuery;
+    n: integer;
+begin
+  Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
+  try
+    Query := TQuery.Create(Props.MainConnection);
+    try
+      Query.SQL.Add('select * from People');
+      Query.SQL.Add('where YearOfDeath=:YOD;');
+      Query.ParamByName('YOD').AsInteger := 1872;
+      Query.Open;
+      n := 0;
+      while not Query.Eof do begin
+        Check(Query.FieldByName('ID').AsInteger>0);
+        Check(Query.FieldByName('YearOfDeath').AsInteger=1872);
+        Query.Next;
+        inc(n);
+      end;
+      Check(n>500);
+    finally
+      Query.Free;
+    end;
+  finally
+    Props.Free;
+  end;
+end;
+
 
 procedure TTestExternalDatabase.CryptedDatabase;
 var R,R2: TSQLRecordPeople;
