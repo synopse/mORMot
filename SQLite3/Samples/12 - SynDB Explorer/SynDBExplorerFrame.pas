@@ -753,7 +753,7 @@ var Edit: TEdit absolute Sender;
     i: integer;
     s: RawUTF8;
 begin
-  s := UpperCase(StringToUTF8(Edit.Text));
+  s := SynCommons.UpperCase(StringToUTF8(Edit.Text));
   List := pointer(Edit.Tag);
   with TMemoryMapText.Create(fSQLLogFile) do
   try

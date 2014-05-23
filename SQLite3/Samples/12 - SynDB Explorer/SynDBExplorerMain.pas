@@ -7,7 +7,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Grids, ExtCtrls, StdCtrls, Consts,
-  {$ifdef HASINLINE}XPMan,{$endif}
+  {$ifdef HASINLINE}XPMan,Contnrs,{$endif}
 {$ifdef ISDELPHIXE}
   SynSQLite3RegEx, // use direct PCRE library as available since Delphi XE
 {$endif}
