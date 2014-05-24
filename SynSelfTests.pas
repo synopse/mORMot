@@ -2414,6 +2414,9 @@ var i, CP, L: integer;
     WA: Boolean;
 begin
   res := 'one,two,three';
+  Check(StrLen(nil)=0);
+  for i := length(res)+1 downto 1 do
+    Check(StrLen(Pointer(@res[i]))=length(res)-i+1);
   CSVToRawUTF8DynArray(pointer(res),arr);
   Check(arr[0]='one');
   Check(arr[1]='two');
@@ -7572,7 +7575,7 @@ type
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
   Props.RegisterCustomFixedSizeRecordProperty(self,sizeof(TGUID),'GUID',
-    @TSQLRecordCustomProps(nil).fGUID);
+    @TSQLRecordCustomProps(nil).fGUID,[],sizeof(TGUID));
 end;
 
 /// will be re-used by both TTestSQLite3Engine and TTestExternalDatabase

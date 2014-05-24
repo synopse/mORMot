@@ -378,6 +378,7 @@ unit SynCommons;
   - UTF-8 process will now handle UTF-16 surrogates - see ticket [4a0382367d] -
     UnicodeCharToUTF8/NextUTF8Char are renamed WideCharToUTF8/NextUTF8UCS4 and
     new UTF16CharToUTF8/UCS4ToUTF8 functions have been introduced
+  - StrLen() function will now use faster SSE2 instructions on supported CPUs
   - included Windows-1258 code page to be recognized as a fixed-width charset
   - introducing TSynAnsiUTF8/TSynAnsiUTF16 to handle CP_UTF8/CP_UTF16 codepages
   - added UTF8AnsiConvert instance, and let TSynAnsiConvert.Engine(0) return
@@ -1896,7 +1897,7 @@ function StrComp(Str1, Str2: pointer): PtrInt;
 function StrIComp(Str1, Str2: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
-function StrLen(S: pointer): PtrInt; overload;
+function StrLen(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -2275,17 +2276,17 @@ function ConvertCaseUTF8(P: PUTF8Char; const Table: TNormTableByte): PtrInt;
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore by correct with true UTF-8 content, but only for 7 bit
-function UpperCase(const S: RawUTF8): RawUTF8; overload;
+function UpperCase(const S: RawUTF8): RawUTF8;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore by correct with true UTF-8 content, but only for 7 bit
-procedure UpperCase(Text: PUTF8Char; Len: integer; var result: RawUTF8); overload;
+procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8); overload;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore by correct with true UTF-8 content, but only for 7 bit
-procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8);
+procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8); overload;
 
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
@@ -15548,6 +15549,42 @@ begin
 end;
 
 function StrLen(S: pointer): PtrInt;
+{$ifdef CPU64}
+asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+        {$ifdef CPUX64}
+        .NOFRAME
+        {$endif}
+        mov      rax,rcx             // get pointer to string from rcx
+        or       rax,rax
+        mov      r8,rcx              // copy pointer
+        jz       @null               // returns 0 if S=nil
+        // rax = s,ecx = 32 bits of s
+        pxor     xmm0,xmm0           // set to zero
+        and      ecx,0FH             // lower 4 bits indicate misalignment
+        and      rax,-10H            // align pointer by 16
+        movdqa   xmm1,[rax]          // read from nearest preceding boundary
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        shr      edx,cl              // shift out false bits
+        shl      edx,cl              // shift back again
+        bsf      edx,edx             // find first 1-bit
+        jnz      @L2                 // found
+        // Main loop,search 16 bytes at a time
+@L1:    add      rax,10H             // increment pointer by 16
+        movdqa   xmm1,[rax]          // read 16 bytes aligned
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        bsf      edx,edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors,  but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz       @L1                 // loop if not found
+@L2:    // Zero-byte found. Compute string length
+        sub      rax,r8              // subtract start address
+        add      rax,rdx             // add byte index
+@null:
+end;
+{$else}
 {$ifdef PUREPASCAL}
 begin
   result := 0;
@@ -15572,7 +15609,45 @@ begin
       exit;
 end;
 {$else}
-// faster than default SysUtils version
+{$ifndef DELPHI5OROLDER}
+asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        or       eax,eax
+        mov      ecx,eax             // copy pointer
+        jz       @null               // returns 0 if S=nil
+        push     eax                 // save start address
+        pxor     xmm0,xmm0           // set to zero
+        and      ecx,0FH             // lower 4 bits indicate misalignment
+        and      eax,-10H            // align pointer by 16
+        movdqa   xmm1,[eax]          // read from nearest preceding boundary
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        shr      edx,cl              // shift out false bits
+        shl      edx,cl              // shift back again
+        bsf      edx,edx             // find first 1-bit
+        jnz      @A200               // found
+        // Main loop,search 16 bytes at a time
+@A100:  add      eax,10H             // increment pointer by 16
+        movdqa   xmm1,[eax]          // read 16 bytes aligned
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        bsf      edx,edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors,  but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz       @A100               // loop if not found
+@A200:  // Zero-byte found. Compute string length
+        pop      ecx                 // restore start address
+        sub      eax,ecx             // subtract start address
+        add      eax,edx             // add byte index
+@null:
+end;
+
+const
+  STRLEN_SIZE = 87;
+
+function StrLenX86(S: pointer): PtrInt;
+{$endif}
+// pure x86 function (if SSE2 not available) - faster than SysUtils' version
 asm
      test eax,eax
      jz @@z
@@ -15602,7 +15677,8 @@ asm
 @@2: mov eax,2;   ret
 @@3: mov eax,3
 end;
-{$endif}
+{$endif PUREPASCAL}
+{$endif CPU64}
 
 function StrCompW(Str1, Str2: PWideChar): PtrInt;
 begin
@@ -17234,7 +17310,7 @@ begin
       dec(PByteArray(result)[i],32);
 end;
 
-procedure UpperCase(Text: PUTF8Char; Len: integer; var result: RawUTF8);
+procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
 var i: integer;
 begin
   SetString(result,PAnsiChar(Text),Len);
@@ -25513,7 +25589,7 @@ begin
   if Item=nil then begin // no RTTI -> stored as hexa string
     result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize);
   end else begin
-    UpperCase(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
+    UpperCaseCopy(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
     ndx := FastFindPUTF8CharSorted(@JSONCUSTOMPARSERRTTITYPE_NAMES,
       ord(pred(ptCustom)),pointer(ItemTypeName));
     if ndx>=0 then
@@ -41336,8 +41412,8 @@ begin
    RedirectCode(@System.Move,@Move);
    {$endif NOX64PATCHRTL}
    {$endif CPU64}
-   {$ifndef ENHANCEDRTL}
-    {$ifndef PUREPASCAL}
+   {$ifndef PUREPASCAL}
+    {$ifndef ENHANCEDRTL}
      {$ifndef DELPHI5OROLDER}
       {$ifndef USEPACKAGES}
        {$ifdef DOPATCHTRTL}
@@ -41360,8 +41436,12 @@ begin
   RedirectCode(@System.Move,@Move);
       {$endif ISDELPHI2007ANDUP}
      {$endif LVCL}
-    {$endif PUREPASCAL}
-   {$endif ENHANCEDRTL}
+    {$endif ENHANCEDRTL}
+    {$ifndef DELPHI5OROLDER}
+  if not SupportsSSE2 then // back to default X86 code for older CPUs
+    PatchCode(@SynCommons.StrLen,@StrLenX86,STRLEN_SIZE);
+    {$endif DELPHI5OROLDER}
+   {$endif PUREPASCAL}
   {$endif FPC}
 end;
 
