@@ -3040,6 +3040,7 @@ end;
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; DoNotTryExtendedMongoSyntax: boolean);
 var tmp: variant; // we use a local variant for only BSONVariant values
+    blob: RawByteString;
     wasString: boolean;
     err: integer;
     Value, Dot: PUTF8Char;
@@ -3100,8 +3101,12 @@ begin
           exit;
         end;
       end;
-      // found no numerical value -> will point to the in-place escaped text
-      BSONWrite(name,Value);
+      // found no numerical value -> check text value
+      if Base64MagicCheckAndDecode(Value,blob) then
+        // recognized '\uFFF0base64encodedbinary' pattern
+        BSONWrite(name,pointer(blob),length(blob)) else
+        // will point to the in-place escaped JSON text
+        BSONWrite(name,Value);
     end;
   end;
   if TotalWritten>BSON_MAXDOCUMENTSIZE then

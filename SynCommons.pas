@@ -25480,12 +25480,14 @@ begin
       ItemType := TJSONCustomParserRTTIType(ndx) else begin
       ItemType := ptCustom;
       case Item^.Kind of
-      tkLString:  ItemType := ptRawUTF8;
-      tkWString:  ItemType := ptWideString;
+      tkLString: if IdemPropName(ItemTypeName,'TSQLRawBlob') then
+                   ItemType := ptRawByteString else
+                   ItemType := ptRawUTF8;
+      tkWString: ItemType := ptWideString;
       {$ifdef UNICODE}
-      tkUString:  ItemType := ptSynUnicode;
+      tkUString: ItemType := ptSynUnicode;
       {$endif}
-      tkVariant:  ItemType := ptVariant;
+      tkVariant: ItemType := ptVariant;
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkClassRef, tkPointer, tkProcedure, tkArray:
@@ -25504,7 +25506,7 @@ begin
         end;
       tkInt64: ItemType := ptInt64;
       {$ifdef FPC}
-      tkBool:  ItemType := ptBoolean;
+      tkBool: ItemType := ptBoolean;
       {$else}
       tkEnumeration:
         if Item=TypeInfo(boolean) then
