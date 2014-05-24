@@ -2598,6 +2598,10 @@ var s,t: RawUTF8;
     I,J: TTimeLogBits;
 begin
   s := DateTimeToIso8601(D,Expanded);
+  if Expanded then begin
+    Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
+    Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
+  end;
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
   Check(Iso8601ToTimeLog(s)<>0);
@@ -2638,6 +2642,19 @@ begin
   tmp := DateTimeToIso8601Text(IntervalTextToDateTime('-2 06:03:20'));
   Check(tmp='1899-12-28T06:03:20');
   CheckSame(TimeLogToDateTime(135131870949),41578.477512,1e-5);
+  tmp := '1982-10-30T06:03:20';
+  Check(Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
+  Check(DateTimeToIso8601(D,true)=tmp);
+  tmp := '1982-10-30';
+  Check(Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
+  Check(DateToIso8601(D,true)=tmp);
+  tmp := 'T06:03:20';
+  Check(Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
+  Check(TimeToIso8601(D,true)=tmp);
+  tmp := '1982-10-30 06:03:20';
+  Check(not Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
+  tmp := 'T06:03:2a';
+  Check(not Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
 end;
 
 procedure TTestLowLevelCommon._IdemPropName;
@@ -5064,7 +5081,10 @@ begin
   u := VariantSaveMongoJSON(o,modNoMongo);
   u2 := FormatUTF8('{"id":"%","name":"John","date":"%"}',[BSONID,st]);
   Check(u=u2);
-  Check(VariantSaveJson(BSONVariant(u))=u);
+  u3 := VariantSaveJson(BSONVariant(u));
+  Check(u3=FormatUTF8('{"id":"%","name":"John","date":{"$date":"%"}}',[BSONID,st]));
+  u3 := VariantSaveMongoJSON(BSONVariant(u),modNoMongo);
+  Check(u3=u);
   u := VariantSaveMongoJSON(o,modMongoShell);
   Check(u=FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',[BSONID,st]));
   u3 := VariantSaveJson(BSONVariant(u));

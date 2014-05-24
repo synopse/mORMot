@@ -446,6 +446,8 @@ type
     procedure BSONWrite(const name: RawUTF8; const value: RawUTF8; isJavaScript: boolean=false); overload;
     /// write a string (UTF-8) value from a memory buffer
     procedure BSONWrite(const name: RawUTF8; value: PUTF8Char); overload;
+    /// write a string (UTF-8) value from a memory buffer
+    procedure BSONWriteString(const name: RawUTF8; value: PUTF8Char; valueLen: integer); 
     /// write a binary (BLOB) value
     procedure BSONWrite(const name: RawUTF8; Data: pointer; DataLen: integer); overload;
     /// write an ObjectID value
@@ -2826,6 +2828,16 @@ begin
     Write(value,L);
 end;
 
+procedure TBSONWriter.BSONWriteString(const name: RawUTF8; value: PUTF8Char; valueLen: integer);
+begin
+  BSONWrite(name,betString);
+  inc(valueLen);
+  Write4(valueLen);
+  if valueLen=1 then
+    Write1(0) else
+    Write(value,valueLen);
+end;
+
 procedure TBSONWriter.BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
 var UnixTime: Int64;
 begin
@@ -3044,6 +3056,8 @@ var tmp: variant; // we use a local variant for only BSONVariant values
     wasString: boolean;
     err: integer;
     Value, Dot: PUTF8Char;
+    ValueLen: integer;
+    ValueDateTime: TDateTime;
     VDouble: double;
     Kind: TBSONElementType;
 begin
@@ -3102,11 +3116,15 @@ begin
         end;
       end;
       // found no numerical value -> check text value
-      if Base64MagicCheckAndDecode(Value,blob) then
+      ValueLen := StrLen(Value);
+      if Base64MagicCheckAndDecode(Value,ValueLen,blob) then
         // recognized '\uFFF0base64encodedbinary' pattern
         BSONWrite(name,pointer(blob),length(blob)) else
+      if Iso8601CheckAndDecode(Value,ValueLen,ValueDateTime) then
+        // recognized TTextWriter.AddDateTime() pattern
+        BSONWriteDateTime(name,ValueDateTime) else
         // will point to the in-place escaped JSON text
-        BSONWrite(name,Value);
+        BSONWriteString(name,Value,ValueLen);
     end;
   end;
   if TotalWritten>BSON_MAXDOCUMENTSIZE then
