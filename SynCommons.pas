@@ -530,7 +530,7 @@ unit SynCommons;
   - expose all internal Hash*() functions (following TDynArrayHashOne prototype)
     in interface section of the unit
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
-    instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
+    instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
@@ -6696,13 +6696,13 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
-// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 3.5 GB/s (SSE4.2)
+// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 3.7 GB/s (SSE4.2)
 // - overloaded version for direct binary content hashing
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - not the best, but simple and efficient code - good candidate for THasher
-// - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.5 GB/s
+// - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.7 GB/s
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 var
@@ -6715,7 +6715,7 @@ var
 /// compute CRC32C checksum on the supplied buffer
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
 // - result is not compatible with zlib's crc32() - not the same polynom
-// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$ifndef PUREPASCAL}
@@ -6726,7 +6726,7 @@ function SupportSSE42: boolean;
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction 
 // - SSE 4.2 shall be available on the processor (checked with SupportSSE42)
 // - result is not compatible with zlib's crc32() - not the same polynom
-// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif}
 
@@ -21262,57 +21262,58 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // eax=crc, edx=buf, ecx=len
-    push esi
-    push ebx
-    mov esi,edx
     not eax
     test ecx,ecx; jz @0
-    test esi,esi; jz @0
-@7: test esi,7 // align to 8 bytes boundary
-    jz @8
+    test edx,edx; jz @0
+@7: test edx,7;   jz @8 // align to 8 bytes boundary
     {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,byte ptr [esi]
+    crc32 dword ptr eax,byte ptr [edx]
     {$else}
-    db $F2,$0F,$38,$F0,$06
-    {$endif}
-    inc esi
-    dec ecx; jz @0
-    test esi,7; jnz @7
-@8: mov ebx,ecx
-    shr ecx,2
-    xor edx,edx
-    test ecx,ecx; jz @2
-@1: {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,dword ptr [edx*4+esi]
-    {$else}
-    db $F2,$0F,$38,$F1,$04,$96
+    db $F2,$0F,$38,$F0,$02
     {$endif}
     inc edx
-    cmp edx,ecx
-    jb @1
-@2: and ebx,3
-    lea esi,edx*4+esi
-    jz @0
-    {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,byte ptr [esi]
-    dec ebx; jz @0
-    crc32 dword ptr eax,byte ptr [esi+1]
-    dec ebx; jz @0
-    crc32 dword ptr eax,byte ptr [esi+2]
-    dec ebx; jz @0
-    crc32 dword ptr eax,byte ptr [esi+3]
+    dec ecx;    jz @0
+    test edx,7; jnz @7
+@8: push ecx
+    shr ecx,3
+    jz @2
+@1: {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,dword ptr [edx]
+    crc32 dword ptr eax,dword ptr [edx+4]
     {$else}
-    db $F2,$0F,$38,$F0,$06
-    dec ebx; jz @0
-    db $F2,$0F,$38,$F0,$46,$01
-    dec ebx; jz @0
-    db $F2,$0F,$38,$F0,$46,$02
-    dec ebx; jz @0
-    db $F2,$0F,$38,$F0,$46,$03
+    db $F2,$0F,$38,$F1,$02
+    db $F2,$0F,$38,$F1,$42,$04
+    {$endif}
+    dec ecx
+    lea edx,edx+8
+    jnz @1
+@2: pop ecx
+    and ecx,7
+    jz @0
+    cmp ecx,4
+    jb @4
+    {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,dword ptr [edx]
+    {$else}
+    db $F2,$0F,$38,$F1,$02
+    {$endif}
+    sub ecx,4
+    lea edx,edx+4
+    jz @0
+@4: {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,byte ptr [edx]
+    dec ecx; jz @0
+    crc32 dword ptr eax,byte ptr [edx+1]
+    dec ecx; jz @0
+    crc32 dword ptr eax,byte ptr [edx+2]
+    {$else}
+    db $F2,$0F,$38,$F0,$02
+    dec ecx; jz @0
+    db $F2,$0F,$38,$F0,$42,$01
+    dec ecx; jz @0
+    db $F2,$0F,$38,$F0,$42,$02
     {$endif}
 @0: not eax
-    pop ebx
-    pop esi
 end;
 {$endif PUREPASCAL}
 
