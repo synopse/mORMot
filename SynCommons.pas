@@ -21139,9 +21139,9 @@ asm // ecx=crc, rdx=buf, r8=len
 @7: test rdx,7;   jz @8 // align to 8 bytes boundary
     crc32 dword ptr eax,byte ptr [rdx]
     inc rdx
-    dec r8;    jz @0
+    dec r8;     jz @0
     test rdx,7; jnz @7
-@8: push r8
+@8: mov rcx,r8
     shr r8,3
     jz @2
 @1: crc32 dword ptr eax,dword ptr [rdx]
@@ -21149,19 +21149,16 @@ asm // ecx=crc, rdx=buf, r8=len
     dec r8
     lea rdx,rdx+8
     jnz @1
-@2: pop r8
-    and r8,7
-    jz @0
-    cmp r8,4
-    jb @4
+@2: and rcx,7; jz @0
+    cmp rcx,4; jb @4
     crc32 dword ptr eax,dword ptr [rdx]
-    sub r8,4
+    sub rcx,4
     lea rdx,rdx+4
     jz @0
 @4: crc32 dword ptr eax,byte ptr [rdx]
-    dec r8; jz @0
+    dec rcx; jz @0
     crc32 dword ptr eax,byte ptr [rdx+1]
-    dec r8; jz @0
+    dec rcx; jz @0
     crc32 dword ptr eax,byte ptr [rdx+2]
 @0: not eax
 end;
