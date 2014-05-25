@@ -6718,12 +6718,17 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
-{$ifndef PUREPASCAL}
+{$ifdef PUREPASCAL}
+{$ifdef CPU64}
+function SupportSSE42: boolean;
+function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$endif}
+{$else}
 /// returns TRUE if Intel Streaming SIMD Extensions 4.2 is available
 function SupportSSE42: boolean;
 
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
-// - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction 
+// - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
 // - SSE 4.2 shall be available on the processor (checked with SupportSSE42)
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
@@ -21109,6 +21114,59 @@ asm // eax=crc, edx=buf, ecx=len
 end;
 {$endif}
 
+{$ifdef CPU64}
+function SupportSSE42: boolean;
+asm
+    {$ifdef CPUX64}
+    .NOFRAME
+    {$endif}
+    push rbx
+    mov eax,1
+    cpuid
+    test edx,$100000
+    setz al
+    pop rbx
+    ret
+@0: xor eax,eax
+end;
+
+function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+asm // ecx=crc, rdx=buf, r8=len
+    mov eax,ecx
+    not eax
+    test r8,r8;   jz @0
+    test rdx,rdx; jz @0
+@7: test rdx,7;   jz @8 // align to 8 bytes boundary
+    crc32 dword ptr eax,byte ptr [rdx]
+    inc rdx
+    dec r8;    jz @0
+    test rdx,7; jnz @7
+@8: push r8
+    shr r8,3
+    jz @2
+@1: crc32 dword ptr eax,dword ptr [rdx]
+    crc32 dword ptr eax,dword ptr [rdx+4]
+    dec r8
+    lea rdx,rdx+8
+    jnz @1
+@2: pop r8
+    and r8,7
+    jz @0
+    cmp r8,4
+    jb @4
+    crc32 dword ptr eax,dword ptr [rdx]
+    sub r8,4
+    lea rdx,rdx+4
+    jz @0
+@4: crc32 dword ptr eax,byte ptr [rdx]
+    dec r8; jz @0
+    crc32 dword ptr eax,byte ptr [rdx+1]
+    dec r8; jz @0
+    crc32 dword ptr eax,byte ptr [rdx+2]
+@0: not eax
+end;
+{$endif CPU64}
+
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
 begin
@@ -21149,7 +21207,7 @@ asm
   push ebx
 @head:
   test dl,3
-  jz   @bodyinit
+  jz   @aligned
   movzx ebx, byte [edx]
   inc  edx
   xor  bl, al
@@ -21161,7 +21219,7 @@ asm
   not eax
 @ret:
   ret
-@bodyinit:
+@aligned:
   sub  edx, ecx
   add  ecx, 8
   jg   @bodydone
@@ -21238,7 +21296,6 @@ end;
 
 function SupportSSE42: boolean;
 asm
-    {$ifndef CPUX64}
     pushfd
     pop eax
     mov edx,eax
@@ -21249,7 +21306,6 @@ asm
     pop eax
     xor eax,edx
     jz @0
-    {$endif}
     push ebx
     mov eax,1
     cpuid

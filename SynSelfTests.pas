@@ -2234,9 +2234,14 @@ begin
   end;
   Test(crc32cpas,'pas');
   Test(crc32cfast,'fast');
+  {$ifdef CPU64}
+  if SupportSSE42 then
+    Test(crc32csse42,'sse42');
+  {$else}
   {$ifndef PUREPASCAL}
   if SupportSSE42 then
     Test(crc32csse42,'sse42');
+  {$endif}
   {$endif}
 //  Timer.Start;
 //  for i := 0 to high(crc) do
