@@ -192,6 +192,8 @@ type
     /// low level fast Integer or Floating-Point to/from string conversion
     // - especially the RawUTF8 or PUTF8Char relative versions
     procedure NumericalConversions;
+    /// test crc32c in both software and hardware (SSE4.2) implementations
+    procedure _crc32c;
     /// the new fast Currency to/from string conversion
     procedure Curr64;
     /// the camel-case / camel-uncase features, used for i18n from Delphi RTII
@@ -2178,6 +2180,72 @@ end;
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText() slower in x64
 {$endif}
 
+
+
+function crc32cpas(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := not crc;
+  if buf<>nil then
+    while len>0 do begin
+      result := crc32ctab[0,byte(result xor ord(buf^))] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    end;
+  result := not result;
+end;
+
+procedure TTestLowLevelCommon._crc32c;
+var crc: array[0..10000] of record
+      s: RawByteString;
+      crc: cardinal;
+    end;
+    totallen: Cardinal;
+procedure Test(hash: THasher; const name: string);
+var i: Integer;
+    Timer: TPrecisionTimer;
+    a: string[10];
+begin
+  Timer.Start;
+  a := '123456789';
+  Check(hash(0,@a,0)=0);
+  Check(hash(0,@a,1)=$2ACF889D);
+  Check(hash(0,@a,2)=$BD5FE6AF);
+  Check(hash(0,@a,3)=$7F40BC73);
+  Check(hash(0,@a,4)=$13790E51);
+  Check(hash(0,@a,5)=$659AD21);
+  Check(hash(0,@a,6)=$85BF5A8C);
+  Check(hash(0,@a,7)=$8B0FB6FA);
+  Check(hash(0,@a,8)=$2E5336F0);
+  for i := 0 to High(crc) do
+    with crc[i] do
+      Check(hash(0,pointer(s),length(s))=crc);
+  fRunConsole := format('%s %s %s %s/s',[fRunConsole,name,Timer.Stop,
+    KB(Timer.PerSec(totallen))]);
+end;
+var i: integer;
+//Timer: TPrecisionTimer;
+begin
+  totallen := 36;
+  for i := 0 to High(crc) do
+  with crc[i] do begin
+    s := RandomString(i shr 3+1);
+    crc := crc32cpas(0,pointer(s),length(s));
+    inc(totallen,length(s));
+  end;
+  Test(crc32cpas,'pas');
+  Test(crc32cfast,'fast');
+  {$ifndef PUREPASCAL}
+  if SupportSSE42 then
+    Test(crc32csse42,'sse42');
+  {$endif}
+//  Timer.Start;
+//  for i := 0 to high(crc) do
+//    with crc[i] do
+//      Hash32(pointer(s),length(s));
+//  fRunConsole := format('%s Hash32 %s %s/s',[fRunConsole,Timer.Stop,
+//    KB(Timer.PerSec(totallen))]);
+end;
+
 procedure TTestLowLevelCommon.NumericalConversions;
 var i, j, b, err: integer;
     juint: cardinal absolute j;
@@ -2189,6 +2257,7 @@ var i, j, b, err: integer;
     varint: array[0..17] of byte;
     PB,PC: PByte;
     P: PUTF8Char;
+    crc: cardinal;
 begin
   Check(IntToThousandString(0)='0');
   Check(IntToThousandString(1)='1');
@@ -2267,6 +2336,9 @@ begin
     str(j,a);
     s := RawUTF8(a);
     Check(kr32(0,pointer(s),length(s))=kr32pas(pointer(s),length(s)));
+    crc := crc32cpas(0,pointer(s),length(s));
+    Check(crc32cfast(0,pointer(s),length(s))=crc);
+    Check(crc32c(0,pointer(s),length(s))=crc);
     u := string(a);
     Check(SysUtils.IntToStr(j)=u);
     Check(Int32ToUtf8(j)=s);
@@ -5955,7 +6027,7 @@ end;
 
 const
   // uses a const table instead of a dynamic array, for better regression test
-  crc32Tab: array[byte] of cardinal =
+  crc32tab: array[byte] of cardinal =
     ($00000000, $77073096, $EE0E612C, $990951BA,
     $076DC419, $706AF48F, $E963A535, $9E6495A3,
     $0EDB8832, $79DCB8A4, $E0D5E91E, $97D2D988,
@@ -6023,12 +6095,13 @@ const
     $BAD03605, $CDD70693, $54DE5729, $23D967BF,
     $B3667A2E, $C4614AB8, $5D681B02, $2A6F2B94,
     $B40BBE37, $C30C8EA1, $5A05DF1B, $2D02EF8D);
+
 function UpdateCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer) : cardinal;
 var i: integer;
 begin // slowest but always accurate version
   result := not aCRC32;
   for i := 1 to inLen do begin
-    result := crc32Tab[byte(result xor pByte(inBuf)^)] xor (result shr 8);
+    result := crc32tab[byte(result xor pByte(inBuf)^)] xor (result shr 8);
     inc(PByte(inBuf));
   end;
   result := not result;
@@ -6041,16 +6114,16 @@ var Z: TSynZipCompressor;
     crc2: Cardinal;
     s: RawByteString;
 begin
-  Check(crc32(0,@crc32Tab,5)=$DF4EC16C,'crc32');
-  Check(UpdateCrc32(0,@crc32Tab,5)=$DF4EC16C,'crc32');
-  Check(crc32(0,@crc32Tab,1024)=$6FCF9E13,'crc32');
-  Check(UpdateCrc32(0,@crc32Tab,1024)=$6FCF9E13);
-  Check(crc32(0,@crc32Tab,1024-5)=$70965738,'crc32');
-  Check(UpdateCrc32(0,@crc32Tab,1024-5)=$70965738);
-  Check(crc32(0,pointer(PtrInt(@crc32Tab)+1),2)=$41D912FF,'crc32');
-  Check(UpdateCrc32(0,pointer(PtrInt(@crc32Tab)+1),2)=$41D912FF);
-  Check(crc32(0,pointer(PtrInt(@crc32Tab)+3),1024-5)=$E5FAEC6C,'crc32');
-  Check(UpdateCrc32(0,pointer(PtrInt(@crc32Tab)+3),1024-5)=$E5FAEC6C);
+  Check(crc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
+  Check(UpdateCrc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
+  Check(crc32(0,@crc32tab,1024)=$6FCF9E13,'crc32');
+  Check(UpdateCrc32(0,@crc32tab,1024)=$6FCF9E13);
+  Check(crc32(0,@crc32tab,1024-5)=$70965738,'crc32');
+  Check(UpdateCrc32(0,@crc32tab,1024-5)=$70965738);
+  Check(crc32(0,pointer(PtrInt(@crc32tab)+1),2)=$41D912FF,'crc32');
+  Check(UpdateCrc32(0,pointer(PtrInt(@crc32tab)+1),2)=$41D912FF);
+  Check(crc32(0,pointer(PtrInt(@crc32tab)+3),1024-5)=$E5FAEC6C,'crc32');
+  Check(UpdateCrc32(0,pointer(PtrInt(@crc32tab)+3),1024-5)=$E5FAEC6C);
   M := SynCommons.THeapMemoryStream.Create;
   Z := TSynZipCompressor.Create(M,6,szcfGZ);
   L := length(Data);
@@ -7283,7 +7356,8 @@ begin
   end;
 {$ifdef WTIME}
   fRunConsole := format('%sdone %s i.e. %d/s, aver. %s, %s/s',
-    [fRunConsole,Timer.Stop,Timer.PerSec(LOOP),Timer.ByCount(LOOP),KB(Timer.PerSec(4898*(LOOP+1)))]);
+    [fRunConsole,Timer.Stop,Timer.PerSec(LOOP),Timer.ByCount(LOOP),
+     KB(Timer.PerSec(4898*(LOOP+1)))]);
 {$endif}
 end;
 

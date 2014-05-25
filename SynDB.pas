@@ -6227,8 +6227,8 @@ begin
       VArray[i] := ''''+DateTimeToIso8601Text(Values[i])+'''';
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayRowPrepare(const aParamTypes: array of TSQLDBFieldType;
-  aExpectedMinimalRowCount: integer=0);
+procedure TSQLDBStatementWithParams.BindArrayRowPrepare(
+  const aParamTypes: array of TSQLDBFieldType; aExpectedMinimalRowCount: integer);
 var i: integer;
 begin
   fParam.Count := 0;

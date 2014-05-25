@@ -529,6 +529,8 @@ unit SynCommons;
   - special 'SetThreadName' exception will now be ignored by TSynLog hook
   - expose all internal Hash*() functions (following TDynArrayHashOne prototype)
     in interface section of the unit
+  - added crc32c() function using either optimized unrolled version, or SSE 4.2
+    instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
@@ -3614,8 +3616,8 @@ type
   /// function prototype to be used for hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
   // - a good candidate is our crc32() function in optimized asm in SynZip unit
-  // - TDynArrayHashed.Init will use kr32() if no custom function is supplied,
-  // which is the standard Kernighan & Ritchie hash function
+  // - TDynArrayHashed.Init will use crc32c() if no custom function is supplied,
+  // which will run either as software or SSE4.2 hardware 
   THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
   /// function prototype to be used for hashing of a dynamic array element
@@ -3695,8 +3697,8 @@ type
     // strings or binary types, and the first field for records (strings included)
     // - if no aCompare is supplied, it will use default Equals() method
     // - if no THasher function is supplied, it will use the one supplied in
-    // DefaultHasher global variable, set to kr32() by default - i.e. the well
-    // known Kernighan & Ritchie hash function
+    // DefaultHasher global variable, set to crc32c() by default - using
+    // SSE4.2 instruction if available
     // - if CaseInsensitive is set to TRUE, it will ignore difference in 7 bit
     // alphabetic characters (e.g. compare 'a' and 'A' as equal)
     procedure Init(aTypeInfo: pointer; var aValue;
@@ -6693,17 +6695,50 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
-// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
+// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
+// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 3.5 GB/s (SSE4.2)
 // - overloaded version for direct binary content hashing
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
-// - not the best, but simple and efficient code - perfect for THasher
+// - not the best, but simple and efficient code - good candidate for THasher
+// - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.5 GB/s
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 var
+  /// tables used by crc32cfast() function
+  // - created with a polynom diverse from zlib's crc32() algorithm, but
+  // compatible with SSE 4.2 crc32 instruction
+  // - tables content is created from code in initialization section below
+  crc32ctab: array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
+
+/// compute CRC32C checksum on the supplied buffer
+// - result is compatible with SSE 4.2 based hardware accelerated instruction
+// - result is not compatible with zlib's crc32() - not the same polynom
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
+function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+{$ifndef PUREPASCAL}
+/// returns TRUE if Intel Streaming SIMD Extensions 4.2 is available
+function SupportSSE42: boolean;
+
+/// compute CRC32C checksum on the supplied buffer using SSE 4.2
+// - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction 
+// - SSE 4.2 shall be available on the processor (checked with SupportSSE42)
+// - result is not compatible with zlib's crc32() - not the same polynom
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.5 GB/s
+function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$endif}
+
+var
+  /// compute CRC32C checksum on the supplied buffer
+  // - this variable will use the fastest mean available, e.g. SSE 4.2
+  // - you should use this function instead of crc32cfast() nor crc32csse42()
+  crc32c: THasher;
+
+var
   /// the default hasher used by TDynArrayHashed()
-  // - is set to kr32() function above
+  // - is set to crc32c() function above
   // - should be set to faster and more accurate crc32() function if available
   // (this is what mORMot.pas unit does in its initialization block) 
   DefaultHasher: THasher;
@@ -15883,8 +15918,9 @@ begin
 end;
 
 procedure InitSynCommonsConversionTables;
-var i: integer;
+var i,n: integer;
     v: byte;
+    crc: cardinal;
 {$ifdef OWNNORMTOUPPER}
     d: integer;
 const n2u: array[138..255] of byte =
@@ -15932,6 +15968,28 @@ begin
   end;
   // initialize our internaly used TSynAnsiConvert engines
   TSynAnsiConvert.Engine(0);
+  // initialize tables for crc32cfast()
+  for i := 0 to 255 do begin
+    crc := i;
+    for n := 1 to 8 do
+      if (crc and 1)<>0 then // polynom is not the same as with zlib's crc32()
+        crc := (crc shr 1) xor $82f63b78 else
+        crc := crc shr 1;
+    crc32ctab[0,i] := crc;
+  end;
+  for i := 0 to 255 do begin
+    crc := crc32ctab[0,i];
+    for n := 1 to high(crc32ctab) do begin
+      crc := (crc shr 8) xor crc32ctab[0,byte(crc)];
+      crc32ctab[n,i] := crc;
+    end;
+  end;
+{$ifndef PUREPASCAL}
+  if SupportSSE42 then
+    crc32c := @crc32csse42 else
+{$endif PUREPASCAL}
+    crc32c := @crc32cfast;
+  DefaultHasher := crc32c;
 end;
 
 var
@@ -21050,6 +21108,213 @@ asm // eax=crc, edx=buf, ecx=len
     pop edi
 end;
 {$endif}
+
+function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef PUREPASCAL}
+begin
+  result := not crc;
+  if (buf<>nil) and (len>0) then begin
+    repeat
+      if PtrUInt(buf) and 3=0 then // align to 4 bytes boundary
+        break;
+      result := crc32ctab[0,byte(result xor ord(buf^))] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    until len=0;
+    while len>=4 do begin
+      result := result xor PCardinal(buf)^;
+      inc(buf,4);
+      result := crc32ctab[3,byte(result)] xor
+                crc32ctab[2,byte(result shr 8)] xor
+                crc32ctab[1,byte(result shr 16)] xor
+                crc32ctab[0,result shr 24];
+      dec(len,4);
+    end;
+    while len>0 do begin
+      result := crc32ctab[0,byte(result xor ord(buf^))] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    end;
+  end;
+  result := not result;
+end;
+{$else}
+// adapted from fast Aleksandr Sharahov version
+asm
+  test edx, edx
+  jz   @ret
+  neg  ecx
+  jz   @ret
+  not eax
+  push ebx
+@head:
+  test dl,3
+  jz   @bodyinit
+  movzx ebx, byte [edx]
+  inc  edx
+  xor  bl, al
+  shr  eax, 8
+  xor  eax,dword ptr [ebx*4 + crc32ctab]
+  inc  ecx
+  jnz  @head
+  pop  ebx
+  not eax
+@ret:
+  ret
+@bodyinit:
+  sub  edx, ecx
+  add  ecx, 8
+  jg   @bodydone
+  push esi
+  push edi
+  mov  edi, edx
+  mov  edx, eax
+@bodyloop:
+  mov ebx, [edi + ecx - 4]
+  xor edx, [edi + ecx - 8]
+  movzx esi, bl
+  mov eax,dword ptr [esi*4 + crc32ctab + 1024*3]
+  movzx esi, bh
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*2]
+  shr ebx, 16
+  movzx esi, bl
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*1]
+  movzx esi, bh
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*0]
+  movzx esi, dl
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*7]
+  movzx esi, dh
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*6]
+  shr edx, 16
+  movzx esi, dl
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*5]
+  movzx esi, dh
+  xor eax,dword ptr [esi*4 + crc32ctab + 1024*4]
+  add ecx, 8
+  jg  @done
+  mov ebx, [edi + ecx - 4]
+  xor eax, [edi + ecx - 8]
+  movzx esi, bl
+  mov edx,dword ptr [esi*4 + crc32ctab + 1024*3]
+  movzx esi, bh
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*2]
+  shr ebx, 16
+  movzx esi, bl
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*1]
+  movzx esi, bh
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*0]
+  movzx esi, al
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*7]
+  movzx esi, ah
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*6]
+  shr eax, 16
+  movzx esi, al
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*5]
+  movzx esi, ah
+  xor edx,dword ptr [esi*4 + crc32ctab + 1024*4]
+  add ecx, 8
+  jle @bodyloop
+  mov eax, edx
+@done:
+  mov edx, edi
+  pop edi
+  pop esi
+@bodydone:
+  sub ecx, 8
+  jl @tail
+  pop ebx
+  not eax
+  ret
+@tail:
+  movzx ebx, byte [edx + ecx]
+  xor bl,al
+  shr eax,8
+  xor eax,dword ptr [ebx*4 + crc32ctab]
+  inc ecx
+  jnz @tail
+  pop ebx
+  not eax
+end;
+
+function SupportSSE42: boolean;
+asm
+    {$ifndef CPUX64}
+    pushfd
+    pop eax
+    mov edx,eax
+    xor eax,$200000
+    push eax
+    popfd
+    pushfd
+    pop eax
+    xor eax,edx
+    jz @0
+    {$endif}
+    push ebx
+    mov eax,1
+    cpuid
+    test edx,$100000
+    setz al
+    pop ebx
+    ret
+@0: xor eax,eax
+end;
+
+function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+asm // eax=crc, edx=buf, ecx=len
+    push esi
+    push ebx
+    mov esi,edx
+    not eax
+    test ecx,ecx; jz @0
+    test esi,esi; jz @0
+@7: test esi,7 // align to 8 bytes boundary
+    jz @8
+    {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,byte ptr [esi]
+    {$else}
+    db $F2,$0F,$38,$F0,$06
+    {$endif}
+    inc esi
+    dec ecx; jz @0
+    test esi,7; jnz @7
+@8: mov ebx,ecx
+    shr ecx,2
+    xor edx,edx
+    test ecx,ecx; jz @2
+@1: {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,dword ptr [edx*4+esi]
+    {$else}
+    db $F2,$0F,$38,$F1,$04,$96
+    {$endif}
+    inc edx
+    cmp edx,ecx
+    jb @1
+@2: and ebx,3
+    lea esi,edx*4+esi
+    jz @0
+    {$ifdef ISDELPHI2010}
+    crc32 dword ptr eax,byte ptr [esi]
+    dec ebx; jz @0
+    crc32 dword ptr eax,byte ptr [esi+1]
+    dec ebx; jz @0
+    crc32 dword ptr eax,byte ptr [esi+2]
+    dec ebx; jz @0
+    crc32 dword ptr eax,byte ptr [esi+3]
+    {$else}
+    db $F2,$0F,$38,$F0,$06
+    dec ebx; jz @0
+    db $F2,$0F,$38,$F0,$46,$01
+    dec ebx; jz @0
+    db $F2,$0F,$38,$F0,$46,$02
+    dec ebx; jz @0
+    db $F2,$0F,$38,$F0,$46,$03
+    {$endif}
+@0: not eax
+    pop ebx
+    pop esi
+end;
+{$endif PUREPASCAL}
 
 type TWordRec = packed record YDiv100, YMod100: byte; end;
 
@@ -29686,11 +29951,8 @@ begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo,aValue,aCountPointer);
   fEventCompare := nil;
-  if @aHasher=nil then begin
-    if @DefaultHasher=nil then
-      DefaultHasher := @kr32; // set here so that kr32() could be smart-linked
-    fHasher := DefaultHasher;
-  end else
+  if @aHasher=nil then
+    fHasher := DefaultHasher else
     fHasher := aHasher;
   if (@aHashElement=nil) or (@aCompare=nil) then begin
     // it's faster to retrieve now the hashing/compare function than in HashOne
@@ -41444,6 +41706,7 @@ begin
    {$endif PUREPASCAL}
   {$endif FPC}
 end;
+
 
 var
   GarbageCollectorFreeAndNilList: TList;
