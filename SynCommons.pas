@@ -2707,6 +2707,11 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean=f
 // - format is Length(Integer):Text, i.e. the one used by WriteStringToStream
 // - will return '' if there is no such text in the stream
 // - you can set a MaxAllowedSize value, if you know how long the size should be
+// - it will read from the current position in S: so if you just write into S,
+// it could be a good idea to rewind it before call, e.g.:
+// !  Report.SaveToStream(Stream);
+// !  Stream.Seek(0,soBeginning);
+// !  str := ReadStringFromStream(Stream);
 function ReadStringFromStream(S: TStream; MaxAllowedSize: integer=255): RawUTF8;
 
 /// write an UTF-8 text into a TStream
@@ -28282,7 +28287,7 @@ begin
       MemStream.Size := PosiEnd;
     if SaveTo(PAnsiChar(MemStream.Memory)+Posi)-MemStream.Memory<>PosiEnd then
       EStreamError.Create('TDynArray.SaveToStream');
-    MemStream.Seek(PosiEnd,soFromBeginning);
+    MemStream.Seek(PosiEnd,soBeginning);
   end else begin
     tmp := SaveTo;
     Stream.Write(pointer(tmp)^,length(tmp));
@@ -35059,7 +35064,7 @@ procedure TFileBufferWriter.CancelAll;
 begin
   fTotalWritten := 0;
   fPos := 0;
-  fStream.Seek(0,soFromBeginning);
+  fStream.Seek(0,soBeginning);
 end;
 
 procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);

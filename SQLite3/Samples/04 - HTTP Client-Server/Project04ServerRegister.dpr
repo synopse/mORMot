@@ -6,7 +6,6 @@ program Project04ServerRegister;
 {$APPTYPE CONSOLE}
 
 uses
-  SynCommons,
   SynCrtSock,
   SysUtils;
 
