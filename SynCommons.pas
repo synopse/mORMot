@@ -2721,7 +2721,7 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean=f
 // - you can set a MaxAllowedSize value, if you know how long the size should be
 // - it will read from the current position in S: so if you just write into S,
 // it could be a good idea to rewind it before call, e.g.:
-// !  Report.SaveToStream(Stream);
+// !  WriteStringToStream(Stream,aUTF8Text);
 // !  Stream.Seek(0,soBeginning);
 // !  str := ReadStringFromStream(Stream);
 function ReadStringFromStream(S: TStream; MaxAllowedSize: integer=255): RawUTF8;
@@ -5678,7 +5678,7 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
-    property DataString: RawByteString read fDataString write fDataString;
+      property DataString: RawByteString read fDataString write fDataString;
   end;
 
   /// a TStream pointing to some in-memory data, for instance UTF-8 text
@@ -6985,7 +6985,7 @@ type
   // type-cast any TTimeLog value with the TTimeLogBits memory structure for
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
   // - since TTimeLog type is bit-oriented, you can't just add or substract two
-  // TTimeLog values when doing date/time computation: use a TDateTime temporary 
+  // TTimeLog values when doing date/time computation: use a TDateTime temporary
   // conversion in such case:
   // ! aTimeStamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimeStamp)));
   TTimeLog = type Int64;
@@ -12874,6 +12874,44 @@ begin // this code is faster than the Borland's original str() or IntToStr()
 end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+{$ifdef CPU64}
+asm // rcx=P, rdx=val
+    {$ifdef CPUX64}
+    .NOFRAME
+    {$endif}
+    cmp rdx,10; jb @3           // direct process of common val=0 (or val<10)
+    mov rax,rdx
+    lea r8,TwoDigitLookupW
+@s: cmp rax,100
+    lea rcx,rcx-2
+    jb @2
+    lea r9,rax*2
+    shr rax,2
+    mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
+    mul rdx
+    shr	rdx,2
+    mov rax,rdx
+    imul rdx,-200
+    lea rdx,rdx+r8
+    movzx rdx,word ptr [rdx+r9]
+    mov [rcx],dx
+    cmp rax,10
+    jae @s
+@1: dec rcx
+    or al,'0'
+    mov [rcx],al
+@0: mov rax,rcx
+    ret
+@2: movzx eax,word ptr [r8+rax*2]
+    mov [rcx],ax
+    mov rax,rcx
+    ret
+@3: dec rcx
+    or dl,'0'
+    mov [rcx],dl
+    mov rax,rcx
+end;
+{$else}
 {$ifdef PUREPASCAL}
 var c100: PtrUInt;
 begin // this code is faster than the Borland's original str() or IntToStr()
@@ -12899,8 +12937,7 @@ begin // this code is faster than the Borland's original str() or IntToStr()
 end;
 {$else}
 asm // eax=P, edx=val
-    cmp edx,10
-    jb @3              // direct process of common val=0 (or val<10)
+    cmp edx,10; jb @3  // direct process of common val=0 (or val<10)
     push edi
     mov edi,eax
     mov eax,edx
@@ -12933,7 +12970,8 @@ asm // eax=P, edx=val
     or dl,'0'
     mov [eax],dl
 end;
-{$endif}
+{$endif CPU64}
+{$endif PUREPASCAL}
 
 {$ifdef CPU64}
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
