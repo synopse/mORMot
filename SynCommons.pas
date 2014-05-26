@@ -394,6 +394,7 @@ unit SynCommons;
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
+  - faster x86 asm version of StrUInt32() and StrInt32() functions
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - added TDynArrayHashed.HashElement property
@@ -1880,7 +1881,7 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 
 {/ internal fast Int64 val to text conversion
-   - same calling convention as with StrInt32() above }
+ - same calling convention as with StrInt32() above }
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
   {$ifdef CPU64}inline;{$endif}
 
@@ -12592,7 +12593,11 @@ procedure Int32ToUTF8(Value : integer; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
+  if Value<0 then begin
+    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
+    P^ := '-';
+  end else
+    P := StrUInt32(@tmp[15],Value);
   SetString(result,P,@tmp[15]-P);
 end;
 
@@ -12860,41 +12865,17 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-var c,c10: PtrUInt;
 begin // this code is faster than the Borland's original str() or IntToStr()
-  if val<0 then
-    c := -val else
-    c := val;
-  repeat
-    if c<10 then begin
-      dec(P);
-      P^ := AnsiChar(c+ord('0'));
-      break;
-    end else
-    if c<100 then begin
-      dec(P,2);
-      PWord(P)^ := TwoDigitLookupW[c];
-      break;
-    end;
-    c10 := c div 100;   // one div by two digits
-{$ifdef CPU64} // CPU64 has no LEA optimization for *10 but has one cycle mul
-    dec(c,c10*100);     {$else}
-    dec(c,(c10*10)*10); // fast c := c mod 100
-{$endif}
-    dec(P,2);
-    PWord(P)^ := TwoDigitLookupW[c];
-    c := c10;
-    if c10=0 then break;
-  until false;
   if val<0 then begin
-    dec(P);
-    P^ := '-';
-  end;
-  result := P;
+    result := StrUInt32(P,PtrUInt(-val))-1;
+    result^ := '-';
+  end else
+    result := StrUInt32(P,val);
 end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-var c10: PtrUInt;
+{$ifdef PUREPASCAL}
+var c100: PtrUInt;
 begin // this code is faster than the Borland's original str() or IntToStr()
   repeat
     if val<10 then begin
@@ -12907,18 +12888,52 @@ begin // this code is faster than the Borland's original str() or IntToStr()
       PWord(P)^ := TwoDigitLookupW[val];
       break;
     end;
-    c10 := val div 100;   // one div by two digits
-{$ifdef CPU64} // CPU64 has one cycle mul
-    dec(val,c10*100);     {$else}
-    dec(val,(c10*10)*10); // fast val := val mod 100
-{$endif}
     dec(P,2);
+    c100 := val div 100;
+    dec(val,c100*100);
     PWord(P)^ := TwoDigitLookupW[val];
-    val := c10;
-    if c10=0 then break;
+    val := c100;
+    if c100=0 then break;
   until false;
   result := P;
 end;
+{$else}
+asm // eax=P, edx=val
+    cmp edx,10
+    jb @3              // direct process of common val=0 (or val<10)
+    push edi
+    mov edi,eax
+    mov eax,edx
+    nop; nop           // for loop alignment
+@s: cmp eax,100
+    lea edi,edi-2
+    jb @2
+    mov ecx,eax
+    mov	edx,1374389535 // use power of two reciprocal to avoid division
+    mul edx
+    shr	edx,5          // now edx=eax div 100
+    mov eax,edx
+    imul edx,-200
+    movzx edx,word ptr [TwoDigitLookupW+ecx*2+edx]
+    mov [edi],dx
+    cmp eax,10
+    jae @s
+@1: dec edi
+    or al,'0'
+    mov [edi],al
+@0: mov eax,edi
+    pop edi
+    ret
+@2: movzx eax,word ptr [TwoDigitLookupW+eax*2]
+    mov [edi],ax
+    mov eax,edi
+    pop edi
+    ret
+@3: dec eax
+    or dl,'0'
+    mov [eax],dl
+end;
+{$endif}
 
 {$ifdef CPU64}
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
@@ -13426,7 +13441,11 @@ function IntToString(Value: integer): string;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
+  if Value<0 then begin
+    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
+    P^ := '-';
+  end else
+    P := StrUInt32(@tmp[15],Value);
   SetString(result,P,@tmp[15]-P);
 end;
 {$else}
@@ -15204,7 +15223,11 @@ function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
+  if Value<0 then begin
+    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
+    P^ := '-';
+  end else
+    P := StrUInt32(@tmp[15],Value);
   SetString(result,P,@tmp[15]-P);
 end;
 
@@ -30441,7 +30464,12 @@ var tmp: array[0..15] of AnsiChar;
 begin
   if B+16>=BEnd then
     Flush;
-  P := StrInt32(@tmp[15],Value);
+  if Value<0 then begin
+    B[1] := '-';
+    inc(B);
+    P := StrUInt32(@tmp[15],PtrUInt(-value));
+  end else
+    P := StrUInt32(@tmp[15],value);
   Len := @tmp[15]-P;
   move(P[0],B[1],Len);
   inc(B,Len);

@@ -2265,7 +2265,7 @@ procedure TTestLowLevelCommon.NumericalConversions;
 var i, j, b, err: integer;
     juint: cardinal absolute j;
     k,l: Int64;
-    s: RawUTF8;
+    s,s2: RawUTF8;
     d,e: double;
     a: shortstring;
     u: string;
@@ -2341,6 +2341,12 @@ begin
   Check(DoubleToString(-3.9999617168e-15)='-3.9999617168E-15');
   Check(DoubleToString(3.9999617168e-15)='3.9999617168E-15');
 {$endif}
+  Check(Int32ToUtf8(1599638299)='1599638299');
+  Check(UInt32ToUtf8(1599638299)='1599638299');
+  Check(Int32ToUtf8(-1599638299)='-1599638299');
+  Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
+  s := Int64ToUTF8(242161819595454762);
+  Check(s='242161819595454762');
 
 {$ifndef LVCL}
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
@@ -2357,7 +2363,8 @@ begin
     Check(crc32c(0,pointer(s),length(s))=crc);
     u := string(a);
     Check(SysUtils.IntToStr(j)=u);
-    Check(Int32ToUtf8(j)=s);
+    s2 := Int32ToUtf8(j);
+    Check(s2=s);
     Check(format('%d',[j])=u);
     Check(GetInteger(pointer(s))=j);
 {$ifndef DELPHI5OROLDER}
