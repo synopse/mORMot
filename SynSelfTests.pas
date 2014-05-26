@@ -2269,10 +2269,11 @@ var i, j, b, err: integer;
     d,e: double;
     a: shortstring;
     u: string;
-    varint: array[0..17] of byte;
+    varint: array[0..31] of byte;
     PB,PC: PByte;
     P: PUTF8Char;
     crc: cardinal;
+    Timer: TPrecisionTimer;
 begin
   Check(IntToThousandString(0)='0');
   Check(IntToThousandString(1)='1');
@@ -2486,6 +2487,20 @@ begin
     Check(FromVarUint64(PB)=i);
     Check(PB=PC);
   end;
+  exit; // code below is speed informative only, without any test
+  Timer.Start;
+  RandSeed := 10;
+  for i := 0 to 99999 do
+    SysUtils.IntToStr(Int64(7777)*Random(maxInt));
+  fRunConsole := format('%s SysUtils.IntToStr %s %s/s',[fRunConsole,Timer.Stop,
+    IntToThousandString(Timer.PerSec(100000))]);
+  Timer.Start;
+  RandSeed := 10;
+  for i := 0 to 99999 do
+    StrInt64(@varint[31],Int64(7777)*Random(maxInt));
+  fRunConsole := format('%s StrInt64 %s %s/s',[fRunConsole,Timer.Stop,
+    IntToThousandString(Timer.PerSec(100000))]);
+  Randomize; // we fixed the RandSeed value above -> get true random now
 end;
 
 procedure TTestLowLevelCommon._UTF8;

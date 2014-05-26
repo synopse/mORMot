@@ -394,7 +394,7 @@ unit SynCommons;
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
-  - faster x86 asm version of StrUInt32() and StrInt32() functions
+  - faster x86 asm version of StrUInt32(), StrInt32() and StrInt64() functions
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - added TDynArrayHashed.HashElement property
@@ -1788,27 +1788,33 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int32ToUtf8(Value: integer): RawUTF8; overload;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - result as var parameter saves a local assignment and a try..finally
 procedure Int32ToUTF8(Value : integer; var result: RawUTF8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - result as var parameter saves a local assignment and a try..finally
 procedure Int64ToUtf8(const Value: Int64; var result: RawUTF8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
 function UInt32ToUtf8(Value: cardinal): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
 procedure UInt32ToUtf8(Value: cardinal; var result: RawUTF8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// faster version than default SysUtils.IntToStr implementation
 function IntToString(Value: integer): string; overload;
@@ -12889,7 +12895,7 @@ asm // rcx=P, rdx=val
     shr rax,2
     mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
     mul rdx
-    shr	rdx,2
+    shr rdx,2
     mov rax,rdx
     imul rdx,-200
     lea rdx,rdx+r8
@@ -12973,38 +12979,68 @@ end;
 {$endif CPU64}
 {$endif PUREPASCAL}
 
-{$ifdef CPU64}
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
-begin // StrInt32 aldready implemented PtrInt=Int64
-  result := StrInt32(P,val);
+{$ifdef CPU64}
+begin // StrUInt32 aldready implemented PtrUInt=UInt64
+  if val<0 then begin
+    result := StrUInt32(P,PtrUInt(-val))-1;
+    result^ := '-';
+  end else
+    result := StrUInt32(P,val);
 end;
 {$else}
-function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
-var c,c10: QWord;
+var c,c100: QWord;
     c64: Int64Rec absolute c;
-begin // this code is faster than the Borland's original str() or IntToStr()
+begin
   if val<0 then
     c := -val else
     c := val;
-  repeat
-    if c64.Hi=0 then begin
-      P := StrUInt32(P,c64.Lo);
-      break;
-    end;
-    c10 := c div 100;   // one div by two digits
-    dec(c,c10*100);     // fast c := c mod 100
-    dec(P,2);
-    PWord(P)^ := TwoDigitLookupW[c];
-    c := c10;
-    if c10=0 then break;
-  until false;
+  if c64.Hi=0 then
+    P := StrUInt32(P,c64.Lo) else begin
+    repeat
+      {$ifdef PUREPASCAL}
+      c100 := c div 100;   // one div by two digits
+      dec(c,c100*100);     // fast c := c mod 100
+      {$else}
+      asm // by-passing the RTL is a good idea here
+        push ebx
+        mov edx,dword ptr [c+4]
+        mov eax,dword ptr [c]
+        mov ebx,100
+        mov ecx,eax
+        mov eax,edx
+        xor edx,edx
+        div ebx
+        mov dword ptr [c100+4],eax
+        xchg eax,ecx
+        div ebx
+        mov dword ptr [c100],eax
+        imul ebx,ecx
+        mov ecx,100
+        mul ecx
+        add edx,ebx
+        pop ebx
+        sub dword ptr [c+4],edx
+        sbb dword ptr [c],eax
+      end;
+      {$endif}
+      dec(P,2);
+      PWord(P)^ := TwoDigitLookupW[c];
+      c := c100;
+      if c64.Hi=0 then begin
+        if c64.Lo<>0 then
+          P := StrUInt32(P,c64.Lo);
+        break;
+      end;
+    until false;
+  end;
   if val<0 then begin
     dec(P);
     P^ := '-';
   end;
   result := P;
 end;
-{$endif}
+{$endif CPU64}
 
 
 // some minimal RTTI const and types
