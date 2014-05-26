@@ -3471,16 +3471,18 @@ type
     // reference-counted types within (like strings) - typical use may be TGUID
     // - main parameters are the record size, in bytes, and the property pointer
     // - add an TSQLPropInfoRecordFixedSize instance to the internal list
+    // - if aData2Text/aText2Data parameters are not defined, it will fallback
+    // to TSQLPropInfo.BinaryToText() simple text Base64 encoding
     // - can be used to override the default TSQLRecord corresponding method:
     // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
     // !  Props: TSQLRecordProperties);
     // !begin
-    // !  Props.RegisterCustomFixedSizeRecordProperty(self,sizeof(TGUID),'GUID',
-    // !    @TSQLMyRecord(nil).fGUID);
+    // !  Props.RegisterCustomFixedSizeRecordProperty(self,sizeof(TMyRec),'RecField',
+    // !    @TSQLMyRecord(nil).fRecField, [], sizeof(TMyRec));
     // !end;
     procedure RegisterCustomFixedSizeRecordProperty(aTable: TClass;
       aRecordSize: cardinal; const aName: RawUTF8;  aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0;
+      aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
       aData2Text: TOnSQLPropInfoRecord2Text=nil;
       aText2Data: TOnSQLPropInfoRecord2Data=nil);
     /// add a custom record property from its RTTI definition
@@ -15488,7 +15490,7 @@ end;
 procedure TSQLPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  SetString(result,PAnsiChar(GetFieldAddr(Instance)),fRecordSize);
+  SetRawUTF8(result,GetFieldAddr(Instance),fRecordSize);
   BinaryToText(result,ToSQL,wasSQLString);
 end;
 
@@ -16240,7 +16242,7 @@ begin
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
-    SetString(Result,PAnsiChar(P),StrLen(P));
+    SetRawUTF8(Result,P,StrLen(P));
   end;
 end;
 
@@ -20338,7 +20340,7 @@ begin
   if UsingStream<>nil then begin
     UsingStream.Seek(0,soFromBeginning);
     GetJSONValues(UsingStream,Expand,withID,Occasion);
-    SetString(result,PAnsiChar(UsingStream.Memory),UsingStream.Seek(0,soFromCurrent));
+    SetRawUTF8(result,UsingStream.Memory,UsingStream.Seek(0,soFromCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
@@ -20806,7 +20808,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
   begin
     B := P;
     while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-    SetString(result,B,P-B);
+    SetRawUTF8(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
        IdemPropNameU(result,'NULL') then
@@ -29317,10 +29319,10 @@ begin
     result := '' else begin
     fLogTableWriter.Flush;
     Data := fLogTableStorage.Memory;
-    SetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
+    SetRawUTF8(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
     // format as valid not expanded JSON table content:
     if StartPosition<>0 then begin
-      SetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
+      SetRawUTF8(JSONStart,Data,fLogTableWriter.StartDataPosition);
       result := JSONStart+result;
     end;
     result := result+']}';
@@ -31607,10 +31609,10 @@ begin
 end;
 
 procedure TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty(
-  aTable: TClass; aRecordSize: cardinal; const aName: RawUTF8;  aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0;
-  aData2Text: TOnSQLPropInfoRecord2Text=nil;
-  aText2Data: TOnSQLPropInfoRecord2Data=nil);
+  aTable: TClass; aRecordSize: cardinal; const aName: RawUTF8;
+  aPropertyPointer: pointer; aAttributes: TSQLPropInfoAttributes;
+  aFieldWidth: integer; aData2Text: TOnSQLPropInfoRecord2Text;
+  aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   Fields.Add(aTable,TSQLPropInfoRecordFixedSize.Create(aRecordSize,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth,aData2Text,aText2Data));
@@ -36692,7 +36694,6 @@ initialization
 {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
 {$endif}
-  DefaultHasher := @crc32; // faster and more accurate than kr32()
   ExeVersionRetrieve; // the sooner the better
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
