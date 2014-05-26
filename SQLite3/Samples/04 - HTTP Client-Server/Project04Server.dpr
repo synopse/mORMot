@@ -20,10 +20,12 @@
    - note that you didn't need to write any SQL statement, only define a
      class and call some methods; even the query was made very easy (just an
      obvious WHERE clause to write)
-   - thanks to the true object oriented modeling of the framework, the same
+   - thanks to the true object oriented modelling of the framework, the same
      exact Unit1 is used for both static in-memory database engine, or
      with SQLite3 database storage, in local mode or in Client/Server mode:
      only the TForm1.Database object creation instance was modified
+   - in order to register the URL for the http.sys server, you have to run 
+     this program once as administrator, or call Project04ServerRegister first
    - look at the tiny size of the EXE (even with SQLite3 engine embedded), less
      than 400KB for the server, and 80KB for the client, with LVCL :)
 
@@ -32,6 +34,9 @@
 
   Version 1.16
   - added authentication to the remote process
+
+  Version 1.18
+  - added Project04ServerRegister.dpr program
 
 }
 
