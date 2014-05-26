@@ -2158,6 +2158,15 @@ begin
     result := result*31+ord(buf[i]);
 end;
 
+function fnv32pas(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+var i: integer;
+begin
+  for i := 0 to len-1 do
+    crc := (crc xor ord(buf[i]))*16777619;
+  result := crc;
+end;
+
+
 {.$define EXTENDEDTOSTRING_USESTR}
 
 {$ifndef WITHUXTHEME}
@@ -2223,7 +2232,7 @@ begin
     KB(Timer.PerSec(totallen))]);
 end;
 var i: integer;
-//Timer: TPrecisionTimer;
+    Timer: TPrecisionTimer;
 begin
   totallen := 36;
   for i := 0 to High(crc) do
@@ -2243,12 +2252,13 @@ begin
     Test(crc32csse42,'sse42');
   {$endif}
   {$endif}
-//  Timer.Start;
-//  for i := 0 to high(crc) do
-//    with crc[i] do
-//      Hash32(pointer(s),length(s));
-//  fRunConsole := format('%s Hash32 %s %s/s',[fRunConsole,Timer.Stop,
-//    KB(Timer.PerSec(totallen))]);
+  exit; // code below is speed informative only, without any test
+  Timer.Start;
+  for i := 0 to high(crc) do
+    with crc[i] do
+      fnv32(0,pointer(s),length(s));
+  fRunConsole := format('%s fnv32 %s %s/s',[fRunConsole,Timer.Stop,
+    KB(Timer.PerSec(totallen))]);
 end;
 
 procedure TTestLowLevelCommon.NumericalConversions;
@@ -2341,6 +2351,7 @@ begin
     str(j,a);
     s := RawUTF8(a);
     Check(kr32(0,pointer(s),length(s))=kr32pas(pointer(s),length(s)));
+    Check(fnv32(0,pointer(s),length(s))=fnv32pas(0,pointer(s),length(s)));
     crc := crc32cpas(0,pointer(s),length(s));
     Check(crc32cfast(0,pointer(s),length(s))=crc);
     Check(crc32c(0,pointer(s),length(s))=crc);

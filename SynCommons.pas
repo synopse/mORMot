@@ -532,6 +532,7 @@ unit SynCommons;
     in interface section of the unit
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
     instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
+  - added fnv32() function, slower than kr32, but with less collisions 
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
@@ -6719,6 +6720,14 @@ function Hash32(Data: pointer; Len: integer): cardinal; overload;
 // - not the best, but simple and efficient code - good candidate for THasher
 // - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.7 GB/s
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+/// simple FNV-1a hashing function
+// - when run over our regression suite, is similar to crc32c() about collisions,
+// and 4 times better than kr32(), but also slower than the others
+// - fnv32() is 715.5 MB/s - kr32() 898.8 MB/s
+// - this hash function should not be usefull, unless you need several hashing
+// algorithms at once (e.g. to implement a bloom filter)
+function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 var
   /// tables used by crc32cfast() function
@@ -21091,6 +21100,31 @@ asm
 end;
 {$endif}
 
+function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef PUREPASCAL}
+var i: integer;
+begin
+  if buf<>nil then
+    for i := 0 to len-1 do
+      crc := (crc xor ord(buf[i]))*16777619;
+  result := crc;
+end;
+{$else}
+asm // eax=crc, edx=buf, ecx=len
+    test edx,edx; jz @0
+    neg ecx; jz @0
+    push ebx
+    sub edx,ecx
+@1: movzx ebx,byte ptr [edx+ecx]
+    xor eax,ebx
+    imul eax,eax,16777619
+    inc ecx
+    jnz @1
+    pop ebx
+@0:
+end; // we tried an unrolled version, but it was slower on our Core i7!
+{$endif}
+
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
 var i: integer;
@@ -29965,7 +29999,7 @@ begin
 {$ifdef CPU64}
   result := Hasher(0,@Elem,sizeof(PtrUInt));
 {$else}
-  result := PtrUInt(Elem); // naive but optimal for TDynArrayHashed
+  result := (PtrUInt(Elem) shr 4)+1; // naive but optimal for TDynArrayHashed
 {$endif}
 end;
 
@@ -30079,6 +30113,8 @@ begin
   SetLength(fHashs,PO2); // fill all fHashs[]=HASH_VOID
 end;
 
+//var TDynArrayHashedCollisionCount: cardinal;
+
 function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
 var n, first: integer;
     looped: boolean;
@@ -30115,7 +30151,8 @@ begin
       result := -(result+1);
       exit; // not found -> returns void index in fHashs[] as negative
     end;
-    // hash colision -> search next item
+    // hash collision -> search next item
+//    inc(TDynArrayHashedCollisionCount);
     inc(result);
     if result=n then
       // reached the end -> search once from fHash[0] to fHash[first-1]
@@ -34720,10 +34757,10 @@ begin
 end;
 
 function TObjectListPropertyHashed.IntHash(const Elem): cardinal;
-var oObject: TObject;
+var O: TObject;
 begin
-  oObject := fSubPropAccess(TObject(Elem));
-  result := fHash.fHashElement(oObject,fHash.fHasher);
+  O := fSubPropAccess(TObject(Elem));
+  result := fHash.fHashElement(O,fHash.fHasher);
 end;
 
 function TObjectListPropertyHashed.IntComp(const A,B): integer;
