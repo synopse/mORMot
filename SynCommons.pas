@@ -379,6 +379,7 @@ unit SynCommons;
     UnicodeCharToUTF8/NextUTF8Char are renamed WideCharToUTF8/NextUTF8UCS4 and
     new UTF16CharToUTF8/UCS4ToUTF8 functions have been introduced
   - StrLen() function will now use faster SSE2 instructions on supported CPUs
+  - introduced StrLenPas() function, to be used when buffer is protected
   - included Windows-1258 code page to be recognized as a fixed-width charset
   - introducing TSynAnsiUTF8/TSynAnsiUTF16 to handle CP_UTF8/CP_UTF16 codepages
   - added UTF8AnsiConvert instance, and let TSynAnsiConvert.Engine(0) return
@@ -1899,7 +1900,16 @@ function StrComp(Str1, Str2: pointer): PtrInt;
 function StrIComp(Str1, Str2: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
+// - this version will use fast SSE2 instructions (if available), on both Win32
+// and Win64 platforms: please note that in this case, it may read up to 15 bytes
+// before or beyond the string; this is rarely a problem but it can in principle
+// generate a protection violation (e.g. when used over mapped files) - in this
+// case, you can use the slower StrLenPas() function instead 
 function StrLen(S: pointer): PtrInt;
+
+/// slower version of StrLen(), but which will never read over the buffer
+// - to be used instead of StrLen() on a memory protected buffer
+function StrLenPas(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -6717,7 +6727,7 @@ var
   // - tables content is created from code in initialization section below
   crc32ctab: array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
 
-/// compute CRC32C checksum on the supplied buffer
+/// compute CRC32C checksum on the supplied buffer using x86/x64 code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
@@ -15593,6 +15603,30 @@ begin
       exit;
 end;
 
+function StrLenPas(S: pointer): PtrInt;
+begin
+  result := 0;
+  if S<>nil then
+  while true do
+    if PAnsiChar(S)[0]<>#0 then
+    if PAnsiChar(S)[1]<>#0 then
+    if PAnsiChar(S)[2]<>#0 then
+    if PAnsiChar(S)[3]<>#0 then begin
+      inc(PtrUInt(S),4);
+      inc(result,4);
+    end else begin
+      inc(result,3);
+      exit;
+    end else begin
+      inc(result,2);
+      exit;
+    end else begin
+      inc(result);
+      exit;
+    end else
+      exit;
+end;
+
 function StrLen(S: pointer): PtrInt;
 {$ifdef CPU64}
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
@@ -21137,6 +21171,9 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // ecx=crc, rdx=buf, r8=len
+    {$ifdef CPUX64}
+    .NOFRAME
+    {$endif}
     mov eax,ecx
     not eax
     test r8,r8;   jz @0
