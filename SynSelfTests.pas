@@ -5444,13 +5444,13 @@ begin
   for i := 0 to 2 do
     Check(V._(i)=Doc.Values[i]);
   Check(V._(3)=4);
-  V._ := '5';
+  V._ := 'a5';
   Check(V._count=5);
   for i := 0 to 2 do
     Check(V._(i)=Doc.Values[i]);
   Check(V._(3)=4);
-  Check(V._(4)='5');
-  Check(V='["one",2,3,4,"5"]');
+  Check(V._(4)='a5');
+  Check(V='["one",2,3,4,"a5"]');
   discogs := StringFromFile(discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
