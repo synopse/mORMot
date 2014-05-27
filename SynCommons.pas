@@ -21356,8 +21356,8 @@ asm
     push rbx
     mov eax,1
     cpuid
-    test edx,$100000
-    setz al
+    test ecx,$100000
+    setnz al
     pop rbx
     ret
 @0: xor eax,eax
@@ -21542,8 +21542,8 @@ asm
     push ebx
     mov eax,1
     cpuid
-    test edx,$100000
-    setz al
+    test ecx,$100000
+    setnz al
     pop ebx
     ret
 @0: xor eax,eax
