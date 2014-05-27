@@ -27,7 +27,7 @@ interface
   {.$define USEDWSJSON}
 {$endif}
 
-{$ifdef ISDELPHI2010}
+{$ifdef ISDELPHIXE} // Delphi 2010 DBXJSON is just buggy and not workable
   {$define USEDBXJSON}
 {$endif}
 
@@ -736,6 +736,9 @@ type // DBXJSON is indeed an half-backed library!
   TJSONObjectHook = class helper for DBXJSON.TJSONObject
   public
     function GetValue(const Name: string): TJSONValue;
+    {$ifndef ISDELPHIXE}
+    class function ParseJSONValue(const Data: UTF8String): TJSONValue;
+    {$endif}
   end;
   TJSONArrayHook = class helper for DBXJSON.TJSONArray
   public // Size and Get() are marked as deprecated since XE6
@@ -743,6 +746,19 @@ type // DBXJSON is indeed an half-backed library!
     function GetItem(const Index: Integer): TJSONValue;
     property Items[const Index: Integer]: TJSONValue read GetItem;
   end;
+
+{$ifndef ISDELPHIXE}
+class function TJSONObjectHook.ParseJSONValue(const Data: UTF8String): TJSONValue;
+var DataBytes: TBytes;
+    len: integer;
+begin
+  len := Length(Data);
+  SetLength(DataBytes,len);
+  Move(pointer(Data)^,pointer(DataBytes)^,len);
+  Result := inherited ParseJSONValue(DataBytes, 0, len);
+  assert(Result<>nil);
+end;
+{$endif}
 
 function TJSONObjectHook.GetValue(const Name: string): TJSONValue;
 var i: integer;
