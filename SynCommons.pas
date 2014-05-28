@@ -13213,7 +13213,7 @@ procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef PUREPASCAL}
 var P: PStrRec;
 begin
-  if (PtrInt(Dest)=0) or                  // s=''
+  if (len>128) or (PtrInt(Dest)=0) or     // s=''
      (PInteger(PtrInt(Dest)-8)^<>1) then  // s.refcount<>1
     SetString(Dest,PAnsiChar(text),len) else begin
     if PStrRec(Pointer(PtrInt(Dest)-STRRECSIZE))^.length<>len then begin
@@ -13228,13 +13228,19 @@ begin
 end;
 {$else}
 asm // eax=@Dest text=edx len=ecx
+    cmp ecx,128 // avoid huge move() in ReallocMem()
+{$ifdef UNICODE}
+    ja @3
+{$else}
+    ja System.@LStrFromPCharLen
+{$endif}
     push ebx
     mov ebx,[eax]
     test ebx,ebx
     jnz @2
 @0: pop ebx
 {$ifdef UNICODE}
-    push CP_UTF8 // UTF-8 code page for Delphi 2009+
+@3: push CP_UTF8 // UTF-8 code page for Delphi 2009+
     call System.@LStrFromPCharLen // we need a call, not a jmp here
     ret
 {$else}
