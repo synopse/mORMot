@@ -1,0 +1,66 @@
+object Form1: TForm1
+  Left = 370
+  Height = 173
+  Top = 270
+  Width = 448
+  BorderStyle = bsSingle
+  Caption = ' mORMot Client using LCL'
+  ClientHeight = 173
+  ClientWidth = 448
+  Color = clBtnFace
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  LCLVersion = '1.3'
+  object lbl1: TLabel
+    Left = 16
+    Height = 13
+    Top = 16
+    Width = 87
+    Caption = 'Enter some value:'
+    ParentColor = False
+  end
+  object lbl2: TLabel
+    Left = 16
+    Height = 13
+    Top = 72
+    Width = 82
+    Caption = 'Computed JSON:'
+    ParentColor = False
+  end
+  object edtValue: TEdit
+    Left = 16
+    Height = 21
+    Top = 32
+    Width = 121
+    OnChange = edtValueChange
+    TabOrder = 0
+  end
+  object mmoJSON: TMemo
+    Left = 16
+    Height = 65
+    Top = 88
+    Width = 425
+    TabOrder = 1
+  end
+  object btnRewind: TButton
+    Left = 208
+    Height = 25
+    Top = 32
+    Width = 75
+    Caption = 'First'
+    OnClick = btnNextClick
+    TabOrder = 2
+  end
+  object btnNext: TButton
+    Left = 288
+    Height = 25
+    Top = 32
+    Width = 75
+    Caption = 'Next'
+    OnClick = btnNextClick
+    TabOrder = 3
+  end
+end
