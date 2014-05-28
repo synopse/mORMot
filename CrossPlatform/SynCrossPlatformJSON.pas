@@ -47,7 +47,9 @@ unit SynCrossPlatformJSON;
   
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
- 
+  - would compile with Delphi for any platform, or with FPC or Kylix
+  - FPC has some issues with working with variants: UTF-8 encoding is sometimes
+    lost, and TInvokeableVariantType.SetProperty() is just broken
 
 }
 
@@ -78,7 +80,7 @@ type
   // simple and strong enough for our client-side purpose
   // - it is in fact already faster (and using less memory) than DBXJSON and
   // SuperObject / XSuperObject libraries - of course, mORMot's TDocVariant
-  // is faster, as dwsJSON is, but those are not cross-platform
+  // is faster, as dwsJSON is in some cases, but those are not cross-platform
   {$ifdef UNICODE}
   TJSONVariantData = record
   private
@@ -125,12 +127,16 @@ type
     /// number of items in this jvObject or jvArray
     property Count: integer read GetCount;
     /// access by name to a value of this jvObject
-    property Value[const aName: string]: variant read GetValue write SetValue;
+    property Value[const aName: string]: variant read GetValue write SetValue; default;
   end;
   {$A+}
 
   /// low-level class used to register TJSONVariantData as custom type
-  // - allows late binding to values
+  // - allows late binding to values, e.g.
+  // ! jsonvar.avalue := jsonvar.avalue+1;
+  // - due to an issue with FPC implementation, you can only read properties,
+  // not set them, so you should write:
+  // ! TJSONVariantData(jsonvar)['avalue'] := jsonvar.avalue+1;
   TJSONVariant = class(TInvokeableVariantType)
   protected
     {$ifndef FPC}
@@ -192,10 +198,16 @@ type
 //!   json := doc; // to convert a TJSONVariant to JSON, just assign to a string
 //!   assert(json='{"test":1234,"name":"Joh\"n\r"}');
 //! end;
-function JSONVariant(const JSON: string): variant;
+// - note that FPC does not allow to set values by late-binding
+function JSONVariant(const JSON: string): variant; overload;
 
-/// access to a TJsonVariant instance members
+/// create a TJSONVariant TJSONVariant array from a supplied array of values
+function JSONVariant(const values: TVariantDynArray): variant; overload;
+
+/// access to a TJSONVariant instance members
 // - e.g. Kind, Count, Names[] or Values[]
+// - will raise an exception if the supplied variant is not a TJSONVariant
+// - this function is safer than TJSONVariant(JSONVariant)
 function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
 
 var
@@ -203,16 +215,63 @@ var
   JSONVariantType: TInvokeableVariantType;
 
 /// compute the quoted JSON string corresponding to the supplied text 
-function JSONEscape(const Text: string): string;
+function StringToJSON(const Text: string): string;
 
+/// compute the JSON representation of a floating-point value
+procedure DoubleToJSON(Value: double; var result: string);
+
+/// compute the JSON representation of a variant value
+function ValueToJSON(const Value: variant): string;
+
+/// read an UTF-8 (JSON) file into a native string
+// - file should be existing, otherwise an exception is raised
+function UTF8FileToString(const aFileName: TFileName): string;
 
 
 implementation
+
+{$ifdef FPC}
+// assume string is UTF-8 encoded (as with Lazarus/LCL)
+// note that when working with variants, FPC 2.7.1 sometimes clear the code page
+type UTF8ToString = RawByteString;
+{$else}
+{$ifndef UNICODE}
+function UTF8ToString(const utf8: UTF8String): string;
+begin
+  result := UTF8ToAnsi(utf8);
+end;
+{$endif}
+{$endif}
+
+function UTF8FileToString(const aFileName: TFileName): string;
+var F: TFileStream;
+    len: integer;
+    utf8: UTF8String;
+begin
+  F := TFileStream.Create(aFileName,fmOpenRead);
+  try
+    len := F.Size;
+    SetLength(utf8,len);
+    F.Read(utf8[1],len);
+    result := UTF8ToString(utf8);
+  finally
+    F.Free;
+  end;
+end;
 
 function JSONVariant(const JSON: string): variant;
 begin
   VarClear(result);
   TJSONVariantData(result).FromJSON(JSON);
+end;
+
+function JSONVariant(const values: TVariantDynArray): variant;
+begin
+  VarClear(result);
+  TJSONVariantData(result).Init;
+  TJSONVariantData(result).VKind := jvArray;
+  TJSONVariantData(result).VCount := length(values);
+  TJSONVariantData(result).Values := values;
 end;
 
 function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
@@ -229,17 +288,17 @@ procedure AppendChar(var str: string; chr: Char);
   {$ifdef HASINLINE}inline;{$endif}
 var len: Integer;  // this is faster than str := str+chr !
 begin
-  len := length(str)+1;
-  SetLength(str,len);
-  str[len] := chr;
-end; // for NextGen / immutable strings, TStringBuilder should be faster 
+  len := length(str);
+  SetLength(str,len+1);
+  PChar(pointer(str))[len] := chr; // SetLength() made str unique
+end; // for NextGen / immutable strings, TStringBuilder could be faster 
 
-function JSONEscape(const Text: string): string;
+function StringToJSON(const Text: string): string;
 var len,j: integer;
 procedure DoEscape;
 var i: Integer;
 begin
-  result := '"'+copy(Text,1,j-1);
+  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
   for i := j to len do begin
     case Text[i] of
     #8: result := result+'\b';
@@ -267,11 +326,22 @@ begin
     end;
     end;
   // if we reached here, no character needs to be escaped in this string
-  result := '"'+Text+'"';
+  result := '"'+Text+'"'; // here FPC 2.7.1 erases UTF-8 encoding :(
 end;
 
-var
-  SettingsUS: TFormatSettings;
+procedure DoubleToJSON(Value: double; var result: string);
+const
+  FloatToStrDecSep: PChar  = @
+{$ifdef FPC}     DefaultFormatSettings. {$else}
+{$ifdef UNICODE} FormatSettings.        {$endif} {$endif}
+                   DecimalSeparator;
+var decsep: Char;
+begin
+  decsep := FloatToStrDecSep^;
+  FloatToStrDecSep^ := '.';
+  result := FloatToStr(Value);
+  FloatToStrDecSep^ := decsep;
+end;
 
 function ValueToJSON(const Value: variant): string;
 var I64: Int64;
@@ -280,14 +350,14 @@ begin
     result := TJSONVariantData(Value).ToJSON else
   if TVarData(Value).VType<=varNull then
     result := 'null' else
-  if VarIsStr(Value) then
-    result := JSONEscape(Value) else
   if VarIsOrdinal(Value) then begin
     I64 := Value;
     result := IntToStr(I64);
   end else
   if VarIsFloat(Value) then
-    result := FloatToStr(Value,SettingsUS) else
+    DoubleToJSON(Value,result) else
+  if VarIsStr(Value) then
+    result := StringToJSON(Value) else
     result := Value;
 end;
 
@@ -645,7 +715,7 @@ begin
   jvObject: begin
     result := '{';
     for i := 0 to VCount-1 do
-      result := result+JSONEscape(Names[i])+':'+ValueToJSON(Values[i])+',';
+      result := result+StringToJSON(Names[i])+':'+ValueToJSON(Values[i])+',';
     result[length(result)] := '}';
   end;
   jvArray: begin
@@ -710,8 +780,13 @@ end;
 function TJSONVariant.SetProperty(const V: TVarData; const Name: string;
   const Value: TVarData): Boolean;
 begin
+  {$ifdef FPC}
+  raise EJSONException.Create('Setting TJSONVariant via late-binding does not'+
+    ' work with FPC: use TJSONVariantData(jsonvar)[''prop''] := ... instead');
+  {$else}
   TJSONVariantData(V).SetValue(Name,variant(Value));
   result := true;
+  {$endif}
 end;
 
 
@@ -833,11 +908,6 @@ end;
 
 
 initialization
-  {$ifdef ISDELPHIXE}
-  SettingsUS := TFormatSettings.Create('en-US');
-  {$else}
-  GetLocaleFormatSettings($0409,SettingsUS);
-  {$endif}
   JSONVariantType := TJSONVariant.Create;
 
 end.

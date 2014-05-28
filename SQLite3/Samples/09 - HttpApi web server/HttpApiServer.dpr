@@ -57,6 +57,7 @@ var W: TTextWriter;
   end;
 
 begin
+  writeln(Ctxt.Method,' ',Ctxt.URL);
   if not IdemPChar(pointer(Ctxt.URL),'/ROOT')  then begin
     result := 404;
     exit;
@@ -127,7 +128,7 @@ begin
 end;
 
 begin
-  with TTestServer.Create('C:\') do
+  with TTestServer.Create('d:\Documents\Smart Mobile Projects\Featured Demos\Binary Data Import\www\') do
   try
     write('Server is now running on http://localhost:888/root'#13#10#13#10+
       'Press [Enter] to quit');
