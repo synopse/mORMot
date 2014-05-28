@@ -196,7 +196,8 @@ type
     procedure SynopseTableVariant;
     procedure SynopseDocVariant;
     procedure SynopseLateBinding;
-    procedure SynopseCrossplatform;
+    procedure SynopseCrossDirect;
+    procedure SynopseCrossVariant;
     {$ifdef TESTBSON}
     procedure SynopseToBSON;
     {$endif}
@@ -1289,7 +1290,7 @@ begin
   list.Free;
 end;
 
-procedure TTestTableContent.SynopseCrossplatform;
+procedure TTestTableContent.SynopseCrossDirect;
 var json: string;
     table: TJSONTable;
 begin
@@ -1304,6 +1305,27 @@ begin
     Check(table['YearOfBirth']<10000);
     Check((table['YearOfDeath']>1400)and(table['YearOfDeath']<2000));
     Check((table['RowID']>11011) or (table['Data']<>null));
+    inc(fRunConsoleOccurenceNumber);
+  end;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  table.Free;
+end;
+procedure TTestTableContent.SynopseCrossVariant;
+var json: string;
+    table: TJSONTable;
+    obj: variant;
+begin
+  json := AnyTextFileToString(fFileName,true);
+//  json := AnyTextFileToString('d:\Dev\Lib\SQLite3\exe\test1.json',true);
+  Owner.TestTimer.Start;
+  table := TJSONTable.Create(json);
+  fRunConsoleOccurenceNumber := 0;
+  while table.StepValue(obj) do begin
+    Check(obj.FirstName<>'');
+    Check(obj.LastName<>'');
+    Check(obj.YearOfBirth<10000);
+    Check((obj.YearOfDeath>1400)and(obj.YearOfDeath<2000));
+    Check((obj.RowID>11011) or (obj.Data<>null));
     inc(fRunConsoleOccurenceNumber);
   end;
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;

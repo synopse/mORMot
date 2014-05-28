@@ -175,10 +175,13 @@ type
     /// to be called in a loop to iterate through all data rows
     // - if returned true, Value[] contains the fields of this row
     function Step(SeekFirst: boolean=false): boolean;
+    /// to be called in a loop to iterate through all data rows
+    // - if returned true, RowValues contains this row as TJSONVariant
+    function StepValue(var RowValues: variant; SeekFirst: boolean=false): boolean;
     /// after Step() returned true, can be used to retrieve a field value by name
     property Value[const FieldName: string]: variant read Get; default;
     /// after Step() returned true, can be used to retrieve a field value by index
-    property RowValue: TVariantDynArray read fRowValues;
+    property RowValues: TVariantDynArray read fRowValues;
     /// the recognized field names
     property FieldNames: TStringDynArray read fFieldNames;
     /// the associated JSON content
@@ -906,6 +909,19 @@ begin
   result := true;
 end;
 
+function TJSONTable.StepValue(var RowValues: variant; SeekFirst: boolean): boolean;
+begin
+  result := Step(SeekFirst);
+  if not result then
+    exit;
+  if TVarData(RowValues).VType<>JSONVariantType.VarType then begin
+    VarClear(RowValues);
+    TJSONVariantData(RowValues).Init;
+  end;
+  TJSONVariantData(RowValues).VCount := Length(fFieldNames);
+  TJSONVariantData(RowValues).Names := fFieldNames;
+  TJSONVariantData(RowValues).Values := fRowValues;
+end;
 
 initialization
   JSONVariantType := TJSONVariant.Create;

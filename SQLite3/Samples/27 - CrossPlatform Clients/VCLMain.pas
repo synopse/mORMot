@@ -70,7 +70,7 @@ end;
 procedure TForm1.btnNextClick(Sender: TObject);
 begin
   if table.Step(Sender=btnRewind) then
-    mmoJSON.Text := JSONVariant(table.RowValue) else
+    mmoJSON.Text := JSONVariant(table.RowValues) else
     mmoJSON.Text := 'null';   
 end;
 
