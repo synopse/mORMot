@@ -866,16 +866,24 @@ begin
   if (PropInfo<>nil) and (Instance<>nil) then
   case PropInfo^.PropType^.Kind of
   tkInt64{$ifdef FPC}, tkQWord{$endif}:
-    SetInt64Prop(Instance,PropInfo,TVarData(Value).VInt64);
+    if TVarData(Value).VType=varInt64 then
+      SetInt64Prop(Instance,PropInfo,TVarData(Value).VInt64) else
+      SetOrdProp(Instance,PropInfo,Value);
   tkEnumeration, tkInteger, tkSet:
     SetOrdProp(Instance,PropInfo,Value);
   {$ifdef FPC}tkAString,{$endif} tkLString:
-    SetStrProp(Instance,PropInfo,Value);
+    if TVarData(Value).VType<=varNull then
+      SetStrProp(Instance,PropInfo,'') else
+      SetStrProp(Instance,PropInfo,Value);
   tkWString:
-    SetWideStrProp(Instance,PropInfo,Value);
+    if TVarData(Value).VType<=varNull then
+      SetWideStrProp(Instance,PropInfo,'') else
+      SetWideStrProp(Instance,PropInfo,Value);
   {$ifdef UNICODE}
   tkUString:
-    SetUnicodeStrProp(Instance,PropInfo,Value);
+    if TVarData(Value).VType<=varNull then
+      SetUnicodeStrProp(Instance,PropInfo,'') else
+      SetUnicodeStrProp(Instance,PropInfo,Value);
   {$endif}
   tkFloat:
     SetFloatProp(Instance,PropInfo,Value);
@@ -884,7 +892,8 @@ begin
   tkDynArray:
     if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray) then begin
       blob := nil;
-      Base64JSONStringToBytes(Value,TByteDynArray(blob));
+      if TVarData(Value).VType>varNull then
+        Base64JSONStringToBytes(Value,TByteDynArray(blob));
       SetDynArrayProp(Instance,PropInfo,blob);
     end;
   tkClass:

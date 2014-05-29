@@ -196,6 +196,7 @@ type
     procedure SynopseTableVariant;
     procedure SynopseDocVariant;
     procedure SynopseLateBinding;
+    procedure SynopseCrossORM;
     procedure SynopseCrossDirect;
     procedure SynopseCrossVariant;
     {$ifdef TESTBSON}
@@ -1220,6 +1221,39 @@ end;
 
 { TTestTableContent }
 
+type
+  TSQLRecordPeople = class(TSQLRecord)
+  private
+    fData: TSQLRawBlob;
+    fFirstName: RawUTF8;
+    fLastName: RawUTF8;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property FirstName: RawUTF8 read fFirstName write fFirstName;
+    property LastName: RawUTF8 read fLastName write fLastName;
+    property Data: TSQLRawBlob read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
+  TSQLRecordPeoplePersistent = class(TPersistent)
+  private
+    fRowID: integer;
+    fData: TByteDynArray;
+    fFirstName: string;
+    fLastName: string;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property RowID: integer read fRowID write fRowID;
+    property FirstName: string read fFirstName write fFirstName;
+    property LastName: string read fLastName write fLastName;
+    property Data: TByteDynArray read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
 procedure TTestTableContent.DownloadFilesIfNecessary;
 var i: integer;
 begin
@@ -1290,12 +1324,34 @@ begin
   list.Free;
 end;
 
+procedure TTestTableContent.SynopseCrossORM;
+var json: string;
+    table: TJSONTableObject;
+    people: TSQLRecordPeoplePersistent;
+begin
+  json := AnyTextFileToString(fFileName,true);
+  people := TSQLRecordPeoplePersistent.Create;
+  Owner.TestTimer.Start;
+  table := TJSONTableObject.Create(json);
+  fRunConsoleOccurenceNumber := 0;
+  while table.StepObject(people) do begin
+    Check(people.FirstName<>'');
+    Check(people.LastName<>'');
+    Check(people.YearOfBirth<10000);
+    Check((people.YearOfDeath>1400)and(people.YearOfDeath<2000));
+    Check((people.RowID>11011) or (people.Data<>nil));
+    inc(fRunConsoleOccurenceNumber);
+  end;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  table.Free;
+  people.Free;
+end;
+
 procedure TTestTableContent.SynopseCrossDirect;
 var json: string;
     table: TJSONTable;
 begin
   json := AnyTextFileToString(fFileName,true);
-//  json := AnyTextFileToString('d:\Dev\Lib\SQLite3\exe\test1.json',true);
   Owner.TestTimer.Start;
   table := TJSONTable.Create(json);
   fRunConsoleOccurenceNumber := 0;
@@ -1316,7 +1372,6 @@ var json: string;
     obj: variant;
 begin
   json := AnyTextFileToString(fFileName,true);
-//  json := AnyTextFileToString('d:\Dev\Lib\SQLite3\exe\test1.json',true);
   Owner.TestTimer.Start;
   table := TJSONTable.Create(json);
   fRunConsoleOccurenceNumber := 0;
@@ -1331,22 +1386,6 @@ begin
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
   table.Free;
 end;
-
-type
-  TSQLRecordPeople = class(TSQLRecord)
-  private
-    fData: TSQLRawBlob;
-    fFirstName: RawUTF8;
-    fLastName: RawUTF8;
-    fYearOfBirth: integer;
-    fYearOfDeath: word;
-  published
-    property FirstName: RawUTF8 read fFirstName write fFirstName;
-    property LastName: RawUTF8 read fLastName write fLastName;
-    property Data: TSQLRawBlob read fData write fData;
-    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
-    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
-  end;
 
 procedure TTestTableContent.SynopseORMLoop;
 var people: TSQLRecordPeople;
@@ -1369,7 +1408,7 @@ begin
 end;
 
 procedure TTestTableContent.SynopseORMList;
-{$ifdef ISDELPHI2010} // use generic syntax ;)
+{$ifdef ISDELPHI2010} // use generic syntax, just for fun ;)
 var json: RawUTF8;
     people: TSQLRecordPeople;
     table: TSQLTableJSON;
