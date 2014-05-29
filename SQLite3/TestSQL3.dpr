@@ -92,12 +92,13 @@ uses
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',
-  mORMotMongoDB in 'mORMotMongoDB.pas',
   {$ifndef NOVARIANTS}
   SynMustache in '..\SynMustache.pas',
   {$ifndef CPU64}
+  {$ifndef FPC}
   SynSMAPI in '..\SynSMAPI.pas',
   SynSM in '..\SynSM.pas',
+  {$endif FPC}
   {$endif CPU64}
   {$endif NOVARIANTS}
   {$endif LVCL}
@@ -126,6 +127,7 @@ uses
 {$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
   mORMotDB in 'mORMotDB.pas',
+  mORMotMongoDB in 'mORMotMongoDB.pas',
   SynZipFiles in '..\SynZipFiles.pas',
 {$endif DELPHI5OROLDER}
 {$endif FPC}

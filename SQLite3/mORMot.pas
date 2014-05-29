@@ -4866,7 +4866,7 @@ type
     property FillCurrentRow: integer read GetFillCurrentRow;
     {/ this property contains the internal state counter of the server database
       when the data was retrieved from it
-      - may be used to check if retrieved data may be out of date }
+      - can be used to check if retrieved data may be out of date }
     property InternalState: cardinal read fInternalState;
   published
     { published properties in inherited classes will be interpreted as SQL fields }

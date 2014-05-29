@@ -206,6 +206,7 @@ type
     fTypeInfo: pointer;
     fPropInfo: array of PPropInfo;
     procedure FillPropInfo(aTypeInfo: pointer); virtual;
+    procedure FillInstance(Instance: TObject); virtual;
     function GetPropInfo(aTypeInfo: PTypeInfo; const PropName: string): PPropInfo; virtual;
   public
     /// to be called in a loop to iterate through all data rows
@@ -248,6 +249,20 @@ function StringToJSON(const Text: string): string;
 /// compute the JSON representation of a floating-point value
 procedure DoubleToJSON(Value: double; var result: string);
 
+/// compute the ISO-8601 JSON text representation of a date/time value
+// - e.g. "YYYY-MM-DD" "Thh:mm:ss" or "YYYY-MM-DDThh:mm:ss"
+// - if Date is 0, will return ""
+function DateTimeToJSON(Value: TDateTime): string;
+
+/// compute the unquoted ISO-8601 text representation of a date/time value
+// - e.g. 'YYYY-MM-DD' 'Thh:mm:ss' or 'YYYY-MM-DDThh:mm:ss'
+// - if Date is 0, will return ''
+function DateTimeToIso8601(Value: TDateTime): string;
+
+/// convert unquoted ISO-8601 text representation into a date/time value
+// - e.g. 'YYYY-MM-DD' 'Thh:mm:ss' or 'YYYY-MM-DDThh:mm:ss'
+function Iso8601ToDateTime(const Value: string): TDateTime;
+
 /// compute the JSON representation of a variant value
 function ValueToJSON(const Value: variant): string;
 
@@ -286,8 +301,31 @@ const
 // - file should be existing, otherwise an exception is raised
 function UTF8FileToString(const aFileName: TFileName): string;
 
+/// this function is faster than str := str+chr !
+procedure AppendChar(var str: string; chr: Char);
+  {$ifdef HASINLINE}inline;{$endif}
+  
+/// check that two Ascii-7 latin text do match
+function IdemPropName(const PropName1,PropName2: string): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+
 
 implementation
+
+function IdemPropName(const PropName1,PropName2: string): boolean;
+var L,i: integer;
+begin
+  result := false;
+  L := length(PropName2);
+  if length(PropName1)<>L then
+    exit;
+  for i := 1 to L do
+    if (ord(PropName1[i]) xor ord(PropName2[i])) and
+      {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
+      exit;
+  result := true;
+end;
 
 {$ifdef FPC}
 // assume string is UTF-8 encoded (as with Lazarus/LCL)
@@ -344,8 +382,7 @@ begin
 end;
 
 procedure AppendChar(var str: string; chr: Char);
-  {$ifdef HASINLINE}inline;{$endif}
-var len: Integer;  // this is faster than str := str+chr !
+var len: Integer;
 begin
   len := length(str);
   SetLength(str,len+1);
@@ -389,7 +426,7 @@ begin
 end;
 
 procedure DoubleToJSON(Value: double; var result: string);
-const
+const // warning: this is NOT thread-safe
   FloatToStrDecSep: PChar  = @
 {$ifdef FPC}     DefaultFormatSettings. {$else}
 {$ifdef UNICODE} FormatSettings.        {$endif} {$endif}
@@ -400,6 +437,59 @@ begin
   FloatToStrDecSep^ := '.';
   result := FloatToStr(Value);
   FloatToStrDecSep^ := decsep;
+end;
+
+function DateTimeToJSON(Value: TDateTime): string;
+begin // e.g. "YYYY-MM-DD" "Thh:mm:ss" or "YYYY-MM-DDThh:mm:ss"
+  result := '"'+DateTimeToIso8601(Value)+'"';
+end;
+
+function DateTimeToIso8601(Value: TDateTime): string;
+begin // e.g. YYYY-MM-DD Thh:mm:ss or YYYY-MM-DDThh:mm:ss
+  if Value=0 then
+    result := '' else
+  if frac(Value)=0 then
+    result := FormatDateTime('yyyy"-"mm"-"dd',Value) else
+  if trunc(Value)=0 then
+    result := FormatDateTime('"T"hh":"nn":"ss',Value) else
+    result := FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss',Value);
+end;
+
+function Iso8601ToDateTime(const Value: string): TDateTime;
+var Y,M,D, HH,MI,SS: cardinal;
+begin //  YYYY-MM-DD   Thh:mm:ss  or  YYYY-MM-DDThh:mm:ss
+      //  1234567890   123456789      1234567890123456789
+  result := 0;
+  case Length(Value) of
+  9: if (Value[1]='T') and (Value[4]=':') and (Value[7]=':') then begin
+    HH := ord(Value[2])*10+ord(Value[3])-(48+480);
+    MI := ord(Value[5])*10+ord(Value[6])-(48+480);
+    SS := ord(Value[8])*10+ord(Value[9])-(48+480);
+    if (HH<24) and (MI<60) and (SS<60) then
+      result := EncodeTime(HH,MI,SS,0);
+  end;
+  10: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) then begin
+    Y := ord(Value[1])*1000+ord(Value[2])*100+
+         ord(Value[3])*10+ord(Value[4])-(48+480+4800+48000);
+    M := ord(Value[6])*10+ord(Value[7])-(48+480);
+    D := ord(Value[9])*10+ord(Value[10])-(48+480);
+    if (Y<=9999) and ((M-1)<12) and ((D-1)<31) then
+      result := EncodeDate(Y,M,D);
+  end;
+  19: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) and
+         (ord(Value[11]) in [ord(' '),ord('T')]) and (Value[14]=':') and (Value[17]=':') then begin
+    Y := ord(Value[1])*1000+ord(Value[2])*100+
+         ord(Value[3])*10+ord(Value[4])-(48+480+4800+48000);
+    M := ord(Value[6])*10+ord(Value[7])-(48+480);
+    D := ord(Value[9])*10+ord(Value[10])-(48+480);
+    HH := ord(Value[12])*10+ord(Value[13])-(48+480);
+    MI := ord(Value[15])*10+ord(Value[16])-(48+480);
+    SS := ord(Value[18])*10+ord(Value[19])-(48+480);
+    if (Y<=9999) and ((M-1)<12) and ((D-1)<31) and
+       (HH<24) and (MI<60) and (SS<60) then
+      result := EncodeDate(Y,M,D)+EncodeTime(HH,MI,SS,0);
+  end;
+  end;
 end;
 
 function ValueToJSON(const Value: variant): string;
@@ -415,6 +505,8 @@ begin
     I64 := Value;
     result := IntToStr(I64);
   end else
+  if TVarData(Value).VType=varDate then
+    result := DateTimeToJSON(TVarData(Value).VDouble) else
   if VarIsFloat(Value) then
     DoubleToJSON(Value,result) else
   if VarIsStr(Value) then
@@ -783,27 +875,27 @@ begin
   if PropWrap(PropInfo^.GetProc).Kind<>$FF then
   {$endif}
     result := nil else // we only allow setting if we know the field address
-    result := PPointer(NativeInt(Instance)+NativeInt(PropInfo^.GetProc) and $00FFFFFF)^;
+    result := PPointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF)^;
 end;
 
 {$ifdef FPC}
 function fpc_Copy_internal (Src, Dest, TypeInfo : Pointer) : SizeInt;[external name 'FPC_COPY'];
-procedure CopyArray(dest, source, typeInfo: Pointer; cnt: Integer);
+procedure CopyDynArray(dest, source, typeInfo: Pointer);
 begin
   fpc_copy_internal(source,dest,typeInfo);
 end;
 {$else}
-procedure CopyArray(dest, source, typeInfo: Pointer; cnt: Integer);
+procedure CopyDynArray(dest, source, typeInfo: Pointer);
 asm
   mov ecx,[ecx]
-  push dword ptr [ebp+8]
+  push 1
   call System.@CopyArray
 end;
 {$endif}
 
 procedure SetDynArrayProp(Instance: TObject; PropInfo: PPropInfo;
   Value: Pointer);
-var Addr: NativeInt;
+var Addr: NativeUInt;
 begin 
   if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
     {$ifdef FPC}
@@ -812,15 +904,15 @@ begin
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
     {$endif}
       exit else // we only allow setting if we know the field address
-      Addr := NativeInt(Instance)+NativeInt(PropInfo^.GetProc) and $00FFFFFF else
+      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF else
     {$ifdef FPC}
     if (PropInfo^.PropProcs shr 2) and 3=0 then
     {$else}
     if PropWrap(PropInfo^.SetProc).Kind=$FF then
     {$endif}
-      Addr := NativeInt(Instance)+NativeInt(PropInfo^.SetProc) and $00FFFFFF else
+      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.SetProc) and $00FFFFFF else
       exit;
-  CopyArray(pointer(Addr),@Value,PropInfo^.PropType,1);
+  CopyDynArray(pointer(Addr),@Value,PropInfo^.PropType);
 end;
 
 {$endif UNICODE}
@@ -829,7 +921,8 @@ function GetInstanceProp(Instance: TObject; PropInfo: PPropInfo): variant;
 var obj: TObject;
 begin
   VarClear(result);
-  if (PropInfo<>nil) and (Instance<>nil) then
+  if (PropInfo=nil) or (Instance=nil) then
+    exit;
   case PropInfo^.PropType^.Kind of
   tkInt64{$ifdef FPC}, tkQWord{$endif}:
     result := GetInt64Prop(Instance,PropInfo);
@@ -844,7 +937,9 @@ begin
     result := GetUnicodeStrProp(Instance,PropInfo);
   {$endif}
   tkFloat:
-    result := GetFloatProp(Instance,PropInfo);
+    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then
+      result := DateTimeToIso8601(GetFloatProp(Instance,PropInfo)) else
+      result := GetFloatProp(Instance,PropInfo);
   tkVariant:
     result := GetVariantProp(Instance,PropInfo);
   tkClass: begin
@@ -886,7 +981,10 @@ begin
       SetUnicodeStrProp(Instance,PropInfo,Value);
   {$endif}
   tkFloat:
-    SetFloatProp(Instance,PropInfo,Value);
+    if (PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime)) and
+       VarIsStr(Value) then
+      SetFloatProp(Instance,PropInfo,Iso8601ToDateTime(Value)) else
+      SetFloatProp(Instance,PropInfo,Value);
   tkVariant:
     SetVariantProp(Instance,PropInfo,Value);
   tkDynArray:
@@ -1340,13 +1438,17 @@ end;
 { TJSONTableObject }
 
 function TJSONTableObject.StepObject(Instance: TObject; SeekFirst: boolean=false): boolean;
-var i: integer;
 begin
   if (Instance=nil) then
     result := false else
     result := Step(SeekFirst);
-  if not result then
-    exit;
+  if result then
+    FillInstance(Instance);
+end;
+
+procedure TJSONTableObject.FillInstance(Instance: TObject);
+var i: integer;
+begin
   if fTypeInfo<>Instance.ClassInfo then
     FillPropInfo(Instance.ClassInfo);
   for i := 0 to Length(fFieldNames)-1 do

@@ -1196,12 +1196,12 @@ begin
       inc(s2,s1);
       inc(s1,P^[3]);
       inc(s2,s1);
-      inc(PtrUInt(P),16);
+      inc(PByte(P),16);
     end;
     for i := 1 to (L shr 2)and 3 do begin // 4 bytes (DWORD) by loop
       inc(s1,P^[0]);
       inc(s2,s1);
-      inc(PtrUInt(P),4);
+      inc(PInteger(P));
     end;
     case L and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(P)^);

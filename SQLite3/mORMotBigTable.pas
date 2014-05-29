@@ -82,7 +82,7 @@ type
     // overridden methods calling the fBig instance
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineLockedNextID: Integer;
-    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false): RawUTF8; override;
+    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(Table: TSQLRecordClass; aID: integer;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
@@ -172,7 +172,7 @@ begin
 end;
 
 function TSQLRestStorageBigTable.EngineList(const SQL: RawUTF8;
-  ForceAJAX: Boolean): RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 begin
 
 end;

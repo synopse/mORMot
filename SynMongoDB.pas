@@ -497,7 +497,7 @@ type
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
     // - this method wil be faster than using a BSONWriteDoc(_ArrFast(...))
-    procedure BSONWriteArray(const Items: array of const); 
+    procedure BSONWriteArray(const Items: array of const);
     /// write an array of integers as a BSON Document
     procedure BSONWriteArrayOfInteger(const Integers: array of integer);
     /// write some BSON document from a supplied (extended) JSON array or object
@@ -1006,8 +1006,16 @@ type
     property MongoRequestOpCode: TMongoOperation read fRequestOpCode;
   end;
 
+  /// a MongoDB client abstract ancestor which is able to create a BULK
+  // command message for MongoDB >= 2.6 instead of older dedicated Wire messages
+  TMongoRequestWritable = class(TMongoRequest)
+  protected
+
+  public
+  end;
+
   /// a MongoDB client message to update a document in a collection
-  TMongoRequestUpdate = class(TMongoRequest)
+  TMongoRequestUpdate = class(TMongoRequestWritable)
   protected
     fSelector, fUpdate: TVarData;
   public
@@ -1028,7 +1036,7 @@ type
   end;
 
   /// a MongoDB client message to insert one or more documents in a collection
-  TMongoRequestInsert = class(TMongoRequest)
+  TMongoRequestInsert = class(TMongoRequestWritable)
   public
     /// initialize a MongoDB client message to insert one or more documents in
     // a collection, supplied as variants
@@ -1056,7 +1064,7 @@ type
   end;
 
   /// a MongoDB client message to delete one or more documents in a collection
-  TMongoRequestDelete = class(TMongoRequest)
+  TMongoRequestDelete = class(TMongoRequestWritable)
   protected
     fQuery: TVarData;
   public
@@ -2130,9 +2138,11 @@ type
     /// initialize the Exception for a given request
     constructor CreateFmt(const aMsg: string; const Args: array of const;
       aConnection: TMongoConnection); reintroduce;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log the connection parameters
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
+    {$endif}
     /// the associated connection
     property Connection: TMongoConnection read fConnection;
   end;
@@ -2146,9 +2156,11 @@ type
     /// initialize the Exception for a given request
     constructor CreateFmt(const aMsg: string; const Args: array of const;
       aDatabase: TMongoDatabase); reintroduce;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log the database parameters
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
+    {$endif}
     /// the associated Database
     property Database: TMongoDatabase read fDatabase;
   end;
@@ -2173,9 +2185,11 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
       aRequest: TMongoRequest; const aErrorDoc: TDocVariantData); reintroduce; overload;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log both the failing request and the returned error message
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
+    {$endif}
     /// the associated error reply document
     property ErrorReply: TMongoReplyCursor read fError;
     /// the associated error reply document, as a TDocVariant instance
@@ -4013,12 +4027,12 @@ constructor TMongoRequestUpdate.Create(const FullCollectionName: RawUTF8;
   const Selector, Update: variant; Flags: TMongoUpdateFlags);
 begin
   inherited Create(FullCollectionName,opUpdate,0,0);
+  fSelector := TVarData(Selector);
+  fUpdate := TVarData(Update);
   WriteCollectionName(0,FullCollectionName);
   Write4(byte(Flags));
   BSONWriteParam(Selector);
   BSONWriteParam(Update);
-  fSelector := TVarData(Selector);
-  fUpdate := TVarData(Update);
 end;
 
 procedure TMongoRequestUpdate.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
@@ -4070,10 +4084,10 @@ constructor TMongoRequestDelete.Create(const FullCollectionName: RawUTF8;
   const Selector: variant; Flags: TMongoDeleteFlags=[]);
 begin
   inherited Create(FullCollectionName,opDelete,0,0);
+  fQuery := TVarData(Selector);
   WriteCollectionName(byte(Flags),FullCollectionName);
   Write4(byte(Flags));
   BSONWriteParam(Selector);
-  fQuery := TVarData(Selector);
 end;
 
 procedure TMongoRequestDelete.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
@@ -4094,14 +4108,14 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUTF8;
 begin
   inherited Create(FullCollectionName,opQuery,0,0);
   fNumberToReturn := NumberToReturn;
+  fQuery := TVarData(Query);
+  fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
   WriteCollectionName(byte(Flags),FullCollectionName);
   Write4(NumberToSkip);
   Write4(NumberToReturn);
   BSONWriteParam(Query);
   if TVarData(ReturnFieldsSelector).VType>varNull then
     BSONWriteParam(ReturnFieldsSelector);
-  fQuery := TVarData(Query);
-  fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
 end;
 
 procedure TMongoRequestQuery.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
@@ -4409,7 +4423,8 @@ begin
   FreeAndNil(fSocket);
 end;
 
-procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery; var result: TVariantDynArray);
+procedure TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery;
+  var result: TVariantDynArray);
 begin
   result := nil;
   GetRepliesAndFree(Query,ReplyDocVariant,result);
@@ -4699,6 +4714,7 @@ begin
   fConnection := aConnection;
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
 function EMongoConnectionException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
@@ -4708,6 +4724,7 @@ begin
     WR.Add('using %:%  ',[fConnection.ServerAddress,fConnection.ServerPort]);
   result := false; // log stack trace
 end;
+{$endif}
 
 
 { EMongoRequestException }
@@ -4740,6 +4757,7 @@ begin
   fErrorDoc := variant(aErrorDoc);
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
 function EMongoRequestException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
@@ -4756,6 +4774,7 @@ begin
   end;
   result := false; // log stack trace
 end;
+{$endif}
 
 function EMongoRequestException.GetErrorDoc: variant;
 begin
@@ -4794,6 +4813,7 @@ begin
   fDatabase := aDatabase;
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
 function EMongoDatabaseException.CustomLog(WR: TTextWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
@@ -4801,7 +4821,7 @@ begin
   WR.AddJSONEscape(['Database',fDatabase.Name]);
   result := false; // log stack trace
 end;
-
+{$endif}
 
 { TMongoClient }
 

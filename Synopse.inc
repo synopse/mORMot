@@ -185,6 +185,10 @@
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
   {$endif CPU64}
 
+  {$define FPC_OR_PUREPASCAL}
+  // exceptions interception code in FPC differs from Delphi
+  {$define NOEXCEPTIONINTERCEPT}
+
 {$else FPC}
 
   {$ifdef CPUX64}
@@ -197,6 +201,10 @@
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$undef CPU64}
   {$endif CPUX64}
+
+  // defines if exceptions shall not be intercepted
+  {.$define NOEXCEPTIONINTERCEPT}
+
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$ifdef VER140} // Delphi 6
       {$define DELPHI6OROLDER}
@@ -257,6 +265,7 @@
 
 {$ifdef PUREPASCAL}
   {$define NODELPHIASM}
+  {$define FPC_OR_PUREPASCAL}
 {$endif PUREPASCAL}
 
 {$R-} // disable Range checking in our code

@@ -3420,6 +3420,24 @@ begin
   fInt := Value;
 end;
 
+{ TSQLRecordPeople }
+
+function TSQLRecordPeople.DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
+begin
+  Result := aClient.CallBackGetResult('DataAsHex',[],RecordClass,fID);
+end;
+
+class function TSQLRecordPeople.Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
+var err: integer;
+const METHOD: array[boolean] of RawUTF8 = ('sum','sum2');
+begin
+  Result := GetExtended(pointer(aClient.CallBackGetResult(
+    METHOD[Method2],['a',a,'b',b])),err);
+end;
+
+{$endif FPC}
+
+
 {$ifndef NOVARIANTS}
 
 type
@@ -3610,22 +3628,6 @@ end;
 
 {$endif NOVARIANTS}
 
-{ TSQLRecordPeople }
-
-function TSQLRecordPeople.DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
-begin
-  Result := aClient.CallBackGetResult('DataAsHex',[],RecordClass,fID);
-end;
-
-class function TSQLRecordPeople.Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
-var err: integer;
-const METHOD: array[boolean] of RawUTF8 = ('sum','sum2');
-begin
-  Result := GetExtended(pointer(aClient.CallBackGetResult(
-    METHOD[Method2],['a',a,'b',b])),err);
-end;
-
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 
 
@@ -3958,7 +3960,9 @@ var J,U: RawUTF8;
 {$endif}
     Trans: TTestCustomJSON2;
     Disco: TTestCustomDiscogs;
+{$ifndef FPC}
     Cache: TSQLRestCacheEntryValue;
+{$endif}
 {$ifndef DELPHI5OROLDER}
     K: RawUTF8;
     Valid: boolean;
@@ -4318,6 +4322,7 @@ begin
   Check(JAV.D='4');
 {$endif}
 
+  {$ifndef FPC}
   Finalize(Cache);
   FillChar(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
@@ -4332,6 +4337,7 @@ begin
   Check(Cache.ID=210);
   Check(Cache.TimeStamp64=2200);
   Check(Cache.JSON='test2');
+  {$endif}
 
   {$ifdef ISDELPHI2010}
   fillchar(nav,sizeof(nav),0);
@@ -4807,11 +4813,15 @@ begin
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArrayVariant),__TTestCustomJSONArrayVariant);
   {$endif}
+  {$ifndef FPC}
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TSQLRestCacheEntryValue),__TSQLRestCacheEntryValue);
+  {$endif}
   TestJSONSerialization;
   TestJSONSerialization; // test twice for safety
+  {$ifndef FPC}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSQLRestCacheEntryValue),'');
+  {$endif}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),'');
@@ -5021,7 +5031,7 @@ begin
   u := oid.ToText;
   Check(u=BSONID);
   o := ObjectID('507f191e810c19729de860ea');
-  u := o;
+  u := string(o);
   Check(u=BSONID);
   d2 := Iso8601ToDateTime('2012-10-17T20:46:22');
   od := d2;
@@ -5036,7 +5046,7 @@ begin
   Check(o=o2);
   o := ObjectID;
   Check(Abs(NowUTC-TDateTime(o))<0.1);
-  oid.FromText(o);
+  oid.FromText(string(o));
   Check(Abs(NowUTC-oid.CreateDateTime)<0.1);
   Check(oid.ProcessID=GetCurrentThreadId);
   o2 := ObjectID;
@@ -5105,7 +5115,7 @@ begin
   Check(VariantSaveMongoJSON(o2,modMongoStrict)=BSONAWESOME);
   b := pointer(bsonDat);
   Check(o2=BSONAWESOME,'BSONVariant casted to string');
-  u := o2;
+  u := string(o2);
   Check(u='{BSON:["awesome",5.05,1986]}','TBSONVariant: mongoShell syntax');
   BSONParseLength(b);
   Check(BSONParseNextElement(b,name,value,asDocVariantPerReference));
@@ -10891,6 +10901,7 @@ end;
 
 
 {$ifndef DELPHI5OROLDER}
+{$ifndef FPC}
 
 { TTestMultiThreadProcess }
 
@@ -11211,6 +11222,7 @@ begin
   Sleep(0); // is expected for proper process
 end;
 
+{$endif FPC}
 {$endif DELPHI5OROLDER}
 
 end.
