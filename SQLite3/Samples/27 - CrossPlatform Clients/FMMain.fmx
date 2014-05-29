@@ -6,7 +6,7 @@ object Form1: TForm1
   ClientWidth = 605
   FormFactor.Width = 320
   FormFactor.Height = 480
-  FormFactor.Devices = [dkDesktop, dkiPhone, dkiPad]
+  FormFactor.Devices = [Desktop, iPhone, iPad]
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   DesignerMobile = False
@@ -14,21 +14,22 @@ object Form1: TForm1
   DesignerHeight = 0
   DesignerDeviceName = ''
   DesignerOrientation = 0
+  DesignerOSVersion = ''
   object lbl1: TLabel
     AutoSize = True
-    Height = 27.000000000000000000
+    Height = 16.000000000000000000
     Position.X = 24.000000000000000000
     Position.Y = 16.000000000000000000
     Text = 'mORMot Client using FireMonkey'
-    Width = 301.000000000000000000
+    Width = 181.000000000000000000
   end
   object edtValue: TEdit
+    Touch.InteractiveGestures = [LongTap, DoubleTap]
     TabOrder = 1
     Position.X = 32.000000000000000000
     Position.Y = 80.000000000000000000
     Width = 153.000000000000000000
     Height = 22.000000000000000000
-    KillFocusByReturn = False
     OnChangeTracking = edtValueChange
   end
   object lbl2: TLabel
@@ -48,28 +49,64 @@ object Form1: TForm1
     Width = 91.000000000000000000
   end
   object mmoJSON: TMemo
+    Touch.InteractiveGestures = [Pan, LongTap, DoubleTap]
     Height = 137.000000000000000000
     Position.X = 32.000000000000000000
     Position.Y = 136.000000000000000000
     TabOrder = 4
     Width = 545.000000000000000000
+    TextSettings.WordWrap = True
   end
-  object btnRewind: TButton
-    Height = 22.000000000000000000
-    Position.X = 264.000000000000000000
-    Position.Y = 80.000000000000000000
-    TabOrder = 5
-    Text = 'First'
-    Width = 80.000000000000000000
-    OnClick = btnNextClick
+  object grpTable: TGroupBox
+    Height = 89.000000000000000000
+    Position.X = 240.000000000000000000
+    Position.Y = 32.000000000000000000
+    Text = 'Table'
+    Width = 113.000000000000000000
+    TabOrder = 7
+    object btnRewind: TButton
+      Height = 22.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 24.000000000000000000
+      TabOrder = 5
+      Text = 'First'
+      Width = 80.000000000000000000
+      OnClick = btnNextClick
+    end
+    object btnNext: TButton
+      Height = 22.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 54.000000000000000000
+      TabOrder = 6
+      Text = 'Next'
+      Width = 80.000000000000000000
+      OnClick = btnNextClick
+    end
   end
-  object btnNext: TButton
-    Height = 22.000000000000000000
-    Position.X = 352.000000000000000000
-    Position.Y = 80.000000000000000000
+  object grpORM: TGroupBox
+    Height = 89.000000000000000000
+    Position.X = 376.000000000000000000
+    Position.Y = 32.000000000000000000
+    Text = 'ORM'
+    Width = 113.000000000000000000
     TabOrder = 6
-    Text = 'Next'
-    Width = 80.000000000000000000
-    OnClick = btnNextClick
+    object btnRewindORM: TButton
+      Height = 22.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 24.000000000000000000
+      TabOrder = 5
+      Text = 'First'
+      Width = 80.000000000000000000
+      OnClick = btnORMClick
+    end
+    object btnNextORM: TButton
+      Height = 22.000000000000000000
+      Position.X = 16.000000000000000000
+      Position.Y = 54.000000000000000000
+      TabOrder = 6
+      Text = 'Next'
+      Width = 80.000000000000000000
+      OnClick = btnORMClick
+    end
   end
 end

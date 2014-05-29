@@ -12,16 +12,21 @@ type
     edtValue: TEdit;
     lbl2: TLabel;
     mmoJSON: TMemo;
-    btnRewind: TButton;
-    btnNext: TButton;
+    grpTable: TGroupBox;
+    btnTableRewind: TButton;
+    btnTableNext: TButton;
+    grpORM: TGroupBox;
+    btnORMFirst: TButton;
+    btnORMNext: TButton;
     procedure FormCreate(Sender: TObject);
     procedure edtValueChange(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnNextClick(Sender: TObject);
+    procedure btnTableNextClick(Sender: TObject);
+    procedure ORMClick(Sender: TObject);
   private
   public
     doc: variant;
-    table: TJSONTable;
+    table: TJSONTableObject;
   end;
 
 var
@@ -35,7 +40,18 @@ procedure TForm1.FormCreate(Sender: TObject);
 var json: string;
     FN: TFileName;
     level: integer;
+    b,c: TByteDynArray;
+    i: integer;
 begin
+  assert(b=nil);
+  for i := 0 to 50 do begin
+    SetLength(b,i);
+    if i>0 then
+      b[i-1] := i;
+    assert(Base64JSONStringToBytes(BytesToBase64JSONString(b),c));
+    assert(length(c)=i);
+    assert(CompareMem(Pointer(b),pointer(c),i));
+  end;
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   assert(doc.test=1234);
   assert(doc.name='Joh"n'#13);
@@ -52,7 +68,7 @@ begin
     if FileExists(FN) then
       break else
       FN := '..\'+FN;
-  table := TJSONTable.Create(UTF8FileToString(FN));
+  table := TJSONTableObject.Create(UTF8FileToString(FN));
   assert(length(table.FieldNames)=6);
 end;
 
@@ -67,11 +83,42 @@ begin
   table.Free;
 end;
 
-procedure TForm1.btnNextClick(Sender: TObject);
+procedure TForm1.btnTableNextClick(Sender: TObject);
 begin
-  if table.Step(Sender=btnRewind) then
+  if table.Step(Sender=btnTableRewind) then
     mmoJSON.Text := JSONVariant(table.RowValues) else
-    mmoJSON.Text := 'null';   
+    mmoJSON.Text := 'null';
+end;
+
+type
+  TSQLRecordPeople = class(TPersistent)
+  private
+    fRowID: integer;
+    fData: TByteDynArray;
+    fFirstName: string;
+    fLastName: string;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property RowID: integer read fRowID write fRowID;
+    property FirstName: string read fFirstName write fFirstName;
+    property LastName: string read fLastName write fLastName;
+    property Data: TByteDynArray read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
+procedure TForm1.ORMClick(Sender: TObject);
+var people: TSQLRecordPeople;
+begin
+  people := TSQLRecordPeople.Create;
+  try
+    if table.StepObject(people,Sender=btnORMFirst) then
+      mmoJSON.Text := ObjectToJSON(people) else
+      mmoJSON.Text := 'null';
+  finally
+    people.Free;
+  end;
 end;
 
 end.

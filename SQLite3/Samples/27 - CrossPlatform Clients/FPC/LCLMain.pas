@@ -9,21 +9,29 @@ uses
   Dialogs, SynCrossPlatformJSON, StdCtrls, FileUtil;
 
 type
+
+  { TForm1 }
+
   TForm1 = class(TForm)
+    btnNext: TButton;
+    btnNext1: TButton;
+    btnRewind: TButton;
+    btnRewind1: TButton;
+    grpTable: TGroupBox;
+    grpORM: TGroupBox;
     lbl1: TLabel;
     edtValue: TEdit;
     lbl2: TLabel;
     mmoJSON: TMemo;
-    btnRewind: TButton;
-    btnNext: TButton;
+    procedure ORMClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure edtValueChange(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnNextClick(Sender: TObject);
+    procedure TableClick(Sender: TObject);
   private
   public
     doc: variant;
-    table: TJSONTable;
+    table: TJSONTableObject;
   end;
 
 var
@@ -55,7 +63,7 @@ begin
     if FileExists(FN) then
       break else
       FN := IncludeTrailingPathDelimiter('..')+FN;
-  table := TJSONTable.Create(UTF8FileToString(FN));
+  table := TJSONTableObject.Create(UTF8FileToString(FN));
   assert(length(table.FieldNames)=6);
 end;
 
@@ -70,13 +78,44 @@ begin
   table.Free;
 end;
 
-procedure TForm1.btnNextClick(Sender: TObject);
+procedure TForm1.TableClick(Sender: TObject);
 var json: string;
 begin
   if table.Step(Sender=btnRewind) then
-    json := JSONVariant(table.RowValue) else
+    json := JSONVariant(table.RowValues) else
     json := 'null';
   mmoJSON.Text := json;
+end;
+
+type
+  TSQLRecordPeople = class(TPersistent)
+  private
+    fRowID: integer;
+    fData: TByteDynArray;
+    fFirstName: string;
+    fLastName: string;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property RowID: integer read fRowID write fRowID;
+    property FirstName: string read fFirstName write fFirstName;
+    property LastName: string read fLastName write fLastName;
+    property Data: TByteDynArray read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
+procedure TForm1.ORMClick(Sender: TObject);
+var people: TSQLRecordPeople;
+begin
+  people := TSQLRecordPeople.Create;
+  try
+    if table.StepObject(people,Sender=btnRewind1) then
+      mmoJSON.Text := ObjectToJSON(people) else
+      mmoJSON.Text := 'null';
+  finally
+    people.Free;
+  end;
 end;
 
 end.

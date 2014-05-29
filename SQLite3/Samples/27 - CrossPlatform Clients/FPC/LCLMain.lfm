@@ -25,7 +25,7 @@ object Form1: TForm1
   object lbl2: TLabel
     Left = 16
     Height = 13
-    Top = 72
+    Top = 80
     Width = 82
     Caption = 'Computed JSON:'
     ParentColor = False
@@ -40,27 +40,65 @@ object Form1: TForm1
   end
   object mmoJSON: TMemo
     Left = 16
-    Height = 65
-    Top = 88
+    Height = 49
+    Top = 104
     Width = 425
     TabOrder = 1
   end
-  object btnRewind: TButton
-    Left = 208
-    Height = 25
-    Top = 32
-    Width = 75
-    Caption = 'First'
-    OnClick = btnNextClick
+  object grpTable: TGroupBox
+    Left = 160
+    Height = 83
+    Top = 8
+    Width = 88
+    Caption = 'Table'
+    ClientHeight = 65
+    ClientWidth = 84
     TabOrder = 2
+    object btnRewind: TButton
+      Left = 6
+      Height = 25
+      Top = 0
+      Width = 75
+      Caption = 'First'
+      OnClick = TableClick
+      TabOrder = 0
+    end
+    object btnNext: TButton
+      Left = 6
+      Height = 25
+      Top = 32
+      Width = 75
+      Caption = 'Next'
+      OnClick = TableClick
+      TabOrder = 1
+    end
   end
-  object btnNext: TButton
-    Left = 288
-    Height = 25
-    Top = 32
-    Width = 75
-    Caption = 'Next'
-    OnClick = btnNextClick
+  object grpORM: TGroupBox
+    Left = 256
+    Height = 83
+    Top = 10
+    Width = 88
+    Caption = 'ORM'
+    ClientHeight = 65
+    ClientWidth = 84
     TabOrder = 3
+    object btnRewind1: TButton
+      Left = 6
+      Height = 25
+      Top = 0
+      Width = 75
+      Caption = 'First'
+      OnClick = ORMClick
+      TabOrder = 0
+    end
+    object btnNext1: TButton
+      Left = 6
+      Height = 25
+      Top = 32
+      Width = 75
+      Caption = 'Next'
+      OnClick = ORMClick
+      TabOrder = 1
+    end
   end
 end

@@ -15,16 +15,21 @@ type
     lbl2: TLabel;
     lbl3: TLabel;
     mmoJSON: TMemo;
+    grpTable: TGroupBox;
     btnRewind: TButton;
     btnNext: TButton;
+    grpORM: TGroupBox;
+    btnRewindORM: TButton;
+    btnNextORM: TButton;
     procedure edtValueChange(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure btnNextClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure btnORMClick(Sender: TObject);
   private
   public
     doc: variant;
-    table: TJSONTable;
+    table: TJSONTableObject;
   end;
 
 var
@@ -37,8 +42,39 @@ implementation
 procedure TForm1.btnNextClick(Sender: TObject);
 begin
   if table.Step(Sender=btnRewind) then
-    mmoJSON.Text := JSONVariant(table.RowValue) else
+    mmoJSON.Text := JSONVariant(table.RowValues) else
     mmoJSON.Text := 'null';
+end;
+
+type
+  TSQLRecordPeople = class(TPersistent)
+  private
+    fRowID: integer;
+    fData: TByteDynArray;
+    fFirstName: string;
+    fLastName: string;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property RowID: integer read fRowID write fRowID;
+    property FirstName: string read fFirstName write fFirstName;
+    property LastName: string read fLastName write fLastName;
+    property Data: TByteDynArray read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
+procedure TForm1.btnORMClick(Sender: TObject);
+var people: TSQLRecordPeople;
+begin
+  people := TSQLRecordPeople.Create;
+  try
+    if table.StepObject(people,Sender=btnRewindORM) then
+      mmoJSON.Text := ObjectToJSON(people) else
+      mmoJSON.Text := 'null';
+  finally
+    people.Free;
+  end;
 end;
 
 procedure TForm1.edtValueChange(Sender: TObject);
@@ -68,7 +104,7 @@ begin
     if FileExists(FN) then
       break else
       FN := IncludeTrailingPathDelimiter('..')+FN;
-  table := TJSONTable.Create(UTF8FileToString(FN));
+  table := TJSONTableObject.Create(UTF8FileToString(FN));
   assert(length(table.FieldNames)=6);
 end;
 

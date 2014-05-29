@@ -60,11 +60,18 @@ interface
 uses
   SysUtils,
   Classes,
-  Variants;
+  Contnrs,
+  Variants,
+  TypInfo;
 
 type
   TStringDynArray = array of string;
   TVariantDynArray = array of variant;
+
+  /// this type is used to store BLOB content
+  TByteDynArray = array of byte;
+
+  PByteDynArray = ^TByteDynArray;
 
   /// exception used during standand-alone cross-platform JSON process
   EJSONException = class(Exception);
@@ -122,8 +129,10 @@ type
     function FromJSON(const JSON: string): boolean;
     /// convert this document into JSON array or object
     function ToJSON: string;
+    /// fill the published properties of supplied class from this JSON object
+    function ToObject(Instance: TObject): boolean;
     /// kind of document this TJSONVariantData contains
-    property aKind: TJSONVariantKind read GetKind;
+    property Kind: TJSONVariantKind read GetKind;
     /// number of items in this jvObject or jvArray
     property Count: integer read GetCount;
     /// access by name to a value of this jvObject
@@ -157,7 +166,7 @@ type
 
   /// handle a JSON result table, as returned by mORMot's server
   // - handle both expanded and non expanded layout
-  // - will be used on client side for ORM data parsing
+  // - will be used e.g. on client side for variant-based ORM data parsing
   TJSONTable = class
   protected
     fJSON: string;
@@ -174,7 +183,7 @@ type
     function FieldIndex(const FieldName: string): integer;
     /// to be called in a loop to iterate through all data rows
     // - if returned true, Value[] contains the fields of this row
-    function Step(SeekFirst: boolean=false): boolean;
+    function Step(SeekFirst: boolean=false): boolean; 
     /// to be called in a loop to iterate through all data rows
     // - if returned true, RowValues contains this row as TJSONVariant
     function StepValue(var RowValues: variant; SeekFirst: boolean=false): boolean;
@@ -188,7 +197,23 @@ type
     property JSON: string read fJSON;
   end;
 
-  
+  /// handle a JSON result table, as returned by mORMot's server
+  // - handle both expanded and non expanded layout
+  // - this class is able to use RTTI to fill all published properties of
+  // a TObject
+  TJSONTableObject = class(TJSONTable)
+  protected
+    fTypeInfo: pointer;
+    fPropInfo: array of PPropInfo;
+    procedure FillPropInfo(aTypeInfo: pointer); virtual;
+    function GetPropInfo(aTypeInfo: PTypeInfo; const PropName: string): PPropInfo; virtual;
+  public
+    /// to be called in a loop to iterate through all data rows
+    // - if returned true, Object published properties will contain this row
+    function StepObject(Instance: TObject; SeekFirst: boolean=false): boolean;
+  end;
+
+
 /// create a TJSONVariant instance from a given JSON content
 // - typical usage may be:
 //! var doc: variant;
@@ -225,6 +250,37 @@ procedure DoubleToJSON(Value: double; var result: string);
 
 /// compute the JSON representation of a variant value
 function ValueToJSON(const Value: variant): string;
+
+/// compute the JSON representation of an object published properties
+// - handle only simple types of properties, not nested class instances
+// - any TList/TObjectList/TCollection will be serialized as JSON array
+function ObjectToJSON(Instance: TObject): string;
+
+/// fill an object published properties from the supplied JSON object
+// - handle only simple types of properties, not nested class instances
+function JSONToObject(Instance: TObject; const JSON: string): boolean;
+
+/// create a list of object published properties from the supplied JSON object
+// - handle only simple types of properties, not nested class instances
+function JSONToObjectList(ItemClass: TClass; const JSON: string): TObjectList;
+
+/// decode a Base64-encoded string, including our JSON_BASE64_MAGIC marker
+function Base64JSONStringToBytes(const JSONString: string;
+  var Bytes: TByteDynArray): boolean;
+
+/// Base-64 encode a BLOB into string, including our JSON_BASE64_MAGIC marker
+function BytesToBase64JSONString(const Bytes: TByteDynArray): string;
+
+const
+  /// special code to mark Base64 binary content in JSON string
+  // - Unicode special char U+FFF0 is UTF-8 encoded as EF BF B0 bytes
+  // - prior to Delphi 2009, it won't work as expected since U+FFF0 won't be
+  // able to be converted into U+FFF0
+    {$ifdef UNICODE}
+    JSON_BASE64_MAGIC: word = $fff0;
+    {$else}
+    JSON_BASE64_MAGIC: array[0..2] of byte = ($ef,$bf,$b0);
+    {$endif}
 
 /// read an UTF-8 (JSON) file into a native string
 // - file should be existing, otherwise an exception is raised
@@ -351,6 +407,8 @@ var I64: Int64;
 begin
   if TVarData(Value).VType=JSONVariantType.VarType then
     result := TJSONVariantData(Value).ToJSON else
+  if (TVarData(Value).VType=varByRef or varVariant) then
+    result := ValueToJSON(PVariant(TVarData(Value).VPointer)^) else
   if TVarData(Value).VType<=varNull then
     result := 'null' else
   if VarIsOrdinal(Value) then begin
@@ -593,6 +651,320 @@ begin
 end;
 
 
+{ RTTI-oriented functions }
+
+const 
+  BASE64: array[0..63] of char =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+var
+  BASE64DECODE: array of ShortInt;
+
+function BytesToBase64JSONString(const Bytes: TByteDynArray): string;
+var i,len,x,c,j: cardinal;
+    P: PChar;
+begin
+  x := sizeof(JSON_BASE64_MAGIC) div sizeof(char);
+  len := length(Bytes);
+  SetLength(result,((len+2)div 3)*4+x);
+  P := pointer(result);
+  move(JSON_BASE64_MAGIC,P^,sizeof(JSON_BASE64_MAGIC));
+  if len=0 then
+    exit;
+  j := 0;
+  for i := 1 to len div 3 do begin
+    c := Bytes[j] shl 16 or Bytes[j+1] shl 8 or Bytes[j+2];
+    inc(j,3);
+    P[x]   := BASE64[(c shr 18) and $3f];
+    P[x+1] := BASE64[(c shr 12) and $3f];
+    P[x+2] := BASE64[(c shr 6) and $3f];
+    P[x+3] := BASE64[c and $3f];
+    inc(x,4);
+  end;
+  case len mod 3 of
+    1: begin
+      c := Bytes[j] shl 4;
+      P[x]   := BASE64[(c shr 6) and $3f];
+      P[x+1] := BASE64[c and $3f];
+      P[x+2] := '=';
+      P[x+3] := '=';
+      inc(x,4);
+    end;
+    2: begin
+      c := Bytes[j] shl 10 or Bytes[j+1] shl 2;
+      P[x]   := BASE64[(c shr 12) and $3f];
+      P[x+1] := BASE64[(c shr 6) and $3f];
+      P[x+2] := BASE64[c and $3f];
+      P[x+3] := '=';
+      inc(x,4);
+    end;
+  end;
+  assert(integer(x)=Length(Result));
+end;
+
+function Base64One(c: Char): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := ord(c);
+  if result>127 then
+    result := -1 else
+    result := BASE64DECODE[result];
+end;
+
+function Base64JSONStringToBytes(const JSONString: string;
+  var Bytes: TByteDynArray): boolean;
+var i,bits,value,x,magiclen,len: cardinal;
+begin
+  result := false;
+  if JSONString='' then
+    exit;
+  if comparemem(pointer(JSONString),@JSON_BASE64_MAGIC,sizeof(JSON_BASE64_MAGIC)) then
+    magiclen := sizeof(JSON_BASE64_MAGIC) div sizeof(char) else
+    {$ifndef UNICODE}
+    if JSONString[1]='?' then // handle UTF-8 decoding error
+      magiclen := 1 else
+    {$endif}
+    exit;
+  x := length(JSONString);
+  len := x-magiclen;
+  if len and 3<>0 then
+    exit;
+  if len=0 then
+    Bytes := nil else begin
+    if BASE64DECODE=nil then begin
+      SetLength(BASE64DECODE,128);
+      for i := 0 to 127 do
+        BASE64DECODE[i] := -1;
+      for i := 0 to high(BASE64) do
+        BASE64DECODE[ord(BASE64[i])] := i;
+    end;
+    len := (len shr 2)*3;
+    if Base64One(JSONString[x])<0 then begin
+      dec(len);
+      if Base64One(JSONString[x-1])<0 then
+        dec(len);
+    end;
+    SetLength(Bytes,len);
+    bits := 0;
+    value := 0;
+    len := 0;
+    for i := magiclen+1 to Length(JSONString) do begin
+      x := Base64One(JSONString[i]);
+      if integer(x)<0 then
+        break;
+      value := value * 64 + x;
+      bits := bits + 6;
+      if bits >= 8 then begin
+        bits := bits - 8;
+        x := value shr bits;
+        value := value and ((1 shl bits)-1);
+        Bytes[len] := x;
+        inc(len);
+      end;
+    end;
+  end;
+  result := len=cardinal(length(Bytes));
+end;
+
+{$ifndef UNICODE} // missing functions in older TypInfo.pas
+
+type
+  // used to map a TPropInfo.GetProc/SetProc and retrieve its kind
+  PropWrap = packed record
+    FillBytes: array [0..SizeOf(Pointer)-2] of byte;
+    /// = $ff for a field address, or =$fe for a virtual method
+    Kind: byte;
+  end;
+
+function GetDynArrayProp(Instance: TObject; PropInfo: PPropInfo): pointer;
+begin
+  {$ifdef FPC}
+  if (PropInfo^.PropProcs) and 3<>0 then
+  {$else}
+  if PropWrap(PropInfo^.GetProc).Kind<>$FF then
+  {$endif}
+    result := nil else // we only allow setting if we know the field address
+    result := PPointer(NativeInt(Instance)+NativeInt(PropInfo^.GetProc) and $00FFFFFF)^;
+end;
+
+{$ifdef FPC}
+function fpc_Copy_internal (Src, Dest, TypeInfo : Pointer) : SizeInt;[external name 'FPC_COPY'];
+procedure CopyArray(dest, source, typeInfo: Pointer; cnt: Integer);
+begin
+  fpc_copy_internal(source,dest,typeInfo);
+end;
+{$else}
+procedure CopyArray(dest, source, typeInfo: Pointer; cnt: Integer);
+asm
+  mov ecx,[ecx]
+  push dword ptr [ebp+8]
+  call System.@CopyArray
+end;
+{$endif}
+
+procedure SetDynArrayProp(Instance: TObject; PropInfo: PPropInfo;
+  Value: Pointer);
+var Addr: NativeInt;
+begin 
+  if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
+    {$ifdef FPC}
+    if (PropInfo^.PropProcs) and 3<>0 then
+    {$else}
+    if PropWrap(PropInfo^.GetProc).Kind<>$FF then
+    {$endif}
+      exit else // we only allow setting if we know the field address
+      Addr := NativeInt(Instance)+NativeInt(PropInfo^.GetProc) and $00FFFFFF else
+    {$ifdef FPC}
+    if (PropInfo^.PropProcs shr 2) and 3=0 then
+    {$else}
+    if PropWrap(PropInfo^.SetProc).Kind=$FF then
+    {$endif}
+      Addr := NativeInt(Instance)+NativeInt(PropInfo^.SetProc) and $00FFFFFF else
+      exit;
+  CopyArray(pointer(Addr),@Value,PropInfo^.PropType,1);
+end;
+
+{$endif UNICODE}
+
+function GetInstanceProp(Instance: TObject; PropInfo: PPropInfo): variant;
+var obj: TObject;
+begin
+  VarClear(result);
+  if (PropInfo<>nil) and (Instance<>nil) then
+  case PropInfo^.PropType^.Kind of
+  tkInt64{$ifdef FPC}, tkQWord{$endif}:
+    result := GetInt64Prop(Instance,PropInfo);
+  tkEnumeration, tkInteger, tkSet:
+    result := GetOrdProp(Instance,PropInfo);
+  {$ifdef FPC}tkAString,{$endif} tkLString:
+    result := GetStrProp(Instance,PropInfo);
+  tkWString:
+    result := GetWideStrProp(Instance,PropInfo);
+  {$ifdef UNICODE}
+  tkUString:
+    result := GetUnicodeStrProp(Instance,PropInfo);
+  {$endif}
+  tkFloat:
+    result := GetFloatProp(Instance,PropInfo);
+  tkVariant:
+    result := GetVariantProp(Instance,PropInfo);
+  tkClass: begin
+    obj := pointer(GetOrdProp(Instance,PropInfo));
+    if obj=nil then
+      result := null else
+      TJSONVariantData(result).Init(ObjectToJSON(obj));
+  end;
+  tkDynArray:
+    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray) then
+      result := BytesToBase64JSONString(GetDynArrayProp(Instance,PropInfo));
+  end;
+end;
+
+procedure SetInstanceProp(Instance: TObject; PropInfo: PPropInfo;
+  const Value: variant);
+var blob: pointer;
+begin
+  if (PropInfo<>nil) and (Instance<>nil) then
+  case PropInfo^.PropType^.Kind of
+  tkInt64{$ifdef FPC}, tkQWord{$endif}:
+    SetInt64Prop(Instance,PropInfo,TVarData(Value).VInt64);
+  tkEnumeration, tkInteger, tkSet:
+    SetOrdProp(Instance,PropInfo,Value);
+  {$ifdef FPC}tkAString,{$endif} tkLString:
+    SetStrProp(Instance,PropInfo,Value);
+  tkWString:
+    SetWideStrProp(Instance,PropInfo,Value);
+  {$ifdef UNICODE}
+  tkUString:
+    SetUnicodeStrProp(Instance,PropInfo,Value);
+  {$endif}
+  tkFloat:
+    SetFloatProp(Instance,PropInfo,Value);
+  tkVariant:
+    SetVariantProp(Instance,PropInfo,Value);
+  tkDynArray:
+    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray) then begin
+      blob := nil;
+      Base64JSONStringToBytes(Value,TByteDynArray(blob));
+      SetDynArrayProp(Instance,PropInfo,blob);
+    end;
+  tkClass:
+    JSONVariantData(Value).ToObject(pointer(GetOrdProp(Instance,PropInfo)));
+  end;
+end;
+
+function JSONToObjectList(ItemClass: TClass; const JSON: string): TObjectList;
+var doc: TJSONVariantData;
+    item: TObject;
+    i: integer;
+begin
+  doc.Init(JSON);
+  if (doc.Kind<>jvArray) or (ItemClass=nil) then
+    result := nil else begin
+    result := TObjectList.Create;
+    for i := 0 to doc.Count-1 do begin
+      item := ItemClass.Create;
+      if not JSONVariantData(doc.Values[i]).ToObject(item) then begin
+        FreeAndNil(result);
+        exit;
+      end;
+      result.Add(item);
+    end;
+  end;
+end;
+
+function JSONToObject(Instance: TObject; const JSON: string): boolean;
+var doc: TJSONVariantData;
+begin
+  if Instance=nil then
+    result := false else begin
+    doc.Init(JSON);
+    result := doc.ToObject(Instance);
+  end;
+end;
+
+function ObjectToJSON(Instance: TObject): string;
+var TypeInfo: PTypeInfo;
+    PropCount, i: integer;
+    PropList: PPropList;
+begin
+  if Instance=nil then begin
+    result := 'null';
+    exit;
+  end;
+  if Instance.InheritsFrom(TList) then begin
+    result := '[';
+    for i := 0 to TList(Instance).Count-1 do
+      result := result+ObjectToJSON(TList(Instance).List[i])+',';
+    result[length(result)] := ']';
+    exit;
+  end;
+  if Instance.InheritsFrom(TCollection) then begin
+    result := '[';
+    for i := 0 to TCollection(Instance).Count-1 do
+      result := result+ObjectToJSON(TCollection(Instance).Items[i])+',';
+    result[length(result)] := ']';
+    exit;
+  end;
+  TypeInfo := Instance.ClassInfo;
+  if TypeInfo=nil then begin
+    result := 'null';
+    exit;
+  end;
+  PropCount := GetPropList(TypeInfo,PropList);
+  if PropCount>0 then
+    try
+      result := '{';
+      for i := 0 to PropCount-1 do
+        result := result+StringToJSON(string(PropList[i]^.Name))+':'+
+          ValueToJSON(GetInstanceProp(Instance,PropList[i]))+',';
+      result[length(result)] := '}';
+    finally
+      FreeMem(PropList);
+    end else
+    result := 'null';
+end;
+
+
 { TJSONVariantData }
 
 procedure TJSONVariantData.Init;
@@ -611,6 +983,10 @@ procedure TJSONVariantData.Init(const JSON: string);
 begin
   Init;
   FromJSON(JSON);
+  if VType=varNull then
+    VKind := jvObject else
+  if VType<>JSONVariantType.VarType then
+    Init; // we expect a true JSON array or object here
 end;
 
 procedure TJSONVariantData.AddNameValue(const aName: string;
@@ -729,6 +1105,33 @@ begin
   end;
   else result := 'null';
   end;
+end;
+
+function TJSONVariantData.ToObject(Instance: TObject): boolean;
+var i: integer;
+    item: TCollectionItem;
+begin
+  result := false;
+  if Instance=nil then
+    exit;
+  case Kind of
+  jvObject:
+    for i := 0 to Count-1 do
+      SetInstanceProp(Instance,
+        GetPropInfo(Instance,Names[i]),Values[i]);
+  jvArray:
+    if not Instance.InheritsFrom(TCollection) then
+      exit else begin
+      TCollection(Instance).Clear;
+      item := TCollection(Instance).Add;
+      for i := 0 to Count-1 do
+        if not JSONVariantData(Values[i]).ToObject(item) then
+          exit;
+    end;
+  else
+    exit;
+  end;
+  result := true;
 end;
 
 
@@ -905,7 +1308,7 @@ begin
       exit;
   end;
   if EndOfField=',' then
-    fJSONCurrentIndex := Parser.Index; // indicates next Step() has data 
+    fJSONCurrentIndex := Parser.Index; // indicates next Step() has data
   result := true;
 end;
 
@@ -918,9 +1321,42 @@ begin
     VarClear(RowValues);
     TJSONVariantData(RowValues).Init;
   end;
+  TJSONVariantData(RowValues).VKind := jvObject;
   TJSONVariantData(RowValues).VCount := Length(fFieldNames);
   TJSONVariantData(RowValues).Names := fFieldNames;
   TJSONVariantData(RowValues).Values := fRowValues;
+end;
+
+
+{ TJSONTableObject }
+
+function TJSONTableObject.StepObject(Instance: TObject; SeekFirst: boolean=false): boolean;
+var i: integer;
+begin
+  if (Instance=nil) then
+    result := false else
+    result := Step(SeekFirst);
+  if not result then
+    exit;
+  if fTypeInfo<>Instance.ClassInfo then
+    FillPropInfo(Instance.ClassInfo);
+  for i := 0 to Length(fFieldNames)-1 do
+    SetInstanceProp(Instance,fPropInfo[i],fRowValues[i]);
+end;
+
+function TJSONTableObject.GetPropInfo(aTypeInfo: PTypeInfo;
+  const PropName: string): PPropInfo;
+begin
+  result := TypInfo.GetPropInfo(aTypeInfo,PropName);
+end;
+
+procedure TJSONTableObject.FillPropInfo(aTypeInfo: pointer);
+var i: integer;
+begin
+  fTypeInfo := aTypeInfo;
+  SetLength(fPropInfo,Length(fFieldNames));
+  for i := 0 to length(FieldNames)-1 do
+    fPropInfo[i] := GetPropInfo(aTypeInfo,fFieldNames[i]);
 end;
 
 initialization
