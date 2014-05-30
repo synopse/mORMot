@@ -4740,7 +4740,15 @@ type
     function FillOne: boolean;
     {/ go to the first prepared row, ready to loop through all rows with FillOne()
       - the Row number (property FillCurrentRow) is reset to 1
-      - return true on success, false if no Row data is available }
+      - return true on success, false if no Row data is available
+      - you can use it e.g. as:
+      ! while Rec.FillOne do
+      !   dosomethingwith(Rec);
+      ! if Rec.FillRewind then
+      ! repeat
+      !   dosomeotherthingwith(Rec);
+      ! until not Rec.FillOne;
+    }
     function FillRewind: boolean;
     {/ close any previous FillPrepare..FillOne loop
      - is called implicitely by FillPrepare() call to release any previous loop
@@ -8728,7 +8736,7 @@ type
     // statement, whereas it now expects bound parameters as '?'
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
       WhereClauseFormat: PUTF8Char; const BoundsSQLWhere: array of const): TSQLTableJSON; overload;
-    /// Execute directly a SQL statement, expecting a list of resutls
+    /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
@@ -11553,7 +11561,8 @@ type
       - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
       - this version will use a GET with supplied parameters (which will be encoded
         with the URL) }
-    function CallBackGet(const aMethodName: RawUTF8; const aParameters: array of const;
+    function CallBackGet(const aMethodName: RawUTF8;
+      const aNameValueParameters: array of const;
       out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
       aResponseHead: PRawUTF8=nil): integer;
     {/ wrapper to the protected URI method to call a method on the server, using
@@ -11562,7 +11571,8 @@ type
         "result":"value" JSON object)
       - this version will use a GET with supplied parameters (which will be encoded
         with the URL) }
-    function CallBackGetResult(const aMethodName: RawUTF8; const aParameters: array of const;
+    function CallBackGetResult(const aMethodName: RawUTF8;
+      const aNameValueParameters: array of const;
       aTable: TSQLRecordClass=nil; aID: integer=0): RawUTF8;
     {/ wrapper to the protected URI method to call a method on the server, using
       a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
@@ -23085,14 +23095,14 @@ begin
   if fServerTimeStampCacheTix=Tix then
     result := fServerTimeStampCacheValue.Value else begin
     fServerTimeStampCacheTix := Tix;
-    fServerTimeStampCacheValue.From(Now+fServerTimeStampOffset);
+    fServerTimeStampCacheValue.From(NowUTC+fServerTimeStampOffset);
     result := fServerTimeStampCacheValue.Value;
   end;
 end;
 
 procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
 begin
-  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
+  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-NowUTC;
   if fServerTimeStampOffset=0 then
     fServerTimeStampOffset := 0.0001; // retrieve server date/time only once
 end;
@@ -23974,7 +23984,7 @@ const
   MAX_SIZE_RESPONSE_LOG = 20*1024;
 
 function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
-  const aParameters: array of const; out aResponse: RawUTF8;
+  const aNameValueParameters: array of const; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: integer; aResponseHead: PRawUTF8): integer;
 var url, header: RawUTF8;
 begin
@@ -23983,7 +23993,8 @@ begin
 {$ifdef WITHLOG}
     SQLite3Log.Enter(Self,pointer(aMethodName),true);
 {$endif}
-    url := Model.getURICallBack(aMethodName,aTable,aID)+UrlEncode(aParameters);
+    url := Model.getURICallBack(aMethodName,aTable,aID)+
+      UrlEncode(aNameValueParameters);
     result := URI(url,'GET',@aResponse,@header).Lo;
     if aResponseHead<>nil then
       aResponseHead^ := header;
@@ -24147,10 +24158,10 @@ DoRetry:
 end;
 
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
-  const aParameters: array of const; aTable: TSQLRecordClass; aID: integer): RawUTF8;
+  const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: integer): RawUTF8;
 var aResponse: RawUTF8;
 begin
-  if CallBackGet(aMethodName,aParameters,aResponse,aTable,aID)=HTML_SUCCESS then
+  if CallBackGet(aMethodName,aNameValueParameters,aResponse,aTable,aID)=HTML_SUCCESS then
     result := JSONDecode(aResponse) else
     result := '';
 end;
