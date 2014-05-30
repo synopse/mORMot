@@ -124,6 +124,28 @@ type
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
   end;
+  
+  TSQLRecordMainNested = class(TCollectionItem)
+  private
+    fNumber: Integer;
+    fIdent: RawUTF8;
+  published
+    property Ident: RawUTF8 read fIdent write fIdent;
+    property Number: Integer read fNumber write fNumber;
+  end;
+
+  TSQLRecordMain = class(TSQLRecord)
+  private
+    fName: RawUTF8;
+    fNested: TCollection;
+  public
+    constructor Create; override;
+    destructor Destroy; override;
+  published
+    property Name: RawUTF8 read fName write fName;
+    property Nested: TCollection read fNested;
+  end;
+
 
 { TSynTest }
 
@@ -245,8 +267,11 @@ end;
 
 procedure TSynCrossPlatformTests.JSON;
 var doc: variant;
-    json,inlined: string;
+    json,json2,inlined: string;
     i: integer;
+    people: TSQLRecordPeople;
+    obj1,obj2: TSQLRecordMain;
+    item: TSQLRecordMainNested;
 begin
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   check(doc.test=1234);
@@ -296,6 +321,44 @@ begin
     check(FormatBind('ab?ab??cd',[i,i,json])='ab'+inlined+'ab'+inlined+
       ':("'+json+'"):cd');
   end;
+  people := TSQLRecordPeople.Create;
+  try
+    for i := 1 to 1000 do begin
+      people.ID := i;
+      people.FirstName := IntToStr(i);
+      people.LastName := people.FirstName+people.FirstName;
+      people.YearOfBirth := i+500;
+      people.YearOfDeath := people.YearOfBirth+40;
+      json := ObjectToJSON(people);
+      check(json=Format('{"ID":%d,"FirstName":"%d","LastName":"%d%d",'+
+        '"Data":"","YearOfBirth":%d,"YearOfDeath":%d}',[i,i,i,i,i+500,i+540]));
+    end;
+  finally
+    people.Free;
+  end;
+  obj1 := TSQLRecordMain.Create;
+  obj2 := TSQLRecordMain.Create;
+  try
+    for i := 1 to 100 do begin
+      obj1.ID := i;
+      obj1.Name := IntToStr(i);
+      item := obj1.Nested.Add as TSQLRecordMainNested;
+      item.Ident := obj1.Name;
+      item.Number := i;
+      check(obj1.Nested.Count=i);
+      json := ObjectToJSON(obj1);
+      check(json<>'');
+      if i=1 then
+        check(json='{"ID":1,"Name":"1","Nested":[{"Ident":"1","Number":1}]}');
+      JSONToObject(obj2,json);
+      check(obj2.Nested.Count=i);
+      json2 := ObjectToJSON(obj2);
+      check(json2=json);
+    end;
+  finally
+    obj2.Free;
+    obj1.Free;
+  end;
 end;
 
 procedure TSynCrossPlatformTests.Model;
@@ -308,6 +371,21 @@ begin
   Check(Model.Tables[0]=TSQLRecordPeople);
   Check(Model.TableNames[0]='People');
   Model.Free;
+end;
+
+
+{ TSQLRecordMain }
+
+constructor TSQLRecordMain.Create;
+begin
+  inherited;
+  fNested := TCollection.Create(TSQLRecordMainNested);
+end;
+
+destructor TSQLRecordMain.Destroy;
+begin
+  fNested.Free;
+  inherited;
 end;
 
 initialization
