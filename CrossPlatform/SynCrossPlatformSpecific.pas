@@ -138,12 +138,12 @@ type
 
   TAbstractHttpConnectionClass = class of TAbstractHttpConnection;
 
-var
-  /// this unit will define a class type to implement a HTTP connection
-  // - will use WinHTTP API (from our SynCrtSock) under Windows
-  // - will use Indy for Delphi on other platforms
-  // - will use fcl-web (fphttpclient) with FreePascal
-  HttpConnectionClass: TAbstractHttpConnectionClass;
+
+/// gives access to the class type to implement a HTTP connection
+// - will use WinHTTP API (from our SynCrtSock) under Windows
+// - will use Indy for Delphi on other platforms
+// - will use fcl-web (fphttpclient) with FreePascal
+function HttpConnectionClass: TAbstractHttpConnectionClass;
 
   
 /// convert a text into UTF-8 binary buffer
@@ -264,6 +264,11 @@ begin
   inherited Destroy;
 end;
 
+function HttpConnectionClass: TAbstractHttpConnectionClass;
+begin
+  result := TFclHttpConnectionClass;
+end;
+
 {$endif}
 
 {$ifdef USEINDY}
@@ -333,6 +338,12 @@ begin
   end;
 end;
 
+function HttpConnectionClass: TAbstractHttpConnectionClass;
+begin
+  result := TIndyHttpConnectionClass;
+end;
+
+
 {$endif}
 
 {$ifdef USESYNCRT}
@@ -389,16 +400,11 @@ begin
   end;
 end;
 
+function HttpConnectionClass: TAbstractHttpConnectionClass;
+begin
+  result := TWinHttpConnectionClass;
+end;
+
 {$endif}
 
-
-initialization
-  {$ifdef USEFCL}
-  {$endif}
-  {$ifdef USEINDY}
-  HttpConnectionClass := TIndyHttpConnectionClass;
-  {$endif}
-  {$ifdef USESYNCRT}
-  HttpConnectionClass := TWinHttpConnectionClass;
-  {$endif}
 end.

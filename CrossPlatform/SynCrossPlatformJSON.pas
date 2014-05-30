@@ -1203,7 +1203,8 @@ begin
       SetDynArrayProp(Instance,PropInfo,blob);
     end;
   tkClass:
-    JSONVariantData(Value).ToObject(pointer(GetOrdProp(Instance,PropInfo)));
+    if TVarData(Value).VType>varNull then
+      JSONVariantData(Value).ToObject(pointer(GetOrdProp(Instance,PropInfo)));
   end;
 end;
 
