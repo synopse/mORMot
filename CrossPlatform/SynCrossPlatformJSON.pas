@@ -757,11 +757,13 @@ var i,len,x,c,j: cardinal;
 begin
   x := sizeof(JSON_BASE64_MAGIC) div sizeof(char);
   len := length(Bytes);
+  if len=0 then begin
+    result := '';
+    exit;
+  end;
   SetLength(result,((len+2)div 3)*4+x);
   P := pointer(result);
   move(JSON_BASE64_MAGIC,P^,sizeof(JSON_BASE64_MAGIC));
-  if len=0 then
-    exit;
   j := 0;
   for i := 1 to len div 3 do begin
     c := Bytes[j] shl 16 or Bytes[j+1] shl 8 or Bytes[j+2];
@@ -806,8 +808,8 @@ function Base64JSONStringToBytes(const JSONString: string;
   var Bytes: TByteDynArray): boolean;
 var i,bits,value,x,magiclen,len: cardinal;
 begin
-  result := false;
-  if JSONString='' then
+  result := JSONString='';
+  if result then
     exit;
   if comparemem(pointer(JSONString),@JSON_BASE64_MAGIC,sizeof(JSON_BASE64_MAGIC)) then
     magiclen := sizeof(JSON_BASE64_MAGIC) div sizeof(char) else
@@ -1230,10 +1232,11 @@ begin
     if not Instance.InheritsFrom(TCollection) then
       exit else begin
       TCollection(Instance).Clear;
-      item := TCollection(Instance).Add;
-      for i := 0 to Count-1 do
+      for i := 0 to Count-1 do begin
+        item := TCollection(Instance).Add;
         if not JSONVariantData(Values[i]).ToObject(item) then
           exit;
+      end;
     end;
   else
     exit;
