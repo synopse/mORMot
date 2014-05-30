@@ -425,19 +425,49 @@ begin
   result := '"'+Text+'"'; // here FPC 2.7.1 erases UTF-8 encoding :(
 end;
 
+{$ifndef KYLIX}
+var
+  SettingsUS: TFormatSettings
+  {$ifdef FPC} = (
+      CurrencyFormat: 1;
+      NegCurrFormat: 5;
+      ThousandSeparator: ',';
+      DecimalSeparator: '.';
+      CurrencyDecimals: 2;
+      DateSeparator: '-';
+      TimeSeparator: ':';
+      ListSeparator: ',';
+      CurrencyString: '$';
+      ShortDateFormat: 'd/m/y';
+      LongDateFormat: 'dd" "mmmm" "yyyy';
+      TimeAMString: 'AM';
+      TimePMString: 'PM';
+      ShortTimeFormat: 'hh:nn';
+      LongTimeFormat: 'hh:nn:ss';
+      ShortMonthNames: ('Jan','Feb','Mar','Apr','May','Jun',
+                        'Jul','Aug','Sep','Oct','Nov','Dec');
+      LongMonthNames: ('January','February','March','April','May','June',
+                       'July','August','September','October','November','December');
+      ShortDayNames: ('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
+      LongDayNames:  ('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday');
+      TwoDigitYearCenturyWindow: 50;)
+  {$endif};
+
+{$endif}
+
 procedure DoubleToJSON(Value: double; var result: string);
-const // warning: this is NOT thread-safe
-  FloatToStrDecSep: PChar  = @
-{$ifdef FPC}     DefaultFormatSettings. {$else}
-{$ifdef UNICODE} FormatSettings.        {$endif} {$endif}
-                   DecimalSeparator;
+{$ifdef KYLIX}
 var decsep: Char;
-begin
-  decsep := FloatToStrDecSep^;
-  FloatToStrDecSep^ := '.';
+begin // warning: this is NOT thread-safe if you mix settings
+  decsep := DecimalSeparator;
   result := FloatToStr(Value);
-  FloatToStrDecSep^ := decsep;
+  DecimalSeparator := decsep;
 end;
+{$else}
+begin
+  result := FloatToStr(Value,SettingsUS);
+end;
+{$endif}
 
 function DateTimeToJSON(Value: TDateTime): string;
 begin // e.g. "YYYY-MM-DD" "Thh:mm:ss" or "YYYY-MM-DDThh:mm:ss"
@@ -1475,5 +1505,12 @@ end;
 
 initialization
   JSONVariantType := TJSONVariant.Create;
+  {$ifndef FPC}
+  {$ifdef ISDELPHIXE}
+  SettingsUS := TFormatSettings.Create('en_US');
+  {$else}
+  GetLocaleFormatSettings($0409,SettingsUS);
+  {$endif}
+  {$endif}
 
 end.

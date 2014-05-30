@@ -127,11 +127,11 @@ type
   
   TSQLRecordMainNested = class(TCollectionItem)
   private
-    fNumber: Integer;
+    fNumber: double;
     fIdent: RawUTF8;
   published
     property Ident: RawUTF8 read fIdent write fIdent;
-    property Number: Integer read fNumber write fNumber;
+    property Number: double read fNumber write fNumber;
   end;
 
   TSQLRecordMain = class(TSQLRecord)
@@ -344,12 +344,12 @@ begin
       obj1.Name := IntToStr(i);
       item := obj1.Nested.Add as TSQLRecordMainNested;
       item.Ident := obj1.Name;
-      item.Number := i;
+      item.Number := i/2;
       check(obj1.Nested.Count=i);
       json := ObjectToJSON(obj1);
       check(json<>'');
       if i=1 then
-        check(json='{"ID":1,"Name":"1","Nested":[{"Ident":"1","Number":1}]}');
+        check(json='{"ID":1,"Name":"1","Nested":[{"Ident":"1","Number":0.5}]}');
       JSONToObject(obj2,json);
       check(obj2.Nested.Count=i);
       json2 := ObjectToJSON(obj2);
