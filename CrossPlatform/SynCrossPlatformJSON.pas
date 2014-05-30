@@ -197,6 +197,14 @@ type
     property JSON: string read fJSON;
   end;
 
+  /// an abstract type used for RTTI type information  
+  TRTTITypeInfo = PPropInfo;
+
+  /// an abstract type used for RTTI property information
+  TRTTIPropInfo = PPropInfo;
+
+  TRTTIPropInfoDynArray = array of TRTTIPropInfo;
+
   /// handle a JSON result table, as returned by mORMot's server
   // - handle both expanded and non expanded layout
   // - this class is able to use RTTI to fill all published properties of
@@ -204,15 +212,23 @@ type
   TJSONTableObject = class(TJSONTable)
   protected
     fTypeInfo: pointer;
-    fPropInfo: array of PPropInfo;
-    procedure FillPropInfo(aTypeInfo: pointer); virtual;
+    fPropInfo: array of TRTTIPropInfo;
+    procedure FillPropInfo(aTypeInfo: TRTTITypeInfo); virtual;
     procedure FillInstance(Instance: TObject); virtual;
-    function GetPropInfo(aTypeInfo: PTypeInfo; const PropName: string): PPropInfo; virtual;
+    function GetPropInfo(aTypeInfo: TRTTITypeInfo; const PropName: string): TRTTIPropInfo; virtual;
   public
     /// to be called in a loop to iterate through all data rows
     // - if returned true, Object published properties will contain this row
-    function StepObject(Instance: TObject; SeekFirst: boolean=false): boolean;
+    function StepObject(Instance: TObject; SeekFirst: boolean=false): boolean; virtual;
   end;
+
+  /// used e.g. by TSynTest for each test case
+  TPublishedMethod = record
+    Name: string;
+    Method: TMethod;
+  end;
+  /// as filled by GetPublishedMethods()
+  TPublishedMethodDynArray = array of TPublishedMethod;
 
 
 /// create a TJSONVariant instance from a given JSON content
@@ -243,7 +259,8 @@ var
   /// the custom variant type definition registered for TJSONVariant
   JSONVariantType: TInvokeableVariantType;
 
-/// compute the quoted JSON string corresponding to the supplied text 
+  
+/// compute the quoted JSON string corresponding to the supplied text
 function StringToJSON(const Text: string): string;
 
 /// compute the JSON representation of a floating-point value
@@ -279,6 +296,39 @@ function JSONToObject(Instance: TObject; const JSON: string): boolean;
 // - handle only simple types of properties, not nested class instances
 function JSONToObjectList(ItemClass: TClass; const JSON: string): TObjectList;
 
+/// returns TRUE if the property is a TDateTime
+function IsDateTime(PropInfo: TRTTIPropInfo): boolean;
+
+/// returns TRUE if the property is a TByteDynArray
+function IsBlob(PropInfo: TRTTIPropInfo): boolean;
+
+/// returns TRUE if the property is a TModTime
+function IsModTime(PropInfo: TRTTIPropInfo): boolean;
+
+/// returns TRUE if the property is a TCreateTime
+function IsCreateTime(PropInfo: TRTTIPropInfo): boolean;
+
+/// retrieve the published properties type information about a given class
+procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
+  var PropRTTI: TRTTIPropInfoDynArray);
+
+/// retrieve the value of a published property as variant
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
+
+/// set the value of a published property from a variant
+procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
+  const Value: variant);
+
+/// retrieve all the published methods of a given class, using RTTI
+procedure GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodDynArray);
+
+/// convert an "array of const" parameter value into its string representation
+function VarRecToValue(const V: TVarRec; out wasString: boolean): string;
+
+/// convert the supplied text as "text", as expected by SQL standard
+procedure DoubleQuoteStr(var text: string);
+
 /// decode a Base64-encoded string, including our JSON_BASE64_MAGIC marker
 function Base64JSONStringToBytes(const JSONString: string;
   var Bytes: TByteDynArray): boolean;
@@ -291,11 +341,11 @@ const
   // - Unicode special char U+FFF0 is UTF-8 encoded as EF BF B0 bytes
   // - prior to Delphi 2009, it won't work as expected since U+FFF0 won't be
   // able to be converted into U+FFF0
-    {$ifdef UNICODE}
-    JSON_BASE64_MAGIC: word = $fff0;
-    {$else}
-    JSON_BASE64_MAGIC: array[0..2] of byte = ($ef,$bf,$b0);
-    {$endif}
+  {$ifdef UNICODE}
+  JSON_BASE64_MAGIC: word = $fff0;
+  {$else}
+  JSON_BASE64_MAGIC: array[0..2] of byte = ($ef,$bf,$b0);
+  {$endif}
 
 /// read an UTF-8 (JSON) file into a native string
 // - file should be existing, otherwise an exception is raised
@@ -304,11 +354,17 @@ function UTF8FileToString(const aFileName: TFileName): string;
 /// this function is faster than str := str+chr !
 procedure AppendChar(var str: string; chr: Char);
   {$ifdef HASINLINE}inline;{$endif}
-  
+
+/// will return the next CSV value from the supplied text 
+function GetNextCSV(const str: string; var index: Integer; out res: string;
+  Sep: char=','): boolean;
+
 /// check that two Ascii-7 latin text do match
 function IdemPropName(const PropName1,PropName2: string): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check that two Ascii-7 latin text do match
+function StartWithPropName(const PropName1,PropName2: string): boolean;
 
 
 implementation
@@ -325,6 +381,38 @@ begin
       {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
       exit;
   result := true;
+end;
+
+function StartWithPropName(const PropName1,PropName2: string): boolean;
+var L,i: integer;
+begin
+  result := false;
+  L := length(PropName2);
+  if length(PropName1)<L then
+    exit;
+  for i := 1 to L do
+    if (ord(PropName1[i]) xor ord(PropName2[i])) and
+      {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
+      exit;
+  result := true;
+end;
+
+function GetNextCSV(const str: string; var index: Integer; out res: string;
+  Sep: char=','): boolean;
+var i,L: integer;
+begin
+  L := length(str);
+  if index<=L then begin
+    i := index;
+    while i<=L do
+      if str[i]=Sep then
+        break else
+        inc(i);
+    res := copy(str,index,i-index);
+    index := i+1;
+    result := true;
+  end else
+    result := false;
 end;
 
 {$ifdef FPC}
@@ -425,7 +513,15 @@ begin
   result := '"'+Text+'"'; // here FPC 2.7.1 erases UTF-8 encoding :(
 end;
 
-{$ifndef KYLIX}
+{$ifdef KYLIX}
+procedure DoubleToJSON(Value: double; var result: string);
+var decsep: Char;
+begin // warning: this is NOT thread-safe if you mix settings
+  decsep := DecimalSeparator;
+  result := FloatToStr(Value);
+  DecimalSeparator := decsep;
+end;
+{$else}
 var
   SettingsUS: TFormatSettings
   {$ifdef FPC} = (
@@ -452,18 +548,7 @@ var
       LongDayNames:  ('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday');
       TwoDigitYearCenturyWindow: 50;)
   {$endif};
-
-{$endif}
-
 procedure DoubleToJSON(Value: double; var result: string);
-{$ifdef KYLIX}
-var decsep: Char;
-begin // warning: this is NOT thread-safe if you mix settings
-  decsep := DecimalSeparator;
-  result := FloatToStr(Value);
-  DecimalSeparator := decsep;
-end;
-{$else}
 begin
   result := FloatToStr(Value,SettingsUS);
 end;
@@ -544,6 +629,55 @@ begin
     result := Value;
 end;
 
+function VarRecToValue(const V: TVarRec; out wasString: boolean): string;
+// http://smartmobilestudio.com/forums/topic/is-array-of-const-supported-in-sms
+begin
+  wasString := not (V.VType in
+    [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
+  with V do
+  case VType of
+  vtString:     result := string(VString^);
+  vtAnsiString: result := string(AnsiString(VAnsiString));
+  {$ifdef UNICODE}
+  vtUnicodeString: result := string(VUnicodeString);
+  {$endif}
+  vtWideString: result := string(WideString(VWideString));
+  vtPChar:      result := string(VPChar);
+  vtChar:       result := string(VChar);
+  vtPWideChar:  result := string(VPWideChar);
+  vtWideChar:   result := string(VWideChar);
+  vtBoolean:    if VBoolean then result := '1' else result := '0';
+  vtInteger:    result := IntToStr(VInteger);
+  vtInt64:      result := IntToStr(VInt64^);
+  vtCurrency:   DoubleToJSON(VCurrency^,result);
+  vtExtended:   DoubleToJSON(VExtended^,result);
+  vtObject:     result := ObjectToJSON(VObject);
+  vtVariant: if TVarData(VVariant^).VType<=varNull then
+    result := 'null' else begin
+    wasString := VarIsStr(VVariant^);
+    result := VVariant^;
+  end;
+  else result := '';
+  end;
+end;
+
+procedure DoubleQuoteStr(var text: string);
+var i,j: integer;
+    tmp: string;
+begin
+  i := pos('"',text);
+  if i=0 then begin
+    text := '"'+text+'"';
+    exit;
+  end;
+  tmp := '"'+copy(text,1,i)+'"';
+  for j := i+1 to length(text) do
+    if text[j]='"' then
+      tmp := tmp+'""' else
+      AppendChar(tmp,text[j]);
+  text := tmp+'"';
+end;
+
 
 { TJSONParser }
 
@@ -568,7 +702,6 @@ type
     function ParseJSONArray(var Data: TJSONVariantData): boolean;
     procedure GetNextStringUnEscape(var str: string);
   end;
-
 
 procedure TJSONParser.Init(const aJSON: string; aIndex: integer);
 begin
@@ -891,6 +1024,34 @@ end;
 
 {$ifndef UNICODE} // missing functions in older TypInfo.pas
 
+{$ifdef FPC}
+
+function GetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): pointer;
+begin
+  if (PropInfo^.PropProcs) and 3<>0 then
+    result := nil else // we only allow setting if we know the field address
+    result := PPointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF)^;
+end;
+
+function fpc_Copy_internal(Src, Dest, TypeInfo : Pointer) : SizeInt;
+  [external name 'FPC_COPY'];
+
+procedure SetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo;
+  Value: Pointer);
+var Addr: NativeUInt;
+begin 
+  if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
+    if (PropInfo^.PropProcs) and 3<>0 then
+      exit else // we only allow setting if we know the field address
+      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF else
+    if (PropInfo^.PropProcs shr 2) and 3=0 then
+      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.SetProc) and $00FFFFFF else
+      exit;
+  fpc_Copy_internal(@Value,pointer(Addr),PropInfo^.PropType);
+end;
+
+{$else}
+
 type
   // used to map a TPropInfo.GetProc/SetProc and retrieve its kind
   PropWrap = packed record
@@ -899,57 +1060,73 @@ type
     Kind: byte;
   end;
 
-function GetDynArrayProp(Instance: TObject; PropInfo: PPropInfo): pointer;
+function GetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): pointer;
 begin
-  {$ifdef FPC}
-  if (PropInfo^.PropProcs) and 3<>0 then
-  {$else}
   if PropWrap(PropInfo^.GetProc).Kind<>$FF then
-  {$endif}
     result := nil else // we only allow setting if we know the field address
     result := PPointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF)^;
 end;
 
-{$ifdef FPC}
-function fpc_Copy_internal (Src, Dest, TypeInfo : Pointer) : SizeInt;[external name 'FPC_COPY'];
-procedure CopyDynArray(dest, source, typeInfo: Pointer);
-begin
-  fpc_copy_internal(source,dest,typeInfo);
-end;
-{$else}
 procedure CopyDynArray(dest, source, typeInfo: Pointer);
 asm
   mov ecx,[ecx]
   push 1
   call System.@CopyArray
 end;
-{$endif}
 
-procedure SetDynArrayProp(Instance: TObject; PropInfo: PPropInfo;
+procedure SetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo;
   Value: Pointer);
 var Addr: NativeUInt;
-begin 
+begin
   if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
-    {$ifdef FPC}
-    if (PropInfo^.PropProcs) and 3<>0 then
-    {$else}
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
-    {$endif}
       exit else // we only allow setting if we know the field address
       Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF else
-    {$ifdef FPC}
-    if (PropInfo^.PropProcs shr 2) and 3=0 then
-    {$else}
     if PropWrap(PropInfo^.SetProc).Kind=$FF then
-    {$endif}
       Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.SetProc) and $00FFFFFF else
       exit;
   CopyDynArray(pointer(Addr),@Value,PropInfo^.PropType);
 end;
 
+{$endif FPC}
 {$endif UNICODE}
 
-function GetInstanceProp(Instance: TObject; PropInfo: PPropInfo): variant;
+function IsDateTime(PropInfo: TRTTIPropInfo): boolean;
+begin
+  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime);
+end;
+
+function IsBlob(PropInfo: TRTTIPropInfo): boolean;
+begin
+  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray);
+end;
+
+function IsModTime(PropInfo: TRTTIPropInfo): boolean;
+begin
+  result := IdemPropName(string(PropInfo^.PropType^.Name),'TModTime');
+end;
+
+function IsCreateTime(PropInfo: TRTTIPropInfo): boolean;
+begin
+  result := IdemPropName(string(PropInfo^.PropType^.Name),'TCreateTime');
+end;
+
+procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
+  var PropRTTI: TRTTIPropInfoDynArray);
+var i,n: integer;
+    List: PPropList;
+begin
+  n := GetPropList(PTypeInfo(TypeInfo),List);
+  SetLength(PropNames,n);
+  SetLength(PropRTTI,n);
+  for i := 0 to n-1 do begin
+    PropNames[i] := string(List[i].Name);
+    PropRTTI[i] := List[i];
+  end;
+  freemem(List);
+end;
+
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
 var obj: TObject;
 begin
   VarClear(result);
@@ -969,7 +1146,7 @@ begin
     result := GetUnicodeStrProp(Instance,PropInfo);
   {$endif}
   tkFloat:
-    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then
+    if IsDateTime(PropInfo) then
       result := DateTimeToIso8601(GetFloatProp(Instance,PropInfo)) else
       result := GetFloatProp(Instance,PropInfo);
   tkVariant:
@@ -981,12 +1158,12 @@ begin
       TJSONVariantData(result).Init(ObjectToJSON(obj));
   end;
   tkDynArray:
-    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray) then
+    if IsBlob(PropInfo) then
       result := BytesToBase64JSONString(GetDynArrayProp(Instance,PropInfo));
   end;
 end;
 
-procedure SetInstanceProp(Instance: TObject; PropInfo: PPropInfo;
+procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
   const Value: variant);
 var blob: pointer;
 begin
@@ -1013,14 +1190,13 @@ begin
       SetUnicodeStrProp(Instance,PropInfo,Value);
   {$endif}
   tkFloat:
-    if (PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime)) and
-       VarIsStr(Value) then
+    if IsDateTime(PropInfo) and VarIsStr(Value) then
       SetFloatProp(Instance,PropInfo,Iso8601ToDateTime(Value)) else
       SetFloatProp(Instance,PropInfo,Value);
   tkVariant:
     SetVariantProp(Instance,PropInfo,Value);
   tkDynArray:
-    if PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray) then begin
+    if IsBlob(PropInfo) then begin
       blob := nil;
       if TVarData(Value).VType>varNull then
         Base64JSONStringToBytes(Value,TByteDynArray(blob));
@@ -1071,17 +1247,23 @@ begin
     exit;
   end;
   if Instance.InheritsFrom(TList) then begin
-    result := '[';
-    for i := 0 to TList(Instance).Count-1 do
-      result := result+ObjectToJSON(TList(Instance).List[i])+',';
-    result[length(result)] := ']';
+    if TList(Instance).Count=0 then
+      result := '[]' else begin
+      result := '[';
+      for i := 0 to TList(Instance).Count-1 do
+        result := result+ObjectToJSON(TList(Instance).List[i])+',';
+      result[length(result)] := ']';
+    end;
     exit;
   end;
   if Instance.InheritsFrom(TCollection) then begin
-    result := '[';
-    for i := 0 to TCollection(Instance).Count-1 do
-      result := result+ObjectToJSON(TCollection(Instance).Items[i])+',';
-    result[length(result)] := ']';
+    if TCollection(Instance).Count=0 then
+      result := '[]' else begin
+      result := '[';
+      for i := 0 to TCollection(Instance).Count-1 do
+        result := result+ObjectToJSON(TCollection(Instance).Items[i])+',';
+      result[length(result)] := ']';
+    end;
     exit;
   end;
   TypeInfo := Instance.ClassInfo;
@@ -1101,6 +1283,56 @@ begin
       FreeMem(PropList);
     end else
     result := 'null';
+end;
+
+procedure GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodDynArray);
+var n: integer;
+  procedure AddParentsFirst(C: TClass);
+  type
+    TMethodInfo = packed record
+    {$ifdef FPC}
+      Name: PShortString;
+      Addr: Pointer;
+    {$else}
+      Len: Word;
+      Addr: Pointer;
+      Name: ShortString;
+    {$endif}
+    end;
+  var M: ^TMethodInfo;
+      Method: TMethod;
+      i,MCount: integer;
+  begin
+    if C=nil then
+      exit;
+    AddParentsFirst(C.ClassParent); // put children methods afterward
+    M := PPointer(NativeInt(C)+vmtMethodTable)^;
+    if M=nil then
+      exit;
+    Method.Data := Instance;
+    MCount := {$ifdef FPC}PCardinal{$else}PWord{$endif}(M)^;
+    inc({$ifdef FPC}PCardinal{$else}PWord{$endif}(M));
+    for i := 1 to MCount do begin
+      Method.Code := M^.Addr;
+      if n>=length(Methods) then
+        SetLength(Methods,n+32);
+      Methods[n].Name := string(M^.Name{$ifdef FPC}^{$endif});
+      Methods[n].Method := Method;
+      inc(n);
+      {$ifdef FPC}
+      inc(M);
+      {$else}
+      inc(PByte(M),M^.Len);
+      {$endif}
+    end;
+  end;
+begin
+  if Instance=nil then
+    exit;
+  n := 0;
+  AddParentsFirst(Instance.ClassType);
+  SetLength(Methods,n);
 end;
 
 
@@ -1484,17 +1716,17 @@ var i: integer;
 begin
   if fTypeInfo<>Instance.ClassInfo then
     FillPropInfo(Instance.ClassInfo);
-  for i := 0 to Length(fFieldNames)-1 do
+  for i := 0 to Length(fPropInfo)-1 do
     SetInstanceProp(Instance,fPropInfo[i],fRowValues[i]);
 end;
 
-function TJSONTableObject.GetPropInfo(aTypeInfo: PTypeInfo;
-  const PropName: string): PPropInfo;
+function TJSONTableObject.GetPropInfo(aTypeInfo: TRTTITypeInfo;
+  const PropName: string): TRTTIPropInfo;
 begin
-  result := TypInfo.GetPropInfo(aTypeInfo,PropName);
+  result := TypInfo.GetPropInfo(PTypeInfo(aTypeInfo),PropName);
 end;
 
-procedure TJSONTableObject.FillPropInfo(aTypeInfo: pointer);
+procedure TJSONTableObject.FillPropInfo(aTypeInfo: TRTTITypeInfo);
 var i: integer;
 begin
   fTypeInfo := aTypeInfo;

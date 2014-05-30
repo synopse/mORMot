@@ -93,7 +93,7 @@ type
     /// run all tests
     procedure Run(LogToConsole: boolean);
     /// validate a test
-    procedure Check(test: Boolean; const Msg: string='');
+    procedure Check(test: Boolean; const Msg: string=''); overload;
   published
   end;
 {$M-}
@@ -125,7 +125,7 @@ type
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
   end;
   
-  TSQLRecordMainNested = class(TCollectionItem)
+  TMainNested = class(TCollectionItem)
   private
     fNumber: double;
     fIdent: RawUTF8;
@@ -134,12 +134,12 @@ type
     property Number: double read fNumber write fNumber;
   end;
 
-  TSQLRecordMain = class(TSQLRecord)
+  TMain = class(TPersistent)
   private
     fName: RawUTF8;
     fNested: TCollection;
   public
-    constructor Create; override;
+    constructor Create;
     destructor Destroy; override;
   published
     property Name: RawUTF8 read fName write fName;
@@ -234,26 +234,26 @@ end;
 procedure TSynCrossPlatformTests.Iso8601DateTime;
 procedure Test(D: TDateTime);
 var s: string;
-    E,F: TDateTime;
+procedure One(D: TDateTime);
+var E: TDateTime;
+    V: TTimeLog;
 begin
-  F := D;
   s := DateTimeToIso8601(D);
+  E := Iso8601ToDateTime(s);
+  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 1 sec error
+  Check(DateTimeToJSON(D)='"'+s+'"');
+  V := DateTimeToTTimeLog(D);
+  E := TTimeLogToDateTime(V);
+  Check(Abs(D-E)<(1000/MSecsPerDay));
+  Check(UrlDecode(UrlEncode(s))=s);
+end;
+begin
+  One(D);
   Check(length(s)=19);
-  E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
-  Check(DateTimeToJSON(D)='"'+s+'"');
-  D := Trunc(F);
-  s := DateTimeToIso8601(D);
+  One(Trunc(D));
   Check(length(s)=10);
-  E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
-  Check(DateTimeToJSON(D)='"'+s+'"');
-  D := Frac(F);
-  s := DateTimeToIso8601(D);
+  One(Frac(D));
   Check(length(s)=9);
-  E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
-  Check(DateTimeToJSON(D)='"'+s+'"');
 end;
 var D: TDateTime;
     i: integer;
@@ -269,9 +269,8 @@ procedure TSynCrossPlatformTests.JSON;
 var doc: variant;
     json,json2,inlined: string;
     i: integer;
-    people: TSQLRecordPeople;
-    obj1,obj2: TSQLRecordMain;
-    item: TSQLRecordMainNested;
+    obj1,obj2: TMain;
+    item: TMainNested;
 begin
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   check(doc.test=1234);
@@ -321,6 +320,61 @@ begin
     check(FormatBind('ab?ab??cd',[i,i,json])='ab'+inlined+'ab'+inlined+
       ':("'+json+'"):cd');
   end;
+  obj1 := TMain.Create;
+  obj2 := TMain.Create;
+  try
+    for i := 1 to 100 do begin
+      obj1.Name := IntToStr(i);
+      item := obj1.Nested.Add as TMainNested;
+      item.Ident := obj1.Name;
+      item.Number := i/2;
+      check(obj1.Nested.Count=i);
+      json := ObjectToJSON(obj1);
+      check(json<>'');
+      if i=1 then
+        check(json='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}]}');
+      JSONToObject(obj2,json);
+      check(obj2.Nested.Count=i);
+      json2 := ObjectToJSON(obj2);
+      check(json2=json);
+    end;
+  finally
+    obj2.Free;
+    obj1.Free;
+  end;
+  json := 'one,two,3';
+  i := 1;
+  check(GetNextCSV(json,i,json2));
+  check(json2='one');
+  check(GetNextCSV(json,i,json2));
+  check(json2='two');
+  check(GetNextCSV(json,i,json2));
+  check(json2='3');
+  check(not GetNextCSV(json,i,json2));
+  check(not GetNextCSV(json,i,json2));
+  json := 'one';
+  i := 1;
+  check(GetNextCSV(json,i,json2));
+  check(json2='one');
+  check(not GetNextCSV(json,i,json2));
+  json := '';
+  i := 1;
+  check(not GetNextCSV(json,i,json2));
+end;
+
+procedure TSynCrossPlatformTests.Model;
+var Model: TSQLModel;
+    people: TSQLRecordPeople;
+    i: integer;
+    json: string;
+    fields: TSQLFieldBits;
+begin
+  Model := TSQLModel.Create([TSQLRecordPeople],'test/');
+  Check(Model.Root='test');
+  Check(length(Model.Info)=1);
+  Check(Model.Info[0].Table=TSQLRecordPeople);
+  Check(Model.Info[0].Name='People');
+  Check(length(Model.Info[0].Prop)=6);
   people := TSQLRecordPeople.Create;
   try
     for i := 1 to 1000 do begin
@@ -336,53 +390,31 @@ begin
   finally
     people.Free;
   end;
-  obj1 := TSQLRecordMain.Create;
-  obj2 := TSQLRecordMain.Create;
-  try
-    for i := 1 to 100 do begin
-      obj1.ID := i;
-      obj1.Name := IntToStr(i);
-      item := obj1.Nested.Add as TSQLRecordMainNested;
-      item.Ident := obj1.Name;
-      item.Number := i/2;
-      check(obj1.Nested.Count=i);
-      json := ObjectToJSON(obj1);
-      check(json<>'');
-      if i=1 then
-        check(json='{"ID":1,"Name":"1","Nested":[{"Ident":"1","Number":0.5}]}');
-      JSONToObject(obj2,json);
-      check(obj2.Nested.Count=i);
-      json2 := ObjectToJSON(obj2);
-      check(json2=json);
-    end;
-  finally
-    obj2.Free;
-    obj1.Free;
-  end;
-end;
-
-procedure TSynCrossPlatformTests.Model;
-var Model: TSQLModel;
-begin
-  Model := TSQLModel.Create([TSQLRecordPeople],'test/');
-  Check(Model.Root='test');
-  Check(length(Model.Tables)=1);
-  Check(length(Model.TableNames)=1);
-  Check(Model.Tables[0]=TSQLRecordPeople);
-  Check(Model.TableNames[0]='People');
+  Check(PInteger(@Model.Info[0].SimpleFields)^=$37);
+  Check(PInteger(@Model.Info[0].BlobFields)^=8);
+  fields := Model.Info[0].FieldNamesToFieldBits('');
+  Check(PInteger(@fields)^=$37);
+  fields := Model.Info[0].FieldNamesToFieldBits('*');
+  Check(PInteger(@fields)^=-1);
+  fields := Model.Info[0].FieldNamesToFieldBits('RowID,firstname');
+  Check(PInteger(@fields)^=3);
+  Check(Model.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
+  fields := Model.Info[0].FieldNamesToFieldBits('firstname,id,toto');
+  Check(PInteger(@fields)^=3);
+  Check(Model.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
   Model.Free;
 end;
 
 
-{ TSQLRecordMain }
+{ TMain }
 
-constructor TSQLRecordMain.Create;
+constructor TMain.Create;
 begin
   inherited;
-  fNested := TCollection.Create(TSQLRecordMainNested);
+  fNested := TCollection.Create(TMainNested);
 end;
 
-destructor TSQLRecordMain.Destroy;
+destructor TMain.Destroy;
 begin
   fNested.Free;
   inherited;
