@@ -168,7 +168,7 @@ begin
   with TSQLConnection.RecordProps do begin
     AddFilterOrValidate('Ident',TSynFilterTrim.Create);
     AddFilterOrValidate('Ident',TSynValidateText.Create);
-    AddFilterOrValidate('Server',TSynValidateText.Create);
+    //AddFilterOrValidate('Server',TSynValidateText.Create);
   end;
   MainCaption := Caption;
   if (ParamCount=1) and FileExists(paramstr(1)) then begin

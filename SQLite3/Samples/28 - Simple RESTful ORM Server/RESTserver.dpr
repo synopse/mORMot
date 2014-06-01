@@ -1,4 +1,7 @@
+/// minimal REST server for a list of Persons stored on PostgreSQL
 program RESTserver;
+
+// see http://synopse.info/forum/viewtopic.php?pid=10882#p10882
 
 {$APPTYPE CONSOLE}
 
@@ -16,8 +19,8 @@ uses
 var
   aModel: TSQLModel;
   aProps: TSQLDBConnectionProperties;
-  aDB: TSQLRestServerDB;
-  aServer: TSQLHttpServer;
+  aRestServer: TSQLRestServerDB;
+  aHttpServer: TSQLHttpServer;
 begin
   // ODBC driver e.g. from http://ftp.postgresql.org/pub/odbc/versions/msi
   aProps := TODBCConnectionProperties.Create('','Driver=PostgreSQL Unicode'+
@@ -29,22 +32,22 @@ begin
     // use PostgreSQL database for all tables
     VirtualTableExternalRegisterAll(aModel,aProps);
     try
-      // create main mORMot server
-      aDB := TSQLRestServerDB.Create(aModel,':memory:',false);
+      // create the main mORMot server
+      aRestServer := TSQLRestServerDB.Create(aModel,':memory:',false); // authentication=false
       try
-        aDB.CreateMissingTables; // create tables or fields if missing
-        // server aDB over HTTP
-        aServer := TSQLHttpServer.Create(SERVER_PORT,[aDB],'+',useHttpApiRegisteringURI);
+        aRestServer.CreateMissingTables; // create tables or fields if missing
+        // serve aRestServer data over HTTP
+        aHttpServer := TSQLHttpServer.Create(SERVER_PORT,[aRestServer],'+',useHttpApiRegisteringURI);
         try
-          aServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
+          aHttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
           writeln('Background server is running.'#10);
           write('Press [Enter] to close the server.');
           readln;
         finally
-          aServer.Free;
+          aHttpServer.Free;
         end;
       finally
-        aDB.Free;
+        aRestServer.Free;
       end;
     finally
       aModel.Free;

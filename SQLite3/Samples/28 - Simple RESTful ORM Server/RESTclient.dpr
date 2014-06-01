@@ -1,12 +1,13 @@
+/// minimal REST client for a list of Persons from RESTserver.exe
 program RESTclient;
 
 {$APPTYPE CONSOLE}
 
 uses
-  SynCommons,
-  mORMot,
-  mORMotHttpClient,
-  RESTModel;
+  SynCommons,          // framework core
+  mORMot,              // RESTful server & ORM
+  mORMotHttpClient,    // HTTP client to a mORMot RESTful server
+  RESTModel;           // data model unit, shared between server and client
 
 var aModel: TSQLModel;
     aClient: TSQLHttpClient;
@@ -26,15 +27,17 @@ begin
       finally
         aPerson.Free;
       end;
+      writeln('Added TPerson.ID=',aID);
       aPerson := TPerson.Create(aClient,aID);
       try
-        writeln('Name read from DB = ',aPerson.Name);
+        writeln('Name read for ID=',aPerson.ID,' from DB = "',aPerson.Name,'"');
       finally
         aPerson.Free;
       end;
     finally
       aClient.Free;
     end;
+    write(#10'Press [Enter] to quit');
     readln;
   finally
     aModel.Free;

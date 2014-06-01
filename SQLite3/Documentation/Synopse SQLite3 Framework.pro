@@ -1159,7 +1159,7 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 SourcePath=Lib\SQLite3
 IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
-SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas
+SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
 Version=1.18
 TitleOffset=0
