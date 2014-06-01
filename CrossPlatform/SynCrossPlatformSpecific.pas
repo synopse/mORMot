@@ -213,7 +213,7 @@ begin
   if fParameters.Https then
     fURL := 'https://' else
     fURL := 'http://';
-  fURL := fURL+fParameters.Server+':'+IntToStr(fParameters.Port);
+  fURL := fURL+fParameters.Server+':'+IntToStr(fParameters.Port)+'/';
 end;
 
 
@@ -249,7 +249,7 @@ begin
     fConnection.RequestHeaders.Text := Call.InHead;
     if Call.InBody<>nil then
       fConnection.RequestBody := InStr;
-    fConnection.HTTPMethod(Call.Method,fURL,OutStr,[]);
+    fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
     Call.OutHead := fConnection.ResponseHeaders.Text;
     Call.OutBody := OutStr.Bytes;
   finally
@@ -316,13 +316,13 @@ begin
       fConnection.Request.Source := InStr;
     end;
     if Call.Method='GET' then
-      fConnection.Get(fURL,OutStr) else
+      fConnection.Get(fURL+Call.Url,OutStr) else
     if Call.Method='POST' then
-      fConnection.Post(fURL,InStr,OutStr) else
+      fConnection.Post(fURL+Call.Url,InStr,OutStr) else
     if Call.Method='PUT' then
-      fConnection.Put(fURL,InStr) else
+      fConnection.Put(fURL+Call.Url,InStr) else
     if Call.Method='DELETE' then
-      fConnection.Delete(fURL,OutStr) else
+      fConnection.Delete(fURL+Call.Url,OutStr) else
       raise Exception.CreateFmt('Indy does not know method %s',[Call.Method]);
     Call.OutStatus := fConnection.Response.ResponseCode;
     Call.OutHead := fConnection.Response.RawHeaders.Text;
