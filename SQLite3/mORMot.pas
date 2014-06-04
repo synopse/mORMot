@@ -797,6 +797,7 @@ unit mORMot;
     - TSQLRestServer.URI() will now handle POST/PUT/DELETE ModelRoot/MethodName
       as method-based services
     - added TSQLRestServerFullMemory.Flush method-based service
+    - added TSQLRestServerFullMemory.DropDatabase method
     - completed HTML_* constant list and messages - feature request [d8de3eb76a]
     - handle HTML_NOTMODIFIED as successful status - as expected by [5d2634e8a3]
     - enhanced sllAuth session creation/deletion logged information
@@ -11077,6 +11078,8 @@ type
     /// write any modification into file
     // - do nothing if file name was not assigned
     procedure UpdateToFile; virtual;
+    /// clear all internal TObjectList content
+    procedure DropDatabase; virtual;
     /// overridden method for direct in-memory database engine call
     // - not implemented: always return false
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
@@ -28783,6 +28786,13 @@ begin
   inherited;
 end;
 
+procedure TSQLRestServerFullMemory.DropDatabase;
+var t: integer;
+begin
+  for t := 0 to fStaticDataCount-1 do
+    TSQLRestStorageInMemory(fStaticData[t]).fValue.Clear;
+end;
+
 procedure TSQLRestServerFullMemory.LoadFromFile;
 var JSON: RawUTF8;
     P, TableName, Data: PUTF8Char;
@@ -28792,8 +28802,7 @@ var JSON: RawUTF8;
 begin
   if (self=nil) or (fFileName='') or not FileExists(fFileName) then
     exit;
-  for t := 0 to fStaticDataCount-1 do
-    TSQLRestStorageInMemory(fStaticData[t]).fValue.Clear;
+  DropDatabase;
   if fBinaryFile then begin
     S := TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
     try
