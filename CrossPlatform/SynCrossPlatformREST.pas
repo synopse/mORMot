@@ -70,6 +70,9 @@ const
   /// the first field in TSQLFieldBits is always ID/RowID
   ID_SQLFIELD = 0;
 
+  /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
+  AS_UNIQUE = false;
+
 type
   /// alias to share the same string type between client and server
   RawUTF8 = string;
@@ -205,6 +208,8 @@ type
     // !   dosomethingwith(Rec);
     constructor CreateAndFillPrepare(aClient: TSQLRest; const FieldNames,
       SQLWhere: string; const BoundsSQLWhere: array of const);
+    /// finalize the record memory
+    destructor Destroy; override;
     /// fill the specified record from the supplied JSON
     function FromJSON(const aJSON: string): boolean;
     /// fill all published properties of this object with the next available
@@ -232,6 +237,84 @@ type
     /// stores the record's primary key
     property ID: integer read fID write fID;
   end;
+
+  /// table containing the available user access rights for authentication
+  // - is added here since should be part of the model
+  // - no wrapper is available to handle AccessRights, since for security
+  // reasons it is not available remotely from client side
+  TSQLAuthGroup = class(TSQLRecord)
+  private
+    fIdent: string;
+    fSessionTimeOut: integer;
+    fAccessRights: string;
+  published
+    /// the access right identifier, ready to be displayed
+    // - the same identifier can be used only once (this column is marked as
+    // unique via a "stored AS_UNIQUE" (i.e. "stored false") attribute)
+    property Ident: string read fIdent write fIdent stored AS_UNIQUE;
+    /// the number of minutes a session is kept alive
+    property SessionTimeout: integer read fSessionTimeOut write fSessionTimeOut;
+    /// a textual representation of a TSQLAccessRights buffer
+    property AccessRights: string read fAccessRights write fAccessRights;
+  end;
+
+  /// class of the table containing the available user access rights for authentication
+  TSQLAuthGroupClass = class of TSQLAuthGroup;
+
+  /// table containing the Users registered for authentication
+  TSQLAuthUser = class(TSQLRecord)
+  protected
+    fLogonName: string;
+    fPasswordHashHexa: string;
+    fDisplayName: string;
+    fGroup: TSQLAuthGroup;
+    fData: TSQLRawBlob;
+    procedure SetPasswordPlain(const Value: string);
+  public
+    /// able to set the PasswordHashHexa field from a plain password content
+    // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
+    property PasswordPlain: string write SetPasswordPlain;
+  published
+    /// the User identification Name, as entered at log-in
+    // - the same identifier can be used only once (this column is marked as
+    // unique via a "stored AS_UNIQUE" - i.e. "stored false" - attribute), and
+    // therefore indexed in the database (e.g. hashed in TSQLRestStorageInMemory)
+    property LogonName: string read fLogonName write fLogonName stored AS_UNIQUE;
+    /// the User Name, as may be displayed or printed
+    property DisplayName: string read fDisplayName write fDisplayName;
+    /// the hexa encoded associated SHA-256 hash of the password
+    property PasswordHashHexa: string read fPasswordHashHexa write fPasswordHashHexa;
+    /// the associated access rights of this user
+    // - access rights are managed by group
+    // - in TAuthSession.User instance, GroupRights property will contain a
+    // REAL TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
+    // - note that 'Group' field name is not allowed by SQLite
+    property GroupRights: TSQLAuthGroup read fGroup write fGroup;
+    /// some custom data, associated to the User
+    // - Server application may store here custom data
+    // - its content is not used by the framework but 'may' be used by your
+    // application
+    property Data: TSQLRawBlob read fData write fData;
+  end;
+
+
+  /// used for client authentication
+  TSQLRestAuthentication = class
+  protected
+    fUser: TSQLAuthUser;
+  public
+    /// initialize client authentication instance, i.e. mainly User
+    constructor Create(const aUserName, aPassword: string;
+      aHashedPassword: Boolean=false);
+    /// finalize the instance
+    destructor Destroy; override;
+    /// read-only access to the logged user information
+    // - only LogonName and PasswordHashHexa are set here
+    property User: TSQLAuthUser read fUser;
+  end;
+
+  /// class used for client authentication
+  TSQLRestAuthenticationClass = class of TSQLRestAuthentication;
 
   /// abstract REST access class
   TSQLRest = class
@@ -307,6 +390,9 @@ type
     function Retrieve(aID: integer; Value: TSQLRecord;
       ForUpdate: boolean=false): boolean; override;
     /// execute directly a SQL statement, returning a list of rows or nil
+    // - we expect reUrlEncodedSQL to be defined in AllowRemoteExecute on
+    // server side, since we will encode the SQL at URL level, so that all
+    // HTTP client libraires will accept this layout (e.g. Indy or AJAX)
     function ExecuteList(const SQL: string): TSQLTableJSON; override;
     /// delete a member
     function Delete(Table: TSQLRecordClass; ID: integer): boolean; override;
@@ -342,67 +428,6 @@ type
     /// the keep-alive timout, in ms (20000 by default)
     property KeepAlive: Integer read fKeepAlive write fKeepAlive;
   end;
-
-const
-  /// MIME content type used for JSON communication
-  JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
-  
-  /// HTML Status Code for "Continue"
-  HTML_CONTINUE = 100;
-  /// HTML Status Code for "Switching Protocols"
-  HTML_SWITCHINGPROTOCOLS = 101;
-  /// HTML Status Code for "Success"
-  HTML_SUCCESS = 200;
-  /// HTML Status Code for "Created"
-  HTML_CREATED = 201;
-  /// HTML Status Code for "Accepted"
-  HTML_ACCEPTED = 202;
-  /// HTML Status Code for "Non-Authoritative Information"
-  HTML_NONAUTHORIZEDINFO = 203;
-  /// HTML Status Code for "No Content"
-  HTML_NOCONTENT = 204;
-  /// HTML Status Code for "Multiple Choices"
-  HTML_MULTIPLECHOICES = 300;
-  /// HTML Status Code for "Moved Permanently"
-  HTML_MOVEDPERMANENTLY = 301;
-  /// HTML Status Code for "Found"
-  HTML_FOUND = 302;
-  /// HTML Status Code for "See Other"
-  HTML_SEEOTHER = 303;
-  /// HTML Status Code for "Not Modified"
-  HTML_NOTMODIFIED = 304;
-  /// HTML Status Code for "Use Proxy"
-  HTML_USEPROXY = 305;
-  /// HTML Status Code for "Temporary Redirect"
-  HTML_TEMPORARYREDIRECT = 307;
-  /// HTML Status Code for "Bad Request"
-  HTML_BADREQUEST = 400;
-  /// HTML Status Code for "Unauthorized"
-  HTML_UNAUTHORIZED = 401;
-  /// HTML Status Code for "Forbidden"
-  HTML_FORBIDDEN = 403;
-  /// HTML Status Code for "Not Found"
-  HTML_NOTFOUND = 404;
-  // HTML Status Code for "Method Not Allowed"
-  HTML_NOTALLOWED = 405;
-  // HTML Status Code for "Not Acceptable"
-  HTML_NOTACCEPTABLE = 406;
-  // HTML Status Code for "Proxy Authentication Required"
-  HTML_PROXYAUTHREQUIRED = 407;
-  /// HTML Status Code for "Request Time-out"
-  HTML_TIMEOUT = 408;
-  /// HTML Status Code for "Internal Server Error"
-  HTML_SERVERERROR = 500;
-  /// HTML Status Code for "Not Implemented"
-  HTML_NOTIMPLEMENTED = 501;
-  /// HTML Status Code for "Bad Gateway"
-  HTML_BADGATEWAY = 502;
-  /// HTML Status Code for "Service Unavailable"
-  HTML_UNAVAILABLE = 503;
-  /// HTML Status Code for "Gateway Timeout"
-  HTML_GATEWAYTIMEOUT = 504;
-  /// HTML Status Code for "HTTP Version Not Supported"
-  HTML_HTTPVERSIONNONSUPPORTED = 505;
 
 
 /// true if PropName is either 'ID' or 'RowID'
@@ -520,7 +545,8 @@ var a,i: integer;
     wasString: Boolean;
 begin
   result := '';
-  for a := 0 to high(aNameValueParameters) shr 1 do begin
+  if high(aNameValueParameters)>=0 then
+  for a := 0 to high(aNameValueParameters) div 2 do begin
     name := VarRecToValue(aNameValueParameters[a*2],wasString);
     for i := 1 to length(name) do
       if not (ord(name[i]) in [ord('a')..ord('z'),ord('A')..ord('Z')]) then
@@ -620,6 +646,12 @@ constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
 begin
   Create;
   fFill := aClient.MultiFieldValues(RecordClass,FieldNames,SQLWhere,BoundsSQLWhere);
+end;
+
+destructor TSQLRecord.Destroy;
+begin
+  fFill.Free;
+  inherited;
 end;
 
 function TSQLRecord.FillOne: boolean;
@@ -849,7 +881,7 @@ end;
 constructor TSQLRest.Create(aModel: TSQLModel);
 begin
   inherited Create;
-  fModel := Model;
+  fModel := aModel;
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -971,9 +1003,10 @@ begin
   result := nil;
   if self=nil then
     exit;
-  Call.Url := Model.Root;
+  // strict HTTP does not allow any body content -> encode SQL at URL
+  // so we expect reUrlEncodedSQL to be defined in AllowRemoteExecute
+  Call.Url := Model.Root+UrlEncode(['sql',sql]);
   Call.Method := 'GET';
-  TextToHttpBody(SQL,Call.InBody);
   URI(Call);
   if Call.OutStatus=HTML_SUCCESS then begin
     HttpBodyToText(Call.OutBody,json);
@@ -1048,6 +1081,7 @@ begin
   result := 0;
   Call.Url := getURIID(tableIndex,0);
   Call.Method := 'POST';
+  TextToHttpBody(json,Call.InBody);
   URI(Call);
   if Call.OutStatus<>HTML_CREATED then
     exit;
@@ -1136,6 +1170,32 @@ begin
         FreeAndNil(fConnection); // will retry once (e.g. if connection broken)
     end;
   end;
+end;
+
+
+{ TSQLAuthUser }
+
+procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
+begin
+  // TODO: create and use new SynCrossPlatformCrypto unit
+end;
+
+{ TSQLRestAuthentication }
+
+constructor TSQLRestAuthentication.Create(const aUserName,
+  aPassword: string; aHashedPassword: Boolean);
+begin
+  fUser := TSQLAuthUser.Create;
+  fUser.LogonName := aUserName;
+  if aHashedPassword then
+    fUser.PasswordPlain := aPassword else
+    fUser.PasswordHashHexa := aPassword;
+end;
+
+destructor TSQLRestAuthentication.Destroy;
+begin
+  fUser.Free;
+  inherited;
 end;
 
 end.

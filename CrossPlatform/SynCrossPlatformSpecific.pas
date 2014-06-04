@@ -139,6 +139,68 @@ type
   TAbstractHttpConnectionClass = class of TAbstractHttpConnection;
 
 
+const
+  /// MIME content type used for JSON communication
+  JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
+  
+  /// HTML Status Code for "Continue"
+  HTML_CONTINUE = 100;
+  /// HTML Status Code for "Switching Protocols"
+  HTML_SWITCHINGPROTOCOLS = 101;
+  /// HTML Status Code for "Success"
+  HTML_SUCCESS = 200;
+  /// HTML Status Code for "Created"
+  HTML_CREATED = 201;
+  /// HTML Status Code for "Accepted"
+  HTML_ACCEPTED = 202;
+  /// HTML Status Code for "Non-Authoritative Information"
+  HTML_NONAUTHORIZEDINFO = 203;
+  /// HTML Status Code for "No Content"
+  HTML_NOCONTENT = 204;
+  /// HTML Status Code for "Multiple Choices"
+  HTML_MULTIPLECHOICES = 300;
+  /// HTML Status Code for "Moved Permanently"
+  HTML_MOVEDPERMANENTLY = 301;
+  /// HTML Status Code for "Found"
+  HTML_FOUND = 302;
+  /// HTML Status Code for "See Other"
+  HTML_SEEOTHER = 303;
+  /// HTML Status Code for "Not Modified"
+  HTML_NOTMODIFIED = 304;
+  /// HTML Status Code for "Use Proxy"
+  HTML_USEPROXY = 305;
+  /// HTML Status Code for "Temporary Redirect"
+  HTML_TEMPORARYREDIRECT = 307;
+  /// HTML Status Code for "Bad Request"
+  HTML_BADREQUEST = 400;
+  /// HTML Status Code for "Unauthorized"
+  HTML_UNAUTHORIZED = 401;
+  /// HTML Status Code for "Forbidden"
+  HTML_FORBIDDEN = 403;
+  /// HTML Status Code for "Not Found"
+  HTML_NOTFOUND = 404;
+  // HTML Status Code for "Method Not Allowed"
+  HTML_NOTALLOWED = 405;
+  // HTML Status Code for "Not Acceptable"
+  HTML_NOTACCEPTABLE = 406;
+  // HTML Status Code for "Proxy Authentication Required"
+  HTML_PROXYAUTHREQUIRED = 407;
+  /// HTML Status Code for "Request Time-out"
+  HTML_TIMEOUT = 408;
+  /// HTML Status Code for "Internal Server Error"
+  HTML_SERVERERROR = 500;
+  /// HTML Status Code for "Not Implemented"
+  HTML_NOTIMPLEMENTED = 501;
+  /// HTML Status Code for "Bad Gateway"
+  HTML_BADGATEWAY = 502;
+  /// HTML Status Code for "Service Unavailable"
+  HTML_UNAVAILABLE = 503;
+  /// HTML Status Code for "Gateway Timeout"
+  HTML_GATEWAYTIMEOUT = 504;
+  /// HTML Status Code for "HTTP Version Not Supported"
+  HTML_HTTPVERSIONNONSUPPORTED = 505;
+
+  
 /// gives access to the class type to implement a HTTP connection
 // - will use WinHTTP API (from our SynCrtSock) under Windows
 // - will use Indy for Delphi on other platforms
@@ -184,9 +246,11 @@ end;
 
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 var utf8: UTF8String;
+    L: integer;
 begin
-  SetLength(utf8,length(Body));
-  move(pointer(Body)^,pointer(utf8)^,length(Body));
+  L := length(Body);
+  SetLength(utf8,L);
+  move(pointer(Body)^,pointer(utf8)^,L);
   {$ifdef UNICODE}
   Text := UTF8ToString(utf8);
   {$else}
@@ -247,11 +311,12 @@ begin
   OutStr := TBytesStream.Create;
   try
     fConnection.RequestHeaders.Text := Call.InHead;
-    if Call.InBody<>nil then
-      fConnection.RequestBody := InStr;
+    fConnection.RequestBody := InStr;
     fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
+    Call.OutStatus := fConnection.ResponseStatusCode;
     Call.OutHead := fConnection.ResponseHeaders.Text;
     Call.OutBody := OutStr.Bytes;
+    SetLength(Call.OutBody,OutStr.Position);
   finally
     OutStr.Free;
     InStr.Free;
@@ -311,12 +376,12 @@ begin
   try
     fConnection.Request.RawHeaders.Text := Call.InHead;
     if Call.InBody<>nil then begin
-      InStr.Write(Call.InBody,length(Call.InBody));
+      InStr.Write(Call.InBody[0],length(Call.InBody));
       InStr.Seek(0,soBeginning);
       fConnection.Request.Source := InStr;
     end;
-    if Call.Method='GET' then
-      fConnection.Get(fURL+Call.Url,OutStr) else
+    if Call.Method='GET' then // allow 400 as valid Call.OutStatus
+      fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_BADREQUEST]) else
     if Call.Method='POST' then
       fConnection.Post(fURL+Call.Url,InStr,OutStr) else
     if Call.Method='PUT' then
@@ -330,7 +395,7 @@ begin
     if OutLen>0 then begin
       SetLength(Call.OutBody,OutLen);
       OutStr.Seek(0,soBeginning);
-      OutStr.Read(Call.OutBody,OutLen);
+      OutStr.Read(Call.OutBody[0],OutLen);
     end;
   finally
     OutStr.Free;
@@ -388,9 +453,9 @@ begin
   EnterCriticalSection(fLock);
   try
     SetString(inb,PAnsiChar(Call.InBody),length(Call.InBody));
-    fConnection.Request(RawByteString(Call.Url),RawByteString(Call.Method),
-      KeepAlive,RawByteString(Call.InHead),inb,RawByteString(InDataType),
-      outh,outb);
+    Call.OutStatus := fConnection.Request(RawByteString(Call.Url),
+      RawByteString(Call.Method),KeepAlive,RawByteString(Call.InHead),
+      inb,RawByteString(InDataType),outh,outb);
     Call.OutHead := string(outh);
     n := length(outb);
     SetLength(Call.OutBody,n);

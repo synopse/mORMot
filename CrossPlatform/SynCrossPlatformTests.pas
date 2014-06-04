@@ -61,6 +61,7 @@ uses
   Variants,
   TypInfo,
   SynCrossPlatformJSON,
+  SynCrossPlatformSpecific,
   SynCrossPlatformRest;
 
 
@@ -96,7 +97,6 @@ type
     procedure Check(test: Boolean; const Msg: string=''); overload;
   published
   end;
-{$M-}
 
   /// regression tests of our CrossPlatform units
   TSynCrossPlatformTests = class(TSynTest)
@@ -106,6 +106,23 @@ type
     procedure JSON;
     procedure Model;
   end;
+
+  /// regression tests of our CrossPlatform units
+  TSynCrossPlatformClient = class(TSynTest)
+  protected
+    fAuthentication: TSQLRestAuthentication;
+    fModel: TSQLModel;
+    fClient: TSQLRestClientHTTP;
+  public
+    constructor Create(aAuthentication: TSQLRestAuthenticationClass); reintroduce;
+    destructor Destroy; override;
+  published
+    procedure Connection;
+    procedure ORM;
+    procedure Services;
+  end;
+{$M-}
+
 
 implementation
 
@@ -418,6 +435,140 @@ destructor TMain.Destroy;
 begin
   fNested.Free;
   inherited;
+end;
+
+{ TSynCrossPlatformClient }
+
+constructor TSynCrossPlatformClient.Create(
+  aAuthentication: TSQLRestAuthenticationClass);
+begin
+  inherited Create;
+  if aAuthentication<>nil then
+    fAuthentication := aAuthentication.Create('user','synopse');
+end;
+
+destructor TSynCrossPlatformClient.Destroy;
+begin
+  fModel.Free;
+  fClient.Free;
+  fAuthentication.Free;
+  inherited;
+end;
+
+procedure TSynCrossPlatformClient.Connection;
+begin
+  fModel := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople]);
+  fClient := TSQLRestClientHTTP.Create('localhost',888,fModel);
+  Check(fClient.Connect);
+  check(fClient.ServerTimeStamp<>0);
+end;
+
+procedure TSynCrossPlatformClient.ORM;
+var people: TSQLRecordPeople;
+    Call: TSQLRestURIParams;
+    i,id: integer;
+begin
+  fClient.CallBackGet('DropWholeDatabase',[],Call);
+  Check(Call.OutStatus=HTML_SUCCESS);
+  people := TSQLRecordPeople.Create;
+  try
+    for i := 1 to 200 do begin
+      people.FirstName := 'First'+IntToStr(i);
+      people.LastName := 'Last'+IntToStr(i);
+      people.YearOfBirth := i+1800;
+      people.YearOfDeath := i+1825;
+      Check(fClient.Add(people,true)=i);
+    end;
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'','',[]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=id);
+      Check(people.FirstName='First'+IntToStr(id));
+      Check(people.LastName='Last'+IntToStr(id));
+      Check(people.YearOfBirth=id+1800);
+      Check(people.YearOfDeath=id+1825);
+    end;
+    Check(id=200);
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,
+    'YearOFBIRTH,Yearofdeath,id','',[]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=id);
+      Check(people.FirstName='');
+      Check(people.LastName='');
+      Check(people.YearOfBirth=id+1800);
+      Check(people.YearOfDeath=id+1825);
+    end;
+    Check(id=200);
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'',
+    'yearofbirth=?',[1900]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=100);
+      Check(people.FirstName='First100');
+      Check(people.LastName='Last100');
+      Check(people.YearOfBirth=1900);
+      Check(people.YearOfDeath=1925);
+    end;
+    Check(id=1);
+  finally
+    people.Free;
+  end;
+  for i := 1 to 200 do
+    if i and 15=0 then
+      fClient.Delete(TSQLRecordPeople,i) else
+    if i mod 82=0 then begin
+      people := TSQLRecordPeople.Create;
+      try
+        id := i+1;
+        people.ID := i;
+        people.FirstName := 'First'+IntToStr(id);
+        people.LastName := 'Last'+IntToStr(id);
+        people.YearOfBirth := id+1800;
+        people.YearOfDeath := id+1825;
+        Check(fClient.Update(people,'YEarOFBIRTH,YEarOfDeath'));
+      finally
+        people.Free;
+      end;
+    end;
+  for i := 1 to 200 do begin
+    people := TSQLRecordPeople.Create(fClient,i);
+    try
+      if i and 15=0 then
+        Check(people.ID=0) else begin
+        if i mod 82=0 then
+          id := i+1 else
+          id := i;
+        Check(people.ID=i);
+        Check(people.FirstName='First'+IntToStr(i));
+        Check(people.LastName='Last'+IntToStr(i));
+        Check(people.YearOfBirth=id+1800);
+        Check(people.YearOfDeath=id+1825);
+      end;
+    finally
+      people.Free;
+    end;
+  end;
+end;
+
+procedure TSynCrossPlatformClient.Services;
+begin
+
 end;
 
 initialization
