@@ -1803,9 +1803,9 @@ type
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a string to specify
     // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
-    // ! FindDoc(BSONVariant(['name','John']),null)
-    // ! FindDoc(BSONVariant(['name','John']),'_id')
-    // ! FindDoc(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'))
+    // ! FindDoc(BSONVariant(['name','John']),null);
+    // ! FindDoc(BSONVariant(['name','John']),'_id');
+    // ! FindDoc(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
     // - NumberToReturn can be left to its default maxInt value to return all
     // matching documents, or specify a limit (e.g. 1 for one document - in this
     // case, the returned instance won't be a dvArray kind of TDocVariant, but
@@ -1819,7 +1819,7 @@ type
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
     // ! FindDoc('{name:"John",age:{$gt,21}}',[]);
-    // ! FindDoc('{name:?,age:{$gt,?}}',['John',21]));
+    // ! FindDoc('{name:?,age:{$gt,?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -1847,7 +1847,7 @@ type
     procedure FindDocs(Criteria: PUTF8Char; const Params: array of const;
       var result: TVariantDynArray; const Projection: RawUTF8='';
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
-      Flags: TMongoQueryFlags=[]); overload; 
+      Flags: TMongoQueryFlags=[]); overload;
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
@@ -1858,9 +1858,9 @@ type
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a string to specify
     // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
-    // ! FindJSON(BSONVariant(['name','John']),null)
-    // ! FindJSON(BSONVariant(['name','John']),'_id')
-    // ! FindJSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'))
+    // ! FindJSON(BSONVariant(['name','John']),null);
+    // ! FindJSON(BSONVariant(['name','John']),'_id');
+    // ! FindJSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
     // - NumberToReturn can be left to its default maxInt value to return all
     // matching documents as a '[..]' JSON array, or specify a limit (e.g. 1
     // for one document - in this case, the returned instance won't be a '[..]'
@@ -1876,7 +1876,7 @@ type
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
     // ! FindJSON('{name:"John",age:{$gt,21}}',[]);
-    // ! FindJSON('{name:?,age:{$gt,?}}',['John',21]));
+    // ! FindJSON('{name:?,age:{$gt,?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -1892,7 +1892,7 @@ type
     // - Criteria and Projection can specify the query selector as (extended)
     // JSON and parameters
     function FindJSON(Criteria: PUTF8Char; const CriteriaParams: array of const;
-      const Projection: RawUTF8; 
+      const Projection: RawUTF8;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
 
@@ -1904,9 +1904,9 @@ type
     // ! FindBSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
     // - Projection can be null (to retrieve all fields) or a string to specify
     // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
-    // ! FindBSON(BSONVariant(['name','John']),null)
-    // ! FindBSON(BSONVariant(['name','John']),'_id')
-    // ! FindBSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'))
+    // ! FindBSON(BSONVariant(['name','John']),null);
+    // ! FindBSON(BSONVariant(['name','John']),'_id');
+    // ! FindBSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
     // - NumberToReturn can be left to its default maxInt value to return all
     // matching documents, or specify a limit (e.g. 1 for one document)
     function FindBSON(const Criteria, Projection: Variant;
@@ -1994,7 +1994,7 @@ type
     // - since all content will be transformed into JSON internally, use this
     // method only if the supplied parameters are simple types: any complex value
     // (e.g. a TDateTime or a BSONVariant binary) won't be handled as expected -
-    // use the overloaded Update() with explicit BSONVariant() values instead 
+    // use the overloaded Update() with explicit BSONVariant() values instead
     // - Query and Update parameters can be specified as JSON objects with
     // parameters
     // - Query is the selection criteria for the update; use the same query
@@ -2083,7 +2083,7 @@ type
     // a specific query
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindCount('{name:?,age:{$gt,?}}',[],['John',21]));
+    // ! FindCount('{name:?,age:{$gt,?}}',[],['John',21]);
     // ! FindCount('{ ord_dt: { $gt: new Date(?) } }',[],[trunc(Now)-7]);
     // - optional MaxNumberToReturn can specify a limit for the search (e.g. if
     // you do not want an exact count, but only check for a specific limit)
