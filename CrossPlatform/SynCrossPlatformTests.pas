@@ -112,7 +112,7 @@ type
   /// regression tests of our CrossPlatform units
   TSynCrossPlatformClient = class(TSynTest)
   protected
-    fAuthentication: TSQLRestAuthentication;
+    fAuthentication: TSQLRestAuthenticationClass;
     fModel: TSQLModel;
     fClient: TSQLRestClientHTTP;
   public
@@ -460,15 +460,13 @@ constructor TSynCrossPlatformClient.Create(
   aAuthentication: TSQLRestAuthenticationClass);
 begin
   inherited Create;
-  if aAuthentication<>nil then
-    fAuthentication := aAuthentication.Create('user','synopse');
+  fAuthentication := aAuthentication;
 end;
 
 destructor TSynCrossPlatformClient.Destroy;
 begin
   fModel.Free;
   fClient.Free;
-  fAuthentication.Free;
   inherited;
 end;
 
@@ -476,8 +474,10 @@ procedure TSynCrossPlatformClient.Connection;
 begin
   fModel := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople]);
   fClient := TSQLRestClientHTTP.Create('localhost',888,fModel);
-  Check(fClient.Connect);
+  check(fClient.Connect);
   check(fClient.ServerTimeStamp<>0);
+  if fAuthentication<>nil then
+    fClient.SetUser(fAuthentication,'User','synopse');
 end;
 
 procedure TSynCrossPlatformClient.ORM;
@@ -485,7 +485,7 @@ var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
     i,id: integer;
 begin
-  fClient.CallBackGet('DropWholeDatabase',[],Call);
+  fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   Check(Call.OutStatus=HTML_SUCCESS);
   people := TSQLRecordPeople.Create;
   try

@@ -1,5 +1,7 @@
 program RegressionTests;
 
+{$i SynCrossPlatform.inc} // define e.g. HASINLINE
+
 {$APPTYPE CONSOLE}
 
 {$ifdef MSWINDOWS}
@@ -46,19 +48,21 @@ type
 
   TCustomServer = class(TSQLRestServerFullMemory)
   published
-    procedure DropWholeDatabase(Ctxt: TSQLRestServerURIContext);
+    procedure DropTable(Ctxt: TSQLRestServerURIContext);
   end;
 
-procedure TCustomServer.DropWholeDatabase(Ctxt: TSQLRestServerURIContext);
+procedure TCustomServer.DropTable(Ctxt: TSQLRestServerURIContext);
 begin
-  if Ctxt.Method=mGET then begin
-    DropDatabase;
+  if (Ctxt.Method=mGET) and (Ctxt.TableIndex>=0) then begin
+    TSQLRestStorageInMemory(fStaticData[Ctxt.TableIndex]).LoadFromJSON('');
     Ctxt.Success;
   end;
 end;
 {$endif}
 
-procedure TestWithAuth(aAuth: TSQLRestAuthenticationClass; waitEnterKey: boolean);
+procedure TestWithAuth(
+  aAuth: SynCrossPlatformREST.TSQLRestAuthenticationClass;
+  waitEnterKey: boolean);
 {$ifdef RUNSERVER}
 var Model: TSQLModel;
     DB: TCustomServer;
@@ -77,6 +81,10 @@ begin
     DB := TCustomServer.Create(Model);
     Server := TSQLHttpServer.Create('888',DB);
     try
+      if aAuth=TSQLRestAuthenticationDefault then
+        DB.AuthenticationRegister(TSQLRestServerAuthenticationDefault) else
+      if aAuth=TSQLRestAuthenticationNone then
+        DB.AuthenticationRegister(TSQLRestServerAuthenticationNone);
 {$endif}
       Run(true);
       if waitEnterKey then begin
@@ -103,6 +111,10 @@ begin
     Free;
   end;
   writeln;
-  TestWithAuth(nil,true);
+  {$ifdef RUNSERVER} // only last one will remain alive for FPC
+  TestWithAuth(nil,false);
+  TestWithAuth(TSQLRestAuthenticationNone,false);
+  {$endif}
+  TestWithAuth(TSQLRestAuthenticationDefault,true);
 end.
 

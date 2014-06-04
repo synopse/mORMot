@@ -61,6 +61,7 @@ uses
   Contnrs,
   Variants,
   SynCrossPlatformSpecific,
+  SynCrossPlatformCrypto,
   SynCrossPlatformJSON;
 
 const
@@ -297,22 +298,6 @@ type
     property Data: TSQLRawBlob read fData write fData;
   end;
 
-
-  /// used for client authentication
-  TSQLRestAuthentication = class
-  protected
-    fUser: TSQLAuthUser;
-  public
-    /// initialize client authentication instance, i.e. mainly User
-    constructor Create(const aUserName, aPassword: string;
-      aHashedPassword: Boolean=false);
-    /// finalize the instance
-    destructor Destroy; override;
-    /// read-only access to the logged user information
-    // - only LogonName and PasswordHashHexa are set here
-    property User: TSQLAuthUser read fUser;
-  end;
-
   /// class used for client authentication
   TSQLRestAuthenticationClass = class of TSQLRestAuthentication;
 
@@ -370,9 +355,12 @@ type
   end;
   {$M-}
 
+  TSQLRestAuthentication = class;
+
   /// REST client access class
   TSQLRestClientURI = class(TSQLRest)
   protected
+    fAuthentication: TSQLRestAuthentication;
     function getURI(aTable: TSQLRecordClass): string;
     function getURIID(aTableExistingIndex: integer; aID: integer): string;
     function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: integer): string;
@@ -402,6 +390,58 @@ type
     procedure CallBackGet(const aMethodName: string;
       const aNameValueParameters: array of const; var Call: TSQLRestURIParams;
       aTable: TSQLRecordClass=nil; aID: integer=0);
+    /// decode "result":... content as returned by CallBackGet()
+    function CallBackGetResult(const aMethodName: string;
+      const aNameValueParameters: array of const;
+      aTable: TSQLRecordClass=nil; aID: integer=0): string;
+    /// authenticate an User to the current connected Server
+    // - using TSQLRestAuthenticationDefault or TSQLRestServerAuthenticationNone
+    procedure SetUser(aAuthenticationClass: TSQLRestAuthenticationClass;
+      const aUserName, aPassword: string; aHashedPassword: Boolean=False);
+    /// close the session initiated with SetUser()
+    procedure SessionClose;
+  end;
+
+  /// used for client authentication
+  TSQLRestAuthentication = class
+  protected
+    fUser: TSQLAuthUser;
+    fSessionID: cardinal;
+    fSessionIDHexa8: string;
+    procedure SetSessionID(Value: Cardinal);
+    // override this method to return the session key
+    function ClientComputeSessionKey(Sender: TSQLRestClientURI): string;
+      virtual; abstract;
+    function ClientSessionComputeSignature(Sender: TSQLRestClientURI;
+      const url: string): string; virtual; abstract;
+  public
+    /// initialize client authentication instance, i.e. the User associated instance
+    constructor Create(const aUserName, aPassword: string;
+      aHashedPassword: Boolean=false);
+    /// finalize the instance
+    destructor Destroy; override;
+    /// read-only access to the logged user information
+    // - only LogonName and PasswordHashHexa are set here
+    property User: TSQLAuthUser read fUser;
+    /// contains the session ID used for the authentication
+    property SessionID: cardinal read fSessionID;
+  end;
+
+  /// mORMot secure RESTful authentication scheme
+  TSQLRestAuthenticationDefault = class(TSQLRestAuthentication)
+  protected
+    fSessionPrivateKey: hash32;
+    function ClientComputeSessionKey(Sender: TSQLRestClientURI): string; override;
+    function ClientSessionComputeSignature(Sender: TSQLRestClientURI;
+      const url: string): string; override;
+  end;
+
+  /// mORMot weak RESTful authentication scheme
+  TSQLRestAuthenticationNone = class(TSQLRestAuthentication)
+  protected
+    function ClientComputeSessionKey(Sender: TSQLRestClientURI): string; override;
+    function ClientSessionComputeSignature(Sender: TSQLRestClientURI;
+      const url: string): string; override;
   end;
 
   /// REST client via HTTP
@@ -1036,12 +1076,19 @@ begin
 end;
 
 procedure TSQLRestClientURI.URI(var Call: TSQLRestURIParams);
+var sign: string;
 begin
   Call.OutStatus := HTML_UNAVAILABLE;
   Call.OutInternalState := 0;
   if self=nil then
     exit;
-  // todo: add signature to url according to authentication scheme
+  if (fAuthentication<>nil) and (fAuthentication.SessionID<>0) then begin
+    if Pos('?',Call.Url)=0 then
+      sign := '?session_signature=' else
+      sign := '&session_signature=';
+    Call.Url := Call.Url+sign+
+      fAuthentication.ClientSessionComputeSignature(self,Call.Url);
+  end;
   InternalURI(Call);
   Call.OutInternalState := StrToInt64Def(
     FindHeader(Call.OutHead,'Server-InternalState:'),0);
@@ -1055,6 +1102,22 @@ begin
     UrlEncode(aNameValueParameters);
   Call.Method := 'GET';
   URI(Call);
+end;
+
+function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
+  const aNameValueParameters: array of const; aTable: TSQLRecordClass;
+  aID: integer): string;
+var doc: TJSONVariantData;
+    Call: TSQLRestURIParams;
+    json: string;
+begin
+  CallBackGet(aMethodName,aNameValueParameters,Call,aTable,aID);
+  if Call.OutStatus<>HTML_SUCCESS then
+    result := '' else begin
+    HttpBodyToText(Call.OutBody,json);
+    doc.Init(json);
+    result := doc.Value['result'];
+  end;
 end;
 
 function TSQLRestClientURI.Connect: boolean;
@@ -1118,6 +1181,35 @@ begin
   result := Call.OutStatus=HTML_SUCCESS;
 end;
 
+procedure TSQLRestClientURI.SetUser(aAuthenticationClass: TSQLRestAuthenticationClass;
+  const aUserName, aPassword: string; aHashedPassword: Boolean);
+var aKey, aSessionID: string;
+    i: integer;
+begin
+  if fAuthentication<>nil then
+    SessionClose;
+  if aAuthenticationClass=nil then
+    exit;
+  fAuthentication := aAuthenticationClass.Create(aUserName,aPassword,aHashedPassword);
+  aKey := fAuthentication.ClientComputeSessionKey(self);
+  i := 1;
+  GetNextCSV(aKey,i,aSessionID,'+');
+  if TryStrToInt(aSessionID,i) then
+    fAuthentication.SetSessionID(i) else
+    FreeAndNil(fAuthentication);
+end;
+
+procedure TSQLRestClientURI.SessionClose;
+var Call: TSQLRestURIParams;
+begin
+  if fAuthentication<>nil then
+    try
+      CallBackGet('auth',['UserName',fAuthentication.User.LogonName,
+        'Session',fAuthentication.SessionID],Call);
+    finally
+      FreeAndNil(fAuthentication);
+    end;
+end;
 
 { TSQLRestClientHTTP }
 
@@ -1139,6 +1231,7 @@ end;
 destructor TSQLRestClientHTTP.Destroy;
 begin
   inherited;
+  FreeAndNil(fAuthentication);
   FreeAndNil(fConnection);
 end;
 
@@ -1175,27 +1268,93 @@ end;
 
 { TSQLAuthUser }
 
+function SHA256Compute(const Values: array of string): string;
+var buf: THttpBody;
+    a: integer;
+begin
+  with TSHA256.Create do
+  try
+    for a := 0 to high(Values) do begin
+      TextToHttpBody(Values[a],buf);
+      Update(buf);
+    end;
+    result := Finalize;
+  finally
+    Free;
+  end;
+end;
+
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
 begin
-  // TODO: create and use new SynCrossPlatformCrypto unit
+  PasswordHashHexa := SHA256Compute(['salt',Value]);
 end;
+
 
 { TSQLRestAuthentication }
 
-constructor TSQLRestAuthentication.Create(const aUserName,
-  aPassword: string; aHashedPassword: Boolean);
+constructor TSQLRestAuthentication.Create(const aUserName, aPassword: string;
+  aHashedPassword: Boolean);
 begin
   fUser := TSQLAuthUser.Create;
   fUser.LogonName := aUserName;
   if aHashedPassword then
-    fUser.PasswordPlain := aPassword else
-    fUser.PasswordHashHexa := aPassword;
+    fUser.PasswordHashHexa := aPassword else
+    fUser.PasswordPlain := aPassword;
 end;
 
 destructor TSQLRestAuthentication.Destroy;
 begin
   fUser.Free;
   inherited;
+end;
+
+procedure TSQLRestAuthentication.SetSessionID(Value: Cardinal);
+begin
+  fSessionID := Value;
+  fSessionIDHexa8 := LowerCase(IntToHex(Value,8));
+end;
+
+{ TSQLRestAuthenticationDefault }
+
+function TSQLRestAuthenticationDefault.ClientComputeSessionKey(
+  Sender: TSQLRestClientURI): string;
+var aServerNonce, aClientNonce: string;
+begin
+  if fUser.LogonName='' then
+    exit;
+  aServerNonce := Sender.CallBackGetResult('auth',
+    ['UserName',User.LogonName]);
+  if aServerNonce='' then
+    exit;
+  aClientNonce := SHA256Compute([Copy(DateTimeToIso8601(Now),1,16)]);
+  result := Sender.CallBackGetResult('auth',
+     ['UserName',User.LogonName,'Password',Sha256Compute(
+      [Sender.Model.Root,aServerNonce,aClientNonce,User.LogonName,User.PasswordHashHexa]),
+      'ClientNonce',aClientNonce]);
+  fSessionPrivateKey := crc32ascii(crc32ascii(0,result),fUser.fPasswordHashHexa);
+end;
+
+function TSQLRestAuthenticationDefault.ClientSessionComputeSignature(
+  Sender: TSQLRestClientURI; const url: string): string;
+var nonce: string;
+begin
+  nonce := LowerCase(IntToHex(trunc(Now*(24*60*60)),8));
+  result := fSessionIDHexa8+nonce+LowerCase(IntToHex(
+    crc32ascii(crc32ascii(fSessionPrivateKey,nonce),url),8));
+end;
+
+{ TSQLRestServerAuthenticationNone }
+
+function TSQLRestAuthenticationNone.ClientComputeSessionKey(
+  Sender: TSQLRestClientURI): string;
+begin
+  result := Sender.CallBackGetResult('auth',['UserName',User.LogonName]);
+end;
+
+function TSQLRestAuthenticationNone.ClientSessionComputeSignature(
+  Sender: TSQLRestClientURI; const url: string): string;
+begin
+  result := fSessionIDHexa8;
 end;
 
 end.
