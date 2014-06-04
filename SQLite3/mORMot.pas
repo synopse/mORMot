@@ -897,6 +897,8 @@ unit mORMot;
       to use 'first-last,' pattern to regroup set bits (reduce storage size)
     - added overloaded TSQLAccessRights.Edit() method using TSQLOccasions set
     - added reOneSessionPerUser kind of remote execution in TSQLAccessRight
+    - enabled reUrlEncodedSQL by default for TSQLAccessRights (needed e.g. for
+      plain HTTP GET request, without any body)
     - introducing TSQLRestClientURI.InternalCheckOpen/InternalClose methods to
       properly handle remote connection and re-connection
     - added TSQLRestClientURI.LastErrorCode/LastErrorMessage/LastErrorException
@@ -12385,7 +12387,7 @@ const
 
   /// Supervisor Database access right, i.e. allmighty over all Tables
   SUPERVISOR_ACCESS_RIGHTS: TSQLAccessRights =
-    (AllowRemoteExecute: [reService,reUrlEncodedDelete];
+    (AllowRemoteExecute: [reService,reUrlEncodedSQL,reUrlEncodedDelete];
      GET: ALL_ACCESS_RIGHTS; POST: ALL_ACCESS_RIGHTS;
      PUT: ALL_ACCESS_RIGHTS; DELETE: ALL_ACCESS_RIGHTS);
 
@@ -12394,7 +12396,7 @@ const
   // - is used by default only TSQLRestClientDB.URI() method, for direct
   // local access right
   FULL_ACCESS_RIGHTS: TSQLAccessRights =
-    (AllowRemoteExecute: [reSQL,reService,reUrlEncodedDelete];
+    (AllowRemoteExecute: [reSQL,reService,reUrlEncodedSQL,reUrlEncodedDelete];
      GET: ALL_ACCESS_RIGHTS; POST: ALL_ACCESS_RIGHTS;
      PUT: ALL_ACCESS_RIGHTS; DELETE: ALL_ACCESS_RIGHTS);
 
