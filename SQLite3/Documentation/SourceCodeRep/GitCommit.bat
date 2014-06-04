@@ -11,6 +11,8 @@ ROBOCOPY %1\CrossPlatform %2\CrossPlatform /s >nul
 
 del %2\*.bak /s
 
+%3 add .
+
 %3 commit -a --file=%4
 
 %3 push

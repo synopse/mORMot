@@ -9,9 +9,14 @@ program RegressionTests;
 {$endif}
 
 uses
-  //FastMM4,
+  {$ifndef FPC}
+  {$ifndef HASINLINE}
+  FastMM4,
+  {$endif}
+  {$endif}
   SynCrossPlatformJSON,
   SynCrossPlatformREST,
+  SynCrossPlatformCrypto,
   SynCrossPlatformTests,
   {$ifdef RUNSERVER}
   SynCommons,

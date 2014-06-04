@@ -72,6 +72,9 @@
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$ifend}
+  {$else}
+    {$define ISDWS} // e.g. for SmartMobileStudio or Delphi Web Script
+    {$define ISSMS} // for SmartMobileStudio
   {$endif}
 
 {$endif FPC}

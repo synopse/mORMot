@@ -61,6 +61,7 @@ uses
   Variants,
   TypInfo,
   SynCrossPlatformJSON,
+  SynCrossPlatformCrypto,
   SynCrossPlatformSpecific,
   SynCrossPlatformRest;
 
@@ -105,6 +106,7 @@ type
     procedure Base64Encoding;
     procedure JSON;
     procedure Model;
+    procedure Cryptography;
   end;
 
   /// regression tests of our CrossPlatform units
@@ -246,6 +248,21 @@ begin
     check(length(c)=i);
     check(CompareMem(Pointer(b),pointer(c),i));
   end;
+end;
+
+procedure TSynCrossPlatformTests.Cryptography;
+var c: array of byte;
+    s: string;
+begin
+  SetLength(c,5);
+  c[4] := $96;
+  Check(crc32(0,c)=$DF4EC16C,'crc32');
+  SetLength(c,3);
+  c[0] := ord('a');
+  c[1] := ord('b');
+  c[2] := ord('c');
+  s := SHA256(c);
+  check(s='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 end;
 
 procedure TSynCrossPlatformTests.Iso8601DateTime;
