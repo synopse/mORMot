@@ -25416,14 +25416,16 @@ end;
 procedure TJSONCustomParserCustomRecord.CustomWriter(
   const aWriter: TTextWriter; const aValue);
 begin
-  GetJSONCustomParserRegistration.Writer(aWriter,aValue);
+  GetJSONCustomParserRegistration^.Writer(aWriter,aValue);
 end;
 
 function TJSONCustomParserCustomRecord.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var valid: boolean;
+    callback: PJSONCustomParserRegistration; // D5/D6 Internal error: C3890
 begin
-  result := GetJSONCustomParserRegistration.Reader(P,aValue,valid);
+  callback := GetJSONCustomParserRegistration;
+  result := callback^.Reader(P,aValue,valid);
   if not valid then
     result := nil;
   if result=nil then
