@@ -9640,6 +9640,7 @@ type
     function ByCount(Count: cardinal): RawUTF8;
   end;
 
+{$ifndef DELPHI5OROLDER}
   /// a simple class which will set FPU exception flags for a code block
   // - using an IUnknown interface to let the compiler auto-generate a
   // try..finally block statement to reset the FPU exception register
@@ -9684,9 +9685,9 @@ type
     // - this method is thread-safe and re-entrant (by reference-counting)
     class function ForDelphiCode: IUnknown;
   end;
+{$endif DELPHI5OROLDER}
 
-
-{$endif}
+{$endif MSWINDOWS}
 
   /// the prototype of an individual test
   // - to be used with TSynTest descendants
@@ -21550,7 +21551,11 @@ asm
     jz @0
     push ebx
     mov eax,1
+    {$ifdef DELPHI5OROLDER}
+    db $0f,$a2
+    {$else}
     cpuid
+    {$endif}
     test ecx,$100000
     setnz al
     pop ebx
@@ -30959,8 +30964,16 @@ procedure TTextWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjec
 var i: integer;
 begin
   if Value<>nil then
-    if Value.InheritsFrom(Exception) then
-      Add('{"%":"%"}',[Value.ClassType,Exception(Value).Message]) else
+    if Value.InheritsFrom(Exception) then begin
+    {$ifdef DELPHI5OROLDER}
+      Add('{','"');
+      AddShort(Value.ClassName);
+      Add('"',':');
+      AddString(Exception(Value).Message);
+      Add('"','}');
+    {$else}
+      Add('{"%":"%"}',[Value.ClassType,Exception(Value).Message]);
+    {$endif} end else
     if Value.InheritsFrom(TRawUTF8List) then
     with TRawUTF8List(Value) do begin
       self.Add('[');
@@ -33721,6 +33734,8 @@ begin
 end;  
 
 
+{$ifndef DELPHI5OROLDER}
+
 { TSynFPUException }
 
 {$ifdef FPC}
@@ -33786,6 +33801,8 @@ begin
   end;
   result := GlobalSynFPUExceptionDelphi;
 end;
+
+{$endif DELPHI5OROLDER}
 
 
 {$endif MSWINDOWS}
