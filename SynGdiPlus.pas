@@ -1876,7 +1876,7 @@ type
 
   /// one DC state properties
   TGDIPlusEnumState = record
-    pen, brush, font: THandle;
+    pen, brush, font, ClipRegion: THandle;
     move: TPoint;
     WinSize, ViewSize: TSize;
     WinOrg, ViewOrg: TPoint;
@@ -2460,6 +2460,8 @@ end;
 procedure TGDIPlusEnum.EnumerateEnd;
 var i: integer;
 begin
+  for i := 1 to nDC do
+    gdip.DeleteRegion(DC[nDC].ClipRegion);
   for i := 0 to high(obj) do
     DeleteObj(i);
   for i := 0 to high(CachedPen) do
@@ -2567,6 +2569,10 @@ end;
 procedure TGDIPlusEnum.RestoreDC;
 begin
   assert(nDC>0);
+  with DC[nDC] do begin
+    gdip.SetClipRegion(graphics, ClipRegion, cmReplace);
+    gdip.DeleteRegion(ClipRegion);
+  end;
   dec(nDC);
   ScaleMatrix(0);
 //  with DC[nDC] do
@@ -2578,6 +2584,10 @@ begin
   Assert(nDC<high(DC));
   DC[nDC+1] := DC[nDC];
   inc(nDC);
+  with DC[nDC] do begin
+    gdip.CreateRegion(ClipRegion);
+    gdip.GetClip(graphics, ClipRegion);
+  end;
 end;
 
 procedure TGDIPlusEnum.ScaleMatrix(matrixOrg: THandle);
