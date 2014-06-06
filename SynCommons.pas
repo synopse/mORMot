@@ -4651,10 +4651,12 @@ type
   TJSONCustomParserFromRTTI = class(TJSONCustomParserAbstract)
   protected
     fRecordTypeInfo: pointer;
+    class function CreateFromRTTI(const PropertyName: RawUTF8;
+      Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
+    function AddItemFromRTTI(const PropertyName: RawUTF8;
+      Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
     {$ifdef ISDELPHI2010}
     procedure FromEnhancedRTTI(Props: TJSONCustomParserRTTI; Info: pointer);
-    function AddItemFromEnhancedRTTI(const PropertyName: RawUTF8;
-      Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
     {$endif}
   public
     /// initialize the instance
@@ -25272,8 +25274,7 @@ type
     fKnownType: (ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray);
     fTypeData: pointer;
     fFixedSize: integer;
-    fStaticArrayRecordIndex: integer;
-    procedure CheckStaticArrayRecordIndex;
+    fStaticArray: TJSONCustomParserRTTI;
   public
     constructor Create(const aPropertyName, aCustomTypeName: RawUTF8;
       aCustomType: pointer); reintroduce;
@@ -25305,14 +25306,13 @@ begin
     end;
     tkArray: begin
       if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
-      raise ESynException.CreateFmt('TJSONCustomParserCustomSimple.Create("%s") '+
-        'supports only one dimension static array)',[aCustomTypeName]);
+        raise ESynException.CreateFmt('TJSONCustomParserCustomSimple.Create("%s") '+
+          'supports only one dimension static array)',[aCustomTypeName]);
       fKnownType := ktStaticArray;
       fDataSize := PArrayTypeInfo(fTypeData)^.Size;
       fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
-      CheckStaticArrayRecordIndex;
-      if fStaticArrayRecordIndex<0 then
-        fKnownType := ktFixedArray;
+      fStaticArray := TJSONCustomParserFromRTTI.CreateFromRTTI(
+        '',PArrayTypeInfo(fTypeData)^.elType^,fFixedSize);
     end
     else
       raise ESynException.CreateFmt(
@@ -25331,14 +25331,6 @@ begin
   fDataSize := aFixedSize;
 end;
 
-procedure TJSONCustomParserCustomSimple.CheckStaticArrayRecordIndex;
-begin
-  if (cardinal(fStaticArrayRecordIndex)>=cardinal(GlobalJSONCustomParsers.fParsersCount)) or
-     (GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].RecordTypeInfo<>PArrayTypeInfo(fTypeData)^.elType^) then
-    fStaticArrayRecordIndex := GlobalJSONCustomParsers.RecordSearch(
-      PArrayTypeInfo(fTypeData)^.elType^,true);
-end;
-
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
 var i: integer;
@@ -25348,12 +25340,8 @@ begin
   ktStaticArray: begin
     aWriter.Add('[');
     V := @aValue;
-    CheckStaticArrayRecordIndex;
-    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
-      GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].Writer(aWriter,V^);
-      inc(V,fFixedSize);
-      aWriter.Add(',');
-    end;
+    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
+      fStaticArray.WriteOneLevel(aWriter,V,[]);
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
@@ -25376,7 +25364,7 @@ function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
     V,i: integer;
-    wasString, valid: boolean;
+    wasString: boolean;
     Val: PByte;
 begin
   result := nil;
@@ -25388,18 +25376,12 @@ begin
     if JSONArrayCount(P)<>PArrayTypeInfo(fTypeData)^.elCount then
       exit; // invalid number of items
     Val := @aValue;
-    CheckStaticArrayRecordIndex;
-    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
-      P := GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].Reader(P,Val^,valid);
-      if (P=nil) or not valid then
+    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
+      if not fStaticArray.ReadOneLevel(P,Val,[]) then
+        exit else
+      if P=nil then
         exit;
-      inc(Val,fFixedSize);
-      if P^=',' then
-        inc(P);
-    end;
-    if P^<>']' then
-      exit;
-    P := GotoNextNotSpace(P+1);
+    P := GotoNextNotSpace(P);
     EndOfObject := P^;
     if P^ in [',','}'] then
       inc(P);
@@ -26231,9 +26213,7 @@ begin
   fItems.Add(fRoot);
 end;
 
-{$ifdef ISDELPHI2010}
-
-function TJSONCustomParserFromRTTI.AddItemFromEnhancedRTTI(
+class function TJSONCustomParserFromRTTI.CreateFromRTTI(
   const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
 var Item: PDynArrayTypeInfo absolute Info;
     ItemType: TJSONCustomParserRTTIType;
@@ -26256,10 +26236,6 @@ begin
       tkWString: ItemType := ptWideString;
       {$ifdef UNICODE}
       tkUString: ItemType := ptSynUnicode;
-      {$endif}
-      tkVariant: ItemType := ptVariant;
-      tkDynArray: ItemType := ptArray;
-      tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkClassRef, tkPointer, tkProcedure:
         case ItemSize of
         1: ItemType := ptByte;
@@ -26267,6 +26243,10 @@ begin
         4: ItemType := ptCardinal;
         8: ItemType := ptInt64;
         end;
+      {$endif}
+      tkVariant: ItemType := ptVariant;
+      tkDynArray: ItemType := ptArray;
+      tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkInteger, tkSet:
         case TOrdType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
         otSByte,otUByte: ItemType := ptByte;
@@ -26306,8 +26286,16 @@ begin
       result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
   end;
   result.fDataSize := ItemSize;
+end;
+
+function TJSONCustomParserFromRTTI.AddItemFromRTTI(
+  const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
+begin
+  result := CreateFromRTTI(PropertyName,Info,ItemSize);
   fItems.Add(result);
 end;
+
+{$ifdef ISDELPHI2010}
 
 procedure TJSONCustomParserFromRTTI.FromEnhancedRTTI(
   Props: TJSONCustomParserRTTI; Info: pointer);
@@ -26347,13 +26335,13 @@ begin // only tkRecord is needed here
       ItemField := ItemFields[i]^.TypeInfo^ else
       ItemField := nil;
     SetRawUTF8(ItemFieldName,PAnsiChar(@ItemFields[i]^.NameLen)+1,ItemFields[i]^.NameLen);
-    Item := AddItemFromEnhancedRTTI(ItemFieldName,ItemField,ItemFieldSize);
+    Item := AddItemFromRTTI(ItemFieldName,ItemField,ItemFieldSize);
     Props.fNestedProperty[i] := Item;
     case Item.PropertyType of
     ptArray: begin
       inc(PByte(ItemField),ItemField^.NameLen);
       {$ifdef FPC}ItemField := AlignToPtr(ItemField);{$endif}
-      ItemArray := AddItemFromEnhancedRTTI('',ItemField^.elType2^,ItemField^.elSize);
+      ItemArray := AddItemFromRTTI('',ItemField^.elType2^,ItemField^.elSize);
       if (ItemArray.PropertyType=ptCustom) and
          (ItemArray.ClassType=TJSONCustomParserRTTI) then
         FromEnhancedRTTI(Item,ItemField^.elType2^) else begin

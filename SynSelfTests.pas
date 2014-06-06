@@ -3923,6 +3923,7 @@ type
     cdArr: array of TSubCD;
   end;
 {$ifdef ISDELPHI2010}
+  TStaticArrayOfInt = packed array[1..5] of Integer;
   TNewRTTI = record
     Number: integer;
     StaticArray: array[1..2] of record
@@ -3930,6 +3931,7 @@ type
       Single: Single;
       Double: Double;
     end;
+    Int: TStaticArrayOfInt;
   end;
 {$endif}
 
@@ -4368,7 +4370,7 @@ begin
   fillchar(nrtti,sizeof(nrtti),0);
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
   Check(U='{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
-                                     '{"Name":"","Single":0,"Double":0}]}');
+     '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
   fillchar(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
@@ -4380,9 +4382,14 @@ begin
   nrtti.StaticArray[2].Name := 'two';
   nrtti.StaticArray[2].Single := 2.5;
   nrtti.StaticArray[2].Double := 2.7;
+  nrtti.Int[1] := 1;
+  nrtti.Int[2] := 2;
+  nrtti.Int[3] := 3;
+  nrtti.Int[4] := 4;
+  nrtti.Int[5] := 5;
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
   Check(U='{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
-                                     '{"Name":"two","Single":2.5,"Double":2.7}]}');
+    '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
   fillchar(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
