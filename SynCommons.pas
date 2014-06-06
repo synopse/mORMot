@@ -13073,7 +13073,7 @@ end;
 
 {$else}
 
-type  /// available type families for Delphi 6 and up
+type  /// available type families for Delphi 6 and up, similar to typinfo.pas
   TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
@@ -13164,6 +13164,18 @@ type
     elType2: ^PDynArrayTypeInfo;
     {$endif}
   end;
+
+  /// map the Delphi static array RTTI
+  PArrayTypeInfo = ^TArrayTypeInfo;
+  TArrayTypeInfo = packed record
+    Size: Integer;
+    // product of lengths of all dimensions
+    elCount: Integer;
+    elType: ^PDynArrayTypeInfo;
+    dimCount: Byte;
+    dims: array[0..255 {DimCount-1}] of ^PDynArrayTypeInfo;
+  end;
+
 
   /// map the Delphi record field RTTI
   TFieldInfo = packed record
@@ -25257,8 +25269,11 @@ type
   /// implement a simple type (e.g. enumerate) over ptCustom kind of property
   TJSONCustomParserCustomSimple = class(TJSONCustomParserCustom)
   protected
-    fKnownType: (ktNone, ktEnumeration, ktGUID, ktFixedArray);
+    fKnownType: (ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray);
+    fTypeData: pointer;
     fFixedSize: integer;
+    fStaticArrayRecordIndex: integer;
+    procedure CheckStaticArrayRecordIndex;
   public
     constructor Create(const aPropertyName, aCustomTypeName: RawUTF8;
       aCustomType: pointer); reintroduce;
@@ -25276,22 +25291,35 @@ begin
   if IdemPropNameU(aCustomTypeName,'TGUID') then begin
     fKnownType := ktGUID;
     fDataSize := sizeof(TGUID);
-  end else
+  end else begin
+    with PDynArrayTypeInfo(fCustomTypeInfo)^ do
+      fTypeData := pointer(PtrUInt(@elSize)+NameLen);
     case PTypeKind(fCustomTypeInfo)^ of
     tkEnumeration: begin
       fKnownType := ktEnumeration;
-      with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-        case TOrdType(PByte(PtrUInt(@elSize)+NameLen)^) of
+      case TOrdType(PByte(fTypeData)^) of
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
-        end;
+      end;
     end;
+    tkArray: begin
+      if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
+      raise ESynException.CreateFmt('TJSONCustomParserCustomSimple.Create("%s") '+
+        'supports only one dimension static array)',[aCustomTypeName]);
+      fKnownType := ktStaticArray;
+      fDataSize := PArrayTypeInfo(fTypeData)^.Size;
+      fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
+      CheckStaticArrayRecordIndex;
+      if fStaticArrayRecordIndex<0 then
+        fKnownType := ktFixedArray;
+    end
     else
       raise ESynException.CreateFmt(
-        'TJSONCustomParserCustomSimple.Create("%s" non supported type: %d)',
+        'TJSONCustomParserCustomSimple.Create("%s") non supported type: %d)',
         [aCustomTypeName,PByte(fCustomTypeInfo)^]);
     end;
+  end;
 end;
 
 constructor TJSONCustomParserCustomSimple.CreateFixedArray(
@@ -25303,54 +25331,109 @@ begin
   fDataSize := aFixedSize;
 end;
 
+procedure TJSONCustomParserCustomSimple.CheckStaticArrayRecordIndex;
+begin
+  if (cardinal(fStaticArrayRecordIndex)>=cardinal(GlobalJSONCustomParsers.fParsersCount)) or
+     (GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].RecordTypeInfo<>PArrayTypeInfo(fTypeData)^.elType^) then
+    fStaticArrayRecordIndex := GlobalJSONCustomParsers.RecordSearch(
+      PArrayTypeInfo(fTypeData)^.elType^,true);
+end;
+
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
-begin // encoded as JSON strings
-  aWriter.Add('"');
+var i: integer;
+    V: PByte;
+begin
   case fKnownType of
-  ktGUID:
-    aWriter.Add(TGUID(aValue));
-  ktEnumeration:
-    aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
-  ktFixedArray:
-    aWriter.AddBinToHex(@aValue,fFixedSize);
+  ktStaticArray: begin
+    aWriter.Add('[');
+    V := @aValue;
+    CheckStaticArrayRecordIndex;
+    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
+      GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].Writer(aWriter,V^);
+      inc(V,fFixedSize);
+      aWriter.Add(',');
+    end;
+    aWriter.CancelLastComma;
+    aWriter.Add(']');
   end;
-  aWriter.Add('"');
+  else begin // encoded as JSON strings
+    aWriter.Add('"');
+    case fKnownType of
+    ktGUID:
+      aWriter.Add(TGUID(aValue));
+    ktEnumeration:
+      aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
+    ktFixedArray:
+      aWriter.AddBinToHex(@aValue,fFixedSize);
+    end;
+    aWriter.Add('"');
+  end;
+  end;
 end;
 
 function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
-    V: integer;
-    wasString: boolean;
+    V,i: integer;
+    wasString, valid: boolean;
+    Val: PByte;
 begin
   result := nil;
-  PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
-  if PropValue=nil then
-    exit;
   case fKnownType of
-  ktGUID:
-    if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
-      result := P;
-  ktEnumeration: begin
-    if wasString then
-      V := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
-      V := GetInteger(PropValue);
-    if V<0 then
+  ktStaticArray: begin
+    if P^<>'[' then
+      exit; // we expect a true array here
+    P := GotoNextNotSpace(P+1);
+    if JSONArrayCount(P)<>PArrayTypeInfo(fTypeData)^.elCount then
+      exit; // invalid number of items
+    Val := @aValue;
+    CheckStaticArrayRecordIndex;
+    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
+      P := GlobalJSONCustomParsers.Parser[fStaticArrayRecordIndex].Reader(P,Val^,valid);
+      if (P=nil) or not valid then
+        exit;
+      inc(Val,fFixedSize);
+      if P^=',' then
+        inc(P);
+    end;
+    if P^<>']' then
       exit;
-    with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-      case TOrdType(PByte(PtrUInt(@elSize)+NameLen)^) of
-      otSByte,otUByte: byte(aValue) := V;
-      otSWord,otUWord: word(aValue) := V;
-      otSLong,otULong: integer(aValue) := V;
-      else exit;
-      end;
+    P := GotoNextNotSpace(P+1);
+    EndOfObject := P^;
+    if P^ in [',','}'] then
+      inc(P);
     result := P;
   end;
-  ktFixedArray:
-    if wasString and (StrLen(PropValue)=fFixedSize*2) and
-       HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+  else begin // encoded as JSON strings
+    PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
+    if PropValue=nil then
+      exit;
+    case fKnownType of
+    ktGUID:
+      if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
+        result := P;
+    ktEnumeration: begin
+      if wasString then
+        V := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+        V := GetInteger(PropValue);
+      if V<0 then
+        exit;
+      with PDynArrayTypeInfo(fCustomTypeInfo)^ do
+        case TOrdType(PByte(PtrUInt(@elSize)+NameLen)^) of
+        otSByte,otUByte: byte(aValue) := V;
+        otSWord,otUWord: word(aValue) := V;
+        otSLong,otULong: integer(aValue) := V;
+        else exit;
+        end;
       result := P;
+    end;
+    ktFixedArray:
+      if wasString and (StrLen(PropValue)=fFixedSize*2) and
+         HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+        result := P;
+    end;
+  end;
   end;
 end;
 
@@ -26177,7 +26260,7 @@ begin
       tkVariant: ItemType := ptVariant;
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
-      tkClassRef, tkPointer, tkProcedure, tkArray:
+      tkClassRef, tkPointer, tkProcedure:
         case ItemSize of
         1: ItemType := ptByte;
         2: ItemType := ptWord;
@@ -26210,7 +26293,7 @@ begin
       end;
     end;
     if ItemType=ptCustom then
-      if Item^.kind=tkEnumeration then
+      if Item^.kind in [tkEnumeration,tkArray] then
         result := TJSONCustomParserCustomSimple.Create(
           PropertyName,ItemTypeName,Item) else begin
         ndx := GlobalJSONCustomParsers.RecordSearch(Item);

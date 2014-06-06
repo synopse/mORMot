@@ -3922,6 +3922,16 @@ type
     abArr: array of TSubAB;
     cdArr: array of TSubCD;
   end;
+{$ifdef ISDELPHI2010}
+  TNewRTTI = record
+    Number: integer;
+    StaticArray: array[1..2] of record
+      Name: string;
+      Single: Single;
+      Double: Double;
+    end;
+  end;
+{$endif}
 
 const // convention may be to use __ before the type name
   __TTestCustomJSONRecord = 'A,B,C integer D RawUTF8 E{E1,E2 double} F TDateTime';
@@ -4183,6 +4193,7 @@ var ab0,ab1: TSubAB;
 {$endif}
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
+    nrtti,nrtti2: TNewRTTI;
 {$endif}
 begin
   Finalize(JR);
@@ -4354,6 +4365,28 @@ begin
   J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
   Check(J=RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
   Check(CompareMem(@nav,@nav2,sizeof(nav)));
+  fillchar(nrtti,sizeof(nrtti),0);
+  U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
+  Check(U='{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
+                                     '{"Name":"","Single":0,"Double":0}]}');
+  fillchar(nrtti2,sizeof(nrtti2),0);
+  Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
+  J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
+  check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+  nrtti.Number := 1;
+  nrtti.StaticArray[1].Name := 'one';
+  nrtti.StaticArray[1].Single := 1.5;
+  nrtti.StaticArray[1].Double := 1.7;
+  nrtti.StaticArray[2].Name := 'two';
+  nrtti.StaticArray[2].Single := 2.5;
+  nrtti.StaticArray[2].Double := 2.7;
+  U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
+  Check(U='{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
+                                     '{"Name":"two","Single":2.5,"Double":2.7}]}');
+  fillchar(nrtti2,sizeof(nrtti2),0);
+  Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
+  J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
+  check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
   {$endif}
 end;
 begin

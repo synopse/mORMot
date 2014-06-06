@@ -1,7 +1,7 @@
 @echo off
 cls
 
-goto SkipOldDelphi
+rem goto SkipOldDelphi
 
 set DCC=c:\progs\delphi5\bin\dcc32.exe
 set DelphiVersion=Delphi 5
