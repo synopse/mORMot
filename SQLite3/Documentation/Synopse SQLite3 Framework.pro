@@ -2130,11 +2130,13 @@ For instance, to register a {\f1\fs20 TGUID} property mapping a {\f1\fs20 TSQLMy
 !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
 !  Props: TSQLRecordProperties);
 !begin
-!  Props.RegisterCustomFixedSizeRecordProperty(self,sizeof(TGUID),'GUID',
-!    @TSQLMyRecord(nil).fGUID);
+!  Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
+!    @TSQLRecordCustomProps(nil).fGUID,[aIsUnique],38);
 !end;
-You may call {\f1\fs20 Props.RegisterCustomRTTIRecordProperty()} for a record containing reference-counted fields like {\f1\fs20 string}, {\f1\fs20 variant} or nested dynamic arrays. Of course, any custom JSON serialization of the given {\f1\fs20 record} type - see @51@ - will be supported.
-Those custom {\f1\fs20 record} registration methods will define either TEXT or BLOB serialization, depending, on request.
+You may call {\f1\fs20 Props.RegisterCustomPropertyFromRTTI()}, supplying the {\f1\fs20 TypeInfo()} pointer, for a record containing reference-counted fields like {\f1\fs20 string}, {\f1\fs20 variant} or nested dynamic arrays. Of course, any custom JSON serialization of the given {\f1\fs20 record} type - see @51@ - will be supported.
+Those custom {\f1\fs20 record} registration methods will define either:
+- TEXT serialization, for {\f1\fs20 RegisterCustomPropertyFromRTTI()} or {\f1\fs20 RegisterCustomPropertyFromTypeName()};
+- BLOB serialization, for {\f1\fs20 RegisterCustomRTTIRecordProperty()} or {\f1\fs20 RegisterCustomFixedSizeRecordProperty()}.
 :  BLOB fields
 In fact, several kind of properties will be stored as @**BLOB@ in the database backend:
 - {\f1\fs20 @*TSQLRawBlob@} properties are how you store your binary data, e.g. images or documents;
@@ -5996,6 +5998,7 @@ The following types are handled by this feature:
 |nested {\f1\fs20 registered} record|Serialized as JSON corresponding the the defined callbacks
 |{\i dynamic array} of {\f1\fs20 record}|Serialized as JSON array\line Identified as {\f1\fs20 array of ...} or {\f1\fs20 [ ... ]}
 |{\i dynamic array} of simple types|Serialized as JSON array\line Identified e.g. as {\f1\fs20 array of integer}
+|{\i static array}|Serialized as JSON array\line Handled with enhanced RTTI, not via text definition yet
 |{\f1\fs20 variant}|Serialized as JSON, with full support of @80@
 |%
 For other types (like enumerations or sets), you can simply use the unsigned integer types corresponding to the binary value, e.g. {\f1\fs20 byte word cardinal Int64} (depending on the {\f1\fs20 sizeof()} of the initial value).
@@ -7489,8 +7492,8 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 ! aUserAgent := FindIniNameValue(pointer(Ctxt.Call.InHead),'USER-AGENT: ');
 : Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
-In practice, result content will be hashed (using {\f1\fs20 crc32} algorithm) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
-Note that in case of hash collision of the {\f1\fs20 crc32} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
+In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
+Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
 \page
 : Handling errors

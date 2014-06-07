@@ -7720,19 +7720,17 @@ type
   end;
   TSQLRecordDali2 = class(TSQLRecordDali1);
 
-  TSQLRecordCustomProps = class(TSQLRecordPeople)
-  protected
-    fGUID: TGUID;
-    fGUIDStr: TGUID;
-    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
-  public
-    property GUID: TGUID read fGUID write fGUID;
-    property GUIDStr: TGUID read fGUIDStr write fGUIDStr;
-  end;
-
   // class hooks to force DMBS property for TTestExternalDatabase.AutoAdaptSQL
   TSQLDBConnectionPropertiesHook = class(TSQLDBConnectionProperties);
   TSQLRestStorageExternalHook = class(TSQLRestStorageExternal);
+
+  TSQLRecordCustomProps = class(TSQLRecordPeople)
+  protected
+    fGUID: TGUID;
+    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
+  public
+    property GUID: TGUID read fGUID write fGUID;
+  end;
 
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
