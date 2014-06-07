@@ -1078,7 +1078,7 @@ uses
   Generics.Collections,
 {$endif}
   Classes,
-  SynZip, // use crc32 for internal TDynArray hasher + TSQLRestClientURI.SetUser
+  SynZip, // use crc32 for TSQLRestClientURI.SetUser
 {$ifdef USETYPEINFO}
   // some pure pascal version must handle the 64-bits ordinal values or
   // a not-Delphi RTTI layout of the underlying compiler (e.g. FPC)
@@ -3760,7 +3760,7 @@ type
     // - CustomHeader optional parameter can be set e.g. to
     // TEXT_CONTENT_TYPE_HEADER if the default JSON_CONTENT_TYPE is not OK
     // - if Handle304NotModified is TRUE and Status is HTML_SUCCESS, the Result
-    // content will be hashed (using crc32) and in case of no modification
+    // content will be hashed (using crc32c) and in case of no modification
     // will return HTML_NOTMODIFIED to the browser, without the actual result
     // content (to save bandwidth)
     procedure Returns(const Result: RawUTF8; Status: integer=HTML_SUCCESS;
@@ -5451,7 +5451,7 @@ type
     function ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
     /// will check then set (if needed) internal fPrivateCopy[Hash] values
     // - returns TRUE if content changed (then fPrivateCopy+fPrivateCopyHash
-    // will be updated)
+    // will be updated using crc32c hash)
     function PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer): boolean;
   public
     /// create the result table from a JSON-formated Data message
@@ -13663,7 +13663,7 @@ function TSQLPropInfo.GetHash(Instance: TObject; CaseInsensitive: boolean): card
 var tmp: RawUTF8;
 begin
   GetValueVar(Instance,false,tmp,nil);
-  result := crc32(0,pointer(tmp),length(tmp));
+  result := crc32c(0,pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfo.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -14548,7 +14548,7 @@ function TSQLPropInfoRTTIObject.GetHash(Instance: TObject; CaseInsensitive: bool
 var tmp: RawUTF8;
 begin
   tmp := ObjectToJSON(GetInstance(Instance));
-  result := crc32(0,pointer(tmp),length(tmp));
+  result := crc32c(0,pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfoRTTIObject.NormalizeValue(var Value: RawUTF8);
@@ -14583,8 +14583,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   GetLongStrProp(Instance,fPropInfo,Value);
   if CaseInsensitive then
-    result := crc32(0,Up,UpperCopy255(Up,Value)-Up) else
-    result := crc32(0,pointer(Value),length(Value));
+    result := crc32c(0,Up,UpperCopy255(Up,Value)-Up) else
+    result := crc32c(0,pointer(Value),length(Value));
 end;
 
 procedure TSQLPropInfoRTTIAnsi.GetValueVar(Instance: TObject;
@@ -14665,8 +14665,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   GetLongStrProp(Instance,fPropInfo,Value);
   if CaseInsensitive then
-    result := crc32(0,Up,UTF8UpperCopy255(Up,Value)-Up) else
-    result := crc32(0,pointer(Value),length(Value));
+    result := crc32c(0,Up,UTF8UpperCopy255(Up,Value)-Up) else
+    result := crc32c(0,pointer(Value),length(Value));
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -14741,8 +14741,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   GetLongStrProp(Instance,fPropInfo,Value);
   if CaseInsensitive then
-    result := crc32(0,Up,UpperCopyWin255(Up,Value)-Up) else
-    result := crc32(0,pointer(Value),length(Value));
+    result := crc32c(0,Up,UpperCopyWin255(Up,Value)-Up) else
+    result := crc32c(0,pointer(Value),length(Value));
 end;
 
 procedure TSQLPropInfoRTTIWinAnsi.GetValueVar(Instance: TObject;
@@ -14790,8 +14790,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   GetLongStrProp(Instance,fPropInfo,Value);
   if CaseInsensitive then
-    result := crc32(0,Up,UpperCopy255W(Up,pointer(Value),length(Value)shr 1)-Up) else
-    result := crc32(0,pointer(Value),length(Value));
+    result := crc32c(0,Up,UpperCopy255W(Up,pointer(Value),length(Value)shr 1)-Up) else
+    result := crc32c(0,pointer(Value),length(Value));
 end;
 
 procedure TSQLPropInfoRTTIRawUnicode.GetValueVar(Instance: TObject;
@@ -14836,7 +14836,7 @@ function TSQLPropInfoRTTIRawBlob.GetHash(Instance: TObject; CaseInsensitive: boo
 var Value: RawByteString;
 begin
   GetLongStrProp(Instance,fPropInfo,Value);
-  result := crc32(0,pointer(Value),length(Value)); // binary -> case sensitive
+  result := crc32c(0,pointer(Value),length(Value)); // binary -> case sensitive
 end;
 
 procedure TSQLPropInfoRTTIRawBlob.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -14940,8 +14940,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   GetWideStrProp(Instance,fPropInfo,Value);
   if CaseInsensitive then
-    result := crc32(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
-    result := crc32(0,pointer(Value),length(Value)*2);
+    result := crc32c(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
+    result := crc32c(0,pointer(Value),length(Value)*2);
 end;
 
 procedure TSQLPropInfoRTTIWide.GetValueVar(Instance: TObject;
@@ -15008,8 +15008,8 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   Value := GetUnicodeStrProp(Instance,pointer(fPropInfo));
   if CaseInsensitive then
-    result := crc32(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
-    result := crc32(0,pointer(Value),length(Value)*2);
+    result := crc32c(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
+    result := crc32c(0,pointer(Value),length(Value)*2);
 end;
 
 procedure TSQLPropInfoRTTIUnicode.GetValueVar(Instance: TObject;
@@ -15099,7 +15099,7 @@ function TSQLPropInfoRTTIDynArray.GetHash(Instance: TObject; CaseInsensitive: bo
 var tmp: RawByteString;
 begin
   tmp := GetDynArray(Instance).SaveTo;
-  result := crc32(0,pointer(tmp),length(tmp));
+  result := crc32c(0,pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetValueVar(Instance: TObject;
@@ -15217,8 +15217,8 @@ var tmp: RawUTF8;
 begin // slow but always working conversion to string
   tmp := VariantSaveJSON(value,twNone);
   if CaseInsensitive then
-    result := crc32(0,Up,UTF8UpperCopy255(Up,tmp)-Up) else
-    result := crc32(0,pointer(tmp),length(tmp));
+    result := crc32c(0,Up,UTF8UpperCopy255(Up,tmp)-Up) else
+    result := crc32c(0,pointer(tmp),length(tmp));
 end;
 begin
   GetVariantProp(Instance,pointer(fPropInfo),value);
@@ -15233,15 +15233,15 @@ begin
     varLongWord, varInteger, varSingle:
       result := varLongWord;
     varInt64, varDouble, varDate, varCurrency:
-      result := crc32(0,@VInt64,sizeof(Int64));
+      result := crc32c(0,@VInt64,sizeof(Int64));
     varString:
       if CaseInsensitive then
-        result := crc32(0,Up,UTF8UpperCopy255(Up,RawUTF8(VString))-Up) else
-        result := crc32(0,VString,length(RawUTF8(VString)));
+        result := crc32c(0,Up,UTF8UpperCopy255(Up,RawUTF8(VString))-Up) else
+        result := crc32c(0,VString,length(RawUTF8(VString)));
     varOleStr {$ifdef UNICODE}, varUString{$endif}:
       if CaseInsensitive then
-        result := crc32(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
-        result := crc32(0,VAny,StrLenW(VOleStr)*2);
+        result := crc32c(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
+        result := crc32c(0,VAny,StrLenW(VOleStr)*2);
   else
     ComplexType;
   end;
@@ -15406,7 +15406,7 @@ function TSQLPropInfoRecordRTTI.GetHash(Instance: TObject;
 var Value: RawByteString;
 begin
   Value := RecordSave(GetFieldAddr(Instance)^,fTypeInfo);
-  result := crc32(0,pointer(Value),length(Value));
+  result := crc32c(0,pointer(Value),length(Value));
 end;
 
 {$ifndef NOVARIANTS}
@@ -15499,7 +15499,7 @@ end;
 
 function TSQLPropInfoRecordFixedSize.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 begin
-  result := crc32(0,GetFieldAddr(Instance),fRecordSize);
+  result := crc32c(0,GetFieldAddr(Instance),fRecordSize);
 end;
 
 procedure TSQLPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
@@ -18433,7 +18433,7 @@ end;
 function TSQLTableJSON.PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer): boolean;
 var Hash: cardinal;
 begin
-  Hash := crc32(0,pointer(aJSON),aLen);
+  Hash := crc32c(0,pointer(aJSON),aLen);
   result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
   if not result then
     exit;
@@ -25876,7 +25876,7 @@ begin
     if Handle304NotModified and (Status=HTML_SUCCESS) and
        (Length(Result)>64) then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
-      serverHash := '"'+CardinalToHex(crc32(0,pointer(Result),Length(Result)))+'"';
+      serverHash := '"'+CardinalToHex(crc32c(0,pointer(Result),Length(Result)))+'"';
       if clientHash<>serverHash then
         Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
         Call.OutBody := ''; // save bandwidth for "304 Not Modified"
