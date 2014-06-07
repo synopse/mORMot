@@ -25268,7 +25268,8 @@ end;
 { TJSONCustomParserCustomSimple }
 
 type
-  /// implement a simple type (e.g. enumerate) over ptCustom kind of property
+  /// implement a simple type (e.g. enumerate, TGUID or a static array) over
+  // ptCustom kind of property
   TJSONCustomParserCustomSimple = class(TJSONCustomParserCustom)
   protected
     fKnownType: (ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray);
@@ -25280,6 +25281,7 @@ type
       aCustomType: pointer); reintroduce;
     constructor CreateFixedArray(const aPropertyName: RawUTF8;
       aFixedSize: cardinal);
+    destructor Destroy; override;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
   end;
@@ -25329,6 +25331,12 @@ begin
   fKnownType := ktFixedArray;
   fFixedSize := aFixedSize;
   fDataSize := aFixedSize;
+end;
+
+destructor TJSONCustomParserCustomSimple.Destroy;
+begin
+  inherited;
+  fStaticArray.Free;
 end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
