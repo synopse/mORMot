@@ -4575,14 +4575,24 @@ type
     procedure FinalizeNestedArray(var Data: PtrUInt);
     procedure AllocateNestedArray(var Data: PtrUInt; NewLength: integer);
     procedure ReAllocateNestedArray(var Data: PtrUInt; NewLength: integer);
-    function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
-      Options: TJSONCustomParserSerializationOptions): boolean; virtual;
-    procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
-      Options: TJSONCustomParserSerializationOptions); virtual;
   public
     /// initialize the instance
     constructor Create(const aPropertyName: RawUTF8;
       aPropertyType: TJSONCustomParserRTTIType);
+    /// initialize an instance from the RTTI type information
+    // - will return an instance of this class of any inherited class
+    class function CreateFromRTTI(const PropertyName: RawUTF8;
+      Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
+    /// create an instance from a specified type name
+    // - will return an instance of this class of any inherited class
+    class function CreateFromTypeName(const aPropertyName,
+      aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
+    /// unserialize some JSON content into its binary internal representation
+    function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
+      Options: TJSONCustomParserSerializationOptions): boolean; virtual;
+    /// serialize a binary internal representation into JSON content
+    procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
+      Options: TJSONCustomParserSerializationOptions); virtual;
     /// the property name
     // - may be void for the Root element
     property PropertyName: RawUTF8 read fPropertyName;
@@ -4618,7 +4628,6 @@ type
     fItems: TObjectList;
     fRoot: TJSONCustomParserRTTI;
     fOptions: TJSONCustomParserSerializationOptions;
-    class function GuessItem(const aPropertyName, aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
     function AddItem(const aPropertyName: RawUTF8; aPropertyType: TJSONCustomParserRTTIType;
       const aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
   public
@@ -4651,8 +4660,6 @@ type
   TJSONCustomParserFromRTTI = class(TJSONCustomParserAbstract)
   protected
     fRecordTypeInfo: pointer;
-    class function CreateFromRTTI(const PropertyName: RawUTF8;
-      Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
     function AddItemFromRTTI(const PropertyName: RawUTF8;
       Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
     {$ifdef ISDELPHI2010}
@@ -24958,7 +24965,7 @@ begin
   TypeInfoToName(Reg.RecordTypeInfo,Reg.RecordTypeName);
   if Reg.RecordTypeName='' then
     exit; // we need a type name!
-  RegRoot := TJSONCustomParserAbstract.GuessItem('',Reg.RecordTypeName);
+  RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
   if RegRoot=nil then begin
     {$ifdef ISDELPHI2010}
     inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
@@ -25313,7 +25320,7 @@ begin
       fKnownType := ktStaticArray;
       fDataSize := PArrayTypeInfo(fTypeData)^.Size;
       fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
-      fStaticArray := TJSONCustomParserFromRTTI.CreateFromRTTI(
+      fStaticArray := TJSONCustomParserRTTI.CreateFromRTTI(
         '',PArrayTypeInfo(fTypeData)^.elType^,fFixedSize);
     end
     else
@@ -25521,6 +25528,29 @@ end;
 
 { TJSONCustomParserRTTI }
 
+const // we rely on TJSONCustomParserRTTIType enumeration to be sorted by name
+  JSONCUSTOMPARSERRTTITYPE_NAMES: array[TJSONCustomParserRTTIType] of PUTF8Char =
+    ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY','DOUBLE','INT64','INTEGER',
+     'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE','STRING','SYNUNICODE',
+     'TDATETIME','TGUID','TTIMELOG',{$ifndef NOVARIANTS}'VARIANT',{$endif}
+     'WIDESTRING','WORD',nil); // latest ptCustom=nil
+  ptPtrInt = {$ifdef CPU64}ptInt64{$else}ptInteger{$endif};
+
+var
+  GlobalCustomJSONSerializerFromTextSimpleType_: TRawUTF8ListHashed;
+
+function GlobalCustomJSONSerializerFromTextSimpleType: TRawUTF8ListHashed;
+begin
+  if GlobalCustomJSONSerializerFromTextSimpleType_=nil then begin
+    GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
+      TRawUTF8ListHashed.Create(false));
+    GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
+    GlobalCustomJSONSerializerFromTextSimpleType_.AddObject(
+      'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
+  end;
+  result := GlobalCustomJSONSerializerFromTextSimpleType_;
+end; 
+
 /// if defined, will try to mimic the default record alignment
 // -> is buggy, and compiler revision specific -> we would rather use packed records
 {.$define ALIGNCUSTOMREC}
@@ -25532,12 +25562,97 @@ begin
   fPropertyType := aPropertyType;
 end;
 
-const // we rely on TJSONCustomParserRTTIType enumeration to be sorted by name
-  JSONCUSTOMPARSERRTTITYPE_NAMES: array[TJSONCustomParserRTTIType] of PUTF8Char =
-    ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY','DOUBLE','INT64','INTEGER',
-     'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE','STRING','SYNUNICODE',
-     'TDATETIME','TGUID','TTIMELOG',{$ifndef NOVARIANTS}'VARIANT',{$endif}
-     'WIDESTRING','WORD',nil); // latest ptCustom=nil
+class function TJSONCustomParserRTTI.CreateFromRTTI(
+  const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
+var Item: PDynArrayTypeInfo absolute Info;
+    ItemType: TJSONCustomParserRTTIType;
+    ItemTypeName: RawUTF8;
+    ndx: integer;
+begin
+  if Item=nil then begin // no RTTI -> stored as hexa string
+    result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize);
+  end else begin
+    UpperCaseCopy(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
+    ndx := FastFindPUTF8CharSorted(@JSONCUSTOMPARSERRTTITYPE_NAMES,
+      ord(pred(ptCustom)),pointer(ItemTypeName));
+    if ndx>=0 then
+      ItemType := TJSONCustomParserRTTIType(ndx) else begin
+      ItemType := ptCustom;
+      case Item^.Kind of
+      tkLString: if IdemPropName(ItemTypeName,'TSQLRawBlob') then
+                   ItemType := ptRawByteString else
+                   ItemType := ptRawUTF8;
+      tkWString: ItemType := ptWideString;
+      {$ifdef UNICODE}
+      tkUString: ItemType := ptSynUnicode;
+      tkClassRef, tkPointer, tkProcedure:
+        case ItemSize of
+        1: ItemType := ptByte;
+        2: ItemType := ptWord;
+        4: ItemType := ptCardinal;
+        8: ItemType := ptInt64;
+        else ItemType := ptPtrInt;
+        end;
+      {$endif}
+      tkVariant: ItemType := ptVariant;
+      tkDynArray: ItemType := ptArray;
+      tkChar, tkClass, tkMethod, tkWChar, tkInterface,
+      tkInteger, tkSet:
+        case TOrdType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
+        otSByte,otUByte: ItemType := ptByte;
+        otSWord,otUWord: ItemType := ptWord;
+        otSLong: ItemType := ptInteger;
+        otULong: ItemType := ptCardinal;
+        end;
+      tkInt64: ItemType := ptInt64;
+      {$ifdef FPC}
+      tkBool: ItemType := ptBoolean;
+      {$else}
+      tkEnumeration:
+        if Item=TypeInfo(boolean) then
+          ItemType := ptBoolean;
+          // other enumerates will use TJSONCustomParserCustomSimple below
+      {$endif}
+      tkFloat:
+        case TFloatType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
+        ftSingle: ItemType := ptSingle;
+        ftDoub:   ItemType := ptDouble;
+        ftCurr:   ItemType := ptCurrency;
+        // ftExtended, ftComp: not implemented yet
+        end;
+      end;
+    end;
+    if ItemType=ptCustom then
+      if Item^.kind in [tkEnumeration,tkArray] then
+        result := TJSONCustomParserCustomSimple.Create(
+          PropertyName,ItemTypeName,Item) else begin
+        ndx := GlobalJSONCustomParsers.RecordSearch(Item);
+        if ndx<0 then
+          ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
+        if ndx<0 then
+          raise ESynException.CreateFmt('AddItemFromEnhancedRTTI("%s")',[ItemTypeName]);
+        result := TJSONCustomParserCustomRecord.Create(PropertyName,ndx);
+      end else
+      result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
+  end;
+  result.fDataSize := ItemSize;
+end;
+
+class function TJSONCustomParserRTTI.CreateFromTypeName(
+  const aPropertyName, aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
+var ndx: integer;
+begin
+  ndx := GlobalCustomJSONSerializerFromTextSimpleType.IndexOf(aCustomRecordTypeName);
+  if ndx>=0 then
+    result := TJSONCustomParserCustomSimple.Create(
+      aPropertyName,aCustomRecordTypeName,
+      GlobalCustomJSONSerializerFromTextSimpleType_.Objects[ndx]) else begin
+    ndx := GlobalJSONCustomParsers.RecordSearch(aCustomRecordTypeName);
+    if ndx<0 then
+      result := nil else
+      result := TJSONCustomParserCustomRecord.Create(aPropertyName,ndx);
+  end;
+end;
 
 function JSONCustomParserRTTITypeFromText(var P: PUTF8Char;
   var TypIdent: RawUTF8): TJSONCustomParserRTTIType;
@@ -25988,40 +26103,9 @@ end;
 
 { TJSONCustomParserAbstract }
 
-var
-  GlobalCustomJSONSerializerFromTextSimpleType_: TRawUTF8ListHashed;
-
-function GlobalCustomJSONSerializerFromTextSimpleType: TRawUTF8ListHashed;
-begin
-  if GlobalCustomJSONSerializerFromTextSimpleType_=nil then begin
-    GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
-      TRawUTF8ListHashed.Create(false));
-    GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
-    GlobalCustomJSONSerializerFromTextSimpleType_.AddObject(
-      'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
-  end;
-  result := GlobalCustomJSONSerializerFromTextSimpleType_;
-end;
-  
 constructor TJSONCustomParserAbstract.Create;
 begin
   fItems := TObjectList.Create;
-end;
-
-class function TJSONCustomParserAbstract.GuessItem(
-  const aPropertyName, aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
-var ndx: integer;
-begin
-  ndx := GlobalCustomJSONSerializerFromTextSimpleType.IndexOf(aCustomRecordTypeName);
-  if ndx>=0 then
-    result := TJSONCustomParserCustomSimple.Create(
-      aPropertyName,aCustomRecordTypeName,
-      GlobalCustomJSONSerializerFromTextSimpleType_.Objects[ndx]) else begin
-    ndx := GlobalJSONCustomParsers.RecordSearch(aCustomRecordTypeName);
-    if ndx<0 then
-      result := nil else
-      result := TJSONCustomParserCustomRecord.Create(aPropertyName,ndx);
-  end;
 end;
 
 function TJSONCustomParserAbstract.AddItem(const aPropertyName: RawUTF8;
@@ -26029,7 +26113,8 @@ function TJSONCustomParserAbstract.AddItem(const aPropertyName: RawUTF8;
   const aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
 begin
   if aPropertyType=ptCustom then begin
-    result := GuessItem(aPropertyName,aCustomRecordTypeName);
+    result := TJSONCustomParserRTTI.CreateFromTypeName(
+      aPropertyName,aCustomRecordTypeName);
     if result=nil then
       raise ESynException.CreateFmt('Unknown ptCustom for %s.AddItem(%s: %s)',
         [ClassName,aPropertyName,aCustomRecordTypeName]);
@@ -26221,85 +26306,10 @@ begin
   fItems.Add(fRoot);
 end;
 
-class function TJSONCustomParserFromRTTI.CreateFromRTTI(
-  const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
-var Item: PDynArrayTypeInfo absolute Info;
-    ItemType: TJSONCustomParserRTTIType;
-    ItemTypeName: RawUTF8;
-    ndx: integer;
-begin
-  if Item=nil then begin // no RTTI -> stored as hexa string
-    result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize);
-  end else begin
-    UpperCaseCopy(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
-    ndx := FastFindPUTF8CharSorted(@JSONCUSTOMPARSERRTTITYPE_NAMES,
-      ord(pred(ptCustom)),pointer(ItemTypeName));
-    if ndx>=0 then
-      ItemType := TJSONCustomParserRTTIType(ndx) else begin
-      ItemType := ptCustom;
-      case Item^.Kind of
-      tkLString: if IdemPropName(ItemTypeName,'TSQLRawBlob') then
-                   ItemType := ptRawByteString else
-                   ItemType := ptRawUTF8;
-      tkWString: ItemType := ptWideString;
-      {$ifdef UNICODE}
-      tkUString: ItemType := ptSynUnicode;
-      tkClassRef, tkPointer, tkProcedure:
-        case ItemSize of
-        1: ItemType := ptByte;
-        2: ItemType := ptWord;
-        4: ItemType := ptCardinal;
-        8: ItemType := ptInt64;
-        end;
-      {$endif}
-      tkVariant: ItemType := ptVariant;
-      tkDynArray: ItemType := ptArray;
-      tkChar, tkClass, tkMethod, tkWChar, tkInterface,
-      tkInteger, tkSet:
-        case TOrdType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
-        otSByte,otUByte: ItemType := ptByte;
-        otSWord,otUWord: ItemType := ptWord;
-        otSLong: ItemType := ptInteger;
-        otULong: ItemType := ptCardinal;
-        end;
-      tkInt64: ItemType := ptInt64;
-      {$ifdef FPC}
-      tkBool: ItemType := ptBoolean;
-      {$else}
-      tkEnumeration:
-        if Item=TypeInfo(boolean) then
-          ItemType := ptBoolean;
-          // other enumerates will use TJSONCustomParserCustomSimple below
-      {$endif}
-      tkFloat:
-        case TFloatType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
-        ftSingle: ItemType := ptSingle;
-        ftDoub:   ItemType := ptDouble;
-        ftCurr:   ItemType := ptCurrency;
-        // ftExtended, ftComp: not implemented yet
-        end;
-      end;
-    end;
-    if ItemType=ptCustom then
-      if Item^.kind in [tkEnumeration,tkArray] then
-        result := TJSONCustomParserCustomSimple.Create(
-          PropertyName,ItemTypeName,Item) else begin
-        ndx := GlobalJSONCustomParsers.RecordSearch(Item);
-        if ndx<0 then
-          ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
-        if ndx<0 then
-          raise ESynException.CreateFmt('AddItemFromEnhancedRTTI("%s")',[ItemTypeName]);
-        result := TJSONCustomParserCustomRecord.Create(PropertyName,ndx);
-      end else
-      result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
-  end;
-  result.fDataSize := ItemSize;
-end;
-
 function TJSONCustomParserFromRTTI.AddItemFromRTTI(
   const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
 begin
-  result := CreateFromRTTI(PropertyName,Info,ItemSize);
+  result := TJSONCustomParserRTTI.CreateFromRTTI(PropertyName,Info,ItemSize);
   fItems.Add(result);
 end;
 
