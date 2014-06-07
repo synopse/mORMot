@@ -7720,7 +7720,7 @@ type
   end;
   TSQLRecordDali2 = class(TSQLRecordDali1);
 
-  TSQLRecordCustomProps = class(TSQLRecordDali1)
+  TSQLRecordCustomProps = class(TSQLRecordPeople)
   protected
     fGUID: TGUID;
     fGUIDStr: TGUID;
@@ -7736,8 +7736,8 @@ type
 
 class procedure TSQLRecordCustomProps.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
 begin
-  Props.RegisterCustomFixedSizeRecordProperty(self,sizeof(TGUID),'GUID',
-    @TSQLRecordCustomProps(nil).fGUID,[],sizeof(TGUID));
+  Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
+    @TSQLRecordCustomProps(nil).fGUID,[aIsUnique],38);
 end;
 
 /// will be re-used by both TTestSQLite3Engine and TTestExternalDatabase
@@ -8527,6 +8527,7 @@ var V,V2: TSQLRecordPeople;
 {$ifndef LVCL}
     VO: TSQLRecordPeopleObject;
 {$endif}
+    VP: TSQLRecordCustomProps;
     FV: TFV;
     ModelC: TSQLModel;
     Client: TSQLRestClientDB;
@@ -8878,6 +8879,7 @@ begin
 {$ifndef LVCL}
   VO := TSQLRecordPeopleObject.Create;
 {$endif}
+  VP := TSQLRecordCustomProps.Create;
   V2 := nil;
   if ClassType<>TTestMemoryBased then begin
     DeleteFile('dali1.json');
@@ -8889,7 +8891,7 @@ begin
     [TSQLRecordPeople, {$ifdef INCLUDE_FTS3} TSQLFTSTest, {$endif}
      TSQLASource, TSQLADest, TSQLADests, TSQLRecordPeopleArray
      {$ifndef LVCL}, TSQLRecordPeopleObject{$endif},
-     TSQLRecordDali1,TSQLRecordDali2],'root');
+     TSQLRecordDali1,TSQLRecordDali2, TSQLRecordCustomProps],'root');
   ModelC.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
   ModelC.VirtualTableRegister(TSQLRecordDali2,TSQLVirtualTableBinary);
   try
@@ -9049,6 +9051,26 @@ begin
       // remote client access test (via named pipes)
       Check(Client.Server.ExportServerNamedPipe('Test'),'declare Test server');
       TestClientDist(TSQLRestClientURINamedPipe.Create(ModelC,'Test'));
+      // check custom properties content
+      if Client.TransactionBegin(TSQLRecordPeopleObject) then
+      try
+        V2.FillPrepare(Client,'LastName=:("Morse"):');
+        n := 0;
+        while V2.FillOne do begin
+          VP.FillFrom(V2); // fast copy some content from TSQLRecordPeople
+          inc(n);
+          VP.fGUID.D1 := n;
+          Check(Client.Add(VP,true)=n);
+        end;
+        Client.Commit;
+        VP.FillPrepare(Client);
+        while VP.FillOne do begin
+          check(VP.LastName='Morse');
+          check(Integer(VP.GUID.D1)=VP.ID);
+        end;
+      except
+        Client.RollBack;
+      end;
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
         Server := TSQLRestServerTest.Create(ModelC,false);
@@ -9226,6 +9248,7 @@ begin
     V.Free;
     V2.Free;
     VA.Free;
+    VP.Free;
 {$ifndef LVCL}
     VO.Free;
 {$endif}
@@ -11266,5 +11289,3 @@ end;
 {$endif DELPHI5OROLDER}
 
 end.
-
-

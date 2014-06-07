@@ -5978,6 +5978,7 @@ type
 // (thanks to sanyin for the report)
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
 
+
 /// encode the supplied data as an UTF-8 valid JSON object content
 // - data must be supplied two by two, as Name,Value pairs, e.g.
 // ! JSONEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
@@ -6018,7 +6019,7 @@ function JSONEncodeArray(const Values: array of RawUTF8): RawUTF8; overload;
 /// encode the supplied integer array data as a valid JSON array
 function JSONEncodeArray(const Values: array of integer): RawUTF8; overload;
 
-/// encode the supplied floating-point array data as a valid JSON array 
+/// encode the supplied floating-point array data as a valid JSON array
 function JSONEncodeArray(const Values: array of double): RawUTF8; overload;
 
 /// encode the supplied array data as a valid JSON array content

@@ -700,6 +700,8 @@ unit mORMot;
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
       IsSimpleField AppendName GetCaption GetSQLFromFieldValue SetFieldAddr
+    - you can now define any custom property and store it as JSON, e.g. TGUID,
+      by using overriding InternalRegisterCustomProperties() - see [b653e5f4ca]
     - TSQLRestRoutingREST will now recognize several URI schemes:
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
@@ -1257,9 +1259,10 @@ type
     // - defined by overriding TSQLRecord.InternalRegisterCustomProperties
     // virtual method, and adding a TSQLPropInfoCustom instance
     sftBlobCustom,
-    /// a custom property, stored as TEXT field
+    /// a custom property, stored as JSON in a TEXT field
     // - defined by overriding TSQLRecord.InternalRegisterCustomProperties
-    // virtual method, and adding a TSQLPropInfoCustom instance
+    // virtual method, and adding a TSQLPropInfoCustom instance, e.g. via
+    // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI()
     sftUTF8Custom,
     {$ifdef PUBLISHRECORD}
     /// a Delphi record, stored as BLOB field
@@ -1353,7 +1356,7 @@ const
 
   /// kind of fields which will contain TEXT content when converted to JSON
   TEXT_FIELDS: TSQLFieldTypes =
-    [sftAnsiText, sftUTF8Text, sftDateTime, sftObject
+    [sftAnsiText, sftUTF8Text, sftDateTime, sftObject, sftUTF8Custom
       {$ifndef NOVARIANTS}, sftVariant{$endif}];
 
 type
@@ -2647,7 +2650,8 @@ type
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); override;
   public
     /// define a custom property in code
-    // - do not call this constructor directly, but one of its inherited classes
+    // - do not call this constructor directly, but one of its inherited classes,
+    // via a call to TSQLRecordProperties.RegisterCustom*()
     constructor Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
       aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropIndex: Integer; aProperty: pointer;
       aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
@@ -2676,10 +2680,9 @@ type
     // !    (...)
     // !    property FieldName: TMyRecord read fFieldName write fFieldName;
     // !  end;
-    // you will have to register it as
-    // ! aPropInfo := TSQLPropInfoCustom.Create(TypeInfo(TMyRecord),'FieldName',
-    // !   @TMainObject(nil).fFieldName);
-    // - optional aIsNotUnique parameter will be used
+    // you will have to register it via a call to
+    // TSQLRecordProperties.RegisterCustomRTTIRecordProperty()
+    // - optional aIsNotUnique parametercanl be defined
     // - implementation will use internally RecordLoad/RecordSave functions
     // - you can specify optional aData2Text/aText2Data callbacks to store
     // the content as textual values, and not as BLOB
@@ -2743,6 +2746,72 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     {$endif}
+  end;
+
+  /// information about a custom property defined directly in code
+  // - you can define any kind of property, either a record or any type
+  // - this class will use JSON serialization, by type name or TypeInfo() pointer
+  // - will store the content as TEXT by default, and SQLFieldType as sftUTF8Custom
+  TSQLPropInfoCustomJSON = class(TSQLPropInfoCustom)
+  protected
+    fCustomParser: TJSONCustomParserRTTI;
+    procedure SetCustomParser(aCustomParser: TJSONCustomParserRTTI);
+  public
+    /// define a custom property from its RTTI definition
+    // - handle any kind of property, e.g. from enhanced RTTI or a custom record
+    // defined via TTextWriter.RegisterCustomJSONSerializer[FromText]()
+    // - aPropertyPointer shall be filled with the offset to the private
+    // field within a nil object, e.g for
+    // !  class TMainObject = class(TSQLRecord)
+    // !    (...)
+    // !    fFieldName: TMyRecord;
+    // !  public
+    // !    (...)
+    // !    property FieldName: TMyRecord read fFieldName write fFieldName;
+    // !  end;
+    // you will have to register it via a call to
+    // TSQLRecordProperties.RegisterCustomPropertyFromRTTI()
+    // - optional aIsNotUnique parameter can be defined
+    // - implementation will use internally RecordLoadJSON/RecordSave functions
+    // - you can specify optional aData2Text/aText2Data callbacks to store
+    // the content as textual values, and not as BLOB
+    constructor Create(aTypeInfo: PTypeInfo; const aName: RawUTF8;
+      aPropertyIndex: integer; aPropertyPointer: pointer;
+      aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+        reintroduce; overload;
+    /// define a custom property from its RTTI definition
+    // - handle any kind of property, e.g. from enhanced RTTI or a custom record
+    // defined via TTextWriter.RegisterCustomJSONSerializer[FromText]()
+    // - aPropertyPointer shall be filled with the offset to the private
+    // field within a nil object, e.g for
+    // !  class TMainObject = class(TSQLRecord)
+    // !    (...)
+    // !    fGUID: TGUID;
+    // !  public
+    // !    (...)
+    // !    property GUID: TGUID read fGUID write fGUID;
+    // !  end;
+    // you will have to register it via a call to
+    // TSQLRecordProperties.RegisterCustomPropertyFromTypeName()
+    // - optional aIsNotUnique parameter can be defined
+    // - implementation will use internally RecordLoadJSON/RecordSave functions
+    // - you can specify optional aData2Text/aText2Data callbacks to store
+    // the content as textual values, and not as BLOB
+    constructor Create(const aTypeName, aName: RawUTF8;
+      aPropertyIndex: integer; aPropertyPointer: pointer;
+      aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+        reintroduce; overload;
+    /// finalize the instance
+    destructor Destroy; override;
+  public
+    procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
+    procedure GetValueVar(Instance: TObject; ToSQL: boolean;
+      var result: RawUTF8; wasSQLString: PBoolean); override;
+    procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
+    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    procedure CopyValue(Source, Dest: TObject); override;
+    procedure NormalizeValue(var Value: RawUTF8); override;
   end;
 
   /// dynamic array of ORM fields information for published properties
@@ -3489,10 +3558,9 @@ type
       aData2Text: TOnSQLPropInfoRecord2Text=nil;
       aText2Data: TOnSQLPropInfoRecord2Data=nil);
     /// add a custom record property from its RTTI definition
-    // - handle any kind of record with TypeInfo() generated, including
-    // text-based JSON serialization
+    // - handle any kind of record with TypeInfo() generated
     // - use this method within InternalRegisterCustomProperties overridden method
-    // to define a custom record property containing reference-counted types 
+    // to define a custom record property containing reference-counted types
     // - main parameters are the record RTTI information, and the property pointer
     // - add an TSQLPropInfoRecordRTTI instance to the internal list
     // - can be used as such:
@@ -3503,10 +3571,42 @@ type
     // !    @TSQLMyRecord(nil).fRecField);
     // !end;
     procedure RegisterCustomRTTIRecordProperty(aTable: TClass;
-      aRecordInfo: PTypeInfo; const aName: RawUTF8;  aPropertyPointer: pointer;
+      aRecordInfo: PTypeInfo; const aName: RawUTF8; aPropertyPointer: pointer;
       aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0;
       aData2Text: TOnSQLPropInfoRecord2Text=nil;
       aText2Data: TOnSQLPropInfoRecord2Data=nil);
+    /// add a custom property from its RTTI definition stored as JSON
+    // - handle any kind of record with TypeInfo() generated
+    // - use this method within InternalRegisterCustomProperties overridden method
+    // to define a custom record property containing reference-counted types
+    // - main parameters are the record RTTI information, and the property pointer
+    // - add an TSQLPropInfoCustomJSON instance to the internal list
+    // - can be used as such:
+    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TSQLRecordProperties);
+    // !begin
+    // !  Props.RegisterCustomPropertyFromRTTI(self,TypeInfo(TMyRec),'RecField',
+    // !    @TSQLMyRecord(nil).fRecField);
+    // !end;
+    procedure RegisterCustomPropertyFromRTTI(aTable: TClass;
+      aTypeInfo: PTypeInfo; const aName: RawUTF8; aPropertyPointer: pointer;
+      aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+    /// add a custom property from its type name, stored as JSON
+    // - handle any kind of registered record, including TGUID
+    // - use this method within InternalRegisterCustomProperties overridden method
+    // to define a custom record property containing reference-counted types
+    // - main parameters are the record RTTI information, and the property pointer
+    // - add an TSQLPropInfoCustomJSON instance to the internal list
+    // - can be used as such:
+    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TSQLRecordProperties);
+    // !begin
+    // !  Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
+    // !    @TSQLMyRecord(nil).fGUID,[aIsUnique],38);
+    // !end;
+    procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
+      const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
+      aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
   end;
 
   TServiceFactoryServer = class;
@@ -13814,7 +13914,7 @@ begin
     result.VInt64 := GetInt64(Value);
   sftMany:
     exit;
-  sftAnsiText, sftUTF8Text, sftUTF8Custom: begin
+  sftAnsiText, sftUTF8Text: begin
     pointer(result.VAny) := nil;
     RawUTF8(result.VAny) := Value;
   end;
@@ -13822,7 +13922,7 @@ begin
     pointer(result.VAny) := nil;
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
   end;
-  sftObject, sftVariant, sftBlobDynArray: begin
+  sftObject, sftVariant, sftBlobDynArray, sftUTF8Custom: begin
     if createValueTempCopy then begin
       tempCopy := Value;
       Value := pointer(tempCopy);
@@ -15588,6 +15688,110 @@ begin
   aValue.VType := ftBlob;
   aValue.VBlob := pointer(temp);
   aValue.VBlobLen := length(temp);
+end;
+
+
+{ TSQLPropInfoCustomJSON }
+
+constructor TSQLPropInfoCustomJSON.Create(aTypeInfo: PTypeInfo;
+  const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
+  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+begin
+  inherited Create(aName,sftUTF8Custom,aAttributes,aFieldWidth,aPropertyIndex,
+    aPropertyPointer,nil,nil);
+  SetCustomParser(TJSONCustomParserRTTI.CreateFromRTTI(aName,aTypeInfo,0));
+end;
+
+constructor TSQLPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
+  aPropertyIndex: integer; aPropertyPointer: pointer;
+  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+begin
+  inherited Create(aName,sftUTF8Custom,aAttributes,aFieldWidth,aPropertyIndex,
+    aPropertyPointer,nil,nil);
+  SetCustomParser(TJSONCustomParserRTTI.CreateFromTypeName(aName,aTypeName));
+end;
+
+procedure TSQLPropInfoCustomJSON.SetCustomParser(
+  aCustomParser: TJSONCustomParserRTTI);
+begin
+  if aCustomParser=nil then
+    raise EORMException.CreateFmt(
+      '%s: Invalid type information for %s',[ClassName,Name]);
+  fCustomParser := aCustomParser;
+end;
+
+destructor TSQLPropInfoCustomJSON.Destroy;
+begin
+  inherited;
+  fCustomParser.Free;
+end;
+
+procedure TSQLPropInfoCustomJSON.CopyValue(Source, Dest: TObject);
+var JSON: RawUTF8;
+begin
+  GetValueVar(Source,false,JSON,nil);
+  SetValue(Dest,pointer(JSON),false);
+end;
+
+procedure TSQLPropInfoCustomJSON.GetBinary(Instance: TObject;
+  W: TFileBufferWriter);
+var JSON: RawUTF8;
+begin
+  GetValueVar(Instance,false,JSON,nil);
+  W.Write(JSON);
+end;
+
+function TSQLPropInfoCustomJSON.SetBinary(Instance: TObject;
+  P: PAnsiChar): PAnsiChar;
+begin
+  SetValue(Instance,pointer(FromVarString(PByte(P))),false);
+  result := P;
+end;
+
+procedure TSQLPropInfoCustomJSON.NormalizeValue(var Value: RawUTF8);
+begin // do nothing: should already be normalized
+end;
+
+procedure TSQLPropInfoCustomJSON.GetJSONValues(Instance: TObject;
+  W: TJSONSerializer);
+var Data: PByte;
+begin
+  Data := GetFieldAddr(Instance);
+  fCustomParser.WriteOneLevel(W,Data,
+    [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference]);
+  W.CancelLastComma;
+end;
+
+procedure TSQLPropInfoCustomJSON.GetValueVar(Instance: TObject;
+  ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
+var W: TJSONSerializer;
+begin
+  W := TJSONSerializer.CreateOwnedStream;
+  with W do
+  try
+    GetJSONValues(Instance,W);
+    W.SetText(result);
+    if wasSQLString<>nil then
+      wasSQLString^ := (result<>'') and (result[1]='"');
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TSQLPropInfoCustomJSON.SetValue(Instance: TObject;
+  Value: PUTF8Char; wasString: boolean);
+var Data: PByte;
+    tmp: RawUTF8;
+begin
+  Data := GetFieldAddr(Instance);
+  if Value<>nil then
+  if ((Value[0]<>'{')or(Value[StrLen(Value)-1]<>'}')) and
+     ((Value[0]<>'[')or(Value[StrLen(Value)-1]<>']')) then begin
+    QuotedStr(Value,'"',tmp);
+    Value := pointer(tmp);
+  end;
+  fCustomParser.ReadOneLevel(Value,Data,
+    [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference]);
 end;
 
 
@@ -31649,6 +31853,23 @@ begin
   Fields.Add(aTable,TSQLPropInfoRecordRTTI.Create(aRecordInfo,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth,aData2Text,aText2Data));
 end;
+
+procedure TSQLRecordProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
+  aTypeInfo: PTypeInfo; const aName: RawUTF8; aPropertyPointer: pointer;
+  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+begin
+  Fields.Add(aTable,TSQLPropInfoCustomJSON.Create(aTypeInfo,aName,Fields.Count,
+    aPropertyPointer,aAttributes,aFieldWidth));
+end;
+
+procedure TSQLRecordProperties.RegisterCustomPropertyFromTypeName(aTable: TClass;
+  const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
+  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+begin
+  Fields.Add(aTable,TSQLPropInfoCustomJSON.Create(aTypeName,aName,Fields.Count,
+    aPropertyPointer,aAttributes,aFieldWidth));
+end;
+
 
 
 { TSynValidateUniqueField }
