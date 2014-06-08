@@ -701,7 +701,8 @@ unit mORMot;
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
       IsSimpleField AppendName GetCaption GetSQLFromFieldValue SetFieldAddr
     - you can now define any custom property and store it as JSON, e.g. TGUID,
-      by using overriding InternalRegisterCustomProperties() - see [b653e5f4ca]
+      by using overriding InternalRegisterCustomProperties(), or directly as
+      record published properties (since Delphi XE6) - see ticket [b653e5f4ca]
     - TSQLRestRoutingREST will now recognize several URI schemes:
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
@@ -1122,13 +1123,6 @@ uses
      encoding - see BlobToTSQLRawBlob() function }
 
 
-{.$define PUBLISHRECORD}
-// - if defined, a sftBlobRecord will be defined in order to serialize published
-// properties with some record type: but even if such properties can be defined,
-// there is no RTTI generated for them: so it won't work :( see
-// http://docwiki.embarcadero.com/RADStudio/en/Classes_and_Objects#Published_Members
-// - should be defined globaly, e.g. in Synopse.inc
-
 const
   /// maximum number of Tables in a Database Model
   // - this constant is used internaly to optimize memory usage in the
@@ -1264,12 +1258,6 @@ type
     // virtual method, and adding a TSQLPropInfoCustom instance, e.g. via
     // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI()
     sftUTF8Custom,
-    {$ifdef PUBLISHRECORD}
-    /// a Delphi record, stored as BLOB field
-    // - is retrieved by default, i.e. is recognized as a "simple" field
-    // - will use Base64 encoding in JSON content
-    sftBlobRecord,
-    {$endif PUBLISHRECORD}
     /// a 'many to many' field (TSQLRecordMany Delphi property)
     // - nothing is stored in the table row, but in a separate pivot table: so
     // there is nothing to retrieve here
@@ -2653,15 +2641,16 @@ type
     // - do not call this constructor directly, but one of its inherited classes,
     // via a call to TSQLRecordProperties.RegisterCustom*()
     constructor Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
-      aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropIndex: Integer; aProperty: pointer;
-      aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
+      aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropIndex: Integer;
+      aProperty: pointer; aData2Text: TOnSQLPropInfoRecord2Text;
+      aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
   public
     function GetFieldAddr(Instance: TObject): pointer; override;
   end;
 
   /// information about a record property defined directly in code
   // - Delphi does not publish RTTI for published record properties
-  // - you can use this class to register a record property from its RTTI 
+  // - you can use this class to register a record property from its RTTI
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
   // - this class will use only binary RecordLoad/RecordSave methods
@@ -2757,6 +2746,10 @@ type
     fCustomParser: TJSONCustomParserRTTI;
     procedure SetCustomParser(aCustomParser: TJSONCustomParserRTTI);
   public
+    /// initialize the internal fields
+    // - should not be called directly
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer);
+      reintroduce; overload; virtual;
     /// define a custom property from its RTTI definition
     // - handle any kind of property, e.g. from enhanced RTTI or a custom record
     // defined via TTextWriter.RegisterCustomJSONSerializer[FromText]()
@@ -13810,9 +13803,6 @@ const
      ftBlob,      // sftBlobDynArray
      ftBlob,      // sftBlobCustom
      ftUTF8,      // sftUTF8Custom
-{$ifdef PUBLISHRECORD}
-     ftBlob,      // sftBlobRecord
-{$endif}
      ftUnknown,   // sftMany
      ftInt64,     // sftModTime
      ftInt64);    // sftCreateTime
@@ -13882,10 +13872,8 @@ const
     varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
  // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
- // sftBlobCustom, sftUTF8Custom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif}
-    varString,      varString,    {$ifdef PUBLISHRECORD} varString, {$endif}
- // sftMany, sftModTime, sftCreateTime
-    varEmpty, varInt64, varInt64);
+ // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
+    varString,      varString,    varEmpty, varInt64, varInt64);
 var tempCopy: RawUTF8;
     err: integer;
 begin
@@ -13918,7 +13906,7 @@ begin
     pointer(result.VAny) := nil;
     RawUTF8(result.VAny) := Value;
   end;
-  sftBlobCustom, {$ifdef PUBLISHRECORD} sftBlobRecord, {$endif} sftBlob: begin
+  sftBlobCustom, sftBlob: begin
     pointer(result.VAny) := nil;
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
   end;
@@ -13978,7 +13966,7 @@ begin
   aSQLFieldType := aType^.SQLFieldType;
   C := nil;
   case aSQLFieldType of
-    sftUnknown, sftBlobCustom, sftUTF8Custom:
+    sftUnknown, sftBlobCustom:
       ; // will raise an EORMException
     sftBoolean, sftEnumerate:
       C := TSQLPropInfoRTTIEnum;
@@ -13998,15 +13986,19 @@ begin
       C := TSQLPropInfoRTTIObject;
     {$ifndef NOVARIANTS}
     sftVariant:
-      C := TSQLPropInfoRTTIVariant; 
+      C := TSQLPropInfoRTTIVariant;
     {$endif}
     sftBlob:
       C := TSQLPropInfoRTTIRawBlob;
     sftBlobDynArray:
       C := TSQLPropInfoRTTIDynArray;
+    sftUTF8Custom: begin // will happen only for DELPHI XE6 and up
+      result := TSQLPropInfoCustomJSON.Create(aPropInfo,aPropIndex);
+      exit;
+    end;
     else
     case aType^.Kind of // retrieve exact type at binary level
-      tkInteger, tkRecord:
+      tkInteger:
         C := TSQLPropInfoRTTIInt32;
       tkSet:
         C := TSQLPropInfoRTTISet;
@@ -15693,6 +15685,16 @@ end;
 
 { TSQLPropInfoCustomJSON }
 
+constructor TSQLPropInfoCustomJSON.Create(aPropInfo: PPropInfo; aPropIndex: integer);
+var attrib: TSQLPropInfoAttributes;
+begin
+  byte(attrib) := 0;
+  if aPropInfo^.IsStored(nil)=AS_UNIQUE then
+    Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;ieldWidth=10
+  Create(aPropInfo^.PropType^,ShortStringToAnsi7String(aPropInfo^.Name),
+    aPropIndex,aPropInfo^.GetFieldAddr(nil),attrib,aPropInfo^.Index);
+end;
+
 constructor TSQLPropInfoCustomJSON.Create(aTypeInfo: PTypeInfo;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
   aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
@@ -17066,9 +17068,6 @@ var
     nil,                 // BlobDynArray
     nil,                 // BlobCustom
     nil,                 // UTF8Custom
-{$ifdef PUBLISHRECORD}
-    nil,                 // BlobRecord
-{$endif}
     nil,
     UTF8CompareInt64,    // ModTime
     UTF8CompareInt64);   // CreateTime
@@ -19240,10 +19239,8 @@ i64:  SetInt64Prop(Dest,pointer(@self),GetInt64Prop(Source,pointer(@self)));
     end;
     tkDynArray:
       GetDynArray(Dest).Copy(GetDynArray(Source));
-    {$ifdef PUBLISHRECORD}
     tkRecord:
       RecordCopy(GetFieldAddr(Dest)^,GetFieldAddr(Source)^,PropType^);
-    {$endif}
     {$ifndef NOVARIANTS}
     tkVariant: begin // do not handle getter/setter yet
       GetVariantProp(Source,pointer(@self),V);
@@ -19561,7 +19558,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
     end;
     {$ifdef PUBLISHRECORD}
     tkRecord: begin
-      result := sftBlobRecord;
+      result := sftUTF8Custom;
       exit;
     end;
     {$endif}
@@ -23049,8 +23046,7 @@ begin // use mostly the same fast comparison functions as for sorting
   if FieldType=sftMany then
     exit; // nothing is stored directly, but in a separate pivot table
   if FieldType in [sftUnknown,sftBlob,sftBlobDynArray,sftBlobCustom,sftObject,
-    sftUTF8Custom{$ifdef PUBLISHRECORD},sftBlobRecord{$endif}
-    {$ifndef NOVARIANTS},sftVariant{$endif}] then
+    sftUTF8Custom{$ifndef NOVARIANTS},sftVariant{$endif}] then
     FieldType := sftUTF8Text; // unknown or blob fields are compared as UTF-8
   { TODO: handle sftBlobDynArray/sftBlobCustom/sftBlobRecord comparison }
   case TSQLQueryOperator(Operator) of
@@ -30609,7 +30605,7 @@ begin
       tkRecord:
         if not wasString then
           exit else
-          RecordLoad(P^.GetFieldAddr(Value)^,pointer(BlobToTSQLRawBlob(PropValue)),P^.PropType^);
+          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.PropType^);
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: begin
@@ -30731,7 +30727,7 @@ begin
         P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
 {$ifdef PUBLISHRECORD}
       tkRecord:
-        RecordLoad(P^.GetFieldAddr(Value)^,pointer(BlobToTSQLRawBlob(U)),P^.PropType^);
+        RecordLoadJSON(P^.GetFieldAddr(Value)^,pointer(U),P^.PropType^);
 {$endif PUBLISHRECORD}
       tkClass: begin
         Obj := pointer(GetOrdProp(Value,pointer(P))); // GetOrdProp() is OK for CPU64
@@ -31599,9 +31595,6 @@ const
     ' BLOB, ',                       // sftBlobDynArray
     ' BLOB, ',                       // sftBlobCustom
     ' TEXT COLLATE NOCASE, ',        // sftUTF8Custom
-{$ifdef PUBLISHRECORD}
-    ' BLOB, ',                       // sftBlobRecord
-{$endif}
     '',                              // sftMany
     ' INTEGER, ',                    // sftModTime
     ' INTEGER, ');                   // sftCreateTime

@@ -2030,7 +2030,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TSQLRawBlob@}|@*BLOB@|This type is an alias to {\f1\fs20 @*RawByteString@}
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
-|{\f1\fs20 record}|BLOB\line TEXT|as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
+|{\f1\fs20 record}|TEXT|JSON string or object\line directly handled since Delphi XE6, or as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} for prior versions
 |%
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
 - If the property is marked as {\f1\fs20 stored AS_UNIQUE} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
@@ -2112,9 +2112,17 @@ At loading, it will check their content:
 Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in Delphi code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
 At JSON level, {\f1\fs20 variant} fields will be transmitted as JSON text or number, depending on the stored value.
 :  Record fields
-Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties. So {\f1\fs20 record} published properties won't work directly.
-You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 @*TSQLRecord@} class definition - see @21@. But it may be confusing.
-Another possibility may be to override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
+Since Delphi XE6, you can define and work directly with published record properties of {\f1\fs20 @*TSQLRecord@}:
+!  TSQLMyRecord = class(TSQLRecordPeople)
+!  protected
+!    fGUID: TGUID;
+!  published
+!    property GUID: TGUID read fGUID write fGUID index 38;
+!  end;
+The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.
+Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties before Delphi XE6. So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of Delphi, or {\i FreePascal}.
+You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
+If you want to work with such properties before Delphi XE6, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
 For instance, to register a {\f1\fs20 TGUID} property mapping a {\f1\fs20 TSQLMyRecord.f@*GUID@: TGUID} field:
 ! type
 !   TSQLMyRecord = class(TSQLRecord)

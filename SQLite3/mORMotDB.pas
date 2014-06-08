@@ -539,9 +539,6 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftBlob,      // sftBlobDynArray
        ftBlob,      // sftBlobCustom
        ftUTF8,      // sftUTF8Comp
-  {$ifdef PUBLISHRECORD}
-       ftBlob,      // sftBlobRecord
-  {$endif}
        ftUnknown,   // sftMany
        ftInt64,     // sftModTime
        ftInt64);    // sftCreateTime

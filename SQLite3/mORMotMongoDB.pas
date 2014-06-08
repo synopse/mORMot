@@ -392,7 +392,6 @@ begin
       case info.SQLFieldType of
         sftDateTime: // store ISO-8601 text as MongoDB date/time
           Variant(V^) := Iso8601ToDateTime(RawByteString(V^.VAny));
-        {$ifdef PUBLISHRECORD}sftBlobRecord,{$endif}
         sftBlob, sftBlobCustom: // store Base64-encoded BLOB as binary
           BSONVariantType.FromBinary(BlobToTSQLRawBlob(RawByteString(V^.VAny)),
             bbtGeneric,Variant(V^));
@@ -410,7 +409,7 @@ begin
           end;
         end;
         end;
-        // sftObject,sftVariant were already converted to object from JSON
+        // sftObject,sftVariant,sftUTF8Custom were already converted to object from JSON
       end;
     end;
   if (Occasion=soInsert) and MissingID then begin
