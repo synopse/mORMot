@@ -157,12 +157,14 @@ type
   private
     fName: RawUTF8;
     fNested: TCollection;
+    fList: TStringList;
   public
     constructor Create;
     destructor Destroy; override;
   published
     property Name: RawUTF8 read fName write fName;
     property Nested: TCollection read fNested;
+    property List: TStringList read fList;
   end;
 
 
@@ -363,10 +365,11 @@ begin
       item.Ident := obj1.Name;
       item.Number := i/2;
       check(obj1.Nested.Count=i);
+      obj1.list.Add(obj1.Name);
       json := ObjectToJSON(obj1);
       check(json<>'');
       if i=1 then
-        check(json='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}]}');
+        check(json='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}],"List":["1"]}');
       JSONToObject(obj2,json);
       check(obj2.Nested.Count=i);
       json2 := ObjectToJSON(obj2);
@@ -446,10 +449,12 @@ constructor TMain.Create;
 begin
   inherited;
   fNested := TCollection.Create(TMainNested);
+  fList := TStringList.Create;
 end;
 
 destructor TMain.Destroy;
 begin
+  fList.Free;
   fNested.Free;
   inherited;
 end;

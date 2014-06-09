@@ -1257,6 +1257,16 @@ begin
     end;
     exit;
   end;
+  if Instance.InheritsFrom(TStrings) then begin
+    if TStrings(Instance).Count=0 then
+      result := '[]' else begin
+      result := '[';
+      for i := 0 to TStrings(Instance).Count-1 do
+        result := result+StringToJSON(TStrings(Instance).Strings[i])+',';
+      result[length(result)] := ']';
+    end;
+    exit;
+  end;
   if Instance.InheritsFrom(TCollection) then begin
     if TCollection(Instance).Count=0 then
       result := '[]' else begin
@@ -1492,15 +1502,24 @@ begin
       SetInstanceProp(Instance,
         GetPropInfo(Instance,Names[i]),Values[i]);
   jvArray:
-    if not Instance.InheritsFrom(TCollection) then
-      exit else begin
+    if Instance.InheritsFrom(TCollection) then begin
       TCollection(Instance).Clear;
       for i := 0 to Count-1 do begin
         item := TCollection(Instance).Add;
         if not JSONVariantData(Values[i]).ToObject(item) then
           exit;
       end;
-    end;
+    end else
+    if Instance.InheritsFrom(TStrings) then
+    try
+      TStrings(Instance).BeginUpdate;
+      TStrings(Instance).Clear;
+      for i := 0 to Count-1 do
+        TStrings(Instance).Add(Values[i]);
+    finally
+      TStrings(Instance).EndUpdate;
+    end else
+      exit;
   else
     exit;
   end;
