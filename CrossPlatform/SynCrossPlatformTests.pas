@@ -356,6 +356,7 @@ begin
     check(FormatBind('ab?ab??cd',[i,i,json])='ab'+inlined+'ab'+inlined+
       ':("'+json+'"):cd');
   end;
+  RegisterClassForJSON([TMainNested]);
   obj1 := TMain.Create;
   obj2 := TMain.Create;
   try
@@ -374,6 +375,12 @@ begin
       check(obj2.Nested.Count=i);
       json2 := ObjectToJSON(obj2);
       check(json2=json);
+      json := ObjectToJSON(item,true);
+      item := JSONToNewObject(json);
+      check(item<>nil);
+      json2 := ObjectToJSON(item,true);
+      check(json2=json);
+      item.Free;
     end;
   finally
     obj2.Free;

@@ -131,6 +131,11 @@ type
     function ToJSON: string;
     /// fill the published properties of supplied class from this JSON object
     function ToObject(Instance: TObject): boolean;
+    /// create an instance, and fill its published properties from this JSON object
+    // - it should contain some "ClassName" properties, i.e. JSON should have
+    // been created by ObjectToJSON(Instance,true) and the class should have
+    // been registered with RegisterClassForJSON()
+    function ToNewObject: TObject;
     /// kind of document this TJSONVariantData contains
     property Kind: TJSONVariantKind read GetKind;
     /// number of items in this jvObject or jvArray
@@ -286,11 +291,26 @@ function ValueToJSON(const Value: variant): string;
 /// compute the JSON representation of an object published properties
 // - handle only simple types of properties, not nested class instances
 // - any TList/TObjectList/TCollection will be serialized as JSON array
-function ObjectToJSON(Instance: TObject): string;
+function ObjectToJSON(Instance: TObject; StoreClassName: boolean=false): string;
 
 /// fill an object published properties from the supplied JSON object
 // - handle only simple types of properties, not nested class instances
 function JSONToObject(Instance: TObject; const JSON: string): boolean;
+
+/// create a new object and fil its published properties from the supplied
+// JSON object, which should include "ClassName":"..." properties
+// - JSON should have been created with ObjectToJSON(Instance,true) and
+// the class should have been registered with RegisterClassForJSON()
+function JSONToNewObject(const JSON: string): pointer;
+
+/// register the class types to be created from its name
+// - used e.g. by JSONToNewObject() or TJSONVariantData.ToNewObject
+procedure RegisterClassForJSON(const Classes: array of TClass);
+
+/// create a class instance from its name
+// - the class should have been registered previously via RegisterClassForJSON()
+// - if the supplied class name is not found, will return nil
+function CreateClassForJSON(const ClassName: string): TObject;
 
 /// create a list of object published properties from the supplied JSON object
 // - handle only simple types of properties, not nested class instances
@@ -1166,6 +1186,7 @@ end;
 procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
   const Value: variant);
 var blob: pointer;
+    obj: TObject;
 begin
   if (PropInfo<>nil) and (Instance<>nil) then
   case PropInfo^.PropType^.Kind of
@@ -1202,9 +1223,16 @@ begin
         Base64JSONStringToBytes(Value,TByteDynArray(blob));
       SetDynArrayProp(Instance,PropInfo,blob);
     end;
-  tkClass:
-    if TVarData(Value).VType>varNull then
-      JSONVariantData(Value).ToObject(pointer(GetOrdProp(Instance,PropInfo)));
+  tkClass: begin
+    obj := pointer(GetOrdProp(Instance,PropInfo));
+    if TVarData(Value).VType>varNull then 
+      if obj=nil then begin
+        obj := JSONVariantData(Value).ToNewObject;
+        if obj<>nil then
+          SetOrdProp(Instance,PropInfo,NativeInt(obj));
+      end else
+        JSONVariantData(Value).ToObject(obj);
+  end;
   end;
 end;
 
@@ -1238,7 +1266,53 @@ begin
   end;
 end;
 
-function ObjectToJSON(Instance: TObject): string;
+function JSONToNewObject(const JSON: string): pointer;
+var doc: TJSONVariantData;
+begin
+  doc.Init(JSON);
+  result := doc.ToNewObject;
+end;
+
+var
+  RegisteredClass: array of record
+    ClassName: string;
+    ClassType: TClass;
+  end;
+
+function FindClassForJSON(const ClassName: string): integer;
+begin
+  for result := 0 to high(RegisteredClass) do
+    if IdemPropName(RegisteredClass[result].ClassName,ClassName) then
+      exit;
+  result := -1;
+end;
+
+function CreateClassForJSON(const ClassName: string): TObject;
+var i: integer;
+begin
+  i := FindClassForJSON(ClassName);
+  if i<0 then
+    result := nil else
+    result := RegisteredClass[i].ClassType.Create;
+end;
+
+procedure RegisterClassForJSON(const Classes: array of TClass);
+var c,i: integer;
+    name: string;
+begin
+  for c := 0 to high(Classes) do begin
+    name := string(Classes[c].ClassName);
+    i := FindClassForJSON(name);
+    if i>=0 then
+      continue;
+    i := length(RegisteredClass);
+    SetLength(RegisteredClass,i+1);
+    RegisteredClass[i].ClassName := Name;
+    RegisteredClass[i].ClassType := Classes[c];
+  end;
+end;
+
+function ObjectToJSON(Instance: TObject; StoreClassName: boolean): string;
 var TypeInfo: PTypeInfo;
     PropCount, i: integer;
     PropList: PPropList;
@@ -1252,7 +1326,7 @@ begin
       result := '[]' else begin
       result := '[';
       for i := 0 to TList(Instance).Count-1 do
-        result := result+ObjectToJSON(TList(Instance).List[i])+',';
+        result := result+ObjectToJSON(TList(Instance).List[i],StoreClassName)+',';
       result[length(result)] := ']';
     end;
     exit;
@@ -1272,7 +1346,7 @@ begin
       result := '[]' else begin
       result := '[';
       for i := 0 to TCollection(Instance).Count-1 do
-        result := result+ObjectToJSON(TCollection(Instance).Items[i])+',';
+        result := result+ObjectToJSON(TCollection(Instance).Items[i],StoreClassName)+',';
       result[length(result)] := ']';
     end;
     exit;
@@ -1285,7 +1359,9 @@ begin
   PropCount := GetPropList(TypeInfo,PropList);
   if PropCount>0 then
     try
-      result := '{';
+      if StoreClassName then
+        result := '{"ClassName":"'+string(Instance.ClassName)+'",' else
+        result := '{';
       for i := 0 to PropCount-1 do
         result := result+StringToJSON(string(PropList[i]^.Name))+':'+
           ValueToJSON(GetInstanceProp(Instance,PropList[i]))+',';
@@ -1487,6 +1563,23 @@ begin
   end;
   else result := 'null';
   end;
+end;
+
+function TJSONVariantData.ToNewObject: TObject;
+var ndx,i: Integer;
+begin
+  result := nil;
+  if (Kind<>jvObject) or (Count=0) then
+    exit;
+  ndx := NameIndex('ClassName');
+  if ndx<0 then
+    exit;
+  result := CreateClassForJSON(Values[ndx]);
+  if result=nil then
+    exit; // class name has not been registered
+  for i := 0 to Count-1 do
+    if i<>ndx then
+      SetInstanceProp(result,GetPropInfo(result,Names[i]),Values[i]);
 end;
 
 function TJSONVariantData.ToObject(Instance: TObject): boolean;
