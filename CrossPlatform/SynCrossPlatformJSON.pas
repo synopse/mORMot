@@ -367,9 +367,11 @@ const
   JSON_BASE64_MAGIC: array[0..2] of byte = ($ef,$bf,$b0);
   {$endif}
 
+{$ifndef ISSMS}
 /// read an UTF-8 (JSON) file into a native string
 // - file should be existing, otherwise an exception is raised
 function UTF8FileToString(const aFileName: TFileName): string;
+{$endif}
 
 /// this function is faster than str := str+chr !
 procedure AppendChar(var str: string; chr: Char);
@@ -435,6 +437,8 @@ begin
     result := false;
 end;
 
+{$ifndef ISSMS}
+
 {$ifdef FPC}
 // assume string is UTF-8 encoded (as with Lazarus/LCL)
 // note that when working with variants, FPC 2.7.1 sometimes clear the code page
@@ -463,6 +467,7 @@ begin
     F.Free;
   end;
 end;
+{$endif}
 
 function JSONVariant(const JSON: string): variant;
 begin
@@ -490,12 +495,18 @@ begin
 end;
 
 procedure AppendChar(var str: string; chr: Char);
+{$ifdef SMS} // JavaScript immutable strings
+begin
+  str := str+chr
+end;
+{$else}
 var len: Integer;
 begin
   len := length(str);
   SetLength(str,len+1);
   PChar(pointer(str))[len] := chr; // SetLength() made str unique
-end; // for NextGen / immutable strings, TStringBuilder could be faster 
+end; 
+{$endif}
 
 function StringToJSON(const Text: string): string;
 var len,j: integer;

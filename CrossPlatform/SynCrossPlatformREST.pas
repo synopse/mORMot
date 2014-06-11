@@ -562,6 +562,11 @@ const
     '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F');
 
 function UrlEncode(const aValue: string): string; overload;
+{$ifdef ISSMS}
+begin // see http://www.w3schools.com/jsref/jsref_encodeuricomponent.asp
+  result := encodeURIComponent(aValue);
+end;
+{$else}
 var utf8: UTF8String;
     i,c: integer;
 begin
@@ -578,6 +583,7 @@ begin
     end; // see rfc3986 2.3. Unreserved Characters
   end;
 end;
+{$endif}
 
 function UrlEncode(const aNameValueParameters: array of const): string; overload;
 var a,i: integer;
@@ -610,6 +616,11 @@ begin
 end;
 
 function UrlDecode(const aValue: string): string;
+{$ifdef ISSMS}
+begin
+  result := decodeURIComponent(aValue);
+end;
+{$else}
 var utf8: UTF8String;
     i,c,n,len: integer;
 begin
@@ -642,6 +653,7 @@ begin
   result := Utf8Decode(utf8);
   {$endif}
 end;
+{$endif}
 
 function FindHeader(const Headers, Name: string): string;
 var i: integer;
@@ -1269,6 +1281,19 @@ end;
 { TSQLAuthUser }
 
 function SHA256Compute(const Values: array of string): string;
+{$ifdef ISSMS}
+var a: integer;
+begin
+  with TSHA256.Create do
+  try
+    for a := 0 to high(Values) do
+      Update(unescape(encodeURIComponent(Values[a])));
+    result := Finalize;
+  finally
+    Free;
+  end;
+end;
+{$else}
 var buf: THttpBody;
     a: integer;
 begin
@@ -1283,6 +1308,7 @@ begin
     Free;
   end;
 end;
+{$endif}
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
 begin

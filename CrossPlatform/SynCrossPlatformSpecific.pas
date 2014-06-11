@@ -80,7 +80,11 @@ uses
 
 type
   /// HTTP body may not match the string type, and could be binary 
+  {$ifdef ISSMS}
+  THttpBody = string;
+  {$else}
   THttpBody = array of byte;
+  {$endif}
   
   /// used to store the request of a REST call
   TSQLRestURIParams = record
@@ -235,6 +239,12 @@ uses
 
 
 procedure TextToHttpBody(const Text: string; var Body: THttpBody);
+{$ifdef ISSMS}
+begin
+  // http://ecmanaut.blogspot.fr/2006/07/encoding-decoding-utf8-in-javascript.html
+  Body := unescape(encodeURIComponent(Text));
+end;
+{$else}
 var utf8: UTF8String;
     n: integer;
 begin
@@ -243,8 +253,14 @@ begin
   SetLength(Body,n);
   move(pointer(utf8)^,pointer(Body)^,n);
 end;
+{$endif}
 
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
+{$ifdef ISSMS}
+begin
+  Text := decodeURIComponent(escape(Body));
+end;
+{$else}
 var utf8: UTF8String;
     L: integer;
 begin
@@ -257,6 +273,7 @@ begin
   Text := UTF8Decode(utf8);
   {$endif}
 end;
+{$endif}
 
 
 { TAbstractHttpConnection }

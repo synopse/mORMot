@@ -102,7 +102,9 @@ type
     /// initialize SHA256 context for hashing
     constructor Create;
     /// update the SHA256 context with some data
-    procedure Update(const buf: array of byte);
+    procedure Update(const buf: array of byte); overload;
+    /// update the SHA256 context with 8 bit ascii data (e.g. UTF-8)
+    procedure Update(const ascii: string); overload;
     /// finalize and compute the resulting SHA256 hash Digest of all data
     // affected to Update() method
     // - returns the data as Hexadecimal
@@ -240,6 +242,31 @@ begin
     end else begin
       for i := 0 to Len-1 do
         Buffer[Index+i] := buf[DataNdx+i];
+      inc(Index,Len);
+      break;
+    end;
+  end;
+end;
+
+procedure TSHA256.Update(const ascii: string);
+var Len, aLen, i: integer;
+    DataNdx: integer;
+begin
+  Len := length(ascii);
+  DataNdx := 1;
+  inc(MLen,Len shl 3);
+  while Len>0 do begin
+    aLen := 64-Index;
+    if aLen<=Len then begin
+      for i := 0 to aLen-1 do
+        Buffer[Index+i] := ord(ascii[DataNdx+i]);
+      dec(Len,aLen);
+      inc(DataNdx,aLen);
+      Compress;
+      Index:= 0;
+    end else begin
+      for i := 0 to Len-1 do
+        Buffer[Index+i] := ord(ascii[DataNdx+i]);
       inc(Index,Len);
       break;
     end;
