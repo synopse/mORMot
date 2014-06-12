@@ -277,7 +277,7 @@ begin
   NotifyTestSpeed('rows updated',Coll.Count,fClient.BytesTransmitted-bytes);
   Check(Coll.Count=COLL_COUNT);
   for i := 0 to COLL_COUNT-1 do begin
-    jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
+    jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],null,1);
     Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'in-place update');
   end;
   jsonArray := Coll.FindJSON(null,BSONVariant(['_id',0,'Date',0,'Number',0]));
@@ -312,7 +312,7 @@ begin
   Check(Coll.Count=fExpectedCount);
   for i := 0 to high(fValues) do
     if not VarIsNull(fValues[i]._id) then begin
-      jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],1);
+      jsonOne := Coll.FindJSON('{_id:?}',[fValues[i]._id],null,1);
       Check(jsonOne=VariantSaveMongoJSON(fValues[i],modMongoStrict),'delete');
     end;
 end;

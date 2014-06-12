@@ -493,6 +493,8 @@ type
     // ! aBSONWriter.BSONWriteObject(['name','John','year',1972]);
     // - this method wil be faster than using a BSONWriteDoc(_ObjFast(...))
     procedure BSONWriteObject(const NameValuePairs: array of const);
+    /// write a projection specified as fieldname:1 pairs as a BSON document
+    procedure BSONWriteProjection(const FieldNamesCSV: RawUTF8);
     /// write an array specified as a list of items as a BSON document
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
@@ -1801,10 +1803,10 @@ type
     // ! FindDoc(BSONVariant('{name:"John",age:{$gt,21}}'),null);
     // ! FindDoc(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
-    // - Projection can be null (to retrieve all fields) or a string to specify
-    // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindDoc(BSONVariant(['name','John']),null);
-    // ! FindDoc(BSONVariant(['name','John']),'_id');
+    // ! FindDoc(BSONVariant(['name','John']),'_id,name');
     // ! FindDoc(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
     // - NumberToReturn can be left to its default maxInt value to return all
     // matching documents, or specify a limit (e.g. 1 for one document - in this
@@ -1839,13 +1841,20 @@ type
     function FindOne(const _id: variant): variant; overload;
     /// returns a dynamic array of TDocVariant instance containing
     // all documents of a collection
-    procedure FindDocs(var result: TVariantDynArray; const Projection: RawUTF8='';
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // field names to retrieve, or a TDocVariant or TBSONVariant with
+    // projection operators
+    procedure FindDocs(var result: TVariantDynArray; const Projection: variant;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
+    // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res);
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // field names to retrieve, or a TDocVariant or TBSONVariant with
+    // projection operators
     procedure FindDocs(Criteria: PUTF8Char; const Params: array of const;
-      var result: TVariantDynArray; const Projection: RawUTF8='';
+      var result: TVariantDynArray; const Projection: variant;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]); overload;
 
@@ -1856,8 +1865,8 @@ type
     // ! FindJSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
     // ! FindJSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
-    // - Projection can be null (to retrieve all fields) or a string to specify
-    // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // thes field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindJSON(BSONVariant(['name','John']),null);
     // ! FindJSON(BSONVariant(['name','John']),'_id');
     // ! FindJSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
@@ -1892,8 +1901,7 @@ type
     // - Criteria and Projection can specify the query selector as (extended)
     // JSON and parameters
     function FindJSON(Criteria: PUTF8Char; const CriteriaParams: array of const;
-      const Projection: RawUTF8;
-      NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      const Projection: variant; NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
 
     /// select documents in a collection and returns a TBSONDocument instance
@@ -1902,8 +1910,8 @@ type
     // TBSONVariant query selector:
     // ! FindBSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
     // ! FindBSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
-    // - Projection can be null (to retrieve all fields) or a string to specify
-    // one field name to retrieve, or a TDocVariant or TBSONVariant - e.g.:
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindBSON(BSONVariant(['name','John']),null);
     // ! FindBSON(BSONVariant(['name','John']),'_id');
     // ! FindBSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));
@@ -3030,6 +3038,18 @@ begin
   BSONDocumentEnd(Start);
 end;
 
+procedure TBSONWriter.BSONWriteProjection(const FieldNamesCSV: RawUTF8);
+var FieldNames: TRawUTF8DynArray;
+    i: integer;
+    Start: cardinal;
+begin
+  CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
+  Start := BSONDocumentBegin;
+  for i := 0 to high(FieldNames) do
+    BSONWrite(FieldNames[i],1);
+  BSONDocumentEnd(Start);
+end;
+
 procedure TBSONWriter.BSONWriteObject(const NameValuePairs: array of const);
 var Start: cardinal;
     Name: RawUTF8;
@@ -3969,7 +3989,7 @@ begin
   if TVarData(paramDoc).VType=varByRef or varVariant then
     BSONWriteParam(PVariant(TVarData(paramDoc).VPointer)^) else
   if VarIsStr(paramDoc) then
-    BSONWriteObject([paramDoc,1]) else
+    BSONWriteProjection(VariantToUTF8(paramDoc)) else
   if (TVarData(paramDoc).VType=BSONVariantType.VarType) and
      (TBSONVariantData(paramDoc).VKind=betDoc) and
      (TBSONVariantData(paramDoc).VBlob<>nil) then
@@ -5229,12 +5249,12 @@ end;
 
 procedure TMongoCollection.FindDocs(Criteria: PUTF8Char;
   const Params: array of const; var result: TVariantDynArray;
-  const Projection: RawUTF8; NumberToReturn, NumberToSkip: Integer;
+  const Projection: variant; NumberToReturn, NumberToSkip: Integer;
   Flags: TMongoQueryFlags);
 begin
   Database.Client.GetOneReadConnection.GetDocumentsAndFree(
     TMongoRequestQuery.Create(fFullCollectionName,
-      BSONVariant(Criteria,[],Params),BSONVariant(Projection),
+      BSONVariant(Criteria,[],Params),Projection,
       NumberToReturn,NumberToSkip,Flags),result);
 end;
 
@@ -5249,11 +5269,11 @@ begin
 end;
 
 procedure TMongoCollection.FindDocs(var result: TVariantDynArray;
-  const Projection: RawUTF8; NumberToReturn, NumberToSkip: Integer;
+  const Projection: variant; NumberToReturn, NumberToSkip: Integer;
   Flags: TMongoQueryFlags);
 begin
   Database.Client.GetOneReadConnection.GetDocumentsAndFree(
-    TMongoRequestQuery.Create(fFullCollectionName,null,null,
+    TMongoRequestQuery.Create(fFullCollectionName,null,Projection,
       NumberToReturn,NumberToSkip,Flags),result);
 end;
 
@@ -5276,12 +5296,11 @@ end;
 
 function TMongoCollection.FindJSON(
   Criteria: PUTF8Char; const CriteriaParams: array of const;
-  const Projection: RawUTF8; 
-  NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
-  Flags: TMongoQueryFlags=[]; Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+  const Projection: variant; NumberToReturn, NumberToSkip: Integer;
+  Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
   result := FindJSON(BSONVariant(Criteria,[],CriteriaParams),
-    BSONVariant(Projection),NumberToReturn,NumberToSkip,Flags,Mode);
+    Projection,NumberToReturn,NumberToSkip,Flags,Mode);
 end;
 
 procedure TMongoCollection.Insert(const Documents: array of variant;
