@@ -1866,7 +1866,7 @@ type
     // ! FindJSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a CSV string to set
-    // thes field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
+    // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindJSON(BSONVariant(['name','John']),null);
     // ! FindJSON(BSONVariant(['name','John']),'_id');
     // ! FindJSON(BSONVariant(['name','John']),BSONVariantFieldSelector('name,_id'));

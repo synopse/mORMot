@@ -73,6 +73,13 @@ type
 
   PByteDynArray = ^TByteDynArray;
 
+  // this type will store UTF-8 encoded buffer on NextGen platform
+{$ifdef NEXTGEN}
+  TUTF8Buffer = TBytes;
+{$else}
+  TUTF8Buffer = UTF8String;
+{$endif}
+
   /// exception used during standand-alone cross-platform JSON process
   EJSONException = class(Exception);
 
@@ -437,7 +444,7 @@ begin
     result := false;
 end;
 
-{$ifndef ISSMS}
+{$ifndef ISSMS} // there is no file within HTML5 DOM
 
 {$ifdef FPC}
 // assume string is UTF-8 encoded (as with Lazarus/LCL)
@@ -445,7 +452,7 @@ end;
 type UTF8ToString = RawByteString;
 {$else}
 {$ifndef UNICODE}
-function UTF8ToString(const utf8: UTF8String): string;
+function UTF8ToString(const utf8: TUTF8Buffer): string;
 begin
   result := UTF8ToAnsi(utf8);
 end;
@@ -455,14 +462,19 @@ end;
 function UTF8FileToString(const aFileName: TFileName): string;
 var F: TFileStream;
     len: integer;
-    utf8: UTF8String;
+    utf8: TUTF8Buffer;
 begin
   F := TFileStream.Create(aFileName,fmOpenRead);
   try
     len := F.Size;
     SetLength(utf8,len);
+{$ifdef NEXTGEN}
+    F.Read(utf8[0],len);
+    result := TEncoding.UTF8.GetString(utf8);
+{$else}
     F.Read(utf8[1],len);
     result := UTF8ToString(utf8);
+{$endif}
   finally
     F.Free;
   end;
@@ -516,8 +528,8 @@ begin
   result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
   for i := j to len do begin
     case Text[i] of
-    #8: result := result+'\b';
-    #9: result := result+'\t';
+    #8:  result := result+'\b';
+    #9:  result := result+'\t';
     #10: result := result+'\n';
     #12: result := result+'\f';
     #13: result := result+'\r';
@@ -667,14 +679,16 @@ begin
     [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
   with V do
   case VType of
+  {$ifndef NEXTGEN}
   vtString:     result := string(VString^);
   vtAnsiString: result := string(AnsiString(VAnsiString));
+  vtChar:       result := string(VChar);
+  vtPChar:      result := string(VPChar);
+  {$endif}
   {$ifdef UNICODE}
   vtUnicodeString: result := string(VUnicodeString);
   {$endif}
   vtWideString: result := string(WideString(VWideString));
-  vtPChar:      result := string(VPChar);
-  vtChar:       result := string(VChar);
   vtPWideChar:  result := string(VPWideChar);
   vtWideChar:   result := string(VWideChar);
   vtBoolean:    if VBoolean then result := '1' else result := '0';

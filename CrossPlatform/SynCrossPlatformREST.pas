@@ -567,12 +567,17 @@ begin // see http://www.w3schools.com/jsref/jsref_encodeuricomponent.asp
   result := encodeURIComponent(aValue);
 end;
 {$else}
-var utf8: UTF8String;
-    i,c: integer;
+var i,c: integer;
+    utf8: TUTF8Buffer;
 begin
-  utf8 := UTF8Encode(aValue);
   result := '';
+{$ifdef NEXTGEN}
+  utf8 := TEncoding.UTF8.GetBytes(aValue);
+  for i := 0 to high(utf8) do begin
+{$else}
+  utf8 := UTF8Encode(aValue);
   for i := 1 to length(utf8) do begin
+{$endif}
     c := ord(utf8[i]);
     case c of
     ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
@@ -621,15 +626,17 @@ begin
   result := decodeURIComponent(aValue);
 end;
 {$else}
-var utf8: UTF8String;
-    i,c,n,len: integer;
+var i,c,n,len: integer;
+    utf8: TUTF8Buffer;
 begin
   i := 1;
   len := length(aValue);
   n := 0;
   SetLength(utf8,len);
   while i<=length(aValue) do begin
+{$ifndef NEXTGEN}
     inc(n);
+{$endif}
     c := ord(aValue[i]);
     case c of
     ord('+'):
@@ -645,13 +652,20 @@ begin
       utf8[n] := AnsiChar(c);
     end;
     inc(i);
+{$ifdef NEXTGEN}
+    inc(n);
+{$endif}
   end;
   SetLength(utf8,n);
+{$ifdef NEXTGEN}
+  result := TEncoding.UTF8.GetString(utf8);
+{$else}
   {$ifdef UNICODE}
   result := UTF8ToString(utf8);
   {$else}
   result := Utf8Decode(utf8);
   {$endif}
+{$endif}
 end;
 {$endif}
 

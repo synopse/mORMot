@@ -245,6 +245,11 @@ begin
   Body := unescape(encodeURIComponent(Text));
 end;
 {$else}
+{$ifdef NEXTGEN}
+begin
+  Body := TEncoding.UTF8.GetBytes(Text);
+end;
+{$else}
 var utf8: UTF8String;
     n: integer;
 begin
@@ -254,11 +259,17 @@ begin
   move(pointer(utf8)^,pointer(Body)^,n);
 end;
 {$endif}
+{$endif}
 
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 {$ifdef ISSMS}
 begin
   Text := decodeURIComponent(escape(Body));
+end;
+{$else}
+{$ifdef NEXTGEN}
+begin
+  Text := TEncoding.UTF8.GetString(Body);
 end;
 {$else}
 var utf8: UTF8String;
@@ -273,6 +284,7 @@ begin
   Text := UTF8Decode(utf8);
   {$endif}
 end;
+{$endif}
 {$endif}
 
 
