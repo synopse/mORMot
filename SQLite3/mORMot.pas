@@ -26415,11 +26415,12 @@ begin
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root',HTML_NOTFOUND) else begin
       Ctxt.URIDecodeSOAByMethod;
-      if (Ctxt.MethodIndex<0) and (Ctxt.URI<>'') and
-         (reService in Call.RestAccessRights^.AllowRemoteExecute) then
+      if (Ctxt.MethodIndex<0) and (Ctxt.URI<>'') then
         Ctxt.URIDecodeSOAByInterface;
       // 2. handle security
-      if not Ctxt.Authenticate then // 403 in case of authentication failure
+      if (not Ctxt.Authenticate) or
+         ((Ctxt.Service<>nil) and
+           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
         // 401 Unauthorized response MUST include a WWW-Authenticate header,
         // which is not what we used, so we won't send 401 error code but 403
         Call.OutStatus := HTML_FORBIDDEN else
