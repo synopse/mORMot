@@ -1011,8 +1011,8 @@ begin
         if fBatchMethod=mPost then
           NotifySQLEvent := seAdd else
           NotifySQLEvent := seUpdate;
-          for i := 0 to fBatchCount-1 do
-            Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClass,fBatchIDs[i],nil);
+        for i := 0 to fBatchCount-1 do
+          Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClass,fBatchIDs[i],nil);
       end;
     end;
   finally
@@ -1083,10 +1083,10 @@ begin
       if fBatchMethod<>mDELETE then
         result := false else
         result := InternalBatchAdd('',ID)>=0 else begin
+      if Owner<>nil then // notify BEFORE deletion
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
-      if result and (Owner<>nil) then
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
     end;
 end;
 

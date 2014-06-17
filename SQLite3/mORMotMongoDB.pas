@@ -536,9 +536,9 @@ begin
       if fBatchMethod<>mDelete then
         exit else
         AddInteger(fBatchIDs,fBatchIDsCount,ID) else begin
-      fCollection.RemoveOne(ID);
-      if Owner<>nil then
+      if Owner<>nil then // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
+      fCollection.RemoveOne(ID);
     end;
     result := true;
   except
