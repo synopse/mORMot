@@ -1094,6 +1094,7 @@ end;
 function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 var i: integer;
+    aSQLWhere: RawUTF8;
 begin
   result := false;
   if (IDs=nil) or (SQLWhere='') or
@@ -1107,7 +1108,13 @@ begin
     if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
-    if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
+    if IdemPChar(pointer(SQLWhere),'LIMIT ') or
+       IdemPChar(pointer(SQLWhere),'ORDER BY ') then
+      // LIMIT is not handled by SQLite3 when built from amalgamation
+      // see http://www.sqlite.org/compile.html#enable_update_delete_limit
+      aSQLWhere := IntegerDynArrayToCSV(IDs,length(IDs),'RowID in (',')') else
+      aSQLWhere := SQLWhere;
+    if ExecuteInlined('delete from % where %',[fTableName,aSQLWhere],false)=nil then
       exit;
   end;
   result := true;

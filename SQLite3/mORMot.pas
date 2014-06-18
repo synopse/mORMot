@@ -878,6 +878,7 @@ unit mORMot;
     - moved SQLFromSelectWhere() from a global function to a TSQLModel method
       (to prepare "Table per class hierarchy" mapping in mORMot)
     - SQLParamContent() / ExtractInlineParameters() functions moved to SynCommons
+    - added TSQLRecordHistory and TSQLRestServer.TrackChanges() for [a78ffe992b] 
     - TSQLAuthUser and TSQLAuthGroup have now "index ..." attributes to their
       RawUTF8 properties, to allow direct handling in external databases
     - new protected TSQLRestServer.InternalAdaptSQL method, extracted from URI()
@@ -1496,6 +1497,11 @@ procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 /// return true if the TEXT is encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function isBlobHex(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the SQL corresponding to a WHERE clause
+// - returns directly the Where value if it starts by ORDER/GROUP/LIMIT
+// - otherwise, append ' WHERE '+Where  
+function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
@@ -6753,7 +6759,6 @@ type
     property RefCount: Integer read fRefCount;
   end;
 
- 
   /// the possible Server-side instance implementation patterns for
   // interface-based services 
   // - each interface-based service will be implemented by a corresponding
@@ -8769,7 +8774,7 @@ type
     // - leave WhereClause void to get all records
     // - call internaly ExecuteList() to get the list
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8; var Data: TIntegerDynArray): boolean; overload;
+      const WhereClause: RawUTF8; var Data: TIntegerDynArray; SQL: PRawUTF8=nil): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs
     // - this method will work for both TSQLRecordFTS3 and TSQLRecordFTS4
     // - this method expects the column/field names to be supplied in the MATCH
@@ -10163,6 +10168,40 @@ type
   end;
   {$endif}
 
+  /// common ancestor for tracking changes on TSQLRecord tables
+  // - used by TSQLRestServer.TrackChanges() method 
+  TSQLRecordHistory = class(TSQLRecord)
+  protected
+    fModifiedRecord: PtrInt;
+    fEvent: TSQLEvent;
+    fSentData: RawUTF8;
+    fTimeStamp: TCreateTime;
+  published
+    /// identifies the modified record
+    // - ID and table index in TSQLModel is stored as one RecordRef integer
+    // - in case of the record deletion, all matching TSQLRecordHistory won't
+    // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
+    // property is a plain integer, not a TRecordReference field
+    property ModifiedRecord: PtrInt read fModifiedRecord;
+    /// the kind of modification stored
+    // - seUpdateBlob is never tracked here
+    property Event: TSQLEvent read fEvent;
+    /// for seAdd/seUpdate, the data stored as JSON
+    // - note that we defined a default maximum size of 4KB for this column,
+    // to avoid using a CLOB here 
+    property SentData: RawUTF8 index 4000 read fSentData;
+    /// when the modification was recorded
+    property TimeStamp: TCreateTime read fTimeStamp;
+  end;
+
+  /// specifies the storage table to be used for tracking TSQLRecord changes
+  // - you can create your custom type from TSQLRecordHistory, even for a
+  // particular table, to split the tracked changes storage in several tables:
+  // ! type
+  // !  TSQLRecordMyHistory = class(TSQLRecordHistory);
+  // - as expected by TSQLRestServer.TrackChanges() method 
+  TSQLRecordHistoryClass = class of TSQLRecordHistory;
+
   { we need the RTTI information to be compiled for the published methods
     of this TSQLRestServer class and its children (like TPersistent), to
     enable Server-Side ModelRoot/[TableName/[TableID/]]MethodName requests
@@ -10216,6 +10255,12 @@ type
 {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
+    // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables 
+    fTrackChangesHistoryTableIndex: array[0..63] of integer;
+    fTrackChangesHistory: array[0..MAX_SQLTABLES-1] of record
+      MaxRow: integer;
+      CurrentRow: integer;
+    end;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
@@ -10362,7 +10407,7 @@ type
     // in the database Model, for database coherency
     // - important notice: we don't use FOREIGN KEY constraints in this framework,
     // and handle all integrity check within this method (it's therefore less
-    // error-prone, and more cross-database engine compatible)S
+    // error-prone, and more cross-database engine compatible)
     function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; virtual;
     /// update all BLOB fields of the supplied Value
     // - this overridden method will execute the direct static class, if any
@@ -10444,6 +10489,16 @@ type
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
+    /// initialize change tracking for the given tables
+    // - by default, it will use the TSQLRecordHistory table to store the
+    // changes - you can specify a dedicated class as aTableHistory parameter
+    // - if aTableHistory is not already part of the TSQLModel, it will be added
+    // - aTableHistory content will be rolling, up to aMaxHistoryRow items
+    // - you can specify aMaxHistoryRow=0 to disable tracking change for a table
+    // - note that change tracking may slow down the writting process, and
+    // increase storage space a lot  
+    procedure TrackChanges(const aTable: array of TSQLRecordClass;
+      aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRow: integer=100);
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -22536,7 +22591,7 @@ begin
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8; var Data: TIntegerDynArray): boolean;
+  WhereClause: RawUTF8; var Data: TIntegerDynArray; SQL: PRawUTF8=nil): boolean;
 var T: TSQLTableJSON;
     V,err: integer;
     Prop: RawUTF8;
@@ -22550,7 +22605,10 @@ begin
     if IsRowIDShort(Prop) then 
       case P^ of
       '=': begin
-        V := GetInteger(P+1,err);
+        inc(P);
+        if PWord(P)^=ord(':')+ord('(')shl 8 then
+          inc(P,2); // handle inlined parameters
+        V := GetInteger(P,err);
         if err=0 then begin
           SetLength(Data,1);
           Data[0] := V;
@@ -22578,6 +22636,8 @@ begin
     if (T.FieldCount<>1) or (T.RowCount<=0) then
       exit;
     T.GetRowValues(0,Data);
+    if SQL<>nil then
+      SQL^ := T.QuerySQL;
     result := true;
   finally
     T.Free;
@@ -24848,6 +24908,7 @@ begin
 end;
 
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
+var t: integer;
 begin
   // specific server initialization
   fVirtualTableDirect := true; // faster direct Static call by default
@@ -24862,6 +24923,8 @@ begin
     // default mORMot authentication schemes
     AuthenticationRegister([TSQLRestServerAuthenticationDefault
       {$ifdef SSPIAUTH},TSQLRestServerAuthenticationSSPI{$endif}]);
+  for t := 0 to high(fTrackChangesHistoryTableIndex) do
+    fTrackChangesHistoryTableIndex[t] := -1;
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
@@ -24904,6 +24967,29 @@ begin
   SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
   fStats.Free; 
+end;
+
+procedure TSQLRestServer.TrackChanges(const aTable: array of TSQLRecordClass;
+  aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRow: integer=100);
+var t, tableIndex, TableHistoryIndex: integer;
+begin
+  if (self=nil) or (high(aTable)<0) then
+    exit;
+  if aMaxHistoryRow<=0 then
+    TableHistoryIndex := -1 else begin
+    if aTableHistory=nil then
+      aTableHistory := TSQLRecordHistory;
+    TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
+  end;
+  for t := 0 to high(aTable) do begin
+    tableIndex := Model.GetTableIndexExisting(aTable[t]);
+    if tableIndex<=high(fTrackChangesHistoryTableIndex) then begin
+      fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
+      fTrackChangesHistory[TableHistoryIndex].MaxRow := aMaxHistoryRow;
+      if fTrackChangesHistory[TableHistoryIndex].CurrentRow=0 then
+        fTrackChangesHistory[TableHistoryIndex].CurrentRow := TableRowCount(aTableHistory);
+    end;
+  end;
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -26730,7 +26816,33 @@ end;
 
 function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
   const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
+procedure DoTrackChanges;
+var TableHistoryIndex: integer;
+    SQLWhere: RawUTF8;
+    IDs: TIntegerDynArray;
+begin // we handle up to 64=1 shl 6 tables here
+  TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
+  EngineAdd(TableHistoryIndex,
+    JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(aEvent),
+                'SentData',aSentData,'TimeStamp',ServerTimeStamp]));
+  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+  try
+    with fTrackChangesHistory[TableHistoryIndex] do
+    if CurrentRow>MaxRow then begin // delete the older half of items
+      CurrentRow := MaxRow shr 1;
+      SQLWhere := 'LIMIT '+Int32ToUTF8(CurrentRow);
+      if OneFieldValues(Model.Tables[TableHistoryIndex],'ID',SQLWhere,IDs) then
+        EngineDeleteWhere(TableHistoryIndex,SQLWhere,IDs);
+    end else
+      inc(CurrentRow);
+  finally
+    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+  end;
+end; // low-level Add(TSQLRecordHistory) without cache
 begin
+  if (aTableIndex<=high(fTrackChangesHistoryTableIndex)) and
+     (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
+    DoTrackChanges;
   if aIsBlobFields<>nil then
     if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
       result := OnBlobUpdateEvent(self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
@@ -32838,7 +32950,6 @@ begin
   if result then
     fLastTimeStamp := aTimeStamp;
 end;
-
 
 
 { TSQLAccessRights }

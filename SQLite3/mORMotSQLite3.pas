@@ -809,14 +809,21 @@ end;
 function TSQLRestServerDB.MainEngineDeleteWhere(TableModelIndex: Integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 var i: integer;
+    aSQLWhere: RawUTF8;
 begin
   if (TableModelIndex<0) or (SQLWhere='') or (IDs=nil) then
     result := false else begin
     // notify BEFORE deletion
     for i := 0 to high(IDs) do
       InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
+    if IdemPChar(pointer(SQLWhere),'LIMIT ') or
+       IdemPChar(pointer(SQLWhere),'ORDER BY ') then
+      // LIMIT is not handled by SQLite3 when built from amalgamation
+      // see http://www.sqlite.org/compile.html#enable_update_delete_limit
+      aSQLWhere := IntegerDynArrayToCSV(IDs,length(IDs),'RowID IN (',')') else
+      aSQLWhere := SQLWhere;
     result := EngineExecuteFmt('DELETE FROM % WHERE %',
-      [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLWhere]);
+      [fModel.TableProps[TableModelIndex].Props.SQLTableName,aSQLWhere]);
   end;
 end;
 
