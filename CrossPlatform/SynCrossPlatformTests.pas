@@ -259,6 +259,7 @@ begin
   SetLength(c,5);
   c[4] := $96;
   Check(crc32(0,c)=$DF4EC16C,'crc32');
+  Check(crc32ascii(0,'abcdefghijklmnop')=$943AC093);
   SetLength(c,3);
   c[0] := ord('a');
   c[1] := ord('b');

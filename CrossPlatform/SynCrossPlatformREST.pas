@@ -51,18 +51,29 @@ unit SynCrossPlatformREST;
 
 }
 
-{$i SynCrossPlatform.inc} // define e.g. HASINLINE
+{$ifdef OP4JS} // should be defined at Project/Options level
+  {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
+  {$define ISSMS}           // for SmartMobileStudio
+{$else}
+  {$i SynCrossPlatform.inc} // define e.g. HASINLINE
+{$endif}
 
 interface
 
+{$ifdef ISDWS}
+uses
+  W3System,
+{$else}
 uses
   SysUtils,
   Classes,
   Contnrs,
   Variants,
   SynCrossPlatformSpecific,
-  SynCrossPlatformCrypto,
-  SynCrossPlatformJSON;
+  SynCrossPlatformJSON,
+{$endif}
+  SynCrossPlatformCrypto;
+
 
 const
   /// maximum number of fields in a database Table
@@ -78,6 +89,40 @@ type
   /// alias to share the same string type between client and server
   RawUTF8 = string;
 
+  /// Exception type raised when working with REST access
+  ERestException = class(Exception);
+
+  TSQLRest = class;
+  TSQLRecord = class;
+  TSQLModel = class;
+
+  TSQLRecordClass = class of TSQLRecord;
+  TSQLRecordClassDynArray = array of TSQLRecordClass;
+
+  {$ifdef ISDWS} // circumvent weird DWS / SMS syntax
+  cardinal = integer;
+  Int64 = integer;
+  TSQLRawBlob = string;
+  TTimeLog = Int64;
+  TModTime = TTimeLog;
+  TCreateTime = TTimeLog;
+  TSQLFieldBit = enum (Low = 0, High = MAX_SQLFIELDS-1);
+  TSQLFieldBits = set of TSQLFieldBit;
+
+  /// handle a JSON result table, as returned by mORMot's REST server ORM
+  // - we define a dedicated class to by-pass SynCrossPlatformJSON unit
+  TSQLTableJSON = class
+  protected
+    fInternalState: cardinal;
+  public
+    /// parse the supplied JSON content
+    constructor Create(const aJSON: string);
+    /// to be called in a loop to iterate through all data rows
+    // - if returned true, Object published properties will contain this row
+    function FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
+  end;
+  {$else}
+
   /// alias to share the same blob type between client and server
   TSQLRawBlob = TByteDynArray;
 
@@ -90,20 +135,9 @@ type
   /// used to define a field which shall be set at record creation
   TCreateTime = type TTimeLog;
 
-  /// Exception type raised when working with REST access
-  ERestException = class(Exception);
-
   /// used to store bit set for all available fields in a Table
   // - in this unit, field at index [0] indicates TSQLRecord.ID
   TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
-
-  {$M+}
-  TSQLRest = class;
-  TSQLRecord = class;
-  TSQLModel = class;
-
-  TSQLRecordClass = class of TSQLRecord;
-  TSQLRecordClassDynArray = array of TSQLRecordClass;
 
   /// handle a JSON result table, as returned by mORMot's REST server ORM
   // - this class is expected to work with TSQLRecord instances only
@@ -118,6 +152,8 @@ type
     // - if returned true, Object published properties will contain this row
     function FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
   end;
+
+  {$endif ISDWS}
 
   /// store information of one TSQLRecord published property
   TSQLModelInfoPropInfo = record
@@ -185,7 +221,9 @@ type
   /// abstract ORM class to access remote tables
   // - in comparison to mORMot.pas TSQLRecord published fields, dynamic arrays
   // shall be defined as variant (since SynCrossPlatformJSON do not serialize)
-  TSQLRecord = class
+  // - inherit from TPersistent to have RTTI for its published properties
+  // (SmartMobileStudio does not allow {$M+} in the source) 
+  TSQLRecord = class(TPersistent)
   protected
     fID: integer;
     fInternalState: cardinal;
@@ -301,6 +339,17 @@ type
   /// class used for client authentication
   TSQLRestAuthenticationClass = class of TSQLRestAuthentication;
 
+  /// the possible Server-side instance implementation patterns for
+  // interface-based services 
+  // - each interface-based service will be implemented by a corresponding
+  // class instance on the server: this parameter is used to define how
+  // class instances are created and managed
+  // - on the Client-side, each instance will be handled depending on the
+  // server side implementation (i.e. with sicClientDriven behavior if necessary)
+  TServiceInstanceImplementation = (
+    sicSingle, sicShared, sicClientDriven, sicPerSession, sicPerUser, sicPerGroup,
+    sicPerThread);
+
   /// abstract REST access class
   TSQLRest = class
   protected
@@ -353,7 +402,6 @@ type
     /// the current Date and Time, as retrieved from the server at connection
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
   end;
-  {$M-}
 
   TSQLRestAuthentication = class;
 
@@ -470,6 +518,12 @@ type
   end;
 
 
+{$ifdef ISDWS}
+procedure AppendChar(var str: string; chr: Char);
+function IdemPropName(const PropName1,PropName2: string): boolean;
+function StartWithPropName(const PropName1,PropName2: string): boolean;
+{$endif}
+
 /// true if PropName is either 'ID' or 'RowID'
 function IsRowID(const PropName: string): boolean;
   {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -498,6 +552,39 @@ function FindHeader(const Headers, Name: string): string;
 
 
 implementation
+
+{$ifdef ISDWS}
+procedure AppendChar(var str: string; chr: Char);
+begin
+  str := str+chr
+end;
+
+function IdemPropName(const PropName1,PropName2: string): boolean;
+var L,i: integer;
+begin
+  result := false;
+  L := length(PropName2);
+  if length(PropName1)<>L then
+    exit;
+  for i := 1 to L do
+    if (ord(PropName1[i]) xor ord(PropName2[i])) and $ffdf<>0 then
+      exit;
+  result := true;
+end;
+
+function StartWithPropName(const PropName1,PropName2: string): boolean;
+var L,i: integer;
+begin
+  result := false;
+  L := length(PropName2);
+  if length(PropName1)<L then
+    exit;
+  for i := 1 to L do
+    if (ord(PropName1[i]) xor ord(PropName2[i])) and $ffdf<>0 then
+      exit;
+  result := true;
+end;
+{$endif ISDWS}
 
 function IsRowID(const PropName: string): boolean;
 begin
@@ -743,7 +830,7 @@ begin
   if StartWithPropName(aJSON,'{"fieldCount":') then
     with TSQLTableJSON.Create(aJSON) do // non expanded format
     try
-      result := StepObject(self);
+      result := FillOne(self);
     finally
       Free;
     end else begin // expanded format
@@ -764,6 +851,20 @@ end;
 
 { TSQLTableJSON }
 
+{$ifdef ISDWS} // circumvent weird DWS / SMS syntax
+
+constructor TSQLTableJSON.Create(const aJSON: string);
+begin
+
+end;
+
+function TSQLTableJSON.FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
+begin
+
+end;
+
+{$else}
+
 function TSQLTableJSON.FillOne(Value: TSQLRecord;
   SeekFirst: boolean): boolean;
 begin
@@ -779,6 +880,8 @@ begin
   if (result=nil) and IdemPropName(PropName,'RowID') then
     result := inherited GetPropInfo(aTypeInfo,'ID');
 end;
+
+{$endif}
 
 
 { TSQLModelInfo }

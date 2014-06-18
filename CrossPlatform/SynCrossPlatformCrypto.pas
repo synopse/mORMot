@@ -51,13 +51,23 @@ unit SynCrossPlatformCrypto;
 
 }
 
-{$i SynCrossPlatform.inc} // define e.g. HASINLINE
+{$ifdef OP4JS} // should be defined at Project/Options level
+  {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
+  {$define ISSMS}           // for SmartMobileStudio
+{$else}
+  {$i SynCrossPlatform.inc} // define e.g. HASINLINE
+{$endif}
 
 interface
 
+{$ifdef ISDWS}
+uses
+  W3System;
+{$else}
 uses
   SysUtils,
   Classes;
+{$endif}
 
 
 type
@@ -72,8 +82,10 @@ var
   // - table content is created from code in initialization section below
   crc32tab: array[0..255] of hash32;
 
+{$ifndef ISDWS}
 /// compute the zlib/deflate crc32 hash value on a supplied buffer
 function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
+{$endif}
 
 /// compute the zlib/deflate crc32 hash value on a supplied ASCII-7 buffer
 function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
@@ -101,8 +113,10 @@ type
   public
     /// initialize SHA256 context for hashing
     constructor Create;
+{$ifndef ISDWS}
     /// update the SHA256 context with some data
     procedure Update(const buf: array of byte); overload;
+{$endif}
     /// update the SHA256 context with 8 bit ascii data (e.g. UTF-8)
     procedure Update(const ascii: string); overload;
     /// finalize and compute the resulting SHA256 hash Digest of all data
@@ -111,8 +125,13 @@ type
     function Finalize: string;
   end;
 
+{$ifndef ISDWS}
 /// compute SHA256 hexa digest of a supplied buffer
-function SHA256(const buf: array of byte): string;
+function SHA256(const buf: array of byte): string; overload;
+{$endif}
+
+/// compute SHA256 hexa digest of a supplied 8 bit ascii data (e.g. UTF-8)
+function SHA256(const buf: string): string; overload;
 
 
 implementation
@@ -133,27 +152,9 @@ type // no-operation for unmanaged Delphi
   shr0 = hash32;
 {$endif}
 
-function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
-var i: integer;
-begin
-  result := shr0(not aCRC32);
-  for i := 0 to length(buf)-1 do
-    result := crc32tab[(result xor buf[i]) and $ff] xor (result shr 8);
-  result := shr0(not result);
-end;
-
-function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
-var i: integer;
-begin
-  result := shr0(not aCRC32);
-  for i := 1 to length(buf) do
-    result := crc32tab[(result xor ord(buf[i])) and $ff] xor (result shr 8);
-  result := shr0(not result);
-end;
-
 procedure InitCrc32Tab;
 var i,n,crc: hash32;
-begin 
+begin
   for i := 0 to 255 do begin
     crc := i;
     for n := 1 to 8 do
@@ -163,6 +164,26 @@ begin
         crc := crc shr 1;
     crc32tab[i] := crc;
   end;
+end;
+
+{$ifndef ISDWS}
+function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
+var i: integer;
+begin
+  result := shr0(not aCRC32);
+  for i := 0 to length(buf)-1 do
+    result := crc32tab[(result xor buf[i]) and $ff] xor (result shr 8);
+  result := shr0(not result);
+end;
+{$endif}
+
+function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
+var i: integer;
+begin
+  result := shr0(not aCRC32);
+  for i := 1 to length(buf) do
+    result := crc32tab[(result xor ord(buf[i])) and $ff] xor (result shr 8);
+  result := shr0(not result);
 end;
 
 const
@@ -223,6 +244,7 @@ begin
   Hash.H := $5be0cd19;
 end;
 
+{$ifndef ISDWS}
 procedure TSHA256.Update(const buf: array of byte);
 var Len, aLen, i: integer;
     DataNdx: integer;
@@ -247,6 +269,7 @@ begin
     end;
   end;
 end;
+{$endif}
 
 procedure TSHA256.Update(const ascii: string);
 var Len, aLen, i: integer;
@@ -300,7 +323,21 @@ begin
     IntToHex(Hash.H,8));
 end;
 
+{$ifndef ISDWS}
 function SHA256(const buf: array of byte): string;
+var SHA: TSHA256;
+begin
+  SHA := TSHA256.Create;
+  try
+    SHA.Update(buf);
+    result := SHA.Finalize;
+  finally
+    SHA.Free;
+  end;
+end;
+{$endif}
+
+function SHA256(const buf: string): string;
 var SHA: TSHA256;
 begin
   SHA := TSHA256.Create;
@@ -314,4 +351,8 @@ end;
 
 initialization
   InitCrc32Tab;
+  {$ifdef ISDWS}
+  assert(crc32ascii(0,'abcdefghijklmnop')=$943AC093);
+  assert(SHA256('abc')='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  {$endif}
 end.
