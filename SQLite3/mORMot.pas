@@ -2244,6 +2244,8 @@ type
     // or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
     // both format supported by BlobToTSQLRawBlob() function
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with JSONToObject
+    // - note that the supplied Value buffer won't be modified by this method:
+    // overriden implementation should create their own temporary copy 
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); virtual; abstract;
     /// convert the property value into an UTF-8 encoded text
     // - if ToSQL is true, result is on SQL form (false->'0' e.g.)
@@ -10348,7 +10350,7 @@ type
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
     function InternalUpdateEvent(aEvent: TSQLEvent; aTable: TSQLRecordClass; aID: integer;
-      aIsBlobFields: PSQLFieldBits): boolean; virtual;
+      const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - delete all available TRecordReference properties pointing to this record
@@ -10848,7 +10850,7 @@ type
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
-    function AddOne(Rec: TSQLRecord; ForceID: boolean): integer; virtual; abstract;
+    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): integer; virtual; abstract;
     /// manual Retrieval of a TSQLRecord field values
     // - an instance of the associated static class is created
     // - and all its properties are filled from the Items[] values
@@ -10865,7 +10867,7 @@ type
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function UpdateOne(Rec: TSQLRecord): boolean; overload; virtual; abstract;
+    function UpdateOne(Rec: TSQLRecord; const SentData: RawUTF8): boolean; overload; virtual; abstract;
     /// manual Update of a TSQLRecord field values from an array of TSQLVar
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
@@ -11023,7 +11025,7 @@ type
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
-    function AddOne(Rec: TSQLRecord; ForceID: boolean): integer; override;
+    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): integer; override;
     /// manual Retrieval of a TSQLRecord field values
     // - an instance of the associated static class is created
     // - and all its properties are filled from the Items[] values
@@ -11040,7 +11042,7 @@ type
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function UpdateOne(Rec: TSQLRecord): boolean; override;
+    function UpdateOne(Rec: TSQLRecord; const SentData: RawUTF8): boolean; override;
     /// manual Update of a TSQLRecord field values from a TSQLVar array
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
@@ -26722,7 +26724,7 @@ begin
 end;
 
 function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTable: TSQLRecordClass;
-  aID: integer; aIsBlobFields: PSQLFieldBits): boolean;
+  aID: integer; const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
 begin
   if aIsBlobFields<>nil then
     if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
@@ -27639,7 +27641,7 @@ begin
     Rec.FillFrom(SentData);
     StorageLock(true);
     try
-      result := AddOne(Rec,Rec.fID>0);
+      result := AddOne(Rec,Rec.fID>0,SentData);
     finally
       StorageUnLock;
     end;
@@ -27666,7 +27668,7 @@ begin
     try
       Rec.FillFrom(SentData);
       Rec.fID := ID;
-      result := UpdateOne(Rec);
+      result := UpdateOne(Rec,SentData);
     finally
       Rec.Free;
     end;
@@ -27689,7 +27691,7 @@ begin
     try
       Rec.SetFieldSQLVars(Values);
       Rec.fID := ID;
-      result := UpdateOne(Rec);
+      result := UpdateOne(Rec,Rec.GetJSONValues(true,False,soUpdate));
     finally
       Rec.Free;
     end;
@@ -27744,7 +27746,8 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean): integer;
+function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
+  const SentData: RawUTF8): integer;
 var ndx,i: integer;
 begin
   if (self=nil) or (Rec=nil) then begin
@@ -27771,7 +27774,7 @@ begin
     end;
   fModified := true;
   if Owner<>nil then
-     Owner.InternalUpdateEvent(seAdd,PSQLRecordClass(Rec)^,result,nil);
+    Owner.InternalUpdateEvent(seAdd,PSQLRecordClass(Rec)^,result,SentData,nil);
 end;
 
 function TSQLRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
@@ -27820,7 +27823,7 @@ begin
         for F := 0 to fUniqueFields.Count-1 do
           TListFieldHash(fUniqueFields.List[F]).Invalidate;
       if Owner<>nil then // notify BEFORE deletion
-         Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
+         Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,'',nil);
       fValue.Delete(i);  // TObjectList.Delete() will Free record
       fModified := true;
       result := true;
@@ -27851,7 +27854,7 @@ begin // RecordCanBeUpdated() has already been called
         TListFieldHash(fUniqueFields.List[i]).Invalidate;
     if Owner<>nil then
       for i := 0 to n do
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil); // notify BEFORE deletion
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],'',nil); // notify BEFORE deletion
     QuickSortInteger(pointer(ndx),0,n); // deletion a bit faster in reverse order
     for i := n downto 0 do
       fValue.Delete(ndx[i]);
@@ -28489,13 +28492,13 @@ begin
     fModified := true;
     result := true;
     if Owner<>nil then
-      Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
+      Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,SentData,nil);
   finally
     StorageUnLock;
   end;
 end;
 
-function TSQLRestStorageInMemory.UpdateOne(Rec: TSQLRecord): boolean;
+function TSQLRestStorageInMemory.UpdateOne(Rec: TSQLRecord; const SentData: RawUTF8): boolean;
 var i: integer;
 begin
   result := false;
@@ -28512,7 +28515,7 @@ begin
     fModified := true;
     result := true;
     if Owner<>nil then
-      Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,nil);
+      Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,SentData,nil);
   finally
     StorageUnLock;
   end;
@@ -28545,7 +28548,8 @@ begin
   fModified := true;
   result := true;
   if Owner<>nil then
-    Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
+    Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,
+      TSQLRecord(fValue.List[i]).GetJSONValues(True,False,soUpdate),nil);
 end;
 
 function TSQLRestStorageInMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
@@ -28608,7 +28612,7 @@ begin
     SetLongStrProp(fValue.List[i],BlobField,BlobData);
     if Owner<>nil then begin
       fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
-      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,@AffectedField);
+      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',@AffectedField);
     end;
     result := true;
   finally
@@ -28631,7 +28635,7 @@ begin
       for f := 0 to high(BlobFields) do
         BlobFields[f].CopyValue(Value,fValue.List[i]);
       if Owner<>nil then
-        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,Value.fID,
+        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,Value.fID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
       result := true;
     finally
@@ -28658,9 +28662,10 @@ end;
 function TSQLRestStorageInMemory.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var SetField: TSQLPropInfo;
-    WhereValueString, SetValueString: RawUTF8;
+    WhereValueString, SetValueString, SetValueJson: RawUTF8;
     Where: TList;
     i, ndx, WhereFieldIndex: integer;
+    SetValueWasString: boolean;
     Rec: TSQLRecord;
 begin
   result := false;
@@ -28672,7 +28677,8 @@ begin
   SetField := fStoredClassRecordProps.Fields.ByRawUTF8Name(SetFieldName);
   if SetField=nil then
     exit; // don't allow setting ID field, which is Read Only
-  if SetValue[1]='"' then
+  SetValueWasString := SetValue[1]='"';
+  if SetValueWasString then
     UnQuoteSQLString(pointer(SetValue),SetValueString) else
     SetValueString := SetValue;
   // handle search field RTTI
@@ -28714,10 +28720,13 @@ begin
     // update field value
     for i := 0 to Where.Count-1 do begin
       Rec := fValue.List[PtrInt(Where.List[i])];
-      SetField.SetValue(Rec,pointer(SetValueString),false);
+      SetField.SetValue(Rec,pointer(SetValueString),SetValueWasString);
       fModified := true;
-      if Owner<>nil then
-        Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,nil);
+      if Owner<>nil then begin
+        if SetValueJson='' then
+          SetValueJson := '{"'+SetField.Name+'":'+SetValue+'}';
+        Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,SetValueJson,nil);
+      end;
       result := true;
     end;
   finally
@@ -32546,7 +32555,8 @@ begin
     if aRecord.SetFieldSQLVars(Values) then begin
       if aRowID>0 then
         aRecord.fID := aRowID;
-      insertedRowID := fStaticInMemory.AddOne(aRecord,aRowID>0);
+      insertedRowID := fStaticInMemory.AddOne(aRecord,aRowID>0,
+        aRecord.GetJSONValues(true,False,soInsert));
       if insertedRowID>0 then begin
         if fStaticInMemory.Owner<>nil then
           fStaticInMemory.Owner.fCache.Notify(aRecord,soInsert);

@@ -661,7 +661,7 @@ begin
       JSONRetrieveIDField(pointer(SentData)))+';';
   if EngineExecute(SQL,nil,nil,@LastID) then begin
     result := LastID;
-    InternalUpdateEvent(seAdd,fModel.Tables[TableModelIndex],result,nil);
+    InternalUpdateEvent(seAdd,fModel.Tables[TableModelIndex],result,SentData,nil);
   end;
 end;
 
@@ -800,7 +800,7 @@ begin
   if (TableModelIndex<0) or (ID<=0) then
     result := false else begin
     // notify BEFORE deletion
-    InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],ID,nil);
+    InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],ID,'',nil);
     result := EngineExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,ID]);
   end;
@@ -814,7 +814,7 @@ begin
     result := false else begin
     // notify BEFORE deletion
     for i := 0 to high(IDs) do
-      InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],IDs[i],nil);
+      InternalUpdateEvent(seDelete,fModel.Tables[TableModelIndex],IDs[i],'',nil);
     result := EngineExecuteFmt('DELETE FROM % WHERE %',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLWhere]);
   end;
@@ -1116,7 +1116,7 @@ begin
     result := EngineExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
       [Model.TableProps[TableModelIndex].Props.SQLTableName,
        GetJSONObjectAsSQL(SentData,true,true),ID]);
-    InternalUpdateEvent(seUpdate,Model.Tables[TableModelIndex],ID,nil);
+    InternalUpdateEvent(seUpdate,Model.Tables[TableModelIndex],ID,SentData,nil);
   end;
 end;
 
@@ -1144,7 +1144,7 @@ begin
       DB.UnLock;
     end;
     FieldIndexsFromBlobField(BlobField,AffectedField);
-    InternalUpdateEvent(seUpdateBlob,Table,aID,@AffectedField);
+    InternalUpdateEvent(seUpdateBlob,Table,aID,'',@AffectedField);
   except
     on ESQLite3Exception do
       result := false;
@@ -1171,7 +1171,7 @@ begin
     result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
       [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
     if WhereID>0 then
-      InternalUpdateEvent(seUpdate,Table,WhereID,nil);
+      InternalUpdateEvent(seUpdate,Table,WhereID,'',nil);
   end;
 end;
 
@@ -1210,7 +1210,7 @@ begin
       finally
         DB.UnLock;
       end;
-      InternalUpdateEvent(seUpdateBlob,PSQLRecordClass(Value)^,Value.ID,@BlobFieldsBits);
+      InternalUpdateEvent(seUpdateBlob,PSQLRecordClass(Value)^,Value.ID,'',@BlobFieldsBits);
     end else
       result := true; // as TSQLRest.UpdateblobFields()
 end;

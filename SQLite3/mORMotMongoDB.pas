@@ -437,7 +437,7 @@ begin
         end else begin
         fCollection.Insert([variant(doc)]);
         if Owner<>nil then
-          Owner.InternalUpdateEvent(seAdd,fStoredClass,result,nil);
+          Owner.InternalUpdateEvent(seAdd,fStoredClass,result,SentData,nil);
       end;
     except
       result := 0;
@@ -458,7 +458,7 @@ begin
       update := BSONVariant(['$set',variant(Doc)]);
       fCollection.Update(query,update);
       if Owner<>nil then
-        Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,nil);
+        Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,SentData,nil);
       result := true;
     except
       result := false;
@@ -482,7 +482,7 @@ begin
       fCollection.Update(query,update);
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
-        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,@AffectedField);
+        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',@AffectedField);
       end;
       result := true;
     except
@@ -518,7 +518,7 @@ begin
     try
       fCollection.Update(query,BSONVariant(['$set',variant(update)]));
       if Owner<>nil then
-        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,
+        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
       result := true;
     except
@@ -537,7 +537,7 @@ begin
         exit else
         AddInteger(fBatchIDs,fBatchIDsCount,ID) else begin
       if Owner<>nil then // notify BEFORE deletion
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,nil);
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,'',nil);
       fCollection.RemoveOne(ID);
     end;
     result := true;
@@ -556,7 +556,7 @@ begin // here we use the pre-computed IDs[]
     try
       if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],nil);
+        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],'',nil);
       fCollection.Remove(BSONVariant(
         ['_id',BSONVariant(['$in',BSONVariantFromIntegers(IDs)])]));
       result := true;
