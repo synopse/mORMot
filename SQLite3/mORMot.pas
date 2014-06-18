@@ -1156,7 +1156,20 @@ type
   // - use TSQLRest.Retrieve(Reference) to get a record value
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
+  // - when the pointed record will be deleted, this property will be set to 0
+  // by TSQLRestServer.AfterDeleteForceCoherency()
   TRecordReference = type PtrUInt;
+
+  /// a reference to another record in any table in the database Model
+  // - stored as an 32 bits unsigned integer (i.e. a pointer=TObject)
+  // - type cast any value of TRecordReference with the RecordRef object below
+  // for easy access to its content
+  // - use TSQLRest.Retrieve(Reference) to get a record value
+  // - don't change associated TSQLModel tables order, since TRecordReference
+  // depends on it to store the Table type in its highest bits
+  // - when the pointed record will be deleted, any record containg a matching
+  // property will be deleted by TSQLRestServer.AfterDeleteForceCoherency()
+  TRecordReferenceToBeDeleted = type TRecordReference;
 
   /// an Int64-encoded date and time of the latest update of a record
   // - can be used as published property field in TSQLRecord for sftModTime:
@@ -10401,10 +10414,12 @@ type
       const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
-    // - delete all available TRecordReference properties pointing to this record
-    // in the database Model, for database coherency
-    // - delete all available TSQLRecord properties pointing to this record
-    // in the database Model, for database coherency
+    // - reset all matching TRecordReference properties in the database Model,
+    // for database coherency, into 0
+    // - delete all records containing a matched TRecordReferenceToBeDeleted
+    // property value in the database Model (e.g. TSQLRecordHistory)
+    // - reset all matching TSQLRecord properties in the database Model,
+    // for database coherency, into 0
     // - important notice: we don't use FOREIGN KEY constraints in this framework,
     // and handle all integrity check within this method (it's therefore less
     // error-prone, and more cross-database engine compatible)
@@ -19540,7 +19555,8 @@ function TTypeInfo.SQLFieldType: TSQLFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Kind of
     tkInteger:
-      if @self=TypeInfo(TRecordReference) then begin
+      if (@self=TypeInfo(TRecordReference)) or
+         (@self=TypeInfo(TRecordReferenceToBeDeleted)) then begin
         result := sftRecord;
         exit; // direct exit is faster in generated asm code (Delphi 7 at least)
       end else begin
@@ -22602,7 +22618,7 @@ begin
   if IsRowID(pointer(FieldName)) and (length(WhereClause)>2) then begin
     P := pointer(WhereClause);
     GetNextFieldProp(P,Prop);
-    if IsRowIDShort(Prop) then 
+    if IsRowIDShort(Prop) then
       case P^ of
       '=': begin
         inc(P);
@@ -25225,6 +25241,7 @@ var T: integer;
     Where: PtrUInt;
     RecRef: TRecordReference;
     Static: TSQLRest;
+    ToDo: (toVoidField, toDeleteRecord);
     W: RawUTF8;
 begin
   result := true; // success if no property found
@@ -25235,9 +25252,14 @@ begin
   if RecRef<>0 then
   for T := 0 to high(Model.fRecordReferences) do
   with Model.fRecordReferences[T] do begin
+    ToDo := toVoidField;
     case FieldType.SQLFieldType of
-    sftRecord: // TRecordReference published field
+    sftRecord: begin // TRecordReference published field
+      if IdemPropName((FieldType as TSQLPropInfoRTTIInstance).PropInfo^.Name,
+          'TRecordReferenceToBeDeleted') then
+        ToDo := toDeleteRecord;
       Where := RecRef;
+    end;
     sftID:     // TSQLRecord published field
       if FieldType.ObjectClass=Table then
         Where := aID else
@@ -25247,12 +25269,18 @@ begin
     // set Field=0 where Field references aID
     UInt32ToUTF8(Where,W);
     Tab := Model.Tables[TableIndex];
-    Static := GetStaticDataServerOrVirtualTable(Tab);
-    if Static<>nil then // fast direct call
-       result := Static.EngineUpdateField(TableIndex,
-         FieldType.Name,'0',FieldType.Name,W) else
-       result := MainEngineUpdateField(TableIndex,
-         FieldType.Name,'0',FieldType.Name,W);
+    case ToDo of
+    toVoidField: begin
+      Static := GetStaticDataServerOrVirtualTable(Tab);
+      if Static<>nil then // fast direct call
+        result := Static.EngineUpdateField(TableIndex,
+          FieldType.Name,'0',FieldType.Name,W) else
+        result := MainEngineUpdateField(TableIndex,
+          FieldType.Name,'0',FieldType.Name,W);
+    end;
+    toDeleteRecord:
+      Delete(Tab,FieldType.Name+'=:('+W+'):');
+    end;
   end;
 end;
 
