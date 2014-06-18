@@ -913,7 +913,7 @@ begin
     if fBatchCount>0 then begin
       if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion
         for i := 0 to fBatchCount-1 do
-          Owner.InternalUpdateEvent(seDelete,fStoredClass,fBatchIDs[i],'',nil);
+          Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,fBatchIDs[i],'',nil);
       with fProperties do
         if BatchMaxSentAtOnce>0 then
           max := BatchMaxSentAtOnce else
@@ -1012,7 +1012,7 @@ begin
           NotifySQLEvent := seAdd else
           NotifySQLEvent := seUpdate;
         for i := 0 to fBatchCount-1 do
-          Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClass,
+          Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClassProps.TableIndex,
             fBatchIDs[i],fBatchValues[i],nil);
       end;
     end;
@@ -1057,7 +1057,7 @@ begin
       result := InternalBatchAdd(SentData,0) else begin
     result := ExecuteFromJSON(SentData,soInsert,0); // UpdatedID=0 -> insert with EngineLockedNextID
     if (result>0) and (Owner<>nil) then
-      Owner.InternalUpdateEvent(seAdd,fStoredClass,result,SentData,nil);
+      Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
   end;
 end;
 
@@ -1072,7 +1072,7 @@ begin
         result := InternalBatchAdd(SentData,ID)>=0 else begin
       result := ExecuteFromJSON(SentData,soUpdate,ID)=ID;
       if result and (Owner<>nil) then
-        Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,SentData,nil);
+        Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
     end;
 end;
 
@@ -1085,7 +1085,7 @@ begin
         result := false else
         result := InternalBatchAdd('',ID)>=0 else begin
       if Owner<>nil then // notify BEFORE deletion
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,'',nil);
+        Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
     end;
@@ -1106,7 +1106,7 @@ begin
         InternalBatchAdd('',IDs[i]) else begin
     if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],'',nil);
+        Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
     if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
       exit;
   end;
@@ -1252,7 +1252,7 @@ begin
       Statement.ExecutePrepared;
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
-        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',@AffectedField);
+        Owner.InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
       end;
       result := true; // success
     end;
@@ -1284,7 +1284,7 @@ begin
       [fTableName,fUpdateBlobFieldsSQL,StoredClassProps.ExternalDB.RowIDFieldName],
       Params,aID,false);
     if result and (Owner<>nil) then
-      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',
+      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
   end else
     result := true; // as TSQLRest.UpdateblobFields()

@@ -5981,6 +5981,7 @@ type
     fProps: TSQLRecordProperties;
     fKind: TSQLRecordVirtualKind;
     fModel: TSQLModel;
+    fTableIndex: integer;
     procedure SetKind(Value: TSQLRecordVirtualKind);
   public
     /// pre-computed SQL statements for this TSQLRecord in this model
@@ -6007,6 +6008,8 @@ type
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
     property Props: TSQLRecordProperties read fProps;
+    /// the table index of this TSQLRecord in the associated Model
+    property TableIndex: Integer read fTableIndex;
     /// define if is a normal table (rSQLite3), an FTS3/FTS4/R-Tree virtual
     // table or a custom TSQLVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
@@ -10349,7 +10352,7 @@ type
     // - you can override this method to implement a server-wide notification,
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
-    function InternalUpdateEvent(aEvent: TSQLEvent; aTable: TSQLRecordClass; aID: integer;
+    function InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
       const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
@@ -21665,6 +21668,7 @@ constructor TSQLModelRecordProperties.Create(aModel: TSQLModel;
 var f: integer;
 begin // similar to TSQLModelRecordPropertiesExternal.ComputeSQL
   fModel := aModel;
+  fTableIndex := fModel.GetTableIndexExisting(aTable);
   fProps := aTable.RecordProps;
   SetKind(aKind);
   with Props do
@@ -21697,6 +21701,7 @@ constructor TSQLModelRecordProperties.CreateFrom(aModel: TSQLModel;
 begin
   inherited Create;
   fModel := aModel;
+  fTableIndex := aSource.fTableIndex;
   fProps := aSource.fProps;
   fKind := aSource.Kind;
   SQL := aSource.SQL;
@@ -26723,15 +26728,15 @@ begin
         RunningThread := nil;
 end;
 
-function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTable: TSQLRecordClass;
-  aID: integer; const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
+function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
+  const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
 begin
   if aIsBlobFields<>nil then
     if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
-      result := OnBlobUpdateEvent(self,seUpdate,aTable,aID,aIsBlobFields^) else
+      result := OnBlobUpdateEvent(self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
       result := true else
   if Assigned(OnUpdateEvent) then
-    result := OnUpdateEvent(self,aEvent,aTable,aID) else
+    result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
     result := true; // true on success, false if error (but action continues)
 end;
 
@@ -27774,7 +27779,7 @@ begin
     end;
   fModified := true;
   if Owner<>nil then
-    Owner.InternalUpdateEvent(seAdd,PSQLRecordClass(Rec)^,result,SentData,nil);
+    Owner.InternalUpdateEvent(seAdd,fStoredClassProps.TableIndex,result,SentData,nil);
 end;
 
 function TSQLRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
@@ -27823,7 +27828,7 @@ begin
         for F := 0 to fUniqueFields.Count-1 do
           TListFieldHash(fUniqueFields.List[F]).Invalidate;
       if Owner<>nil then // notify BEFORE deletion
-         Owner.InternalUpdateEvent(seDelete,fStoredClass,ID,'',nil);
+         Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,ID,'',nil);
       fValue.Delete(i);  // TObjectList.Delete() will Free record
       fModified := true;
       result := true;
@@ -27854,7 +27859,7 @@ begin // RecordCanBeUpdated() has already been called
         TListFieldHash(fUniqueFields.List[i]).Invalidate;
     if Owner<>nil then
       for i := 0 to n do
-        Owner.InternalUpdateEvent(seDelete,fStoredClass,IDs[i],'',nil); // notify BEFORE deletion
+        Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,IDs[i],'',nil); // notify BEFORE deletion
     QuickSortInteger(pointer(ndx),0,n); // deletion a bit faster in reverse order
     for i := n downto 0 do
       fValue.Delete(ndx[i]);
@@ -28492,7 +28497,7 @@ begin
     fModified := true;
     result := true;
     if Owner<>nil then
-      Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,SentData,nil);
+      Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,ID,SentData,nil);
   finally
     StorageUnLock;
   end;
@@ -28515,7 +28520,7 @@ begin
     fModified := true;
     result := true;
     if Owner<>nil then
-      Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,SentData,nil);
+      Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,Rec.fID,SentData,nil);
   finally
     StorageUnLock;
   end;
@@ -28548,7 +28553,7 @@ begin
   fModified := true;
   result := true;
   if Owner<>nil then
-    Owner.InternalUpdateEvent(seUpdate,fStoredClass,ID,
+    Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,ID,
       TSQLRecord(fValue.List[i]).GetJSONValues(True,False,soUpdate),nil);
 end;
 
@@ -28612,7 +28617,7 @@ begin
     SetLongStrProp(fValue.List[i],BlobField,BlobData);
     if Owner<>nil then begin
       fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
-      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,aID,'',@AffectedField);
+      Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',@AffectedField);
     end;
     result := true;
   finally
@@ -28635,7 +28640,7 @@ begin
       for f := 0 to high(BlobFields) do
         BlobFields[f].CopyValue(Value,fValue.List[i]);
       if Owner<>nil then
-        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClass,Value.fID,'',
+        Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,Value.fID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
       result := true;
     finally
@@ -28725,7 +28730,7 @@ begin
       if Owner<>nil then begin
         if SetValueJson='' then
           SetValueJson := '{"'+SetField.Name+'":'+SetValue+'}';
-        Owner.InternalUpdateEvent(seUpdate,fStoredClass,Rec.fID,SetValueJson,nil);
+        Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,Rec.fID,SetValueJson,nil);
       end;
       result := true;
     end;
