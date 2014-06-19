@@ -96,6 +96,8 @@ unit mORMotDB;
   - now handles TSQLDBConnectionProperties.ForcedSchemaName as expected
   - fixed issue in TSQLRestStorageExternal.EngineDeleteWhere() when
     calling commands like MyDB.Delete(TSQLMyClass, 'PLU < ?', [20000])
+  - TSQLRestStorageExternal.EngineDeleteWhere() will handle more border cases,
+    and will split DELETE FROM table WHERE ID IN (....) in several intervals 
   - fixed errors when executing JOINed queries (e.g. via FillPrepareMany)
   - fixed ticket [3c41462594] in TSQLRestStorageExternal.ExecuteFromJSON()
   - fixed ticket [9a821d26ee] in TSQLRestStorageExternal.Create() not
@@ -899,7 +901,7 @@ procedure TSQLRestStorageExternal.InternalBatchStop;
 var i,j,n,max,BatchBegin,BatchEnd,ValuesMax: integer;
     Query: ISQLDBStatement;
     NotifySQLEvent: TSQLEvent;
-    SQL: RawUTF8;
+    SQL,privateCopy: RawUTF8;
     P: PUTF8Char;
     Fields, ExternalFields: TRawUTF8DynArray;
     Types: TSQLDBFieldTypeArray;
@@ -926,7 +928,8 @@ begin
           assert(fBatchIDs<>nil);
           BatchEnd := fBatchCount-1;
           for i := BatchBegin to BatchEnd do begin
-            P := @fBatchValues[i][1]; // make copy before in-place decoding
+            privateCopy := fBatchValues[i];
+            P := @privateCopy[1]; // make copy before in-place decoding
             while P^ in [#1..' ','{','['] do inc(P);
             if fBatchMethod=mPost then
               Occasion := soInsert else
@@ -1093,8 +1096,9 @@ end;
 
 function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
-var i: integer;
-    aSQLWhere: RawUTF8;
+var i,n: integer;
+    aSQLWhere, aSQLWhereUpper: RawUTF8;
+    InClause: TIntegerDynArray;
 begin
   result := false;
   if (IDs=nil) or (SQLWhere='') or
@@ -1108,11 +1112,24 @@ begin
     if Owner<>nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
-    if IdemPChar(pointer(SQLWhere),'LIMIT ') or
-       IdemPChar(pointer(SQLWhere),'ORDER BY ') then
+    aSQLWhereUpper := UpperCase(SQLWhere);
+    if IdemPChar(pointer(aSQLWhereUpper),'LIMIT ') or
+       IdemPChar(pointer(aSQLWhereUpper),'ORDER BY ') or
+       (PosEx(' FROM ',aSQLWhereUpper)>0) then begin
       // LIMIT is not handled by SQLite3 when built from amalgamation
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
-      aSQLWhere := IntegerDynArrayToCSV(IDs,length(IDs),'RowID in (',')') else
+      SetLength(InClause,200); // send by chunks
+      for i := 0 to length(IDs) div Length(InClause) do begin
+        if length(IDs)<(i+1)*length(InClause) then
+          n := length(IDs)-i*length(InClause) else
+          n := length(InClause);
+        Move(IDs[i*length(InClause)],InClause[0],n*sizeof(Integer));
+        aSQLWhere := IntegerDynArrayToCSV(InClause,n,'RowID in (',')');
+        if ExecuteInlined('delete from % where %',[fTableName,aSQLWhere],false)=nil then
+          exit;
+      end;
+      exit;
+    end else
       aSQLWhere := SQLWhere;
     if ExecuteInlined('delete from % where %',[fTableName,aSQLWhere],false)=nil then
       exit;
