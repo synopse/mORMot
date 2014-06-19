@@ -5703,7 +5703,7 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
-      property DataString: RawByteString read fDataString write fDataString;
+    property DataString: RawByteString read fDataString write fDataString;
   end;
 
   /// a TStream pointing to some in-memory data, for instance UTF-8 text
@@ -5968,6 +5968,9 @@ type
     /// retrieve the current in-memory pointer
     // - if file was not memory-mapped, returns nil
     function CurrentMemory: pointer;
+    /// retrieve the current in-memory position
+    // - if file was not memory-mapped, returns -1
+    function CurrentPosition: integer;
     /// raise an exception in case of invalid content
     procedure ErrorInvalidContent;
     /// read-only access to the global file size
@@ -36051,6 +36054,13 @@ begin
   if (fMap.fBuf=nil) or (fCurrentPos>=fMap.fBufSize) then
     result := nil else
     result := @fMap.fBuf[fCurrentPos];
+end;
+
+function TFileBufferReader.CurrentPosition: integer;
+begin
+  if (fMap.fBuf=nil) or (fCurrentPos>=fMap.fBufSize) then
+    result := -1 else
+    result := fCurrentPos;
 end;
 
 function TFileBufferReader.ReadPointer(DataLen: PtrUInt;
