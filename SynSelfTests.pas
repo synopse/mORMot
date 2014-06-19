@@ -604,7 +604,7 @@ type
   protected
     fExternalModel: TSQLModel;
     fPeopleData: TSQLTable;
-    procedure Test(StaticVirtualTableDirect: boolean);
+    procedure Test(StaticVirtualTableDirect, TrackChanges: boolean);
   public
     /// release used instances (e.g. server) and memory
     procedure CleanUp; override;
@@ -628,6 +628,9 @@ type
     // - using the Virtual Table mechanism of SQLite3 is more than 2 times
     // slower than direct REST access
     procedure ExternalViaVirtualTable;
+    /// test external DB implementation via faster REST calls and change tracking
+    // - a TSQLRecordHistory table will be used to store record history
+    procedure ExternalViaRESTWithChangeTracking;
     {$ifndef CPU64}
     {$ifndef LVCL}
     /// test external DB using the JET engine
@@ -7872,13 +7875,16 @@ begin
   end;
 end;
 
+type
+  TSQLRecordMyHistory = class(TSQLRecordHistory);
+  
 procedure TTestExternalDatabase.ExternalRecords;
 var SQL: RawUTF8;
 begin
   if CheckFailed(fExternalModel=nil) then exit; // should be called once
   fExternalModel := TSQLModel.Create(
     [TSQLRecordPeopleExt,TSQLRecordOnlyBlob,TSQLRecordTestJoin,
-     TSQLASource,TSQLADest,TSQLADests,TSQLRecordPeople]);
+     TSQLASource,TSQLADest,TSQLADests,TSQLRecordPeople,TSQLRecordMyHistory]);
   ReplaceParamsByNames(StringOfChar('?',200),SQL);
   Check(Hash32(SQL)=$AD27D1E0,'excludes :IF :OF');
 end;
@@ -7982,12 +7988,17 @@ end;
 
 procedure TTestExternalDatabase.ExternalViaREST;
 begin
-  Test(true);
+  Test(true,false);
 end;
 
 procedure TTestExternalDatabase.ExternalViaVirtualTable;
 begin
-  Test(false);
+  Test(false,false);
+end;
+
+procedure TTestExternalDatabase.ExternalViaRESTWithChangeTracking;
+begin
+  Test(true,true);
 end;
 
 {$ifndef CPU64}
@@ -8205,7 +8216,7 @@ begin
 end;
 
 
-procedure TTestExternalDatabase.Test(StaticVirtualTableDirect: boolean);
+procedure TTestExternalDatabase.Test(StaticVirtualTableDirect, TrackChanges: boolean);
 const BLOB_MAX = 1000;
 var RInt: TSQLRecordPeople;
     RExt: TSQLRecordPeopleExt;
@@ -8223,17 +8234,21 @@ var RInt: TSQLRecordPeople;
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
 begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
-  fProperties := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
+  DeleteFile('extdata.db3');
+  fProperties := TSQLDBSQLite3ConnectionProperties.Create('extdata.db3','','','');
+  fProperties.ExecuteNoResult('PRAGMA synchronous=0',[]);
+  fProperties.ExecuteNoResult('PRAGMA locking_mode=EXCLUSIVE',[]);
   Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordOnlyBlob,fProperties,'OnlyBlobExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordTestJoin,fProperties,'TestJoinExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLASource,fProperties,'SourceExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADest,fProperties,'DestExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADests,fProperties,'DestsExternal'));
+  Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordMyHistory,fProperties,'History'));
   fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
     MapField('ID','Key').
     MapField('YearOfDeath','YOD');
-  DeleteFile('testExternal.db3'); // need a file for backup testing 
+  DeleteFile('testExternal.db3'); // need a file for backup testing
   aExternalClient := TSQLRestClientDB.Create(fExternalModel,nil,'testExternal.db3',TSQLRestServerDB);
   try
     aExternalClient.Server.DB.Synchronous := smOff;
@@ -8243,6 +8258,8 @@ begin
     Start := aExternalClient.ServerTimeStamp;
     aExternalClient.Server.StaticVirtualTableDirect := StaticVirtualTableDirect;
     aExternalClient.Server.CreateMissingTables;
+    if TrackChanges then
+      aExternalClient.Server.TrackChanges([TSQLRecordPeopleExt],TSQLRecordMyHistory,100,4096);
     Check(aExternalClient.Server.CreateSQLMultiIndex(
       TSQLRecordPeopleExt,['FirstName','LastName'],false));
     InternalTestMany(self,aExternalClient);
@@ -8518,6 +8535,8 @@ begin
     finally
       RInt.Free;
     end;
+    if TrackChanges then
+      aExternalClient.Server.TrackChangesFlush(TSQLRecordMyHistory);
   finally
     aExternalClient.Free;
     fProperties.Free;

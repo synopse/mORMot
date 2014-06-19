@@ -1082,6 +1082,7 @@ uses
   Generics.Collections,
 {$endif}
   Classes,
+  SynLZ,
   SynZip, // use crc32 for TSQLRestClientURI.SetUser
 {$ifdef USETYPEINFO}
   // some pure pascal version must handle the 64-bits ordinal values or
@@ -3532,6 +3533,12 @@ type
       withID: boolean; const WrittenFields: TSQLFieldBits);
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
+    /// save the TSQLRecord RTTI into a binary header
+    // - used e.g. by TSQLRestStorageInMemory.SaveToBinary()
+    procedure SaveBinaryHeader(W: TFileBufferWriter);
+    /// ensure that the TSQLRecord RTTI matches the supplied binary header
+    // - used e.g. by TSQLRestStorageInMemory.LoadFromBinary()
+    function CheckBinaryHeader(var R: TFileBufferReader): boolean;
 
     /// register a custom filter or validation rule to the class for a specified
     // field
@@ -4217,7 +4224,7 @@ type
     fFill: TSQLRecordFill;
     /// internal properties getters (using fProps data for speed)
     function GetHasBlob: boolean;
-    function GetSimpleFieldCount: integer; 
+    function GetSimpleFieldCount: integer;
     function GetFillCurrentRow: integer;
     function GetTable: TSQLTable;
   protected
@@ -4273,7 +4280,7 @@ type
        the popup hint of a button (i.e. the name must be fully qualified, not
        the default short version)
      - is not part of TSQLRecordProperties because has been declared as virtual }
-    class function CaptionName(Action: PRawUTF8=nil; ForHint: boolean=false): string; virtual; 
+    class function CaptionName(Action: PRawUTF8=nil; ForHint: boolean=false): string; virtual;
     {/ get the captions to be used for this class
      - just a wrapper calling CaptionName() virtual method, from a ShortString pointer }
     class function CaptionNameFromRTTI(Action: PShortString): string;
@@ -4655,12 +4662,22 @@ type
       const Fields: TSQLFieldBits): RawUTF8; overload;
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
-    procedure GetBinaryValues(W: TFileBufferWriter);
+    procedure GetBinaryValues(W: TFileBufferWriter); overload;
+    /// write the field values into the binary buffer
+    // - won't write the ID field (should be stored before, with the Count e.g.)
+    procedure GetBinaryValues(W: TFileBufferWriter; const aFields: TSQLFieldBits); overload;
+    /// write the simple field values (excluding ID) into the binary buffer
+    procedure GetBinaryValuesSimpleFields(W: TFileBufferWriter);
     /// set the field values from a binary buffer
     // - won't read the ID field (should be read before, with the Count e.g.)
-    // - returns true on success, or false in case of invalid content in P e.g.
+    // - returns true on success, or false in case of invalid content in P^ e.g.
     // - P is updated to the next pending content after the read values
     function SetBinaryValues(var P: PAnsiChar): Boolean;
+    /// set the simple field values from a binary buffer
+    // - won't read the ID field (should be read before, with the Count e.g.)
+    // - returns true on success, or false in case of invalid content in P^ e.g.
+    // - P is updated to the next pending content after the read values
+    function SetBinaryValuesSimpleFields(var P: PAnsiChar): Boolean;
     /// write the record fields into RawByteString a binary buffer
     // - same as GetBinaryValues(), but also writing the ID field first
     function GetBinary: RawByteString;
@@ -10182,16 +10199,72 @@ type
   {$endif}
 
   /// common ancestor for tracking changes on TSQLRecord tables
-  // - used by TSQLRestServer.TrackChanges() method 
+  // - used by TSQLRestServer.TrackChanges() method for simple fields history
+  // - TSQLRestServer.InternalUpdateEvent will use this table to store individual
+  // row changes as SentDataJSON, then will compress them in History BLOB
+  // - note that any layout change of the tracked TSQLRecord table (e.g. adding
+  // a new property) would break the internal data format, so will void the table
   TSQLRecordHistory = class(TSQLRecord)
   protected
     fModifiedRecord: PtrInt;
     fEvent: TSQLEvent;
     fSentData: RawUTF8;
-    fTimeStamp: TCreateTime;
+    fTimeStamp: TModTime;
+    fHistory: TSQLRawBlob;
+    // BLOB storage layout is: RTTIheader + offsets + recordsdata
+    fHistoryModel: TSQLModel;
+    fHistoryTable: TSQLRecordClass;
+    fHistoryTableIndex: integer;
+    fHistoryUncompressed: RawByteString;
+    fHistoryUncompressedCount: integer;
+    fHistoryUncompressedOffset: TIntegerDynArray;
+    fHistoryAdd: TFileBufferWriter;
+    fHistoryAddCount: integer;
+    fHistoryAddOffset: TIntegerDynArray;
+  public
+    /// called when the associated table is created in the database
+    // - will create an index History(ModifiedRecord)
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    /// finalize any internal memory
+    destructor Destroy; override;
+    /// returns the modified record table, as stored in ModifiedRecord
+    function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+    /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
+    function ModifiedTableIndex: integer;
+    /// returns the modified record ID, as stored in ModifiedRecord
+    function ModifiedID: PtrInt;
+  public
+    /// prepare to access the History BLOB content
+    // - ModifiedRecord should have been set to a proper value
+    // - returns FALSE if the History BLOB is incorrect (e.g. TSQLRecord
+    // layout changed): caller shall flush all previous history
+    function HistoryOpen(Model: TSQLModel): boolean;
+    /// returns how many revisions are stored in the History BLOB
+    // - HistoryOpen() should have been called before using this method
+    // - this method will ignore any previous HistoryAdd() call
+    function HistoryCount: integer;
+    /// retrieve an historical version
+    // - HistoryOpen() should have been called before using this method
+    // - this method will ignore any previous HistoryAdd() call
+    // - if Rec=nil, will only retrieve Event and TimeStamp
+    // - if Rec is set, will fill all simple properties of this TSQLRecord  
+    function HistoryGet(Index: integer; out Event: TSQLEvent;
+      out TimeStamp: TModTime; Rec: TSQLRecord): boolean;
+    /// add a record content to the History BLOB
+    // - HistoryOpen() should have been called before using this method
+    // - use then HistorySave() to compress and replace the History field
+    procedure HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+    /// update the History BLOB field content
+    // - HistoryOpen() should have been called before using this method
+    // - if HistoryAdd() has not been used, returns false
+    // - ID field should have been set for proper persistence on Server  
+    // - otherwise compress the data into History BLOB, deleting the oldest
+    // versions if resulting size is biggger than expected, and returns true
+    function HistorySave(Server: TSQLRestServer): boolean;
   published
     /// identifies the modified record
     // - ID and table index in TSQLModel is stored as one RecordRef integer
+    // - you can use ModifiedTable/ModifiedID to retrieve the TSQLRecord item
     // - in case of the record deletion, all matching TSQLRecordHistory won't
     // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
     // property is a plain integer, not a TRecordReference field
@@ -10201,10 +10274,16 @@ type
     property Event: TSQLEvent read fEvent;
     /// for seAdd/seUpdate, the data stored as JSON
     // - note that we defined a default maximum size of 4KB for this column,
-    // to avoid using a CLOB here 
-    property SentData: RawUTF8 index 4000 read fSentData;
+    // to avoid using a CLOB here
+    property SentDataJSON: RawUTF8 index 4000 read fSentData;
     /// when the modification was recorded
-    property TimeStamp: TCreateTime read fTimeStamp;
+    property TimeStamp: TModTime read fTimeStamp;
+    /// after some events are written as individual SentData content, they
+    // will be gathered and compressed within one BLOB field
+    // - use HistoryOpen/HistoryCount/HistoryGet to access the stored data
+    // - as any BLOB field, this one won't be retrieved by default: use
+    // explicitly TSQLRest.RetrieveBlobFields(aRecordHistory) to get it
+    property History: TSQLRawBlob read fHistory;
   end;
 
   /// specifies the storage table to be used for tracking TSQLRecord changes
@@ -10270,9 +10349,10 @@ type
     fPublishedMethods: TDynArrayHashed;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables 
     fTrackChangesHistoryTableIndex: array[0..63] of integer;
-    fTrackChangesHistory: array[0..MAX_SQLTABLES-1] of record
-      MaxRow: integer;
+    fTrackChangesHistory: array of record
       CurrentRow: integer;
+      MaxSentDataJsonRow: integer;
+      MaxUncompressedBlobSize: integer;
     end;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -10406,12 +10486,39 @@ type
     /// virtual method called when a record is updated
     // - default implementation will call the OnUpdateEvent/OnBlobUpdateEvent
     // methods, if defined
+    // - will also handle TSQLRecordHistory tables, as defined by TrackChanges() 
     // - returns true on success, false if an error occured (but action must continue)
     // - you can override this method to implement a server-wide notification,
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
     function InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
       const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean; virtual;
+    /// initialize change tracking for the given tables
+    // - by default, it will use the TSQLRecordHistory table to store the
+    // changes - you can specify a dedicated class as aTableHistory parameter
+    // - if aTableHistory is not already part of the TSQLModel, it will be added
+    // - note that this setting should be consistent in time: if you disable
+    // tracking for a while, or did not enable tracking before adding a record,
+    // then the content history won't be consistent (or disabled) for this record
+    // - at every change, aTableHistory.SentDataJSON records will be added, up
+    // to aMaxHistoryRowBeforeBlob items - then aTableHistory.History will store
+    // a compressed version of all previous changes
+    // - aMaxHistoryRowBeforeBlob is the maximum number of JSON rows per Table
+    // - aMaxUncompressedBlobSize is the maximum BLOB size per record
+    // - you can specify aMaxHistoryRowBeforeBlob=0 to disable change tracking
+    // - you should call this method after the CreateMissingTables call
+    // - note that change tracking may slow down the writing process, and
+    // may increase storage space a lot (even if BLOB maximum size can be set),
+    // so should be defined only when necessary
+    procedure TrackChanges(const aTable: array of TSQLRecordClass;
+      aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRowBeforeBlob: integer=1000;
+      aMaxUncompressedBlobSize: integer=64*1024); virtual;
+    /// force compression of all aTableHistory.SentDataJson into History BLOB
+    // - by default, this will take place in InternalUpdateEvent() when
+    // aMaxHistoryRowBeforeBlob - as set by TrackChanges() method - is reached
+    // - you can manually call this method to force History BLOB update, e.g.
+    // when the server is in Idle state, and ready for process
+    procedure TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass); virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -10504,16 +10611,6 @@ type
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
-    /// initialize change tracking for the given tables
-    // - by default, it will use the TSQLRecordHistory table to store the
-    // changes - you can specify a dedicated class as aTableHistory parameter
-    // - if aTableHistory is not already part of the TSQLModel, it will be added
-    // - aTableHistory content will be rolling, up to aMaxHistoryRow items
-    // - you can specify aMaxHistoryRow=0 to disable tracking change for a table
-    // - note that change tracking may slow down the writting process, and
-    // increase storage space a lot  
-    procedure TrackChanges(const aTable: array of TSQLRecordClass;
-      aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRow: integer=100);
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -20520,6 +20617,24 @@ begin
       Fields.List[f].GetBinary(self,W);
 end;
 
+procedure TSQLRecord.GetBinaryValuesSimpleFields(W: TFileBufferWriter);
+var f: integer;
+begin
+  with RecordProps do
+    for f := 0 to SimpleFieldCount-1 do
+      SimpleFields[f].GetBinary(self,W);
+end;
+
+procedure TSQLRecord.GetBinaryValues(W: TFileBufferWriter;
+  const aFields: TSQLFieldBits);
+var f: integer;
+begin
+  with RecordProps do
+    for f := 0 to Fields.Count-1 do
+      if f in aFields then
+        Fields.List[f].GetBinary(self,W);
+end;
+
 function TSQLRecord.GetBinary: RawByteString;
 var W: TFileBufferWriter;
 begin
@@ -20547,6 +20662,19 @@ begin
   with RecordProps do
     for f := 0 to Fields.Count-1 do begin
       P := Fields.List[f].SetBinary(self,P);
+      if P=nil then
+        exit; // on error
+    end;
+  result := true;
+end;
+
+function TSQLRecord.SetBinaryValuesSimpleFields(var P: PAnsiChar): Boolean;
+var f: integer;
+begin
+  result := false;
+  with RecordProps do
+    for f := 0 to SimpleFieldCount-1 do begin
+      P := SimpleFields[f].SetBinary(self,P);
       if P=nil then
         exit; // on error
     end;
@@ -22736,8 +22864,10 @@ begin
       if T.RowCount>=1 then begin
         Value.FillFrom(T,1); // fetch data from first result row
         result := true;
-      end else
+      end else begin
+        Value.fID := 0;
         result := false;
+      end;
     finally
       T.Free;
     end;
@@ -24941,6 +25071,7 @@ begin
       {$ifdef SSPIAUTH},TSQLRestServerAuthenticationSSPI{$endif}]);
   for t := 0 to high(fTrackChangesHistoryTableIndex) do
     fTrackChangesHistoryTableIndex[t] := -1;
+  SetLength(fTrackChangesHistory,MAX_SQLTABLES);
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
@@ -24983,29 +25114,6 @@ begin
   SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
   fStats.Free; 
-end;
-
-procedure TSQLRestServer.TrackChanges(const aTable: array of TSQLRecordClass;
-  aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRow: integer=100);
-var t, tableIndex, TableHistoryIndex: integer;
-begin
-  if (self=nil) or (high(aTable)<0) then
-    exit;
-  if aMaxHistoryRow<=0 then
-    TableHistoryIndex := -1 else begin
-    if aTableHistory=nil then
-      aTableHistory := TSQLRecordHistory;
-    TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
-  end;
-  for t := 0 to high(aTable) do begin
-    tableIndex := Model.GetTableIndexExisting(aTable[t]);
-    if tableIndex<=high(fTrackChangesHistoryTableIndex) then begin
-      fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
-      fTrackChangesHistory[TableHistoryIndex].MaxRow := aMaxHistoryRow;
-      if fTrackChangesHistory[TableHistoryIndex].CurrentRow=0 then
-        fTrackChangesHistory[TableHistoryIndex].CurrentRow := TableRowCount(aTableHistory);
-    end;
-  end;
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -26842,42 +26950,330 @@ begin
         RunningThread := nil;
 end;
 
+{ TSQLRecordHistory }
+
+function TSQLRecordHistory.ModifiedTableIndex: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := RecordRef(fModifiedRecord).TableIndex;
+end;
+
+function TSQLRecordHistory.ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+begin
+  if (self=nil) or (Model=nil) then
+    result := nil else
+    result := RecordRef(fModifiedRecord).Table(Model);
+end;
+
+function TSQLRecordHistory.ModifiedID: PtrInt;
+begin
+  if self=nil then
+    result := 0 else
+    result := RecordRef(fModifiedRecord).ID;
+end;
+
+class procedure TSQLRecordHistory.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8);
+begin
+  inherited InitializeTable(Server,FieldName);
+  if FieldName='' then
+    Server.CreateSQLIndex(Self,'ModifiedRecord',false);
+end;
+
+destructor TSQLRecordHistory.Destroy;
+begin
+  inherited;
+  fHistoryAdd.Free;
+end;
+
+function TSQLRecordHistory.HistoryOpen(Model: TSQLModel): boolean;
+var len: cardinal;
+    start,i: integer;
+    R: TFileBufferReader;
+    tmp: RawByteString;
+begin
+  result := false;
+  fHistoryModel := Model;
+  fHistoryUncompressed := '';
+  fHistoryTable := ModifiedTable(Model);
+  fHistoryUncompressedCount := 0;
+  fHistoryUncompressedOffset := nil;
+  if fHistoryTable=nil then
+    exit; // invalid Model or ModifiedRecord
+  CompressSynLZ(fHistoryUncompressed,false);
+  len := length(fHistoryUncompressed);
+  if len>4 then begin
+    R.OpenFrom(pointer(tmp),len);
+    if not fHistoryTable.RecordProps.CheckBinaryHeader(R) then
+      exit; // invalid content: TSQLRecord layout may have changed
+    R.ReadVarUInt32Array(fHistoryUncompressedOffset);
+    fHistoryUncompressedCount := length(fHistoryUncompressedOffset);
+    start := R.CurrentPosition;
+    for i := 0 to fHistoryUncompressedCount-1 do
+      inc(fHistoryUncompressedOffset[i],start);
+  end;
+  result := true;
+end;
+
+function TSQLRecordHistory.HistoryCount: integer;
+begin
+  if (self=nil) or (fHistoryUncompressed='') then
+    result := 0 else
+    result := fHistoryUncompressedCount;
+end;
+
+function TSQLRecordHistory.HistoryGet(Index: integer;
+  out Event: TSQLEvent; out TimeStamp: TModTime; Rec: TSQLRecord): boolean;
+var P: PAnsiChar;
+begin
+  if cardinal(Index)>=cardinal(HistoryCount) then
+    result := false else begin
+    P := pointer(fHistoryUncompressed);
+    inc(P,fHistoryUncompressedOffset[Index]);
+    Event := TSQLEvent(P^); inc(P);
+    TimeStamp := FromVarUInt64(PByte(P));
+    if Rec<>nil then begin
+      if Event=seDelete then
+        Rec.ClearProperties else
+        Rec.SetBinaryValuesSimpleFields(P);
+      Rec.fID := ModifiedID;
+    end;
+    result := true;
+  end;
+end;
+
+procedure TSQLRecordHistory.HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+begin
+  if (self=nil) or (fHistoryModel=nil) or (Rec.RecordClass<>fHistoryTable) then
+    exit;
+  if fHistoryAdd=nil then
+    fHistoryAdd := TFileBufferWriter.Create(TRawByteStringStream);
+  AddInteger(fHistoryAddOffset,fHistoryAddCount,fHistoryAdd.TotalWritten);
+  fHistoryAdd.Write1(Ord(Hist.Event));
+  fHistoryAdd.WriteVarUInt64(Hist.TimeStamp);
+  if Hist.Event<>seDelete then
+    Rec.GetBinaryValuesSimpleFields(fHistoryAdd);
+end;
+
+function TSQLRecordHistory.HistorySave(Server: TSQLRestServer): boolean;
+var size,i,maxSize,TableHistoryIndex: integer;
+    firstOldIndex,firstOldOffset, firstNewIndex,firstNewOffset: integer;
+    newOffset: TIntegerDynArray;
+    W: TFileBufferWriter;
+begin
+  result := false;
+  try
+    if (fHistoryAdd=nil) or (fHistoryTable=nil) or (fModifiedRecord=0) then
+      exit; // nothing new
+    // ensure resulting size matches specified criteria
+    firstOldIndex := 0;
+    TableHistoryIndex := Server.Model.GetTableIndexExisting(RecordClass);
+    if Server=nil then
+      maxSize := 64*1024 else
+      maxSize := Server.fTrackChangesHistory[TableHistoryIndex].MaxUncompressedBlobSize;
+    size := fHistoryAdd.TotalWritten;
+    if (size>maxSize) or (fHistoryUncompressedCount=0) then
+      // e.g. if fHistory.Add() is already bigger than expected
+      firstOldIndex := fHistoryUncompressedCount else begin
+      inc(size,Length(fHistoryUncompressed)-fHistoryUncompressedOffset[0]);
+      while (firstOldIndex<fHistoryUncompressedCount-1) and (size>maxSize) do begin
+        dec(size,fHistoryUncompressedOffset[firstOldIndex+1]-fHistoryUncompressedOffset[firstOldIndex]);
+        inc(firstOldIndex);
+      end;
+    end;
+    W := TFileBufferWriter.Create(TRawByteStringStream);
+    try
+      // compute offsets
+      if firstOldIndex=fHistoryUncompressedCount then
+        firstOldOffset := length(fHistoryUncompressed) else
+        firstOldOffset := fHistoryUncompressedOffset[firstOldIndex];
+      SetLength(newOffset,fHistoryUncompressedCount-firstOldIndex+fHistoryAddCount);
+      for i := firstOldIndex to fHistoryUncompressedCount-1 do
+        newOffset[i-firstOldIndex] := fHistoryUncompressedOffset[i]-firstOldOffset;
+      firstNewIndex := fHistoryUncompressedCount-firstOldIndex;
+      firstNewOffset := Length(fHistoryUncompressed)-firstOldOffset;
+      for i := 0 to fHistoryAddCount-1 do
+        newOffset[firstNewIndex+i] := fHistoryAddOffset[i]+firstNewOffset;
+      // write header
+      fHistoryTable.RecordProps.SaveBinaryHeader(W);
+      W.WriteVarUInt32Array(newOffset,length(newOffset),wkOffsetU);
+      // write data
+      W.Write(@PByteArray(fHistoryUncompressedOffset)[firstOldOffset],firstNewOffset);
+      fHistoryAdd.Flush;
+      W.WriteBinary((fHistoryAdd.Stream as TRawByteStringStream).DataString);
+      W.Flush;
+      fHistoryUncompressed := (W.Stream as TRawByteStringStream).DataString;
+      CompressSynLZ(fHistoryUncompressed,true);
+      fHistory := fHistoryUncompressed;
+      if (Server<>nil) and (fID<>0) then begin
+        Server.EngineUpdate(TableHistoryIndex,fID,
+          '{"TimeStamp":'+Int64ToUTF8(Server.ServerTimeStamp)+'}');
+        // Server.EngineUpdate() may fail within a BATCH (not an issue)
+        Server.EngineUpdateBlob(TableHistoryIndex,fID,
+          RecordProps.BlobFields[0].PropInfo,fHistory);
+      end;
+      result := true;
+    finally
+      W.Free;
+    end;
+  finally
+    fHistoryUncompressed := '';
+    fHistoryUncompressedOffset := nil;
+    FreeAndNil(fHistoryAdd);
+    fHistoryAddOffset := nil;
+    fHistoryAddCount := 0;
+  end;
+end;
+
+
+procedure TSQLRestServer.TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass);
+var HistBlob: TSQLRecordHistory;
+    Rec: TSQLRecord;
+    HistJson: TSQLRecordHistory;
+    WhereClause, JSON: RawUTF8;
+    HistID: TIntegerDynArray;
+    TableHistoryIndex: integer;
+begin
+  {$ifdef WITHLOG}
+  SQLite3Log.Enter;
+  {$endif}
+  Rec := nil;
+  HistBlob := nil;
+  // we will compress into BLOB only when we got more than 10 revisions of a record
+  WhereClause := FormatUTF8('ModifiedRecord in (select ModifiedRecord from '+
+      '(select ModifiedRecord, count(*) NumItems from % group by ModifiedRecord) '+
+      'where NumItems>10 order by ModifiedRecord) and History is null',
+      [aTableHistory.SQLTableName]);
+  try
+    HistJson := aTableHistory.CreateAndFillPrepare(self,WhereClause);
+    try
+      if HistJson.FillTable.RowCount=0 then
+        exit; // nothing to compress
+      TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
+      HistBlob := aTableHistory.Create;
+      while HistJson.FillOne do begin
+        if HistJson.ModifiedRecord=0 then
+          raise EORMException.CreateFmt('Invalid %s.ID=%d',[HistJson.SQLTableName,HistJson.fID]);
+        if HistJson.ModifiedRecord<>HistBlob.ModifiedRecord then begin
+          if HistBlob.ModifiedRecord<>0 then
+            HistBlob.HistorySave(self);
+          FreeAndNil(Rec);
+          if not Retrieve('ModifiedRecord=? and History is not null',[],
+              [HistJson.ModifiedRecord],HistBlob) then
+            HistBlob.fModifiedRecord := HistJson.ModifiedRecord else
+            RetrieveBlobFields(HistBlob);
+          if not HistBlob.HistoryOpen(Model) then begin
+            InternalLog(FormatUTF8('Invalid %.History BLOB content for ID=%: % '+
+              'layout may have changed -> flush any previous content',
+              [HistBlob.RecordClass,HistBlob.fID,HistJson.ModifiedTable(Model)]),sllError);
+            HistBlob.fID := 0; // force get content
+          end;
+          if HistBlob.fID<>0 then // allow changes appending to HistBlob
+            Rec := HistJson.ModifiedTable(Model).Create else begin
+            // HistBlob.fID=0 -> no previous BLOB content
+            JSON := JSONEncode(['ModifiedRecord',HistJson.ModifiedRecord,
+              'TimeStamp',ServerTimeStamp]);
+            if HistJson.Event=seAdd then begin // allow versioning from scratch
+              HistBlob.fID := EngineAdd(TableHistoryIndex,JSON);
+              Rec := HistJson.ModifiedTable(Model).Create;
+              HistBlob.HistoryOpen(Model);
+            end else begin
+              Rec := Retrieve(HistJson.ModifiedRecord);
+              if Rec<>nil then begin // initialize BLOB with latest revision
+                HistBlob.fID := EngineAdd(TableHistoryIndex,JSON);
+                HistBlob.HistoryOpen(Model);
+                HistBlob.HistoryAdd(Rec,HistJson);
+                FreeAndNil(Rec); // ignore partial SentDataJSON for this record
+              end;
+            end;
+          end;
+        end;
+        if (Rec=nil) or (HistBlob.fID=0) then
+          continue; // only append modifications to BLOB if valid
+        Rec.FillFrom(pointer(HistJson.SentDataJSON));
+        HistBlob.HistoryAdd(Rec,HistJson);
+      end;
+      if HistBlob.ModifiedRecord<>0 then
+        HistBlob.HistorySave(self);
+      HistJson.FillTable.GetRowValues(HistJson.FillTable.fFieldIndexID,HistID);
+      QuickSortInteger(Pointer(HistID),0,high(HistID));
+      EngineDeleteWhere(TableHistoryIndex,WhereClause,HistID);
+    finally
+      HistJson.Free;
+      HistBlob.Free;
+      Rec.Free;
+    end;
+  except
+    on Exception do
+      ;
+  end;
+end;
+
 function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
   const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
 procedure DoTrackChanges;
 var TableHistoryIndex: integer;
-    SQLWhere: RawUTF8;
-    IDs: TIntegerDynArray;
-begin // we handle up to 64=1 shl 6 tables here
+begin
   TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-  EngineAdd(TableHistoryIndex,
-    JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(aEvent),
-                'SentData',aSentData,'TimeStamp',ServerTimeStamp]));
-  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
-  try
-    with fTrackChangesHistory[TableHistoryIndex] do
-    if CurrentRow>MaxRow then begin // delete the older half of items
-      CurrentRow := MaxRow shr 1;
-      SQLWhere := 'LIMIT '+Int32ToUTF8(CurrentRow);
-      if OneFieldValues(Model.Tables[TableHistoryIndex],'ID',SQLWhere,IDs) then
-        EngineDeleteWhere(TableHistoryIndex,SQLWhere,IDs);
+  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock); // avoid race condition
+  try // low-level Add(TSQLRecordHistory) without cache
+    EngineAdd(TableHistoryIndex,  // RecordRef encoding
+      JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(aEvent),
+                  'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]));
+    if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
+        fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
+      // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
+      TrackChangesFlush(TSQLRecordHistoryClass(Model.Tables[TableHistoryIndex]));
+      fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
     end else
-      inc(CurrentRow);
+      // fast append as JSON until reached MaxSentDataJsonRow
+      inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
   finally
     LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
   end;
-end; // low-level Add(TSQLRecordHistory) without cache
+end;
 begin
-  if (aTableIndex<=high(fTrackChangesHistoryTableIndex)) and
-     (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
-    DoTrackChanges;
   if aIsBlobFields<>nil then
+    // BLOB fields update
     if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
       result := OnBlobUpdateEvent(self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
-      result := true else
-  if Assigned(OnUpdateEvent) then
-    result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
-    result := true; // true on success, false if error (but action continues)
+      result := true else begin
+    // simple fields modification
+    if (aTableIndex<=high(fTrackChangesHistoryTableIndex)) and
+       (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
+      DoTrackChanges;
+    if Assigned(OnUpdateEvent) then
+      result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
+      result := true; // true on success, false if error (but action continues)
+  end;
+end;
+
+procedure TSQLRestServer.TrackChanges(const aTable: array of TSQLRecordClass;
+  aTableHistory: TSQLRecordHistoryClass; aMaxHistoryRowBeforeBlob,
+  aMaxUncompressedBlobSize: integer);
+var t, tableIndex, TableHistoryIndex: integer;
+begin
+  if (self=nil) or (high(aTable)<0) then
+    exit;
+  if aMaxHistoryRowBeforeBlob<=0 then // disable change tracking
+    TableHistoryIndex := -1 else begin
+    if aTableHistory=nil then
+      aTableHistory := TSQLRecordHistory;
+    TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
+  end;
+  for t := 0 to high(aTable) do begin
+    tableIndex := Model.GetTableIndexExisting(aTable[t]);
+    if tableIndex<=high(fTrackChangesHistoryTableIndex) then begin
+      fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
+      with fTrackChangesHistory[TableHistoryIndex] do begin
+        if CurrentRow=0 then
+          CurrentRow := TableRowCount(aTableHistory);
+        MaxSentDataJsonRow := aMaxHistoryRowBeforeBlob;
+        MaxUncompressedBlobSize := aMaxUncompressedBlobSize;
+      end;
+    end;
+  end;
 end;
 
 function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
@@ -28479,12 +28875,10 @@ const
 function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
     MS: TMemoryStream;
-    n, i, f: integer;
-    FieldNames: TRawUTF8DynArray;
+    i, f: integer;
     IDs: TIntegerDynArray;
     P: PAnsiChar;
     aRecord: TSQLRecord;
-    FieldTypes: array[0..MAX_SQLFIELDS-1] of TSQLFieldType;
 begin
   result := false;
   if self=nil then
@@ -28496,16 +28890,8 @@ begin
     // check header: expect same exact RTTI
     R.OpenFrom(MS.Memory,MS.Size);
     if (R.ReadRawUTF8<>RawUTF8(ClassName)) or
-       (R.ReadRawUTF8<>SQLTableName) or
-       (R.ReadVarRawUTF8DynArray(FieldNames)<>Fields.Count) then
+       not CheckBinaryHeader(R) then
       exit;
-    n := sizeof(TSQLFieldType)*Fields.Count;
-    if R.Read(@FieldTypes,n)<>n then
-      exit;
-    for i := 0 to Fields.Count-1 do
-      with Fields.List[i] do
-      if (Name<>FieldNames[i]) or (SQLFieldType<>FieldTypes[i]) then
-        exit;
     // read IDs
     fModified := false;
     fValue.Clear;
@@ -28537,7 +28923,6 @@ function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
     IDs: TIntegerDynArray;
-    FieldNames: TRawUTF8DynArray;
     i, f: integer;
 begin
   result := 0;
@@ -28549,13 +28934,7 @@ begin
   try
     // primitive magic and fields signature for file type identification
     W.Write(RawUTF8(ClassName));
-    W.Write(SQLTableName);
-    SetLength(FieldNames,Fields.Count);
-    for i := 0 to Fields.Count-1 do
-      FieldNames[i] := Fields.List[i].Name;
-    W.WriteRawUTF8DynArray(FieldNames,Fields.Count);
-    for i := 0 to Fields.Count-1 do
-      W.Write(@Fields.List[i].fSQLFieldType,sizeof(TSQLFieldType));
+    SaveBinaryHeader(W);
     // write IDs
     SetLength(IDs,Count);
     with fValue do
@@ -31860,6 +32239,38 @@ begin
   assert(id=nFieldBits);
 end;
 
+procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);
+var i: integer;
+    FieldNames: TRawUTF8DynArray;
+begin
+  W.Write(SQLTableName);
+  SetLength(FieldNames,Fields.Count);
+  for i := 0 to Fields.Count-1 do
+    FieldNames[i] := Fields.List[i].Name;
+  W.WriteRawUTF8DynArray(FieldNames,Fields.Count);
+  for i := 0 to Fields.Count-1 do
+    W.Write(@Fields.List[i].fSQLFieldType,sizeof(TSQLFieldType));
+end;                          
+
+function TSQLRecordProperties.CheckBinaryHeader(var R: TFileBufferReader): boolean;
+var n,i: integer;
+    FieldNames: TRawUTF8DynArray;
+    FieldTypes: array[0..MAX_SQLFIELDS-1] of TSQLFieldType;
+begin
+  result := false;
+  if (R.ReadRawUTF8<>SQLTableName) or
+     (R.ReadVarRawUTF8DynArray(FieldNames)<>Fields.Count) then
+    exit;
+  n := sizeof(TSQLFieldType)*Fields.Count;
+  if R.Read(@FieldTypes,n)<>n then
+    exit;
+  for i := 0 to Fields.Count-1 do
+    with Fields.List[i] do
+    if (Name<>FieldNames[i]) or (SQLFieldType<>FieldTypes[i]) then
+      exit;
+  result := true;
+end;
+
 function TSQLRecordProperties.IsFieldName(const PropName: RawUTF8): boolean;
 begin
   result := (PropName<>'') and
@@ -33552,6 +33963,7 @@ begin
 end;
 
 {$endif SSPIAUTH}
+
 
 { TServiceContainer }
 
