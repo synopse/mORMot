@@ -5817,6 +5817,8 @@ type
     /// append an integer value using 64-bit variable-length integer encoding of
     // the by-two complement of the given value
     procedure WriteVarInt64(Value: Int64);
+    /// append an unsigned integer value using 64-bit variable-length encoding  
+    procedure WriteVarUInt64(Value: QWord);
     /// append cardinal values (NONE must be negative!) using 32-bit
     // variable-length integer encoding or other specialized algorithm,
     // depending on the data layout
@@ -35668,6 +35670,18 @@ begin
   end;
   pos := fPos;
   fPos := PtrUInt(ToVarInt64(Value,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+  inc(fTotalWritten,PtrUInt(fPos-Pos));
+end;
+
+procedure TFileBufferWriter.WriteVarUInt64(Value: QWord);
+var pos: integer;
+begin
+  if fPos+16>fBufLen then begin
+    fStream.Write(pointer(fBuf)^,fPos);
+    fPos := 0;
+  end;
+  pos := fPos;
+  fPos := PtrUInt(ToVarUInt64(Value,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
 end;
 
