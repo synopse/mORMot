@@ -2102,7 +2102,8 @@ type
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
-    // alternative map-reduce pattern
+    // alternative map-reduce pattern, and is available since MongoDB 2.2 -
+    / see http://docs.mongodb.org/manual/reference/command/aggregate
     // - you should specify the aggregation pipeline as a list of JSON object
     // operators (without the [..]) - for reference of all available phases,
     // see http://docs.mongodb.org/manual/core/aggregation-pipeline
@@ -2117,7 +2118,8 @@ type
     function AggregateDoc(Operators: PUTF8Char; const Params: array of const): variant;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
-    // alternative map-reduce pattern
+    // alternative map-reduce pattern, and is available since MongoDB 2.2 -
+    / see http://docs.mongodb.org/manual/reference/command/aggregate
     // - you should specify the aggregation pipeline as a list of JSON object
     // operators (without the [..]) - for reference of all available phases,
     // see http://docs.mongodb.org/manual/core/aggregation-pipeline
@@ -5091,6 +5093,8 @@ function TMongoCollection.AggregateCall(Operators: PUTF8Char;
   const Params: array of const; var reply,res: variant): boolean;
 var pipeline: RawUTF8;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
+  if fDatabase.Client.ServerBuildInfoNumber<2020000 then
+    raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
   pipeline := FormatUTF8('{aggregate:"%",pipeline:[%]}',
     [Name,FormatUTF8(Operators,[],Params,True)]);
   // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$int"}}}]})
