@@ -162,6 +162,7 @@ unit SynSQLite3;
   - fixed ticket [f79ff5714b] about potential finalization issues as .bpl in IDE
   - TSQLDataBase.Blob() will now allow negative IDs, and expect 0 to be replaced
     by the latest inserted ID - see ticket [799a2c114c]
+  - small fix of TOnSQLStoredProc callback parameter (TSQLRequest as const)
   - added SQLITE_MEMORY_DATABASE_NAME constant as alias to ':memory:'
 
 
@@ -2254,7 +2255,7 @@ type
   // - no TSQLDataBase or higher levels objects can be used inside this method,
   // since all locking and try..finally protection is outside it
   // - can optionnaly trigger a ESQLite3Exception on any error
-  TOnSQLStoredProc = procedure(Statement: TSQLRequest) of object;
+  TOnSQLStoredProc = procedure(const Statement: TSQLRequest) of object;
 
   {/ TSQLDataBase.TransactionBegin can be deferred, immediate, or exclusive
    - tbDeferred means that no locks are acquired on the database until the
