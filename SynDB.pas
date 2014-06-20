@@ -173,7 +173,8 @@ unit SynDB;
     created after multiple columns)
   - added TSQLDBConnectionProperties.SQLTableName() method
   - added TSQLDBConnectionProperties.SQLSplitTableName() and SQLFullTableName()
-  - now TSQLDBConnectionProperties.SQLAddIndex() will handle schema name
+  - now TSQLDBConnectionProperties.SQLAddIndex() will handle schema name and
+    will ensure that the generated identifier will be not too long 
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)
@@ -3938,6 +3939,7 @@ begin
         F.ColumnName := ColumnUTF8(1);
         F.ColumnTypeNative := ColumnUTF8(2);
         F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,0);
+        F.ColumnIndexed := IsRowID(pointer(F.ColumnName)); // by definition for SQLite3
         FA.Add(F);
       end;
     except
@@ -4372,7 +4374,7 @@ function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
   const aIndexName: RawUTF8): RawUTF8;
 const CREATNDX: PUTF8Char = 'CREATE %INDEX %% ON %(%)'; // Delphi 5
   CREATNDXIFNE: array[boolean] of RawUTF8 = ('','IF NOT EXISTS ');
-var IndexName, ColsDesc, Owner,Table: RawUTF8;
+var IndexName,FieldsCSV, ColsDesc, Owner,Table: RawUTF8;
 begin
   result := '';
   if (self=nil) or (aTableName='') or (high(aFieldNames)<0) then
@@ -4385,7 +4387,14 @@ begin
        not (fDBMS in [dMSSQL,dPostgreSQL,dMySQL,dFirebird,dDB2]) then
       // some DB engines do not expect any schema in the index name
       IndexName := Owner+'.';
-    IndexName := IndexName+'Index'+Table+RawUTF8ArrayToCSV(aFieldNames,'');
+    FieldsCSV := RawUTF8ArrayToCSV(aFieldNames,'');
+    if length(FieldsCSV)+length(Table)>27 then
+      // sounds like if some DB limit the identifier length to 32 chars
+      IndexName := IndexName+'INDEX'+
+        CardinalToHex(crc32c(0,pointer(Table),length(Table)))+
+        CardinalToHex(crc32c(0,pointer(FieldsCSV),length(FieldsCSV)))+
+        CardinalToHex(GetTickCount64) else
+      IndexName := IndexName+'NDX'+Table+FieldsCSV;
   end else
     IndexName := aIndexName;
   if aDescending then
