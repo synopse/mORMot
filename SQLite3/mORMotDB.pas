@@ -105,6 +105,7 @@ unit mORMotDB;
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
   - ensure DESC INDEX is created for Firebird ID column, as expected for
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
+  - fix TSQLRestStorageExternal.CreateSQLMultiIndex() to set ColumnIndexed=TRUE
   - fixed TSQLRestStorageExternal.UpdateBlobFields() to return true
     if no BLOB field is defined, and to proper handle multi-field update
   - fixed ticket [21c2d5ae96] when inserting/updating blob-only table content
@@ -1479,12 +1480,13 @@ function TSQLRestStorageExternal.CreateSQLMultiIndex(
 var SQL: RawUTF8;
     ExtFieldNames: TRawUTF8DynArray;
     Descending: boolean;
-    i: integer;
+    ExtFieldIndex: integer;
 begin
   result := false;
   Descending := false;
-  if (self=nil) or (fProperties=nil) or (Table<>fStoredClass) then
+  if (self=nil) or (fProperties=nil) or (Table<>fStoredClass) or (high(FieldNames)<0) then
     exit;
+  ExtFieldIndex := InternalFieldNameToFieldExternalIndex(FieldNames[0]);
   if high(FieldNames)=0 then begin
     if IsRowID(Pointer(FieldNames[0])) then
       case fProperties.DBMS of
@@ -1495,9 +1497,9 @@ begin
       dFirebird:  // see http://www.firebirdfaq.org/faq205
         Descending := true;
       end;
-    if not Descending then begin // we identify just if indexed, not the order
-      i := InternalFieldNameToFieldExternalIndex(FieldNames[0]);
-      if (i>=0) and (fFieldsExternal[i].ColumnIndexed) then begin
+    if not Descending then // we identify just if indexed, not the order
+      if ExtFieldIndex>=0 then
+        if fFieldsExternal[ExtFieldIndex].ColumnIndexed then begin
         result := true; // column already indexed
         exit;
       end;
@@ -1505,8 +1507,11 @@ begin
   end;
   StoredClassProps.ExternalDB.InternalToExternalDynArray(FieldNames,ExtFieldNames);
   SQL := fProperties.SQLAddIndex(fTableName,ExtFieldNames,Unique,Descending,IndexName);
-  if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
-    result := true;
+  if (SQL='') or (ExecuteDirect(pointer(SQL),[],[],false)=nil) then
+    exit;
+  result := true;
+  if ExtFieldIndex>=0 then
+    fFieldsExternal[ExtFieldIndex].ColumnIndexed := true;
 end;
 
 class function TSQLRestStorageExternal.Instance(
