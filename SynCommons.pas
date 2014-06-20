@@ -535,6 +535,7 @@ unit SynCommons;
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
     instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
   - added fnv32() function, slower than kr32, but with less collisions 
+  - added SynLZCompress/SynLZDecompress functions, using crc32c() for hashing 
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
@@ -10975,6 +10976,12 @@ function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 // - you should specify a Magic number to be used to identify the compressed
 // file format
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
+
+/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+function SynLZCompress(const Data: RawByteString): RawByteString;
+
+/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
+function SynLZDecompress(const Data: RawByteString): RawByteString;
 
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
@@ -38977,6 +38984,48 @@ begin
   {$endif}
      (Hash32(result.Memory,Head.UnCompressedSize)<>Head.HashUncompressed) then
     FreeAndNil(result);
+end;
+
+function SynLZCompress(const Data: RawByteString): RawByteString;
+var DataLen, len: integer;
+    P: PAnsiChar;
+begin
+  DataLen := length(Data);
+  if DataLen=0 then
+    result := '' else begin
+    len := SynLZcompressdestlen(DataLen)+8;
+    SetString(result,nil,len);
+    P := pointer(result);
+    PCardinal(P)^ := crc32c(0,pointer(Data),DataLen);
+{$ifdef PUREPASCAL}
+    len := SynLZcompress1pas(pointer(Data),DataLen,P+8); {$else}
+    len := SynLZcompress1asm(pointer(Data),DataLen,P+8);
+{$endif}
+    PCardinal(P+4)^ := crc32c(0,pointer(P+8),len);
+    SetLength(result,len+8);
+  end;
+end;
+
+function SynLZDecompress(const Data: RawByteString): RawByteString;
+var DataLen, len: integer;
+    P: PAnsiChar;
+begin
+  DataLen := length(Data);
+  result := '';
+  if DataLen=0 then
+    exit;
+  P := pointer(Data);
+  if (DataLen<=8) or (crc32c(0,pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
+    exit;
+  len := SynLZdecompressdestlen(P+8);
+  SetLength(result,len);
+  if (len<>0) and
+{$ifdef PUREPASCAL}
+        ((SynLZdecompress1pas(P+8,DataLen-8,pointer(result))<>len) or
+{$else} ((SynLZdecompress1asm(P+8,DataLen-8,pointer(result))<>len) or
+{$endif}(crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
+    result := '' else
+    SetLength(result,len);
 end;
 
 
