@@ -737,6 +737,7 @@ unit mORMot;
     - interface-based services can now return the result value as JSON object
       instead of JSON array if TServiceFactoryServer.ResultAsJSONObject is set
       (can be useful e.g. when consuming services from JavaScript)
+    - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
     - method-based services are now able to handle "304 Not Modified" optimized
@@ -7016,8 +7017,8 @@ type
     // - will append a JSON array of results in Res, or set an Error message, or
     // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
     function InternalExecute(Instances: array of pointer; Par: PUTF8Char;
-      Res: TTextWriter; var aHead: RawUTF8; Options: TServiceMethodOptions;
-      ResultAsJSONObject: boolean;
+      Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
+      Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
       BackgroundExecutionThread: TSynBackgroundThreadProcedure): boolean;
     /// retrieve a var / out / result argument index in Args[] from its name
     // - search is case insensitive
@@ -7044,15 +7045,19 @@ type
   // implementation, and it may be used with plain AJAX or HTML requests
   // (via POST), to retrieve some custom content
   TServiceCustomAnswer = record
-    /// the response type, as encoded in the HTTP header
+    /// mandatory response type, as encoded in the HTTP header
     // - useful to set the response mime-type - see e.g. the
     // TEXT_CONTENT_TYPE_HEADER or HTML_CONTENT_TYPE_HEADER constants or
     // GetMimeContentType() function
-    // - in order to be handled as expected, this field SHALL be set (<>'')
-    // (otherwise it will transmitted with default JSON object format)
+    // - in order to be handled as expected, this field SHALL be set to NOT ''
+    // (otherwise TServiceCustomAnswer will transmitted with as raw JSON)
     Header: RawUTF8;
     /// the response body
+    // - corresponding to the response type, as defined in Header
     Content: RawByteString;
+    /// the HTML response code
+    // - if not overriden, will default to HTML_SUCCESS = 200
+    Status: cardinal;
   end;
 
   PServiceCustomAnswer = ^TServiceCustomAnswer;
@@ -36528,8 +36533,9 @@ begin
         if optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options then
           EnterCriticalSection(fInstanceLock);
         if not fInterface.fMethods[Ctxt.ServiceMethodIndex].InternalExecute(
-            [PAnsiChar(Inst.Instance)+entry^.IOffset],Ctxt.ServiceParameters,WR,
-             Ctxt.Call.OutHead,fExecution[Ctxt.ServiceMethodIndex].Options,
+            [PAnsiChar(Inst.Instance)+entry^.IOffset],Ctxt.ServiceParameters,
+             WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
+             fExecution[Ctxt.ServiceMethodIndex].Options,
              Ctxt.ForceServiceResultAsJSONObject,
              {$ifdef LVCL}nil{$else}fBackgroundThread{$endif}) then
           exit; // wrong request
@@ -36540,9 +36546,9 @@ begin
       if Ctxt.Call.OutHead='' then begin // <>'' for TServiceCustomAnswer
         Ctxt.ServiceResultEnd(WR,Inst.InstanceID);
         Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER;
+        Ctxt.Call.OutStatus := HTML_SUCCESS;
       end;
       WR.SetText(Ctxt.Call.OutBody);
-      Ctxt.Call.OutStatus := HTML_SUCCESS;
     finally
       with ThreadServer^ do begin
         Factory := nil;
@@ -36995,7 +37001,7 @@ begin
 end;
 
 function TServiceMethod.InternalExecute(Instances: array of pointer;
-  Par: PUTF8Char; Res: TTextWriter; var aHead: RawUTF8;
+  Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
   Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
   BackgroundExecutionThread: TSynBackgroundThreadProcedure): boolean;
 var RawUTF8s: TRawUTF8DynArray;
@@ -37176,6 +37182,9 @@ begin
         if Header<>'' then begin
           aHead := Header;
           Res.ForceContent(Content);
+          if Status=0 then // Values[]=@Records[] is filled with 0 by default
+            aStatus := HTML_SUCCESS else
+            aStatus := Status;
           Result := true;
           exit;
         end;
