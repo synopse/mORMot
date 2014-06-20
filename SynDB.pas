@@ -2783,7 +2783,7 @@ const
   (' INTEGER',' VARCHAR(%)',' BIGINT',' DOUBLE PRECISION',' NUMERIC(19,4)',
    ' TIMESTAMP',' TEXT',' BYTEA'),
   // dDB2 (for CCSID Unicode tables) - bigint needs 9.1 and up
-  (' int not null',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob')
+  (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob')
   );
 
   /// the known column data types corresponding to our TSQLDBFieldType types
@@ -4326,7 +4326,7 @@ begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
     exit; // nothing to create
   for i := 0 to high(aFields) do begin
     if (not aAddID) and (aFields[i].ColumnType=ftUnknown) then begin
-      F := aFields[i].ColumnName+' '+fSQLCreateField[aFields[i].ColumnType]+' NOT NULL';
+      F := aFields[i].ColumnName+' '+fSQLCreateField[ftUnknown]+' NOT NULL';
       case DBMS of
       dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB:
         F := F+' PRIMARY KEY';
