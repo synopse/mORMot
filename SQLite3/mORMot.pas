@@ -2544,7 +2544,6 @@ type
     procedure GetBlob(Instance: TObject; var Blob: RawByteString);
     procedure SetBlob(Instance: TObject; const Blob: RawByteString);
     function IsNull(Instance: TObject): Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// information about a WideString published property
