@@ -16025,12 +16025,12 @@ asm // faster version by AB
         or      edx,edx
         je      @min
 @1:     mov     al,[ecx]
-        inc     ecx
         mov     ah,[edx]
-        inc     edx
         test    al,al
+        lea     ecx,ecx+1
         je      @exit
         cmp     al,ah
+        lea     edx,edx+1
         je      @1
 @exit:  xor     edx,edx
         xchg    ah,dl

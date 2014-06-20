@@ -4914,7 +4914,7 @@ type
       - JSON data may be expanded or not }
     procedure FillFrom(P: PUTF8Char); overload;
     {/ fill all published properties of this object from another object
-      - source object must be a parent or of the same class as the current record 
+      - source object must be a parent or of the same class as the current record
       - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
         those fields don't contain any data, but a TSQLRecordMany instance
         which allow to access to the pivot table data) }
@@ -4937,7 +4937,7 @@ type
     {/ return true if all published properties values in Other are identical to
       the published properties of this object
       - instances must be of the same class type
-      - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared 
+      - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
       - comparaison is much faster than SameValues() above }
     function SameRecord(Reference: TSQLRecord): boolean;
     /// clear the values of all published properties, and also the ID property
@@ -27164,7 +27164,7 @@ function TSQLRecordHistory.HistorySave(Server: TSQLRestServer;
 var size,i,maxSize,TableHistoryIndex: integer;
     firstOldIndex,firstOldOffset, firstNewIndex,firstNewOffset: integer;
     newOffset: TIntegerDynArray;
-    JSONDB,JSONLast: RawUTF8;
+    DBRec: TSQLRecord;
     HistTemp: TSQLRecordHistory;
     W: TFileBufferWriter;
 begin
@@ -27174,24 +27174,21 @@ begin
   try
     // ensure latest item matches "official" one, as read from DB
     if (Server<>nil) and (LastRec<>nil) and (LastRec.fID=ModifiedID) then begin
-      JSONDB := Server.EngineRetrieve(ModifiedTableIndex,LastRec.fID);
-      if JSONDB<>'' then begin // may be just deleted
-        JSONLast := LastRec.GetJSONValues(true,True,soSelect);
-        if IdemPChar(pointer(JSONDB),'{"ROWID":') then
-          delete(JSONDB,3,3);
-        if IdemPChar(pointer(JSONLast),'{"ROWID":') then
-          delete(JSONLast,3,3);
-        if JSONDB<>JSONLast then begin
-          LastRec.FillFrom(pointer(JSONDB));
+      DBRec := Server.Retrieve(ModifiedRecord);
+      if DBRec<>nil then
+      try // may be just deleted
+        if not DBRec.SameRecord(LastRec) then begin
           HistTemp := RecordClass.Create as TSQLRecordHistory;
           try
             HistTemp.fEvent := seUpdate;
             HistTemp.fTimeStamp := Server.ServerTimeStamp;
-            HistoryAdd(LastRec,HistTemp);
+            HistoryAdd(DBRec,HistTemp);
           finally
             HistTemp.Free;
           end;
         end;
+      finally
+        DBRec.Free;
       end;
     end;
     if fHistoryAdd=nil then
@@ -27239,9 +27236,8 @@ begin
       fHistoryUncompressed := (W.Stream as TRawByteStringStream).DataString;
       fHistory := SynLZCompress(fHistoryUncompressed);
       if (Server<>nil) and (fID<>0) then begin
-        Server.EngineUpdate(TableHistoryIndex,fID,
-          '{"TimeStamp":'+Int64ToUTF8(Server.ServerTimeStamp)+'}');
-        // Server.EngineUpdate() may fail within a BATCH (not an issue)
+        Server.EngineUpdateField(TableHistoryIndex,
+          'TimeStamp',Int64ToUTF8(Server.ServerTimeStamp),'RowID',UInt32ToUtf8(fID));
         Server.EngineUpdateBlob(TableHistoryIndex,fID,
           RecordProps.BlobFields[0].PropInfo,fHistory);
       end;
