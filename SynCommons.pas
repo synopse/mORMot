@@ -459,6 +459,7 @@ unit SynCommons;
     ',"rowCount":' field in non expanded mode - used for all JSON creation
   - introducing new TTextWriterEcho class, dedicated to row text multicast
   - added QuickSortIndexedPUTF8Char() and FastFindIndexedPUTF8Char()
+  - added overloaded QuickSortInteger() for synchronous sort of two arrays
   - added RawUnicodeToUtf8() and UTF8ToSynUnicode() overloaded procedures
   - added UrlDecodeNextValue() and UrlDecodeNextNameValue() functions
   - added Utf8DecodeToRawUnicodeUI() overloaded function returning text as var
@@ -3068,7 +3069,10 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// sort an Integer array, low values first
-procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt);
+procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
+
+/// sort an Integer array, low values first
+procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 
 /// copy an integer array, then sort it, low values first
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
@@ -18978,7 +18982,7 @@ begin
   result := -1;
 end;
 
-procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt);
+procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: integer;
 begin
@@ -18997,7 +19001,32 @@ begin
       end;
     until I > J;
     if L < J then
-      QuickSortInteger(ID, L, J);
+      QuickSortInteger(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
+procedure QuickSortInteger(ID,CoValues: PIntegerArray; L,R: PtrInt);
+var I, J, P: PtrInt;
+    pivot, Tmp: integer;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        Tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortInteger(ID,CoValues,L,J);
     L := I;
   until I >= R;
 end;
