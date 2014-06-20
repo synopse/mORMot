@@ -6395,6 +6395,7 @@ begin
     Check(CompressSynLZ(s,true)='synlz');
     Check(CompressSynLZ(s,false)='synlz');
     Check(s=t);
+    Check(SynLZDecompress(SynLZCompress(s))=t);
     SetLength(comp2,SynLZcompressdestlen(length(s)));
     complen2 := SynLZcompress1pas(Pointer(s),length(s),pointer(comp2));
     Check(complen2<length(comp2));
@@ -8222,6 +8223,7 @@ var RInt: TSQLRecordPeople;
     RExt: TSQLRecordPeopleExt;
     RBlob: TSQLRecordOnlyBlob;
     RJoin: TSQLRecordTestJoin;
+    RHist: TSQLRecordMyHistory;
     Tables: TRawUTF8DynArray;
     i,n, aID: integer;
     ok: Boolean;
@@ -8232,6 +8234,35 @@ var RInt: TSQLRecordPeople;
     json: RawUTF8;
     {$endif}
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
+procedure HistoryCheck(aIndex,aYOB: Integer; aEvent: TSQLEvent);
+var Event: TSQLEvent;
+    TimeStamp: TModTime;
+begin
+  RExt.ClearProperties;
+  Check(RHist.HistoryGet(aIndex,Event,TimeStamp,RExt));
+  Check(Event=aEvent);
+  Check(TimeStamp>=Start);
+  if Event=seDelete then
+    exit;
+  Check(RExt.ID=400);
+  Check(RExt.FirstName='Franz36');
+  Check(RExt.YearOfBirth=aYOB);
+end;
+procedure HistoryChecks;
+var i: integer;
+begin
+  RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
+  try
+    Check(RHist.HistoryCount=503);
+    HistoryCheck(0,1797,seAdd);
+    HistoryCheck(1,1828,seUpdate);
+    for i := 1 to 500 do
+      HistoryCheck(i+1,i,seUpdate);
+    HistoryCheck(502,0,seDelete);
+  finally
+    RHist.Free;
+  end;
+end;
 begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
   DeleteFile('extdata.db3');
@@ -8244,7 +8275,7 @@ begin
   Check(VirtualTableExternalRegister(fExternalModel,TSQLASource,fProperties,'SourceExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADest,fProperties,'DestExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADests,fProperties,'DestsExternal'));
-  Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordMyHistory,fProperties,'History'));
+  Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordMyHistory,fProperties,'HistoryExternal'));
   fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
     MapField('ID','Key').
     MapField('YearOfDeath','YOD');
@@ -8259,7 +8290,7 @@ begin
     aExternalClient.Server.StaticVirtualTableDirect := StaticVirtualTableDirect;
     aExternalClient.Server.CreateMissingTables;
     if TrackChanges then
-      aExternalClient.Server.TrackChanges([TSQLRecordPeopleExt],TSQLRecordMyHistory,100,4096);
+      aExternalClient.Server.TrackChanges([TSQLRecordPeopleExt],TSQLRecordMyHistory,100,10,65536);
     Check(aExternalClient.Server.CreateSQLMultiIndex(
       TSQLRecordPeopleExt,['FirstName','LastName'],false));
     InternalTestMany(self,aExternalClient);
@@ -8535,8 +8566,29 @@ begin
     finally
       RInt.Free;
     end;
-    if TrackChanges then
-      aExternalClient.Server.TrackChangesFlush(TSQLRecordMyHistory);
+    if TrackChanges then begin
+      RExt := TSQLRecordPeopleExt.Create;
+      try
+        RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
+        try
+          Check(RHist.HistoryCount=2);
+          HistoryCheck(0,1797,seAdd);
+          HistoryCheck(1,1828,seUpdate);
+        finally
+          RHist.Free;
+        end;
+        for i := 1 to 500 do begin
+          RExt.YearOfBirth := i;
+          aExternalClient.Update(RExt,'YearOfBirth');
+        end;
+        aExternalClient.Delete(TSQLRecordPeopleExt,400);
+        HistoryChecks;
+        aExternalClient.Server.TrackChangesFlush(TSQLRecordMyHistory);
+        HistoryChecks;
+      finally
+        RExt.Free;
+      end;
+    end;
   finally
     aExternalClient.Free;
     fProperties.Free;
