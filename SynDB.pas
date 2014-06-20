@@ -174,7 +174,7 @@ unit SynDB;
   - added TSQLDBConnectionProperties.SQLTableName() method
   - added TSQLDBConnectionProperties.SQLSplitTableName() and SQLFullTableName()
   - now TSQLDBConnectionProperties.SQLAddIndex() will handle schema name and
-    will ensure that the generated identifier will be not too long 
+    will ensure that the generated identifier won't be too long 
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)

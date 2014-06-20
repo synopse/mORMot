@@ -85,7 +85,8 @@ unit mORMotDB;
     of a mORMot model to be handled via a specified database
   - TSQLRestStorageExternal.AdaptSQLForEngineList() will now accept
     'select count(*) from TableName [where...]' statements directly (virtual
-    behavior for count(*) is to loop through all records, which may be slow)
+    behavior for count(*) is to loop through all records, which may be slow),
+    and 'IN (...)' or 'IS NULL' / 'IS NOT NULL' where clauses
   - now TSQLRestStorageExternal will call TSQLRestServer.OnUpdateEvent and
     OnBlobUpdateEvent callbacks, if defined (even in BATCH mode)
   - BatchDelete() will now split its batch statement executed following
@@ -218,7 +219,7 @@ type
     // mapped external field names ('AS [InternalFieldName]' if needed), and
     // SQLTableName into fTableName
     // - any 'LIMIT #' clause will be changed into the appropriate SQL statement
-    // - handle statements to avoid slow virtual table loop over all rows, like
+    // - handle also statements to avoid slow virtual table full scan, e.g. 
     // $ SELECT count(*) FROM table
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     /// run INSERT of UPDATE from the corresponding JSON object
@@ -715,7 +716,7 @@ var Prop: ShortString; // to avoid any temporary memory allocation
       result := false;
   end;
 
-label Order,Limit;
+label Order,Limit,null;
 var Pos: record AfterSelect, WhereClause, Limit, LimitRowCount: integer; end;
     B: PUTF8Char;
     err: integer;
@@ -812,9 +813,19 @@ Limit:  Pos.Limit := W.TextLength+1;
         W.AddShort(' like ');
         B := nil;
       end else
-        exit; // only handle "Field = > >= < <= <> LIKE Value" pairs
+      if IdemPChar(P,'IS NULL') then begin
+        inc(P,7);
+        W.Add(' ');
+        goto null;
+      end else
+      if IdemPChar(P,'IS NOT NULL') then begin
+        inc(P,11);
+        W.Add(' ');
+        goto null;
+      end else
+        exit; // only "= > >= < <= <> LIKE" or "IS [NOT] NULL"
       if B<>nil then
-        W.Add(B,P-B,twNone);
+        W.AddNoJSONEscape(B,P-B);
       P := GotoNextNotSpace(P);
       B := P;
       if PWord(P)^=ord(':')+ord('(') shl 8 then
@@ -825,7 +836,7 @@ Limit:  Pos.Limit := W.TextLength+1;
       P := GotoNextNotSpace(P);
       if PWord(P)^=ord(')')+ord(':')shl 8 then
         inc(P,2); // ignore :(...): parameter
-      P := GotoNextNotSpace(P);
+null: P := GotoNextNotSpace(P);
       W.AddNoJSONEscape(B,P-B);
       if P^ in [#0,';'] then
         break; // properly ended the WHERE clause
@@ -1098,7 +1109,7 @@ end;
 function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 var i,n: integer;
-    aSQLWhere, aSQLWhereUpper: RawUTF8;
+    aSQLWhereUpper: RawUTF8;
     InClause: TIntegerDynArray;
 begin
   result := false;
@@ -1115,24 +1126,23 @@ begin
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
     aSQLWhereUpper := UpperCase(SQLWhere);
     if IdemPChar(pointer(aSQLWhereUpper),'LIMIT ') or
+       // LIMIT is not handled by SQLite3 when built from amalgamation
+       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
        IdemPChar(pointer(aSQLWhereUpper),'ORDER BY ') or
        (PosEx(' FROM ',aSQLWhereUpper)>0) then begin
-      // LIMIT is not handled by SQLite3 when built from amalgamation
-      // see http://www.sqlite.org/compile.html#enable_update_delete_limit
       SetLength(InClause,200); // send by chunks
       for i := 0 to length(IDs) div Length(InClause) do begin
         if length(IDs)<(i+1)*length(InClause) then
           n := length(IDs)-i*length(InClause) else
           n := length(InClause);
         Move(IDs[i*length(InClause)],InClause[0],n*sizeof(Integer));
-        aSQLWhere := IntegerDynArrayToCSV(InClause,n,'RowID in (',')');
-        if ExecuteInlined('delete from % where %',[fTableName,aSQLWhere],false)=nil then
+        if ExecuteInlined('delete from % where %',[fTableName,
+            IntegerDynArrayToCSV(InClause,n,'RowID in (',')')],false)=nil then
           exit;
       end;
       exit;
     end else
-      aSQLWhere := SQLWhere;
-    if ExecuteInlined('delete from % where %',[fTableName,aSQLWhere],false)=nil then
+    if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
       exit;
   end;
   result := true;
@@ -1307,7 +1317,7 @@ begin
       BlobFields[f].GetFieldSQLVar(Value,Params[f],temp[f]);
     result := ExecuteDirectSQLVar('update % set % where %=?',
       [fTableName,fUpdateBlobFieldsSQL,StoredClassProps.ExternalDB.RowIDFieldName],
-      Params,aID,false);
+       Params,aID,false);
     if result and (Owner<>nil) then
       Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
@@ -1500,10 +1510,9 @@ begin
     if not Descending then // we identify just if indexed, not the order
       if ExtFieldIndex>=0 then
         if fFieldsExternal[ExtFieldIndex].ColumnIndexed then begin
-        result := true; // column already indexed
-        exit;
-      end;
-    end;
+          result := true; // column already indexed
+          exit;
+        end;
   end;
   StoredClassProps.ExternalDB.InternalToExternalDynArray(FieldNames,ExtFieldNames);
   SQL := fProperties.SQLAddIndex(fTableName,ExtFieldNames,Unique,Descending,IndexName);
