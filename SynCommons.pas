@@ -535,7 +535,7 @@ unit SynCommons;
     in interface section of the unit
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
     instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
-  - added fnv32() function, slower than kr32, but with less collisions 
+  - added fnv32() function, slower than kr32, but with less collisions
   - added SynLZCompress/SynLZDecompress functions, using crc32c() for hashing 
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
@@ -543,7 +543,7 @@ unit SynCommons;
     is still compatible with old layout, but will more optimized and readable
   - TSynTableStatement.Create() SQL statement parser will handle optional
     LIMIT [OFFSET] clause (in new FoundLimit/FoundOffset integer properties),
-    and "SELECT Count() FROM TableName WHERE ..." statement
+    "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
     (now properly handles SQL null and more than MAX_SQLFIELDS parameters)
   - introducing TSQLParamType / TSQLParamTypeDynArray generic parameters
@@ -7750,7 +7750,8 @@ type
      opLessThanOrEqualTo,
      opGreaterThan,
      opGreaterThanOrEqualTo,
-     opIn);
+     opIn,
+     opIs);
 
   TSynTableFieldProperties = class;
 
@@ -38559,28 +38560,49 @@ begin
            WhereOperator := opLessThanOrEqualTo;
          end else
            WhereOperator := opLessThan;
-    {$ifndef NOVARIANTS}
-    'i','I': if P[1] in ['n','N'] then begin
-           inc(P,2);
-           WhereOperator := opIn;
-           P := GotoNextNotSpace(P);
-           if P^<>'(' then
-             exit; // incorrect SQL statement
-           B := P; // get the IN() clause - without :(...): by now
-           inc(P);
-           while P^<>')' do
-             if P^=#0 then
-               exit else
-               inc(P);
-           inc(P);
-           SetString(WhereValue,PAnsiChar(B),P-B);
-           WhereValue[1] := '[';
-           WhereValue[P-B] := ']';
-           TDocVariantData(WhereValueVariant).InitJSONInPlace(
-             pointer(WhereValue),JSON_OPTIONS[true]);
-           goto Limit;
-         end;
-    {$endif}
+    'i','I':
+      case P[1] of
+      's','S': begin
+        P := GotoNextNotSpace(P+2);
+        {$ifndef NOVARIANTS}
+        SetVariantNull(WhereValueVariant);
+        {$endif}
+        if IdemPChar(P,'NULL') then begin
+          WhereValue := 'null';
+          WhereOperator := opIs;
+          inc(P,4);
+          goto Limit;
+        end else
+        if IdemPChar(P,'NOT NULL') then begin
+          WhereValue := 'not null';
+          WhereOperator := opIs;
+          inc(P,8);
+          goto Limit;
+        end;
+        exit;
+      end;
+      {$ifndef NOVARIANTS}
+      'n','N': begin
+         WhereOperator := opIn;
+         P := GotoNextNotSpace(P+2);
+         if P^<>'(' then
+           exit; // incorrect SQL statement
+         B := P; // get the IN() clause - without :(...): by now
+         inc(P);
+         while P^<>')' do
+           if P^=#0 then
+             exit else
+             inc(P);
+         inc(P);
+         SetString(WhereValue,PAnsiChar(B),P-B);
+         WhereValue[1] := '[';
+         WhereValue[P-B] := ']';
+         TDocVariantData(WhereValueVariant).InitJSONInPlace(
+           pointer(WhereValue),JSON_OPTIONS[true]);
+         goto Limit;
+      end;
+      {$endif}
+      end;
     else exit; // unknown operator
     end;
     inc(P); // we had 'WHERE FieldName = '
