@@ -742,7 +742,7 @@ var W: TJSONSerializer;
     Stmt: TSynTableStatement;
 procedure ComputeQuery;
 const // see http://docs.mongodb.org/manual/reference/operator/query
-  QUERY_OPS: array[opNotEqualTo..high(TSynTableStatementOperator)] of RawUTF8 = (
+  QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
     '$ne','$lt','$lte','$gt','$gte','$in');
 var QueryFieldName: RawUTF8;
 begin
@@ -751,10 +751,17 @@ begin
     exit;
   end;
   QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.WhereField-1);
-  if Stmt.WhereOperator=opEqualTo then
-    Query := BSONVariant([QueryFieldName,Stmt.WhereValueVariant]) else
+  case Stmt.WhereOperator of
+  opEqualTo:
+    Query := BSONVariant([QueryFieldName,Stmt.WhereValueVariant]);
+  opIs: // http://docs.mongodb.org/manual/faq/developers/#faq-developers-query-for-nulls
+    if IdemPropName(Stmt.WhereValue,'null') then
+      Query := BSONVariant('{%:{$type:10}}',[QueryFieldName],[]) else
+      Query := BSONVariant('{%:{$not:{type:10}}}',[QueryFieldName],[])
+  else
     Query := BSONVariant([QueryFieldName,
-      BSONVariant([QUERY_OPS[Stmt.WhereOperator],Stmt.WhereValueVariant])]);
+      '{',QUERY_OPS[Stmt.WhereOperator],Stmt.WhereValueVariant,'}']);
+  end;
 end;
 procedure SetCount(aCount: integer);
 begin
