@@ -8253,12 +8253,13 @@ var i: integer;
 begin
   RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
   try
-    Check(RHist.HistoryCount=503);
+    Check(RHist.HistoryCount=504);
     HistoryCheck(0,1797,seAdd);
     HistoryCheck(1,1828,seUpdate);
+    HistoryCheck(2,1515,seUpdate);
     for i := 1 to 500 do
-      HistoryCheck(i+1,i,seUpdate);
-    HistoryCheck(502,0,seDelete);
+      HistoryCheck(i+2,i,seUpdate);
+    HistoryCheck(503,0,seDelete);
   finally
     RHist.Free;
   end;
@@ -8453,6 +8454,11 @@ begin
             end;
           end;
         end;
+        aExternalClient.Retrieve(400,RExt);
+        Check(RExt.fID=400);
+        Check(RExt.FirstName='Franz36');
+        Check(RExt.YearOfBirth=1828);
+        aExternalClient.UpdateField(TSQLRecordPeopleExt,400,'YearOfBirth',[1515]);
         RInt.ClearProperties;
         Check(aExternalClient.Retrieve(1,RInt));
         Check(RInt.fID=1);
@@ -8571,10 +8577,11 @@ begin
       try
         RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
         try
-          Check(RHist.HistoryCount=2);
+          Check(RHist.HistoryCount=3);
           HistoryCheck(0,1797,seAdd);
           HistoryCheck(1,1828,seUpdate);
-        finally
+          HistoryCheck(2,1515,seUpdate);
+         finally
           RHist.Free;
         end;
         for i := 1 to 500 do begin

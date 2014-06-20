@@ -8712,7 +8712,7 @@ type
     // clause, so you won't be able to use it to execute such statements:
     // $ UPDATE tablename SET setfieldname=setvalue
     // - this method must be implemented in a thread-safe manner
-    function EngineUpdateField(TableModelIndex: integer; 
+    function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
     /// send/execute the supplied JSON BATCH content, and return the expected array
     // - this method will be implemented for TSQLRestClient and TSQLRestServer only
@@ -10540,6 +10540,8 @@ type
     // - you can manually call this method to force History BLOB update, e.g.
     // when the server is in Idle state, and ready for process
     procedure TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass); virtual;
+    /// check if OnUpdateEvent or change tracked has been defined for this table 
+    function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -23172,7 +23174,7 @@ end;
 function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 begin
-  result := UpdateField(Table,'ID',[ID],FieldName,FieldValue);
+  result := UpdateField(Table,'RowID',[ID],FieldName,FieldValue);
 end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass;
@@ -23194,7 +23196,7 @@ end;
 function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
   const FieldName: RawUTF8; const FieldValue: Variant): boolean;
 begin
-  result := UpdateField(Table,'ID',ID,FieldName,FieldValue);
+  result := UpdateField(Table,'RowID',ID,FieldName,FieldValue);
 end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass;
@@ -27336,13 +27338,14 @@ function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID:
   const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
 procedure DoTrackChanges;
 var TableHistoryIndex: integer;
+    JSON: RawUTF8;
 begin
   TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
   EnterCriticalSection(fAcquireExecution[execORMWrite].Lock); // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
-    EngineAdd(TableHistoryIndex,  // RecordRef encoding
-      JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(aEvent),
-                  'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]));
+    JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(aEvent),
+                        'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
+    EngineAdd(TableHistoryIndex,JSON);
     if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
         fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
       // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
@@ -27400,6 +27403,13 @@ begin
         end;
     end;
   end;
+end;
+
+function TSQLRestServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean;
+begin
+  result := (self<>nil) and (Assigned(OnUpdateEvent) or
+    ((aTableIndex<length(fTrackChangesHistoryTableIndex)) and
+     (fTrackChangesHistoryTableIndex[aTableIndex]>=0)));
 end;
 
 function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;

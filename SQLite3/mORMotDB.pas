@@ -1254,13 +1254,26 @@ end;
 
 function TSQLRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+var Rows: ISQLDBRows;
+    ExtWhereFieldName, JSON: RawUTF8;
 begin
   if (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
-    with StoredClassProps.ExternalDB do
+    with StoredClassProps.ExternalDB do begin
+      ExtWhereFieldName := InternalToExternal(WhereFieldName);
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
         [fTableName,InternalToExternal(SetFieldName),SetValue,
-         InternalToExternal(WhereFieldName),WhereValue],false)<>nil;
+         ExtWhereFieldName,WhereValue],false)<>nil;
+    if result and (Owner<>nil) and Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
+      Rows := ExecuteInlined('select % from % where %=:(%):',
+        [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
+      if Rows=nil then
+        exit;
+      JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+      while Rows.Step do
+        Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+    end;
+    end;
 end;
 
 function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex, aID: integer;

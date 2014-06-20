@@ -354,7 +354,7 @@ type
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
     // retrieve the proper ID when aSQL is an INSERT statement (thread safe)
     function EngineExecute(const aSQL: RawUTF8; ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil;
-      LastInsertedID: PInt64=nil): boolean; overload;
+      ValueInts: PIntegerDynArray=nil; LastInsertedID: PInt64=nil): boolean; overload;
     /// EngineExecute directly a SQL statement with supplied parameters
     // - expect the same format as FormatUTF8() function, that is only % with
     // strings (already quoted) and integers (not ? with parameters)
@@ -366,6 +366,9 @@ type
     /// execute one SQL statement, which must return a UTF-8 encoded value
     // - intercept any DB exception and return false on error, true on success
     function EngineExecute(const aSQL: RawUTF8; out Value: RawUTF8): boolean; overload;
+    /// execute one SQL statement, which must return a list of integer values
+    // - intercept any DB exception and return false on error, true on success
+    function EngineExecute(const aSQL: RawUTF8; out Value: TIntegerDynArray): boolean; overload;
     /// execute one SQL statement, and apply an Event to every record
     // - lock the database during the run
     // - call a fast "stored procedure"-like method for each row of the request;
@@ -659,7 +662,7 @@ begin
     SQL := SQL+' DEFAULT VALUES;' else
     SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
       JSONRetrieveIDField(pointer(SentData)))+';';
-  if EngineExecute(SQL,nil,nil,@LastID) then begin
+  if EngineExecute(SQL,nil,nil,nil,@LastID) then begin
     result := LastID;
     InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
   end;
@@ -859,10 +862,12 @@ begin
 end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8;
-  ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil; LastInsertedID: PInt64=nil): boolean;
+  ValueInt: PInt64; ValueUTF8: PRawUTF8; ValueInts: PIntegerDynArray;
+  LastInsertedID: PInt64): boolean;
 var Req: PSQLRequest;
+    ValueIntsCount, Res: Integer;
 begin
-  if (self<>nil) and (DB<>nil) then 
+  if (self<>nil) and (DB<>nil) then
   try
     DB.Lock(aSQL);
     try
@@ -873,6 +878,15 @@ begin
       if Req<>nil then
       with Req^ do
       try
+        if ValueInts<>nil then begin
+          ValueIntsCount := 0;
+          repeat
+            res := Step;
+            if res=SQLITE_ROW then
+              AddInteger(ValueInts^,ValueIntsCount,FieldInt(0));
+          until res=SQLITE_DONE;
+          SetLength(ValueInts^,ValueIntsCount);
+        end else
         if (ValueInt=nil) and (ValueUTF8=nil) then begin
           // default execution: loop through all rows
           repeat until Step<>SQLITE_ROW;
@@ -914,12 +928,17 @@ end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: Int64): boolean;
 begin
-  result:= EngineExecute(aSQL,@Value,nil);
+  result:= EngineExecute(aSQL,@Value);
 end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: RawUTF8): boolean;
 begin
   result:= EngineExecute(aSQL,nil,@Value);
+end;
+
+function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: TIntegerDynArray): boolean;
+begin
+  result:= EngineExecute(aSQL,nil,nil,@Value);
 end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8;
@@ -1160,7 +1179,9 @@ end;
 
 function TSQLRestServerDB.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var WhereID: integer;
+var WhereID,i: integer;
+    JSON: RawUTF8;
+    ID: TIntegerDynArray;
 begin
   result := false;
   if (TableModelIndex<0) or (SetFieldName='') then
@@ -1170,15 +1191,45 @@ begin
     WhereID := 0;
     if IsRowID(pointer(WhereFieldName)) then begin
       WhereID := GetInteger(Pointer(WhereValue));
-      if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
+      if WhereID<=0 then
         exit; // limitation: will only check for update from RowID
     end else
       if Fields.IndexByName(WhereFieldName)<0 then
         exit;
-    result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
-      [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
-    if WhereID>0 then
-      InternalUpdateEvent(seUpdate,TableModelIndex,WhereID,'',nil);
+    if InternalUpdateEventNeeded(TableModelIndex) then begin
+      if WhereID>0 then begin
+        SetLength(ID,1);
+        ID[0] := WhereID;
+      end else
+        if not EngineExecute(FormatUTF8('select RowID from % where %=:(%):',
+           [SQLTableName,WhereFieldName,WhereValue]),ID) then
+          exit else
+          if ID=nil then begin
+            result := true; // nothing to update, but return success
+            exit;
+          end;
+      for i := 0 to high(ID) do
+        if not RecordCanBeUpdated(Table,ID[i],seUpdate) then
+          exit;
+      if Length(ID)=1 then
+        result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
+          [SQLTableName,SetFieldName,SetValue,ID[0]]) else
+        result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
+          [SQLTableName,SetFieldName,SetValue,IntegerDynArrayToCSV(ID,length(ID))]);
+      if not result then
+        exit;
+      JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+      for i := 0 to high(ID) do
+        InternalUpdateEvent(seUpdate,TableModelIndex,ID[i],JSON,nil);
+    end else begin
+      if IsRowID(pointer(WhereFieldName)) then begin
+        WhereID := GetInteger(Pointer(WhereValue));
+        if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
+          exit; // limitation: will only check for update from RowID
+      end;
+      result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
+        [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
+    end;
   end;
 end;
 
