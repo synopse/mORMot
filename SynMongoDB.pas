@@ -2103,7 +2103,7 @@ type
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
     // alternative map-reduce pattern, and is available since MongoDB 2.2 -
-    / see http://docs.mongodb.org/manual/reference/command/aggregate
+    // see http://docs.mongodb.org/manual/reference/command/aggregate
     // - you should specify the aggregation pipeline as a list of JSON object
     // operators (without the [..]) - for reference of all available phases,
     // see http://docs.mongodb.org/manual/core/aggregation-pipeline
@@ -2119,7 +2119,7 @@ type
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
     // alternative map-reduce pattern, and is available since MongoDB 2.2 -
-    / see http://docs.mongodb.org/manual/reference/command/aggregate
+    // see http://docs.mongodb.org/manual/reference/command/aggregate
     // - you should specify the aggregation pipeline as a list of JSON object
     // operators (without the [..]) - for reference of all available phases,
     // see http://docs.mongodb.org/manual/core/aggregation-pipeline
