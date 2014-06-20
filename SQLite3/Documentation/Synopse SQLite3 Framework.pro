@@ -1091,7 +1091,7 @@ In short, both approaches have benefits, which are to be weighted.
 |Data size (avoid duplicates and with no schema)|Schema-less: cleaner evolution
 |Data is stored once, therefore consistent|Version management (e.g. {\i CouchDB})
 |Complex ACID statements|Graph storage (e.g. {\i Redis})
-|Aggregation functions (depends)|Map/Reduce or Aggregation functions
+|@*Aggregation@ functions (depends)|@*Map/Reduce@ or Aggregation functions\line (e.g. since {\i MongoDB} 2.2)
 |%
 With {\i mORMot}, you can switch from a classic SQL engine into a trendy {\i MongoDB} server, just in one line of code, when initializing the data on the server side. You can switch from ORM to ODM at any time, even at runtime, e.g. for a demanding customer.
 :54 Domain-Driven Design
@@ -2020,7 +2020,8 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TSQLRecord@}|INTEGER|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
-|{\f1\fs20 TRecordReference}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)
+|{\f1\fs20 TRecordReference}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically reset all occurences of this field to 0
+|{\f1\fs20 TRecordReferenceToBeDeleted}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically delete all {\f1\fs20 TSQLRecord} containing a reference to it
 |{\f1\fs20 @*TPersistent@}|TEXT|@*JSON@ object ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -2537,7 +2538,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed aggregation values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i map/reduce} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
 :     Dynamic arrays fields
 :      Dynamic arrays from Delphi Code
 For instance, here is how the regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\i @*dynamic array@s} fields:
@@ -5486,6 +5487,7 @@ Which will output as expected:
 $Before: {"_id":2,"Name":"Name 3","Number":2}
 $After:  {"_id":2,"Name":"NEW","Number":2}
 You can refer to the documentation of the {\f1\fs20 SynMongoDB.pas} unit, to find out all functions, classes and methods available to work with {\i MongoDB}.
+Some very powerful features are available, including @**Aggregation@ (available since {\i MongoDB} 2.2), which offers a good alternative to standard @**Map/Reduce@ pattern.\line See @http://docs.mongodb.org/manual/reference/command/aggregate for reference.
 :   Write Concern and Performance
 You can take a look at the {\f1\fs20 MongoDBTests.dpr} sample - located in the {\f1\fs20 SQLite3\\Samples\\24 - MongoDB} sub-folder of the source code repository, and the {\f1\fs20 TTestDirect} classes, to find out some performance information.
 In fact, this {\f1\fs20 TTestDirect} is inherited twice, to run the same tests with diverse write concern:
@@ -5594,7 +5596,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TSQLRecord@}|int32|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
-|{\f1\fs20 TRecordReference}|int32|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)
+|{\f1\fs20 TRecordReference}\line {\f1\fs20 TRecordReferenceToBeDeleted}|int32|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content) - with proper synchronization when the record is deleted
 |{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -9147,8 +9149,9 @@ In order to specify a custom format, you can use the following {\f1\fs20 @*TServ
 !  TServiceCustomAnswer = record
 !    Header: RawUTF8;
 !    Content: RawByteString;
+!    Status: cardinal;
 !  end;
-The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}). Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).
+The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overriden with a propert HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from Delphi clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
 In order to implement such method, you may define such an interface:
 !  IComplexCalculator = interface(ICalculator)
 !    ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
@@ -9159,6 +9162,7 @@ This may be implemented for instance as such:
 !begin
 !  Result.Header := TEXT_CONTENT_TYPE_HEADER;
 !  Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
+!  // leave Result.Header to its default value
 !end;
 This will return not a JSON object, but a plain TEXT content.
 Regression tests will make the following process:
