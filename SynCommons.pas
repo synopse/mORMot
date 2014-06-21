@@ -446,8 +446,9 @@ unit SynCommons;
   - added TTextWriter.AddJSONEscapeAnsiString() method
   - added TTextWriter.AddAnyAnsiString() method and AnyAnsiToUTF8() function   
   - for Delphi 2010 and up, RecordSaveJSON/RecordLoadJSON will use enhanced RTTI
-  - before Delphi 2010, you can specify the record layout as text tos
-    TTextWriter.RegisterCustomJSONSerializerFromText() for JSON serialization 
+  - before Delphi 2010, you can specify the record layout as text to
+    TTextWriter.RegisterCustomJSONSerializerFromText() for JSON serialization
+  - added TTextWriter.RegisterCustomJSONSerializerSetOptions() for [da22968223]
   - added TTextWriter.AddDynArrayJSON() overloaded method and new functions
     DynArrayLoadJSON() and DynArraySaveJSON() to be used e.g. for custom
     record JSON serialization, using TDynArrayJSONCustomReader/Writer
@@ -5110,6 +5111,14 @@ type
     // instance corresponding to the supplied RTTI text definition
     class function RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
       const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+    /// change options for custom serialization of dynamic array or record
+    // - will return TRUE if the options have been changed, FALSE if the
+    // supplied type info was not previously registered
+    // - if AddIfNotExisting is TRUE, and enhanced RTTI is available (since
+    // Delphi 2010), you would be able to customize the options of this type
+    class function RegisterCustomJSONSerializerSetOptions(aTypeInfo: pointer;
+      aOptions: TJSONCustomParserSerializationOptions;
+      aAddIfNotExisting: boolean=false): boolean;
     /// define a custom serialization for a given simple type
     // - you should be able to use this type in the RTTI text definition
     // of any further RegisterCustomJSONSerializerFromText() call
@@ -31170,6 +31179,28 @@ class function TTextWriter.RegisterCustomJSONSerializerFromText(aTypeInfo: point
   const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
 begin
   result := GlobalJSONCustomParsers.RegisterFromText(aTypeInfo,aRTTIDefinition);
+end;
+
+class function TTextWriter.RegisterCustomJSONSerializerSetOptions(aTypeInfo: pointer;
+  aOptions: TJSONCustomParserSerializationOptions; aAddIfNotExisting: boolean): boolean;
+var ndx: integer;
+begin
+  result := false;
+  if aTypeInfo=nil then
+    exit;
+  case PFieldTable(aTypeInfo)^.kind of
+  tkRecord:
+    ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
+  tkDynArray:
+    ndx := GlobalJSONCustomParsers.DynArraySearch(aTypeInfo,nil,aAddIfNotExisting);
+  else
+    exit;
+  end;
+  if (ndx>=0) and
+     (GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser<>nil) then begin
+    GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser.Options := aOptions;
+    result := true;
+  end;
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
