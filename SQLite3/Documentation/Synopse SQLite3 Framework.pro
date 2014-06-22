@@ -579,7 +579,7 @@ If you do not know some of those concepts, don't worry: this document will detai
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture, ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in Delphi or any other mean, including AJAX).
 The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
-No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call.\line Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than DataSnap, WCF or node.js, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
+No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.\line Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than DataSnap, WCF or node.js, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
 In short, with {\i mORMot}, your ROI is maximized.
 \page
 :41 Client-Server ORM/SOA framework
@@ -1971,6 +1971,7 @@ Following the three previous purposes, these properties will be used:
 - To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way;
 - To have business logic objects accessible for both the Client and Server side, in a RESTful approach;
 - To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
+Our ORM engine has genuine advanced features like convention-over-configuration, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
 :26 TSQLRecord fields definition
 For example, a database {\f1\fs20 Baby} Table is defined in Delphi code as:
 !/// some enumeration
@@ -2195,6 +2196,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !end;
 Of course, you can have a {\f1\fs20 TSQLBaby} instance alive during a longer time. The same {\f1\fs20 TSQLBaby} instance can be used to access several record content, and call {\f1\fs20 Retrieve / Add / Delete / Update} methods on purpose.
 No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. It could even work with @*NoSQL@ databases, like a fast {\f1\fs20 TObjectList} or @*MongoDB@. This is the magic of @*ORM@.
+To be honnest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little but the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':
@@ -3024,6 +3026,58 @@ By default, this method will compute the {\f1\fs20 @*TModTime@ / sftModTime} and
 !    end;
 !end;
 You may override this method for you own purpose, saved the fact that you call this inherited implementation to properly handle {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} @*published properties@.
+: Audit-trail for change tracking
+Since most @*CRUD@ operations are centered within the scope of our {\i mORMot} server, we implemented in the @*ORM@ an integrated mean of tracking changes (aka @**Audit Trail@) of any {\f1\fs20 TSQLRecord}.
+Keeping a track of the history of business objects is one very common need for software modeling, and a must-have for any accurate data @*model@ing, like @54@. By default, as expected by the @*OOP@ model, any change to an object will forget any previous state of this object. But thanks to {\i mORMot}'s exclusive change-tracking feature, you can persist the history of your objects.
+:  Enabling audit-trail
+By default, change-tracking feature will be disabled, saving performance and disk use.\line But you can enable change tracking for any class, by calling the following method, on server side:
+! aServer.TrackChanges([TSQLInvoice]);
+This single line will let {\f1\fs20 aServer: TSQLRestServer} monitor all CRUD operations, and store all changes of the {\f1\fs20 TSQLInvoice} table within a {\f1\fs20 TSQLRecordHistory} table.
+Since all content change will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your may database may be powered by high-end hardware (and small SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
+!type
+!  TSQLRecordSecondaryHistory = class(TSQLRecord);
+! (...)
+! aServer.TrackChanges([TSQLInvoice],TSQLRecordSecondaryHistory);
+Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
+:  A true Time Machine for your objects
+Once the object changes are tracked, you can later on browse the history of the object, by using the {\f1\fs20 TSQLRecordHistory.CreateHistory()}, then {\f1\fs20 HistoryGetLast}, {\f1\fs20 HistoryCount}, and {\f1\fs20 HistoryGet()} methods:
+!var aHist: TSQLRecordSecondaryHistory;
+!    aInvoice: TSQLInvoice;
+!    aEvent: TSQLEvent;
+!    aTimeStamp: TModTime;
+!(...)
+!aInvoice := TSQLInvoice.Create;
+!aHist := TSQLRecordSecondaryHistory.CreateHistory(aClient,TSQLRecordPeopleExt,400);
+!try
+!  writeln('Number of items in the record history: ',aHist.HistoryCount);
+!  for i := 0 to aHist.HistoryCount-1 do begin
+!    aHist.HistoryGet(i,aEvent,aTimeStamp,aInvoice);
+!    writeln;
+!    writeln('Event: ',GetEnumName(TypeInfo(TSQLEvent),ord(aEvent))^);
+!    writeln('TimeStamp: ',TTimeLogBits(TimeStamp).ToText);
+!    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect);
+!  end;
+!finally
+!  aHist.Free;
+!  aInvoice.Free;
+!end;
+As a result, our ORM is also transformed as a true time machine, for the objects which need it.
+This feature will be available on both client and server sides, via the {\f1\fs20 TSQLRecordHistory} table.
+:  Automatic history packing
+This {\f1\fs20 TSQLRecordHistory} class will in fact create a {\f1\fs20 History} table in the main database, defined as such:
+\graph DBHistory History Record Layout
+rankdir=LR;
+node [shape=Mrecord];
+struct1 [label="ID : integer|Event : TSQLEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime|ID : integer"];
+\
+In short, any modification via the ORM will be stored in the {\f1\fs20 TSQLRecordHistory} table, as a JSON object of the changed fields, in {\f1\fs20 TSQLRecordHistory.SentDataJSON}.
+By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} are executed within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB triggers to track low-level changes: it would slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
+When the history grows, the JSON content may become huge, and fill the disk space with a lot of duplicated content. In order to save disk space, when a record reaches a define number of JSON data rows, all this JSON content is gathered and compressed into a BLOB, in {\f1\fs20 TSQLRecordHistory.History}.\line You can force this packing process by calling {\f1\fs20 TSQLRestServer.TrackChangesFlush()} manually in your code. Calling this method will also have a welcome side effect: it will read the actual content of the record from the database, then add a fake {\f1\fs20 seUpdate} event in the history if the field values do not match the one computed from tracked changes, to ensure that the audit trail will be correct. As a consequence, history will become always synchronized with the actual data persisted in the database, even if external SQL did by-pass the CRUD methods of the ORM, via unsafe {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} statements.
+You can tune how packing is defined for a given {\f1\fs20 TSQLRecord} table, by using some optional parameters to the registering method:
+!procedure TrackChanges(const aTable: array of TSQLRecordClass;
+!  aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRowBeforeBlob: integer=1000;
+!  aMaxHistoryRowPerRecord: integer=10; aMaxUncompressedBlobSize: integer=64*1024); virtual;
+Take a look at the documentation of this method (or the comments in its declaration code) for further information.\line Default options will let {\f1\fs20 TSQLRestServer.TrackChangesFlush()} be called after 1000 individual {\f1\fs20 TSQLRecordHistory.SentDataJSON} rows are stored, then will compress them into a BLOB once 10 JSON rows are available for a given record, ensuring that the uncompressed BLOB size for a single record won't use more than 64 KB of memory (but probably much less in the database, since it is stored with very high compression rate).
 :Daily ORM
 %cartoon03.png
 When you compare @*ORM@ and standard @*SQL@, some aspects must be highlighted.
