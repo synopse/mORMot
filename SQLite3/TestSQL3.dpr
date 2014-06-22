@@ -137,5 +137,10 @@ uses
   SynSelfTests in '..\SynSelfTests.pas';
 
 begin
+  {$ifdef ISDELPHI2007ANDUP}
+  {$ifdef DEBUG}
+  ReportMemoryLeaksOnShutdown := True;
+  {$endif}
+  {$endif}
   SQLite3ConsoleTests;
 end.

@@ -25018,15 +25018,19 @@ begin
   if Reg.RecordTypeName='' then
     exit; // we need a type name!
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
+  {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
-    {$ifdef ISDELPHI2010}
     inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
     inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer));
     if FieldTable^.AllCount=0 then
-    {$endif}
       exit; // not enough RTTI -> avoid exception in constructor below
   end;
+  {$else}
+  if RegRoot=nil then
+    exit; // not enough RTTI for older versions of Delphi
+  {$endif}
   Reg.RecordCustomParser := TJSONCustomParserFromRTTI.Create(Reg.RecordTypeInfo,RegRoot);
+  GarbageCollector.Add(Reg.RecordCustomParser);
   Reg.Reader := Reg.RecordCustomParser.CustomReader;
   Reg.Writer := Reg.RecordCustomParser.CustomWriter;
   if self=nil then
@@ -30413,11 +30417,7 @@ begin
   end;
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  {$ifdef UNICODE} // circumvent newer compilers regression about object type
-  pointer(fHashs) := nil;
-  {$else}
   SetLength(fHashs,0);
-  {$endif}
 end;
 
 procedure TDynArrayHashed.HashInit;

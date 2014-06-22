@@ -1242,7 +1242,7 @@ var ACities: TDynArrayHashed;
     AI: TAmountI;
     AmountCollection: TAmountCollection;
     AmountICollection: TAmountICollection;
-    AmountDA: TDynArrayHashed;
+    AmountDA,AmountIDA1,AmountIDA2: TDynArrayHashed;
 const CITIES_MAX=200000;
 begin
   // default Init() will hash and compare binary content before string, i.e. firmID
@@ -1258,33 +1258,33 @@ begin
   for i := 1 to length(AmountCollection) do
     Check(AmountDA.FindHashed(i)=i-1);
   // default Init() will hash and compare the WHOLE binary content, i.e. 8 bytes
-  AmountDA.Init(TypeInfo(TAmountICollection), AmountICollection);
-  Check(AmountDA.KnownType=djInt64);
-  Check(@AmountDA.HashElement=@HashInt64);
+  AmountIDA1.Init(TypeInfo(TAmountICollection), AmountICollection);
+  Check(AmountIDA1.KnownType=djInt64);
+  Check(@AmountIDA1.HashElement=@HashInt64);
   for i := 1 to 100 do begin
     AI.firmID := i;
     AI.amount := i*2;
-    Check(AmountDA.Add(AI)=i-1);
+    Check(AmountIDA1.Add(AI)=i-1);
   end;
-  AmountDA.ReHash;
+  AmountIDA1.ReHash;
   for i := 1 to length(AmountICollection) do begin
     AI.firmID := i;
     AI.amount := i*2;
-    Check(AmountDA.FindHashed(AI)=i-1);
+    Check(AmountIDA1.FindHashed(AI)=i-1);
   end;
+  AmountIDA1.Clear;
   // specific hash & compare of the firmID integer first field
-  AmountDA.Clear;
-  AmountDA.InitSpecific(TypeInfo(TAmountICollection), AmountICollection, djInteger);
-  Check(AmountDA.KnownType=djInteger);
-  Check(@AmountDA.HashElement=@HashInteger);
+  AmountIDA2.InitSpecific(TypeInfo(TAmountICollection), AmountICollection, djInteger);
+  Check(AmountIDA2.KnownType=djInteger);
+  Check(@AmountIDA2.HashElement=@HashInteger);
   for i := 1 to 100 do begin
     AI.firmID := i;
     AI.amount := i*2;
-    Check(AmountDA.Add(AI)=i-1);
+    Check(AmountIDA2.Add(AI)=i-1);
   end;
-  AmountDA.ReHash;
+  AmountIDA2.ReHash;
   for i := 1 to length(AmountICollection) do
-    Check(AmountDA.FindHashed(i)>=0);
+    Check(AmountIDA2.FindHashed(i)>=0);
   // valide generic-like features
   // see http://docwiki.embarcadero.com/CodeExamples/en/Generics_Collections_TDictionary_(Delphi)
   ACities.Init(TypeInfo(TCityDynArray),Cities,nil,nil,nil,@CitiesCount);
@@ -4370,10 +4370,12 @@ begin
   J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
   Check(J=RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
   Check(CompareMem(@nav,@nav2,sizeof(nav)));
+  Finalize(nrtti);
   fillchar(nrtti,sizeof(nrtti),0);
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
   Check(U='{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
      '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
+  Finalize(nrtti2);
   fillchar(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
@@ -4393,6 +4395,7 @@ begin
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
   Check(U='{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
     '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
+  Finalize(nrtti2);
   fillchar(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));

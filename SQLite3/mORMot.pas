@@ -5242,7 +5242,7 @@ type
       may be slightly slower to access than readonly=FALSE, if all values are
       likely be accessed later in the process }
     procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      // {$ifdef HASINLINE}inline;{$endif} won't reset docarray as required
     {$endif NOVARIANTS}
 
     /// save the table values in JSON format
