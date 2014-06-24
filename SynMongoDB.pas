@@ -47,6 +47,7 @@ unit SynMongoDB;
 
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
+    and feature request [0fee1d995c]
 
 
   TODO:
