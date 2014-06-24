@@ -390,6 +390,7 @@ unit SynCommons;
   - FormatUTF8() and VarRecToUTF8() will append the class name of any TObject
   - added JSONFormat optional parameter to FormatUTF8() to produce valid JSON
     content from a given set of values identified by ? - used e.g. by _JsonFmt()
+  - added QuotedStrJSON() function
   - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
@@ -2434,6 +2435,10 @@ function QuotedStr(Text: PUTF8Char; Quote: AnsiChar): RawUTF8; overload;
    quotes ('). A single quote within the string can be encoded by putting two
    single quotes in a row - as in Pascal." }
 procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); overload;
+
+/// convert a buffered text content into a JSON string
+// - with proper escaping of the content, and surounding " characters
+procedure QuotedStrJSON(aText: PUTF8Char; var result: RawUTF8);
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ', either " then double quotes
@@ -15131,6 +15136,21 @@ begin // P^='"' at function call
   result := P;
 end; // P^='"' at function return
 
+procedure QuotedStrJSON(aText: PUTF8Char; var result: RawUTF8);
+begin
+  if aText=nil then
+    result := '""' else
+    with TTextWriter.CreateOwnedStream do
+    try
+      Add('"');
+      AddJSONEscape(pointer(aText));
+      Add('"');
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
 begin // P^='"' at function call
   inc(P);
@@ -15686,17 +15706,19 @@ Txt:  len := Format-PDeb;
         SetLength(tmp,tmpN+8);
       {$ifndef NOVARIANTS}
       if JSONFormat and (Params[P].VType=vtVariant) then
-        VariantToUTF8(Params[P].VVariant^,tmp[tmpN],wasString) else
+        VariantSaveJSON(Params[P].VVariant^,twJSONEscape,tmp[tmpN]) else
       {$endif}
       begin
         VarRecToUTF8(Params[P],tmp[tmpN]);
         wasString := not (Params[P].VType in NOTTOQUOTE[JSONFormat]);
-      end;
-      if wasString then
-        tmp[tmpN] := QuotedStr(pointer(tmp[tmpN]),QUOTECHAR[JSONFormat]);
-      if not JSONFormat then begin
-        inc(L,4); // space for :():
-        include(inlin,tmpN);
+        if wasString then
+          if JSONFormat then
+            QuotedStrJSON(pointer(tmp[tmpN]),tmp[tmpN]) else
+            tmp[tmpN] := QuotedStr(pointer(tmp[tmpN]),'''');
+        if not JSONFormat then begin
+          inc(L,4); // space for :():
+          include(inlin,tmpN);
+        end;
       end;
       inc(P);
       inc(L,length(tmp[tmpN]));
@@ -31877,8 +31899,8 @@ begin
         inc(B,UTF16CharToUtf8(B+1,P));
     end;
   end;
-end;  
-                      
+end;
+
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
 var c: PtrUInt;
 label Esc, nxt;
