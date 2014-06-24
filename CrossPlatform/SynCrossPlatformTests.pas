@@ -266,6 +266,7 @@ begin
   c[2] := ord('c');
   s := SHA256(c);
   check(s='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  check(SHA256('abc')=s);
 end;
 
 procedure TSynCrossPlatformTests.Iso8601DateTime;

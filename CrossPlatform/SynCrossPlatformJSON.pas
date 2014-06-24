@@ -60,7 +60,11 @@ interface
 uses
   SysUtils,
   Classes,
+{$ifdef NEXTGEN}
+  System.Generics.Collections,
+{$else}
   Contnrs,
+{$endif}
   Variants,
   TypInfo;
 
@@ -76,6 +80,8 @@ type
   // this type will store UTF-8 encoded buffer on NextGen platform
 {$ifdef NEXTGEN}
   TUTF8Buffer = TBytes;
+  // TObjecTList is not defined in Mobile platforms
+  TObjectList = TObjectList<TObject>;
 {$else}
   TUTF8Buffer = UTF8String;
 {$endif}
@@ -388,11 +394,21 @@ procedure AppendChar(var str: string; chr: Char);
 function GetNextCSV(const str: string; var index: Integer; out res: string;
   Sep: char=','): boolean;
 
-/// check that two Ascii-7 latin text do match
-function IdemPropName(const PropName1,PropName2: string): boolean;
+/// check that two ASCII-7 latin text do match
+function IdemPropName(const PropName1,PropName2: string): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// check that two Ascii-7 latin text do match
+/// check that two ASCII-7 latin text do match
+// - first parameter is expected to be a shortstring low-level buffer
+// - as such, this overloaded function would work with NEXTGEN encoded RTTI
+function IdemPropName(PropName1: PByteArray; const PropName2: string): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert ASCII-7 latin text, encoded as a shortstring buffer, into a string
+// - as such, this function would work with NEXTGEN encoded RTTI
+function ShortStringToString(Buffer: PByteArray): string;
+
+/// check that two ASCII-7 latin text do match
 function StartWithPropName(const PropName1,PropName2: string): boolean;
 
 
@@ -407,6 +423,34 @@ begin
     exit;
   for i := 1 to L do
     if (ord(PropName1[i]) xor ord(PropName2[i])) and
+      {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
+      exit;
+  result := true;
+end;
+
+function ShortStringToString(Buffer: PByteArray): string;
+{$ifdef UNICODE}
+var i: integer;
+begin
+  SetLength(result,Buffer^[0]);
+  for i := 1 to Buffer^[0] do
+    result[i] := chr(Buffer^[i]);
+end;
+{$else}
+begin
+  SetString(result,PAnsiChar(@Buffer[1]),Buffer^[0]);
+end;
+{$endif}
+
+function IdemPropName(PropName1: PByteArray; const PropName2: string): boolean;
+var L,i: integer;
+begin
+  result := false;
+  L := length(PropName2);
+  if PropName1^[0]<>L then
+    exit;
+  for i := 1 to L do
+    if (PropName1^[i] xor ord(PropName2[i])) and
       {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
       exit;
   result := true;
@@ -684,11 +728,11 @@ begin
   vtAnsiString: result := string(AnsiString(VAnsiString));
   vtChar:       result := string(VChar);
   vtPChar:      result := string(VPChar);
+  vtWideString: result := string(WideString(VWideString));
   {$endif}
   {$ifdef UNICODE}
   vtUnicodeString: result := string(VUnicodeString);
   {$endif}
-  vtWideString: result := string(WideString(VWideString));
   vtPWideChar:  result := string(VPWideChar);
   vtWideChar:   result := string(VWideChar);
   vtBoolean:    if VBoolean then result := '1' else result := '0';
@@ -1148,12 +1192,12 @@ end;
 
 function IsModTime(PropInfo: TRTTIPropInfo): boolean;
 begin
-  result := IdemPropName(string(PropInfo^.PropType^.Name),'TModTime');
+  result := IdemPropName(@PropInfo^.PropType^.Name,'TModTime');
 end;
 
 function IsCreateTime(PropInfo: TRTTIPropInfo): boolean;
 begin
-  result := IdemPropName(string(PropInfo^.PropType^.Name),'TCreateTime');
+  result := IdemPropName(@PropInfo^.PropType^.Name,'TCreateTime');
 end;
 
 procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
@@ -1165,7 +1209,7 @@ begin
   SetLength(PropNames,n);
   SetLength(PropRTTI,n);
   for i := 0 to n-1 do begin
-    PropNames[i] := string(List[i].Name);
+    PropNames[i] := ShortStringToString(@List[i].Name);
     PropRTTI[i] := List[i];
   end;
   freemem(List);
@@ -1182,14 +1226,19 @@ begin
     result := GetInt64Prop(Instance,PropInfo);
   tkEnumeration, tkInteger, tkSet:
     result := GetOrdProp(Instance,PropInfo);
-  {$ifdef FPC}tkAString,{$endif} tkLString:
+  {$ifdef NEXTGEN}
+  tkUString:
+    result := GetStrProp(Instance,PropInfo);
+  {$else}
+  {$ifdef FPC}tkAString,{$endif}tkLString:
     result := GetStrProp(Instance,PropInfo);
   tkWString:
     result := GetWideStrProp(Instance,PropInfo);
   {$ifdef UNICODE}
   tkUString:
     result := GetUnicodeStrProp(Instance,PropInfo);
-  {$endif}
+  {$endif UNICODE}
+  {$endif NEXTGEN}
   tkFloat:
     if IsDateTime(PropInfo) then
       result := DateTimeToIso8601(GetFloatProp(Instance,PropInfo)) else
@@ -1221,6 +1270,12 @@ begin
       SetOrdProp(Instance,PropInfo,Value);
   tkEnumeration, tkInteger, tkSet:
     SetOrdProp(Instance,PropInfo,Value);
+  {$ifdef NEXTGEN}
+  tkUString:
+    if TVarData(Value).VType<=varNull then
+      SetStrProp(Instance,PropInfo,'') else
+      SetStrProp(Instance,PropInfo,Value);
+  {$else}
   {$ifdef FPC}tkAString,{$endif} tkLString:
     if TVarData(Value).VType<=varNull then
       SetStrProp(Instance,PropInfo,'') else
@@ -1234,7 +1289,8 @@ begin
     if TVarData(Value).VType<=varNull then
       SetUnicodeStrProp(Instance,PropInfo,'') else
       SetUnicodeStrProp(Instance,PropInfo,Value);
-  {$endif}
+  {$endif UNICODE}
+  {$endif NEXTGEN}
   tkFloat:
     if IsDateTime(PropInfo) and VarIsStr(Value) then
       SetFloatProp(Instance,PropInfo,Iso8601ToDateTime(Value)) else
@@ -1388,7 +1444,7 @@ begin
         result := '{"ClassName":"'+string(Instance.ClassName)+'",' else
         result := '{';
       for i := 0 to PropCount-1 do
-        result := result+StringToJSON(string(PropList[i]^.Name))+':'+
+        result := result+StringToJSON(ShortStringToString(@PropList[i]^.Name))+':'+
           ValueToJSON(GetInstanceProp(Instance,PropList[i]))+',';
       result[length(result)] := '}';
     finally
@@ -1429,7 +1485,7 @@ var n: integer;
       Method.Code := M^.Addr;
       if n>=length(Methods) then
         SetLength(Methods,n+32);
-      Methods[n].Name := string(M^.Name{$ifdef FPC}^{$endif});
+      Methods[n].Name := {$ifdef FPC}M^.Name^{$else}ShortStringToString(@M^.Name){$endif};
       Methods[n].Method := Method;
       inc(n);
       {$ifdef FPC}

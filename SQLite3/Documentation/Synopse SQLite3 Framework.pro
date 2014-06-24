@@ -3033,7 +3033,7 @@ Keeping a track of the history of business objects is one very common need for s
 By default, change-tracking feature will be disabled, saving performance and disk use.\line But you can enable change tracking for any class, by calling the following method, on server side:
 ! aServer.TrackChanges([TSQLInvoice]);
 This single line will let {\f1\fs20 aServer: TSQLRestServer} monitor all CRUD operations, and store all changes of the {\f1\fs20 TSQLInvoice} table within a {\f1\fs20 TSQLRecordHistory} table.
-Since all content change will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your may database may be powered by high-end hardware (and small SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
+Since all content changes will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your main database may be powered by high-end hardware (and smaller SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
 !type
 !  TSQLRecordSecondaryHistory = class(TSQLRecord);
 ! (...)
@@ -3055,13 +3055,13 @@ Once the object changes are tracked, you can later on browse the history of the 
 !    writeln;
 !    writeln('Event: ',GetEnumName(TypeInfo(TSQLEvent),ord(aEvent))^);
 !    writeln('TimeStamp: ',TTimeLogBits(TimeStamp).ToText);
-!    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect);
+!    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect));
 !  end;
 !finally
 !  aHist.Free;
 !  aInvoice.Free;
 !end;
-As a result, our ORM is also transformed as a true time machine, for the objects which need it.
+As a result, our ORM is also transformed into a true {\i time machine}, for the objects which need it.
 This feature will be available on both client and server sides, via the {\f1\fs20 TSQLRecordHistory} table.
 :  Automatic history packing
 This {\f1\fs20 TSQLRecordHistory} class will in fact create a {\f1\fs20 History} table in the main database, defined as such:
@@ -3071,7 +3071,7 @@ node [shape=Mrecord];
 struct1 [label="ID : integer|Event : TSQLEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime|ID : integer"];
 \
 In short, any modification via the ORM will be stored in the {\f1\fs20 TSQLRecordHistory} table, as a JSON object of the changed fields, in {\f1\fs20 TSQLRecordHistory.SentDataJSON}.
-By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} are executed within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB triggers to track low-level changes: it would slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
+By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB trigger to track low-level changes: it would slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
 When the history grows, the JSON content may become huge, and fill the disk space with a lot of duplicated content. In order to save disk space, when a record reaches a define number of JSON data rows, all this JSON content is gathered and compressed into a BLOB, in {\f1\fs20 TSQLRecordHistory.History}.\line You can force this packing process by calling {\f1\fs20 TSQLRestServer.TrackChangesFlush()} manually in your code. Calling this method will also have a welcome side effect: it will read the actual content of the record from the database, then add a fake {\f1\fs20 seUpdate} event in the history if the field values do not match the one computed from tracked changes, to ensure that the audit trail will be correct. As a consequence, history will become always synchronized with the actual data persisted in the database, even if external SQL did by-pass the CRUD methods of the ORM, via unsafe {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} statements.
 You can tune how packing is defined for a given {\f1\fs20 TSQLRecord} table, by using some optional parameters to the registering method:
 !procedure TrackChanges(const aTable: array of TSQLRecordClass;

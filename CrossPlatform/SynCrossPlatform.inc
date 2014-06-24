@@ -58,6 +58,16 @@
 
 {$else}
 
+{$ifdef DWSCRIPT} // always defined since SMS 1.1.2
+  {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
+  {$define ISSMS}           // for SmartMobileStudio
+{$else}
+  {$ifdef NEXTGEN}
+    {$define HASINLINE}
+    {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
+    {$define ISDELPHI2010}
+    {$define ISDELPHIXE}
+  {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$if CompilerVersion >= 18}    // Delphi 2006 or newer
       {$define HASINLINE}
@@ -72,9 +82,8 @@
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$ifend}
-  {$else}
-    {$define ISDWS} // e.g. for SmartMobileStudio or Delphi Web Script
-    {$define ISSMS} // for SmartMobileStudio
   {$endif}
+  {$endif}
+{$endif DELPHIWEBSCRIPT}
 
 {$endif FPC}

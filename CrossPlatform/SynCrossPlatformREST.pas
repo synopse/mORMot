@@ -51,7 +51,7 @@ unit SynCrossPlatformREST;
 
 }
 
-{$ifdef OP4JS} // should be defined at Project/Options level
+{$ifdef DWSCRIPT} // always defined since SMS 1.1.2
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
 {$else}
@@ -67,7 +67,11 @@ uses
 uses
   SysUtils,
   Classes,
+{$ifdef NEXTGEN}
+  System.Generics.Collections,
+{$else}
   Contnrs,
+{$endif}
   Variants,
   SynCrossPlatformSpecific,
   SynCrossPlatformJSON,
