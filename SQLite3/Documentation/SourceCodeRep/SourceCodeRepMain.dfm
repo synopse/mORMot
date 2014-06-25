@@ -2,7 +2,7 @@ object MainForm: TMainForm
   Left = 265
   Top = 235
   Width = 617
-  Height = 435
+  Height = 543
   Caption = ' mORMot Source Code Repository Synch'
   Color = clBtnFace
   Constraints.MinHeight = 422
@@ -16,7 +16,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   DesignSize = (
     601
-    397)
+    505)
   PixelsPerInch = 96
   TextHeight = 13
   object lbl1: TLabel
@@ -28,7 +28,7 @@ object MainForm: TMainForm
   end
   object lbl2: TLabel
     Left = 24
-    Top = 176
+    Top = 224
     Width = 95
     Height = 13
     Caption = 'Commit Description:'
@@ -37,7 +37,7 @@ object MainForm: TMainForm
     Left = 16
     Top = 24
     Width = 569
-    Height = 145
+    Height = 193
     Anchors = [akLeft, akTop, akRight]
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -51,9 +51,9 @@ object MainForm: TMainForm
   end
   object mmoDescription: TMemo
     Left = 16
-    Top = 192
+    Top = 240
     Width = 569
-    Height = 118
+    Height = 178
     Anchors = [akLeft, akTop, akRight, akBottom]
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -66,7 +66,7 @@ object MainForm: TMainForm
   end
   object btnFossilSynch: TButton
     Left = 168
-    Top = 317
+    Top = 425
     Width = 113
     Height = 41
     Anchors = [akLeft, akBottom]
@@ -76,7 +76,7 @@ object MainForm: TMainForm
   end
   object btnFullSynch: TButton
     Left = 472
-    Top = 317
+    Top = 425
     Width = 113
     Height = 57
     Anchors = [akLeft, akBottom]
@@ -93,7 +93,7 @@ object MainForm: TMainForm
   end
   object btnGitSynch: TButton
     Left = 304
-    Top = 317
+    Top = 425
     Width = 113
     Height = 41
     Anchors = [akLeft, akBottom]
@@ -113,7 +113,7 @@ object MainForm: TMainForm
   end
   object btnGitShell: TButton
     Left = 336
-    Top = 365
+    Top = 473
     Width = 75
     Height = 25
     Anchors = [akLeft, akBottom]
@@ -123,7 +123,7 @@ object MainForm: TMainForm
   end
   object btnFossilShell: TButton
     Left = 208
-    Top = 365
+    Top = 473
     Width = 75
     Height = 25
     Anchors = [akLeft, akBottom]
@@ -133,7 +133,7 @@ object MainForm: TMainForm
   end
   object btnTests: TButton
     Left = 16
-    Top = 317
+    Top = 425
     Width = 113
     Height = 60
     Anchors = [akLeft, akBottom]

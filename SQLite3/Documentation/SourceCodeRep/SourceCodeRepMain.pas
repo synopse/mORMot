@@ -53,15 +53,14 @@ var
   StartupInfo: TStartupInfo;
   ProcessInfo: TProcessInformation;
 begin
-  FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
-  with StartupInfo do
-  begin
+  FillChar(StartupInfo,SizeOf(TStartupInfo),0);
+  with StartupInfo do begin
     cb := SizeOf(TStartupInfo);
     dwFlags := STARTF_USESHOWWINDOW or STARTF_FORCEONFEEDBACK;
     wShowWindow := visibility;
   end;
   if CreateProcess(nil,pointer(Command),nil, nil, False, NORMAL_PRIORITY_CLASS,
-    nil, pointer(CurrentDir), StartupInfo, ProcessInfo) then
+      nil, pointer(CurrentDir), StartupInfo, ProcessInfo) then
     { timeout is in miliseconds or INFINITE if you want to wait forever }
     result := Integer(WaitForSingleObject(ProcessInfo.hProcess, timeout)) else
     result := GetLastError;
@@ -76,12 +75,12 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   fBatPath := ExtractFilePath(paramstr(0));
-  if not FileExists(fBatPath+'FossilStatus.bat') then
+  if not FileExists(fBatPath+'FossilStatus.bat') then // from exe sub-folder?
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
   if not FileExists(fBatPath+'FossilStatus.bat') then
     ShowMessage('Missing .bat files');
   fFossilRepository := 'c:\progs\fossil\lib';
-  fGitExe := 'C:\Users\User\AppData\Local\GitHub\PortableGit_054f2e797ebafd44a30203088cd3d58663c627ef\bin\git.exe';
+  fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
   fGitRepository := 'd:\dev\github\mORMot';
   if not DirectoryExists(fFossilRepository) then begin
     ShowMessage('Please set Fossil Repository Name');
@@ -162,12 +161,14 @@ end;
 procedure TMainForm.btnRefreshStatusClick(Sender: TObject);
 begin
   ReadStatus;
+  mmoDescription.SetFocus;
+  mmoDescription.SelectAll;
 end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
   WinExecAndWait32(format('%sGitShell.bat  "%s"',[fBatPath,ExtractFilePath(fGitExe)]),
-     fGitRepository,SW_SHOWNORMAL,INFINITE);
+    fGitRepository,SW_SHOWNORMAL,INFINITE);
 end;
 
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
