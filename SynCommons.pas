@@ -2438,7 +2438,7 @@ procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); over
 
 /// convert a buffered text content into a JSON string
 // - with proper escaping of the content, and surounding " characters
-procedure QuotedStrJSON(aText: PUTF8Char; var result: RawUTF8);
+procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ', either " then double quotes
@@ -15136,19 +15136,25 @@ begin // P^='"' at function call
   result := P;
 end; // P^='"' at function return
 
-procedure QuotedStrJSON(aText: PUTF8Char; var result: RawUTF8);
+procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
+var i: integer;
 begin
-  if aText=nil then
-    result := '""' else
-    with TTextWriter.CreateOwnedStream do
-    try
-      Add('"');
-      AddJSONEscape(pointer(aText));
-      Add('"');
-      SetText(result);
-    finally
-      Free;
+  for i := 1 to length(aText) do
+    case aText[i] of
+    #0..#31,'\','"':
+      with TTextWriter.CreateOwnedStream do
+      try
+        Add('"');
+        AddJSONEscape(pointer(aText));
+        Add('"');
+        SetText(result);
+        exit;
+      finally
+        Free;
+      end;
     end;
+  // if we reached here, no character needs to be escaped in this string
+  result := '"'+aText+'"';
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
@@ -15713,7 +15719,7 @@ Txt:  len := Format-PDeb;
         wasString := not (Params[P].VType in NOTTOQUOTE[JSONFormat]);
         if wasString then
           if JSONFormat then
-            QuotedStrJSON(pointer(tmp[tmpN]),tmp[tmpN]) else
+            QuotedStrJSON(tmp[tmpN],tmp[tmpN]) else
             tmp[tmpN] := QuotedStr(pointer(tmp[tmpN]),'''');
         if not JSONFormat then begin
           inc(L,4); // space for :():
