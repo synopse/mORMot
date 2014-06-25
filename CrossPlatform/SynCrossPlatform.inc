@@ -58,7 +58,7 @@
 
 {$else}
 
-{$ifdef DWSCRIPT} // always defined since SMS 1.1.2
+{$ifdef DWSSCRIPT} // always defined since SMS 1.1.2
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
 {$else}

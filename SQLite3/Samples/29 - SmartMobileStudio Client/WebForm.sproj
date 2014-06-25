@@ -1,0 +1,94 @@
+<SMART>
+  <project version="2" subversion="0" type="visual">
+    <name>WebForm</name>
+    <author>A. Bouchez</author>
+    <company>Synopse</company>
+    <version>
+      <major>1</major>
+      <minor>0</minor>
+      <revision>0</revision>
+    </version>
+    <apple_specific>
+      <format_detection>0</format_detection>
+      <statusbar_style>default</statusbar_style>
+      <webapp_capable>1</webapp_capable>
+    </apple_specific>
+    <options>
+      <use_obfuscation>0</use_obfuscation>
+      <use_codepacking>0</use_codepacking>
+      <use_rangechecking>0</use_rangechecking>
+      <use_instancechecking>0</use_instancechecking>
+      <use_conditionchecking>1</use_conditionchecking>
+      <use_loopchecking>1</use_loopchecking>
+      <use_noinlinemagics>0</use_noinlinemagics>
+      <use_nosourcelocation>0</use_nosourcelocation>
+      <use_nortti>1</use_nortti>
+      <use_smartlinking>1</use_smartlinking>
+      <use_sourcemap>0</use_sourcemap>
+      <use_compresscss>1</use_compresscss>
+      <use_assertions>1</use_assertions>
+      <use_optimize>1</use_optimize>
+      <use_closures>0</use_closures>
+      <use_devirtualize>1</use_devirtualize>
+      <use_generate_manifest>1</use_generate_manifest>
+      <use_serve_manifest>0</use_serve_manifest>
+      <use_server>1</use_server>
+      <pause_after_execution>0</pause_after_execution>
+      <use_css_external>0</use_css_external>
+      <use_verbosity>1</use_verbosity>
+      <use_css_theme>default.css</use_css_theme>
+      <use_ro_rodl></use_ro_rodl>
+      <use_hints_level>1</use_hints_level>
+      <use_main_body>1</use_main_body>
+      <javascript_only>0</javascript_only>
+      <use_custom_template>0</use_custom_template>
+      <use_custom_theme>0</use_custom_theme>
+      <output_name>index.html</output_name>
+      <execute_type>0</execute_type>
+      <executeable_name></executeable_name>
+      <executeable_params></executeable_params>
+      <use_pre-build_script>0</use_pre-build_script>
+      <pre-build_script></pre-build_script>
+      <use_pre-link_script>0</use_pre-link_script>
+      <pre-link_script></pre-link_script>
+      <use_post-build_script>0</use_post-build_script>
+      <post-build_script></post-build_script>
+      <conditional_defines>DWSCRIPT</conditional_defines>
+      <handle_exceptions>0</handle_exceptions>
+      <auto_refresh>0</auto_refresh>
+    </options>
+    <globals />
+    <files>
+      <file type="unit">
+        <name>MainUnit</name>
+        <created>2014-06-17T10:47:09.813Z</created>
+        <filename>MainUnit.pas</filename>
+      </file>
+      <file type="main">
+        <name>WebFormApplication</name>
+        <created>2014-06-17T10:47:09.813Z</created>
+        <filename>WebFormApplication.spr</filename>
+      </file>
+      <file type="form">
+        <name>LoginForm</name>
+        <created>2014-06-17T10:47:09.813Z</created>
+        <filename>LoginForm.pas</filename>
+      </file>
+      <file type="unit">
+        <name>SynCrossPlatformCrypto</name>
+        <created>2014-06-18T09:24:43.834Z</created>
+        <filename>SynCrossPlatformCrypto.pas</filename>
+      </file>
+      <file type="unit">
+        <name>SynCrossPlatformREST</name>
+        <created>2014-06-18T09:51:37.618Z</created>
+        <filename>SynCrossPlatformREST.pas</filename>
+      </file>
+      <file type="unit">
+        <name>SynCrossPlatformSpecific</name>
+        <created>2014-06-25T13:50:46.341Z</created>
+        <filename>SynCrossPlatformSpecific.pas</filename>
+      </file>
+    </files>
+  </project>
+</SMART>

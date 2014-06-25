@@ -329,17 +329,9 @@ function CreateClassForJSON(const ClassName: string): TObject;
 // - handle only simple types of properties, not nested class instances
 function JSONToObjectList(ItemClass: TClass; const JSON: string): TObjectList;
 
-/// returns TRUE if the property is a TDateTime
-function IsDateTime(PropInfo: TRTTIPropInfo): boolean;
-
-/// returns TRUE if the property is a TByteDynArray
-function IsBlob(PropInfo: TRTTIPropInfo): boolean;
-
-/// returns TRUE if the property is a TModTime
-function IsModTime(PropInfo: TRTTIPropInfo): boolean;
-
-/// returns TRUE if the property is a TCreateTime
-function IsCreateTime(PropInfo: TRTTIPropInfo): boolean;
+/// return a string corresponding to the type name, as stored in the RTTI
+// - e.g. 'TDateTime', 'TByteDynArray', 'TModTime', 'TCreateTime'
+function RTTIPropInfoTypeName(PropInfo: TRTTIPropInfo): string;
 
 /// retrieve the published properties type information about a given class
 procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
@@ -551,7 +543,7 @@ begin
 end;
 
 procedure AppendChar(var str: string; chr: Char);
-{$ifdef SMS} // JavaScript immutable strings
+{$ifdef ISSMS} // JavaScript immutable strings
 begin
   str := str+chr
 end;
@@ -1180,24 +1172,9 @@ end;
 {$endif FPC}
 {$endif UNICODE}
 
-function IsDateTime(PropInfo: TRTTIPropInfo): boolean;
+function RTTIPropInfoTypeName(PropInfo: TRTTIPropInfo): string;
 begin
-  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime);
-end;
-
-function IsBlob(PropInfo: TRTTIPropInfo): boolean;
-begin
-  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray);
-end;
-
-function IsModTime(PropInfo: TRTTIPropInfo): boolean;
-begin
-  result := IdemPropName(@PropInfo^.PropType^.Name,'TModTime');
-end;
-
-function IsCreateTime(PropInfo: TRTTIPropInfo): boolean;
-begin
-  result := IdemPropName(@PropInfo^.PropType^.Name,'TCreateTime');
+  result := ShortStringToString(@PropInfo^.PropType^.Name);
 end;
 
 procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
@@ -1213,6 +1190,18 @@ begin
     PropRTTI[i] := List[i];
   end;
   freemem(List);
+end;
+
+function IsDateTime(PropInfo: TRTTIPropInfo): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime);
+end;
+
+function IsBlob(PropInfo: TRTTIPropInfo): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray);
 end;
 
 function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;

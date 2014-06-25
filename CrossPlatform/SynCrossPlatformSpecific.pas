@@ -52,46 +52,70 @@ unit SynCrossPlatformSpecific;
 
 }
 
-{$i SynCrossPlatform.inc} // define e.g. HASINLINE
-
-{$ifdef MSWINDOWS}
-  {$ifdef FPC}
-    {$define USEFCL}  // for debugging the FCL within Lazarus
-  {$else}
-  {$ifdef UNICODE}    // for debugging Indy within the IDE
-    {$define USEINDY}
-  {$else}
-    {$define USESYNCRT}
-  {$endif}
-  {$endif}
+{$ifdef DWSCRIPT} // always defined since SMS 1.1.2
+  {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
+  {$define ISSMS}           // for SmartMobileStudio
+  {$define HASNEWRECORD}
 {$else}
-  {$ifdef FPC}
-    {$define USEFCL}
+  {$i SynCrossPlatform.inc} // define e.g. HASINLINE
+  {$ifdef MSWINDOWS}
+    {$ifdef FPC}
+      {$define USEFCL}  // for debugging the FCL within Lazarus
+    {$else}
+    {$ifdef UNICODE}    // for debugging Indy within the IDE
+      {$define USEINDY}
+    {$else}
+      {$define USESYNCRT}
+    {$endif}
+    {$endif}
   {$else}
-    {$define USEINDY}
+    {$ifdef FPC}
+      {$define USEFCL}
+    {$else}
+      {$define USEINDY}
+    {$endif}
   {$endif}
 {$endif}
 
 interface
 
+{$ifdef ISDWS}
+uses
+  W3System,
+  w3c.date;
+{$else}
 uses
   SysUtils,
   Classes;
+{$endif}
 
 type
   /// HTTP body may not match the string type, and could be binary 
-  {$ifdef ISSMS}
+  {$ifdef ISDWS}
+
   THttpBody = string;
+
+  // define some Delphi types not supported natively by DWS/SMS
+  char = string;
+  word = integer;
+  cardinal = integer;
+  Int64 = integer;
+  TPersistent = TObject;
+  TObjectList = array of TObject;
+  TVariantDynArray = array of variant;
+
   {$else}
+
   THttpBody = array of byte;
-  {$endif}
+
+  {$endif ISDWS}
   
   /// used to store the request of a REST call
   TSQLRestURIParams = record
     /// input parameter containing the caller URI
     Url: string;
     /// input parameter containing the caller method
-    Method: string;
+    {$ifdef ISDWS}&Method{$else}Method{$endif}: string;
     /// input parameter containing the caller message headers
     InHead: string;
     /// input parameter containing the caller message body
@@ -219,6 +243,46 @@ procedure TextToHttpBody(const Text: string; var Body: THttpBody);
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 
 
+{$ifdef ISDWS}
+
+procedure DoubleQuoteStr(var text: string);
+function IdemPropName(const PropName1,PropName2: string): boolean;
+function StartWithPropName(const PropName1,PropName2: string): boolean;
+function VarRecToValue(const VarRec: variant; var tmpIsString: boolean): string;
+procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
+procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
+function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
+function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTIme): boolean;
+function TryStrToInt(const S: string; var Value: integer): Boolean;
+function TryStrToInt64(const S: string; var Value: Int64): Boolean;
+function UpCase(ch: Char): Char; inline;
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char): boolean;
+
+type
+  /// which kind of document the TJSONVariantData contains
+  TJSONVariantKind = (jvUndefined, jvObject, jvArray);
+
+  /// stores any JSON object or array as variant
+  TJSONVariantData = class
+  public
+    Kind: TJSONVariantKind;
+    Names: TStrArray;
+    Values: TVariantDynArray;
+    /// initialize the low-level memory structure with a given JSON content
+    constructor Create(const aJSON: string);
+    /// initialize the low-level memory structure with a given object
+    constructor CreateFrom(const document: variant);
+    /// number of items in this jvObject or jvArray
+    function Count: integer;
+  end;
+
+/// guess the type of a supplied variant
+function VariantType(const Value: variant): TJSONVariantKind;
+
+{$endif}
+
+
 implementation
 
 {$ifdef USEFCL}
@@ -242,7 +306,9 @@ procedure TextToHttpBody(const Text: string; var Body: THttpBody);
 {$ifdef ISSMS}
 begin
   // http://ecmanaut.blogspot.fr/2006/07/encoding-decoding-utf8-in-javascript.html
-  Body := unescape(encodeURIComponent(Text));
+  asm
+    @Body=unescape(encodeURIComponent(@Text));
+  end;
 end;
 {$else}
 {$ifdef NEXTGEN}
@@ -264,7 +330,9 @@ end;
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 {$ifdef ISSMS}
 begin
-  Text := decodeURIComponent(escape(Body));
+  asm
+    @Text=decodeURIComponent(escape(@Body));
+  end;
 end;
 {$else}
 {$ifdef NEXTGEN}
@@ -500,5 +568,221 @@ begin
 end;
 
 {$endif}
+
+
+{$ifdef ISDWS}
+
+procedure DoubleQuoteStr(var text: string);
+var i,j: integer;
+    tmp: string;
+begin
+  i := pos('"',text);
+  if i=0 then begin
+    text := '"'+text+'"';
+    exit;
+  end;
+  tmp := '"'+copy(text,1,i)+'"';
+  for j := i+1 to length(text) do
+    if text[j]='"' then
+      tmp := tmp+'""' else
+      tmp := tmp+text[j];
+  text := tmp+'"';
+end;
+
+function IdemPropName(const PropName1,PropName2: string): boolean;
+begin
+  result := uppercase(PropName1)=uppercase(PropName2);
+end;
+
+function StartWithPropName(const PropName1,PropName2: string): boolean;
+var L: integer;
+begin
+  L := length(PropName2);
+  if length(PropName1)<L then
+    result := false else
+    result := IdemPropName(PropName1,copy(PropName2,1,L));
+end;
+
+function VarRecToValue(const VarRec: variant; var tmpIsString: boolean): string;
+begin
+  tmpIsString := TVariant.IsString(VarRec);
+  if TVariant.IsNull(VarRec) then
+    result := 'null' else
+    result := TVariant.AsString(VarRec);
+end;
+
+procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
+var date: JDate;
+begin
+  date.AsDateTime := Value;
+  HH := date.getHours;
+  MM := date.getMinutes;
+  SS := date.getSeconds;
+end;
+
+procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
+var date: JDate;
+begin
+  date.AsDateTime := Value;
+  Y := date.getFullYear;
+  M := date.getMonth;
+  D := date.getDay;
+end;
+
+function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
+var date: JDate;
+begin
+  if (Y>1900) and (Y<3000) and (M>0) and (M<13) and (D>0) and (D<32) then
+  try
+    asm // missing declaration in w3c.date
+      @date.setFullYear(@Y,@M,@D);
+    end;
+    Value := date.AsDateTime;
+    result := true;
+  except
+    result := false;
+  end else
+    result := false;
+end;
+
+function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTIme): boolean;
+var date: JDate;
+begin
+  if (HH>=0) and (HH<25) and (MM>=0) and (MM<60) and (SS>=0) and (SS<60) and
+     (MS>=0) and (MS<1000) then
+  try
+    date.setHours(HH);
+    date.setMinutes(MM);
+    date.setSeconds(SS);
+    date.setMilliseconds(MS);
+    result := true;
+  except
+    result := false;
+  end else
+    result := false;
+end;
+
+function UpCase(ch: Char): Char; inline;
+begin
+  result := ch.UpperCase;
+end;
+
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char): boolean;
+var i,L: integer;
+begin
+  L := length(str);
+  if index<=L then begin
+    i := index;
+    while i<=L do
+      if str[i]=Sep then
+        break else
+        inc(i);
+    res := copy(str,index,i-index);
+    index := i+1;
+    result := true;
+  end else
+    result := false;
+end;
+
+function TryStrToInt(const S: string; var Value: Integer): Boolean;
+begin
+  try
+    Value := StrToInt(S);
+    result := true;
+  except
+    on E: Exception do
+      result := false;
+  end;
+end;
+
+function TryStrToInt64(const S: string; var Value: Int64): Boolean; inline;
+begin
+  result := TryStrToInt(S,Value);
+end;
+
+
+{ TJSONVariantData }
+
+{$HINTS OFF}
+function VariantType(const Value: variant): TJSONVariantKind;
+begin
+  asm
+    if (@Value === null) return 0;
+    if (typeof(@Value) !== "object") return 0;
+    if (Object.prototype.toString.call(@Value) === "[object Array]") return 2;
+    return 1;
+  end;
+end;
+
+function VariantGetProp(const Value: variant; const PropName: string): variant;
+begin
+  asm
+    return @Value[@PropName];
+  end;
+end;
+{$HINTS ON}
+
+constructor TJSONVariantData.Create(const aJSON: string);
+begin
+  CreateFrom(JSON.Parse(aJSON));
+end;
+
+constructor TJSONVariantData.CreateFrom(const document: Variant);
+var name: string;
+begin
+  Kind := VariantType(document);
+  case Kind of
+  jvObject: begin
+    Names := TVariant.Properties(document);
+    for name in Names do begin
+      Values.Add(VariantGetProp(document,name));
+    end;
+  end;
+  jvArray: asm
+    @Values=@document;
+  end;
+  end;
+end;
+
+function TJSONVariantData.Count: integer;
+begin
+  result := Values.Count;
+end;
+
+
+function HttpConnectionClass: TAbstractHttpConnectionClass;
+begin
+end;
+
+
+procedure TestSMS;
+var doc: TJSONVariantData;
+begin
+  assert(VariantType(123)=jvUndefined);
+  assert(VariantType(null)=jvUndefined);
+  assert(VariantType(TVariant.CreateObject)=jvObject);
+  assert(VariantType(TVariant.CreateArray)=jvArray);
+  doc := TJSONVariantData.Create('{"a":1,"b":"B"}');
+  assert(doc.Kind=jvObject);
+  assert(doc.Count=2);
+  assert(doc.Names[0]='a');
+  assert(doc.Names[1]='b');
+  assert(doc.Values[0]=1);
+  assert(doc.Values[1]='B');
+  doc := TJSONVariantData.Create('["a",2]');
+  assert(doc.Kind=jvArray);
+  assert(doc.Count=2);
+  assert(doc.Names.Count=0);
+  assert(doc.Values[0]='a');
+  assert(doc.Values[1]=2);
+end;
+
+
+initialization
+   TestSMS;
+
+{$endif ISDWS}
+
 
 end.

@@ -71,20 +71,17 @@ uses
   System.Generics.Collections,
 {$else}
   Contnrs,
-{$endif}
+{$endif NEXTGEN}
   Variants,
-  SynCrossPlatformSpecific,
   SynCrossPlatformJSON,
-{$endif}
+{$endif ISDWS}
+  SynCrossPlatformSpecific,
   SynCrossPlatformCrypto;
 
 
 const
   /// maximum number of fields in a database Table
   MAX_SQLFIELDS = 256;
-
-  /// the first field in TSQLFieldBits is always ID/RowID
-  ID_SQLFIELD = 0;
 
   /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
   AS_UNIQUE = false;
@@ -93,8 +90,6 @@ type
   /// alias to share the same string type between client and server
   RawUTF8 = string;
 
-  /// Exception type raised when working with REST access
-  ERestException = class(Exception);
 
   TSQLRest = class;
   TSQLRecord = class;
@@ -103,21 +98,29 @@ type
   TSQLRecordClass = class of TSQLRecord;
   TSQLRecordClassDynArray = array of TSQLRecordClass;
 
-  {$ifdef ISDWS} // circumvent weird DWS / SMS syntax
+  {$ifdef ISDWS}
+
+  // circumvent weird DWS / SMS syntax
   cardinal = integer;
   Int64 = integer;
+  TPersistent = TObject;
+  TObjectList = array of TObject;
   TSQLRawBlob = string;
   TTimeLog = Int64;
   TModTime = TTimeLog;
   TCreateTime = TTimeLog;
   TSQLFieldBit = enum (Low = 0, High = MAX_SQLFIELDS-1);
-  TSQLFieldBits = set of TSQLFieldBit;
+
+  ERestException = class(EW3Exception);
 
   /// handle a JSON result table, as returned by mORMot's REST server ORM
   // - we define a dedicated class to by-pass SynCrossPlatformJSON unit
   TSQLTableJSON = class
   protected
     fInternalState: cardinal;
+    fFieldCount, fRowCount, fCurrentRow: integer;
+    fFieldNames: TStrArray;
+    fValues: TVariantDynArray;
   public
     /// parse the supplied JSON content
     constructor Create(const aJSON: string);
@@ -125,7 +128,11 @@ type
     // - if returned true, Object published properties will contain this row
     function FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
   end;
+
   {$else}
+
+  /// Exception type raised when working with REST access
+  ERestException = class(Exception);
 
   /// alias to share the same blob type between client and server
   TSQLRawBlob = TByteDynArray;
@@ -139,9 +146,8 @@ type
   /// used to define a field which shall be set at record creation
   TCreateTime = type TTimeLog;
 
-  /// used to store bit set for all available fields in a Table
-  // - in this unit, field at index [0] indicates TSQLRecord.ID
-  TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
+  /// used to identify the a field in a Table as in TSQLFieldBits
+  TSQLFieldBit = 0..MAX_SQLFIELDS-1;
 
   /// handle a JSON result table, as returned by mORMot's REST server ORM
   // - this class is expected to work with TSQLRecord instances only
@@ -159,17 +165,44 @@ type
 
   {$endif ISDWS}
 
+  /// used to store bit set for all available fields in a Table
+  // - in this unit, field at index [0] indicates TSQLRecord.ID
+  TSQLFieldBits = set of TSQLFieldBit;
+
+  /// a published property kind
+  // - does not match mORMot.pas TSQLFieldType: here we recognize only types
+  // which may expect a special behavior in this unit
+  TSQLFieldKind = (
+    sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime);
+
+  /// a set of published property Kind
+  TSQLFieldKinds = set of TSQLFieldKind;
+
   /// store information of one TSQLRecord published property
-  TSQLModelInfoPropInfo = record
+  TSQLModelInfoPropInfo = class
+  public
     /// the name of the published property
     Name: string;
+    /// the property field type
+    Kind: TSQLFieldKind;
+    {$ifdef ISDWS}
+    /// index of the published property in the associated Prop[]
+    FieldIndex: TSQLFieldBit;
+    {$else}
+    /// the property type name, as retrieved from RTTI
+    TypeName: string;
     /// RTTI information about the published property
     RTTI: TRTTIPropInfo;
+    /// initialize the instance
+    constructor CreateFrom(aRTTI: TRTTIPropInfo);
+    {$endif}
   end;
+
+  /// store information of all TSQLRecord published properties
   TSQLModelInfoPropInfoDynArray = array of TSQLModelInfoPropInfo;
   
-  /// store information of each TSQLRecord class
-  TSQLModelInfo = object
+  /// store information of one TSQLRecord class
+  TSQLModelInfo = class
   public
     /// the TSQLRecord class type itself
     Table: TSQLRecordClass;
@@ -183,20 +216,47 @@ type
     SimpleFields: TSQLFieldBits;
     /// specifies the BLOB fields
     BlobFields: TSQLFieldBits;
+    /// specifies all fields, including simple and BLOB fields
+    AllFields: TSQLFieldBits;
     /// specifies the TModTime fields
     ModTimeFields: TSQLFieldBits;
     /// specifies the TCreateTime fields
     CreateTimeFields: TSQLFieldBits;
+    /// specifies the TModTime and TCreateTime fields
+    ModAndCreateTimeFields: TSQLFieldBits;
+    /// contains all published properties kind
+    HasKind: TSQLFieldKinds;
+    /// TRUE if has TModTime or TCreateTime fields
+    HasTimeFields: boolean;
+    {$ifdef ISSMS}
+    /// allow fast by-name access to Prop[]
+    PropCache: variant;
+    {$else}
+    /// finalize the memory used
+    destructor Destroy; override;
+    {$endif}
+    /// initialize the class member for the supplied TSQLRecord
+    constructor CreateFromRTTI(aTable: TSQLRecordClass);
     /// FieldNames='' to retrieve simple fields, '*' all fields, or as specified
-    function FieldNamesToFieldBits(const FieldNames: string): TSQLFieldBits;
+    function FieldNamesToFieldBits(const FieldNames: string;
+      IncludeModTimeFields: boolean): TSQLFieldBits;
     /// return the corresponding field names
     function FieldBitsToFieldNames(const FieldBits: TSQLFieldBits): string;
     /// set TModTime and TCreateFields
     procedure ComputeFieldsBeforeWrite(aClient: TSQLRest;
       Value: TSQLRecord; AndCreate: Boolean);
+    /// compute the 'SELECT ... FROM ...' corresponding to the supplied fields
+    function SQLSelect(const FieldNames: string): string;
+    /// save the specified record as JSON for record adding
+    function ToJSONAdd(Client: TSQLRest; Value: TSQLRecord; ForceID: boolean): string;
+    /// save the specified record as JSON for record update
+    function ToJSONUpdate(Client: TSQLRest; Value: TSQLRecord;
+      const FieldNames: string): string;
     /// save the specified record as JSON
-    function ToJSON(Value: TSQLRecord; const Fields: TSQLFieldBits): string;
+    function ToJSON(Value: TSQLRecord; const Fields: TSQLFieldBits): string; overload;
   end;
+
+  /// store information of several TSQLRecord class
   TSQLModelInfoDynArray = array of TSQLModelInfo;
 
   /// store the database model
@@ -207,9 +267,13 @@ type
   public
     /// initialize the Database Model
     // - set the Tables to be associated with this Model, as TSQLRecord classes
-    // - set the optional Root URI path of this Model
+    // - set the optional Root URI path of this Model - default is 'root'
     constructor Create(const Tables: array of TSQLRecordClass;
-      const aRoot: string='root'); reintroduce;
+      const aRoot: string {$ifndef ISDWS}='root'{$endif});
+    {$ifndef ISSMS}
+    /// finalize the memory used
+    destructor Destroy; override;
+    {$endif}
     /// get index of aTable in Tables[], returns -1 if not found
     function GetTableIndex(aTable: TSQLRecordClass): integer; overload;
     /// get index of aTable in Tables[], returns -1 if not found
@@ -222,16 +286,32 @@ type
     property Info: TSQLModelInfoDynArray read fInfo;
   end;
 
+  {$ifdef ISSMS}
+  /// low-level structure used for server-side generated pseudo RTTI
+  TRTTIPropInfos = class
+  public
+    Props: TSQLModelInfoPropInfoDynArray;
+    PropCache: variant;
+    constructor Create(const PropNames: array of string;
+      const PropKinds: array of TSQLFieldKind);
+  end;
+  {$endif}
+
   /// abstract ORM class to access remote tables
   // - in comparison to mORMot.pas TSQLRecord published fields, dynamic arrays
   // shall be defined as variant (since SynCrossPlatformJSON do not serialize)
   // - inherit from TPersistent to have RTTI for its published properties
-  // (SmartMobileStudio does not allow {$M+} in the source) 
+  // (SmartMobileStudio does not allow {$M+} in the source)
   TSQLRecord = class(TPersistent)
   protected
     fID: integer;
     fInternalState: cardinal;
     fFill: TSQLTableJSON;
+    {$ifdef ISSMS}
+    class function GetRTTI: TRTTIPropInfos;
+    /// you should override this method
+    class function ComputeRTTI: TRTTIPropInfos; virtual;
+    {$endif}
   public
     /// this constructor initializes the record
     constructor Create; overload; virtual;
@@ -255,6 +335,11 @@ type
     destructor Destroy; override;
     /// fill the specified record from the supplied JSON
     function FromJSON(const aJSON: string): boolean;
+    {$ifdef ISSMS}
+    /// fill the specified record from Names/Values pairs
+    function FromNamesValues(const Names: TStrArray; const Values: TVariantDynArray;
+      ValuesStartIndex: integer): boolean;
+    {$endif}
     /// fill all published properties of this object with the next available
     // row of data, as returned by CreateAndFillPrepare() constructor
     function FillOne: boolean;
@@ -294,7 +379,8 @@ type
     /// the access right identifier, ready to be displayed
     // - the same identifier can be used only once (this column is marked as
     // unique via a "stored AS_UNIQUE" (i.e. "stored false") attribute)
-    property Ident: string read fIdent write fIdent stored AS_UNIQUE;
+    property Ident: string read fIdent write fIdent
+      {$ifndef ISDWS}stored AS_UNIQUE{$endif};
     /// the number of minutes a session is kept alive
     property SessionTimeout: integer read fSessionTimeOut write fSessionTimeOut;
     /// a textual representation of a TSQLAccessRights buffer
@@ -322,8 +408,9 @@ type
     // - the same identifier can be used only once (this column is marked as
     // unique via a "stored AS_UNIQUE" - i.e. "stored false" - attribute), and
     // therefore indexed in the database (e.g. hashed in TSQLRestStorageInMemory)
-    property LogonName: string read fLogonName write fLogonName stored AS_UNIQUE;
-    /// the User Name, as may be displayed or printed
+    property LogonName: string read fLogonName write fLogonName
+      {$ifndef ISDWS}stored AS_UNIQUE{$endif};
+   /// the User Name, as may be displayed or printed
     property DisplayName: string read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
     property PasswordHashHexa: string read fPasswordHashHexa write fPasswordHashHexa;
@@ -339,6 +426,8 @@ type
     // application
     property Data: TSQLRawBlob read fData write fData;
   end;
+
+  TSQLRestAuthentication = class;
 
   /// class used for client authentication
   TSQLRestAuthenticationClass = class of TSQLRestAuthentication;
@@ -398,16 +487,21 @@ type
     /// delete a member
     function Delete(Table: TSQLRecordClass; ID: integer): boolean; virtual; abstract;
     /// update a member
-    // - FieldNames='' update simple fields, '*' all fields, or as specified
-    function Update(Value: TSQLRecord; const FieldNames: string=''): boolean; virtual;
+    // - this overloaded method will update only simple fields of the TSQLRecord
+    // - just a wrapper around Update(Value,'') since default string parameters
+    // are not yet allowed by DWS compiler
+    function Update(Value: TSQLRecord): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// update a member
+    // - you can set FieldNames='' to update simple fields, '*' to update all
+    // fields, or specify a CSV list of updated fields
+    function Update(Value: TSQLRecord; const FieldNames: string): boolean; overload; virtual;
 
     /// the associated data model
     property Model: TSQLModel read fModel;
     /// the current Date and Time, as retrieved from the server at connection
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
   end;
-
-  TSQLRestAuthentication = class;
 
   /// REST client access class
   TSQLRestClientURI = class(TSQLRest)
@@ -507,9 +601,10 @@ type
   public
     /// access to a mORMot server via HTTP
     constructor Create(const aServer: string; aPort: integer; aModel: TSQLModel;
-      aHttps: boolean=false; const aProxyName: string='';
+      aHttps: boolean=false
+    {$ifndef ISSMS}; const aProxyName: string='';
       const aProxyByPass: string=''; aSendTimeout: Cardinal=30000;
-      aReceiveTimeout: Cardinal=30000); reintroduce; virtual;
+      aReceiveTimeout: Cardinal=30000{$endif}); reintroduce; virtual;
     /// finalize the connection
     destructor Destroy; override;
 
@@ -521,12 +616,6 @@ type
     property KeepAlive: Integer read fKeepAlive write fKeepAlive;
   end;
 
-
-{$ifdef ISDWS}
-procedure AppendChar(var str: string; chr: Char);
-function IdemPropName(const PropName1,PropName2: string): boolean;
-function StartWithPropName(const PropName1,PropName2: string): boolean;
-{$endif}
 
 /// true if PropName is either 'ID' or 'RowID'
 function IsRowID(const PropName: string): boolean;
@@ -554,41 +643,15 @@ function UrlDecode(const aValue: string): string;
 /// e.g. location := FindHeader(Call.OutHead,'Location:');
 function FindHeader(const Headers, Name: string): string;
 
+const
+  /// the first field in TSQLFieldBits is always ID/RowID
+  ID_SQLFIELD: TSQLFieldBit = 0;
+  
+var
+  /// contains no field bit set
+  NO_SQLFIELDBITS: TSQLFieldBits;
 
 implementation
-
-{$ifdef ISDWS}
-procedure AppendChar(var str: string; chr: Char);
-begin
-  str := str+chr
-end;
-
-function IdemPropName(const PropName1,PropName2: string): boolean;
-var L,i: integer;
-begin
-  result := false;
-  L := length(PropName2);
-  if length(PropName1)<>L then
-    exit;
-  for i := 1 to L do
-    if (ord(PropName1[i]) xor ord(PropName2[i])) and $ffdf<>0 then
-      exit;
-  result := true;
-end;
-
-function StartWithPropName(const PropName1,PropName2: string): boolean;
-var L,i: integer;
-begin
-  result := false;
-  L := length(PropName2);
-  if length(PropName1)<L then
-    exit;
-  for i := 1 to L do
-    if (ord(PropName1[i]) xor ord(PropName2[i])) and $ffdf<>0 then
-      exit;
-  result := true;
-end;
-{$endif ISDWS}
 
 function IsRowID(const PropName: string): boolean;
 begin
@@ -598,10 +661,18 @@ end;
 
 function FormatBind(const SQLWhere: string;
   const BoundsSQLWhere: array of const): string;
-var i,deb,arg: integer;
-    tmpIsString: Boolean;
+var tmpIsString: Boolean;
     tmp: string;
+    i,deb,arg: integer;
+{$ifdef ISSMS}
+    args: variant;
 begin
+  asm
+    @args=@BoundsSQLWhere;
+  end;
+{$else}
+begin
+{$endif}
   result := '';
   arg := 0;
   i := 1;
@@ -611,7 +682,8 @@ begin
       result := result+copy(SQLWhere,deb,i-deb)+':(';
       if arg>high(BoundsSQLWhere) then
         tmp := 'null' else begin
-        tmp := VarRecToValue(BoundsSQLWhere[arg],tmpIsString);
+        tmp := VarRecToValue(
+          {$ifdef ISSMS}args{$else}BoundsSQLWhere{$endif}[arg],tmpIsString);
         if tmpIsString then
           DoubleQuoteStr(tmp);
         inc(arg);
@@ -648,16 +720,15 @@ begin
     result := result+Time;
 end;
 
-const
-  HexChars: array[0..15] of string = (
-    '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F');
-
 function UrlEncode(const aValue: string): string; overload;
 {$ifdef ISSMS}
 begin // see http://www.w3schools.com/jsref/jsref_encodeuricomponent.asp
   result := encodeURIComponent(aValue);
 end;
 {$else}
+const
+  HexChars: array[0..15] of string = (
+    '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F');
 var i,c: integer;
     utf8: TUTF8Buffer;
 begin
@@ -682,20 +753,35 @@ end;
 {$endif}
 
 function UrlEncode(const aNameValueParameters: array of const): string; overload;
-var a,i: integer;
+var n,a: integer;
     name,value: string;
+    {$ifndef ISSMS}
     wasString: Boolean;
+    i: integer;
+    {$endif}
 begin
   result := '';
-  if high(aNameValueParameters)>=0 then
-  for a := 0 to high(aNameValueParameters) div 2 do begin
-    name := VarRecToValue(aNameValueParameters[a*2],wasString);
-    for i := 1 to length(name) do
-      if not (ord(name[i]) in [ord('a')..ord('z'),ord('A')..ord('Z')]) then
-        raise ERestException.CreateFmt(
-          'UrlEncode() expect alphabetic names, not "%s"',[name]);
-    value := VarRecToValue(aNameValueParameters[a*2+1],wasString);
-    result := result+'&'+name+'='+UrlEncode(value);
+  n := high(aNameValueParameters);
+  if n>0 then begin
+{$ifdef ISSMS} // open parameters are not a true array in JavaScript
+    var temp: variant;
+    asm
+      @temp=@aNameValueParameters;
+    end;
+    for a := 0 to n div 2 do begin
+      name := temp[a*2];
+      value := temp[a*2+1];
+{$else}
+    for a := 0 to n div 2 do begin
+      name := VarRecToValue(aNameValueParameters[a*2],wasString);
+      for i := 1 to length(name) do
+        if not (ord(name[i]) in [ord('a')..ord('z'),ord('A')..ord('Z')]) then
+          raise ERestException.CreateFmt(
+            'UrlEncode() expect alphabetic names, not "%s"',[name]);
+      value := VarRecToValue(aNameValueParameters[a*2+1],wasString);
+{$endif}
+      result := result+'&'+name+'='+UrlEncode(value);
+    end;
   end;
   if result<>'' then
     result[1] := '?';
@@ -776,6 +862,77 @@ end;
 
 { TSQLRecord }
 
+{$ifdef ISSMS}
+
+constructor TRTTIPropInfos.Create(const PropNames: array of string;
+  const PropKinds: array of TSQLFieldKind);
+var name: string;
+    cache: variant;
+    p: integer;
+    prop: TSQLModelInfoPropInfo;
+begin
+  if length(PropNames)<>length(PropKinds) then
+    raise ERESTException.Create(ClassName);
+  prop.Name := 'RowID'; // first Field is RowID
+  Props.Add(prop);
+  for name in PropNames do begin
+    prop.Name := name;
+    Props.Add(prop);
+  end;
+  for p := 0 to high(Props) do begin
+    prop := Props[p];
+    prop.FieldIndex := p;
+    if p>0 then
+      prop.Kind := PropKinds[p-1];
+    var upperName := uppercase(prop.Name);
+    asm
+      @cache[@upperName]=prop;
+    end;
+  end;
+  PropCache := cache;
+end;
+
+function Find(PropCache: variant; Name: string; var Info: TSQLModelInfoPropInfo): boolean;
+begin
+  Name := UpperCase(Name);
+  if Name='ID' then
+    Name := 'ROWID';
+  asm
+    @Info=@PropCache[@Name];
+  end;
+  result := not VarIsNull(Info);
+end;
+
+var
+  RTTI_Cache: variant;
+
+{$HINTS OFF}
+class function TSQLRecord.GetRTTI: TRTTIPropInfos;
+begin // use RTTI_Cache as global dictionary of all TSQLRecord's RTTI
+  var name = ClassName;
+  var value: variant;
+  asm
+    @value=@RTTI_Cache[@name];
+  end;
+  if VarIsNull(value) then begin
+    result := ComputeRTTI;
+    asm
+      @RTTI_Cache[@name]=@result;
+    end;
+  end else
+  asm
+    return @value;
+  end;
+end;
+{$HINTS ON}
+
+class function TSQLRecord.ComputeRTTI: TRTTIPropInfos;
+begin
+  result := TRTTIPropInfos.Create([],[]);
+end;
+
+{$endif ISSMS}
+
 constructor TSQLRecord.Create;
 begin
   // do nothing by now: inherited classes may set some properties
@@ -825,24 +982,59 @@ begin
     result := fFill.FillOne(self,true);
 end;
 
+{$ifdef ISSMS}
+
+function TSQLRecord.FromNamesValues(const Names: TStrArray;
+  const Values: TVariantDynArray; ValuesStartIndex: integer): boolean;
+var i: integer;
+    info: TSQLModelInfoPropInfo;
+    rtti: TRTTIPropInfos;
+begin
+  result := false;
+  if ValuesStartIndex+length(Names)>length(Values) then
+    exit;
+  rtti := GetRTTI;
+  for i := 0 to high(Names) do
+    if Find(rtti.PropCache,Names[i],info) then begin
+      var name := info.Name;
+      var value := Values[i+ValuesStartIndex];
+      asm
+        @self[@name]=@value;
+      end;
+    end else
+      exit;
+  result := true;
+end;
+
+{$endif}
+
 function TSQLRecord.FromJSON(const aJSON: string): boolean;
 var doc: TJSONVariantData;
+    table: TSQLTableJSON;
+    {$ifndef ISSMS}
     i: Integer;
+    {$endif}
 begin
   if (self=nil) or (aJSON='') then
     result := false else
-  if StartWithPropName(aJSON,'{"fieldCount":') then
-    with TSQLTableJSON.Create(aJSON) do // non expanded format
+  if StartWithPropName(aJSON,'{"fieldCount":') then begin
+    table := TSQLTableJSON.Create(aJSON); // non expanded format
     try
-      result := FillOne(self);
+      result := table.FillOne(self);
     finally
-      Free;
-    end else begin // expanded format
+      table.Free;
+    end;
+  end else begin // expanded format
+    {$ifdef ISSMS}
+    doc := TJSONVariantData.Create(aJSON);
+    result := FromNamesValues(doc.Names,doc.Values,0);
+    {$else}
     doc.Init(aJSON);
     for i := 0 to doc.Count-1 do
       if IsRowID(doc.Names[i]) then
         doc.Names[i] := 'ID';
     result := doc.ToObject(self);
+    {$endif}
   end;
 end;
 
@@ -859,12 +1051,56 @@ end;
 
 constructor TSQLTableJSON.Create(const aJSON: string);
 begin
-
+  var dat = JSON.Parse(aJSON);
+  case VariantType(dat) of
+  jvObject: begin
+    // non expanded format: {"fieldCount":2,"values":["ID","Int",1,0,2,0,3,...]
+    fFieldCount := dat.fieldCount;
+    var values := dat.values;
+    if VariantType(values)<>jvArray then
+      exit;
+    asm
+      @fValues=@values;
+    end;
+    var n = fValues.Count;
+    if (n<fFieldCount) or (n mod fFieldCount<>0) then
+      exit;
+    for var i := 0 to fFieldCount-1 do
+      fFieldNames.Add(string(fValues[i]));
+    fRowCount := (n div fFieldCount)-1;
+    if fRowCount>0 then
+      fCurrentRow := 1;
+  end;
+  jvArray: begin
+    // expanded format: [{"ID":1,"Int":0},{"ID":2,"Int":0},{"ID":3,...]
+    asm
+      @fValues=@dat;
+    end;
+    fRowCount := fValues.Count;
+    if fRowCount>0 then
+      fCurrentRow := 1;
+  end;
+  end;
 end;
 
 function TSQLTableJSON.FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
 begin
-
+  result := false;
+  if (Value=nil) or (fRowCount=0) then
+    exit;
+  if SeekFirst then
+    fCurrentRow := 1 else
+    if fCurrentRow>fRowCount then
+      exit;
+  if fFieldNames.Count>0 then begin
+    // non expanded format
+    result := Value.FromNamesValues(fFieldNames,fValues,fCurrentRow*fFieldCount);
+  end else begin
+    // expanded format
+    var doc := TJSONVariantData.CreateFrom(fValues[fCurrentRow-1]);
+    result := Value.FromNamesValues(doc.Names,doc.Values,0);
+  end;
+  inc(fCurrentRow);
 end;
 
 {$else}
@@ -885,77 +1121,52 @@ begin
     result := inherited GetPropInfo(aTypeInfo,'ID');
 end;
 
-{$endif}
+
+{ TSQLModelInfoPropInfo }
+
+constructor TSQLModelInfoPropInfo.CreateFrom(aRTTI: TRTTIPropInfo);
+begin
+  RTTI := aRTTI;
+  TypeName := RTTIPropInfoTypeName(RTTI);
+  if TypeName='TByteDynArray' then
+    Kind := sftBlob else
+  if TypeName='TDateTime' then
+    Kind := sftDateTime else
+  if TypeName='TCreateTime' then
+    Kind := sftCreateTime else
+  if TypeName='TModTime' then
+    Kind := sftModTime;
+end;
+
+{$endif ISDWS}
 
 
 { TSQLModelInfo }
 
 procedure TSQLModelInfo.ComputeFieldsBeforeWrite(aClient: TSQLRest;
   Value: TSQLRecord; AndCreate: Boolean);
-var f: Integer;
+var f: TSQLFieldBit;
     fields: TSQLFieldBits;
     TimeStamp: Int64;
 begin
-  if AndCreate then
-    fields := ModTimeFields+CreateTimeFields else
-    fields := ModTimeFields;
-  if fields=[] then
+  if not HasTimeFields then
     exit;
+  if AndCreate then
+    fields := ModAndCreateTimeFields else
+    fields := ModTimeFields;
   TimeStamp := aClient.ServerTimeStamp;
   for f := 0 to length(Prop)-1 do
     if f in fields then
+      {$ifdef ISSMS} begin
+        var name := Prop[ord(f)].Name;
+        asm
+          @Value[@name]=@TimeStamp;
+        end;
+      end;
+      {$else}
       SetInstanceProp(Value,Prop[f].RTTI,TimeStamp);
+      {$endif}
 end;
-
-function TSQLModelInfo.FieldBitsToFieldNames(
-  const FieldBits: TSQLFieldBits): string;
-var f: integer;
-begin
-  result := '';
-  for f := 0 to length(Prop)-1 do
-  if f in FieldBits then
-    result := result+Prop[f].Name+',';
-  if result<>'' then
-    SetLength(result,length(result)-1);
-end;
-
-function TSQLModelInfo.FieldNamesToFieldBits(const FieldNames: string): TSQLFieldBits;
-var i,f: integer;
-    field: string;
-begin
-  if FieldNames='' then
-    result := SimpleFields else
-  if FieldNames='*' then
-    FillChar(result,sizeof(result),255) else begin
-    FillChar(result,sizeof(result),0);
-    i := 1;
-    while GetNextCSV(FieldNames,i,field) do begin
-      if IsRowID(field) then
-        Include(result,ID_SQLFIELD) else
-        for f := 1 to length(Prop)-1 do
-          if IdemPropName(field,Prop[f].Name) then begin
-            Include(result,f);
-            break;
-          end;
-    end;
-  end;
-end;
-
-function TSQLModelInfo.ToJSON(Value: TSQLRecord;
-  const Fields: TSQLFieldBits): string;
-var i: integer;
-begin
-  result := '{';
-  for i := 0 to length(Prop)-1 do
-    if i in Fields then
-      result := result+'"'+Prop[i].Name+'":'+
-        ValueToJSON(GetInstanceProp(Value,Prop[i].RTTI))+',';
-  if result='{' then
-    result := 'null' else
-    result[Length(Result)] := '}';
-end;
-
-{ TSQLModel }
 
 function GetDisplayNameFromClass(C: TClass): string;
 begin
@@ -971,33 +1182,181 @@ begin
   end;
 end;
 
-constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
-  const aRoot: string);
-var i,j: integer;
+constructor TSQLModelInfo.CreateFromRTTI(aTable: TSQLRecordClass);
+var f: TSQLFieldBit;
+    Kind: TSQLFieldKind;
+{$ifdef ISDWS}
+    rtti: TRTTIPropInfos;
+{$else}
     List: TRTTIPropInfoDynArray;
     Names: TStringDynArray;
+{$endif}
 begin
-  SetLength(fInfo,length(Tables));
-  for i := 0 to high(fInfo) do
-  with fInfo[i] do begin
-    Table := Tables[i];
-    Name := GetDisplayNameFromClass(Table);
-    GetPropsInfo(Table.ClassInfo,Names,List);
-    SetLength(Prop,length(List));
-    for j := 0 to high(Prop) do begin
-      if j=0 then
-        Prop[j].Name := 'RowID' else
-        Prop[j].Name := Names[j];
-      Prop[j].RTTI := List[j];
-      if IsBlob(List[j]) then
-        include(BlobFields,j) else
-        include(SimpleFields,j);
-      if IsModTime(List[j]) then
-        include(ModTimeFields,j) else
-      if IsCreateTime(List[j]) then
-        include(CreateTimeFields,j);
+  Table := aTable;
+  Name := GetDisplayNameFromClass(Table);
+  {$ifdef ISDWS}
+  rtti := aTable.GetRTTI;
+  Prop := rtti.Props;
+  PropCache := rtti.PropCache;
+  {$else}
+  GetPropsInfo(Table.ClassInfo,Names,List);
+  SetLength(Prop,length(List));
+  for f := 0 to high(List) do begin
+    Prop[f] := TSQLModelInfoPropInfo.CreateFrom(List[f]);
+    if f=0 then
+      Prop[f].Name := 'RowID' else
+      Prop[f].Name := Names[f];
+  end;
+  {$endif}
+  for f := 0 to TSQLFieldBit(high(Prop)) do begin
+    include(AllFields,f);
+    Kind := Prop[ord(f)].Kind;
+    include(HasKind,Kind);
+    if Kind=sftBlob then
+      Include(BlobFields,f) else
+      Include(SimpleFields,f);
+    case Kind of
+    sftModTime: begin
+      include(ModTimeFields,f);
+      include(ModAndCreateTimeFields,f);
+      HasTimeFields := true;
+    end;
+    sftCreateTime: begin
+      include(CreateTimeFields,f);
+      include(ModAndCreateTimeFields,f);
+      HasTimeFields := true;
+    end;
     end;
   end;
+end;
+
+{$ifndef ISSMS}
+destructor TSQLModelInfo.Destroy;
+var i: integer;
+begin
+  inherited;
+  for i := 0 to Length(Prop)-1 do
+    Prop[i].Free;
+end;
+{$endif}
+
+function TSQLModelInfo.FieldBitsToFieldNames(
+  const FieldBits: TSQLFieldBits): string;
+var f: TSQLFieldBit;
+begin
+  result := '';
+  for f := 0 to length(Prop)-1 do
+  if f in FieldBits then
+    result := result+Prop[ord(f)].Name+',';
+  if result<>'' then
+    SetLength(result,length(result)-1);
+end;
+
+function TSQLModelInfo.FieldNamesToFieldBits(const FieldNames: string;
+  IncludeModTimeFields: boolean): TSQLFieldBits;
+var i: integer;
+    f: TSQLFieldBit;
+    field: string;
+begin
+  if FieldNames='' then
+    result := SimpleFields else
+  if FieldNames='*' then
+    result := AllFields else begin
+    result := NO_SQLFIELDBITS;
+    i := 1;
+    while GetNextCSV(FieldNames,i,field,',') do begin
+      {$ifdef ISSMS}
+      var Info: TSQLModelInfoPropInfo;
+      if Find(PropCache,field,info) then
+        include(result,info.FieldIndex);
+      {$else}
+      if IsRowID(field) then
+        Include(result,ID_SQLFIELD) else
+        for f := 1 to length(Prop)-1 do
+          if IdemPropName(field,Prop[ord(f)].Name) then begin
+            include(result,f);
+            break;
+          end;
+      {$endif}
+    end;
+    {$ifdef ISSMS}
+    if IncludeModTimeFields and (sftModTime in HasKind) then
+      for f := 1 to length(Prop)-1 do
+        if f in ModTimeFields then
+          include(result,f);
+    {$else}
+    if IncludeModTimeFields then
+      result := result+ModTimeFields;
+    {$endif}
+  end;
+end;
+
+function TSQLModelInfo.SQLSelect(const FieldNames: string): string;
+begin
+  result := 'select '+FieldBitsToFieldNames(FieldNamesToFieldBits(
+    FieldNames,false))+' from '+Name;
+end;
+
+function TSQLModelInfo.ToJSON(Value: TSQLRecord;
+  const Fields: TSQLFieldBits): string;
+var f: TSQLFieldBit;
+begin
+{$ifdef ISSMS}
+  var doc: variant;
+  for f in Fields do begin // only serialize the main Prop[] fields
+    var name := Prop[ord(f)].Name;
+    asm
+      @doc[@name]=@Value[@name];
+    end;
+  end;
+  result := JSON.Stringify(doc);
+{$else}
+  result := '{';
+  for f := 0 to length(Prop)-1 do
+    if f in Fields then
+      result := result+'"'+Prop[ord(f)].Name+'":'+
+        ValueToJSON(GetInstanceProp(Value,Prop[f].RTTI))+',';
+  if result='{' then
+    result := 'null' else
+    result[Length(Result)] := '}';
+{$endif}
+end;
+
+function TSQLModelInfo.ToJSONAdd(Client: TSQLRest;
+  Value: TSQLRecord; ForceID: boolean): string;
+var Fields: TSQLFieldBits;
+begin
+  ComputeFieldsBeforeWrite(Client,Value,true);
+  fields := SimpleFields;
+  if not ForceID then
+    exclude(fields,ID_SQLFIELD);
+  result := ToJSON(Value,fields);
+end;
+
+function TSQLModelInfo.ToJSONUpdate(Client: TSQLRest; Value: TSQLRecord;
+  const FieldNames: string): string;
+var Fields: TSQLFieldBits;
+begin
+  fields := FieldNamesToFieldBits(FieldNames,true);
+  exclude(fields,ID_SQLFIELD);
+  ComputeFieldsBeforeWrite(Client,Value,false);
+  result := ToJSON(Value,fields);
+end;
+
+
+{ TSQLModel }
+
+constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
+  const aRoot: string);
+var t: integer;
+begin
+  {$ifdef ISSMS}
+  fInfo.SetLength(length(Tables));
+  {$else}
+  SetLength(fInfo,length(Tables));
+  {$endif}
+  for t := 0 to high(fInfo) do
+    fInfo[t] := TSQLModelInfo.CreateFromRTTI(Tables[t]);
   if aRoot<>'' then
     if aRoot[length(aRoot)]='/' then
       fRoot := copy(aRoot,1,Length(aRoot)-1) else
@@ -1013,9 +1372,19 @@ begin
   result := -1;
 end;
 
+{$ifndef ISSMS}
+destructor TSQLModel.Destroy;
+var i: integer;
+begin
+  inherited;
+  for i := 0 to high(fInfo) do
+    fInfo[i].Free;
+end;
+{$endif}
+
 function TSQLModel.GetTableIndex(const aTableName: string): integer;
 begin
-  if self<>nil then
+  if self<>nil then                                
     for result := 0 to High(fInfo) do
       if IdemPropName(fInfo[result].Name,aTableName) then
         exit;
@@ -1037,17 +1406,10 @@ end;
 function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): integer;
 var tableIndex: Integer;
     json: string;
-    fields: TSQLFieldBits;
 begin
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
   if SendData then
-  with Model.Info[tableIndex] do begin
-    ComputeFieldsBeforeWrite(self,Value,true);
-    fields := SimpleFields;
-    if not ForceID then
-      exclude(fields,ID_SQLFIELD);
-    json := ToJSON(Value,fields);  
-  end;
+    json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID);
   result := ExecuteAdd(tableIndex,json);
 end;
 
@@ -1075,14 +1437,9 @@ end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames, SQLWhere: string): TSQLTableJSON;
-var tableIndex: Integer;
-    fields,sql: string;
+var sql: string;
 begin
-  tableIndex := Model.GetTableIndexExisting(Table);
-  with Model.Info[tableIndex] do begin
-    fields := FieldBitsToFieldNames(FieldNamesToFieldBits(FieldNames));
-    sql := 'select '+fields+' from '+Name;
-  end;
+  sql := Model.Info[Model.GetTableIndexExisting(Table)].SQLSelect(FieldNames);
   if SQLWhere<>'' then
     sql := sql+' where '+SQLWhere;
   result := ExecuteList(sql);
@@ -1108,7 +1465,9 @@ function TSQLRest.RetrieveList(Table: TSQLRecordClass; const FieldNames,
 var rows: TSQLTableJSON;
     rec: TSQLRecord;
 begin
+  {$ifndef ISSMS} // result is already created as "array of TObject"
   result := TObjectList.Create;
+  {$endif}
   rows := MultiFieldValues(Table,FieldNames,SQLWhere,BoundsSQLWhere);
   if rows<>nil then
     try
@@ -1125,9 +1484,13 @@ begin
     end;
 end;
 
+function TSQLRest.Update(Value: TSQLRecord): boolean;
+begin
+  result := Update(Value,'');
+end;
+
 function TSQLRest.Update(Value: TSQLRecord; const FieldNames: string): boolean;
 var tableIndex: Integer;
-    fields: TSQLFieldBits;
     json: string;
 begin
   if (Value=nil) or (Value.ID<=0) then begin
@@ -1135,12 +1498,7 @@ begin
     exit;
   end;
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
-  with Model.Info[tableIndex] do begin
-    fields := FieldNamesToFieldBits(FieldNames)+ModTimeFields;
-    exclude(fields,ID_SQLFIELD);
-    ComputeFieldsBeforeWrite(self,Value,false);
-    json := ToJSON(Value,fields);
-  end;
+  json := Model.Info[tableIndex].ToJSONUpdate(self,Value,FieldNames);
   result := ExecuteUpdate(tableIndex,Value.ID,json);
 end;
 
@@ -1223,7 +1581,7 @@ begin
       fAuthentication.ClientSessionComputeSignature(self,Call.Url);
   end;
   InternalURI(Call);
-  Call.OutInternalState := StrToInt64Def(
+  Call.OutInternalState := StrToIntDef(
     FindHeader(Call.OutHead,'Server-InternalState:'),0);
 end;
 
@@ -1240,16 +1598,25 @@ end;
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
   aID: integer): string;
-var doc: TJSONVariantData;
+var {$ifdef ISSMS}
+    doc: variant;
+    {$else}
+    doc: TJSONVariantData;
+    {$endif}
     Call: TSQLRestURIParams;
-    json: string;
+    jsonres: string;
 begin
   CallBackGet(aMethodName,aNameValueParameters,Call,aTable,aID);
   if Call.OutStatus<>HTML_SUCCESS then
     result := '' else begin
-    HttpBodyToText(Call.OutBody,json);
-    doc.Init(json);
+    HttpBodyToText(Call.OutBody,jsonres);
+    {$ifdef ISSMS}
+    doc := JSON.Parse(jsonres);
+    result := doc.result;
+    {$else}
+    doc.Init(jsonres);
     result := doc.Value['result'];
+    {$endif}
   end;
 end;
 
@@ -1277,7 +1644,13 @@ begin
   result := 0;
   Call.Url := getURIID(tableIndex,0);
   Call.Method := 'POST';
+  {$ifdef ISSMS}
+  var body: THttpBody;
+  TextToHttpBody(json,body);
+  Call.InBody := body;
+  {$else}
   TextToHttpBody(json,Call.InBody);
+  {$endif}
   URI(Call);
   if Call.OutStatus<>HTML_CREATED then
     exit;
@@ -1309,7 +1682,13 @@ var Call: TSQLRestURIParams;
 begin
   Call.Url := getURIID(tableIndex,ID);
   Call.Method := 'PUT';
+  {$ifdef ISSMS}
+  var body: THttpBody;
+  TextToHttpBody(json,body);
+  Call.InBody := body;
+  {$else}
   TextToHttpBody(json,Call.InBody);
+  {$endif}
   URI(Call);
   result := Call.OutStatus=HTML_SUCCESS;
 end;
@@ -1328,8 +1707,10 @@ begin
   i := 1;
   GetNextCSV(aKey,i,aSessionID,'+');
   if TryStrToInt(aSessionID,i) then
-    fAuthentication.SetSessionID(i) else
-    FreeAndNil(fAuthentication);
+    fAuthentication.SetSessionID(i) else begin
+    fAuthentication.Free;
+    fAuthentication := nil;
+  end;
 end;
 
 procedure TSQLRestClientURI.SessionClose;
@@ -1340,32 +1721,36 @@ begin
       CallBackGet('auth',['UserName',fAuthentication.User.LogonName,
         'Session',fAuthentication.SessionID],Call);
     finally
-      FreeAndNil(fAuthentication);
+      fAuthentication.Free;
+      fAuthentication := nil;
     end;
 end;
 
 { TSQLRestClientHTTP }
 
 constructor TSQLRestClientHTTP.Create(const aServer: string;
-  aPort: integer; aModel: TSQLModel; aHttps: boolean; const aProxyName,
-  aProxyByPass: string; aSendTimeout, aReceiveTimeout: Cardinal);
+  aPort: integer; aModel: TSQLModel; aHttps: boolean
+  {$ifndef ISSMS}; const aProxyName, aProxyByPass: string;
+                   aSendTimeout, aReceiveTimeout: Cardinal{$endif});
 begin
   inherited Create(aModel);
   fParameters.Server := aServer;
   fParameters.Port := aPort;
   fParameters.Https := aHttps;
+  {$ifndef ISSMS}
   fParameters.ProxyName := aProxyName;
   fParameters.ProxyByPass := aProxyByPass;
   fParameters.SendTimeout := aSendTimeout;
   fParameters.ReceiveTimeout := aReceiveTimeout;
   fKeepAlive := 20000;
+  {$endif}
 end;
 
 destructor TSQLRestClientHTTP.Destroy;
 begin
   inherited;
-  FreeAndNil(fAuthentication);
-  FreeAndNil(fConnection);
+  fAuthentication.Free;
+  fConnection.Free;
 end;
 
 procedure TSQLRestClientHTTP.InternalURI(var Call: TSQLRestURIParams);
@@ -1381,8 +1766,10 @@ begin
         fConnection := HttpConnectionClass.Create(fParameters);
         // TODO: handle SynLZ compression and SHA/AES encryption
       except
-        on Exception do
-          FreeAndNil(fConnection);
+        on E: Exception do begin
+          fConnection.Free;
+          fConnection := nil;
+        end;
       end;
     if fConnection=nil then begin
       Call.OutStatus := HTML_NOTIMPLEMENTED;
@@ -1392,8 +1779,10 @@ begin
       fConnection.URI(Call,inType,fKeepAlive);
       break; // do not rety on transmission success
     except
-      on Exception do
-        FreeAndNil(fConnection); // will retry once (e.g. if connection broken)
+      on E: Exception do begin
+        fConnection.Free;
+        fConnection := nil;
+      end; // will retry once (e.g. if connection broken)
     end;
   end;
 end;
@@ -1402,34 +1791,22 @@ end;
 { TSQLAuthUser }
 
 function SHA256Compute(const Values: array of string): string;
-{$ifdef ISSMS}
-var a: integer;
-begin
-  with TSHA256.Create do
-  try
-    for a := 0 to high(Values) do
-      Update(unescape(encodeURIComponent(Values[a])));
-    result := Finalize;
-  finally
-    Free;
-  end;
-end;
-{$else}
 var buf: THttpBody;
     a: integer;
+    sha: TSHA256;
 begin
-  with TSHA256.Create do
+  sha := TSHA256.Create;
   try
     for a := 0 to high(Values) do begin
       TextToHttpBody(Values[a],buf);
-      Update(buf);
+      sha.Update(buf);
     end;
-    result := Finalize;
+    result := sha.Finalize;
   finally
-    Free;
+    sha.Free;
   end;
 end;
-{$endif}
+
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
 begin
@@ -1505,4 +1882,3 @@ begin
 end;
 
 end.
-

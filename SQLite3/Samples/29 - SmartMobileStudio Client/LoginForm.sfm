@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SmartForm>
+  <Created>2014-06-17T10:47:09.864</Created>
+  <Modified>2014-06-25T21:52:26.813</Modified>
+  <object type="TW3Form">
+    <Caption>W3Form</Caption>
+    <Name>LoginForm</Name>
+    <object type="TW3Label">
+      <Caption>mORMot Web Test</Caption>
+      <AlignText>1</AlignText>
+      <Width>184</Width>
+      <Top>16</Top>
+      <StyleClass>h1</StyleClass>
+      <Left>32</Left>
+      <Height>32</Height>
+      <Transparent>True</Transparent>
+      <Name>W3Label1</Name>
+    </object>
+    <object type="TW3Label">
+      <Caption>Server</Caption>
+      <Width>64</Width>
+      <Top>56</Top>
+      <Left>32</Left>
+      <Height>32</Height>
+      <Name>W3Label2</Name>
+    </object>
+    <object type="TW3EditBox">
+      <Value></Value>
+      <Text>127.0.0.1</Text>
+      <Range></Range>
+      <Width>128</Width>
+      <Top>56</Top>
+      <Left>88</Left>
+      <Height>32</Height>
+      <Name>ServerAddress</Name>
+    </object>
+    <object type="TW3Panel">
+      <Width>192</Width>
+      <Top>96</Top>
+      <Left>24</Left>
+      <Height>224</Height>
+      <Name>W3Panel1</Name>
+      <object type="TW3EditBox">
+        <Value></Value>
+        <Text>User</Text>
+        <Range></Range>
+        <Width>128</Width>
+        <Top>40</Top>
+        <Left>16</Left>
+        <Height>32</Height>
+        <Name>LogonName</Name>
+      </object>
+      <object type="TW3Label">
+        <Caption>Name</Caption>
+        <Width>56</Width>
+        <Top>16</Top>
+        <Left>16</Left>
+        <Height>24</Height>
+        <Name>W3Label3</Name>
+      </object>
+      <object type="TW3Label">
+        <Caption>Password</Caption>
+        <Width>128</Width>
+        <Top>80</Top>
+        <Left>16</Left>
+        <Height>32</Height>
+        <Name>W3Label4</Name>
+      </object>
+      <object type="TW3EditBox">
+        <Value></Value>
+        <Text>synopse</Text>
+        <Range></Range>
+        <Width>128</Width>
+        <Top>112</Top>
+        <Left>16</Left>
+        <Height>32</Height>
+        <Name>LogonPassword</Name>
+      </object>
+      <object type="TW3Button">
+        <Caption>Connect</Caption>
+        <Width>160</Width>
+        <Top>160</Top>
+        <Left>16</Left>
+        <Height>40</Height>
+        <Name>Connect</Name>
+        <OnClick>ConnectClick</OnClick>
+      </object>
+    </object>
+  </object>
+</SmartForm>

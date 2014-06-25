@@ -51,11 +51,11 @@ unit SynCrossPlatformCrypto;
 
 }
 
-{$ifdef OP4JS} // should be defined at Project/Options level
+{$ifdef DWSCRIPT} // always defined since SMS 1.1.2
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
 {$else}
-  {$i SynCrossPlatform.inc} // define e.g. HASINLINE
+   {$i SynCrossPlatform.inc} // define e.g. HASINLINE
 {$endif}
 
 interface
@@ -139,7 +139,7 @@ implementation
 {$ifdef ISDWS}
 function shr0(c: hash32): hash32; inline;
 begin
-  {$ifdef ISSMS}
+  {$ifdef ISSMS} // circumvent DWS compiler bug
   asm
     @result = @c >>> 0;
   end;
@@ -351,8 +351,8 @@ end;
 
 initialization
   InitCrc32Tab;
-  {$ifdef ISDWS}
   assert(crc32ascii(0,'abcdefghijklmnop')=$943AC093);
+  {$ifdef ISDWS}
   assert(SHA256('abc')='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   {$endif}
 end.
