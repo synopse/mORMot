@@ -521,6 +521,7 @@ unit SynCommons;
   - added TSynLog.DebuggerNotify() and TSynLog.CloseLogFile / Release methods
   - protected the global TSynLog instances list against potential race condition
   - introducing TSynLogFamily.StackTraceUse: TSynLogStackTraceUse property
+    (set to stManualAndAPI by default, but stOnlyAPI within the Delphi IDE)
   - introducing TSynLogFamily.EchoToConsole: TSynLogInfos property, able to
     optionally echo the process log to the current console window, using colors
   - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
@@ -10411,6 +10412,8 @@ type
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 20, maximum is 255
+    // - if stOnlyAPI is defined as StackTraceUse under Windows XP, maximum 
+    // value may be around 60, due to RtlCaptureStackBackTrace() API limitations
     property StackTraceLevel: byte read fStackTraceLevel write fStackTraceLevel;
     /// how the stack trace shall use only the Windows API
     // - the class will use low-level RtlCaptureStackBackTrace() API to retrieve
@@ -10419,7 +10422,8 @@ type
     // trigger some unexpected access violations or return wrong positions,
     // you can disable this optional manual walk by setting it to stOnlyAPI
     // - default is stManualAndAPI, i.e. use RtlCaptureStackBackTrace() API and
-    // perform a manual stack walk if the API returned no address (or <3)
+    // perform a manual stack walk if the API returned no address (or <3); but
+    // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
     property StackTraceUse: TSynLogStackTraceUse read fStackTraceUse write fStackTraceUse;
     /// if the some kind of events shall be echoed to the console
     // - note that it will slow down the logging process a lot, but may be
@@ -31921,7 +31925,7 @@ begin
     // escape chars, according to http://www.ietf.org/rfc/rfc4627.txt
     c := PByte(P)^;
     if c>=32 then begin
-      if c in [ord('\'),{ord('/'),}ord('"')] then goto Esc;
+      if c in [ord('\'),ord('"')] then goto Esc;
       B^ := AnsiChar(c);
 nxt:  if Len=1 then
         break;
@@ -40098,12 +40102,16 @@ begin
   if SynLogFamily=nil then
     GarbageCollectorFreeAndNil(SynLogFamily,TList.Create);
   fIdent := SynLogFamily.Add(self);
-  fDestinationPath := ExtractFilePath(paramstr(0)); // use .exe path 
+  fDestinationPath := ExtractFilePath(paramstr(0)); // use .exe path
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
   fBufferSize := 4096;
   fStackTraceLevel := 20;
+  {$ifndef FPC}
+  if DebugHook<>0 then // never let stManualAndAPI trigger AV within the IDE
+    fStackTraceUse := stOnlyAPI;
+  {$endif}
   fExceptionIgnore := TList.Create;
   fLevelStackTrace :=
     [sllError,sllException,sllExceptionOS,sllFail,sllLastError,sllStackTrace];
