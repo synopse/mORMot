@@ -55,7 +55,6 @@ unit SynCrossPlatformSpecific;
 {$ifdef DWSCRIPT} // always defined since SMS 1.1.2
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
-  {$define HASNEWRECORD}
 {$else}
   {$i SynCrossPlatform.inc} // define e.g. HASINLINE
   {$ifdef MSWINDOWS}
@@ -82,6 +81,7 @@ interface
 {$ifdef ISDWS}
 uses
   W3System,
+  W3Inet,
   w3c.date;
 {$else}
 uses
@@ -136,10 +136,12 @@ type
     Server: string;
     Port: integer;
     Https: boolean;
+    {$ifndef ISSMS}
     ProxyName: string;
     ProxyByPass: string;
     SendTimeout: cardinal;
     ReceiveTimeout: cardinal
+    {$endif}
   end;
 
   /// abstract class for HTTP client connection
@@ -750,9 +752,67 @@ begin
   result := Values.Count;
 end;
 
+type
+  TSMSHttpConnectionClass = class(TAbstractHttpConnection)
+  protected  // see http://www.w3.org/TR/XMLHttpRequest
+    fConnection: THandle;
+    fCall: TSQLRestURIParams;
+    procedure OnReadyStateChange;
+    procedure OnError;
+  public
+    constructor Create(const aParameters: TSQLRestConnectionParams); override;
+    procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
+      KeepAlive: integer); override;
+    destructor Destroy; override;
+  end;
+
+{ TSMSHttpConnectionClass }
+
+constructor TSMSHttpConnectionClass.Create(
+  const aParameters: TSQLRestConnectionParams);
+begin
+  inherited Create(aParameters);
+  asm
+    @Self.fConnection = new XMLHttpRequest();
+  end;
+  fConnection.onreadystatechange := @OnReadyStateChange;
+  fConnection.onerror := @OnError;
+end;
+
+procedure TSMSHttpConnectionClass.URI(var Call: TSQLRestURIParams;
+  const InDataType: string; KeepAlive: integer);
+begin
+  fCall := Call;
+  fConnection.open(Call.&Method,fURL+Call.Url,false); // false for synchronous call
+  fConnection.setRequestHeader(header,value);
+  if InStr<>'' then begin
+    fConnection.send(InStr);
+  end else
+    fConnection.send();
+    fConnection.RequestHeaders.Text := Call.InHead;
+    fConnection.RequestBody := InStr;
+    fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
+    Call.OutStatus := fConnection.ResponseStatusCode;
+    Call.OutHead := fConnection.ResponseHeaders.Text;
+    Call.OutBody := OutStr.Bytes;
+    SetLength(Call.OutBody,OutStr.Position);
+  finally
+    OutStr.Free;
+    InStr.Free;
+  end;
+end;
+
+destructor TSMSHttpConnectionClass.Destroy;
+begin
+  fConnection.Free;
+  inherited Destroy;
+end;
+
+
 
 function HttpConnectionClass: TAbstractHttpConnectionClass;
 begin
+  result := TSMSHttpConnectionClass;
 end;
 
 
