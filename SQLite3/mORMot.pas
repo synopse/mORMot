@@ -972,7 +972,8 @@ unit mORMot;
       with other protocols (like named pipes)
     - added STATICFILE_CONTENT_TYPE[_HEADER] as aliases to HTTP_RESP_STATICFILE
       as defined in SynCrtSock.pas unit, for generic handling
-    - added TSQLRestServerStats.CurrentThreadCount
+    - added TSQLRestServer.Shutdown method for clean server stop - [55d5babb16]
+    - added TSQLRestServerStats.CurrentThreadCount and CurrentRequestCount
     - now TSQLRestServerStats.ClientsMax/ClientsCurrent will reflect session
       authentication process, and OutcomingFiles the number of files
       transmitted via OutContentType=STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
@@ -9664,6 +9665,8 @@ type
     fOutcomingFiles: QWord;
     /// current thread counts
     fCurrentThreadCount: integer;
+    /// how many concurrent requests are processed in TSQLRestServer.URI()
+    fCurrentRequestCount: integer;
 {$ifdef WITHSTATPROCESS}
     /// time used to process the requests, with appended unit ('0.13 ms' e.g.)
     function GetProcessTimeString: RawUTF8;
@@ -9710,6 +9713,8 @@ type
     /// number of current declared thread counts
     // - as registered by BeginCurrentThread/EndCurrentThread
     property CurrentThreadCount: integer read fCurrentThreadCount;
+    /// how many concurrent requests are processed in TSQLRestServer.URI()
+    property CurrentRequestCount: integer read fCurrentRequestCount;
 {$ifdef WITHSTATPROCESS}
     /// the global time spent in the server process
     property ProcessTime: RawUTF8 read GetProcessTimeString;
@@ -10334,7 +10339,6 @@ type
   // prototype, and is expected to be thread-safe
   TSQLRestServer = class(TSQLRest)
   protected
-    fStats: TSQLRestServerStats;
     fVirtualTableDirect: boolean;
     fNoAJAXJSON: boolean;
     fHandleAuthentication: boolean;
@@ -10374,7 +10378,9 @@ type
 {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
-    // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables 
+    fStats: TSQLRestServerStats;
+    fShutdownRequested: boolean;
+    // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistory: array of record
       CurrentRow: integer;
@@ -10644,6 +10650,11 @@ type
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
+    /// you can call this method to prepare the server for shuting down
+    // - it will reject any incoming request from now on, and will wait until
+    // all pending requests are finished, for proper server termination
+    // - this method is called by Destroy itself
+    procedure Shutdown; virtual;
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -25139,6 +25150,7 @@ end;
 destructor TSQLRestServer.Destroy;
 var i: integer;
 begin
+  Shutdown;
 {$ifdef MSWINDOWS}
   if GlobalURIRequestServer=self then begin
     GlobalURIRequestServer := nil;
@@ -25158,6 +25170,25 @@ begin
   SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
   fStats.Free; 
+end;
+
+procedure TSQLRestServer.Shutdown;
+begin
+  {$ifdef WITHLOG}
+  SQLite3Log.Enter(self,'Shutdown').
+    Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
+  {$endif}
+  EnterCriticalSection(fSessionCriticalSection);
+  try
+    if fShutdownRequested then
+      exit; // Shutdown method already called
+    fShutdownRequested := true; // will be identified by TSQLRestServer.URI()
+  finally
+    LeaveCriticalSection(fSessionCriticalSection);
+  end;
+  repeat
+    Sleep(5);
+  until fStats.CurrentRequestCount=0;
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -26678,10 +26709,13 @@ begin
   Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
   Ctxt := ServicesRouting.Create(self,Call);
   try
+    InterlockedIncrement(fStats.fCurrentRequestCount);
     {$ifdef WITHLOG}
     Ctxt.Log := SQLite3Log.Add;
     Ctxt.Log.Enter(Self,pointer(Ctxt.URIWithoutSignature),true);
     {$endif}
+    if fShutdownRequested then
+      Ctxt.Error('Server is shuting down',HTML_UNAVAILABLE) else
     if Ctxt.Method=mNone then
       Ctxt.Error('Unknown VERB') else
     // 1. decode URI
@@ -26742,6 +26776,7 @@ begin
     inc(fStats.ProcessTimeCounter,timeEnd-timeStart);
     {$endif}
   finally
+    InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
   end;
 end;

@@ -7313,6 +7313,7 @@ end;
 procedure TTestClientServerAccess.CleanUp;
 begin
   FreeAndNil(Client);
+  Server.Shutdown;
   FreeAndNil(Server);
   FreeAndNil(DataBase);
   FreeAndNil(Model);
@@ -11129,6 +11130,7 @@ procedure TTestMultiThreadProcess.DatabaseClose;
 begin
   if fDatabase=nil then
     exit;
+  fHttpServer.Shutdown;
   FreeAndNil(fHttpServer);
   FreeAndNil(fDatabase);
   fTestClass := nil;

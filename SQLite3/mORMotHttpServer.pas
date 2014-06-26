@@ -118,7 +118,7 @@ unit mORMotHttpServer;
     Version 1.18
       - renamed SQLite3HttpServer.pas unit to mORMotHttpServer.pas
       - classes TSQLHttpServer* renamed as TSQLHttpServer*
-      - added TSQLHttpServer.RemoveServer() method
+      - added TSQLHttpServer.RemoveServer() and Shutdown methods
       - added TSQLHttpServer.AccessControlAllowOrigin property to handle
         cross-site AJAX requests via cross-origin resource sharing (CORS)
       - TSQLHttpServer now handles sub-domains generic matching (via
@@ -290,6 +290,11 @@ type
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
+    /// you can call this method to prepare the HTTP server for shuting down
+    // - it will call all associated TSQLRestServer.Shutdown methods
+    // - note that Destroy won't call this method on its own, since the
+    // TSQLRestServer instances may have a life-time uncoupled from HTTP process 
+    procedure Shutdown; 
     /// try to register another TSQLRestServer instance to the HTTP server
     // - each TSQLRestServer class must have an unique Model.Root value, to
     // identify which instance must handle a particular request from its URI
@@ -516,6 +521,14 @@ destructor TSQLHttpServer.Destroy;
 begin
   FreeAndNil(fHttpServer);
   inherited;
+end;
+
+procedure TSQLHttpServer.Shutdown;
+var i: integer;
+begin
+  if self<>nil then
+    for i := 0 to high(fDBServers) do
+      fDBServers[i].Server.Shutdown;
 end;
 
 function TSQLHttpServer.GetDBServer(Index: Integer): TSQLRestServer;
