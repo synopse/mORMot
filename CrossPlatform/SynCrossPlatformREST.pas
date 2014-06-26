@@ -270,6 +270,8 @@ type
     // - set the optional Root URI path of this Model - default is 'root'
     constructor Create(const Tables: array of TSQLRecordClass;
       const aRoot: string {$ifndef ISDWS}='root'{$endif});
+    /// register a new Table class to this Model
+    procedure Add(Table: TSQLRecordClass);
     {$ifndef ISSMS}
     /// finalize the memory used
     destructor Destroy; override;
@@ -292,6 +294,8 @@ type
   public
     Props: TSQLModelInfoPropInfoDynArray;
     PropCache: variant;
+    /// define the published properties
+    // - optional PropKinds[] can override default sftUnspecified type
     constructor Create(const PropNames: array of string;
       const PropKinds: array of TSQLFieldKind);
   end;
@@ -371,10 +375,13 @@ type
   // - no wrapper is available to handle AccessRights, since for security
   // reasons it is not available remotely from client side
   TSQLAuthGroup = class(TSQLRecord)
-  private
+  protected
     fIdent: string;
     fSessionTimeOut: integer;
     fAccessRights: string;
+    {$ifdef ISSMS}
+    class function ComputeRTTI: TRTTIPropInfos; override;
+    {$endif}
   published
     /// the access right identifier, ready to be displayed
     // - the same identifier can be used only once (this column is marked as
@@ -398,6 +405,9 @@ type
     fDisplayName: string;
     fGroup: TSQLAuthGroup;
     fData: TSQLRawBlob;
+    {$ifdef ISSMS}
+    class function ComputeRTTI: TRTTIPropInfos; override;
+    {$endif}
     procedure SetPasswordPlain(const Value: string);
   public
     /// able to set the PasswordHashHexa field from a plain password content
@@ -698,19 +708,29 @@ end;
 
 function DateTimeToTTimeLog(Value: TDateTime): TTimeLog;
 var HH,MM,SS,MS,Y,M,D: word;
+    {$ifndef ISSMS}
     V: Int64;
+    {$endif}
 begin
   DecodeTime(Value,HH,MM,SS,MS);
   DecodeDate(Value,Y,M,D);
+  {$ifdef ISSMS} // JavaScript truncates to 32 bit binary
+  result := SS+MM*$40+(HH+D*$20+M*$400+Y*$4000-$420)*$1000;
+  {$else}
   V := HH+D shl 5+M shl 10+Y shl 14-(1 shl 5+1 shl 10);
   result := SS+MM shl 6+V shl 12;
+  {$endif}
 end;
 
 function TTimeLogToDateTime(Value: TTimeLog): TDateTime;
 var Y: cardinal;
     Time: TDateTime;
 begin
+  {$ifdef ISSMS} // JavaScript truncates to 32 bit binary
+  Y := (Value div $4000000) and 4095;
+  {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
+  {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(Value shr (6+6+5+5)) and 15,
        1+(Value shr (6+6+5)) and 31,result) then
     result := 0;
@@ -869,21 +889,21 @@ constructor TRTTIPropInfos.Create(const PropNames: array of string;
 var name: string;
     cache: variant;
     p: integer;
-    prop: TSQLModelInfoPropInfo;
+    prop = new TSQLModelInfoPropInfo;
 begin
-  if length(PropNames)<>length(PropKinds) then
-    raise ERESTException.Create(ClassName);
   prop.Name := 'RowID'; // first Field is RowID
   Props.Add(prop);
   for name in PropNames do begin
     prop.Name := name;
     Props.Add(prop);
   end;
+  cache := TVariant.CreateObject;
   for p := 0 to high(Props) do begin
     prop := Props[p];
     prop.FieldIndex := p;
-    if p>0 then
-      prop.Kind := PropKinds[p-1];
+    if p<length(PropKinds) then
+      prop.Kind := PropKinds[p-1] else
+      prop.Kind := sftUnspecified;
     var upperName := uppercase(prop.Name);
     asm
       @cache[@upperName]=prop;
@@ -900,11 +920,11 @@ begin
   asm
     @Info=@PropCache[@Name];
   end;
-  result := not VarIsNull(Info);
+  result := VarIsValidRef(Info);
 end;
 
 var
-  RTTI_Cache: variant;
+  RTTI_Cache: variant = TVariant.CreateObject;
 
 {$HINTS OFF}
 class function TSQLRecord.GetRTTI: TRTTIPropInfos;
@@ -912,14 +932,14 @@ begin // use RTTI_Cache as global dictionary of all TSQLRecord's RTTI
   var name = ClassName;
   var value: variant;
   asm
-    @value=@RTTI_Cache[@name];
+    @value = @RTTI_Cache[@name];
   end;
-  if VarIsNull(value) then begin
-    result := ComputeRTTI;
+  if not VarIsValidRef(value) then begin
+    value := ComputeRTTI;
     asm
-      @RTTI_Cache[@name]=@result;
+      @RTTI_Cache[@name]=@value;
     end;
-  end else
+  end;
   asm
     return @value;
   end;
@@ -1346,6 +1366,21 @@ end;
 
 { TSQLModel }
 
+procedure TSQLModel.Add(Table: TSQLRecordClass);
+var n,i: integer;
+begin
+  n := length(fInfo);
+  for i := 0 to n-1 do
+    if fInfo[i].Table=Table then
+      raise ERESTException.CreateFmt('%s registered twice',[Table.ClassName]);
+  {$ifdef ISSMS}
+  fInfo.SetLength(n+1);
+  {$else}
+  SetLength(fInfo,n+1);
+  {$endif}
+  fInfo[n] := TSQLModelInfo.CreateFromRTTI(Table);
+end;
+
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
   const aRoot: string);
 var t: integer;
@@ -1507,7 +1542,7 @@ end;
 function TSQLRestClientURI.getURI(aTable: TSQLRecordClass): string;
 begin
   result := Model.Root;
-  if aTable<>nil then
+  if (aTable<>nil) and (aTable<>TSQLRecord) then // SMS converts nil->TSQLRecord
     result := result+'/'+Model.Info[Model.GetTableIndexExisting(aTable)].Name;
 end;
 
@@ -1540,7 +1575,11 @@ begin
   Call.Method := 'GET';
   URI(Call);
   if Call.OutStatus=HTML_SUCCESS then begin
+    {$ifdef ISSMS}
+    json := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
+    {$else}
     HttpBodyToText(Call.OutBody,json);
+    {$endif}
     result := TSQLTableJSON.Create(json);
     result.fInternalState := Call.OutInternalState;
   end;
@@ -1561,7 +1600,11 @@ begin
   result := Call.OutStatus=HTML_SUCCESS;
   if result then begin
     Value.fInternalState := Call.OutInternalState;
+    {$ifdef ISSMS}
+    json := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
+    {$else}
     HttpBodyToText(Call.OutBody,json);
+    {$endif}
     Value.FromJSON(json);
   end;
 end;
@@ -1602,18 +1645,19 @@ var {$ifdef ISSMS}
     doc: variant;
     {$else}
     doc: TJSONVariantData;
+    jsonres: string;
     {$endif}
     Call: TSQLRestURIParams;
-    jsonres: string;
 begin
   CallBackGet(aMethodName,aNameValueParameters,Call,aTable,aID);
   if Call.OutStatus<>HTML_SUCCESS then
     result := '' else begin
-    HttpBodyToText(Call.OutBody,jsonres);
     {$ifdef ISSMS}
-    doc := JSON.Parse(jsonres);
-    result := doc.result;
+    doc := JSON.Parse(Call.OutBody);
+    if VarIsValidRef(result) then
+      result := doc.result;
     {$else}
+    HttpBodyToText(Call.OutBody,jsonres);
     doc.Init(jsonres);
     result := doc.Value['result'];
     {$endif}
@@ -1629,7 +1673,11 @@ begin
   result := Call.OutStatus=HTML_SUCCESS;
   if not result then
     exit;
+  {$ifdef ISSMS}
+  tmp := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
+  {$else}
   HttpBodyToText(Call.OutBody,tmp);
+  {$endif}
   if not TryStrToInt64(tmp,TimeStamp) then
     result := false else
     fServerTimeStampOffset := TTimeLogToDateTime(TimeStamp)-Now;
@@ -1645,11 +1693,9 @@ begin
   Call.Url := getURIID(tableIndex,0);
   Call.Method := 'POST';
   {$ifdef ISSMS}
-  var body: THttpBody;
-  TextToHttpBody(json,body);
-  Call.InBody := body;
+  Call.InBody := json; // XMLHttpRequest will convert the DomString into UTF-8
   {$else}
-  TextToHttpBody(json,Call.InBody);
+  Call.InBody := TextToHttpBody(json);
   {$endif}
   URI(Call);
   if Call.OutStatus<>HTML_CREATED then
@@ -1683,11 +1729,9 @@ begin
   Call.Url := getURIID(tableIndex,ID);
   Call.Method := 'PUT';
   {$ifdef ISSMS}
-  var body: THttpBody;
-  TextToHttpBody(json,body);
-  Call.InBody := body;
+  Call.InBody := json;
   {$else}
-  TextToHttpBody(json,Call.InBody);
+  Call.InBody := TextToHttpBody(json);
   {$endif}
   URI(Call);
   result := Call.OutStatus=HTML_SUCCESS;
@@ -1758,8 +1802,10 @@ var inType: string;
     retry: integer;
 begin
   inType := FindHeader(Call.InHead,'content-type:');
-  if inType='' then
+  if inType='' then begin
     inType := JSON_CONTENT_TYPE;
+    Call.InHead := trim(Call.InHead+#13#10'content-type:'+inType);
+  end;
   for retry := 0 to 1 do begin
     if fConnection=nil then
       try
@@ -1777,7 +1823,7 @@ begin
     end;
     try
       fConnection.URI(Call,inType,fKeepAlive);
-      break; // do not rety on transmission success
+      break; // do not retry on transmission success
     except
       on E: Exception do begin
         fConnection.Free;
@@ -1798,7 +1844,7 @@ begin
   sha := TSHA256.Create;
   try
     for a := 0 to high(Values) do begin
-      TextToHttpBody(Values[a],buf);
+      buf := TextToHttpBody(Values[a]);
       sha.Update(buf);
     end;
     result := sha.Finalize;
@@ -1807,6 +1853,14 @@ begin
   end;
 end;
 
+{$ifdef ISSMS}
+class function TSQLAuthUser.ComputeRTTI: TRTTIPropInfos;
+begin
+  result := TRTTIPropInfos.Create(
+    ['Data','Group','LogonName','DisplayName','PasswordHashHexa'],
+    [sftBlob]);
+end;
+{$endif}
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
 begin
@@ -1880,5 +1934,15 @@ function TSQLRestAuthenticationNone.ClientSessionComputeSignature(
 begin
   result := fSessionIDHexa8;
 end;
+
+{ TSQLAuthGroup }
+
+{$ifdef ISSMS}
+class function TSQLAuthGroup.ComputeRTTI: TRTTIPropInfos;
+begin
+  result := TRTTIPropInfos.Create(
+    ['Ident','SessionTimeOut','AccessRights'],[]);
+end;
+{$endif}
 
 end.

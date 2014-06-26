@@ -129,6 +129,12 @@ type
     /// output parameter to be set to the database internal state
     // - this is the only mORMot-specific parameter
     OutInternalState: cardinal;
+    {$ifdef ISDWS}
+    /// the associated TXMLHttpRequest instance
+    Connection: THandle;
+    OnReadyStateChange: TProcedureRef;
+    OnError: TProcedureRef;
+    {$endif}
   end;
 
   /// the connection parameters 
@@ -239,7 +245,7 @@ function HttpConnectionClass: TAbstractHttpConnectionClass;
 
   
 /// convert a text into UTF-8 binary buffer
-procedure TextToHttpBody(const Text: string; var Body: THttpBody);
+function TextToHttpBody(const Text: string): THttpBody;
 
 /// convert a UTF-8 binary buffer into texts
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
@@ -304,18 +310,18 @@ uses
 {$endif}
 
 
-procedure TextToHttpBody(const Text: string; var Body: THttpBody);
+function TextToHttpBody(const Text: string): THttpBody;
 {$ifdef ISSMS}
 begin
   // http://ecmanaut.blogspot.fr/2006/07/encoding-decoding-utf8-in-javascript.html
   asm
-    @Body=unescape(encodeURIComponent(@Text));
+    @result=unescape(encodeURIComponent(@Text));
   end;
 end;
 {$else}
 {$ifdef NEXTGEN}
 begin
-  Body := TEncoding.UTF8.GetBytes(Text);
+  result := TEncoding.UTF8.GetBytes(Text);
 end;
 {$else}
 var utf8: UTF8String;
@@ -323,8 +329,8 @@ var utf8: UTF8String;
 begin
   utf8 := UTF8Encode(Text);
   n := length(utf8);
-  SetLength(Body,n);
-  move(pointer(utf8)^,pointer(Body)^,n);
+  SetLength(result,n);
+  move(pointer(utf8)^,pointer(result)^,n);
 end;
 {$endif}
 {$endif}
@@ -614,7 +620,7 @@ begin
 end;
 
 procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
-var date: JDate;
+var date := new JDate;
 begin
   date.AsDateTime := Value;
   HH := date.getHours;
@@ -623,7 +629,7 @@ begin
 end;
 
 procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
-var date: JDate;
+var date := new JDate;
 begin
   date.AsDateTime := Value;
   Y := date.getFullYear;
@@ -632,7 +638,7 @@ begin
 end;
 
 function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
-var date: JDate;
+var date := new JDate;
 begin
   if (Y>1900) and (Y<3000) and (M>0) and (M<13) and (D>0) and (D<32) then
   try
@@ -647,8 +653,8 @@ begin
     result := false;
 end;
 
-function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTIme): boolean;
-var date: JDate;
+function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTime): boolean;
+var date := new JDate;
 begin
   if (HH>=0) and (HH<25) and (MM>=0) and (MM<60) and (SS>=0) and (SS<60) and
      (MS>=0) and (MS<1000) then
@@ -657,6 +663,7 @@ begin
     date.setMinutes(MM);
     date.setSeconds(SS);
     date.setMilliseconds(MS);
+    Value := date.AsDateTime;
     result := true;
   except
     result := false;
@@ -755,59 +762,42 @@ end;
 type
   TSMSHttpConnectionClass = class(TAbstractHttpConnection)
   protected  // see http://www.w3.org/TR/XMLHttpRequest
-    fConnection: THandle;
-    fCall: TSQLRestURIParams;
-    procedure OnReadyStateChange;
-    procedure OnError;
   public
-    constructor Create(const aParameters: TSQLRestConnectionParams); override;
     procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
       KeepAlive: integer); override;
-    destructor Destroy; override;
   end;
 
 { TSMSHttpConnectionClass }
 
-constructor TSMSHttpConnectionClass.Create(
-  const aParameters: TSQLRestConnectionParams);
-begin
-  inherited Create(aParameters);
-  asm
-    @Self.fConnection = new XMLHttpRequest();
-  end;
-  fConnection.onreadystatechange := @OnReadyStateChange;
-  fConnection.onerror := @OnError;
-end;
-
 procedure TSMSHttpConnectionClass.URI(var Call: TSQLRestURIParams;
   const InDataType: string; KeepAlive: integer);
 begin
-  fCall := Call;
-  fConnection.open(Call.&Method,fURL+Call.Url,false); // false for synchronous call
-  fConnection.setRequestHeader(header,value);
-  if InStr<>'' then begin
-    fConnection.send(InStr);
-  end else
-    fConnection.send();
-    fConnection.RequestHeaders.Text := Call.InHead;
-    fConnection.RequestBody := InStr;
-    fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
-    Call.OutStatus := fConnection.ResponseStatusCode;
-    Call.OutHead := fConnection.ResponseHeaders.Text;
-    Call.OutBody := OutStr.Bytes;
-    SetLength(Call.OutBody,OutStr.Position);
-  finally
-    OutStr.Free;
-    InStr.Free;
+  asm
+    @Call.Connection = new XMLHttpRequest();
   end;
+  Call.Connection.onreadystatechange := Call.OnReadyStateChange;
+  Call.Connection.onerror := Call.OnError;
+  Call.Connection.open(Call.&Method,fURL+Call.Url,false); // false for synchronous call
+  if Call.InHead<>'' then begin
+    var i = 1;
+    var line: string;
+    while GetNextCSV(Call.InHead,i,line,#10) do begin
+      var l := pos(line,':');
+      if l=0 then
+        continue;
+      var head := trim(copy(line,1,l-1));
+      var value := trim(copy(line,l+1,maxInt));
+      if (head<>'') and (value<>'') then
+        Call.Connection.setRequestHeader(head,value);
+    end;
+  end;
+  if Call.InBody='' then
+    Call.Connection.send(null) else
+    Call.Connection.send(Call.InBody);
+  Call.OutStatus := Call.Connection.status;
+  Call.OutHead := Call.Connection.getAllResponseHeaders();
+  Call.OutBody := Call.Connection.responseText;
 end;
-
-destructor TSMSHttpConnectionClass.Destroy;
-begin
-  fConnection.Free;
-  inherited Destroy;
-end;
-
 
 
 function HttpConnectionClass: TAbstractHttpConnectionClass;

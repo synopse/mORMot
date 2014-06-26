@@ -81,6 +81,7 @@ begin
     DB := TCustomServer.Create(Model);
     Server := TSQLHttpServer.Create('888',DB);
     try
+      Server.AccessControlAllowOrigin := '*';
       if aAuth=TSQLRestAuthenticationDefault then
         DB.AuthenticationRegister(TSQLRestServerAuthenticationDefault) else
       if aAuth=TSQLRestAuthenticationNone then
