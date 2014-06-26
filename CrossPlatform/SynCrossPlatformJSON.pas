@@ -1391,6 +1391,7 @@ begin
     result := 'null';
     exit;
   end;
+  {$ifndef NEXTGEN}
   if Instance.InheritsFrom(TList) then begin
     if TList(Instance).Count=0 then
       result := '[]' else begin
@@ -1401,6 +1402,7 @@ begin
     end;
     exit;
   end;
+  {$endif}
   if Instance.InheritsFrom(TStrings) then begin
     if TStrings(Instance).Count=0 then
       result := '[]' else begin
@@ -1454,7 +1456,7 @@ var n: integer;
     {$else}
       Len: Word;
       Addr: Pointer;
-      Name: ShortString;
+      Name: Byte;
     {$endif}
     end;
   var M: ^TMethodInfo;
