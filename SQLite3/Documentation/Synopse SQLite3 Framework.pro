@@ -2125,7 +2125,7 @@ The record will be serialized as JSON - here @*TGUID@ will be serialized as a JS
 Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties before Delphi XE6. So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of Delphi, or {\i FreePascal}.
 You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
 If you want to work with such properties before Delphi XE6, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
-For instance, to register a {\f1\fs20 TGUID} property mapping a {\f1\fs20 TSQLMyRecord.f@*GUID@: TGUID} field:
+For instance, to register a {\f1\fs20 @*GUID@} property mapping a {\f1\fs20 TSQLMyRecord.fGUID: TGUID} field:
 ! type
 !   TSQLMyRecord = class(TSQLRecord)
 !   protected
@@ -2235,7 +2235,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
 For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
-As stated previously, {\f1\fs20 sft@*Blob@} property are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins), if the data is expected to be big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing such a query. See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
+As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
 Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.EngineExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 :  Introducing TSQLTableJSON
 As we stated above, {\f1\fs20 [CreateAnd]FillPrepare} / {\f1\fs20 FillOne} methods are implemented via an internal {\f1\fs20 @**TSQLTableJSON@} instance.
@@ -2590,7 +2590,7 @@ The {\f1\fs20 FillPrepare} / {\f1\fs20 FillOne} method are used to loop through 
 !    end else
 !      str(n,VA.fUTF8);
 The {\f1\fs20 n} variable is used to follow the {\f1\fs20 PeopleArray} number, and will most of the time set its textual converted value in the {\f1\fs20 UTF8} column, and once per 32 rows, will add one item to both {\f1\fs20 VA} and {\f1\fs20 FV} {\i @*dynamic array@} fields.
-We could have used normal access to V{\f1\fs20 VA} and {\f1\fs20 FV} {\i dynamic arrays}, as such:
+We could have used normal access to {\f1\fs20 VVA} and {\f1\fs20 FV} {\i dynamic arrays}, as such:
 !     SetLength(VA.Ints,length(VA.Ints)+1);
 !     VA.Ints[high(VA.Ints)] := n;
 But the {\f1\fs20 DynArray} method is used instead, to allow direct access to the {\i dynamic array} via a {\f1\fs20 TDynArray} wrapper. Those two lines behave therefore the same as this code:
@@ -4240,7 +4240,7 @@ In {\i SQLite3}, ACID is implemented by two means at file level:
 - {\i File locking}: it means that the database file is locked for exclusive use during writing, allowing several processes to access the same database file concurrently.
 Changing these default settings can ensure much better writing performance.
 :   Synchronous writing
-You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLDataBase.Synchronous} property to {\f1\fs20 smOff} instead of the default {\f1\fs20 smFull} setting. When {\f1\fs20 Synchronous} is set to {\f1\fs20 smOff}, {\i SQLite} continues without syncing as soon as it has handed data off to the operating system. If the application running {\i SQLite} crashes, the data will be safe, but the database might become corrupted if the operating system crashes or the computer loses power before that data has been written to the disk surface. On the other hand, some operations are as much as 50 or more times faster with this setting.
+You can overwrite the default ACID behavior by setting the {\f1\fs20 TSQLDataBase.Synchronous} property to {\f1\fs20 smOff} instead of the default {\f1\fs20 smFull} setting. When {\f1\fs20 Synchronous} is set to {\f1\fs20 smOff}, {\i SQLite} continues without syncing as soon as it has handed data off to the operating system. If the application running {\i SQLite} crashes, the data will be safe, but the database might become corrupted if the operating system crashes or the computer loses power before that data has been written to the disk surface. On the other hand, some operations are as much as 50 or more times faster with this setting.
 When the tests performed during @59@ use {\f1\fs20 Synchronous := smOff}, "Write one" speed is enhanced from 8-9 rows per second into about 400 rows per second, on a physical hard drive (SSD or NAS drives may not suffer from this delay).
 So depending on your application requirements, you may switch Synchronous setting to off.
 To change the main {\i SQLite3} engine synchronous parameter, you may code for instance:
@@ -4253,7 +4253,7 @@ But if you defined some {\i SQLite3} external tables - see @27@, you can define 
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!TSQLDBSQLite3Connection(Props.MainConnection).Synchronous := smOff;
 :   File locking
-You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLDataBase.LockingMode} property to {\f1\fs20 LockingMode} instead of the default {\f1\fs20 lmNormal} setting. When {\f1\fs20 LockingMode} is set to {\f1\fs20 lmExclusive}, {\i SQLite} will lock the database file for exclusive use during the whole session. It will prevent other processes (e.g. database viewer tools) to access the file at the same time, but small write transactions will be much faster, by a factor usually greater than 40. Bigger transactions involving several hundredths/thousands of INSERT won't be accelerated - but individual insertions will have a major speed up - see @59@.
+You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLDataBase.LockingMode} property to {\f1\fs20 lmExclusive} instead of the default {\f1\fs20 lmNormal} setting. When {\f1\fs20 LockingMode} is set to {\f1\fs20 lmExclusive}, {\i SQLite} will lock the database file for exclusive use during the whole session. It will prevent other processes (e.g. database viewer tools) to access the file at the same time, but small write transactions will be much faster, by a factor usually greater than 40. Bigger transactions involving several hundredths/thousands of INSERT won't be accelerated - but individual insertions will have a major speed up - see @59@.
 To change the main {\i SQLite3} engine locking mode parameter, you may code for instance:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!Client.Server.DB.LockingMode := lmExclusive;
@@ -10377,7 +10377,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  // create a Data Model
 !  aModel := TSQLModel.Create([],ROOT_NAME);
 !  (...)
-Of course, this interactive console refresh slows down the process a lot. It is therefore tobe defined only for debugging purposes, not on production.
+Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
 %cartoon04.png
 =[License]

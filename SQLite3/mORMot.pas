@@ -1141,7 +1141,7 @@ type
 
   /// a String used to store the BLOB content
   // - equals RawByteString for byte storage, to force no implicit charset
-  // conversion, thatever the codepage of the resulting string is
+  // conversion, whatever the codepage of the resulting string is
   // - will identify a sftBlob field type, if used to define such a published
   // property
   // - by default, the BLOB fields are not retrieved or updated with raw
