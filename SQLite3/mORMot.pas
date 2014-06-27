@@ -24490,7 +24490,7 @@ begin
 {$ifdef SSPIAUTH} // try Windows authentication with the current logged user
   result := true;
   if (trim(aUserName)='') and
-    TSQLRestServerAuthenticationSSPI.ClientSetUser(self,'',aPassword) then
+    TSQLRestServerAuthenticationSSPI.ClientSetUser(self,'',aPassword,passKerberosSPN) then
       exit;
 {$endif}
   result := TSQLRestServerAuthenticationDefault.
