@@ -108,6 +108,10 @@ type
 
   THttpBody = array of byte;
 
+  {$ifdef NEXTGEN}
+  AnsiChar = byte;
+  {$endif NEXTGEN}
+  
   {$endif ISDWS}
   
   /// used to store the request of a REST call
@@ -321,7 +325,7 @@ end;
 {$else}
 {$ifdef NEXTGEN}
 begin
-  result := TEncoding.UTF8.GetBytes(Text);
+  result := THttpBody(TEncoding.UTF8.GetBytes(Text));
 end;
 {$else}
 var utf8: UTF8String;
@@ -345,7 +349,7 @@ end;
 {$else}
 {$ifdef NEXTGEN}
 begin
-  Text := TEncoding.UTF8.GetString(Body);
+  Text := TEncoding.UTF8.GetString(TBytes(Body));
 end;
 {$else}
 var utf8: UTF8String;

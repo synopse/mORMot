@@ -837,15 +837,15 @@ begin
     c := ord(aValue[i]);
     case c of
     ord('+'):
-      utf8[n] := ' ';
+      utf8[n] := AnsiChar(' ');
     ord('%'): begin
       if i+2<=len then
         utf8[n] := AnsiChar(HexDecode(aValue[i+1],aValue[i+2])) else
-        utf8[n] := '?';
+        utf8[n] := AnsiChar('?');
       inc(i,2);
     end;
     else if c>127 then
-      utf8[n] := '?' else
+      utf8[n] := AnsiChar('?') else
       utf8[n] := AnsiChar(c);
     end;
     inc(i);
