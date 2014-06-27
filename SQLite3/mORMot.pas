@@ -10650,7 +10650,7 @@ type
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
-    /// you can call this method to prepare the server for shuting down
+    /// you can call this method to prepare the server for shutting down
     // - it will reject any incoming request from now on, and will wait until
     // all pending requests are finished, for proper server termination
     // - this method is called by Destroy itself
@@ -26312,7 +26312,7 @@ procedure TSQLRestServerURIContext.FillInput;
 var n,max: integer;
     P: PUTF8Char;
 begin
-  if fInput<>nil then
+  if (fInput<>nil) or (Parameters=nil) then
     exit; // only do it once
   P := Parameters;
   n := 0;
@@ -26715,7 +26715,7 @@ begin
     Ctxt.Log.Enter(Self,pointer(Ctxt.URIWithoutSignature),true);
     {$endif}
     if fShutdownRequested then
-      Ctxt.Error('Server is shuting down',HTML_UNAVAILABLE) else
+      Ctxt.Error('Server is shutting down',HTML_UNAVAILABLE) else
     if Ctxt.Method=mNone then
       Ctxt.Error('Unknown VERB') else
     // 1. decode URI

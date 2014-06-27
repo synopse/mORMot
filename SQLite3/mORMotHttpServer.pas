@@ -290,7 +290,7 @@ type
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
-    /// you can call this method to prepare the HTTP server for shuting down
+    /// you can call this method to prepare the HTTP server for shutting down
     // - it will call all associated TSQLRestServer.Shutdown methods
     // - note that Destroy won't call this method on its own, since the
     // TSQLRestServer instances may have a life-time uncoupled from HTTP process 
