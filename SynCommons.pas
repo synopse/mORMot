@@ -423,7 +423,6 @@ unit SynCommons;
     and nil parameter as null JSON value
   - new TTextWriter.AddJSON() method and JSONEncode() overloaded function able
     to recognize (extended) JSON content, including MongoDB shell extensions
-  - added TTextWriter.AddHtmlEscape() method
   - added IsHTMLContentTypeTextual() function, and modified ExistsIniNameValue()
   - added ShortStringToAnsi7String() and UpperCopyWin255() functions
   - added IsEqualGUID, GUIDToText, GUIDToRawUTF8 and GUIDToString functions
@@ -566,6 +565,8 @@ unit SynCommons;
   - fixed ticket [cce54e98ca], [388c2768b6] and [355249a9d1] about overflow in
     TTextWriter.AddJSONEscapeW()
   - fixed ticket [a75c0c6759] about TTextWriter.AddNoJSONEscapeW()
+  - added TTextWriter.AddHtmlEscape() method
+  - TTextWriter.AddJSONEscape/AddJSONEscapeW methods speed up
   - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
     now a per-thread context will be stored, e.g. for Enter/Leave tracking
   - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
@@ -4936,7 +4937,7 @@ type
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
     /// append some chars, escaping all HTML special chars as expected
     // - i.e.   < > & "   as   &lt; &gt; &amp; &quote;
-    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: integer);
+    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
     /// fast conversion from binary data into hexa chars, ready to be displayed
@@ -13793,7 +13794,7 @@ asm // rcx=Source, rdx=Dest, r8=Count
      and r8,07H
 @09: test r8,r8
      jle @11
-     db 66H,66H,66H,90H,66H,66H,90H
+     db 66H,66H,66H,90H
 @10: dec r8
      mov al,[rcx+rdx]
      mov [rdx],al
@@ -31632,36 +31633,35 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: integer);
-var c: AnsiChar;
+procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
+const HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
+var i,beg: PtrInt;
 begin
   if Text=nil then
     exit;
   if TextLen=0 then
     TextLen := MaxInt;
-  if B>=BEnd then
-    Flush;
-  repeat
-    c := Text^;
-    inc(Text);
-    case c of
-    #0:  break;
-    '<': AddShort('&lt;');
-    '>': AddShort('&gt;');
-    '&': AddShort('&amp;');
-    '"': AddShort('&quot;');
-    else begin
-      inc(B);
-      B^ := c;
-      if TextLen=1 then
-        break;
-      dec(TextLen);
-      if B<BEnd then
-        continue;
-      Flush;
+  i := 0;
+  while i<TextLen do begin
+    beg := i;
+    if not(ord(Text[i]) in HTML_ESCAPE) then begin
+      repeat
+        inc(i);
+      until (i>=TextLen) or (ord(Text[i]) in HTML_ESCAPE);
+      AddNoJSONEscape(Text+beg,i-beg);
     end;
+    while i<TextLen do begin
+      case Text[i] of
+      #0:  exit;
+      '<': AddShort('&lt;');
+      '>': AddShort('&gt;');
+      '&': AddShort('&amp;');
+      '"': AddShort('&quot;');
+      else break;
+      end;
+      inc(i);
     end;
-  until false;
+  end;
 end;
 
 procedure TTextWriter.AddByteToHex(Value: byte);
@@ -31678,8 +31678,8 @@ begin
   if B+3>=BEnd then
     Flush;
   PCardinal(B+1)^ := ((Value shr 12) and $3f)+
-                   ((Value shr 6) and $3f)shl 8+
-                   (Value and $3f)shl 16+$202020;
+                     ((Value shr 6) and $3f)shl 8+
+                     (Value and $3f)shl 16+$202020;
   //assert(Chars3ToInt18(B)=Value);
   inc(B,3);
 end;
@@ -31911,115 +31911,81 @@ begin
   end;
 end;
 
+const // see http://www.ietf.org/rfc/rfc4627.txt
+  JSON_ESCAPE: set of byte = [0..31,ord('\'),ord('"')];
+
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
-var c: PtrUInt;
-label Esc, nxt;
+var i,c: PtrInt;
 begin
-  if P=nil then exit;
+  if P=nil then
+    exit;
   if Len=0 then
     Len := MaxInt;
-  if B>=BEnd then
-    Flush;
-  repeat
-    inc(B);
-    // escape chars, according to http://www.ietf.org/rfc/rfc4627.txt
-    c := PByte(P)^;
-    if c>=32 then begin
-      if c in [ord('\'),ord('"')] then goto Esc;
-      B^ := AnsiChar(c);
-nxt:  if Len=1 then
-        break;
-      dec(Len);
-      inc(PByte(P));
-      if B<BEnd then
-        continue;
-      Flush;
-    end else
-    case c of
-    0: begin
-      dec(B); break; end;
-    8: begin
-      c := ord('b'); goto Esc; end;
-    9: begin
-      c := ord('t'); goto Esc; end;
-    $a: begin
-      c := ord('n'); goto Esc; end;
-    $c: begin
-      c := ord('f'); goto Esc; end;
-    $d: begin
-      c := ord('r');
-Esc:  B^ := '\';
-      if B>=BEnd then  // inlined: avoid endless loop
-        Flush;
-      B[1] := AnsiChar(c);
-      inc(B);
-      goto nxt;
+  i := 0;
+  while i<Len do begin
+    c := i;
+    if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
+      repeat
+        inc(i);
+      until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
+      AddNoJSONEscape(PAnsiChar(P)+c,i-c);
     end;
-    else begin // characters below ' ', #7 e.g. -> // 'u0007'
-      B^ := '\';
-      AddShort('u00');
-      Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
-      goto nxt;
+    while i<Len do begin
+      c := PByteArray(P)[i];
+      case c of
+      0:  exit;
+      8:  Add('\','b');
+      9:  Add('\','t');
+      10: Add('\','n');
+      12: Add('\','f');
+      13: Add('\','r');
+      ord('\'),ord('"'): Add('\',AnsiChar(c));
+      1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
+        AddShort('\u00');
+        Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
+      end;
+      else break;
+      end;
+      inc(i);
     end;
-    end;
-  until false;
+  end;
 end;
 
 procedure TTextWriter.AddJSONEscapeW(P: PWord; Len: PtrInt);
-var PEnd: PtrUInt;
-    c: ansichar;
-    v: PtrUInt;
-label Escape;
+var i,c: PtrInt;
 begin
-  if P=nil then exit;
+  if P=nil then
+    exit;
   if Len=0 then
-    PEnd := PtrUInt(-1) else
-    PEnd := PtrUInt(P)+PtrUInt(Len)*sizeof(WideChar);
-  repeat
-    if B+7>=BEnd then
-      Flush;
-    inc(B);
-    // escape chars, according to http://www.ietf.org/rfc/rfc4627.txt
-    case P^ of
-      0: begin
-        dec(B); break; end;
-      8: begin
-        c := 'b'; goto Escape; end;
-      9: begin
-        c := 't'; goto Escape; end;
-      10: begin
-        c := 'n'; goto Escape; end;
-      12: begin
-        c := 'f'; goto Escape; end;
-      13: begin
-        c := 'r'; goto Escape; end;
-      ord('\'),{ord('/'),}ord('"'): begin // litterals 34,47,92
-        c := AnsiChar(ord(P^));
-Escape: B^ := '\';
-        inc(B);
-        inc(P);
-        B^ := c;
-        if PtrUInt(P)<PEnd then continue else break;
-      end;
-      32,33,35..46,48..91,93..126: begin
-        B^ := AnsiChar(ord(P^)); // direct store 7 bits ASCII
-        inc(P);
-        if PtrUInt(P)<PEnd then continue else break;
-      end;
-      1..7, 11, 14..31: begin // characters below ' ', #7 e.g. -> '\u0007'
-        B^ := '\';
-        AddShort('u00');
-        v := byte(PAnsiChar(P)^);
-        inc(P);
-        Add(HexCharsLower[v shr 4],HexCharsLower[v and $F]);
-        if PtrUInt(P)<PEnd then continue else break;
-      end;
-      else begin // characters higher than #126 -> UTF-8 encode
-        inc(B,UTF16CharToUtf8(B,P)-1);
-        if PtrUInt(P)<PEnd then continue else break;
-      end;
+    Len := MaxInt;
+  i := 0;
+  while i<Len do begin
+    c := i;
+    if not(PWordArray(P)[i] in JSON_ESCAPE) then begin
+      repeat
+        inc(i);
+      until (i>=Len) or (PWordArray(P)[i] in JSON_ESCAPE);
+      AddNoJSONEscapeW(@PWordArray(P)[c],i-c);
     end;
-  until false;
+    while i<Len do begin
+      c := PWordArray(P)[i];
+      case c of
+      0:  exit;
+      8:  Add('\','b');
+      9:  Add('\','t');
+      10: Add('\','n');
+      12: Add('\','f');
+      13: Add('\','r');
+      ord('\'),ord('"'): Add('\',AnsiChar(c));
+      1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
+        AddShort('\u00');
+        Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
+      end;
+      else break;
+      end;
+      inc(i);
+    end;
+  end;
 end;
 
 procedure TTextWriter.AddJSONEscape(const V: TVarRec);
