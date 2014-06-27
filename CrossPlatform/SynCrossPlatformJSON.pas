@@ -289,6 +289,10 @@ procedure DoubleToJSON(Value: double; var result: string);
 // - if Date is 0, will return ""
 function DateTimeToJSON(Value: TDateTime): string;
 
+/// compute the ISO-8601 JSON text representation of the current date/time value
+// - e.g. "2014-06-27T20:59:29"
+function NowToIso8601: string;
+
 /// compute the unquoted ISO-8601 text representation of a date/time value
 // - e.g. 'YYYY-MM-DD' 'Thh:mm:ss' or 'YYYY-MM-DDThh:mm:ss'
 // - if Date is 0, will return ''
@@ -636,6 +640,11 @@ end;
 function DateTimeToJSON(Value: TDateTime): string;
 begin // e.g. "YYYY-MM-DD" "Thh:mm:ss" or "YYYY-MM-DDThh:mm:ss"
   result := '"'+DateTimeToIso8601(Value)+'"';
+end;
+
+function NowToIso8601: string;
+begin
+  result := DateTimeToIso8601(Now);
 end;
 
 function DateTimeToIso8601(Value: TDateTime): string;

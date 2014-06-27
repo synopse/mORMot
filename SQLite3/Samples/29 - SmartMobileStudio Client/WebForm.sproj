@@ -89,6 +89,11 @@
         <created>2014-06-25T13:50:46.341Z</created>
         <filename>SynCrossPlatformSpecific.pas</filename>
       </file>
+      <file type="unit">
+        <name>SmartTests</name>
+        <created>2014-06-27T22:44:51.425Z</created>
+        <filename>SmartTests.pas</filename>
+      </file>
     </files>
   </project>
 </SMART>

@@ -5,6 +5,7 @@ interface
 uses 
   W3System, W3Components, W3Forms, W3Application,
   SynCrossPlatformCrypto, SynCrossPlatformSpecific, SynCrossPlatformREST,
+  SmartTests,
   LoginForm;
 
 type

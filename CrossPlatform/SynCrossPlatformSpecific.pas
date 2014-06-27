@@ -265,6 +265,9 @@ procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
 procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
 function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
 function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTIme): boolean;
+function NowToIso8601: string;
+function DateTimeToIso8601(Value: TDateTime): string;
+function Iso8601ToDateTime(const Value: string): TDateTime;
 function TryStrToInt(const S: string; var Value: integer): Boolean;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean;
 function UpCase(ch: Char): Char; inline;
@@ -637,42 +640,28 @@ var date := new JDate;
 begin
   date.AsDateTime := Value;
   Y := date.getFullYear;
-  M := date.getMonth;
-  D := date.getDay;
+  M := date.getMonth+1;
+  D := date.getDate;
 end;
 
 function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
-var date := new JDate;
 begin
-  if (Y>1900) and (Y<3000) and (M>0) and (M<13) and (D>0) and (D<32) then
   try
-    asm // missing declaration in w3c.date
-      @date.setFullYear(@Y,@M,@D);
-    end;
-    Value := date.AsDateTime;
-    result := true;
+    Value := EncodeDate(Y,M,D);
+    result := true
   except
     result := false;
-  end else
-    result := false;
+  end;
 end;
 
 function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTime): boolean;
-var date := new JDate;
 begin
-  if (HH>=0) and (HH<25) and (MM>=0) and (MM<60) and (SS>=0) and (SS<60) and
-     (MS>=0) and (MS<1000) then
   try
-    date.setHours(HH);
-    date.setMinutes(MM);
-    date.setSeconds(SS);
-    date.setMilliseconds(MS);
-    Value := date.AsDateTime;
-    result := true;
+    Value := EncodeTime(HH,MM,SS,MS);
+    result := true
   except
     result := false;
-  end else
-    result := false;
+  end;
 end;
 
 function UpCase(ch: Char): Char; inline;
@@ -712,6 +701,57 @@ end;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean; inline;
 begin
   result := TryStrToInt(S,Value);
+end;
+
+function NowToIso8601: string;
+begin
+  result := Copy(JDate.Create.toISOString,1,19);
+end;
+
+function DateTimeToIso8601(Value: TDateTime): string;
+begin // e.g. YYYY-MM-DD Thh:mm:ss or YYYY-MM-DDThh:mm:ss
+  if Value=0 then
+    result := '' else
+  if frac(Value)=0 then
+    result := FormatDateTime('yyyy-mm-dd',Value) else
+  if trunc(Value)=0 then
+    result := FormatDateTime('Thh:nn:ss',Value) else
+    result := FormatDateTime('yyyy-mm-ddThh:nn:ss',Value);
+end;
+
+function Iso8601ToDateTime(const Value: string): TDateTime;
+var Y,M,D, HH,MI,SS: cardinal;
+begin //  YYYY-MM-DD   Thh:mm:ss  or  YYYY-MM-DDThh:mm:ss
+      //  1234567890   123456789      1234567890123456789
+  result := 0;
+  case Length(Value) of
+  9: if (Value[1]='T') and (Value[4]=':') and (Value[7]=':') then begin
+    HH := ord(Value[2])*10+ord(Value[3])-(48+480);
+    MI := ord(Value[5])*10+ord(Value[6])-(48+480);
+    SS := ord(Value[8])*10+ord(Value[9])-(48+480);
+    TryEncodeTime(HH,MI,SS,0,result);
+  end;
+  10: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) then begin
+    Y := ord(Value[1])*1000+ord(Value[2])*100+
+         ord(Value[3])*10+ord(Value[4])-(48+480+4800+48000);
+    M := ord(Value[6])*10+ord(Value[7])-(48+480);
+    D := ord(Value[9])*10+ord(Value[10])-(48+480);
+    TryEncodeDate(Y,M,D,result);
+  end;
+  19: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) and
+         (ord(Value[11]) in [ord(' '),ord('T')]) and (Value[14]=':') and (Value[17]=':') then begin
+    Y := ord(Value[1])*1000+ord(Value[2])*100+
+         ord(Value[3])*10+ord(Value[4])-(48+480+4800+48000);
+    M := ord(Value[6])*10+ord(Value[7])-(48+480);
+    D := ord(Value[9])*10+ord(Value[10])-(48+480);
+    HH := ord(Value[12])*10+ord(Value[13])-(48+480);
+    MI := ord(Value[15])*10+ord(Value[16])-(48+480);
+    SS := ord(Value[18])*10+ord(Value[19])-(48+480);
+    if (Y<=9999) and ((M-1)<12) and ((D-1)<31) and
+       (HH<24) and (MI<60) and (SS<60) then
+      result := EncodeDate(Y,M,D)+EncodeTime(HH,MI,SS,0);
+  end;
+  end;
 end;
 
 

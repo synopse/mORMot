@@ -4,10 +4,12 @@ interface
 
 uses 
   W3System, W3Graphics, W3Components, W3Forms, W3Fonts, W3Borders, W3Application,
-  W3Label, W3Editbox, W3Panel, W3Button, SynCrossPlatformREST;
+  W3Label, W3Editbox, W3Panel, W3Button,
+  SynCrossPlatformREST, SmartTests;
 
 type
   TLoginForm=class(TW3form)
+    procedure W3Button1Click(Sender: TObject);
     procedure ConnectClick(Sender: TObject);
   private
     {$I 'LoginForm:intf'}
@@ -45,6 +47,11 @@ begin
   if client.ServerTimeStamp=0 then
     ShowMessage('Impossible to retrieve server time stamp');
 
+end;
+
+procedure TLoginForm.W3Button1Click(Sender: TObject);
+begin
+  TestSMS;
 end;
 
 procedure TLoginForm.Resize;
