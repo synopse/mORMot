@@ -8,6 +8,8 @@ from CrossPlatform folder into this folder:
 - SynCrossPlatformRest.pas
 - SynCrossPlatformSpecific.pas
 
+For this, simply run CopySynCrossPlatformUnits.bat
+
 Those units are needed as external content, to compile the 
 demo application.
 
