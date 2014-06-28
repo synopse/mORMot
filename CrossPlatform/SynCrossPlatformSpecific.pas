@@ -630,18 +630,18 @@ procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
 var date := new JDate;
 begin
   date.AsDateTime := Value;
-  HH := date.getHours;
-  MM := date.getMinutes;
-  SS := date.getSeconds;
+  HH := date.getUTCHours;
+  MM := date.getUTCMinutes;
+  SS := date.getUTCSeconds;
 end;
 
 procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
 var date := new JDate;
 begin
   date.AsDateTime := Value;
-  Y := date.getFullYear;
-  M := date.getMonth+1;
-  D := date.getDate;
+  Y := date.getUTCFullYear;
+  M := date.getUTCMonth+1;
+  D := date.getUTCDate;
 end;
 
 function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
@@ -705,12 +705,12 @@ end;
 
 function NowToIso8601: string;
 begin
-  result := Copy(JDate.Create.toISOString,1,19);
+  result := DateTimeToIso8601(Now);
 end;
 
 function DateTimeToIso8601(Value: TDateTime): string;
 begin // e.g. YYYY-MM-DD Thh:mm:ss or YYYY-MM-DDThh:mm:ss
-  if Value=0 then
+  if Value<=0 then
     result := '' else
   if frac(Value)=0 then
     result := FormatDateTime('yyyy-mm-dd',Value) else

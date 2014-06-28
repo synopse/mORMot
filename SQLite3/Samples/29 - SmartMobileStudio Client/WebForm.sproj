@@ -44,9 +44,9 @@
       <use_custom_template>0</use_custom_template>
       <use_custom_theme>0</use_custom_theme>
       <output_name>index.html</output_name>
-      <execute_type>0</execute_type>
+      <execute_type>1</execute_type>
       <executeable_name></executeable_name>
-      <executeable_params></executeable_params>
+      <executeable_params>%output%</executeable_params>
       <use_pre-build_script>0</use_pre-build_script>
       <pre-build_script></pre-build_script>
       <use_pre-link_script>0</use_pre-link_script>
@@ -54,7 +54,7 @@
       <use_post-build_script>0</use_post-build_script>
       <post-build_script></post-build_script>
       <conditional_defines>DWSCRIPT</conditional_defines>
-      <handle_exceptions>0</handle_exceptions>
+      <handle_exceptions>1</handle_exceptions>
       <auto_refresh>0</auto_refresh>
     </options>
     <globals />

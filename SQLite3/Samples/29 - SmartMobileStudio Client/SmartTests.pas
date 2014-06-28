@@ -11,8 +11,29 @@ uses
 
 procedure TestSMS;
 
+type
+  TSQLRecordPeople = class(TSQLRecord)
+  protected
+    fData: TSQLRawBlob;
+    fFirstName: RawUTF8;
+    fLastName: RawUTF8;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+    class function ComputeRTTI: TRTTIPropInfos; override;
+  published
+    property FirstName: RawUTF8 read fFirstName write fFirstName;
+    property LastName: RawUTF8 read fLastName write fLastName;
+    property Data: TSQLRawBlob read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+
 
 implementation
+
+const
+  MSecsPerDay = 86400000;
+  OneSecDateTime = 1000/MSecsPerDay;
 
 procedure TestsIso8601DateTime;
   procedure Test(D: TDateTime);
@@ -25,13 +46,13 @@ procedure TestsIso8601DateTime;
     J := new JDate;
     J.AsDateTime := D;
     E := J.AsDateTime;
-    assert(Abs(D-E)<(1000/86400000)); // we allow 1 sec error
+    assert(Abs(D-E)<OneSecDateTime);
     s := DateTimeToIso8601(D);
     E := Iso8601ToDateTime(s);
-    assert(Abs(D-E)<(1000/86400000)); // we allow 1 sec error
+    assert(Abs(D-E)<OneSecDateTime);
     V := DateTimeToTTimeLog(D);
     E := TTimeLogToDateTime(V);
-    assert(Abs(D-E)<(1000/86400000));
+    assert(Abs(D-E)<OneSecDateTime);
     assert(UrlDecode(UrlEncode(s))=s);
   end;
   begin
@@ -44,7 +65,17 @@ procedure TestsIso8601DateTime;
   end;
 var D: TDateTime;
     i: integer;
+    s,x: string;
+    T: TTimeLog;
 begin
+  s := '2014-06-28T11:50:22';
+  D := Iso8601ToDateTime(s);
+  assert(Abs(D-41818.49331)<OneSecDateTime);
+  assert(DateTimeToIso8601(D)=s);
+  x := TTimeLogToIso8601(135181810838);
+  assert(x=s);
+  T := DateTimeToTTimeLog(D);
+  assert(T=135181810838);
   D := Now/20+Random*20; // some starting random date/time
   for i := 1 to 2000 do begin
     Test(D);
@@ -77,5 +108,14 @@ begin
   TestsIso8601DateTime;
 end;
 
+
+{ TSQLRecordPeople }
+
+class function TSQLRecordPeople.ComputeRTTI: TRTTIPropInfos;
+begin
+  result := TRTTIPropInfos.Create(
+    ['Data','FirstName','LastName','YearOfBirth','YearOfDeath'],
+    [sftBlob]);
+end;
 
 end.

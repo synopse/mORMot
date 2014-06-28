@@ -295,7 +295,15 @@ begin
 end;
 var D: TDateTime;
     i: integer;
+    s: string;
+    T: TTimeLog;
 begin
+  s := '2014-06-28T11:50:22';
+  D := Iso8601ToDateTime(s);
+  Check(Abs(D-41818.49331)<(1000/MSecsPerDay));
+  Check(DateTimeToIso8601(D)=s);
+  T := DateTimeToTTimeLog(D);
+  Check(T=135181810838);
   D := Now/20+Random*20; // some starting random date/time
   for i := 1 to 2000 do begin
     Test(D);

@@ -641,6 +641,9 @@ function DateTimeToTTimeLog(Value: TDateTime): TTimeLog;
 /// convert a TTimeLog value into the Delphi date/time type
 function TTimeLogToDateTime(Value: TTimeLog): TDateTime;
 
+/// convert a TTimeLog value into an ISO-8601 encoded date/time text
+function TTimeLogToIso8601(Value: TTimeLog): string;
+
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
 
@@ -738,6 +741,11 @@ begin
      TryEncodeTime((Value shr (6+6)) and 31,
        (Value shr 6) and 63,Value and 63, 0, Time) then
     result := result+Time;
+end;
+
+function TTimeLogToIso8601(Value: TTimeLog): string;
+begin
+  result := DateTimeToIso8601(TTimeLogToDateTime(Value));
 end;
 
 function UrlEncode(const aValue: string): string; overload;
@@ -1467,7 +1475,9 @@ end;
 
 function TSQLRest.GetServerTimeStamp: TTimeLog;
 begin
-  result := DateTimeToTTimeLog(Now+fServerTimeStampOffset);
+  if fServerTimeStampOffset=0 then
+    result := 0 else
+    result := DateTimeToTTimeLog(Now+fServerTimeStampOffset);
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -1679,8 +1689,11 @@ begin
   HttpBodyToText(Call.OutBody,tmp);
   {$endif}
   if not TryStrToInt64(tmp,TimeStamp) then
-    result := false else
+    result := false else begin
     fServerTimeStampOffset := TTimeLogToDateTime(TimeStamp)-Now;
+    if fServerTimeStampOffset=0 then
+      fServerTimeStampOffset := 0.000001; // ensure <> 0 (indicates error)
+  end;
 end;
 
 function TSQLRestClientURI.ExecuteAdd(tableIndex: integer;

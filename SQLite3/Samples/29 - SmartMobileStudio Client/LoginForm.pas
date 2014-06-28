@@ -42,6 +42,7 @@ var client: TSQLRestClientHTTP;
 begin
   model := TSQLModel.Create([TSQLAuthUser],'root');
   model.Add(TSQLAuthGroup); // circumvent requests/43
+  model.Add(TSQLRecordPeople);
   client := TSQLRestClientHTTP.Create(ServerAddress.Text,888,model,false);
   client.Connect;
   if client.ServerTimeStamp=0 then
