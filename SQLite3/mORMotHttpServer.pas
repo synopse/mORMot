@@ -625,6 +625,8 @@ begin
     fAccessControlAllowOriginHeader :=
       #13#10'Access-Control-Allow-Methods: POST, PUT, GET, DELETE, LOCK, OPTIONS'+
       #13#10'Access-Control-Max-Age: 1728000'+
+      // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
+      #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
 end;
 
