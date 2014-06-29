@@ -47,7 +47,8 @@ unit SynCrossPlatformREST;
 
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
-  - would compile with Delphi for any platform, or with FPC or Kylix
+  - would compile with Delphi for any platform (including NextGen for mobiles),
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
 
 }
 
@@ -182,6 +183,7 @@ type
   TSQLModelInfoPropInfo = class
   public
     /// the name of the published property
+    // - e.g. 'FirstName'
     Name: string;
     /// the property field type
     Kind: TSQLFieldKind;
@@ -282,9 +284,11 @@ type
     function GetTableIndex(const aTableName: string): integer; overload;
     /// get index of aTable in Tables[], raise an ERestException if not found
     function GetTableIndexExisting(aTable: TSQLRecordClass): integer;
+    /// get the RTTI information for the specified class or raise an ERestException
+    function GetInfo(aTable: TSQLRecordClass): TSQLModelInfo;
     /// the Root URI path of this Database Model
     property Root: string read fRoot;
-    /// the information for each class
+    /// the RTTI information for each class
     property Info: TSQLModelInfoDynArray read fInfo;
   end;
 
@@ -313,8 +317,10 @@ type
     fFill: TSQLTableJSON;
     {$ifdef ISSMS}
     class function GetRTTI: TRTTIPropInfos;
-    /// you should override this method
+    /// you should override these methods
     class function ComputeRTTI: TRTTIPropInfos; virtual;
+    procedure SetProperty(FieldIndex: integer; const Value: variant); virtual;
+    function GetProperty(FieldIndex: integer): variant; virtual;
     {$endif}
   public
     /// this constructor initializes the record
@@ -357,6 +363,9 @@ type
     // !   dosomeotherthingwith(Rec);
     // ! until not Rec.FillOne;
     function FillRewind: boolean;
+    /// get the object properties as JSON
+    // - FieldNames='' to retrieve simple fields, '*' all fields, or as specified
+    function ToJSON(aModel: TSQLModel; aFieldNames: string=''): string;
     /// return the class type of this TSQLRecord
     function RecordClass: TSQLRecordClass;
       {$ifdef HASINLINE}inline;{$endif}
@@ -377,10 +386,12 @@ type
   TSQLAuthGroup = class(TSQLRecord)
   protected
     fIdent: string;
-    fSessionTimeOut: integer;
     fAccessRights: string;
+    fSessionTimeOut: integer;
     {$ifdef ISSMS}
     class function ComputeRTTI: TRTTIPropInfos; override;
+    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
+    function GetProperty(FieldIndex: integer): variant; override;
     {$endif}
   published
     /// the access right identifier, ready to be displayed
@@ -403,10 +414,12 @@ type
     fLogonName: string;
     fPasswordHashHexa: string;
     fDisplayName: string;
-    fGroup: TSQLAuthGroup;
     fData: TSQLRawBlob;
+    fGroup: integer;
     {$ifdef ISSMS}
     class function ComputeRTTI: TRTTIPropInfos; override;
+    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
+    function GetProperty(FieldIndex: integer): variant; override;
     {$endif}
     procedure SetPasswordPlain(const Value: string);
   public
@@ -424,12 +437,10 @@ type
     property DisplayName: string read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
     property PasswordHashHexa: string read fPasswordHashHexa write fPasswordHashHexa;
-    /// the associated access rights of this user
+    /// the associated access rights of this user in TSQLAuthGroup
     // - access rights are managed by group
-    // - in TAuthSession.User instance, GroupRights property will contain a
-    // REAL TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
     // - note that 'Group' field name is not allowed by SQLite
-    property GroupRights: TSQLAuthGroup read fGroup write fGroup;
+    property GroupRights: integer read fGroup write fGroup;
     /// some custom data, associated to the User
     // - Server application may store here custom data
     // - its content is not used by the framework but 'may' be used by your
@@ -517,6 +528,7 @@ type
   TSQLRestClientURI = class(TSQLRest)
   protected
     fAuthentication: TSQLRestAuthentication;
+    fOnlyJSONRequests: boolean;
     function getURI(aTable: TSQLRecordClass): string;
     function getURIID(aTableExistingIndex: integer; aID: integer): string;
     function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: integer): string;
@@ -524,6 +536,8 @@ type
     function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
   public
+    /// will call SessionClose
+    destructor Destroy; override;
     /// connect to the REST server, and retrieve its time stamp
     function Connect: boolean;
     /// method calling the remote Server via a RESTful command
@@ -552,10 +566,20 @@ type
       aTable: TSQLRecordClass=nil; aID: integer=0): string;
     /// authenticate an User to the current connected Server
     // - using TSQLRestAuthenticationDefault or TSQLRestServerAuthenticationNone
+    // - will set Authentication property on success
     procedure SetUser(aAuthenticationClass: TSQLRestAuthenticationClass;
       const aUserName, aPassword: string; aHashedPassword: Boolean=False);
     /// close the session initiated with SetUser()
+    // - will reset Authentication property to nil
     procedure SessionClose;
+    /// set this property to TRUE if the server expects only APPLICATION/JSON
+    // - applies only for AJAX clients (i.e. SmartMobileStudio platform)
+    // - true will let any remote call be identified as "preflighted requests",
+    // so will send an OPTIONS method prior to any request: may be twice slower
+    // - the default is false, as in TSQLHttpServer.OnlyJSONRequests
+    property OnlyJSONRequests: boolean read fOnlyJSONRequests write fOnlyJSONRequests;
+    /// if not nil, point to the current authentication session running
+    property Authentication: TSQLRestAuthentication read fAuthentication;
   end;
 
   /// used for client authentication
@@ -678,7 +702,7 @@ var tmpIsString: Boolean;
     tmp: string;
     i,deb,arg: integer;
 {$ifdef ISSMS}
-    args: variant;
+    args: variant; // open parameters are not a true array in JavaScript
 begin
   asm
     @args=@BoundsSQLWhere;
@@ -783,23 +807,26 @@ end;
 function UrlEncode(const aNameValueParameters: array of const): string; overload;
 var n,a: integer;
     name,value: string;
-    {$ifndef ISSMS}
+    {$ifdef ISSMS}
+    temp: variant;
+    {$else}
     wasString: Boolean;
     i: integer;
     {$endif}
 begin
   result := '';
-  n := high(aNameValueParameters);
-  if n>0 then begin
 {$ifdef ISSMS} // open parameters are not a true array in JavaScript
-    var temp: variant;
-    asm
-      @temp=@aNameValueParameters;
-    end;
-    for a := 0 to n div 2 do begin
+  asm
+    @temp=@aNameValueParameters;
+  end;
+  n := temp.length;
+  if n>1 then begin
+    for a := 0 to (n-1)shr 1 do begin
       name := temp[a*2];
       value := temp[a*2+1];
 {$else}
+  n := high(aNameValueParameters);
+  if n>0 then begin
     for a := 0 to n div 2 do begin
       name := VarRecToValue(aNameValueParameters[a*2],wasString);
       for i := 1 to length(name) do
@@ -895,40 +922,39 @@ end;
 constructor TRTTIPropInfos.Create(const PropNames: array of string;
   const PropKinds: array of TSQLFieldKind);
 var name: string;
-    cache: variant;
     p: integer;
-    prop = new TSQLModelInfoPropInfo;
+    prop: TSQLModelInfoPropInfo;
 begin
+  prop := new TSQLModelInfoPropInfo;
   prop.Name := 'RowID'; // first Field is RowID
   Props.Add(prop);
   for name in PropNames do begin
+    prop := new TSQLModelInfoPropInfo;
     prop.Name := name;
     Props.Add(prop);
   end;
-  cache := TVariant.CreateObject;
+  PropCache := TVariant.CreateObject;
   for p := 0 to high(Props) do begin
     prop := Props[p];
     prop.FieldIndex := p;
-    if p<length(PropKinds) then
+    if (p>0) and (p<=length(PropKinds)) then
       prop.Kind := PropKinds[p-1] else
       prop.Kind := sftUnspecified;
-    var upperName := uppercase(prop.Name);
-    asm
-      @cache[@upperName]=prop;
-    end;
+    PropCache[uppercase(prop.Name)] := prop;
   end;
-  PropCache := cache;
 end;
 
-function Find(PropCache: variant; Name: string; var Info: TSQLModelInfoPropInfo): boolean;
+function Find(PropCache: variant; Name: string; var Info: TSQLModelInfoPropInfo): boolean; inline;
 begin
   Name := UpperCase(Name);
   if Name='ID' then
     Name := 'ROWID';
+  var nfo: TSQLModelInfoPropInfo;
   asm
-    @Info=@PropCache[@Name];
+    @nfo=@PropCache[@Name];
   end;
-  result := VarIsValidRef(Info);
+  result := VarIsValidRef(nfo);
+  Info := nfo;
 end;
 
 var
@@ -937,19 +963,12 @@ var
 {$HINTS OFF}
 class function TSQLRecord.GetRTTI: TRTTIPropInfos;
 begin // use RTTI_Cache as global dictionary of all TSQLRecord's RTTI
-  var name = ClassName;
-  var value: variant;
-  asm
-    @value = @RTTI_Cache[@name];
-  end;
-  if not VarIsValidRef(value) then begin
-    value := ComputeRTTI;
-    asm
-      @RTTI_Cache[@name]=@value;
-    end;
-  end;
-  asm
-    return @value;
+  var res = RTTI_Cache[ClassName];
+  if VarIsValidRef(res) then asm
+    @result=@res;
+  end else begin
+    result := ComputeRTTI;
+    RTTI_Cache[ClassName] := result;
   end;
 end;
 {$HINTS ON}
@@ -957,6 +976,20 @@ end;
 class function TSQLRecord.ComputeRTTI: TRTTIPropInfos;
 begin
   result := TRTTIPropInfos.Create([],[]);
+end;
+
+procedure TSQLRecord.SetProperty(FieldIndex: integer; const Value: variant);
+begin
+  case FieldIndex of
+  0: fID := Value;
+  end;
+end;
+
+function TSQLRecord.GetProperty(FieldIndex: integer): variant;
+begin
+  case FieldIndex of
+  0: result := fID;
+  end;
 end;
 
 {$endif ISSMS}
@@ -992,8 +1025,15 @@ end;
 
 destructor TSQLRecord.Destroy;
 begin
-  fFill.Free;
+  fFill.Free; // may help even with SMS (marking objects as  Garbage Collect)
   inherited;
+end;
+
+function TSQLRecord.RecordClass: TSQLRecordClass;
+begin
+  if self=nil then
+    result := nil else
+    result := TSQLRecordClass(ClassType);
 end;
 
 function TSQLRecord.FillOne: boolean;
@@ -1023,13 +1063,8 @@ begin
     exit;
   rtti := GetRTTI;
   for i := 0 to high(Names) do
-    if Find(rtti.PropCache,Names[i],info) then begin
-      var name := info.Name;
-      var value := Values[i+ValuesStartIndex];
-      asm
-        @self[@name]=@value;
-      end;
-    end else
+    if Find(rtti.PropCache,Names[i],info) then
+      SetProperty(info.FieldIndex,Values[i+ValuesStartIndex]) else
       exit;
   result := true;
 end;
@@ -1066,12 +1101,17 @@ begin
   end;
 end;
 
-function TSQLRecord.RecordClass: TSQLRecordClass;
+
+function TSQLRecord.ToJSON(aModel: TSQLModel; aFieldNames: string=''): String;
+var nfo: TSQLModelInfo;
 begin
   if self=nil then
-    result := nil else
-    result := TSQLRecordClass(ClassType);
+    result := 'null' else begin
+    nfo := aModel.Info[aModel.GetTableIndexExisting(RecordClass)];
+    result := nfo.ToJSON(self,nfo.FieldNamesToFieldBits(aFieldNames,false));
+  end;
 end;
+
 
 { TSQLTableJSON }
 
@@ -1177,7 +1217,7 @@ var f: TSQLFieldBit;
     fields: TSQLFieldBits;
     TimeStamp: Int64;
 begin
-  if not HasTimeFields then
+  if (Value=nil) or not HasTimeFields then
     exit;
   if AndCreate then
     fields := ModAndCreateTimeFields else
@@ -1185,12 +1225,8 @@ begin
   TimeStamp := aClient.ServerTimeStamp;
   for f := 0 to length(Prop)-1 do
     if f in fields then
-      {$ifdef ISSMS} begin
-        var name := Prop[ord(f)].Name;
-        asm
-          @Value[@name]=@TimeStamp;
-        end;
-      end;
+      {$ifdef ISSMS}
+      Value.SetProperty(ord(f),TimeStamp);
       {$else}
       SetInstanceProp(Value,Prop[f].RTTI,TimeStamp);
       {$endif}
@@ -1259,6 +1295,7 @@ begin
 end;
 
 {$ifndef ISSMS}
+
 destructor TSQLModelInfo.Destroy;
 var i: integer;
 begin
@@ -1266,6 +1303,7 @@ begin
   for i := 0 to Length(Prop)-1 do
     Prop[i].Free;
 end;
+
 {$endif}
 
 function TSQLModelInfo.FieldBitsToFieldNames(
@@ -1330,14 +1368,13 @@ function TSQLModelInfo.ToJSON(Value: TSQLRecord;
 var f: TSQLFieldBit;
 begin
 {$ifdef ISSMS}
-  var doc: variant;
-  for f in Fields do begin // only serialize the main Prop[] fields
-    var name := Prop[ord(f)].Name;
-    asm
-      @doc[@name]=@Value[@name];
-    end;
-  end;
-  result := JSON.Stringify(doc);
+  if Value=nil then
+    exit('null');
+  var doc := TVariant.CreateObject;
+  for f := 0 to length(Prop)-1 do
+    if f in Fields then
+      doc[Prop[ord(f)].Name] := Value.GetProperty(f);
+  result := JSON.Stringify(doc); // rely on JavaScript serialization
 {$else}
   result := '{';
   for f := 0 to length(Prop)-1 do
@@ -1416,6 +1453,7 @@ begin
 end;
 
 {$ifndef ISSMS}
+
 destructor TSQLModel.Destroy;
 var i: integer;
 begin
@@ -1423,7 +1461,13 @@ begin
   for i := 0 to high(fInfo) do
     fInfo[i].Free;
 end;
+
 {$endif}
+
+function TSQLModel.GetInfo(aTable: TSQLRecordClass): TSQLModelInfo;
+begin
+  result := Info[GetTableIndexExisting(aTable)];
+end;
 
 function TSQLModel.GetTableIndex(const aTableName: string): integer;
 begin
@@ -1664,7 +1708,7 @@ begin
     result := '' else begin
     {$ifdef ISSMS}
     doc := JSON.Parse(Call.OutBody);
-    if VarIsValidRef(result) then
+    if VarIsValidRef(doc.result) then
       result := doc.result;
     {$else}
     HttpBodyToText(Call.OutBody,jsonres);
@@ -1773,14 +1817,19 @@ end;
 procedure TSQLRestClientURI.SessionClose;
 var Call: TSQLRestURIParams;
 begin
-  if fAuthentication<>nil then
-    try
+  if (self<>nil) and (fAuthentication<>nil) then
+    try // notify Server to end of session
       CallBackGet('auth',['UserName',fAuthentication.User.LogonName,
         'Session',fAuthentication.SessionID],Call);
     finally
       fAuthentication.Free;
       fAuthentication := nil;
     end;
+end;
+
+destructor TSQLRestClientURI.Destroy;
+begin
+  SessionClose;
 end;
 
 { TSQLRestClientHTTP }
@@ -1816,14 +1865,16 @@ var inType: string;
 begin
   inType := FindHeader(Call.InHead,'content-type:');
   if inType='' then begin
-    inType := JSON_CONTENT_TYPE;
+    if OnlyJSONRequests then
+      inType := JSON_CONTENT_TYPE else
+      inType := 'text/plain'; // avoid slow CORS preflighted requests
     Call.InHead := trim(Call.InHead+#13#10'content-type:'+inType);
   end;
   for retry := 0 to 1 do begin
     if fConnection=nil then
       try
         fConnection := HttpConnectionClass.Create(fParameters);
-        // TODO: handle SynLZ compression and SHA/AES encryption
+        // TODO: handle SynLZ compression and SHA/AES encryption?
       except
         on E: Exception do begin
           fConnection.Free;
@@ -1867,12 +1918,38 @@ begin
 end;
 
 {$ifdef ISSMS}
+
 class function TSQLAuthUser.ComputeRTTI: TRTTIPropInfos;
 begin
   result := TRTTIPropInfos.Create(
     ['Data','Group','LogonName','DisplayName','PasswordHashHexa'],
     [sftBlob]);
 end;
+
+procedure TSQLAuthUser.SetProperty(FieldIndex: integer; const Value: variant);
+begin
+  case FieldIndex of
+  0: fID := Value;
+  1: fData := Value;
+  2: fGroup := Value;
+  3: fLogonName := Value;
+  4: fDisplayName := Value;
+  5: fPasswordHashHexa := Value;
+  end;
+end;
+
+function TSQLAuthUser.GetProperty(FieldIndex: integer): variant;
+begin
+  case FieldIndex of
+  0: result := fID;
+  1: result := fData;
+  2: result := fGroup;
+  3: result := fLogonName;
+  4: result := fDisplayName;
+  5: result := fPasswordHashHexa;
+  end;
+end;
+
 {$endif}
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
@@ -1951,11 +2028,33 @@ end;
 { TSQLAuthGroup }
 
 {$ifdef ISSMS}
+
 class function TSQLAuthGroup.ComputeRTTI: TRTTIPropInfos;
 begin
   result := TRTTIPropInfos.Create(
     ['Ident','SessionTimeOut','AccessRights'],[]);
 end;
+
+procedure TSQLAuthGroup.SetProperty(FieldIndex: integer; const Value: variant);
+begin
+  case FieldIndex of
+  0: fID := Value;
+  1: fIdent := Value;
+  2: fSessionTimeOut := Value;
+  3: fAccessRights := Value;
+  end;
+end;
+
+function TSQLAuthGroup.GetProperty(FieldIndex: integer): variant;
+begin
+  case FieldIndex of
+  0: result := fID;
+  1: result := fIdent;
+  2: result := fSessionTimeOut;
+  3: result := fAccessRights;
+  end;
+end;
+
 {$endif}
 
 end.

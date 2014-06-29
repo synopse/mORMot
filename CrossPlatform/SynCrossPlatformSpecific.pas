@@ -48,7 +48,8 @@ unit SynCrossPlatformSpecific;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - each operating system will have its own API calls in this single unit
-  - would compile with Delphi for any platform, or with FPC or Kylix
+  - would compile with Delphi for any platform (including NextGen for mobiles),
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
 
 }
 
@@ -182,7 +183,7 @@ type
 const
   /// MIME content type used for JSON communication
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
-  
+
   /// HTML Status Code for "Continue"
   HTML_CONTINUE = 100;
   /// HTML Status Code for "Switching Protocols"
@@ -615,7 +616,7 @@ begin
   L := length(PropName2);
   if length(PropName1)<L then
     result := false else
-    result := IdemPropName(PropName1,copy(PropName2,1,L));
+    result := IdemPropName(copy(PropName1,1,L),PropName2);
 end;
 
 function VarRecToValue(const VarRec: variant; var tmpIsString: boolean): string;
@@ -767,13 +768,6 @@ begin
     return 1;
   end;
 end;
-
-function VariantGetProp(const Value: variant; const PropName: string): variant;
-begin
-  asm
-    return @Value[@PropName];
-  end;
-end;
 {$HINTS ON}
 
 constructor TJSONVariantData.Create(const aJSON: string);
@@ -788,9 +782,8 @@ begin
   case Kind of
   jvObject: begin
     Names := TVariant.Properties(document);
-    for name in Names do begin
-      Values.Add(VariantGetProp(document,name));
-    end;
+    for name in Names do
+      Values.Add(document[name]);
   end;
   jvArray: asm
     @Values=@document;
@@ -821,12 +814,12 @@ begin
   end;
   Call.Connection.onreadystatechange := Call.OnReadyStateChange;
   Call.Connection.onerror := Call.OnError;
-  Call.Connection.open(Call.&Method,fURL+Call.Url,false); // false for synchronous call
+  Call.Connection.open(Call.Method,fURL+Call.Url,false); // false for synchronous call
   if Call.InHead<>'' then begin
     var i = 1;
     var line: string;
     while GetNextCSV(Call.InHead,i,line,#10) do begin
-      var l := pos(line,':');
+      var l := pos(':',line );
       if l=0 then
         continue;
       var head := trim(copy(line,1,l-1));

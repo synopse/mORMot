@@ -122,6 +122,7 @@ type
     procedure Connection;
     procedure ORM;
     procedure Services;
+    procedure CleanUp;
   end;
 {$M-}
 
@@ -487,9 +488,14 @@ end;
 
 destructor TSynCrossPlatformClient.Destroy;
 begin
-  fModel.Free;
-  fClient.Free;
+  CleanUp;
   inherited;
+end;
+
+procedure TSynCrossPlatformClient.CleanUp;
+begin
+  FreeAndNil(fClient);
+  FreeAndNil(fModel);
 end;
 
 procedure TSynCrossPlatformClient.Connection;
