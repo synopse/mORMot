@@ -228,7 +228,7 @@ begin
           if ShowModal=mrOk then begin
             C.Password := Crypt(C.Password);
             if TryConnect(C,true) and (res=100) then
-              Conns.AddOne(C,false) else
+              Conns.AddOne(C,false,'') else
               if res=100 then
                 FreeAndNil(C);
           end;
