@@ -106,7 +106,8 @@ unit mORMotDB;
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
   - ensure DESC INDEX is created for Firebird ID column, as expected for
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
-  - fix TSQLRestStorageExternal.CreateSQLMultiIndex() to set ColumnIndexed=TRUE
+  - fix TSQLRestStorageExternal.CreateSQLMultiIndex() to set ColumnIndexed=TRUE,
+    and fixed ticket [929cb6fc3047c5f78b95] by ignoring BLOB fields
   - fixed TSQLRestStorageExternal.UpdateBlobFields() to return true
     if no BLOB field is defined, and to proper handle multi-field update
   - fixed ticket [21c2d5ae96] when inserting/updating blob-only table content
@@ -160,6 +161,9 @@ type
     // - is >=0 for index in Props.Fields[], -1 for RowID/ID, -2 if unknown
     // - use InternalFieldNameToFieldExternalIndex() to convert from column name
     fFieldsExternalToInternal: TIntegerDynArray;
+    /// gives the index of each in Props.Fields[]+1 in fFieldsExternal[]
+    // - expects [0] of RowID/ID, [1..length(fFieldNames)] for others
+    fFieldsInternalToExternal: TIntegerDynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
     fBatchCapacity, fBatchCount, fBatchAddedID: integer;
@@ -283,6 +287,8 @@ type
     /// create one index for all specific FieldNames at once
     // - this method will in fact call the SQLAddIndex method, if the index
     // is not already existing
+    // - for databases which do not support indexes on BLOB fields (i.e. all
+    // engine but SQLite3), such FieldNames will be ignored
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; override;
     /// this method is called by TSQLRestServer.EndCurrentThread method just
@@ -504,12 +510,22 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; const aFileName: TFileName; aBinaryFile: boolean);
 
   procedure FieldsInternalInit;
-  var i: integer;
+  var i,n,int: integer;
   begin
-    SetLength(fFieldsExternalToInternal,length(fFieldsExternal));
-    with StoredClassProps.ExternalDB do
-    for i := 0 to high(fFieldsExternal) do
-      fFieldsExternalToInternal[i] := ExternalToInternalIndex(fFieldsExternal[i].ColumnName);
+    n := length(fFieldsExternal);
+    SetLength(fFieldsExternalToInternal,n);
+    with StoredClassProps.ExternalDB do begin
+      SetLength(fFieldsInternalToExternal,length(FieldNames)+1);
+      for i := 0 to high(fFieldsInternalToExternal) do
+        fFieldsInternalToExternal[i] := -1;
+      for i := 0 to n-1 do begin
+        int := ExternalToInternalIndex(fFieldsExternal[i].ColumnName);
+        fFieldsExternalToInternal[i] := int;
+        inc(int); // fFieldsInternalToExternal[0]=RowID, then follows fFieldsExternal[]
+        if int>=0 then
+          fFieldsInternalToExternal[int] := i;
+      end;
+    end;
   end;
   function FieldsExternalIndexOf(const ColName: RawUTF8): integer;
   begin
@@ -1502,16 +1518,19 @@ function TSQLRestStorageExternal.CreateSQLMultiIndex(
   Unique: boolean; IndexName: RawUTF8): boolean;
 var SQL: RawUTF8;
     ExtFieldNames: TRawUTF8DynArray;
+    IntFieldIndex: TIntegerDynArray;
     Descending: boolean;
-    ExtFieldIndex: integer;
+    i,n,extfield: integer;
 begin
   result := false;
   Descending := false;
-  if (self=nil) or (fProperties=nil) or (Table<>fStoredClass) or (high(FieldNames)<0) then
+  n := length(FieldNames);
+  if (self=nil) or (fProperties=nil) or (Table<>fStoredClass) or (n<=0) then
     exit;
-  ExtFieldIndex := InternalFieldNameToFieldExternalIndex(FieldNames[0]);
-  if high(FieldNames)=0 then begin
-    if IsRowID(Pointer(FieldNames[0])) then
+  StoredClassProps.ExternalDB.InternalToExternalDynArray(
+    FieldNames,ExtFieldNames,@IntFieldIndex);
+  if n=1 then begin // handle case of index over a single column
+    if IntFieldIndex[0]<0 then // ID/RowID?
       case fProperties.DBMS of
       dSQLite: begin
         result := true; // SQLite3 always generates an index for ID/RowID
@@ -1520,20 +1539,34 @@ begin
       dFirebird:  // see http://www.firebirdfaq.org/faq205
         Descending := true;
       end;
-    if not Descending then // we identify just if indexed, not the order
-      if ExtFieldIndex>=0 then
-        if fFieldsExternal[ExtFieldIndex].ColumnIndexed then begin
-          result := true; // column already indexed
-          exit;
-        end;
+    if not Descending then begin // we identify just if indexed, not the order
+      extfield := fFieldsInternalToExternal[IntFieldIndex[0]+1];
+      if (extfield>=0) and (fFieldsExternal[extfield].ColumnIndexed) then begin
+        result := true; // column already indexed
+        exit;
+      end;
+    end;
   end;
-  StoredClassProps.ExternalDB.InternalToExternalDynArray(FieldNames,ExtFieldNames);
+  if not (fProperties.DBMS in DB_HANDLEINDEXONBLOBS) then
+    // BLOB fields cannot be indexed (only in SQLite3)
+    for i := 0 to n-1 do begin
+      extfield := fFieldsInternalToExternal[IntFieldIndex[i]+1];
+      if (extfield>=0) and
+         (fFieldsExternal[extfield].ColumnType in [ftBlob,ftUTF8]) and
+         (fFieldsExternal[extfield].ColumnLength<=0) then begin
+        if i=0 then
+          exit; // impossible to create an index with no field!
+        SetLength(ExtFieldNames,i); // truncate index to the last indexable field
+        break;
+      end;
+    end;
   SQL := fProperties.SQLAddIndex(fTableName,ExtFieldNames,Unique,Descending,IndexName);
   if (SQL='') or (ExecuteDirect(pointer(SQL),[],[],false)=nil) then
     exit;
   result := true;
-  if ExtFieldIndex>=0 then
-    fFieldsExternal[ExtFieldIndex].ColumnIndexed := true;
+  extfield := fFieldsInternalToExternal[IntFieldIndex[0]+1];
+  if extfield>=0 then // mark first column as indexed by now
+    fFieldsExternal[extfield].ColumnIndexed := true;
 end;
 
 class function TSQLRestStorageExternal.Instance(
@@ -1629,8 +1662,7 @@ function TSQLRestStorageExternal.InternalFieldNameToFieldExternalIndex(
   const InternalFieldName: RawUTF8): integer;
 begin
   result := StoredClassRecordProps.Fields.IndexByNameOrExcept(InternalFieldName);
-  result := IntegerScanIndex(Pointer(fFieldsExternalToInternal),
-    length(fFieldsExternalToInternal),result);
+  result := fFieldsInternalToExternal[result+1];
 end;
 
 function TSQLRestStorageExternal.JSONDecodedPrepareToSQL(
@@ -1823,8 +1855,7 @@ begin
           hasIndex := true else begin
           if cardinal(Column)>=cardinal(Fields.Count) then
             exit; // invalid column index -> abort query
-          col := IntegerScanIndex(Pointer(fFieldsExternalToInternal),
-            length(fFieldsExternalToInternal),Column);
+          col := fFieldsInternalToExternal[Column+1];
           if col<0 then
             exit; // column not known in the external database -> abort query
           hasIndex := fFieldsExternal[col].ColumnIndexed;

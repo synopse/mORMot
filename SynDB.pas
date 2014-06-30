@@ -2740,8 +2740,6 @@ var
 
 
 
-implementation
-
 { -------------- Database specific classes - shared by several SynDB units }
 
 const
@@ -2832,6 +2830,9 @@ const
   /// the known database engine handling CREATE INDEX IF NOT EXISTS statement
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
 
+  /// the known database engine handling CREATE INDEX on BLOB columns
+  DB_HANDLEINDEXONBLOBS = [dSQLite];
+
   /// where the DESC clause shall be used for a CREATE INDEX statement
   // - only identified syntax exception is for FireBird 
   DB_SQLDESENDINGINDEXPOS: array[TSQLDBDefinition] of
@@ -2839,6 +2840,10 @@ const
     posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
     posWithColumn, posWithColumn, posGlobalBefore, posWithColumn, posWithColumn,
     posWithColumn);
+
+
+
+implementation
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
 begin

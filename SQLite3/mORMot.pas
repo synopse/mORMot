@@ -5949,8 +5949,10 @@ type
     /// create a list of external field names, from the internal field names
     // - raise an EORMException if any of the supplied field name is not defined
     // in the TSQLRecord as ID or a published property
+    // - if IntFieldIndex is set, it will store an array of internal field
+    // indexes, i.e. -1 for ID or index in in FieldNames[] for other fields
     procedure InternalToExternalDynArray(const IntFieldNames: array of RawUTF8;
-      out result: TRawUTF8DynArray);
+      out result: TRawUTF8DynArray; IntFieldIndex: PIntegerDynArray=nil);
     /// map an external field name into its internal field name
     // - return '' if the external field name is not RowIDFieldName nor in
     // FieldNames[]
@@ -21858,12 +21860,22 @@ begin
 end;
 
 procedure TSQLModelRecordPropertiesExternal.InternalToExternalDynArray(
-  const IntFieldNames: array of RawUTF8; out result: TRawUTF8DynArray);
-var i: integer;
+  const IntFieldNames: array of RawUTF8; out result: TRawUTF8DynArray;
+  IntFieldIndex: PIntegerDynArray);
+var i,n,ndx: integer;
 begin
-  SetLength(result,length(IntFieldNames));
-  for i := 0 to high(IntFieldNames) do
-    result[i] := InternalToExternal(IntFieldNames[i]);
+  n := length(IntFieldNames);
+  SetLength(result,n);
+  if IntFieldIndex<>nil then 
+    SetLength(IntFieldIndex^,n);
+  for i := 0 to n-1 do begin
+    ndx := fProps.Props.Fields.IndexByNameOrExcept(IntFieldNames[i]);
+    if IntFieldIndex<>nil then
+      IntFieldIndex^[i] := ndx;
+    if ndx<0 then
+      result[i] := RowIDFieldName else
+      result[i] := fFieldNames[ndx];
+  end;
 end;
 
 function TSQLModelRecordPropertiesExternal.ExternalToInternalIndex(
@@ -37737,4 +37749,5 @@ initialization
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
 end.
+
 
