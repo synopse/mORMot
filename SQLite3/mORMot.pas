@@ -14112,8 +14112,8 @@ begin
   sftDateTime:
     result.VDate := Iso8601ToDateTimePUTF8Char(Value,0);
   sftBoolean:
-    result.VBoolean := (Value=nil) or (PWord(Value)^=ord('0')) or
-      (PInteger(Value)^=FALSE_LOW);
+    result.VBoolean :=
+      not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
   sftEnumerate, sftID, sftRecord, sftInteger:
     result.VInteger := GetInteger(Value);
   sftSet, sftTimeLog, sftModTime, sftCreateTime:

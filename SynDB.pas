@@ -2827,14 +2827,14 @@ const
     (Position: posAfter;  InsertFmt:' limit %'),
     (Position: posAfter;  InsertFmt:' fetch first % rows only'));
 
-  /// the known database engine handling CREATE INDEX IF NOT EXISTS statement
+  /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
 
-  /// the known database engine handling CREATE INDEX on BLOB columns
+  /// the known database engines handling CREATE INDEX on BLOB columns
   DB_HANDLEINDEXONBLOBS = [dSQLite];
 
   /// where the DESC clause shall be used for a CREATE INDEX statement
-  // - only identified syntax exception is for FireBird 
+  // - only identified syntax exception is for FireBird
   DB_SQLDESENDINGINDEXPOS: array[TSQLDBDefinition] of
     (posWithColumn, posGlobalBefore) = (
     posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
