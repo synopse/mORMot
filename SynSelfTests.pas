@@ -8238,19 +8238,27 @@ var RInt: TSQLRecordPeople;
     json: RawUTF8;
     {$endif}
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
-procedure HistoryCheck(aIndex,aYOB: Integer; aEvent: TSQLEvent);
-var Event: TSQLEvent;
+procedure HistoryCheck(aIndex,aYOB: Integer; aEvent: TSQLHistoryEvent);
+var Event: TSQLHistoryEvent;
     TimeStamp: TModTime;
+    R: TSQLRecordPeopleExt;
 begin
   RExt.ClearProperties;
   Check(RHist.HistoryGet(aIndex,Event,TimeStamp,RExt));
   Check(Event=aEvent);
   Check(TimeStamp>=Start);
-  if Event=seDelete then
+  if Event=heDelete then
     exit;
   Check(RExt.ID=400);
   Check(RExt.FirstName='Franz36');
   Check(RExt.YearOfBirth=aYOB);
+  R := RHist.HistoryGet(aIndex) as TSQLRecordPeopleExt;
+  if CheckFailed(R<>nil) then
+    exit;
+  Check(R.ID=400);
+  Check(R.FirstName='Franz36');
+  Check(R.YearOfBirth=aYOB);
+  R.Free;
 end;
 procedure HistoryChecks;
 var i: integer;
@@ -8258,12 +8266,12 @@ begin
   RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
   try
     Check(RHist.HistoryCount=504);
-    HistoryCheck(0,1797,seAdd);
-    HistoryCheck(1,1828,seUpdate);
-    HistoryCheck(2,1515,seUpdate);
+    HistoryCheck(0,1797,heAdd);
+    HistoryCheck(1,1828,heUpdate);
+    HistoryCheck(2,1515,heUpdate);
     for i := 1 to 500 do
-      HistoryCheck(i+2,i,seUpdate);
-    HistoryCheck(503,0,seDelete);
+      HistoryCheck(i+2,i,heUpdate);
+    HistoryCheck(503,0,heDelete);
   finally
     RHist.Free;
   end;
@@ -8582,9 +8590,9 @@ begin
         RHist := TSQLRecordMyHistory.CreateHistory(aExternalClient,TSQLRecordPeopleExt,400);
         try
           Check(RHist.HistoryCount=3);
-          HistoryCheck(0,1797,seAdd);
-          HistoryCheck(1,1828,seUpdate);
-          HistoryCheck(2,1515,seUpdate);
+          HistoryCheck(0,1797,heAdd);
+          HistoryCheck(1,1828,heUpdate);
+          HistoryCheck(2,1515,heUpdate);
          finally
           RHist.Free;
         end;
