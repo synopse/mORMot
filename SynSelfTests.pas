@@ -244,6 +244,8 @@ type
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
 {$ifndef NOVARIANTS}
+    /// some low-level variant process
+    procedure Variants;
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
 {$endif}
@@ -3423,6 +3425,7 @@ begin
   fInt := Value;
 end;
 
+
 { TSQLRecordPeople }
 
 function TSQLRecordPeople.DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
@@ -3442,6 +3445,21 @@ end;
 
 
 {$ifndef NOVARIANTS}
+
+procedure TTestLowLevelTypes.Variants;
+var v: Variant;
+begin
+  ValueVarToVariant(nil,sftBoolean,TVarData(v),false);
+  Check(not boolean(v));
+  ValueVarToVariant('0',sftBoolean,TVarData(v),false);
+  Check(not boolean(v));
+  ValueVarToVariant('false',sftBoolean,TVarData(v),false);
+  Check(not boolean(v));
+  ValueVarToVariant('1',sftBoolean,TVarData(v),false);
+  Check(boolean(v));
+  ValueVarToVariant('true',sftBoolean,TVarData(v),false);
+  Check(boolean(v));
+end;
 
 type
   TMustacheTest = packed record

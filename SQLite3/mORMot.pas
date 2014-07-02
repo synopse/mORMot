@@ -12700,6 +12700,16 @@ function UTF8CompareDouble(P1,P2: PUTF8Char): PtrInt;
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 
+{$ifndef NOVARIANTS}
+/// low-level function used to convert a JSON Value into a variant,
+// according to the property type
+// - for sftObject, sftVariant, sftBlobDynArray and sftUTF8Custom, the
+// JSON buffer may be an array or an object, so createValueTempCopy can
+// create a temporary copy before parsing it in-place, to preserve the buffer
+procedure ValueVarToVariant(Value: PUTF8Char; FT: TSQLFieldType;
+  var result: TVarData; createValueTempCopy: boolean);
+{$endif}
+
 const
   /// if a TSQLVirtualTablePreparedConstraint.Column is to be ignored
   VIRTUAL_TABLE_IGNORE_COLUMN = -2;
