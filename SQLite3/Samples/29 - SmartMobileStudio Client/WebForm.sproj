@@ -75,21 +75,6 @@
         <filename>LoginForm.pas</filename>
       </file>
       <file type="unit">
-        <name>SynCrossPlatformCrypto</name>
-        <created>2014-06-18T09:24:43.834Z</created>
-        <filename>SynCrossPlatformCrypto.pas</filename>
-      </file>
-      <file type="unit">
-        <name>SynCrossPlatformREST</name>
-        <created>2014-06-18T09:51:37.618Z</created>
-        <filename>SynCrossPlatformREST.pas</filename>
-      </file>
-      <file type="unit">
-        <name>SynCrossPlatformSpecific</name>
-        <created>2014-06-25T13:50:46.341Z</created>
-        <filename>SynCrossPlatformSpecific.pas</filename>
-      </file>
-      <file type="unit">
         <name>SmartTests</name>
         <created>2014-06-27T22:44:51.425Z</created>
         <filename>SmartTests.pas</filename>
