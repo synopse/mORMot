@@ -4,8 +4,8 @@ interface
 
 uses 
   W3System, W3Graphics, W3Components, W3Forms, W3Fonts, W3Borders, W3Application,
-  W3Label, W3Editbox, W3Panel, W3Button, w3c.date,
-  SynCrossPlatformREST, SmartTests;
+  SynCrossPlatformREST, SmartTests,
+  W3Label, W3Editbox, W3Panel, W3Button, w3c.date;
 
 type
   TLoginForm=class(TW3form)
@@ -59,22 +59,27 @@ begin
   writeln('Connecting to the server at '+ServerAddress.Text+':888');
   client.Free;
   client := TSQLRestClientHTTP.Create(ServerAddress.Text,888,model,false);
-  client.Connect;
-  if client.ServerTimeStamp=0 then
-    ShowMessage('Impossible to retrieve server time stamp') else
-    writeln('ServerTimeStamp='+IntToStr(client.ServerTimeStamp));
-  client.SetUser(TSQLRestAuthenticationDefault,'User','synopse');
-  if client.Authentication=nil then
-    ShowMessage('Authentication Error');
-  writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
-  people := TSQLRecordPeople.Create(client,1);
-  assert(people.ID=1);
-  writeln(people.ToJSON(client.Model,'*'));
-  writeln('Testing remote CRUD methods');
-  ORMTest(client);
-  writeln('Disconnect from server');
-  client.Free;
-  BrowserAPI.console.timeEnd('ORM');
+  client.Connect(
+  lambda
+    if client.ServerTimeStamp=0 then
+      ShowMessage('Impossible to retrieve server time stamp') else
+      writeln('ServerTimeStamp='+IntToStr(client.ServerTimeStamp));
+    client.SetUser(TSQLRestAuthenticationDefault,LogonName.Text,LogonPassWord.Text);
+    if client.Authentication=nil then
+      ShowMessage('Authentication Error');
+    writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
+    people := TSQLRecordPeople.Create(client,1);
+    assert(people.ID=1);
+    writeln(people.ToJSON(client.Model,'*'));
+    writeln('Testing remote CRUD methods');
+    ORMTest(client);
+    writeln('Disconnect from server');
+    client.Free;
+    BrowserAPI.console.timeEnd('ORM');
+  end,
+  lambda
+    ShowMessage('Impossible to connect to the server');
+  end);
 end;
 
 procedure TLoginForm.W3Button1Click(Sender: TObject);

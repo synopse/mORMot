@@ -470,6 +470,7 @@ type
     fModel: TSQLModel;
     fServerTimeStampOffset: TDateTime;
     function GetServerTimeStamp: TTimeLog;
+    function SetServerTimeStamp(const ServerResponse: string): boolean;
     function ExecuteAdd(tableIndex: integer; const json: string): integer; virtual; abstract;
     function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; virtual; abstract;
   public
@@ -524,6 +525,14 @@ type
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
   end;
 
+  {$ifdef ISSMS}
+  /// callback used e.g. by TSQLRestClientURI.Connect() overloaded method
+  TSQLRestEvent = procedure(Client: TSQLRest);
+
+  /// callback which should return TRUE on process success, or FALSE on error
+  TSQLRestEventProcess = function: boolean;
+  {$endif ISSMS}
+
   /// REST client access class
   TSQLRestClientURI = class(TSQLRest)
   protected
@@ -535,18 +544,53 @@ type
     function ExecuteAdd(tableIndex: integer; const json: string): integer; override;
     function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
+    {$ifdef ISSMS}
+    /// connect to the REST server, and retrieve its time stamp offset
+    // - under SMS, you SHOULD use this asynchronous method, which won't block
+    // the browser, e.g. if the network is offline
+    procedure SetAsynch(var Call: TSQLRestURIParams; onSuccess, onError: TSQLRestEvent;
+      onBeforeSuccess: TSQLRestEventProcess);
+    {$endif}
   public
     /// will call SessionClose
     destructor Destroy; override;
-    /// connect to the REST server, and retrieve its time stamp
+    {$ifdef ISSMS}
+    /// connect to the REST server, and retrieve its time stamp offset
+    // - under SMS, only this asynchronous method is available, which won't
+    // block the browser, e.g. if the network is offline
+    // - code sample using two lambda functions may be:
+    // !  client := TSQLRestClientHTTP.Create(ServerAddress.Text,888,model,false);
+    // !  client.Connect(
+    // !  lambda
+    // !    if client.ServerTimeStamp=0 then
+    // !      ShowMessage('Impossible to retrieve server time stamp') else
+    // !      writeln('ServerTimeStamp='+IntToStr(client.ServerTimeStamp));
+    // !    client.SetUser(TSQLRestAuthenticationDefault,LogonName.Text,LogonPassWord.Text);
+    // !    if client.Authentication=nil then
+    // !      ShowMessage('Authentication Error');
+    // !    writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
+    // !    people := TSQLRecordPeople.Create(client,1); // blocking request
+    // !    assert(people.ID=1);
+    // !    writeln('Disconnect from server');
+    // !    client.Free;
+    // !  end,
+    // !  lambda
+    // !    ShowMessage('Impossible to connect to the server');
+    // !  end);
+    procedure Connect(onSuccess, onError: TSQLRestEvent);
+    {$else}
+    /// connect to the REST server, and retrieve its time stamp offset
+    // - under SMS, you should not use this blocking version, but
+    // the overloaded asynchronous method
     function Connect: boolean;
+    {$endif ISSMS}
     /// method calling the remote Server via a RESTful command
     // - calls the InternalURI abstract method
     // - this method will sign the url, if authentication is enabled
     procedure URI(var Call: TSQLRestURIParams); virtual;
     /// get a member from its ID using URI()
     function Retrieve(aID: integer; Value: TSQLRecord;
-      ForUpdate: boolean=false): boolean; override;
+      ForUpdate: boolean=false): boolean; overload; override;
     /// execute directly a SQL statement, returning a list of rows or nil
     // - we expect reUrlEncodedSQL to be defined in AllowRemoteExecute on
     // server side, since we will encode the SQL at URL level, so that all
@@ -677,8 +721,9 @@ function UrlEncode(const aNameValueParameters: array of const): string; overload
 /// decode a text as defined by RFC 3986
 function UrlDecode(const aValue: string): string;
 
-/// e.g. location := FindHeader(Call.OutHead,'Location:');
-function FindHeader(const Headers, Name: string): string;
+/// retrieve one header from a low-level HTTP response
+// - use e.g. location := GetOutHeader(Call,'location');
+function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string;
 
 const
   /// the first field in TSQLFieldBits is always ID/RowID
@@ -773,7 +818,7 @@ begin
 end;
 
 function UrlEncode(const aValue: string): string; overload;
-{$ifdef ISSMS}
+{$ifdef ISSMS} inline;
 begin // see http://www.w3schools.com/jsref/jsref_encodeuricomponent.asp
   result := encodeURIComponent(aValue);
 end;
@@ -900,19 +945,6 @@ begin
 {$endif}
 end;
 {$endif}
-
-function FindHeader(const Headers, Name: string): string;
-var i: integer;
-    line: string;
-begin
-  result := '';
-  i := 1;
-  while GetNextCSV(Headers,i,line,#10) do
-    if StartWithPropName(line,Name) then begin
-      result := trim(copy(line,length(Name)+1,MaxInt));
-      exit;
-    end;
-end;
 
 
 { TSQLRecord }
@@ -1524,6 +1556,18 @@ begin
     result := DateTimeToTTimeLog(Now+fServerTimeStampOffset);
 end;
 
+function TSQLRest.SetServerTimeStamp(const ServerResponse: string): boolean;
+var TimeStamp: Int64;
+begin
+  if not TryStrToInt64(ServerResponse,TimeStamp) then
+    result := false else begin
+    fServerTimeStampOffset := TTimeLogToDateTime(TimeStamp)-Now;
+    if fServerTimeStampOffset=0 then
+      fServerTimeStampOffset := 0.000001; // ensure <> 0 (indicates error)
+    result := true;
+  end;
+end;
+
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames, SQLWhere: string): TSQLTableJSON;
 var sql: string;
@@ -1663,6 +1707,29 @@ begin
   end;
 end;
 
+function FindHeader(const Headers, Name: string): string;
+var i: integer;
+    line: string;
+begin
+  result := '';
+  i := 1;
+  while GetNextCSV(Headers,i,line,#10) do
+    if StartWithPropName(line,Name) then begin
+      result := trim(copy(line,length(Name)+1,MaxInt));
+      exit;
+    end;
+end;
+
+function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string;
+  {$ifdef ISSMS}inline;{$endif}
+begin
+{$ifdef ISSMS} // faster direct retrieval
+  result := Call.Connection.getResponseHeader(Name);
+{$else}
+  result := FindHeader(Call.OutHead,Name+':');
+{$endif}
+end;
+
 procedure TSQLRestClientURI.URI(var Call: TSQLRestURIParams);
 var sign: string;
 begin
@@ -1678,8 +1745,7 @@ begin
       fAuthentication.ClientSessionComputeSignature(self,Call.Url);
   end;
   InternalURI(Call);
-  Call.OutInternalState := StrToIntDef(
-    FindHeader(Call.OutHead,'Server-InternalState:'),0);
+  Call.OutInternalState := StrToIntDef(GetOutHeader(Call,'Server-InternalState'),0);
 end;
 
 procedure TSQLRestClientURI.CallBackGet(const aMethodName: string;
@@ -1718,9 +1784,41 @@ begin
   end;
 end;
 
+{$ifdef ISSMS}
+
+procedure TSQLRestClientURI.SetAsynch(var Call: TSQLRestURIParams;
+  onSuccess, onError: TSQLRestEvent; onBeforeSuccess: TSQLRestEventProcess);
+begin
+  if Assigned(onSuccess) then
+    Call.OnSuccess := lambda
+      if Call.Connection.readyState=rrsDone then begin
+        Call.OutInternalState := StrToIntDef(
+          Call.Connection.getResponseHeader('Server-InternalState'),0);
+        if onBeforeSuccess then
+          onSuccess(self) else
+          if assigned(onError) then
+            onError(self);
+      end;
+    end;
+  if Assigned(onError) then
+    Call.OnError := lambda
+      onError(Self);
+    end;
+end;
+
+procedure TSQLRestClientURI.Connect(onSuccess, onError: TSQLRestEvent);
+var Call: TSQLRestURIParams;
+begin
+  SetAsynch(Call,onSuccess,onError,lambda
+    result := (Call.OutStatus=HTML_SUCCESS) and SetServerTimeStamp(Call.OutBody);
+  end);
+  CallBackGet('TimeStamp',[],Call);
+end;
+
+{$else}
+
 function TSQLRestClientURI.Connect: boolean;
 var Call: TSQLRestURIParams;
-    TimeStamp: Int64;
     tmp: string;
 begin
   CallBackGet('TimeStamp',[],Call);
@@ -1732,13 +1830,10 @@ begin
   {$else}
   HttpBodyToText(Call.OutBody,tmp);
   {$endif}
-  if not TryStrToInt64(tmp,TimeStamp) then
-    result := false else begin
-    fServerTimeStampOffset := TTimeLogToDateTime(TimeStamp)-Now;
-    if fServerTimeStampOffset=0 then
-      fServerTimeStampOffset := 0.000001; // ensure <> 0 (indicates error)
-  end;
+  result := SetServerTimeStamp(tmp);
 end;
+
+{$endif ISSMS}
 
 function TSQLRestClientURI.ExecuteAdd(tableIndex: integer;
   const json: string): integer;
@@ -1757,7 +1852,7 @@ begin
   URI(Call);
   if Call.OutStatus<>HTML_CREATED then
     exit;
-  location := FindHeader(Call.OutHead,'Location:');
+  location := GetOutHeader(Call,'location');
   for i := length(location) downto 1 do
     if not (ord(location[i]) in [ord('0')..ord('9')]) then begin
       result := StrToIntDef(Copy(location,i+1,100),0);
@@ -1887,7 +1982,7 @@ begin
     end;
     try
       fConnection.URI(Call,inType,fKeepAlive);
-      break; // do not retry on transmission success
+      break; // do not retry on transmission success, or asynchronous request
     except
       on E: Exception do begin
         fConnection.Free;

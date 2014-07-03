@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <SmartForm>
   <Created>2014-06-17T10:47:09.864</Created>
-  <Modified>2014-06-28T14:39:29.628</Modified>
+  <Modified>2014-07-03T18:09:46.626</Modified>
   <object type="TW3Form">
-    <Caption>W3Form</Caption>
+    <Caption>mORMot Web Test</Caption>
     <Name>LoginForm</Name>
     <object type="TW3Label">
       <Caption>mORMot Web Test</Caption>

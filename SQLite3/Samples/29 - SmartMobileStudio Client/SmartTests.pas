@@ -33,7 +33,6 @@ published
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
   end;
 
-
 implementation
 
 const
@@ -152,7 +151,7 @@ procedure ORMTest(client: TSQLRestClientHTTP);
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
     i,id: integer;
-begin
+begin // all this is run in synchronous mode -> only 200 records in the set
   client.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   assert(Call.OutStatus=HTML_SUCCESS);
   people := TSQLRecordPeople.Create;
@@ -231,6 +230,5 @@ begin
   end;
   people.Free;
 end;
-
 
 end.

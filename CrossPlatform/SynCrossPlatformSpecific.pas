@@ -56,6 +56,7 @@ unit SynCrossPlatformSpecific;
 {$ifdef DWSCRIPT} // always defined since SMS 1.1.2
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
+  {$define HASINLINE}
 {$else}
   {$i SynCrossPlatform.inc} // define e.g. HASINLINE
   {$ifdef MSWINDOWS}
@@ -105,6 +106,12 @@ type
   TObjectList = array of TObject;
   TVariantDynArray = array of variant;
 
+  // as defined in W3Inet and expected by XMLHttpRequest
+  THttpRequestReadyState = (rrsUnsent          = 0,
+                            rrsOpened          = 1,
+                            rrsHeadersReceived = 2,
+                            rrsLoading         = 3,
+                            rrsDone            = 4);
   {$else}
 
   THttpBody = array of byte;
@@ -112,7 +119,7 @@ type
   {$ifdef NEXTGEN}
   AnsiChar = byte;
   {$endif NEXTGEN}
-  
+
   {$endif ISDWS}
   
   /// used to store the request of a REST call
@@ -137,7 +144,9 @@ type
     {$ifdef ISDWS}
     /// the associated TXMLHttpRequest instance
     Connection: THandle;
-    OnReadyStateChange: TProcedureRef;
+    /// callback events for asynchronous call
+    // - will be affected to the corresponding Connection events
+    OnSuccess: TProcedureRef;
     OnError: TProcedureRef;
     {$endif}
   end;
@@ -241,7 +250,7 @@ const
   /// HTML Status Code for "HTTP Version Not Supported"
   HTML_HTTPVERSIONNONSUPPORTED = 505;
 
-  
+
 /// gives access to the class type to implement a HTTP connection
 // - will use WinHTTP API (from our SynCrtSock) under Windows
 // - will use Indy for Delphi on other platforms
@@ -796,6 +805,7 @@ begin
   result := Values.Count;
 end;
 
+
 type
   TSMSHttpConnectionClass = class(TAbstractHttpConnection)
   protected  // see http://www.w3.org/TR/XMLHttpRequest
@@ -812,9 +822,20 @@ begin
   asm
     @Call.Connection = new XMLHttpRequest();
   end;
-  Call.Connection.onreadystatechange := Call.OnReadyStateChange;
-  Call.Connection.onerror := Call.OnError;
-  Call.Connection.open(Call.Method,fURL+Call.Url,false); // false for synchronous call
+  if Assigned(Call.OnSuccess) then begin // asynchronous call
+    Call.Connection.onreadystatechange := lambda
+      if Call.Connection.readyState=rrsDone then begin
+        Call.Connection.onreadystatechange := nil; // avoid any further trigger
+        Call.OutStatus := Call.Connection.status;
+        Call.OutHead := Call.Connection.getAllResponseHeaders();
+        Call.OutBody := Call.Connection.responseText;
+        Call.OnSuccess;
+      end;
+    end;
+    Call.Connection.onerror := Call.OnError;
+    Call.Connection.open(Call.Method,fURL+Call.Url,true);  // true for asynch call
+  end else
+    Call.Connection.open(Call.Method,fURL+Call.Url,false); // false for synch call
   if Call.InHead<>'' then begin
     var i = 1;
     var line: string;
@@ -831,9 +852,11 @@ begin
   if Call.InBody='' then
     Call.Connection.send(null) else
     Call.Connection.send(Call.InBody);
-  Call.OutStatus := Call.Connection.status;
-  Call.OutHead := Call.Connection.getAllResponseHeaders();
-  Call.OutBody := Call.Connection.responseText;
+  if not Assigned(Call.OnSuccess) then begin // synchronous call
+    Call.OutStatus := Call.Connection.status;
+    Call.OutHead := Call.Connection.getAllResponseHeaders();
+    Call.OutBody := Call.Connection.responseText;
+  end;
 end;
 
 
@@ -870,6 +893,4 @@ initialization
    TestSMS;
 
 {$endif ISDWS}
-
-
 end.
