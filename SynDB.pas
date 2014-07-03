@@ -4160,9 +4160,15 @@ begin
   case DBMS of
   dOracle: result := 'select owner||''.''||table_name name '+
     'from sys.all_tables order by owner, table_name';
-  dMSSQL, dMySQL, dPostgreSQL:
-    result := 'select TABLE_SCHEMA + ''.'' + TABLE_NAME Name '+
-      'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by Name';
+  dMSSQL:
+    result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
+  dMySQL:
+    result := 'select concact(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
+  dPostgreSQL:
+    result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.TABLES where TABLE_TYPE=''BASE TABLE'' order by name';
   dSQLite: result := 'select name from sqlite_master where type=''table'' '+
      'and name not like ''sqlite_%''';
   dFirebird: result := 'select rdb$relation_name from rdb$relations '+
