@@ -13,6 +13,7 @@ object DbExplorerMain: TDbExplorerMain
   KeyPreview = True
   OldCreateOrder = False
   Position = poScreenCenter
+  Scaled = False
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyDown = FormKeyDown
