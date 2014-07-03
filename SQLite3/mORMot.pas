@@ -25796,7 +25796,7 @@ begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
-            Log.Log(sllUserAuth,'%/%',[aSession.User.LogonName,aSession],self);
+            Log.Log(sllUserAuth,'%/%',[aSession.User.LogonName,aSession.ID],self);
             {$endif}
             SetString(fSessionAccessRights,PAnsiChar(@aSession.fAccessRights),
               sizeof(TSQLAccessRights)); // override access rights
