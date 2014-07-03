@@ -411,8 +411,11 @@ type
     function ToUTF8(cx: PJSContext): RawUTF8; overload;
     /// get the UTF-8 text corresponding to this string, for a given
     // runtime execution context
-    // - slightly faster overloaded method (avoid string assignment) 
+    // - slightly faster overloaded method (avoid string assignment)
     procedure ToUTF8(cx: PJSContext; var result: RawUTF8); overload;
+    /// Add UTF-8 text corresponding to this string to writer,
+    // without escaping
+    procedure ToUTF8(cx: PJSContext; W: TTextWriter); overload;
     /// get the UTF-16 text corresponding to this string, for a given
     // runtime execution context
     function ToSynUnicode(cx: PJSContext): SynUnicode;
@@ -421,7 +424,7 @@ type
     function ToWideString(cx: PJSContext): WideString;
     /// get the UTF-16 text corresponding to this string as a variant,
     // for a given runtime execution context
-    // - will store a SynUnicode value into the variant instance 
+    // - will store a SynUnicode value into the variant instance
     procedure ToVariant(cx: PJSContext; var Value: Variant);
     /// get the Delphi string text corresponding to this string, for a given
     // runtime execution context
@@ -652,7 +655,7 @@ type
   /// Finalize obj, which the garbage collector has determined to be unreachable
   // from other live objects or from GC roots.  Obviously, finalizers must never
   // store a reference to obj.
-  JSFinalizeOp = procedure(cx: PJSContext; var obj: PJSObject); cdecl;
+  JSFinalizeOp = procedure(cx: PJSContext; obj: PJSObject); cdecl;
 
   /// callback used by JS_AddExternalStringFinalizer and JS_RemoveExternalStringFinalizer
   // to extend and reduce the set of string types finalized by the GC.
@@ -3816,7 +3819,7 @@ procedure JS_ClearTrap(cx: PJSContext; script: PJSScript; pc: pjsbytecode;
 type
   /// calback type to be called when an error is triggerred during script debugging
   JSDebugErrorHook = function(cx: PJSContext; message: PCChar;
-    report: PJSErrorReport; closure: pointer): JSTrapStatus; cdecl;
+    report: PJSErrorReport; closure: pointer): JSBool; cdecl;
 
 /// set a calback to be called when an error is triggerred during script debugging
 function JS_SetDebugErrorHook(rt: PJSRuntime; hook: JSDebugErrorHook;
@@ -3826,14 +3829,19 @@ type
   /// calback type to be called when script debugging is interrupted
   JSInterruptHook = function(cx: PJSContext; script: PJSScript; pc: pjsbytecode;
     rval: pjsval; closure: pointer): JSTrapStatus; cdecl;
+  PJSInterruptHook = ^JSInterruptHook;
 
 /// set a calback to be called when script debugging is interrupted
 function JS_SetInterrupt(rt: PJSRuntime; handler: JSInterruptHook;
   closure: pointer): JSBool; cdecl; external SpiderMonkeyLib;
 
 /// clear a calback to be called when script debugging is interrupted
-function JS_ClearInterrupt(rt: PJSRuntime; hook: JSInterruptHook;
+function JS_ClearInterrupt(rt: PJSRuntime; hook: PJSInterruptHook;
   closurep: PPointer): JSBool; cdecl; external SpiderMonkeyLib;
+
+/// set single step mode. In this mode script interrupts on each line
+function JS_SetSingleStepMode(cx: PJSContext; script: PJSScript; singleStep: JSBool): JSBool;
+  cdecl; external SpiderMonkeyLib;
 
 type
   /// calback type to be called when script throws an exception
@@ -3883,6 +3891,8 @@ type
    lineno: uintn;
    fun: PJSFunction;
    callObject: PJSObject;
+   thisVal: jsval;
+   raw: JSuintptr;
   end;
 
   /// points to an extended stack trace
@@ -3930,7 +3940,7 @@ type
   JSPropertyDescFlags = set of JSPropertyDescFlag;
 
   /// points to a JavaScript object property description
-  PJSPropertyDesc = ^JSPropertyDesc;
+//  PJSPropertyDesc = ^JSPropertyDesc;
   /// defines a JavaScript object property description
   JSPropertyDesc = record
     // the ID of this property
@@ -3944,11 +3954,13 @@ type
     /// contains the alias ID if dfAlias is included in description flags
     alias: jsval;
   end;
-
+  TJSPropertyDescVector = array[0..(MaxInt div sizeof(JSPropertyDesc))-1] of JSPropertyDesc;
+  PJSPropertyDescVector = ^TJSPropertyDescVector;
+
   /// stores JavaScript object properties description
   JSPropertyDescArray = record
    len: uint32;
-   arr: PJSPropertyDesc;
+   arr: PJSPropertyDescVector;
   end;
 
 /// retrieve the description of a given JavaScript object property
@@ -3962,6 +3974,18 @@ procedure JS_PutPropertyDescArray(cx: PJSContext; var pda: JSPropertyDescArray);
 
 /// cast a JavaScript function into a script instance
 function JS_GetFunctionScript(cx: PJSContext; fun: PJSFunction): PJSScript;
+  cdecl; external SpiderMonkeyLib;
+
+function JS_GetScriptFunction(cx: PJSContext; script: PJSScript): PJSFunction;
+  cdecl; external SpiderMonkeyLib;
+
+function JS_GetParentOrScopeChain(cx: PJSContext; obj: PJSObject): PJSObject;
+  cdecl; external SpiderMonkeyLib;
+
+type
+  PJSScriptSource = Pointer;
+
+function JS_GetScriptSource(cx: PJSContext; script: PJSScript): PJSScriptSource;
   cdecl; external SpiderMonkeyLib;
 
 /// retrieve the local name array information of a given function
@@ -3993,7 +4017,12 @@ function JS_GetScriptBaseLineNumber(cx: PJSContext; script: PJSScript): uint;
 function JS_GetScriptLineExtent(cx: PJSContext; script: PJSScript): uint;
   cdecl; external SpiderMonkeyLib;
 
-  
+/// compile and execute a script in stack frame with raw identifier (obj)
+function JS_evaluateUCInStackFrame(cx: PJSContext; raw: JSuintptr;
+ chars: Pjschar; length: size_t; filename: PCChar; lineno: uintN; var rval: jsval): boolean;
+  cdecl; external SpiderMonkeyLib;
+
+
 implementation
 
 // jsval.h *_IMPL functions
@@ -4736,10 +4765,13 @@ function JSString.ToString(cx: PJSContext): string;
 var buf: pjschar;
     len: size_t;
 begin
-  buf := JS_GetStringCharsAndLength(cx, @self, len);
-  if len>0 then
-    RawUnicodeToString(PWideChar(buf),len,result) else
-    result := '';
+  if @self<>nil then begin
+    buf := JS_GetStringCharsAndLength(cx, @self, len);
+    if len>0 then
+      RawUnicodeToString(PWideChar(buf),len,result) else
+      result := '';
+  end else
+      result := '';
 end;
 
 procedure JSString.ToJSONString(cx: PJSContext; W: TTextWriter);
@@ -4800,6 +4832,14 @@ begin
     result := '';
 end;
 
+procedure JSString.ToUTF8(cx: PJSContext; W: TTextWriter);
+var buf: pjschar;
+    len: size_t;
+begin
+  buf := JS_GetStringCharsAndLength(cx, @self, len);
+  W.AddNoJSONEscapeW(pointer(buf),len);
+end;
+
 
 { JSObject }
 
@@ -4845,3 +4885,4 @@ finalization
   JS_ShutDown;
 
 end.
+

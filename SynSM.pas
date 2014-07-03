@@ -819,7 +819,7 @@ type
     procedure DoOnNewEngine(const Engine: TSMEngine); virtual;
   public
     /// initialize the SpiderMonkey scripting engine
-    constructor Create;
+    constructor Create; virtual;
     /// finalize the SpiderMonkey scripting engine
     destructor Destroy; override;
 
@@ -830,7 +830,7 @@ type
     // - you can call this method just before a thread is finished to ensure
     // that the associated scripting Engine will be released
     // - could be used e.g. in a try...finally block inside a TThread.Execute
-    // overridden method
+    // overriden method
     procedure ReleaseCurrentThreadEngine;
 
     /// internal version of the script files
@@ -1068,7 +1068,7 @@ begin
     raise ESMException.Create('JSContext create');
 
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
-  // ION is disabled without this options
+  // ION is disabled without these options
   fCx.Options := [jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs];
 
   fStringFinalizer.finalize := ExternalStringFinalizer;
@@ -1094,9 +1094,11 @@ end;
 destructor TSMEngine.Destroy;
 begin
   inherited Destroy;
+  FGlobal := null;
   TSynFPUException.ForLibraryCode;
   //JS_RemoveExternalStringFinalizer(ExternalStringFinalizer);
-  comp^.Destroy;
+//  comp^.Destroy;
+  JS_LeaveCompartment(cx, comp);
   if FThreadID=GetCurrentThreadId then
     cx^.Destroy; // SM 24 expects the context to be released in the same thread
   KillWatchdog;
@@ -1897,7 +1899,7 @@ procedure TSMValue.AddJSON(cx: PJSContext; W: TTextWriter);
 begin
   if @self=nil then
     W.AddShort('null') else
-  case JS_TypeOfValue(cx,FValue) of
+  case ValType(cx) of
     JSTYPE_VOID,
     JSTYPE_NULL:
       W.AddShort('null');
@@ -2050,6 +2052,7 @@ var r: JSBool;
 begin
   TSynFPUException.ForLibraryCode;
   eng := Engine;
+  eng.ClearLastError;
   eng.ScheduleWatchdog(Engine.fTimeoutInterval);
   r := JS_CallFunctionName(cx, obj, pointer(methodName),
     Length(argv), pointer(argv), rval.FValue);

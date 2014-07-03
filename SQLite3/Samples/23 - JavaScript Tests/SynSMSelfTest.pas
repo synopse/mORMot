@@ -46,7 +46,7 @@ unit SynSMSelfTest;
 
   Version 0.1
   - initial release. Use SpiderMonkey 24
-
+  
 }
 
 interface
@@ -134,7 +134,9 @@ type
     procedure BasicSmStructureWrappers;
     /// test Jslint support
     procedure JslintSupport;
-    // destroy context here for future test
+    /// test external objects access
+    procedure ExternalObject;
+    /// destroy context here for future test
     procedure Finalize;
   end;
 
@@ -147,6 +149,7 @@ type
     destructor Destroy; override;
   published
     procedure CreateSmEngine;
+    procedure ExternalObject;
     procedure SmValueTransformation;
     procedure ScriptEvaluation;
     procedure LoadMustacheTemplate;
@@ -510,10 +513,281 @@ begin
 //  JS_CallFunctionValue(cx, global, )
 end;
 
+type
+  TTestRec = record
+    a: string;
+    b: integer;
+  end;
+  PTestRec = ^TTestRec;
+var
+  IsPropertyCalled: boolean;
+  
+function TestClassProperty(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    vp: pjsval): JSBool; cdecl;
+var
+  js_Val: jsval;
+  s: SynUnicode;
+  TR: PTestRec;
+begin
+  IsPropertyCalled := true;
+  JS_IdToValue(cx, id, js_Val);
+  s := JS_ValueToString(cx, js_Val).ToSynUnicode(cx);
+  TR := JS_GetPrivate(obj);
+  Result := JS_TRUE;
+  if s = 'a' then
+    vp^ := cx.NewJSString(TR.a).ToJSVal
+  else if s = 'b' then
+    vp^ := JS_NumberValue(TR.b)
+  else if s = 'c' then
+    vp^ := JSVAL_NULL
+  else
+    Result := JS_FALSE;
+end;
+
+var
+  IsDelPropertyCalled: boolean;
+  
+function TestClassDelProperty(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    succeeded: PJSBool):JSBool; cdecl;
+var
+  js_Val: jsval;
+  s: SynUnicode;
+  TR: PTestRec;
+begin
+  IsDelPropertyCalled := true;
+  JS_IdToValue(cx, id, js_Val);
+  s := JS_ValueToString(cx, js_Val).ToSynUnicode(cx);
+  TR := JS_GetPrivate(obj);
+  succeeded^ := JS_TRUE;
+  Result := JS_TRUE;
+  if s = 'a' then
+    TR.a := ''
+  else if s = 'b' then
+    TR.b := 0
+  else if s = 'c' then
+    succeeded^ := JS_FALSE
+  else
+    Result := JS_FALSE;
+end;
+
+var
+  IsSetPropertyCalled: boolean;
+function TestClassSetProperty(cx: PJSContext; var obj: PJSObject; var id: jsid;
+                                strict: JSBool; vp: pjsval): JSBool; cdecl;
+var
+  js_Val: jsval;
+  s: SynUnicode;
+  TR: PTestRec;
+begin
+  IsSetPropertyCalled := true;
+  JS_IdToValue(cx, id, js_Val);
+  s := JS_ValueToString(cx, js_Val).ToSynUnicode(cx);
+  TR := JS_GetPrivate(obj);
+  Result := JS_TRUE;
+  if s = 'a' then
+    TR.a := JS_ValueToString(cx, vp^).ToSynUnicode(cx)
+  else if s = 'b' then
+    TR.b := JSVAL_TO_INT(vp^)
+  else
+    Result := JS_FALSE;
+end;
+
+function TestClassEnumerate(cx: PJSContext; var obj: PJSObject; enum_op: JSIterateOp;
+                              statep: pjsval; idp: pjsid): JSBool; cdecl;
+begin
+  Result := JS_TRUE; //ToDo
+end;
+
+var
+  IsResolveCalled: boolean;
+function TestClassResolve(cx: PJSContext; var obj: PJSObject;
+    var id: jsid): JSBool; cdecl;
+var
+  js_Val: jsval;
+  s: SynUnicode;
+begin
+  IsResolveCalled := true;
+  JS_IdToValue(cx, id, js_Val);
+  s := JS_ValueToString(cx, js_Val).ToSynUnicode(cx);
+  if (s = 'a') or (s = 'b') or (s = 'c') then
+    Result := JS_TRUE
+  else
+    Result := JS_FALSE;
+end;
+
+function TestClassConvert(cx: PJSContext; var obj: PJSObject; typ: JSType;
+    vp: pjsval): JSBool; cdecl;
+begin
+  Result := JS_TRUE;//ToDo
+end;
+
+var
+  IsFinalizeCalled: boolean;
+  
+procedure TestClassFinalize(cx: PJSContext; obj: PJSObject); cdecl;
+var
+  TR: PTestRec;
+begin
+  IsFinalizeCalled := true;
+  TR := JS_GetPrivate(obj);
+  if TR<>nil then
+    Dispose(TR);
+end;
+
+var
+  IsConstructCalled: boolean;
+  
+function TestClassConstruct(cx: PJSContext; argc: uintN; vp: Pjsval): JSBool; cdecl;
+var
+  obj: PJSObject;
+  c: PJSClass;
+  TR: PTestRec;
+begin
+  IsConstructCalled := true;
+  obj := JSVAL_TO_OBJECT(vp^);
+  c := JS_GetClass(obj);
+  obj := JS_NewObject(cx, C, nil, nil);
+  New(TR);
+  JS_SetPrivate(obj,TR);
+  vp^ := obj.ToJSValue;
+  Result := JS_TRUE;
+end;
+
+const
+  TestClass: JSClass = (name: 'TestClass';
+    flags: JSCLASS_HAS_PRIVATE { or JSCLASS_NEW_RESOLVE };
+    addProperty: TestClassProperty;
+    delProperty: TestClassDelProperty;
+    getProperty: TestClassProperty;
+    setProperty: TestClassSetProperty;
+    enumerate: @TestClassEnumerate;
+    resolve: TestClassResolve;
+    convert: TestClassConvert;
+    finalize: TestClassFinalize;
+    construct: TestClassConstruct;
+    );
+
+procedure TTestSynSMAPI.ExternalObject;
+var
+  obj: PJSObject;
+  Val: jsval;
+  TR: PTestRec;
+const
+  Script1: AnsiString = 'var obj = new TestClass();';
+  
+  Script2: AnsiString = 'obj.a ="555"';
+  Script3: AnsiString = 'obj.a;';
+  Script4: AnsiString = 'obj.a ="777"; obj;';
+  Script5: AnsiString = 'delete obj.a; obj;';
+
+  Script6: AnsiString = 'obj.b =555';
+  Script7: AnsiString = 'obj.b;';
+  Script8: AnsiString = 'obj.b =777; obj;';
+  Script9: AnsiString = 'delete obj.b; obj;';
+
+  Script10: AnsiString = 'obj.c =555;';
+  Script11: AnsiString = 'obj.c;';
+  Script12: AnsiString = 'obj.c ="777"';
+  Script13: AnsiString = 'delete obj.c';
+
+  Script14: AnsiString = 'obj.d =555;';
+
+begin
+  obj := JS_InitClass(cx, global ,nil, @TestClass, nil, 0, nil, nil, nil, nil);
+  IsConstructCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script1),length(Script1),nil,0, Val)=JS_TRUE);
+  Check(IsConstructCalled);
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script2),length(Script2),nil,0, Val)=JS_TRUE);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script3),length(Script3),nil,0, Val)=JS_TRUE);
+  Check(JSVAL_TO_STRING(Val).ToSynUnicode(cx)='555');
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script4),length(Script4),nil,0, Val)=JS_TRUE);
+  Check(IsSetPropertyCalled);
+  TR := JS_GetPrivate(JSVAL_TO_OBJECT(Val));
+  Check(TR.a = '777');
+
+  IsDelPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script5),length(Script5),nil,0, Val)=JS_TRUE);
+  Check(IsDelPropertyCalled);
+  TR := JS_GetPrivate(JSVAL_TO_OBJECT(Val));
+  Check(TR.a = '');
+
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script6),length(Script6),nil,0, Val)=JS_TRUE);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script7),length(Script7),nil,0, Val)=JS_TRUE);
+  Check(JSVAL_TO_INT(Val)=555);
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script8),length(Script8),nil,0, Val)=JS_TRUE);
+  Check(IsSetPropertyCalled);
+  TR := JS_GetPrivate(JSVAL_TO_OBJECT(Val));
+  Check(TR.b = 777);
+
+  IsDelPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script9),length(Script9),nil,0, Val)=JS_TRUE);
+  Check(IsDelPropertyCalled);
+  TR := JS_GetPrivate(JSVAL_TO_OBJECT(Val));
+  Check(TR.b = 0);
+
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  CheckNot(JS_EvaluateScript(cx,global,pointer(Script10),length(Script10),nil,0, Val)=JS_TRUE);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script11),length(Script11),nil,0, Val)=JS_TRUE);
+  Check(Val=JSVAL_NULL);
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  CheckNot(JS_EvaluateScript(cx,global,pointer(Script12),length(Script12),nil,0, Val)=JS_TRUE);
+  Check(IsSetPropertyCalled);
+
+  IsDelPropertyCalled := false;
+  Check(JS_EvaluateScript(cx,global,pointer(Script13),length(Script13),nil,0, Val)=JS_TRUE);
+  Check(IsDelPropertyCalled);
+  Check(JSVAL_TO_BOOLEAN(Val)=JS_FALSE);
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  CheckNot(JS_EvaluateScript(cx,global,pointer(Script14),length(Script14),nil,0, Val)=JS_TRUE);
+  Check(IsResolveCalled);
+  CheckNot(IsPropertyCalled);
+  CheckNot(IsSetPropertyCalled);
+
+end;
+
 procedure TTestSynSMAPI.Finalize;
 begin
+  IsFinalizeCalled := false;
   JS_LeaveCompartment(cx,comp);
   cx.Destroy;
+  Check(IsFinalizeCalled);
   rt.Destroy;
 end;
 
@@ -1138,6 +1412,158 @@ begin
 
 end;
 
+procedure TTestSynSM.ExternalObject;
+var
+  engine: TSMEngine;
+  obj: TSMObject;
+  Val: TSMValue;
+  TR: PTestRec;
+  ScriptFailed: boolean;
+begin
+  engine := FManager.ThreadSafeEngine;
+  engine.InitClass(@TestClass, nil, obj);
+
+  IsConstructCalled := false;
+  engine.GlobalObject.Evaluate('var obj = new TestClass(); obj;', '', 0, Val);
+  Check(IsConstructCalled);
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a ="555";', '', 0, Val);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a;', '', 0, Val);
+  Check(Val.ToSynUnicode(engine.cx) ='555');
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a ="777"; obj;', '', 0, Val);
+  Check(IsSetPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.a = '777');
+
+  IsDelPropertyCalled := false;
+  engine.GlobalObject.Evaluate('delete obj.a; obj;', '', 0, Val);
+  Check(IsDelPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.a = '');
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a ="555";', '', 0, Val);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a;', '', 0, Val);
+  Check(Val.ToSynUnicode(engine.cx) ='555');
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.a ="777"; obj;', '', 0, Val);
+  Check(IsSetPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.a = '777');
+
+  IsDelPropertyCalled := false;
+  engine.GlobalObject.Evaluate('delete obj.a; obj;', '', 0, Val);
+  Check(IsDelPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.a = '');
+
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.b =555;', '', 0, Val);
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+
+  IsPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.b;', '', 0, Val);
+  Check(Val.ToInteger = 555);
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.b =777; obj;', '', 0, Val);
+  Check(IsSetPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.b = 777);
+
+  IsDelPropertyCalled := false;
+  engine.GlobalObject.Evaluate('delete obj.b; obj;', '', 0, Val);
+  Check(IsDelPropertyCalled);
+  engine.MakeObject(val, obj);
+  TR := obj.PrivateData;
+  Check(TR.b = 0);
+
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  ScriptFailed := false;
+  try
+    engine.GlobalObject.Evaluate('obj.c =555;', '', 0, Val);
+  except
+    ScriptFailed := true;
+  end;
+  Check(IsResolveCalled);
+  Check(IsPropertyCalled);
+  Check(IsSetPropertyCalled);
+  Check(ScriptFailed);
+
+  IsPropertyCalled := false;
+  engine.GlobalObject.Evaluate('obj.c;', '', 0, Val);
+  Check(Val.AsJSVal = JSVAL_NULL);
+  Check(IsPropertyCalled);
+
+  IsSetPropertyCalled := false;
+  ScriptFailed := false;
+  try
+    engine.GlobalObject.Evaluate('obj.c ="777"', '', 0, Val);
+  except
+    ScriptFailed := true;
+  end;
+  Check(IsSetPropertyCalled);
+  Check(ScriptFailed);
+
+  IsDelPropertyCalled := false;
+  engine.GlobalObject.Evaluate('delete obj.c', '', 0, Val);
+  Check(IsDelPropertyCalled);
+  CheckNot(Val.AsBoolean);
+
+  IsResolveCalled := false;
+  IsPropertyCalled := false;
+  IsSetPropertyCalled := false;
+  ScriptFailed := false;
+  try
+    engine.GlobalObject.Evaluate('obj.d =555;', '', 0, Val);
+  except
+    ScriptFailed := true;
+  end;
+  Check(IsResolveCalled);
+  CheckNot(IsPropertyCalled);
+  CheckNot(IsSetPropertyCalled);
+  Check(ScriptFailed);
+
+  IsFinalizeCalled := false;
+  FManager.ContentVersion := FManager.ContentVersion+1;
+  FManager.ThreadSafeEngine;
+  Check(IsFinalizeCalled);
+end;
+
 { TTestSynSM }
 procedure TTestSynSM.AbortOnTimeout;
 var
@@ -1270,6 +1696,13 @@ begin
   Check(v = smv.AsJSVal);
   Check(v = JSVAL_FALSE);
 
+  Check(smv.SetJSON(engine.cx, '"test\r\nline"'));
+  Check(smv.ToUTF8(engine.cx) = 'test'#13#10'line');
+  Check(smv.ToJSON(engine.cx) = '"test\r\nline"');
+
+  Check(smv.SetJSON(engine.cx, '{"prop":"strVal"}'));
+  Check(smv.ToJSON(engine.cx) = '{"prop":"strVal"}');
+
 end;
 
 procedure TTestSynSM.ScriptEvaluation;
@@ -1355,24 +1788,10 @@ end;
 procedure TTestSynSM.LoadMustacheTemplate;
 var
   engine: TSMEngine;
-  mustacheFN: TFileName;
-  mustache: RawByteString;
   mSource: SynUnicode;
-  i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
-  mustacheFN := ExtractFilePath(ParamStr(0)) + 'js\mustache.js';
-  mSource := AnyTextFileToSynUnicode(mustacheFN);
-  if mSource='' then begin
-    mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
-    if PosEx('return send(result);',mustache)=0 then begin
-      i := PosEx('send(result);',mustache);
-      if i>0 then
-        insert('return ',mustache,i); // fix syntax error in official libary! :)
-    end;
-    FileFromString(mustache,mustacheFN);
-    mSource := SynUnicode(mustache);
-  end;
+  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\mustache.js');
   Check(mSource <> '', 'exist js\mustache.js');
   engine.Evaluate(mSource, 'mustache.js');
 end;
