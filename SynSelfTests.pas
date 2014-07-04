@@ -5598,6 +5598,15 @@ begin
   DoChange(V2);
   Check(VariantSaveJSON(V1)=s);
   Check(Hash32(VariantSaveJSON(V2))=$92FEB37B);
+  V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
+  Check(V.result='{"data":{"1000":"D1", "1001":"D2"}}');
+  Check(V.result.data.Exists('1000'));
+  Check(V.result.data.Exists('1001'));
+  Check(not V.result.data.Exists('1002'));
+  Check(DocVariantData(V.result.data).Value['1000']='D1');
+  Check(V.result.data.Value(0)='D1');
+  Check(V.result.data.Value('1000')='D1');
+  Check(V.result.data.Value('1001')='D2');
 end;
 
 {$endif LVCL}

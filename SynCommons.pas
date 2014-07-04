@@ -8872,6 +8872,7 @@ type
   // ! aVariant._JSON = DocVariantData(aVariant).JSON
   // ! aVariant._(i) = DocVariantData(aVariant).Value[i]
   // ! aVariant.Value(i) = DocVariantData(aVariant).Value[i]
+  // ! aVariant.Value(aName) = DocVariantData(aVariant).Value[aName]
   // ! aVariant.Name(i) = DocVariantData(aVariant).Name[i]
   // ! aVariant.Add(aItem) = DocVariantData(aVariant).AddItem(aItem)
   // ! aVariant._ := aItem = DocVariantData(aVariant).AddItem(aItem)
@@ -28005,7 +28006,11 @@ function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData;
 var ndx: integer;
     Data: TDocVariantData absolute V;
     temp: RawUTF8;
-    wasString: boolean;
+procedure SetTempFromFirstArgument;
+var wasString: boolean;
+begin
+  VariantToUTF8(variant(Arguments[0]),temp,wasString);
+end;
 begin
   result := true;
   case length(Arguments) of
@@ -28019,21 +28024,21 @@ begin
       exit;
     end else
     if SameText(Name,'Delete') then begin
-      VariantToUTF8(variant(Arguments[0]),temp,wasString);
+      SetTempFromFirstArgument;
       Data.Delete(Data.GetValueIndex(temp));
       exit;
     end else
     if SameText(Name,'Exists') then begin
-      VariantToUTF8(variant(Arguments[0]),temp,wasString);
+      SetTempFromFirstArgument;
       variant(Dest) := Data.GetValueIndex(temp)>=0;
       exit;
     end else
     if SameText(Name,'NameIndex') then begin
-      VariantToUTF8(variant(Arguments[0]),temp,wasString);
+      SetTempFromFirstArgument;
       variant(Dest) := Data.GetValueIndex(temp);
       exit;
     end else
-    if VariantToInteger(variant(Arguments[0]),ndx) then
+    if VariantToInteger(variant(Arguments[0]),ndx) then begin
       if (Name='_') or SameText(Name,'Value') then begin
         Data.RetrieveValueOrRaiseException(ndx,variant(Dest),true);
         exit;
@@ -28043,8 +28048,15 @@ begin
         RawUTF8ToVariant(temp,variant(Dest));
         exit;
       end;
+    end else
+    if (Name='_') or SameText(Name,'Value') then begin
+      SetTempFromFirstArgument;
+      Data.RetrieveValueOrRaiseException(pointer(temp),length(temp),
+        dvoNameCaseSensitive in Data.VOptions,variant(Dest),true);
+      exit;
+    end;
   2:if SameText(Name,'Add') then begin
-      VariantToUTF8(variant(Arguments[0]),temp,wasString);
+      SetTempFromFirstArgument;
       Data.InternalAddValue(temp,variant(Arguments[1]));
       exit;
     end;
