@@ -27015,12 +27015,12 @@ var i: integer;
 begin
   InterlockedIncrement(fStats.fCurrentThreadCount);
   CurrentThreadId := GetCurrentThreadId;
-  {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
-    [self,Sender,CurrentThreadId,fStats.CurrentThreadCount]);
-  {$endif}
   if Sender=nil then
     raise ECommunicationException.Create('BeginCurrentThread(nil)');
+  {$ifdef WITHLOG}
+  SQLite3Log.Add.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
+    [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
+  {$endif}
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateFmt(
       'BeginCurrentThread(Thread.ID=%d) and CurrentThreadID=%d',[Sender.ThreadID,CurrentThreadId]);
@@ -27046,12 +27046,12 @@ var i: integer;
 begin
   InterlockedDecrement(fStats.fCurrentThreadCount);
   CurrentThreadId := GetCurrentThreadId;
-  {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [self,Sender,CurrentThreadId,fStats.CurrentThreadCount]);
-  {$endif}
   if Sender=nil then
     raise ECommunicationException.Create('EndCurrentThread(nil)');
+  {$ifdef WITHLOG}
+  SQLite3Log.Add.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
+    [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
+  {$endif}
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateFmt(
       'EndCurrentThread(Thread.ID=%d) and CurrentThreadID=%d',[Sender.ThreadID,CurrentThreadId]);
