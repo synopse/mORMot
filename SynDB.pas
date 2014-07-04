@@ -2777,8 +2777,8 @@ const
   // dNexusDB
   (' INTEGER',' NVARCHAR(%)',' LARGEINT',' REAL',' MONEY',' DATETIME',' NCLOB',' BLOB'),
   // VARCHAR(%) CODEPAGE 65001 just did not work well with Delphi<2009
-  // PostgreSQL
-  (' INTEGER',' VARCHAR(%)',' BIGINT',' DOUBLE PRECISION',' NUMERIC(19,4)',
+  // dPostgreSQL - we will create TEXT column instead of VARCHAR(%)
+  (' INTEGER',' TEXT',' BIGINT',' DOUBLE PRECISION',' NUMERIC(19,4)',
    ' TIMESTAMP',' TEXT',' BYTEA'),
   // dDB2 (for CCSID Unicode tables) - bigint needs 9.1 and up
   (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob')
@@ -2786,11 +2786,10 @@ const
 
   /// the known column data types corresponding to our TSQLDBFieldType types
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
+  // - SQLite3 doesn't expect any field length, neither PostgreSQL, so set to 0
   DB_FIELDSMAX: array[TSQLDBDefinition] of cardinal = (
     1000, 1000, 1333, { =4000/3 since WideChar is up to 3 bytes in UTF-8 }
-    4000, 255, 4000,
-    0, { SQLite3 doesn't expect any field length }
-    32760, 32767, 65535, 32700);
+    4000, 255, 4000, 0, 32760, 32767, 0, 32700);
 
   /// the known SQL statement to retrieve the server date and time
   DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = (

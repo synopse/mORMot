@@ -231,7 +231,8 @@ begin
               Conns.AddOne(C,false,'') else
               if res=100 then
                 FreeAndNil(C);
-          end;
+          end else
+            FreeAndNil(C);
         finally
           Free;
         end;
