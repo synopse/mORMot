@@ -5,7 +5,7 @@ program RegressionTests;
 {$APPTYPE CONSOLE}
 
 {$ifdef MSWINDOWS}
-{$ifndef FPC}
+{$ifndef FPC}  // under FPC, please run program RegressionTestsServer.dpr
   {$define RUNSERVER}
 {$endif}
 {$endif}
@@ -21,53 +21,14 @@ uses
   SynCrossPlatformCrypto,
   SynCrossPlatformTests,
   {$ifdef RUNSERVER}
-  SynCommons,
-  mORMot,
-  mORMotHttpServer,
+  PeopleServer,
   {$endif}
   SysUtils;
 
-// for testing FPC, run locally RegressionTests.exe compiled with Delphi on Windows :)
+var
+  TotalFailed: cardinal = 0;
 
-{$ifdef RUNSERVER}
-type
-  TSQLRecordPeople = class(mORMot.TSQLRecord)
-  private
-    fData: TSQLRawBlob;
-    fFirstName: RawUTF8;
-    fLastName: RawUTF8;
-    fYearOfBirth: integer;
-    fYearOfDeath: word;
-  published
-    property FirstName: RawUTF8 read fFirstName write fFirstName;
-    property LastName: RawUTF8 read fLastName write fLastName;
-    property Data: TSQLRawBlob read fData write fData;
-    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
-    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
-  end;
-
-  TCustomServer = class(TSQLRestServerFullMemory)
-  published
-    procedure DropTable(Ctxt: TSQLRestServerURIContext);
-  end;
-
-procedure TCustomServer.DropTable(Ctxt: TSQLRestServerURIContext);
-begin
-  if (Ctxt.Method=mGET) and (Ctxt.TableIndex>=0) then begin
-    TSQLRestStorageInMemory(fStaticData[Ctxt.TableIndex]).LoadFromJSON('');
-    Ctxt.Success;
-  end;
-end;
-{$endif}
-
-procedure TestWithAuth(
-  aAuth: SynCrossPlatformREST.TSQLRestAuthenticationClass;
-  waitEnterKey: boolean);
-{$ifdef RUNSERVER}
-var Model: TSQLModel;
-    DB: TCustomServer;
-    Server: TSQLHttpServer;
-{$endif}
+procedure TestWithAuth(aAuth: SynCrossPlatformREST.TSQLRestAuthenticationClass);
 begin
   with TSynCrossPlatformClient.Create(aAuth) do
   try
@@ -76,27 +37,18 @@ begin
       Ident := Ident+' without authentication' else
       Ident := Ident+' using '+string(aAuth.ClassName);
 {$ifdef RUNSERVER}
-    Model := TSQLModel.Create([mORMot.TSQLAuthUser,mORMot.TSQLAuthGroup,
-      TSQLRecordPeople]);
-    DB := TCustomServer.Create(Model);
-    Server := TSQLHttpServer.Create('888',DB);
     try
-      Server.AccessControlAllowOrigin := '*';
       if aAuth=TSQLRestAuthenticationDefault then
-        DB.AuthenticationRegister(TSQLRestServerAuthenticationDefault) else
+        StartServer(psaDefault) else
       if aAuth=TSQLRestAuthenticationNone then
-        DB.AuthenticationRegister(TSQLRestServerAuthenticationNone);
+        StartServer(psaWeak) else
+        StartServer(psaNone);
 {$endif}
       Run(true);
-      if waitEnterKey then begin
-        write(' Press [Enter] to quit');
-        readln;
-      end;
+      inc(TotalFailed,Failed);
 {$ifdef RUNSERVER}
     finally
-      Server.Free;
-      DB.Free;
-      Model.Free;
+      StopServer;
     end;
 {$endif}
   finally
@@ -112,10 +64,15 @@ begin
     Free;
   end;
   writeln;
-  {$ifdef RUNSERVER} // only last one will remain alive for FPC
-  TestWithAuth(nil,false);
-  TestWithAuth(TSQLRestAuthenticationNone,false);
+  {$ifdef RUNSERVER} // only last one should be tested for server-less FPC
+  TestWithAuth(nil);
+  TestWithAuth(TSQLRestAuthenticationNone);
   {$endif}
-  TestWithAuth(TSQLRestAuthenticationDefault,true);
+  TestWithAuth(TSQLRestAuthenticationDefault);
+  if TotalFailed>0 then begin
+    writeln(#10'Some tests failed... please fix it ASAP!');
+    readln;
+  end;
+  readln;
 end.
 
