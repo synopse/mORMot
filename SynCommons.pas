@@ -582,7 +582,7 @@ unit SynCommons;
   - fixed ticket [815facfe57] in UTF8ILComp()
   - fixed UTF8ToWideChar() functions to always append a WideChar(0) to the end
     of the destination buffer, even if returned length is 0
-  - added AnyTextFileToString() and AnyTextFileToSynUnicode() functions
+  - added AnyTextFileToString, AnyTextFileToSynUnicode and AnyTextFileToRawUTF8
   - declared PByteArray, PWordArray, PPointerArray here - see [d6b38a96e6]
   - fixed IdemPChar() in pure pascal to behave like the asm version (i.e.
     if up parameter is nil, will return TRUE)
@@ -2740,6 +2740,14 @@ function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean=false
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
 // case, the current string code page is used (i.e. CurrentAnsiConvert class)
 function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean=false): SynUnicode;
+
+/// get text file contents (even Unicode or UTF8) and convert it into an
+// UTF-8 string according to any BOM marker at the beginning of the file
+// - if AssumeUTF8IfNoBOM is FALSE, the current string code page is used (i.e.
+// CurrentAnsiConvert class) for conversion from ANSI into UTF-8
+// - if AssumeUTF8IfNoBOM is TRUE, any file without any BOM marker will be
+// interpreted as UTF-8
+function AnyTextFileToRawUTF8(const FileName: TFileName; AssumeUTF8IfNoBOM: boolean=false): RawUTF8;
 
 /// read an UTF-8 text from a TStream
 // - format is Length(Integer):Text, i.e. the one used by WriteStringToStream
@@ -18427,6 +18435,27 @@ begin
       UTF8ToSynUnicode(PUTF8Char(pointer(PtrInt(Map.Buffer)+3)),Map.Size-3,Result);
     isAnsi:
       result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
+    end;
+  finally
+    Map.UnMap;
+  end;
+end;
+
+function AnyTextFileToRawUTF8(const FileName: TFileName; AssumeUTF8IfNoBOM: boolean): RawUTF8;
+var Map: TMemoryMap;
+begin
+  result := '';                                   
+  if Map.Map(FileName) then
+  try
+    case TextFileKind(Map) of
+    isUnicode:
+      RawUnicodeToUtf8(PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1,Result);
+    isUTF8:
+      SetString(result,PAnsiChar(pointer(PtrInt(Map.Buffer)+3)),Map.Size-3);
+    isAnsi:
+      if AssumeUTF8IfNoBOM then
+        SetString(result,PAnsiChar(Map.Buffer),Map.Size) else
+        result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Map.Buffer, Map.Size);
     end;
   finally
     Map.UnMap;
