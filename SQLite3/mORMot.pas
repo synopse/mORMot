@@ -958,6 +958,7 @@ unit mORMot;
       if no BLOB field is defined (as with TSQLRestServer) - ticket [bfa13889d5]
     - fixed issue in TSQLRestStorageInMemory.GetJSONValues(), and handle
       optional LIMIT clause in this very same method
+    - added new TSQLRestStorageInMemory.DropValues method
     - fix potential GDI handle resource leak in TSQLRestClientURIMessage.Create
     - introducing TSQLRestClientURIMessage.DoNotProcessMessages property
     - TSQLRestClientURINamedPipe.InternalCheckOpen/InternalURI refactoring
@@ -11222,6 +11223,9 @@ type
     // - especially release all fValue[] instances
     destructor Destroy; override;
 
+    /// clear all the values of this table
+    // - will reset the associated database file, if any
+    procedure DropValues;
     /// load the values from JSON data
     procedure LoadFromJSON(const aJSON: RawUTF8); overload;
     /// load the values from JSON data
@@ -29094,6 +29098,13 @@ begin
     ReturnedRowCount^ := ResCount;
 end;
 
+procedure TSQLRestStorageInMemory.DropValues;
+begin
+  fModified := fValue.Count>0;
+  fValue.Clear;
+  UpdateFile;
+end;
+
 procedure TSQLRestStorageInMemory.LoadFromJSON(const aJSON: RawUTF8);
 begin
   LoadFromJSON(Pointer(aJSON),length(aJSON));
@@ -29118,8 +29129,9 @@ var T: TSQLTableJSON;
 begin
   fModified := false;
   fValue.Clear;
+  if JSONBuffer=nil then
+    exit;
   T := TSQLTableJSON.CreateFromTables([fStoredClass],'',JSONBuffer,JSONBufferLen);
-  if T<>nil then  // use a temporary table
   try
     if T.fFieldIndexID<0 then
       exit; // no ID field -> load is impossible -> error
@@ -29832,8 +29844,8 @@ end;
 procedure TSQLRestServerFullMemory.DropDatabase;
 var t: integer;
 begin
-  for t := 0 to fStaticDataCount-1 do
-    TSQLRestStorageInMemory(fStaticData[t]).fValue.Clear;
+  for t := 0 to fStaticDataCount-1 do 
+    TSQLRestStorageInMemory(fStaticData[t]).DropValues;
 end;
 
 procedure TSQLRestServerFullMemory.LoadFromFile;
