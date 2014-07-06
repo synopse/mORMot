@@ -3955,6 +3955,13 @@ type
     end;
     Int: TStaticArrayOfInt;
   end;
+  TBookRecord = packed record
+    name: string;
+    author: record
+      first_name:string;
+      last_name:string;
+    end;
+  end;
 {$endif}
 
 const // convention may be to use __ before the type name
@@ -4218,6 +4225,7 @@ var ab0,ab1: TSubAB;
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
     nrtti,nrtti2: TNewRTTI;
+    book: TBookRecord;
 {$endif}
 begin
   Finalize(JR);
@@ -4419,6 +4427,11 @@ begin
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
   check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
+  U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
+  RecordLoadJSON(Book,@U[1],TypeInfo(TBookRecord));
+  check(Book.name='Book');
+  check(Book.author.first_name='Bob');
+  Check(Book.author.last_name='White');
   {$endif}
 end;
 begin
