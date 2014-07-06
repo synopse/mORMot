@@ -702,7 +702,7 @@ unit mORMot;
       IsSimpleField AppendName GetCaption GetSQLFromFieldValue SetFieldAddr
     - you can now define any custom property and store it as JSON, e.g. TGUID,
       by using overriding InternalRegisterCustomProperties(), or directly as
-      record published properties (since Delphi XE6) - see ticket [b653e5f4ca]
+      record published properties (since Delphi XE5) - see ticket [b653e5f4ca]
     - TSQLRestRoutingREST will now recognize several URI schemes:
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
@@ -14247,7 +14247,7 @@ begin
       C := TSQLPropInfoRTTIRawBlob;
     sftBlobDynArray:
       C := TSQLPropInfoRTTIDynArray;
-    sftUTF8Custom: begin // will happen only for DELPHI XE6 and up
+    sftUTF8Custom: begin // will happen only for DELPHI XE5 and up
       result := TSQLPropInfoCustomJSON.Create(aPropInfo,aPropIndex);
       exit;
     end;

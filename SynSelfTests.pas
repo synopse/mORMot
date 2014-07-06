@@ -7763,14 +7763,14 @@ type
   TSQLRecordCustomProps = class(TSQLRecordPeople)
   protected
     fGUID: TGUID;
-    {$ifdef ISDELPHIXE6}
+    {$ifdef PUBLISHRECORD}
     fGUIDXE6: TGUID;
     {$endif}
     class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
   public
     property GUID: TGUID read fGUID write fGUID;
   published
-    {$ifdef ISDELPHIXE6}
+    {$ifdef PUBLISHRECORD}
     property GUIDXE6: TGUID read fGUIDXE6 write fGUIDXE6;
     {$endif}
   end;
@@ -9183,7 +9183,7 @@ begin
           VP.FillFrom(V2); // fast copy some content from TSQLRecordPeople
           inc(n);
           VP.fGUID.D1 := n;
-          {$ifdef ISDELPHIXE6}
+          {$ifdef PUBLISHRECORD}
           VP.fGUIDXE6.D1 := n shl 1;
           {$endif}
           Check(Client.Add(VP,true)=n);
@@ -9193,7 +9193,7 @@ begin
         while VP.FillOne do begin
           check(VP.LastName='Morse');
           check(Integer(VP.GUID.D1)=VP.ID);
-          {$ifdef ISDELPHIXE6}
+          {$ifdef PUBLISHRECORD}
           check(Integer(VP.GUIDXE6.D1)=VP.ID shl 1);
           {$endif}
         end;
