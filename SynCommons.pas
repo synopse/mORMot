@@ -34021,6 +34021,10 @@ begin
   {$ifdef VER2_5_0}+' 2.5.0'{$endif}
   {$ifdef VER2_5_1}+' 2.5.1'{$endif}
   {$ifdef VER2_6_0}+' 2.6.0'{$endif}
+  {$ifdef VER2_6_1}+' 2.6.1'{$endif}
+  {$ifdef VER2_6_2}+' 2.6.2'{$endif}
+  {$ifdef VER2_6_3}+' 2.6.3'{$endif}
+  {$ifdef VER2_6_4}+' 2.6.4'{$endif}
   {$ifdef VER2_7_0}+' 2.7.0'{$endif}
   {$ifdef VER2_7_1}+' 2.7.1'{$endif}
 {$else}
