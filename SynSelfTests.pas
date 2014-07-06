@@ -4429,7 +4429,7 @@ begin
   check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
   U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
   RecordLoadJSON(Book,@U[1],TypeInfo(TBookRecord));
-  check(Book.name='Book');
+  check(Book.name='Book the First');
   check(Book.author.first_name='Bob');
   Check(Book.author.last_name='White');
   {$endif}
