@@ -217,7 +217,8 @@ unit SynDB;
   - added Bind(TSQLVar) overloaded method to ISQLDBStatement/TSQLDBStatement
   - added missing ColumnToSQLVar() method to ISQLDBRows interface
   - added TSQLDBStatement.ColumnsToBinary() method
-  - method TSQLDBStatement.ColumnTypeNativeToDB() is now public
+  - method TSQLDBStatement.ColumnTypeNativeToDB() is now public, and will
+    recognize uniqueidentifier data type as ftUTF8
   - added TSQLDBStatementWithParams.BindFromRows() method
   - new TSQLDBProxyStatementRandomAccess class for in-memory browsing of data
     retrieved via TSQLDBStatement.FetchAllToBinary()
@@ -4197,14 +4198,16 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(
   const aNativeType: RawUTF8; aScale: integer): TSQLDBFieldType;
 procedure ColumnTypeNativeDefault;
 const
-  PCHARS: array[0..54] of PAnsiChar = (
+  DECIMAL=18; // change it if you update PCHARS[] below before 'DECIMAL'
+  NUMERIC=DECIMAL+1;
+  PCHARS: array[0..55] of PAnsiChar = (
     'TEXT COLLATE ISO8601',
     'TEXT','CHAR','NCHAR','VARCHAR','NVARCHAR','CLOB','NCLOB','DBCLOB',
     'BIT','INT','BIGINT', 'DOUBLE','NUMBER','FLOAT','REAL','DECFLOAT',
     'CURR','DECIMAL','NUMERIC', 'BLOB SUB_TYPE 1',  'BLOB',
     'DATE','SMALLDATE','TIME',
     'TINYINT','BOOL','SMALLINT','MEDIUMINT','SERIAL','YEAR',
-    'TINYTEXT','MEDIUMTEXT','NTEXT','XML','ENUM','SET',
+    'TINYTEXT','MEDIUMTEXT','NTEXT','XML','ENUM','SET','UNIQUEIDENTIFIER',
     'MONEY','SMALLMONEY','NUM',
     'VARRAW','RAW','LONG RAW','LONG VARRAW','TINYBLOB','MEDIUMBLOB',
     'BYTEA','VARBIN','IMAGE','LONGBLOB','BINARY','VARBINARY',
@@ -4216,13 +4219,11 @@ const
     ftCurrency,ftCurrency,ftCurrency, ftUTF8, ftBlob,
     ftDate,ftDate,ftDate,
     ftInt64,ftInt64,ftInt64,ftInt64,ftInt64,ftInt64,
-    ftUTF8,ftUTF8,ftUTF8,ftUTF8,ftUTF8,ftUTF8,
+    ftUTF8,ftUTF8,ftUTF8,ftUTF8,ftUTF8,ftUTF8,ftUTF8,
     ftCurrency,ftCurrency,ftCurrency,
     ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,
     ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,ftBlob,
     ftNull);
-  DECIMAL=18;
-  NUMERIC=DECIMAL+1;
 var ndx: integer;
 begin
   //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
