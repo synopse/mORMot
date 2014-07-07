@@ -25093,11 +25093,12 @@ begin
     exit; // not enough RTTI for older versions of Delphi
   {$endif}
   Reg.RecordCustomParser := TJSONCustomParserFromRTTI.Create(Reg.RecordTypeInfo,RegRoot);
-  GarbageCollector.Add(Reg.RecordCustomParser);
   Reg.Reader := Reg.RecordCustomParser.CustomReader;
   Reg.Writer := Reg.RecordCustomParser.CustomWriter;
   if self=nil then
-    self := TJSONCustomParsers.Create;
+    if GlobalJSONCustomParsers<>nil then // may have been set just above
+      self := GlobalJSONCustomParsers else
+      self := TJSONCustomParsers.Create;
   ndx := fParsers.FindHashedForAdding(Reg.RecordTypeName,added);
   if not added then
     exit; // name should be unique
@@ -26423,6 +26424,7 @@ begin
     {$endif}
   end;
   fItems.Add(fRoot);
+  GarbageCollector.Add(self);
 end;
 
 function TJSONCustomParserFromRTTI.AddItemFromRTTI(
