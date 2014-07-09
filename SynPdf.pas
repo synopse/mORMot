@@ -216,6 +216,7 @@ unit SynPdf;
   - therefore, TPdfDocumentGDI will use much less resource and memory with no
     swaping to disk (tested with 200,000 simple text pages)
   - reduced generated file size, with optional PDFGeneratePDF15File property
+  - fixed incorrect Postscript font name retrieval e.g. for Asiatic fonts
   - fixed potential GPF issue in TPdfWrite.AddUnicodeHex and TPdfWrite.AddHex
   - fixed compilation warnings regarding Delphi XE3 regressions
   - fixed text color process in TPdfEnum
@@ -1312,7 +1313,8 @@ type
     procedure CreateInfo;
     /// get the PostScript Name of a TrueType Font
     // - use the Naming Table ('name') of the TTF content if not 7 bit ascii
-    function TTFFontPostcriptName(aFontIndex: integer; AStyle: TFontStyles; const ALogFont: TLogFontW): PDFString;
+    function TTFFontPostcriptName(aFontIndex: integer; AStyle: TFontStyles;
+      AFont: TPdfFontTrueType): PDFString;
     /// if ANSI_CHARSET is used, create a standard embedded font
     function CreateEmbeddedFont(const FontName: RawUTF8): TPdfFont;
     /// register the font in the font list
@@ -2940,7 +2942,7 @@ begin
   L := GetFontData(aDC,PCardinal(aTableName)^,0,nil,0);
   if L=GDI_ERROR then
     exit;
-  SetLength(ref,L shr 1);
+  SetLength(ref,L shr 1+1);
   if GetFontData(aDC,PCardinal(aTableName)^,0,pointer(ref),L)=GDI_ERROR then
     exit;
   result := pointer(ref);
@@ -5772,6 +5774,15 @@ begin
   end;
 end;
 
+const
+  TTFCFP_MAC_PLATFORMID = 1;
+  TTFCFP_MS_PLATFORMID = 3;
+  TTFCFP_SYMBOL_CHAR_SET = 0;
+  TTFCFP_UNICODE_CHAR_SET = 1;
+
+  TTFCFP_FLAGS_SUBSET = 1;
+  TTFMFP_SUBSET = 0;
+
 type
   /// a TTF name record used for the 'name' Format 4 table
   TNameRecord = packed record
@@ -5795,7 +5806,7 @@ type
   end;
 
 function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TFontStyles;
-  const ALogFont: TLogFontW): PDFString;
+  AFont: TPdfFontTrueType): PDFString;
 // see http://www.microsoft.com/typography/OTSPEC/name.htm
 function TrueTypeFontName(const aFontName: RawUTF8; AStyle: TFontStyles): PDFString;
 var i: Integer;
@@ -5814,38 +5825,35 @@ end;
 const NAME_POSTCRIPT = 6;
 var fName: TWordDynArray;
     name: ^TNameFmt4;
-    gdi, old: THandle;
     aFontName: RawUTF8;
     i, L: integer;
     Rec: ^TNameRecord;
+    PW: pointer;
 begin
   aFontName := FTrueTypeFonts[aFontIndex];
   result := TrueTypeFontName(aFontName,AStyle);
-  if IsAnsiCompatible(aFontName) then
+  if IsAnsiCompatible(aFontName) or (AFont=nil) then
     exit; // no need to search for the PostScript name field in TTF content
-  gdi := CreateFontIndirectW(ALogFont);
-  if gdi=0 then
-    exit; // if the function failed, the return value is NULL
-  old := SelectObject(FDC,gdi);
-  try
-    name := GetTTFData(FDC,'name',fName);
-    if name=nil then
-      exit;
-    Rec := @name^.FirstNameRecord;
-    for i := 0 to name^.count-1 do begin
-      if Rec^.nameID=NAME_POSTCRIPT then begin
-        L := Rec^.length shr 1;
-        SetLength(result,L);
-        RawUnicodeToWinPChar(pointer(Result),
-          pointer(PAnsiChar(name)+name^.stringOffset+Rec^.offset),L);
-        exit;
+  name := GetTTFData(GetDCWithFont(AFont),'name',fName);
+  if (name=nil) or (name^.format<>0) then
+    exit;
+  Rec := @name^.FirstNameRecord;
+  for i := 0 to name^.count-1 do 
+    if (Rec^.nameID=NAME_POSTCRIPT) and (Rec^.platformID=TTFCFP_MS_PLATFORMID) and
+       (Rec^.encodingID=1) and (Rec^.languageID=$409) then begin
+      PW := PAnsiChar(name)+name^.stringOffset+Rec^.offset;
+      L := Rec^.length shr 1;
+      if Rec^.offset and 1<>0 then begin // fix GetTTFData() wrong SwapBuffer()
+        dec(PByte(PW));
+        SwapBuffer(PW,L+1); // restore big-endian original unaligned buffer
+        inc(PByte(PW));
+        SwapBuffer(PW,L);   // convert from big-endian at correct odd offset
       end;
-      inc(Rec);
-    end;
-  finally
-    SelectObject(FDC,old);
-    DeleteObject(gdi);
-  end;
+      SetLength(result,L);
+      RawUnicodeToWinPChar(pointer(Result),PW,L);
+      exit;
+    end else
+    inc(Rec);
 end;
 
 function TPdfDocument.CreateOutline(const Title: string; Level: integer;
@@ -7379,7 +7387,7 @@ begin
       if fUsedWide[i].Glyph=aGlyph then
         exit; // fast return already existing glyph index
   // 2. register this glyph, and return TTF glyph
-  with UnicodeFont do // UnicodeFont.fUsedWide[] = available glyphs from TPdfTTF 
+  with UnicodeFont do // UnicodeFont.fUsedWide[] = available glyphs from TPdfTTF
     for i := 0 to fUsedWideChar.Count-1 do
       if fUsedWide[i].Glyph=aGlyph then begin
         result := WinAnsiFont.fUsedWide[
@@ -7391,25 +7399,27 @@ end;
 
 constructor TPdfFontTrueType.Create(ADoc: TPdfDocument; AFontIndex: integer;
   AStyle: TFontStyles; const ALogFont: TLogFontW; AWinAnsiFont: TPdfFontTrueType);
-var old: THandle;
-    W: packed array of TABC;
+var W: packed array of TABC;
     c: AnsiChar;
     aFontName: PDFString;
     Flags: integer;    
 begin
+  if AWinAnsiFont<>nil then begin
+    fWinAnsiFont := AWinAnsiFont;
+    fUnicode := true;
+    fUnicodeFont := self;
+    fHGDI := AWinAnsiFont.fHGDI; // only one GDI resource is used for both
+  end else begin
+    fWinAnsiFont := self;
+    fHGDI := CreateFontIndirectW(ALogFont);
+  end;
   if AWinAnsiFont<>nil then // we use the Postscript Name here
     aFontName := AWinAnsiFont.fName else
-    aFontName := ADoc.TTFFontPostcriptName(AFontIndex,AStyle,ALogFont);
+    aFontName := ADoc.TTFFontPostcriptName(AFontIndex,AStyle,self);
   inherited Create(ADoc.FXref,aFontName);
   fDoc := ADoc;
   fTrueTypeFontsIndex := AFontIndex+1;
   fStyle := AStyle;
-  if AWinAnsiFont<>nil then begin
-    fWinAnsiFont := AWinAnsiFont;
-    fUnicode := true;
-    fUnicodeFont := Self;
-  end else
-    fWinAnsiFont := self;
   // adding element to the dictionary
   Data.AddItem('Type', 'Font');
   Data.AddItem('BaseFont', FName);
@@ -7420,21 +7430,19 @@ begin
     Data.AddItem('Subtype', 'Type0');
     Data.AddItem('Encoding', 'Identity-H');
     // Retrieve some font details from WinAnsi version
-    fHGDI := AWinAnsiFont.fHGDI; // only one GDI resource is used for both
     fFixedWidth := AWinAnsiFont.fFixedWidth;
     fDefaultWidth := AWinAnsiFont.fDefaultWidth;
     fM := AWinAnsiFont.fM;
     fOTM := AWinAnsiFont.fOTM;
     // get TrueType glyphs info
-    old := SelectObject(fDoc.FDC,fHGDI);
+    fDoc.GetDCWithFont(self);
     TPdfTTF.Create(self).Free; // all the magic in one line :)
   end else begin
     // 2. WinAnsi Font
     Data.AddItem('Subtype', 'TrueType');
     Data.AddItem('Encoding', 'WinAnsiEncoding');
     // retrieve default WinAnsi characters widths
-    fHGDI := CreateFontIndirectW(ALogFont);
-    old := SelectObject(fDoc.FDC,fHGDI);
+    fDoc.GetDCWithFont(self);
     GetTextMetrics(fDoc.FDC,fM);
     fOTM.otmSize := SizeOf(fOTM);
     GetOutlineTextMetrics(fDoc.FDC,SizeOf(fOTM),@fOTM);
@@ -7480,7 +7488,6 @@ begin
   end;
   fAscent := fOTM.otmAscent;
   fDescent := fOTM.otmDescent;
-  SelectObject(fDoc.FDC,old);
   FDoc.RegisterFont(self);
 end;
 
@@ -7526,14 +7533,6 @@ begin
   FreeMem(Buffer);
 end;
 
-const
-  TTFCFP_MS_PLATFORMID = 3;
-  TTFCFP_SYMBOL_CHAR_SET = 0;
-  TTFCFP_UNICODE_CHAR_SET = 1;
-
-  TTFCFP_FLAGS_SUBSET = 1;
-  TTFMFP_SUBSET = 0;
-
 var
   FontSub: THandle = INVALID_HANDLE_VALUE;
   CreateFontPackage: function(puchSrcBuffer: pointer; ulSrcBufferSize: cardinal;
@@ -7551,7 +7550,6 @@ var c: AnsiChar;
     ToUnicode: TPdfStream;
     DS: TStream;
     WR: TPdfWrite;
-    old: THandle;
     ttfSize: cardinal;
     ttf: PDFString;
     SubSetData: PAnsiChar;
@@ -7651,7 +7649,7 @@ begin
       if fDoc.PDFA1 or (fDoc.EmbeddedTTF and
          ((fDoc.fEmbeddedTTFIgnore=nil) or (fDoc.fEmbeddedTTFIgnore.
            IndexOf(fDoc.FTrueTypeFonts[fTrueTypeFontsIndex-1])<0))) then begin
-        old := SelectObject(fDoc.FDC,fHGDI);
+        fDoc.GetDCWithFont(self);
         ttfSize := GetFontData(fDoc.FDC, 0, 0, nil, 0);
         if ttfSize<>GDI_ERROR then begin
           SetLength(ttf,ttfSize);
@@ -7690,7 +7688,6 @@ begin
             fFontDescriptor.AddItem('FontFile2',fFontFile2);
           end;
         end;
-        SelectObject(fDoc.FDC,old);
       end;
     end;
   finally
