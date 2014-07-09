@@ -1039,7 +1039,7 @@ begin
       raise EODBCException.CreateFmt('Unknown DBMSName=%s DriverName=%s DBMSVersion=%s',
         [DBMSName,DriverName,DBMSVersion]);
     {$ifndef DELPHI5OROLDER}
-    Log.Log(sllDebug,'Connected to % using % % recognized as %s',
+    Log.Log(sllDebug,'Connected to % using % % recognized as %',
       [DBMSName,DriverName,DBMSVersion,
        GetEnumName(TypeInfo(TSQLDBDefinition),ord(fDBMS))^]);
     {$endif}
