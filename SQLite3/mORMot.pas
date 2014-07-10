@@ -35284,7 +35284,7 @@ begin
         ArgsResultIndex := -1;
       // go to next method
       {$ifdef ISDELPHIXE}
-      inc(PW); // skip attributes
+      inc(PB,PW^); // skip custom attributes
       {$endif}
     end;
   end;
