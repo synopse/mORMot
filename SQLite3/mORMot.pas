@@ -37363,6 +37363,8 @@ begin
     if Records<>nil then begin
       i := 0;
       for a := 0 to high(Args) do
+        if Records[i]=nil then // avoid GPF in case of incorrect input
+          break else
         with Args[a] do
         case ValueType of
         smvRecord: begin

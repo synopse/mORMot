@@ -736,6 +736,14 @@ type
     IsSQLUpdateBack, EOF: boolean;
   end;
 
+  /// a record used by IComplexCalculator.GetCustomer
+  TCustomerData = packed record
+    Id: Integer;
+    AccountNum: RawUTF8;
+    Name: RawUTF8;
+    Address: RawUTF8;
+  end;
+
   /// a test interface, used by TTestServiceOrientedArchitecture
   // - to test basic and high-level remote service calls
   ICalculator = interface(IInvokable)
@@ -785,10 +793,12 @@ type
     {$endif}
     /// returns the thread ID running the method on server side
     function GetCurrentThreadID: cardinal;
+    /// validate record transmission
+    function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
     {$ifdef UNICODE}
     /// validate simple record transmission
     // - older Delphi versions (e.g. 6-7) do not allow records without
-    // nested reference-counted types 
+    // nested reference-counted types
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     {$endif}
   end;
@@ -9670,6 +9680,7 @@ type
     {$endif LVCL}
     function GetCurrentThreadID: cardinal;
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
+    function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
   end;
 
   TServiceComplexNumber = class(TInterfacedObject,IComplexNumber)
@@ -9814,6 +9825,14 @@ end;
 function TServiceComplexCalculator.GetCurrentThreadID: cardinal;
 begin
   result := Windows.GetCurrentThreadId;
+end;
+
+function TServiceComplexCalculator.GetCustomer(CustomerId: Integer;
+  out CustomerData: TCustomerData): Boolean;
+begin
+  CustomerData.Id := CustomerId;
+  CustomerData.AccountNum := Int32ToUtf8(CustomerID);
+  result := True;
 end;
 
 {$ifndef LVCL}
@@ -10013,6 +10032,7 @@ begin
   end;
 end;
 var s: RawUTF8;
+    data: TCustomerData;
 {$ifndef LVCL}
     cust: TServiceCustomAnswer;
     c: cardinal;
@@ -10076,6 +10096,9 @@ begin
       CheckSame(V2,C3.Real+c);
       Check(VariantSaveJSON(V3)=s);
 {$endif}
+      Check(Inst.CC.GetCustomer(c,data));
+      Check(data.Id=c);
+      Check(GetInteger(pointer(data.AccountNum))=c);
 {$ifdef UNICODE}
       Nav.MaxRows := c;
       Nav.Row0 := c*2;
@@ -10349,6 +10372,7 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
 var S: TServiceFactory;
     i: integer;
     rout: integer;
+    resp: RawUTF8;
 const
   ROUTING: array[0..1] of TSQLRestServerURIContextClass =
     (TSQLRestRoutingREST,TSQLRestRoutingJSON_RPC);
@@ -10447,9 +10471,12 @@ begin
     Check(Ask('Subtract','23,20','n2=20&n1=23',200)='3');
     Check(Ask('ToText','777,"abc"','result=abc&value=777',200)='777');
     Check(Ask('ToTextFunc','777','value=777',200)='777');
+    if rout=0 then
+      Check(fClient.URI('root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe',
+        'POST',@resp,nil,nil).Lo=400,'incorrect input');
   end;
   fClient.ServicesRouting := TSQLRestRoutingREST; // back to default
-  fClient.Server.ServicesRouting := TSQLRestRoutingREST; 
+  fClient.Server.ServicesRouting := TSQLRestRoutingREST;
 end;
 
 procedure TTestServiceOrientedArchitecture.Security;
