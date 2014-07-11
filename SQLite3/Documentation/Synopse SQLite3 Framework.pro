@@ -5081,6 +5081,10 @@ Our integration within {\f1\fs20 SynDB.pas} units and the {\i mORMot} persistenc
 \UniDAC\SQLite3
 \NexusDB=Oracle=SQLite3
 \
+For instance, to access to a @*MySQL@ remote database, you should be able to connect using:
+!PropsMySQL := TSQLDBUniDACConnectionProperties.Create(
+!  TSQLDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
+!  'world', 'root', 'dev');
 This library gives pretty stable results, but lack of the array binding feature, in comparison to {\i FireDAC}.
 :   BDE engine
 {\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of Delphi. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB} provider.
