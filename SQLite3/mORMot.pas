@@ -37368,12 +37368,12 @@ begin
         with Args[a] do
         case ValueType of
         smvRecord: begin
-          RecordClear(pointer(Records[i])^,TypeInfo);
+          RecordClear(Records[i][0],TypeInfo);
           inc(i);
         end;
         {$ifndef NOVARIANTS}
         smvVariant: begin
-          VarClear(PVariant(pointer(Records[i]))^); // fast
+          VarClear(PVariant(Records[i])^); // fast, even for simple types
           inc(i);
         end;
         {$endif}

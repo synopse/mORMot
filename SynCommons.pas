@@ -25714,7 +25714,9 @@ begin
         else ItemType := ptPtrInt;
         end;
       {$endif}
+      {$ifndef NOVARIANTS}
       tkVariant: ItemType := ptVariant;
+      {$endif}
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkInteger, tkSet:

@@ -6,7 +6,7 @@ uses
   SynCommons,
   mORMot,
   mORMotHttpServer,
-  mORMotWrappers,
+  //mORMotWrappers,
   SysUtils;
 
 type

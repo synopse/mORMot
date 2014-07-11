@@ -612,8 +612,10 @@ type
     /// release used instances (e.g. server) and memory
     procedure CleanUp; override;
   published
+    {$ifndef LVCL}
     /// test TQuery emulation class
     procedure _TQuery;
+    {$endif}
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -8126,6 +8128,7 @@ end;
 {$endif}
 {$endif}
 
+{$ifndef LVCL}
 procedure TTestExternalDatabase._TQuery;
 var Props: TSQLDBConnectionProperties;
     Query: TQuery;
@@ -8154,6 +8157,7 @@ begin
     Props.Free;
   end;
 end;
+{$endif}
 
 
 procedure TTestExternalDatabase.CryptedDatabase;
@@ -9198,6 +9202,7 @@ begin
       Check(Client.Server.ExportServerNamedPipe('Test'),'declare Test server');
       TestClientDist(TSQLRestClientURINamedPipe.Create(ModelC,'Test'));
       // check custom properties content
+{$ifndef LVCL}
       if Client.TransactionBegin(TSQLRecordPeopleObject) then
       try
         V2.FillPrepare(Client,'LastName=:("Morse"):');
@@ -9223,6 +9228,7 @@ begin
       except
         Client.RollBack;
       end;
+{$endif}
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
         Server := TSQLRestServerTest.Create(ModelC,false);
@@ -10032,8 +10038,8 @@ begin
   end;
 end;
 var s: RawUTF8;
-    data: TCustomerData;
 {$ifndef LVCL}
+    data: TCustomerData;
     cust: TServiceCustomAnswer;
     c: cardinal;
     n1,n2: double;
@@ -10097,8 +10103,8 @@ begin
       Check(VariantSaveJSON(V3)=s);
 {$endif}
       Check(Inst.CC.GetCustomer(c,data));
-      Check(data.Id=c);
-      Check(GetInteger(pointer(data.AccountNum))=c);
+      Check(data.Id=integer(c));
+      Check(GetCardinal(pointer(data.AccountNum))=c);
 {$ifdef UNICODE}
       Nav.MaxRows := c;
       Nav.Row0 := c*2;
