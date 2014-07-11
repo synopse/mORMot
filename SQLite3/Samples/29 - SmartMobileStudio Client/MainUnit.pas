@@ -3,7 +3,7 @@ unit MainUnit;
 interface
 
 uses 
-  W3System, W3Components, W3Forms, W3Application,
+  SmartCL.System, SmartCL.Components, SmartCL.Forms, SmartCL.Application,
   SynCrossPlatformCrypto, SynCrossPlatformSpecific, SynCrossPlatformREST,
   SmartTests,
   LoginForm;

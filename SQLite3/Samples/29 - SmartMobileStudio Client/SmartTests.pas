@@ -3,7 +3,8 @@ unit SmartTests;
 interface
 
 uses 
-  W3System,
+  SmartCL.System,
+  System.Types,
   w3c.date,
   SynCrossPlatformSpecific,
   SynCrossPlatformREST,

@@ -63,7 +63,8 @@ interface
 
 {$ifdef ISDWS}
 uses
-  W3System,
+  SmartCL.System,
+  System.Types,
 {$else}
 uses
   SysUtils,

@@ -82,8 +82,9 @@ interface
 
 {$ifdef ISDWS}
 uses
-  W3System,
-  W3Inet,
+  SmartCL.System,
+  SmartCL.Inet,
+  System.Types,
   w3c.date;
 {$else}
 uses
@@ -106,7 +107,7 @@ type
   TObjectList = array of TObject;
   TVariantDynArray = array of variant;
 
-  // as defined in W3Inet and expected by XMLHttpRequest
+  // as defined in SmartCL.Inet and expected by XMLHttpRequest
   THttpRequestReadyState = (rrsUnsent          = 0,
                             rrsOpened          = 1,
                             rrsHeadersReceived = 2,

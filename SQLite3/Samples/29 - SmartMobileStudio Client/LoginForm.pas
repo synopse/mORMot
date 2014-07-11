@@ -3,9 +3,11 @@ unit LoginForm;
 interface
 
 uses 
-  W3System, W3Graphics, W3Components, W3Forms, W3Fonts, W3Borders, W3Application,
+  SmartCL.System, SmartCL.Graphics, SmartCL.Components, SmartCL.Forms,
+  SmartCL.Fonts, SmartCL.Borders, SmartCL.Application,
   SynCrossPlatformREST, SmartTests,
-  W3Label, W3Editbox, W3Panel, W3Button, w3c.date;
+  SmartCL.Controls.Label, SmartCL.Controls.Editbox, SmartCL.Controls.Panel,
+  SmartCL.Controls.Button, w3c.date;
 
 type
   TLoginForm=class(TW3form)
