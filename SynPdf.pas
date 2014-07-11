@@ -3737,7 +3737,7 @@ begin
       W.fDoc.fEncryption.EncodeBuffer(Buf^,Buf^,TmpSize);
   {$endif}
     W.Add(#10'stream'#10).Add(Buf,TmpSize).
-      Add('endstream');
+      Add(#10'endstream');
     FWriter.fDestStream.Size := 0; // release internal stream memory
   finally
     TmpStream.Free;
@@ -4225,9 +4225,9 @@ begin
 end;
 
 function TPdfWrite.AddIso8601(DateTime: TDateTime): TPdfWrite;
-begin // add e.g. '2010-06-16T15:06:59-07:00'
+begin // add e.g. '2010-06-16T15:06:59'
   result := Add(DateTimeToIso8601(DateTime,true,'T'));
-end;
+end;               
 
 function TPdfWrite.AddWithSpace(Value: Extended): TPdfWrite;
 var Buffer: ShortString;
@@ -5559,8 +5559,8 @@ begin
       '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="SynPdf">'+
       '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'+
       '<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">'+
-      '<xmp:CreateDate>')).AddIso8601(Info.CreationDate).Add('</xmp:CreateDate>'+
-      '<xmp:ModifyDate>').AddIso8601(Info.ModDate).Add('</xmp:ModifyDate>'+
+      '<xmp:CreateDate>')).AddIso8601(Info.CreationDate).Add('Z</xmp:CreateDate>'+
+      '<xmp:ModifyDate>').AddIso8601(Info.ModDate).Add('Z</xmp:ModifyDate>'+
       '<xmp:CreatorTool>').Add(StringToUTF8(Info.Creator)).
        Add('</xmp:CreatorTool></rdf:Description>'+
       '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">'+
