@@ -7567,6 +7567,8 @@ begin
       Descendant.AddItem('Type','Font');
       Descendant.AddItem('Subtype','CIDFontType2');
       Descendant.AddItem('BaseFont',FName);
+      if fDoc.PDFA1 then
+        Descendant.AddItem('CIDToGIDMap','Identity');
       CIDSystemInfo := TPdfDictionary.Create(FDoc.FXref);
       CIDSystemInfo.AddItem('Supplement',0);
       CIDSystemInfo.AddItemText('Ordering','Identity');
