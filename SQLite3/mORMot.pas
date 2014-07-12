@@ -9400,7 +9400,7 @@ type
     function BatchCount: integer;
     {/ execute a BATCH sequence started by BatchStart method
      - send all pending BatchAdd/Update/Delete statements to the remote server
-     - URI is 'ModelRoot/TableName/0' with POST method
+     - URI is 'ModelRoot/TableName/0' with POST (or PUT) method
      - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
      - a dynamic array of integers will be created in Results,
        containing all ROWDID created for each BatchAdd call, 200 (=HTML_SUCCESS)
@@ -26873,8 +26873,8 @@ procedure TSQLRestServer.Batch(Ctxt: TSQLRestServerURIContext);
 var Results: TIntegerDynArray;
     i: integer;
 begin 
-  if Ctxt.Method<>mPUT then begin
-    Ctxt.Error('PUT only');
+  if not (Ctxt.Method in [mPUT,mPOST]) then begin
+    Ctxt.Error('PUT/POST only');
     exit;
   end;
   try
