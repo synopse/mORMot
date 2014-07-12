@@ -12850,8 +12850,15 @@ function URIRequest(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): I
 
 
 type
+  /// points to the currently running service on the server side
+  // - your code may use such a local pointer to retrieve the ServiceContext
+  // threadvar once in a method, since threadvar access does cost some CPU
+  // !var context: PServiceRunningContext;
+  // !begin
+  // !  context := @ServiceContext; // threadvar access once
+  // !  ...
   PServiceRunningContext = ^TServiceRunningContext;
-  
+
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
   TServiceRunningContext = record
@@ -12862,7 +12869,7 @@ type
     /// the currently runnning context which launched the method
     // - make available e.g. current session or authentication parameters
     // (including e.g. user details via Factory.RestServer.SessionGetUser)
-    // - low-level RESTful context is also available in its Call member 
+    // - low-level RESTful context is also available in its Call member
     Request: TSQLRestServerURIContext;
     /// the thread which launched the request
     // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
@@ -12882,13 +12889,22 @@ threadvar
   // cost - for instance, if you want to use a "with" statement:
   // ! with PServiceRunningContext(@ServiceContext)^ do
   // !   ... access TServiceRunningContext members
+  // or as a local variable:
+  // !var context: PServiceRunningContext;
+  // !    inContentType: RawUTF8;
+  // !begin
+  // !  context := @ServiceContext; // threadvar access once
+  // !  ...
+  // !  inContentType := FindIniNameValue(pointer(context.Request.Call^.InHead),
+  // !    HEADER_CONTENT_TYPE_UPPER);
+  // !end;
   // - when accessed from a package, use function CurrentServiceContext()
   // instead, to circumvent a Delphi RTL/compiler restriction (bug?)
   ServiceContext: TServiceRunningContext;
 
 /// wrapper function to retrieve the global ServiceContext threadvar value
 // - to be used when accessing the value from a package, to circumvent a
-// Delphi RTL/compiler restriction (bug?) 
+// Delphi RTL/compiler restriction (bug?)
 function CurrentServiceContext: TServiceRunningContext;
 
 
@@ -26085,7 +26101,8 @@ begin
                 Call.OutHead := HEADER_CONTENT_TYPE+
                   GetMimeContentType(pointer(Call.OutBody),Length(Call.OutBody));
                 Call.OutStatus := HTML_SUCCESS; // 200 OK
-              end;
+              end else
+                Call.OutStatus := HTML_NOTFOUND;
             end;
           end else begin
             // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
@@ -26099,7 +26116,8 @@ begin
               Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
             end;
             if Call.OutBody<>'' then // if something was found
-              Call.OutStatus := HTML_SUCCESS; // 200 OK
+              Call.OutStatus := HTML_SUCCESS else // 200 OK
+              Call.OutStatus := HTML_NOTFOUND;
           end;
       end else
       // ModelRoot/TableName with 'select=..&where=' or YUI paging
@@ -26176,7 +26194,8 @@ begin
               Call.OutBody := '{"values":'+Call.OutBody+
                 FormatUTF8(Server.URIPagingParameters.SendTotalRowsCountFmt,[SQLTotalRowsCount])+'}';
             end;
-        end;
+        end else
+          Call.OutStatus := HTML_NOTFOUND;
       end;
     end;
   end;
