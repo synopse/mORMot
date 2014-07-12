@@ -49,7 +49,7 @@ begin
   model.Add(TSQLRecordPeople);
   model.GetTableIndexExisting(TSQLRecordPeople);
   var people := new TSQLRecordPeople;
-  var s := model.GetInfo(people.RecordClass).ToJSONAdd(client,people,true);
+  var s := model.InfoExisting(people.RecordClass).ToJSONAdd(client,people,true,'');
   assert(s='{"RowID":0,"FirstName":"","LastName":"","YearOfBirth":0,"YearOfDeath":0}');
   s := '{"RowID":10,"FirstName":"ab\"c","LastName":"def","YearOfBirth":20,"YearOfDeath":30}';
   assert(people.FromJSON(s));

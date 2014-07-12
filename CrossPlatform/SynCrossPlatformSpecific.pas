@@ -49,7 +49,7 @@ unit SynCrossPlatformSpecific;
   - first public release, corresponding to mORMot Framework 1.18
   - each operating system will have its own API calls in this single unit
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
 
 }
 
@@ -106,6 +106,7 @@ type
   TPersistent = TObject;
   TObjectList = array of TObject;
   TVariantDynArray = array of variant;
+  TIntegerDynArray = array of integer;
 
   // as defined in SmartCL.Inet and expected by XMLHttpRequest
   THttpRequestReadyState = (rrsUnsent          = 0,
@@ -144,9 +145,9 @@ type
     OutInternalState: cardinal;
     {$ifdef ISDWS}
     /// the associated TXMLHttpRequest instance
-    Connection: THandle;
+    XHR: THandle;
     /// callback events for asynchronous call
-    // - will be affected to the corresponding Connection events
+    // - will be affected to the corresponding XHR events
     OnSuccess: TProcedureRef;
     OnError: TProcedureRef;
     {$endif}
@@ -503,8 +504,8 @@ begin
       InStr.Seek(0,soBeginning);
       fConnection.Request.Source := InStr;
     end;
-    if Call.Method='GET' then // allow 400 as valid Call.OutStatus
-      fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_BADREQUEST]) else
+    if Call.Method='GET' then // allow 404 as valid Call.OutStatus
+      fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_NOTFOUND]) else
     if Call.Method='POST' then
       fConnection.Post(fURL+Call.Url,InStr,OutStr) else
     if Call.Method='PUT' then
@@ -821,22 +822,22 @@ procedure TSMSHttpConnectionClass.URI(var Call: TSQLRestURIParams;
   const InDataType: string; KeepAlive: integer);
 begin
   asm
-    @Call.Connection = new XMLHttpRequest();
+    @Call.XHR = new XMLHttpRequest();
   end;
   if Assigned(Call.OnSuccess) then begin // asynchronous call
-    Call.Connection.onreadystatechange := lambda
-      if Call.Connection.readyState=rrsDone then begin
-        Call.Connection.onreadystatechange := nil; // avoid any further trigger
-        Call.OutStatus := Call.Connection.status;
-        Call.OutHead := Call.Connection.getAllResponseHeaders();
-        Call.OutBody := Call.Connection.responseText;
+    Call.XHR.onreadystatechange := lambda
+      if Call.XHR.readyState=rrsDone then begin
+        Call.XHR.onreadystatechange := nil; // avoid any further trigger
+        Call.OutStatus := Call.XHR.status;
+        Call.OutHead := Call.XHR.getAllResponseHeaders();
+        Call.OutBody := Call.XHR.responseText;
         Call.OnSuccess;
       end;
     end;
-    Call.Connection.onerror := Call.OnError;
-    Call.Connection.open(Call.Method,fURL+Call.Url,true);  // true for asynch call
+    Call.XHR.onerror := Call.OnError;
+    Call.XHR.open(Call.Method,fURL+Call.Url,true);  // true for asynch call
   end else
-    Call.Connection.open(Call.Method,fURL+Call.Url,false); // false for synch call
+    Call.XHR.open(Call.Method,fURL+Call.Url,false); // false for synch call
   if Call.InHead<>'' then begin
     var i = 1;
     var line: string;
@@ -847,16 +848,16 @@ begin
       var head := trim(copy(line,1,l-1));
       var value := trim(copy(line,l+1,maxInt));
       if (head<>'') and (value<>'') then
-        Call.Connection.setRequestHeader(head,value);
+        Call.XHR.setRequestHeader(head,value);
     end;
   end;
   if Call.InBody='' then
-    Call.Connection.send(null) else
-    Call.Connection.send(Call.InBody);
+    Call.XHR.send(null) else
+    Call.XHR.send(Call.InBody);
   if not Assigned(Call.OnSuccess) then begin // synchronous call
-    Call.OutStatus := Call.Connection.status;
-    Call.OutHead := Call.Connection.getAllResponseHeaders();
-    Call.OutBody := Call.Connection.responseText;
+    Call.OutStatus := Call.XHR.status;
+    Call.OutHead := Call.XHR.getAllResponseHeaders();
+    Call.OutBody := Call.XHR.responseText;
   end;
 end;
 

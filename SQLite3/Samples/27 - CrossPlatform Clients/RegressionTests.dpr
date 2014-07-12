@@ -69,10 +69,9 @@ begin
   TestWithAuth(TSQLRestAuthenticationNone);
   {$endif}
   TestWithAuth(TSQLRestAuthenticationDefault);
-  if TotalFailed>0 then begin
+  if TotalFailed>0 then
     writeln(#10'Some tests failed... please fix it ASAP!');
-    readln;
-  end;
+  write(#10'Press [Enter] to quit');
   readln;
 end.
 

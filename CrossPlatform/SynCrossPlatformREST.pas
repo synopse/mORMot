@@ -48,7 +48,7 @@ unit SynCrossPlatformREST;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
 
 }
 
@@ -102,7 +102,7 @@ type
 
   {$ifdef ISDWS}
 
-  // circumvent weird DWS / SMS syntax
+  // circumvent limited DWS / SMS syntax
   cardinal = integer;
   Int64 = integer;
   TPersistent = TObject;
@@ -251,10 +251,11 @@ type
     /// compute the 'SELECT ... FROM ...' corresponding to the supplied fields
     function SQLSelect(const FieldNames: string): string;
     /// save the specified record as JSON for record adding
-    function ToJSONAdd(Client: TSQLRest; Value: TSQLRecord; ForceID: boolean): string;
+    function ToJSONAdd(Client: TSQLRest; Value: TSQLRecord; ForceID: boolean;
+      const FieldNames: string): string;
     /// save the specified record as JSON for record update
     function ToJSONUpdate(Client: TSQLRest; Value: TSQLRecord;
-      const FieldNames: string): string;
+      const FieldNames: string; ForceID: boolean): string;
     /// save the specified record as JSON
     function ToJSON(Value: TSQLRecord; const Fields: TSQLFieldBits): string; overload;
   end;
@@ -286,11 +287,11 @@ type
     /// get index of aTable in Tables[], raise an ERestException if not found
     function GetTableIndexExisting(aTable: TSQLRecordClass): integer;
     /// get the RTTI information for the specified class or raise an ERestException
-    function GetInfo(aTable: TSQLRecordClass): TSQLModelInfo;
-    /// the Root URI path of this Database Model
-    property Root: string read fRoot;
+    function InfoExisting(aTable: TSQLRecordClass): TSQLModelInfo;
     /// the RTTI information for each class
     property Info: TSQLModelInfoDynArray read fInfo;
+    /// the Root URI path of this Database Model
+    property Root: string read fRoot;
   end;
 
   {$ifdef ISSMS}
@@ -470,13 +471,20 @@ type
   protected
     fModel: TSQLModel;
     fServerTimeStampOffset: TDateTime;
+    fBatch: string;
+    fBatchTable: TSQLRecordClass;
+    fBatchCount: integer;
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
+    function InternalBatch(Table: TSQLRecordClass; const CMD: string; var Info: TSQLModelInfo): Integer;
     function ExecuteAdd(tableIndex: integer; const json: string): integer; virtual; abstract;
     function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; virtual; abstract;
+    function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
+      var Results: TIntegerDynArray): integer; virtual; abstract;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TSQLModel); virtual;
+
     /// get a member from its ID
     // - return true on success, and fill all simple fields
     function Retrieve(aID: integer; Value: TSQLRecord;
@@ -505,20 +513,80 @@ type
       SQLWhere: string; const BoundsSQLWhere: array of const): TObjectList;
     /// execute directly a SQL statement, returning a list of data rows or nil
     function ExecuteList(const SQL: string): TSQLTableJSON; virtual; abstract;
+
     /// create a new member, returning the newly created ID, or 0 on error
+    // - if SendData is true, content of Value is sent to the server as JSON
+    // - if ForceID is true, client sends the Value.ID field to use this ID for
+    // adding the record (instead of a database-generated ID)
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; virtual;
     /// delete a member
     function Delete(Table: TSQLRecordClass; ID: integer): boolean; virtual; abstract;
     /// update a member
-    // - this overloaded method will update only simple fields of the TSQLRecord
-    // - just a wrapper around Update(Value,'') since default string parameters
-    // are not yet allowed by DWS compiler
-    function Update(Value: TSQLRecord): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// update a member
-    // - you can set FieldNames='' to update simple fields, '*' to update all
-    // fields, or specify a CSV list of updated fields
-    function Update(Value: TSQLRecord; const FieldNames: string): boolean; overload; virtual;
+    // - you can let default FieldNames='' to update simple fields, '*' to
+    // update all fields (including BLOBs), or specify a CSV list of updated fields
+    function Update(Value: TSQLRecord; FieldNames: string=''): boolean; virtual;
+
+    /// begin a BATCH sequence to speed up huge database change
+    // - then call BatchAdd(), BatchUpdate()  or BatchDelete() methods
+    // - at BatchSend call, all the sequence transactions will be sent at once
+    // - at BatchAbort call, all operations will be aborted
+    // - expect one TSQLRecordClass as parameter, which will be used for the whole
+    //   sequence (in this case, you can't mix classes in the same BATCH sequence)
+    // - if no TSQLRecordClass is supplied, the BATCH sequence will allow any
+    //   kind of individual record in BatchAdd/BatchUpdate/BatchDelete
+    // - return TRUE on success, FALSE if aTable is incorrect or a previous BATCH
+    //   sequence was already initiated
+    // - AutomaticTransactionPerRow will execute all BATCH process within an
+    // unique transaction grouped by a given number of rows, on the server side
+    function BatchStart(aTable: TSQLRecordClass;
+      AutomaticTransactionPerRow: cardinal=10000): boolean; virtual;
+    /// create a new member in current BATCH sequence
+    // - similar to Add(), but in BATCH mode: nothing is sent until BatchSend()
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - you can set FieldNames='' to sent simple fields, '*' to add all fields
+    // (including BLOBs), or specify a CSV list of added fields
+    // - this method will always compute and send TCreateTime/TModTime fields
+    function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
+      FieldNames: string=''): integer;
+    /// update a member in current BATCH sequence
+    // - similar to Update(), but in BATCH mode: nothing is sent until BatchSend()
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - you can set FieldNames='' to sent simple fields, '*' to add all fields
+    // (including BLOBs), or specify a CSV list of added fields
+    // - this method will always compute and send any TModTime fields
+    function BatchUpdate(Value: TSQLRecord; FieldNames: string=''): integer;
+    /// delete a member in current BATCH sequence
+    // - similar to Delete(), but in BATCH mode: nothing is sent until BatchSend()
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - deleted record class is the TSQLRecordClass used at BatchStart()
+    // call: it will fail if no class was specified for this BATCH sequence
+    function BatchDelete(ID: integer): integer; overload;
+    /// delete a member in current BATCH sequence
+    // - similar to Delete(), but in BATCH mode: nothing is sent until BatchSend()
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    // - with this overloaded method, the deleted record class is specified:
+    // no class shall have been set at BatchStart() call, or should be the same
+    function BatchDelete(Table: TSQLRecordClass; ID: integer): integer; overload;
+    /// delete a member in current BATCH sequence
+    // - similar to Delete(), but in BATCH mode: nothing is sent until BatchSend()
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    function BatchDelete(Value: TSQLRecord): integer; overload;
+    /// retrieve the current number of pending transactions in the BATCH sequence
+    // - every call to BatchAdd/Update/Delete methods increases this count
+    function BatchCount: integer;
+    /// execute a BATCH sequence started by BatchStart() method
+    // - send all pending BatchAdd/Update/Delete statements to the remote server
+    // - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
+    // - a dynamic array of integers will be created in Results,
+    // containing all ROWDID created for each BatchAdd call, or 200
+    // (=HTML_SUCCESS) for all successfull BatchUpdate/BatchDelete, or 0 on error
+    // - any error during server-side process MUST be checked against Results[]
+    // (the main URI Status is 200 if about communication success, and won't
+    // imply that all statements in the BATCH sequence were successfull
+    function BatchSend(var Results: TIntegerDynArray): integer;
+    /// abort a BATCH sequence started by BatchStart() method
+    // - in short, nothing is sent to the remote server, and sequence is voided
+    procedure BatchAbort;
 
     /// the associated data model
     property Model: TSQLModel read fModel;
@@ -544,6 +612,8 @@ type
     function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: integer): string;
     function ExecuteAdd(tableIndex: integer; const json: string): integer; override;
     function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; override;
+    function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
+      var Results: TIntegerDynArray): integer; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
     {$ifdef ISSMS}
     /// connect to the REST server, and retrieve its time stamp offset
@@ -733,6 +803,7 @@ const
 var
   /// contains no field bit set
   NO_SQLFIELDBITS: TSQLFieldBits;
+
 
 implementation
 
@@ -1140,7 +1211,7 @@ var nfo: TSQLModelInfo;
 begin
   if self=nil then
     result := 'null' else begin
-    nfo := aModel.Info[aModel.GetTableIndexExisting(RecordClass)];
+    nfo := aModel.InfoExisting(RecordClass);
     result := nfo.ToJSON(self,nfo.FieldNamesToFieldBits(aFieldNames,false));
   end;
 end;
@@ -1396,8 +1467,7 @@ begin
     FieldNames,false))+' from '+Name;
 end;
 
-function TSQLModelInfo.ToJSON(Value: TSQLRecord;
-  const Fields: TSQLFieldBits): string;
+function TSQLModelInfo.ToJSON(Value: TSQLRecord; const Fields: TSQLFieldBits): string;
 var f: TSQLFieldBit;
 begin
 {$ifdef ISSMS}
@@ -1421,22 +1491,24 @@ begin
 end;
 
 function TSQLModelInfo.ToJSONAdd(Client: TSQLRest;
-  Value: TSQLRecord; ForceID: boolean): string;
+  Value: TSQLRecord; ForceID: boolean; const FieldNames: string): string;
 var Fields: TSQLFieldBits;
 begin
   ComputeFieldsBeforeWrite(Client,Value,true);
-  fields := SimpleFields;
+  fields := FieldNamesToFieldBits(FieldNames,true);
   if not ForceID then
     exclude(fields,ID_SQLFIELD);
   result := ToJSON(Value,fields);
 end;
 
 function TSQLModelInfo.ToJSONUpdate(Client: TSQLRest; Value: TSQLRecord;
-  const FieldNames: string): string;
+  const FieldNames: string; ForceID: boolean): string;
 var Fields: TSQLFieldBits;
 begin
   fields := FieldNamesToFieldBits(FieldNames,true);
-  exclude(fields,ID_SQLFIELD);
+  if ForceID then
+    include(fields,ID_SQLFIELD) else
+    exclude(fields,ID_SQLFIELD);
   ComputeFieldsBeforeWrite(Client,Value,false);
   result := ToJSON(Value,fields);
 end;
@@ -1446,17 +1518,19 @@ end;
 
 procedure TSQLModel.Add(Table: TSQLRecordClass);
 var n,i: integer;
+    info: TSQLModelInfo;
 begin
   n := length(fInfo);
   for i := 0 to n-1 do
     if fInfo[i].Table=Table then
       raise ERESTException.CreateFmt('%s registered twice',[Table.ClassName]);
+  info := TSQLModelInfo.CreateFromRTTI(Table);
   {$ifdef ISSMS}
-  fInfo.SetLength(n+1);
+  fInfo.Add(info);
   {$else}
   SetLength(fInfo,n+1);
+  fInfo[n] := info;
   {$endif}
-  fInfo[n] := TSQLModelInfo.CreateFromRTTI(Table);
 end;
 
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
@@ -1464,12 +1538,13 @@ constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
 var t: integer;
 begin
   {$ifdef ISSMS}
-  fInfo.SetLength(length(Tables));
+  for t := 0 to high(fInfo) do
+    fInfo.Add(TSQLModelInfo.CreateFromRTTI(Tables[t]));
   {$else}
   SetLength(fInfo,length(Tables));
-  {$endif}
   for t := 0 to high(fInfo) do
     fInfo[t] := TSQLModelInfo.CreateFromRTTI(Tables[t]);
+  {$endif}
   if aRoot<>'' then
     if aRoot[length(aRoot)]='/' then
       fRoot := copy(aRoot,1,Length(aRoot)-1) else
@@ -1497,7 +1572,7 @@ end;
 
 {$endif}
 
-function TSQLModel.GetInfo(aTable: TSQLRecordClass): TSQLModelInfo;
+function TSQLModel.InfoExisting(aTable: TSQLRecordClass): TSQLModelInfo;
 begin
   result := Info[GetTableIndexExisting(aTable)];
 end;
@@ -1522,16 +1597,6 @@ begin
 end;
 
 { TSQLRest }
-
-function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): integer;
-var tableIndex: Integer;
-    json: string;
-begin
-  tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
-  if SendData then
-    json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID);
-  result := ExecuteAdd(tableIndex,json);
-end;
 
 constructor TSQLRest.Create(aModel: TSQLModel);
 begin
@@ -1573,7 +1638,7 @@ function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames, SQLWhere: string): TSQLTableJSON;
 var sql: string;
 begin
-  sql := Model.Info[Model.GetTableIndexExisting(Table)].SQLSelect(FieldNames);
+  sql := Model.InfoExisting(Table).SQLSelect(FieldNames);
   if SQLWhere<>'' then
     sql := sql+' where '+SQLWhere;
   result := ExecuteList(sql);
@@ -1618,12 +1683,17 @@ begin
     end;
 end;
 
-function TSQLRest.Update(Value: TSQLRecord): boolean;
+function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): integer;
+var tableIndex: Integer;
+    json: string;
 begin
-  result := Update(Value,'');
+  tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
+  if SendData then
+    json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID,'');
+  result := ExecuteAdd(tableIndex,json);
 end;
 
-function TSQLRest.Update(Value: TSQLRecord; const FieldNames: string): boolean;
+function TSQLRest.Update(Value: TSQLRecord; FieldNames: string): boolean;
 var tableIndex: Integer;
     json: string;
 begin
@@ -1632,9 +1702,117 @@ begin
     exit;
   end;
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
-  json := Model.Info[tableIndex].ToJSONUpdate(self,Value,FieldNames);
+  json := Model.Info[tableIndex].ToJSONUpdate(self,Value,FieldNames,false);
   result := ExecuteUpdate(tableIndex,Value.ID,json);
 end;
+
+function TSQLRest.BatchStart(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal=10000): boolean;
+begin
+  if (fBatchCount<>0) or (fBatch<>'') or (AutomaticTransactionPerRow<=0) then begin
+    result := false; // already opened BATCH sequence
+    exit;
+  end;
+  if aTable<>nil then // sent as '{"Table":["cmd":values,...]}'
+    fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
+  fBatch := fBatch+'["automaticTransactionPerRow":'+
+    IntToStr(AutomaticTransactionPerRow)+',';
+  fBatchTable := aTable;
+  result := true;
+end;
+
+function TSQLRest.InternalBatch(Table: TSQLRecordClass; const CMD: string;
+  var Info: TSQLModelInfo): Integer;
+begin
+  result := -1;
+  if (self=nil) or (Table=nil) or (fBatch='') then
+    exit; // invalid parameters, or not opened BATCH sequence
+  Info := Model.InfoExisting(Table);
+  if fBatchTable<>nil then
+    if fBatchTable<>Table then
+      exit else 
+      fBatch := fBatch+CMD+'":' else
+      fBatch := fBatch+CMD+'@'+Info.Name+'":';
+  result := fBatchCount;
+  inc(fBatchCount);
+end;
+
+function TSQLRest.BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean;
+  FieldNames: string): integer;
+var info: TSQLModelInfo;
+begin
+  result := InternalBatch(Value.RecordClass,'"POST',info);
+  if result>=0 then
+    if not SendData then
+      fBatch := fBatch+'{},' else
+      fBatch := fBatch+info.ToJSONAdd(self,Value,ForceID,FieldNames)+',';
+end;
+
+function TSQLRest.BatchUpdate(Value: TSQLRecord; FieldNames: string): integer;
+var info: TSQLModelInfo;
+begin
+  if (Value=nil) or (Value.ID<=0) then
+    result := -1 else begin
+    result := InternalBatch(Value.RecordClass,'"PUT',info);
+    if result>=0 then
+      fBatch := fBatch+info.ToJSONUpdate(self,Value,FieldNames,true)+',';
+  end;
+end;
+
+function TSQLRest.BatchDelete(Table: TSQLRecordClass; ID: integer): integer;
+var info: TSQLModelInfo;
+begin
+  if ID<=0 then
+    result := -1 else begin
+    result := InternalBatch(Table,'"DELETE',info);
+    if result>=0 then
+      fBatch := fBatch+IntToStr(ID)+',';
+  end;
+end;
+
+function TSQLRest.BatchDelete(ID: integer): integer;
+begin
+  result := BatchDelete(fBatchTable,ID);
+end;
+
+function TSQLRest.BatchDelete(Value: TSQLRecord): integer;
+begin
+  result := BatchDelete(Value.RecordClass,Value.ID);
+end;
+
+function TSQLRest.BatchCount: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := fBatchCount;
+end;
+
+function TSQLRest.BatchSend(var Results: TIntegerDynArray): integer;
+begin
+  if (self=nil) or (fBatch='') then
+    result := HTML_BADREQUEST else
+  try
+    if BatchCount>0 then begin
+      fBatch[length(fBatch)] := ']';
+      if fBatchTable<>nil then
+        fBatch := fBatch+'}';
+      result := ExecuteBatchSend(fBatchTable,fBatch,Results);
+    end else
+      result := HTML_SUCCESS; // nothing to send
+  finally
+    BatchAbort;
+  end;
+end;
+
+procedure TSQLRest.BatchAbort;
+begin
+  if self=nil then
+    exit;
+  fBatchCount := 0;
+  fBatchTable := nil;
+  fBatch := '';
+end;
+
 
 { TSQLRestClientURI }
 
@@ -1642,7 +1820,7 @@ function TSQLRestClientURI.getURI(aTable: TSQLRecordClass): string;
 begin
   result := Model.Root;
   if (aTable<>nil) and (aTable<>TSQLRecord) then // SMS converts nil->TSQLRecord
-    result := result+'/'+Model.Info[Model.GetTableIndexExisting(aTable)].Name;
+    result := result+'/'+Model.InfoExisting(aTable).Name;
 end;
 
 function TSQLRestClientURI.getURICallBack(const aMethodName: string;
@@ -1725,7 +1903,7 @@ function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string
   {$ifdef ISSMS}inline;{$endif}
 begin
 {$ifdef ISSMS} // faster direct retrieval
-  result := Call.Connection.getResponseHeader(Name);
+  result := Call.XHR.getResponseHeader(Name);
 {$else}
   result := FindHeader(Call.OutHead,Name+':');
 {$endif}
@@ -1757,6 +1935,54 @@ begin
     UrlEncode(aNameValueParameters);
   Call.Method := 'GET';
   URI(Call);
+end;
+
+function TSQLRestClientURI.ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
+  var Results: TIntegerDynArray): integer;
+var {$ifdef ISSMS}
+    doc: variant;
+    {$else}
+    doc: TJSONVariantData;
+    jsonres: string;
+    {$endif}
+    Call: TSQLRestURIParams;
+    i: integer;
+begin
+  Call.Url := getURICallBack('Batch',Table,0);
+  Call.Method := 'POST';
+  {$ifdef ISSMS}
+  Call.InBody := Data;
+  {$else}
+  Call.InBody := TextToHttpBody(Data);
+  {$endif}
+  URI(Call);
+  result := Call.OutStatus;
+  if result<>HTML_SUCCESS then
+    exit; // transmission or internal server error
+  {$ifdef ISSMS}
+  Results.Clear;
+  if Call.OutBody='["OK"]' then begin
+    for i := 0 to fBatchCount-1 do
+      Results.Add(HTML_SUCCESS);
+  end else begin
+    doc := JSON.Parse(Call.OutBody);
+    if (VariantType(doc)=jvArray) and (doc.length=fBatchCount) then
+      for i := 0 to fBatchCount-1 do
+        Results.Add(integer(doc[i]));
+  end;
+  {$else}
+  SetLength(Results,fBatchCount);
+  HttpBodyToText(Call.OutBody,jsonres);
+  if jsonres='["OK"]' then begin
+    for i := 0 to fBatchCount-1 do
+      Results[i] := HTML_SUCCESS;
+  end else begin
+    doc.Init(jsonres);
+    if (doc.Kind=jvArray) and (doc.Count=fBatchCount) then
+      for i := 0 to fBatchCount-1 do
+        Results[i] := doc.Values[i];
+  end;
+  {$endif}
 end;
 
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
@@ -1792,9 +2018,9 @@ procedure TSQLRestClientURI.SetAsynch(var Call: TSQLRestURIParams;
 begin
   if Assigned(onSuccess) then
     Call.OnSuccess := lambda
-      if Call.Connection.readyState=rrsDone then begin
+      if Call.XHR.readyState=rrsDone then begin
         Call.OutInternalState := StrToIntDef(
-          Call.Connection.getResponseHeader('Server-InternalState'),0);
+          Call.XHR.getResponseHeader('Server-InternalState'),0);
         if onBeforeSuccess then
           onSuccess(self) else
           if assigned(onError) then
@@ -1826,11 +2052,7 @@ begin
   result := Call.OutStatus=HTML_SUCCESS;
   if not result then
     exit;
-  {$ifdef ISSMS}
-  tmp := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
-  {$else}
   HttpBodyToText(Call.OutBody,tmp);
-  {$endif}
   result := SetServerTimeStamp(tmp);
 end;
 

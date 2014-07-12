@@ -72,6 +72,7 @@ uses
 type
   TStringDynArray = array of string;
   TVariantDynArray = array of variant;
+  TIntegerDynArray = array of integer;
 
   /// this type is used to store BLOB content
   TByteDynArray = array of byte;

@@ -121,6 +121,7 @@ type
   published
     procedure Connection;
     procedure ORM;
+    procedure ORMBatch;
     procedure Services;
     procedure CleanUp;
   end;
@@ -190,7 +191,7 @@ end;
 procedure TSynTest.Run(LogToConsole: boolean);
 var i: integer;
     BeforePassed,BeforeFailed: cardinal;
-    start: TDateTime;
+    startclass, startmethod: TDateTime;
     datetime: string;
     LogFile: text;
   procedure Log(const Fmt: string; const Args: array of const);
@@ -204,16 +205,17 @@ var i: integer;
       Flush(LogFile);
   end;
 begin
-  start := Now;
-  datetime := DateTimeToIso8601(start);
+  startclass := Now;
+  datetime := DateTimeToIso8601(startclass);
   if not LogToConsole then begin
     assign(LogFile,ExtractFilePath(ParamStr(0))+
-      FormatDateTime('yyyy mm dd hh nn ss',start)+'.txt');
+      FormatDateTime('yyyy mm dd hh nn ss',startclass)+'.txt');
     rewrite(LogFile);
   end;
   Log(#13#10' %s'#13#10'%s',[Ident,StringOfChar('-',length(Ident)+2)]);
   for i := 0 to high(Tests) do begin
     Log(#13#10' %d. Running "%s"',[i+1,Tests[i].Name]);
+    startmethod := Now;
     BeforePassed := Passed;
     BeforeFailed := Failed;
     try
@@ -226,11 +228,12 @@ begin
     if Failed<>BeforeFailed then
       Log(' !!! %d test(s) failed / %d %s',[Failed-BeforeFailed,
         Failed-BeforeFailed+Passed-BeforePassed,fFailureMsg]) else
-      Log('    %d tests passed',[Passed-BeforePassed]);
+      Log('    %d tests passed in %s',[Passed-BeforePassed,
+        FormatDateTime('nn:ss:zzz',Now-startmethod)]);
     fFailureMsg := '';
   end;
   Log(#13#10' Tests failed: %d / %d'#13#10' Time elapsed: %s'#13#10#13#10' %s',
-    [Failed,Failed+Passed,FormatDateTime('nn:ss:zzz',Now-Start),datetime]);
+    [Failed,Failed+Passed,FormatDateTime('nn:ss:zzz',Now-startclass),datetime]);
   if not LogToConsole then
     close(LogFile);
 end;
@@ -591,6 +594,120 @@ begin
         people.Free;
       end;
     end;
+  for i := 1 to 200 do begin
+    people := TSQLRecordPeople.Create(fClient,i);
+    try
+      if i and 15=0 then
+        Check(people.ID=0) else begin
+        if i mod 82=0 then
+          id := i+1 else
+          id := i;
+        Check(people.ID=i);
+        Check(people.FirstName='First'+IntToStr(i));
+        Check(people.LastName='Last'+IntToStr(i));
+        Check(people.YearOfBirth=id+1800);
+        Check(people.YearOfDeath=id+1825);
+      end;
+    finally
+      people.Free;
+    end;
+  end;
+end;
+
+procedure TSynCrossPlatformClient.ORMBatch;
+var people: TSQLRecordPeople;
+    Call: TSQLRestURIParams;
+    res: TIntegerDynArray;
+    i,id: integer;
+begin
+  fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
+  Check(Call.OutStatus=HTML_SUCCESS);
+  fClient.BatchStart(TSQLRecordPeople);
+  people := TSQLRecordPeople.Create;
+  try
+    for i := 1 to 200 do begin
+      people.FirstName := 'First'+IntToStr(i);
+      people.LastName := 'Last'+IntToStr(i);
+      people.YearOfBirth := i+1800;
+      people.YearOfDeath := i+1825;
+      fClient.BatchAdd(people,true);
+    end;
+  finally
+    people.Free;
+  end;
+  Check(fClient.BatchSend(res)=HTML_SUCCESS);
+  Check(length(res)=200);
+  for i := 1 to 200 do
+    Check(res[i-1]=i);
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'','',[]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=id);
+      Check(people.FirstName='First'+IntToStr(id));
+      Check(people.LastName='Last'+IntToStr(id));
+      Check(people.YearOfBirth=id+1800);
+      Check(people.YearOfDeath=id+1825);
+    end;
+    Check(id=200);
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,
+    'YearOFBIRTH,Yearofdeath,id','',[]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=id);
+      Check(people.FirstName='');
+      Check(people.LastName='');
+      Check(people.YearOfBirth=id+1800);
+      Check(people.YearOfDeath=id+1825);
+    end;
+    Check(id=200);
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'',
+    'yearofbirth=?',[1900]);
+  try
+    id := 0;
+    while people.FillOne do begin
+      inc(id);
+      Check(people.ID=100);
+      Check(people.FirstName='First100');
+      Check(people.LastName='Last100');
+      Check(people.YearOfBirth=1900);
+      Check(people.YearOfDeath=1925);
+    end;
+    Check(id=1);
+  finally
+    people.Free;
+  end;
+  fClient.BatchStart(nil);
+  for i := 1 to 200 do
+    if i and 15=0 then
+      fClient.BatchDelete(TSQLRecordPeople,i) else
+    if i mod 82=0 then begin
+      people := TSQLRecordPeople.Create;
+      try
+        id := i+1;
+        people.ID := i;
+        people.FirstName := 'First'+IntToStr(id);
+        people.LastName := 'Last'+IntToStr(id);
+        people.YearOfBirth := id+1800;
+        people.YearOfDeath := id+1825;
+        Check(fClient.BatchUpdate(people,'YEarOFBIRTH,YEarOfDeath')>=0);
+      finally
+        people.Free;
+      end;
+    end;
+  Check(fClient.BatchSend(res)=HTML_SUCCESS);
+  Check(length(res)=14);
+  for i := 1 to 14 do
+    Check(res[i-1]=HTML_SUCCESS);
   for i := 1 to 200 do begin
     people := TSQLRecordPeople.Create(fClient,i);
     try

@@ -2,12 +2,12 @@
   <Project version="2" subversion="1">
     <Name>WebForm</Name>
     <Created>T00:00:00.000</Created>
-    <Modified>2014-07-11T23:19:47.503</Modified>
+    <Modified>2014-07-12T16:39:05.245</Modified>
     <Author>A. Bouchez</Author>
     <Company>Synopse</Company>
     <Version>
       <Major>1</Major>
-      <Minor>0</Minor>
+      <Minor>18</Minor>
       <Revision>0</Revision>
     </Version>
     <Apple>
@@ -87,12 +87,12 @@
       <File type="form">
         <Name>LoginForm</Name>
         <Created>2014-06-17T10:47:09.813Z</Created>
-        <Modified>2014-07-11T23:16:29.730</Modified>
+        <Modified>2014-07-12T14:47:52.404</Modified>
         <Filename>LoginForm.pas</Filename>
         <AutoCreate>
-          <IsAutoCreate>0</IsAutoCreate>
-          <IsMainForm>0</IsMainForm>
-          <Order>0</Order>
+          <IsAutoCreate>1</IsAutoCreate>
+          <IsMainForm>1</IsMainForm>
+          <Order>1</Order>
         </AutoCreate>
       </File>
     </Files>
