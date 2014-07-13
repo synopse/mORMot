@@ -419,7 +419,7 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity);
 var i,j: integer;
-    ErrMsg: string;
+    ErrMsg, ServersRoot: string;
 {$ifdef WITHLOG}
     Log: ISynLog;
 {$endif}
@@ -437,12 +437,14 @@ begin
       ErrMsg := 'Invalid TSQLRestServer';
   if ErrMsg='' then
     for i := 0 to high(aServers) do
-    with aServers[i].Model do
-    for j := i+1 to high(aServers) do
-      if aServers[j].Model.URIMatch(Root) then
-        ErrMsg:= Format('Duplicated Root URI: %s and %s',[Root,aServers[j].Model.Root]);
+    with aServers[i].Model do begin
+      ServersRoot := ServersRoot+' '+Root;
+      for j := i+1 to high(aServers) do
+        if aServers[j].Model.URIMatch(Root) then
+          ErrMsg:= Format('Duplicated Root URI: %s and %s',[Root,aServers[j].Model.Root]);
+    end;
   if ErrMsg<>'' then
-     raise EModelException.CreateFmt('%s.Create: %s',[ClassName,ErrMsg]);
+     raise EModelException.CreateFmt('%s.Create(%s ): %s',[ClassName,ServersRoot,ErrMsg]);
   SetAccessControlAllowOrigin(''); // deny CORS by default
   SetLength(fDBServers,length(aServers));
   for i := 0 to high(aServers) do
@@ -471,7 +473,7 @@ begin
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
-      Log.Log(sllError,'% for %',[E,fHttpServer],self);
+      Log.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
       {$endif}
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
@@ -501,9 +503,7 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$ifdef WITHLOG}
-  for i := 0 to high(aServers) do
-    with aServers[i] do
-      Log.Log(sllInfo,'% initialized at http://localhost/%:%',[fHttpServer,Model.Root,aPort],self);
+  Log.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
 {$endif}
 end;
 
@@ -519,6 +519,9 @@ end;
 
 destructor TSQLHttpServer.Destroy;
 begin
+{$ifdef WITHLOG}
+  TSQLLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
+{$endif}
   FreeAndNil(fHttpServer);
   inherited;
 end;
