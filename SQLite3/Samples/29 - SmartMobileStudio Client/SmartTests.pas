@@ -151,18 +151,24 @@ end;
 procedure ORMTest(client: TSQLRestClientHTTP);
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
+    res: TIntegerDynArray;
     i,id: integer;
 begin // all this is run in synchronous mode -> only 200 records in the set
   client.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   assert(Call.OutStatus=HTML_SUCCESS);
+  client.BatchStart(TSQLRecordPeople);
   people := TSQLRecordPeople.Create;
   for i := 1 to 200 do begin
     people.FirstName := 'First'+IntToStr(i);
     people.LastName := 'Last'+IntToStr(i);
     people.YearOfBirth := i+1800;
     people.YearOfDeath := i+1825;
-    assert(client.Add(people,true)=i);
+    assert(client.BatchAdd(people,true)=i-1);
   end;
+  assert(client.BatchSend(res)=HTML_SUCCESS);
+  assert(length(res)=200);
+  for i := 1 to 200 do
+    assert(res[i-1]=i);
   people := TSQLRecordPeople.CreateAndFillPrepare(client,'','',[]);
   id := 0;
   while people.FillOne do begin

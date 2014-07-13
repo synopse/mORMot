@@ -1538,7 +1538,7 @@ constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
 var t: integer;
 begin
   {$ifdef ISSMS}
-  for t := 0 to high(fInfo) do
+  for t := 0 to high(Tables) do
     fInfo.Add(TSQLModelInfo.CreateFromRTTI(Tables[t]));
   {$else}
   SetLength(fInfo,length(Tables));

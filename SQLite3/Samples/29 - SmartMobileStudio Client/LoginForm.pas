@@ -44,9 +44,7 @@ var client: TSQLRestClientHTTP;
 begin
   BrowserAPI.console.time('ORM');
   writeln('Creating Data Model');
-  model := TSQLModel.Create([TSQLAuthUser],'root');
-  model.Add(TSQLAuthGroup); // circumvent requests/43
-  model.Add(TSQLRecordPeople);
+  model := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople],'root');
   model.GetTableIndexExisting(TSQLRecordPeople);
   var people := new TSQLRecordPeople;
   var s := model.InfoExisting(people.RecordClass).ToJSONAdd(client,people,true,'');
