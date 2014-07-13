@@ -31235,7 +31235,8 @@ begin
   if Value.InheritsFrom(TList) then
     for i := 0 to TList(Value).Count-1 do
       AddInstanceName(TList(Value).List[i],',')
-    {$ifndef LVCL} else
+  {$ifndef LVCL} else
+  if Value.InheritsFrom(TCollection) then
     for i := 0 to TCollection(Value).Count-1 do
       AddInstanceName(TCollection(Value).Items[i],',') {$endif} ;
   CancelLastComma;
