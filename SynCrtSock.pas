@@ -2826,10 +2826,10 @@ constructor THttpServer.Create(const aPort: RawByteString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
 var aSock: TCrtSocket;
 begin
+  InitializeCriticalSection(fProcessCS);
   aSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   inherited Create(false);
   Sock := aSock;
-  InitializeCriticalSection(fProcessCS);
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
 {$ifdef USETHREADPOOL}
@@ -2848,15 +2848,17 @@ begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   StartTick := GetTickCount;
   StopTick := StartTick+20000;
-  repeat // wait for all THttpServerResp.Execute to be finished
-    EnterCriticalSection(fProcessCS);
-    if fInternalHttpServerRespList.Count=0 then
-      break;
-    LeaveCriticalSection(fProcessCS);
-    sleep(100);
-  until (GetTickCount>StopTick) or (GetTickCount<StartTick);
   EnterCriticalSection(fProcessCS);
-  FreeAndNil(fInternalHttpServerRespList);
+  if fInternalHttpServerRespList<>nil then begin
+    repeat // wait for all THttpServerResp.Execute to be finished
+      if fInternalHttpServerRespList.Count=0 then
+        break;
+      LeaveCriticalSection(fProcessCS);
+      sleep(100);
+      EnterCriticalSection(fProcessCS);
+    until (GetTickCount>StopTick) or (GetTickCount<StartTick);
+    FreeAndNil(fInternalHttpServerRespList);
+  end;
   LeaveCriticalSection(fProcessCS);
 {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
