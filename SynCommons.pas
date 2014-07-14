@@ -397,6 +397,7 @@ unit SynCommons;
   - FastCode-based x86 asm Move() procedure will handle source=dest
   - faster x86 asm version of StrUInt32(), StrInt32() and StrInt64() functions
   - new StrUInt64() and SetRawUTF8() functions
+  - recognize 8.1 and upcoming "Threshold" 9 in TWindowsVersion
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - added TDynArrayHashed.HashElement property
@@ -7523,7 +7524,9 @@ type
     wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
     wVista, wVista_64, wServer2008, wServer2008_64,
     wServer2008_R2, wServer2008_R2_64, wSeven, wSeven_64,
-    wEight, wEight_64, wServer2012, wServer2012_64);
+    wEight, wEight_64, wServer2012, wServer2012_64,
+    wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
+    wNine, wNine_64, wServer2014R2, wServer2014R2_64);
   {$ifndef UNICODE}
   /// not defined in older Delphi versions
   TOSVersionInfoEx = record
@@ -16394,20 +16397,22 @@ begin
           Vers := wServer2003 else
           Vers := wServer2003_R2;
     end;
-    6: case dwMinorVersion of
-     0: if wProductType=VER_NT_WORKSTATION then
-          Vers := wVista else
-          Vers := wServer2008;
-     1: if wProductType=VER_NT_WORKSTATION then
-          Vers := wSeven else
-          Vers := wServer2008_R2;
-     2: if wProductType=VER_NT_WORKSTATION then
-          Vers := wEight else
-          Vers := wServer2012;
+    6: begin
+    case dwMinorVersion of
+     0: Vers := wVista;
+     1: Vers := wSeven;
+     2: Vers := wEight;
+     3: Vers := wEightOne;
+     4: Vers := wNine;
+    end;
+    if Vers<>wUnknown then begin
+      if wProductType<>VER_NT_WORKSTATION then
+        inc(Vers,2); // e.g. wEight -> wServer2012
+      if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
+        inc(Vers);   // e.g. wEight -> wEight64
+    end;
     end;
   end;
-  if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
-    inc(Vers);
   OSVersion := Vers;
 end;
 {$endif MSWINDOWS}
