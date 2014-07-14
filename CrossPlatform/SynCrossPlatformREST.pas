@@ -697,7 +697,7 @@ type
     property Authentication: TSQLRestAuthentication read fAuthentication;
   end;
 
-  /// used for client authentication
+  /// abstract class used for client authentication
   TSQLRestAuthentication = class
   protected
     fUser: TSQLAuthUser;

@@ -370,7 +370,7 @@ begin
     check(FormatBind('ab?ab??cd',[i,i,json])='ab'+inlined+'ab'+inlined+
       ':("'+json+'"):cd');
   end;
-  RegisterClassForJSON([TMainNested]);
+  RegisterClassForJSON([TMainNested]); // for JSONToNewObject()
   obj1 := TMain.Create;
   obj2 := TMain.Create;
   try

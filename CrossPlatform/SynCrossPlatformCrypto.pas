@@ -81,7 +81,11 @@ type
 var
   /// table used by crc32() function
   // - table content is created from code in initialization section below
-  crc32tab: array[0..255] of hash32;
+  {$ifdef ISDWS}
+  crc32tab: variant;
+  {$else}
+  crc32tab: array[byte] of hash32;
+  {$endif}
 
 {$ifndef ISDWS}
 /// compute the zlib/deflate crc32 hash value on a supplied buffer
@@ -137,6 +141,7 @@ function SHA256(const buf: string): string; overload;
 
 implementation
 
+
 {$ifdef ISDWS}
 function shr0(c: hash32): hash32; inline;
 begin
@@ -156,6 +161,9 @@ type // no-operation for unmanaged Delphi
 procedure InitCrc32Tab;
 var i,n,crc: hash32;
 begin
+  {$ifdef ISDWS}
+  asm @crc32tab=[]; end;
+  {$endif}
   for i := 0 to 255 do begin
     crc := i;
     for n := 1 to 8 do
@@ -163,20 +171,15 @@ begin
         // $edb88320 from polynomial p=(0,1,2,4,5,7,8,10,11,12,16,22,23,26)
         crc := shr0((crc shr 1) xor $edb88320) else
         crc := crc shr 1;
+    {$ifndef ISSMS}
     crc32tab[i] := crc;
+    {$else}
+    crc32tab.push(crc);
+    {$endif}
   end;
 end;
 
-{$ifndef ISDWS}
-function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
-var i: integer;
-begin
-  result := shr0(not aCRC32);
-  for i := 0 to length(buf)-1 do
-    result := crc32tab[(result xor buf[i]) and $ff] xor (result shr 8);
-  result := shr0(not result);
-end;
-{$endif}
+{$ifdef ISDWS}
 
 function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
 var i: integer;
@@ -186,6 +189,28 @@ begin
     result := crc32tab[(result xor ord(buf[i])) and $ff] xor (result shr 8);
   result := shr0(not result);
 end;
+
+{$else}
+
+function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
+var i: integer;
+begin
+  result := shr0(not aCRC32);
+  for i := 0 to length(buf)-1 do
+    result := crc32tab[(result xor buf[i]) and $ff] xor (result shr 8);
+  result := shr0(not result);
+end;
+
+function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
+var i: integer;
+begin
+  result := shr0(not aCRC32);
+  for i := 1 to length(buf) do
+    result := crc32tab[(result xor ord(buf[i])) and $ff] xor (result shr 8);
+  result := shr0(not result);
+end;
+
+{$endif ISDWS}
 
 const
   K: TSHA256Buffer = (
