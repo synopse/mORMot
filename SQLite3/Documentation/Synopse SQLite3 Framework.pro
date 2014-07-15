@@ -132,8 +132,8 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 : Expected Use
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
-This framework was developed in order to run under any Delphi compiler, from version Delphi 6 to version Delphi XE6. It targets both {\i Win32} and {\i Win64} platforms, using the 64 bit compiler included in latest Delphi XE2 and up IDE.
-It was conceived so that it could be compatible also with the {\i Free Pascal Compiler}, which is more advanced than the Embarcadero Delphi compiler for cross-platform support. This support is not tested nor fully supported, but was taken in account during coding.
+This framework was developed in order to run under any Delphi compiler, from version Delphi 6 to version Delphi XE6. It targets both {\i Win32} and {\i Win64} platforms, using the 64 bit compiler included in latest Delphi XE2 and up.
+It was conceived so that it could be compatible also with the {\i @*FreePascal@ Compiler}, which is more advanced than the Embarcadero Delphi compiler for cross-platform support. This support is not tested nor fully supported, but was taken in account during coding.
 =[License]
 \page
 :Software Design Input
@@ -1082,7 +1082,7 @@ As a result, we can discuss the two data models:
 - {\i Document data Model} as a collection of complex documents with arbitrary, nested data formats and varying "record" format.
 The {\i Relational} model features {\i @**normalization@} of data, i.e. organize the fields and tables of a relational database to minimize redundancy.\line On the other hand, the {\i Document} model features {\i @**denormalization@} of data, to optimize the read performance of a database by adding redundant data or by grouping data. It also features horizontal scaling of the servers, since data can easily be balanced among several servers, without the speed penalty of performing a remote JOIN.
 One of the main difficulties, when working with {\i NoSQL}, is to define how to {\i denormalize} the data, and when to store the data in {\i normalized} format.\line One good habit is to model your data depending on the most current queries you will have to perform. For instance, you may embed sub-documents which will be very likely to be requested by your application most of the time. Note that most {\i NoSQL} engines feature a {\i projection} mechanism, which allows you to return only the needed fields for a query, leaving the sub-documents on the server if you do not need them at this time. The less frequent queries may be executed other separated collections, populated e.g. with consolidated information.\line Since {\i NoSQL} databases have fewer hard-and-fast rules than their relational databases ancestors, you are more likely to tune your model, depending on your expectations. In practice, you may spend less time thinking about "how" to store the data than with a RDBMS, and are still able to {\i normalize} information later, if needed. {\i NoSQL} engines do not fear redundant information, as soon as you follow the rules of letting the client application take care of the whole data consistency (e.g. via one ORM).
-As you may have stated, this {\i Document data Model} is much closer to the OOP paradigm than the classic relational scheme. Even a new family of frameworks did appear together with {\i NoSQL} adoption, named {\i Object Document Mapping} (@**ODM@), which is what @13@ was for RDBMS.
+As you may have stated, this {\i Document data Model} is much closer to the @*OOP@ paradigm than the classic relational scheme. Even a new family of frameworks did appear together with {\i NoSQL} adoption, named {\i Object Document Mapping} (@**ODM@), which is what @13@ was for RDBMS.
 In short, both approaches have benefits, which are to be weighted.
 |%50%50
 |\b SQL|NoSQL\b0
@@ -1222,7 +1222,7 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotReport.pas}|Integrated Reporting engine
 |%
-Other units are available in the framework source code repository, but are either expected by those files above (e.g. like {\f1\fs20 SynDB*.pas} database providers), or used only optionally in end-user client applications (e.g. the {\f1\fs20 CrossPlatform} folder).
+Other units are available in the framework source code repository, but are either expected by those files above (e.g. like {\f1\fs20 SynDB*.pas} database providers), or used only optionally in end-user @*cross-platform@ client applications (e.g. the {\f1\fs20 CrossPlatform} folder).
 In the following pages, the features offered by those units will be presented.\line Do not forget to take a look at all sample projects available in the {\f1\fs20 SQLite3\\Samples} sub-folders - nothing is better than some simple code to look at.
 Then detailed information will be available in the second part of this document - see @44@.
 :45SynCommons unit
@@ -1246,7 +1246,7 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - @*Log@ging.
 :32 Unicode and UTF-8
 Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under Delphi 2009 and up (including latest XE6 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from Delphi 6 up to Delphi 2007.
-Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of Delphi (even pre-Unicode versions, especially the Delphi 7 version we like so much), and provide compatibility with the {\i Free Pascal Compiler}.
+Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of Delphi (even pre-Unicode versions, especially the Delphi 7 version we like so much), and provide compatibility with the {\i FreePascal Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
 - {\f1\fs20 WinAnsiString} where {\i WinAnsi}-encoded {\f1\fs20 AnsiString} (code page 1252) are needed;
@@ -2122,7 +2122,7 @@ Since Delphi XE5, you can define and work directly with published record propert
 !    property GUID: TGUID read fGUID write fGUID index 38;
 !  end;
 The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.
-Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties before Delphi XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of Delphi, or {\i FreePascal}.
+Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties before Delphi XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of Delphi, or {\i @*FreePascal@}.
 You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
 If you want to work with such properties before Delphi XE5, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
 For instance, to register a {\f1\fs20 @*GUID@} property mapping a {\f1\fs20 TSQLMyRecord.fGUID: TGUID} field:
@@ -6059,7 +6059,7 @@ The following types are handled by this feature:
 |{\f1\fs20 boolean}|Serialized as JSON boolean
 |{\f1\fs20 byte word integer cardinal Int64 single double}|Serialized as JSON number
 |{\f1\fs20 string RawUTF8 SynUnicode WideString}|Serialized as JSON string
-|{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as ISO-8601
+|{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
 |{\f1\fs20 RawJSON}|Stored as un-serialized raw JSON content\line (e.g. any value, object or array)
 |{\f1\fs20 TGUID}|@*GUID@ serialized as JSON text
@@ -6395,7 +6395,7 @@ Depending on a setting, {\i mORMot} servers may in fact returns this alternative
 $ {"fieldCount":1,"values":["ID",1,2,3,4,5,6,7]}
 which preserves bandwidth and human readability: if you were able to send a GET request to the URI {\f1\fs20 http://example.org/coll} you will be able to append this URI at the beginning of every future request, doesn't it make sense?
 In all cases, the {\i Synopse mORMot Framework} always returns the JSON content just as a pure response of a @*SQL@ query, with an array and field names.
-:  JSON (not) expanded layouts
+:87  JSON (not) expanded layouts
 Note that our @*JSON@ content has two layouts, which can be produced according to the {\f1\fs20 TSQLRestServer.NoAJAXJSON} property:
 1. the {\i "expanded" or standard/@*AJAX@ layout}, which allows you to create pure @*JavaScript@ objects from the JSON content, because the field name / JavaScript object property name is supplied for every value:
 $ [{"ID":0,"Int":0,"Test":"abcde+¬ef+á+¬","Unicode":"abcde+¬ef+á+¬","Ansi":"abcde+¬ef+á+¬","ValFloat":3.14159265300000E+0000,"ValWord":1203,"ValDate":"2009-03-10T21:19:36","Next":0},{..}]
@@ -9285,8 +9285,228 @@ Since SOAP features a lot of requirements, and expects some plumping according t
 But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 {\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
-:75Hosting
+:86Cross-Platform clients
 %cartoon07.png
+Current version of the framework units target only Win32 and Win64 systems yet.\line But in a @17@, you would probably need to create clients for other platforms.
+A set of @**cross-platform@ client units is available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository.\line It allows writing any client in modern {\i object pascal} language, for:
+- Any version of {\i Delphi}, on any platform (including @*OSX@, @*iPhone@ or @*Android@);
+- {\i @*FreePascal@} Compiler 2.7.1;
+- {\i @*Smart Mobile Studio@} 2.1, to create AJAX applications.
+The units are the following:
+|%40%60
+|\b Unit name|Description\b0
+|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured REST client access
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformJSON.pas}|Optimized JSON process (not used by {\i Smart})
+|{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
+|%
+This set of units will provide a solid and shared ground for the any kind of clients:
+- Connection to a {\i mORMot} server, using weak or default authentication - see @18@;
+- Definition of the {\f1\fs20 TSQLRecord} class, using RTTI on {\i Delphi} or {\i FreePascal}, and generated code on {\i Smart};
+- Mapping of all supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
+- Remote @*CRUD@ operations, via @*JSON@ and @*REST@, with a {\f1\fs20 TSQLRestClientURI} class, with the same methods as with the {\f1\fs20 mORMot.pas} framework unit;
+- Optimized {\f1\fs20 TSQLTableJSON} class to handle a JSON result table, as returned by {\i mORMot}'s REST server ORM - see @87@;
+- @*Batch@ process - see @28@ - for transactional and high-speed writes;
+- Remote method-based services call, with parameters marshaling;
+- Some cross-platform low-level functions and types definitions, to help share as much code as possible for your projects.
+In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats. Then, some code generator may be used to create the wrappers, eventually using the @81@ included on the server side. Any help is welcome!
+: REST clients
+Thanks to {\f1\fs20 SynCrossPlatform*} units, you could easily access any {\i mORMot} server with the following code (extracted from "{\f1\fs20 27 - CrossPlatform Clients\RegressionTests}" sample):
+!var Model: TSQLModel;
+!    Client: TSQLRestClientHTTP;
+!    Call: TSQLRestURIParams;
+!...
+!!  Model := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople]);
+!!  Client := TSQLRestClientHTTP.Create('localhost',888,Model);
+!  assert(Client.Connect);            // try to connect to the server
+!  assert(Client.ServerTimeStamp<>0); // call of a method-based service
+!!  Client.SetUser(TSQLRestAuthenticationDefault,'User','synopse'); // safe session
+!!  Client.CallBackGet('DropTable',[],Call,TSQLRecordPeople); // call of another service
+!  assert(Call.OutStatus=HTML_SUCCESS);
+!  people := TSQLRecordPeople.Create; // create a record ORM
+!  try
+!    for i := 1 to 200 do begin
+!      people.FirstName := 'First'+IntToStr(i);
+!      people.LastName := 'Last'+IntToStr(i);
+!      people.YearOfBirth := i+1800;
+!      people.YearOfDeath := i+1825;
+!!      assert(Client.Add(people,true)=i); // add one record
+!    end;
+!  finally
+!    people.Free;
+!  end;
+!!  people := TSQLRecordPeople.CreateAndFillPrepare(Client,'',
+!!    'yearofbirth=?',[1900]); // parameterized query
+!  try
+!    n := 0;
+!!    while people.FillOne do begin
+!      inc(n);
+!      assert(people.ID=100);
+!      assert(people.FirstName='First100');
+!      assert(people.LastName='Last100');
+!      assert(people.YearOfBirth=1900);
+!      assert(people.YearOfDeath=1925);
+!    end;
+!    assert(n=1); // we expected only one record here
+!  finally
+!    people.Free;
+!  end;
+!  for i := 1 to 200 do
+!    if i and 15=0 then
+!!      Client.Delete(TSQLRecordPeople,i) else
+!    if i mod 82=0 then begin
+!      people := TSQLRecordPeople.Create;
+!      try
+!        id := i+1;
+!        people.ID := i;
+!        people.YearOfBirth := id+1800;
+!        people.YearOfDeath := id+1825;
+!!        assert(Client.Update(people,'YEarOFBIRTH,YEarOfDeath'));
+!      finally
+!        people.Free;
+!      end;
+!    end;
+As we already stated, @*BATCH@ mode is also supported, with the classic {\i mORMot} syntax:
+!...
+!    res: TIntegerDynArray;
+!...
+!!  Client.BatchStart(TSQLRecordPeople);
+!  people := TSQLRecordPeople.Create;
+!  try
+!    for i := 1 to 200 do begin
+!      people.FirstName := 'First'+IntToStr(i);
+!      people.LastName := 'Last'+IntToStr(i);
+!      people.YearOfBirth := i+1800;
+!      people.YearOfDeath := i+1825;
+!!      Client.BatchAdd(people,true);
+!    end;
+!  finally
+!    people.Free;
+!  end;
+!!  assert(Client.BatchSend(res)=HTML_SUCCESS);
+!  assert(length(res)=200);
+!  for i := 1 to 200 do
+!    assert(res[i-1]=i); // server returned the IDs of the newly created records
+Those {\f1\fs20 BatchAdd} / {\f1\fs20 BatchDelete} / {\f1\fs20 BatchUpdate} methods of {\f1\fs20 TSQLRest} have the benefit to introduce at client level:
+- Much higher performance, especially on multi-insertion or multi-update of data;
+- Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 AutomaticTransactionPerRow} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, and an ACID rollback in case of any failure.
+You can note that all above code has exactly the same structure and methods than standard {\i mORMot} clients.\line As a result, you are able to {\i share} client code between a Windows project and any supported platform, even AJAX. It would eventually reduce both implementation and debugging time.
+: Delphi Multi-Device
+Latest versions of {\i Delphi} include the {\i @*FireMonkey@} FMX framework, able to deliver multi-device, true native applications for Windows, Mac, Android and iOS.\line Our {\f1\fs20 SynCrossPlatform*} units are able to easily create clients for those platforms.
+In order to be compliant with the {\i NextGen} revision, we tried to follow the expectation of this new family of cross-compilers.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would comply on all supported platform.
+Feedback is needed for the mobile targets.\line In fact, we rely for our own projects on {\i Smart Mobile Studio} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. iOS and Android) as deep as other systems. Your input would be very valuable and welcome, here!
+:  Cross-platform JSON
+We developed our own JSON process units, much faster than the official {\f1\fs20 DBXJSON} unit shipped with Delphi, and cross-platform alternatives, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
+$ 2.2. Table content:
+$- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
+$- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
+Our {\f1\fs20 TSQLTableJSON} class is more than 10 times faster than standard {\f1\fs20 DBXJSON} unit, when processing a list of results as returned by a {\i mORMot} server.\line The latest value above is the memory consumption. It should be of high interest on mobile platforms, where memory allocation tends to be much slower and sensitive than on Windows (the {\i FastMM4} memory manager does wonders). Our unit consumes less than half the memory of the {\i Delphi}'s version.
+We did not include {\i XSuperObject} here, which is cross-platform, but performs even worse than {\f1\fs20 DBXJSON} in terms of speed. Other libraries - as {\i SuperObject} or {\i dwsJSON} - are not cross-platform.\line See @http://blog.synopse.info/post/json-benchmark-delphi-mormot-superobject-dwsjson-dbxjson for details about this comparison.
+A special mention is due to {\i dwsJSON}, which performs very well, but only on Windows, and is slower than {\i mORMot}'s implementation:
+$- Synopse ORM loop: 41,135 assertions passed  6.18ms  1,330,153/s  1.1 MB
+$- Synopse ORM list: 41,135 assertions passed  6.47ms  1,270,775/s  952 KB
+$- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
+$- Super object properties: 41,136 assertions passed  2.20s  3,739/s  6.3 MB
+$- dwsJSON: 41,136 assertions passed  32.05ms  256,628/s  4.7 MB
+$- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
+The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized UTF-8 functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory.
+This unit features a {\f1\fs20 TJSONVariantData} custom variant type, similar to @80@, available in the main {\i mORMot} framework.\line It allows writing such nice and readable code, with late-binding:
+!var doc: variant;
+!    json,json2: string;
+!...
+!  doc := JSONVariant('{"test":1234,"name":"Joh\\"n\\r","zero":0.0}');
+!  assert(doc.test=1234);
+!  assert(doc.name='Joh"n'#13);
+!  assert(doc.name2=null);
+!  assert(doc.zero=0);
+!  json := doc; // conversion to JSON text when assigned to a string variable
+!  assert(json='{"test":1234,"name":"Joh\\"n\\r","zero":0}');
+!  doc.name2 := 3.1415926;
+!  doc.name := 'John';
+!  json := doc;
+!  assert(json='{"test":1234,"name":"John","zero":0,"name2":3.1415926}');
+The unit is also able to serialize any {\f1\fs20 TPersistent} class, i.e. all published properties could be written or read from a JSON object representation. It also handles nested objects, stored as {\f1\fs20 TCollection}.\line See for instance in the {\f1\fs20 SynCrossPlatformTests} unit:
+!type
+!  TMainNested = class(TCollectionItem)
+!  private
+!    fNumber: double;
+!    fIdent: RawUTF8;
+!  published
+!    property Ident: RawUTF8 read fIdent write fIdent;
+!    property Number: double read fNumber write fNumber;
+!  end;
+!
+!  TMain = class(TPersistent)
+!  private
+!    fName: RawUTF8;
+!    fNested: TCollection;
+!    fList: TStringList;
+!  public
+!    constructor Create;
+!    destructor Destroy; override;
+!  published
+!    property Name: RawUTF8 read fName write fName;
+!    property Nested: TCollection read fNested;
+!    property List: TStringList read fList;
+!  end;
+!
+!  obj1 := TMain.Create;
+!  obj2 := TMain.Create;
+!...
+!  obj1.Name := IntToStr(i);
+!  item := obj1.Nested.Add as TMainNested;
+!  item.Ident := obj1.Name;
+!  item.Number := i/2;
+!  obj1.list.Add(obj1.Name);
+!  json := ObjectToJSON(obj1);
+!  if i=1 then
+!    assert(json='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}],"List":["1"]}');
+!  JSONToObject(obj2,json);
+!  assert(obj2.Nested.Count=i);
+!  json2 := ObjectToJSON(obj2);
+!  assert(json2=json);
+!...
+Of course, this serialization feature is used for the {\f1\fs20 TSQLRecord} ORM class.
+:  RESTful Client
+On Delphi, the {\i Indy} library is used for HTTP requests.\line It is cross-platform by nature, so should work on any supported system.
+: FreePascal support
+Those units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with Delphi, including RTTI support and all supported types.
+Some restrictions apply, though.
+Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
+!  doc.name2 := 3.1415926;
+!  doc.name := 'John';
+Under {\i FreePascal}, you have to write:
+!  TJSONVariantData(doc)['name2'] := 3.1415926;
+!  TJSONVariantData(doc)['name'] := 'John';
+In fact, the way late-binding properties are implemented in the {\i FreePascal} RTL forbid to modify the content of the associated {\f1\fs20 variant}. A private copy of the {\f1\fs20 variant} is made, which is not only slower, but disallows modification of its stored value.\line Any feedback and help from the {\i FreePascal} maintainers may be welcome!
+As a result, direct access to {\f1\fs20 TJSONVariantData} instances, and not a {\f1\fs20 variant} variable, would be faster and less error-prone when using this compiler, until the issue is fixed.
+Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an UTF-8 encoded text, then the following line would reset the result code page to the system code page:
+!function StringToJSON(const Text: string): string;
+!  ...
+!  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
+!  ...
+It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With Delphi, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
+You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and Lazarus). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
+We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with Delphi. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
+: Smart Mobile Studio
+{\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} into highly optimized and raw {\i JavaScript}.
+There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
+- {\i JavaScript} super-sets, adding optional {\i strong typing}, and classes, close to the {\i ECMAScript Sixth Edition}: the current main language in this category is certainly {\i TypeScript}, designed by Anders Hejlsberg (father of both the {\i Delphi} language and {\i C#}), and published by {\i Microsoft};
+- New languages, dedicated to make writing {\i JavaScript} programs easier, with an alternative syntax and new concepts (like classes, lambdas, scoping, splats, comprehensions...): most relevant languages of this family are {\i CoffeeScript} and {\i Dart};
+- High-level languages, like {\i Google Web Toolkit} (compiling {\i Java} code), {\i JSIL} (from {\i C#} via {\i Mono}), or {\i Smart Mobile Studio} (from {\i object pascal});
+- Low-level languages, like {\i Emscripten} (compiling C/C++ from LLVM bytecode, using {\i asm.js}).
+Of course, from our point of view, use of modern {\i object pascal} is of great interest, since it will leverage our own coding skills, and make us able to share code between client and server sides.
+:  Beyond JavaScript
+The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some JavaScript code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
+The resulting HTML5 project is self-sufficient with no external javascript library, and is compiled as a single {\f1\fs20 index.html} file. The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
+The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debugg your application directly within the IDE (since revision 2.1), or within your browser, with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
+Using a third-party tool like @http://phonegap.com you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one included with Delphi FMX.
+{\i Smart Mobile Studio} is therefore a great platform for implementing rich client-side AJAX applications, to work with our client-server {\i mORMot} framework.
+
+{\i (to be continued)}
+
+:75Hosting
+%cartoon08.png
 About @**hosting@, the easiest is to have your main {\f1\fs20 TSQLRestServer} class handling the service, in conjunction with other Client-Server process (like ORM). See @%%mORMotDesign1@ about this generic Client-Server architecture.
 But you may find out some (good?) reasons which main induce another design:
 - For better scalability, you should want to use a dedicated process (or even dedicated hardware) to split the database and the service process;
@@ -9394,7 +9614,7 @@ label="PC Server";
 Of course, you can make any combination of the protocols and servers, to tune hosting for a particular purpose. You can even create several ORM servers or Services servers (grouped per features family or per product), which will cooperate for better scaling and performance.
 If you consider implementing a @*stand-alone@ application for hosting your services, and has therefore basic ORM needs (e.g. you may need only CRUD statements for handling authentication), you may use the lighter {\f1\fs20 TSQLRestServerFullMemory} kind of server instead of a full {\f1\fs20 TSQLRestServerDB}, which will embed a {\i @*SQLite3@} database engine, perhaps not worth it in this case.
 :43Security
-%cartoon08.png
+%cartoon01.png
 The framework tries to implement @**security@ via:
 - Process safety;
 - Authentication;
@@ -9582,7 +9802,7 @@ For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=
 $ root/People/6?session_signature=0000004C000F6DD02E24541C
 For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA-256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA-256, to enhance security with no performance penalty.
 In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a Delphi Client or from a @*AJAX@ / JavaScript client.
-On practice, this scheme is secure and very fast, perfect for a Delphi client.
+On practice, this scheme is secure and very fast, perfect for a Delphi client, or an AJAX application.
 :   Authentication using Windows credentials
 :    Windows Authentication
 By default, the {\i hash} of the user password is stored safely on the server side. This may be an issue for corporate applications, since a new user name / password pair is to be defined by each client, which may be annoying.
@@ -9636,8 +9856,8 @@ The {\f1\fs20 TSQLRestServerAuthenticationNone} class can be used if you trust y
 Here are the typical steps to be followed in order to create a new user session via this authentication scheme:
 - Client sends a {\f1\fs20 GET ModelRoot/auth?UserName=...} request to the remote server;
 - Server checks that the transmitted user name is valid, i.e. that it is available in the {\f1\fs20 TSQLAuthGroup} table - if the value is not correct, authentication fails
-- On success, Server will create a new in-memory session and returns the associated session number (encoded as hexadecimal in the JSON result object);
-- On any further access to the Server, a {\f1\fs20 &session_signature=} parameter is to be added to the URL with the correct session ID, and will be checked against the valid sessions in order to validate the request.
+- On success, Server will create a new in-memory session and returns the associated session number (encoded as decimal in the JSON result object);
+- On any further access to the Server, a {\f1\fs20 &session_signature=} parameter is to be added to the URL with the correct session ID (encoded as hexadecimal), and will be checked against the valid sessions in order to validate the request.
 For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=6 will have the following URI:
 $ root/People/6?session_signature=0000004C
 Here is some sample code about how to define this authentication scheme:
@@ -9703,7 +9923,7 @@ In addition to this global parameter, you can set per-service and per-method @77
 For @49@, if authentication is enabled, any method execution will be processed only for signed URI.
 You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
 :79Scripting Engine
-%cartoon01.png
+%cartoon02.png
 : Scripting abilities
 As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the Delphi source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a Delphi IDE installed (and paid), and know the Delphi language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
@@ -9962,7 +10182,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 !  ...
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :68Domain-Driven-Design
-%cartoon02.png
+%cartoon03.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
 This is were @54@ - abbreviated DDD - patterns are worth looking at.
 : Domain
@@ -10211,7 +10431,7 @@ label="Domain Model";
 In order to provide the better scaling of the server side, @*cache@ can be easily implemented at every level, and hosting can be tuned in order to provide the best response time possible: one central server, several dedicated servers for application, domain and persistence layers...
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
-%cartoon03.png
+%cartoon04.png
 : Automated testing
 You know that @**test@ing is (almost) everything if you want to avoid regression problems in your application.
 How can you be confident that any change made to your software code won't create any error in other part of the software?
@@ -10384,7 +10604,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  (...)
 Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
-%cartoon04.png
+%cartoon05.png
 =[License]
 \page
 : Availability
@@ -10409,8 +10629,8 @@ The framework source code tree will compile and is tested for the following plat
 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 Some part of the library (e.g. {\f1\fs20 SynCommons.pas} or the @27@ units) are also compatible with Delphi 5.
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
-Note that the framework is expected to create only Windows applications yet. But cross-platform is on its way: it will probably use the Delphi XE2 (and up) FireMonkey library for User Interface generation, {\i Free Pascal Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
-The latest versions of the {\i Free Pascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and Lazarus) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like Lazarus stability and speed much more than Delphi, even if the compiler is slower than Delphi's. At least, it works, and works well. So stay tuned!
+Note that the framework is expected to create only Windows server applications yet. But @86@ are available, using either {\i FireMonkey} library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i Smart Mobile Studio} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and Lazarus) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like Lazarus stability and speed much more than Delphi, even if the compiler is slower than Delphi's. At least, it works, and works well.\line As we just stated, we were able to make our cross-platform clients compatible with this developping environement, so every door is open! Stay tuned!
 :  32 bit sqlite3*.obj and 64 bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
@@ -10578,7 +10798,7 @@ TitleOffset=0
 DisplayName=Main SynFile Demo
 
 :50SynFile application
-%cartoon05.png
+%cartoon06.png
 This sample application is a simple database tool which stores text content and files into the database, in both clear and "safe" manner. Safe records are stored using {\i AES-256/SHA-256} encryption. There is an {\i Audit Trail} table for tracking the changes made to the database.
 This document will follow the application architecture and implementation, in order to introduce the reader to some main aspects of the Framework:
 - General architecture - see @7@;
@@ -11167,9 +11387,9 @@ SourceFile=
 Version=1.18
 DisplayName=Ajax clients for mORMot
 
-:The Smart Project
+:Smart Mobile Studio
 Did you hear from the great {\i @**Smart@} project?
-It is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} embedded application. It does target AJAX Mobile application (i.e. {\i Android} and {\i iPhone/iPad} apps running {\i Web-Kit}) creation. You'll get an unique {\f1\fs20 .html} file containing the whole client-side application: it won't need any server side implementation. Using a third-party tool like {\i PhoneGap}, you'd be able to supply your customers with true native applications, running without any network, and accessing the full power of any modern Smart Phone.
+It is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} embedded application. It does target AJAX Mobile application (i.e. {\i @*Android@} and {\i @*iPhone@/iPad} apps running {\i Web-Kit}) creation. You'll get an unique {\f1\fs20 .html} file containing the whole client-side application: it won't need any server side implementation. Using a third-party tool like {\i PhoneGap}, you'd be able to supply your customers with true native applications, running without any network, and accessing the full power of any modern Smart Phone.
 {\i Smart} is a great candidate for implementing rich client-side AJAX applications, to work with our client-server {\i mORMot} framework.
 : Introduction to Smart coding
 In order to interface {\i Smart} code with {\i mORMot}, we started implementing some low-level code to work with our @*REST@ful authentication scheme.
