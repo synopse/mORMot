@@ -6751,7 +6751,7 @@ var MS: THeapMemoryStream;
     WS: SynUnicode;
 const
   Hash: array[boolean] of Cardinal =
-    ($6F8CA9E5,$EB1B9EBD);
+    ($92260252,$554BB32D);
   Name: array[boolean] of PDFString =
     ('Arial','Helvetica');
 begin
@@ -6892,7 +6892,7 @@ const
   'jz/dDXej3ZClzk14r9LVXTW1kca7FgzLrfNaWG5KyG/40tuNtM7LvavpM665+Q+G+dsXdVoc3x5vK5fK'+
   'WP0ebanRbmgol+oYnDQrW+6mTLl3Hln9FZS7n5W7K+Gi8ZIw3vqLIZ2yZd44wufWeWzS1Ebaxn17Dfzy'+
   'CW6jv67RdXcuf1/o69I+T+fTdim0j3Ry8TccmqZuqswsX2i+d/n7Qnv9f1RSHw29k+n/Bw==';
-  Hash: array[boolean] of Cardinal = ($B0DAF3E9,$D6A281F2);
+  Hash: array[boolean] of Cardinal = ($4D1810E,$2806E33);
 var S: RawByteString;
     MS: THeapMemoryStream;
     MF: TMetaFile;
@@ -6944,16 +6944,16 @@ begin
       if (GetACP<>1252) {$ifdef CPU64}or true{$endif} then
         Check(length(s)>6500) else begin
         i := PosEx('/FontBBox[',s);
-        if CheckFailed(i=5579) then exit;
+        if CheckFailed(i=5580) then exit;
         fillchar(s[i],32,32);
         j := PosEx('/FontBBox[',s);
-        if CheckFailed(j=5909) then exit;
+        if CheckFailed(j=5910) then exit;
         fillchar(s[j],32,32);
         i := PosEx('/FontBBox[',s);
-        if CheckFailed(i=6296)then exit;
+        if CheckFailed(i=6297)then exit;
         fillchar(s[i],32,32);
         H := Hash32(s);
-        Check(H=$BB3D8B61);
+        Check(H=$CDF0EE9F);
       end;
     finally
       Free;
