@@ -419,7 +419,8 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity);
 var i,j: integer;
-    ErrMsg, ServersRoot: string;
+    ErrMsg: string;
+    ServersRoot: RawUTF8;
 {$ifdef WITHLOG}
     Log: ISynLog;
 {$endif}
