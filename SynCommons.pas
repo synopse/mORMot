@@ -554,6 +554,7 @@ unit SynCommons;
   - added GarbageCollectorFreeAndNil() procedure to handle global variables
     proper finalization to nil - avoid error [8e3073c8c7] and [8546b4af1d] e.g.
     when used as design package in Delphi IDE (for all globals and class VMTs)
+  - added GlobalLock/GlobalUnlock functions, used e.g. for ticket [ea4e8bd544] 
   - fixed rouding issue e.g. for ExtendedToString(double(22.99999999999997))
   - fixed potential GPF in TRawUTF8List.SetTextPtr() - ticket [d947b36cf9]
   - fixed potential GPF in function UrlDecodeNeedParameters()
@@ -7706,6 +7707,25 @@ var
 // !  if SynAnsiConvertList=nil then
 // !    GarbageCollectorFreeAndNil(SynAnsiConvertList,TObjectList.Create);
 procedure GarbageCollectorFreeAndNil(var InstanceVariable; Instance: TObject);
+
+/// enter a giant lock for thread-safe shared process
+// - shall be protected as such:
+// ! GlobalLock;
+// ! try
+// !   .... do something thread-safe but as short as possible
+// ! finally
+// !  GlobalUnLock;
+// ! end;
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section - these functions are just here to be convenient, for
+// non time critical process
+procedure GlobalLock;
+
+/// release the giant lock for thread-safe shared process
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section - these functions are just here to be convenient, for
+// non time critical process
+procedure GlobalUnLock;
 
 
 { ************ TSynTable generic types and classes }
@@ -39224,6 +39244,25 @@ const
   /// Delphi linker starts the code section at this fixed offset
   CODE_SECTION = $1000;
 
+var
+  GlobalCriticalSection: TRTLCriticalSection;
+  GlobalCriticalSectionInitialized: boolean;
+
+procedure GlobalLock;
+begin
+  if not GlobalCriticalSectionInitialized then begin
+    InitializeCriticalSection(GlobalCriticalSection);
+    GlobalCriticalSectionInitialized := true;
+  end;
+  EnterCriticalSection(GlobalCriticalSection);
+end;
+
+procedure GlobalUnLock;
+begin
+  if GlobalCriticalSectionInitialized then
+    LeaveCriticalSection(GlobalCriticalSection);
+end;
+
 
 constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=true);
 
@@ -39454,29 +39493,34 @@ begin
     fMapFile := aExeName;
   fMapFile := ChangeFileExt(fMapFile,'.map');
   MabFile := ChangeFileExt(fMapFile,'.mab');
-  MapAge := FileAgeToDateTime(fMapFile);
-  MabAge := FileAgeToDateTime(MabFile);
-  if (MabAge<=MapAge) and (MapAge>0) then
-    LoadMap; // if no faster-to-load .mab available and accurate
-  // 2. search for a .mab file matching the running .exe/.dll name
-  if (SymCount=0) and (MabAge<>0) then
-    LoadMab(MabFile);
-  // 3. search for an embedded compressed .mab file appended to the .exe/.dll
-  if SymCount=0 then
-    LoadMab(GetModuleName(hInstance));
-  // finalize symbols
-  if SymCount>0 then begin
-    for i := 1 to SymCount-1 do
-      assert(fSymbol[i].Start>fSymbol[i-1].Stop);
-    SetLength(fSymbol,SymCount);
-    SetLength(fUnit,UnitCount);
-    fSymbols.fCountP := nil;
-    fUnits.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP := nil;
-    if MabCreate then
-      SaveToFile(MabFile); // if just created from .map -> create .mab file 
-    fHasDebugInfo := true;
-  end else
-    fMapFile := '';
+  GlobalLock;
+  try
+    MapAge := FileAgeToDateTime(fMapFile);
+    MabAge := FileAgeToDateTime(MabFile);
+    if (MabAge<=MapAge) and (MapAge>0) then
+      LoadMap; // if no faster-to-load .mab available and accurate
+    // 2. search for a .mab file matching the running .exe/.dll name
+    if (SymCount=0) and (MabAge<>0) then
+      LoadMab(MabFile);
+    // 3. search for an embedded compressed .mab file appended to the .exe/.dll
+    if SymCount=0 then
+      LoadMab(GetModuleName(hInstance));
+    // finalize symbols
+    if SymCount>0 then begin
+      for i := 1 to SymCount-1 do
+        assert(fSymbol[i].Start>fSymbol[i-1].Stop);
+      SetLength(fSymbol,SymCount);
+      SetLength(fUnit,UnitCount);
+      fSymbols.fCountP := nil;
+      fUnits.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP := nil;
+      if MabCreate then
+        SaveToFile(MabFile); // if just created from .map -> create .mab file
+      fHasDebugInfo := true;
+    end else
+      fMapFile := '';
+  finally
+    GlobalUnLock;
+  end;
 end;
 
 procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
@@ -42402,6 +42446,8 @@ initialization
 
 finalization
   GarbageCollectorFree;
+  if GlobalCriticalSectionInitialized then
+    DeleteCriticalSection(GlobalCriticalSection);
 end.
 
 
