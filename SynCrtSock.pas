@@ -180,6 +180,8 @@ unit SynCrtSock;
   - added aRegisterURI optional parameter to THttpApiServer.AddUrl() method
   - made exception error messages more explicit (tuned per module)
   - fixed several issues when releasing THttpApiServer and THttpServer instances
+  - allow to use any Unicode content for SendEmail() - also includes
+    SendEmailSubject() function, for feature request [0a5fdf9129]  
 
 }
 
@@ -1291,9 +1293,18 @@ function HttpPost(const server, port: RawByteString; const url, Data, DataType: 
 
 /// send an email using the SMTP protocol
 // - retry true on success
+// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// SendEmailSubject() to encode it as Unicode, if needed
+// - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CSVDest, Subject, Text: RawByteString;
   const Headers: RawByteString=''; const User: RawByteString=''; const Pass: RawByteString='';
-  const Port: RawByteString='25'): boolean;
+  const Port: RawByteString='25'; const TextCharSet: RawByteString = 'ISO-8859-1'): boolean;
+
+/// convert a supplied subject text into an Unicode encoding
+// - will convert the text into UTF-8 and append '=?UTF-8?B?'
+// - for pre-Unicode versions of Delphi, Text is expected to be already UTF-8
+// encoded - since Delphi 2010, it will be converted from UnicodeString
+function SendEmailSubject(const Text: string): RawByteString;
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
@@ -2756,9 +2767,8 @@ begin
   end;
 end;
 
-function SendEmail(const Server: RawByteString; const From, CSVDest, Subject, Text: RawByteString;
-  const Headers: RawByteString=''; const User: RawByteString=''; const Pass: RawByteString='';
-  const Port: RawByteString='25'): boolean;
+function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
+  User, Pass, Port, TextCharSet: RawByteString): boolean;
 var TCP: TCrtSocket;
 procedure Expect(const Answer: RawByteString);
 var Res: RawByteString;
@@ -2805,8 +2815,8 @@ begin
     until P=nil;
     Exec('DATA','354');
     writeln(TCP.SockOut^,'Subject: ',Subject,#13#10,
-      ToList,#13#10'Content-Type: text/plain; charset=ISO-8859-1'#13#10+
-      'Content-Transfer-Encoding: 8bit'#13#10,
+      ToList,#13#10'Content-Type: text/plain; charset=',TextCharSet,
+      #13#10'Content-Transfer-Encoding: 8bit'#13#10,
       Headers,#13#10#13#10,Text);
     Exec('.','25');
     writeln(TCP.SockOut^,'QUIT');
@@ -2814,6 +2824,13 @@ begin
   finally
     TCP.Free;
   end;
+end;
+
+function SendEmailSubject(const Text: string): RawByteString;
+var utf8: UTF8String;
+begin
+  utf8 := UTF8String(Text);
+  result := '=?UTF-8?B?'+Base64Encode(utf8);
 end;
 
 
