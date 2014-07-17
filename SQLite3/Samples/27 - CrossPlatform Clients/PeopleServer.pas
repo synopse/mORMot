@@ -56,6 +56,7 @@ var Model: TSQLModel;
 procedure StartServer(auth: TPeopleServerAuthentication);
 begin
   StopServer;
+  //TSQLLog.Family.Level := LOG_VERBOSE;
   Model := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople]);
   DB := TCustomServer.Create(Model);
   Server := TSQLHttpServer.Create('888',DB);

@@ -48,9 +48,9 @@ begin
     DeleteFile(aDatabaseFile);
     aServer := TSQLRestServerDB.Create(aModel,aDatabaseFile);
     try
-      aServer.AcquireWriteTimeOut := 10000; // 10 seconds before write failure 
+      aServer.AcquireWriteTimeOut := 15000;   // 15 seconds before write failure
       aServer.DB.Synchronous := smOff;
-      aServer.DB.LockingMode := lmExclusive;
+      aServer.DB.LockingMode := lmExclusive;  // off+exclusive = fastest SQLite3  
       aServer.NoAJAXJSON := true;
       aServer.CreateMissingTables;
       // launch the server
