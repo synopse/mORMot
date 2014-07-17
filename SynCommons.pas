@@ -620,6 +620,7 @@ unit SynCommons;
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
   - added TTextWriter.Add(const Values: array of const) method
   - fixed potential GPF issue in TMemoryMapText.LoadFromMap()
+  - allow file size of 0 byte in TMemoryMap.Map()
   - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
   - introduced TSynInvokeableVariantType.Clear() and Copy() default methods
   - added TSynInvokeableVariantType.CopyByValue() virtual method
@@ -35410,7 +35411,7 @@ begin
   fFileLocal := false;
   fFile := aFile;
   fFileSize := FileSeek64(fFile,0,soFromEnd);
-  if (fFileSize<=0) or (fFileSize>maxInt) then
+  if (fFileSize<0) or (fFileSize>maxInt) then
     /// maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors)
     exit;
   if aCustomSize=0 then
