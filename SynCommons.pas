@@ -35405,13 +35405,17 @@ end;
 function TMemoryMap.Map(aFile: THandle; aCustomSize: cardinal; aCustomOffset: Int64): boolean;
 var Available: Int64;
 begin
-  result := false;
   fBuf := nil;
   fMap := 0;
   fFileLocal := false;
   fFile := aFile;
   fFileSize := FileSeek64(fFile,0,soFromEnd);
-  if (fFileSize<0) or (fFileSize>maxInt) then
+  if fFileSize=0 then begin
+    result := true; // handle 0 byte file without error (but no memory map)
+    exit;
+  end;
+  result := false;
+  if (fFileSize<=0) or (fFileSize>maxInt) then
     /// maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors)
     exit;
   if aCustomSize=0 then
@@ -35466,6 +35470,8 @@ begin
     UnmapViewOfFile(fBuf);
     CloseHandle(fMap);
     fMap := 0;
+  end;
+  if fFile<>0 then begin
     if fFileLocal then
       FileClose(fFile);
     fFile := 0;
