@@ -223,16 +223,20 @@ function UncompressString(const data: RawByteString) : RawByteString;
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString;
 
-/// (un)compress a data content using the Deflate algorithm
+/// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
 // - as expected by THttpSocket.RegisterCompress
 // - will use internaly a level compression of 1, i.e. fastest available (content
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+// - deflate content encoding is pretty inconsistent in practice, so slightly
+// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
 function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteString;
 
 /// (un)compress a data content using the zlib algorithm
 // - as expected by THttpSocket.RegisterCompress
 // - will use internaly a level compression of 1, i.e. fastest available (content
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+// - zlib content encoding is pretty inconsistent in practice, so slightly
+// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawByteString;
 
 
@@ -1178,10 +1182,9 @@ begin
   if Len=0 then
     exit;
   SetLength(result,Len);
-  if UnCompressMem(@gz[10],pointer(result),gzLen-18,Len)<>Len then
-    result := '' else
-    if SynZip.crc32(0,pointer(result),Len)<>pCardinal(@gz[gzLen-8])^ then
-      result := ''; // invalid CRC
+  if (UnCompressMem(@gz[10],pointer(result),gzLen-18,Len)<>Len) or
+     (SynZip.crc32(0,pointer(result),Len)<>pCardinal(@gz[gzLen-8])^) then
+    result := ''; // invalid CRC
 end;
 
 

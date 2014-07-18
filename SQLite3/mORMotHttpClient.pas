@@ -107,7 +107,9 @@ unit mORMotHttpClient;
      - TSQLHttpClient* classes will now handle properly reconnection in case
        of connection break via overridden InternalCheckOpen/InternalClose methods
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
-       compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES
+       compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES:
+       hcDeflate will in fact use gzip content encoding, since deflate/gzip is
+       not consistent in practice among clients
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
         
@@ -147,9 +149,11 @@ type
   // clients, but hcDeflate for AJAX or any HTTP clients
   // - with hcSynLZ, the 440 KB JSON for TTestClientServerAccess._TSQLHttpClient
   // is compressed into 106 KB with no speed penalty (it's even a bit faster)
-  // whereas deflate, hcDeflate with its level set to 1 (fastest), is 25 % slower
+  // whereas hcDeflate with its level set to 1 (fastest), is 25 % slower
   // - hcSynShaAes will use SHA-256/AES-256-CTR to encrypt the content (after
   // SynLZ compression), via SynCrypto.CompressShaAes() function
+  // - here hcDeflate will use in fact gzip content encoding, since deflate
+  // is inconsistent between browsers: http://stackoverflow.com/a/9186091/458259
   TSQLHttpCompression = (hcSynLZ, hcDeflate, hcSynShaAes);
 
   /// set of available compressions schemes
@@ -405,8 +409,8 @@ begin
         // SynLZ is very fast and efficient, perfect for a Delphi Client
         fSocket.RegisterCompress(CompressSynLZ);
       if hcDeflate in Compression then
-        // standard (slower) AJAX/HTTP zip/deflate compression
-        fSocket.RegisterCompress(CompressDeflate);
+        // standard (slower) AJAX/HTTP gzip compression
+        fSocket.RegisterCompress(CompressGZip);
       result := true;
     except
       on Exception do begin
@@ -479,7 +483,7 @@ begin
         fWinAPI.RegisterCompress(CompressSynLZ);
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
-        fWinAPI.RegisterCompress(CompressDeflate);
+        fWinAPI.RegisterCompress(CompressGZip);
       result := true;
     except
       on Exception do

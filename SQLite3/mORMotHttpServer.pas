@@ -131,7 +131,8 @@ unit mORMotHttpServer;
       - added aHttpServerSecurity: TSQLHttpServerSecurity parameter to
         TSQLHttpServer.Create(), allowing HTTPS secure content publishing, when
         using the http.sys kind of server, or our proprietary SHA-256 /
-        AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes" 
+        AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+      - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
 
 }
 
@@ -147,13 +148,15 @@ interface
   - TSQLHttpClientGeneric.Compression shall contain hcSynLZ to handle it }
 
 {$define COMPRESSDEFLATE}
-{ if defined, will use deflate/zip for content compression
+{ if defined, will use gzip (and not deflate/zip) for content compression
   - can be set global for Client and Server applications
+  - deflate/zip is just broken between browsers and client, and should be
+    avoided: see http://stackoverflow.com/a/9186091/458259
   - SynLZ is faster but only known by Delphi clients: you can enable deflate
     when the server is connected an AJAX application (not defined by default)
   - if you define both COMPRESSSYNLZ and COMPRESSDEFLATE, the server will use
     SynLZ if available, and deflate if not called from a Delphi client
-  - TSQLHttpClientGeneric.Compression shall contain hcSynDeflate to handle it }
+  - TSQLHttpClientGeneric.Compression shall contain hcDeflate to handle it }
 
 {.$define USETCPPREFIX}
 { if defined, a prefix will be added to the TCP/IP stream so that it won't be
@@ -497,7 +500,7 @@ begin
   fHttpServer.RegisterCompress(CompressSynLZ);
 {$endif}
 {$ifdef COMPRESSDEFLATE}
-  fHttpServer.RegisterCompress(CompressDeflate);
+  fHttpServer.RegisterCompress(CompressGZip);
 {$endif}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
