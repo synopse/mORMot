@@ -79,6 +79,7 @@ begin
   end,
   lambda
     ShowMessage('Impossible to connect to the server');
+    BrowserAPI.console.timeEnd('ORM');
   end);
 end;
 

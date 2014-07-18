@@ -1,7 +1,7 @@
 <SMART>
   <Form version="2" subversion="1">
     <Created>2014-06-17T10:47:09.864</Created>
-    <Modified>2014-07-14T17:37:37.589</Modified>
+    <Modified>2014-07-18T15:32:06.707</Modified>
     <object type="TW3Form">
       <Caption>mORMot Web Test</Caption>
       <Name>LoginForm</Name>
@@ -9,7 +9,7 @@
         <Caption>&lt;b&gt;&lt;i&gt;mORMot&lt;/i&gt; Web Test&lt;/b&gt;</Caption>
         <AlignText>1</AlignText>
         <Width>184</Width>
-        <Top>16</Top>
+        <Top>8</Top>
         <StyleClass>h1</StyleClass>
         <Left>32</Left>
         <Height>32</Height>
@@ -18,7 +18,7 @@
       </object>
       <object type="TW3Panel">
         <Width>192</Width>
-        <Top>56</Top>
+        <Top>40</Top>
         <Left>24</Left>
         <Height>264</Height>
         <Name>W3Panel1</Name>
@@ -99,7 +99,7 @@
       <object type="TW3Button">
         <Caption>Offline Tests</Caption>
         <Width>160</Width>
-        <Top>336</Top>
+        <Top>312</Top>
         <Left>40</Left>
         <Height>40</Height>
         <Name>W3Button1</Name>
