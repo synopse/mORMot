@@ -381,6 +381,8 @@ unit SynCommons;
   - StrLen() function will now use faster SSE2 instructions on supported CPUs
   - introduced StrLenPas() function, to be used when buffer is protected
   - included Windows-1258 code page to be recognized as a fixed-width charset
+  - TSynAnsiFixedWidth.Create(CODEPAGE_US) will now use a hard-coded table, 
+    since some Russian system do tweak the registry to force 1252 page maps 1251
   - introducing TSynAnsiUTF8/TSynAnsiUTF16 to handle CP_UTF8/CP_UTF16 codepages
   - added UTF8AnsiConvert instance, and let TSynAnsiConvert.Engine(0) return
     the main CurrentAnsiConvert instance
@@ -1192,6 +1194,9 @@ type
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
   // - this instance is global and instantied during the whole program life time
+  // - it will be created from hard-coded values, and not using the system API,
+  // since it appeared that some systems (e.g. in Russia) did tweak the registry
+  // so that 1252 code page maps 1251 code page
   WinAnsiConvert: TSynAnsiFixedWidth;
 
   /// global TSynAnsiConvert instance to handle current system encoding
@@ -11515,22 +11520,42 @@ begin
   end;
 end;
 
+const
+  /// used for fast WinAnsi to Unicode conversion
+  // - this table contain all the unicode characters corresponding to
+  // the Ansi Code page 1252 (i.e. WinAnsi), which unicode value are > 255
+  // - values taken from MultiByteToWideChar(1252,0,@Tmp,256,@WinAnsiTable,256)
+  // so these values are available outside the Windows platforms (e.g. Linux/BSD)
+  // and if even if registry has been tweaked as such:
+  // http://www.fas.harvard.edu/~chgis/data/chgis/downloads/v4/howto/cyrillic.html
+  WinAnsiUnicodeChars: packed array[128..159] of word =
+    (8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
+     141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
+     353, 8250, 339, 157, 382, 376);
+
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var i: integer;
     A256: array[0..256] of AnsiChar;
     U256: array[0..256] of WideChar; // AnsiBufferToUnicode() write a last #0
-begin
+begin                      
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
     raise ESynException.CreateFmt('%s.Create - Invalid code page %d',
       [ClassName,fCodePage]);
-  // create internal look-up tables from Operating System returned values
+  // create internal look-up tables
   SetLength(fAnsiToWide,256);
-  for i := 0 to 255 do
-    A256[i] := AnsiChar(i);
-  if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)<>512 then
-    raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
-  move(U256,fAnsiToWide[0],256*2);
+  if aCodePage=CODEPAGE_US then begin // do not trust the Windows API :(
+    for i := 0 to 255 do
+      fAnsiToWide[i] := i;
+    for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
+      fAnsiToWide[i] := WinAnsiUnicodeChars[i];
+  end else begin // from Operating System returned values
+    for i := 0 to 255 do
+      A256[i] := AnsiChar(i);
+    if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)<>512 then
+      raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
+    move(U256,fAnsiToWide[0],256*2);
+  end;
   SetLength(fWideToAnsi,65536);
   fillchar(fWideToAnsi[1],65535,ord('?')); // '?' for unknown char
   for i := 1 to 255 do
