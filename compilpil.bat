@@ -5,19 +5,19 @@ rem ** Default compiler is Delphi 7
 set DCC=c:\progs\delphi7\bin\dcc32.exe
 set DelphiVersion=Delphi 7 %LVCL%
 if exist \dev\lib\RTL7\Classes.pas goto EnhancedRTL
-set Switches=-B -Q -DLVCL;INCLUDE_FTS3 -GD -U\dev\lib\LVCL;\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib\LVCL\;\dev\lib -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DLVCL;INCLUDE_FTS3 -GD -U\dev\lib\LVCL;\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib\LVCL\;\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 if not "%LVCL%"=="" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 goto AllSet
 :EnhancedRTL
-set Switches=-B -Q -DENHANCEDRTL;INCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DENHANCEDRTL;INCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 goto AllSet
 :AlreadySet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi5\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi5\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 if "%DelphiVersion%"=="Delphi 5" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi6\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi6\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 if "%DelphiVersion%"=="Delphi 6" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset -I\dev\lib -R\dev\lib -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
 :AllSet
 
 if not exist %DCC% goto NoDCCCompiler
@@ -79,6 +79,10 @@ cd "\dev\lib\sqlite3\Samples\04 - HTTP Client-Server"
 %DCC% Project04Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project04Server.dpr %Switches%
+@if errorlevel 1 pause
+%DCC% Project04ServerRegister.dpr %Switches%
+@if errorlevel 1 pause
+%DCC% Project04ServerStatic.dpr %Switches%
 @if errorlevel 1 pause
 
 cd "\dev\lib\sqlite3\Samples\05 - Report created from code"
@@ -192,6 +196,29 @@ cd "\dev\lib\sqlite3\Samples\23 - JavaScript Tests"
 cd "\dev\lib\sqlite3\Samples\24 - MongoDB"
 %DCC% MongoDBTests.dpr %Switches%
 @if errorlevel 1 pause
+
+cd "\dev\lib\sqlite3\Samples\25 - JSON performance"
+%DCC% JSONPerfTests.dpr %Switches%
+@if errorlevel 1 pause
+
+cd "\dev\lib\sqlite3\Samples\26 - RESTful ORM"
+%DCC% RESTserver.dpr %Switches%
+@if errorlevel 1 pause
+
+cd "\dev\lib\sqlite3\Samples\27 - CrossPlatform Clients"
+%DCC% RegressionTests.dpr %Switches%
+@if errorlevel 1 pause
+%DCC% RegressionTestsServer.dpr %Switches%
+@if errorlevel 1 pause
+%DCC% VCLClient.dpr %Switches%
+@if errorlevel 1 pause
+
+cd "\dev\lib\sqlite3\Samples\28 - Simple RESTful ORM Server"
+%DCC% RESTserver.dpr %Switches%
+@if errorlevel 1 pause
+%DCC% RESTclient.dpr %Switches%
+@if errorlevel 1 pause
+
 
 cd "\dev\lib\sqlite3\Samples\MainDemo"
 call FileMainRes.bat
