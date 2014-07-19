@@ -132,6 +132,9 @@ unit mORMotHttpServer;
         TSQLHttpServer.Create(), allowing HTTPS secure content publishing, when
         using the http.sys kind of server, or our proprietary SHA-256 /
         AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+      - added optional aAdditionalURL parameter to TSQLHttpServer.Create(), to
+        be used e.g. to registry an URI to server static file content in addition
+        to TSQLRestServer instances - need to override TSQLHttpServer.Request()
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
 
 }
@@ -274,10 +277,13 @@ type
     // instance (after proper certificate installation as explained in the SAD
     // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
     // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+    // - optional aAdditionalURL parameter can be used e.g. to registry an URI
+    // to server static file content, by overriding TSQLHttpServer.Request 
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions=useHttpApi; ServerThreadPoolCount: Integer=32;
-      aHttpServerSecurity: TSQLHttpServerSecurity=secNone); reintroduce; overload;
+      aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
+      const aAdditionalURL: AnsiString=''); reintroduce; overload;
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
     // - raise a EHttpServer exception if binding failed
     // - specify one TSQLRestServer server class to be used
@@ -287,10 +293,13 @@ type
     // instance (after proper certificate installation as explained in the SAD
     // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
     // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
+    // - optional aAdditionalURL parameter can be used e.g. to registry an URI
+    // to server static file content, by overriding TSQLHttpServer.Request
     constructor Create(const aPort: AnsiString; aServer: TSQLRestServer;
       const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions=useHttpApi; aRestAccessRights: PSQLAccessRights=nil;
-      ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone); reintroduce; overload;
+      ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
+      const aAdditionalURL: AnsiString=''); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -420,10 +429,23 @@ end;
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
-  aHttpServerSecurity: TSQLHttpServerSecurity);
-var i,j: integer;
+  aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString);
+procedure RegURL(const URI: AnsiString);
+var err: integer;
     ErrMsg: string;
+begin
+  err := THttpApiServer(fHttpServer).AddUrl(URI,aPort,
+    (aHttpServerSecurity=secSSL),aDomainName,(aHttpServerKind=useHttpApiRegisteringURI));
+  if err=NO_ERROR then
+    exit;
+  ErrMsg := 'Impossible to register URL';
+  if err=ERROR_ACCESS_DENIED then
+    ErrMsg := ErrMsg+' (administrator rights needed)';
+  raise ECommunicationException.CreateFmt('%s.Create: %s for %s',[ClassName,ErrMsg,URI]);
+end;
+var i,j: integer;
     ServersRoot: RawUTF8;
+    ErrMsg: string;
 {$ifdef WITHLOG}
     Log: ISynLog;
 {$endif}
@@ -461,19 +483,10 @@ begin
   try
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false);
-    for i := 0 to high(aServers) do begin
-      j := THttpApiServer(fHttpServer).AddUrl(
-        aServers[i].Model.Root,aPort,(aHttpServerSecurity=secSSL),aDomainName,
-        (aHttpServerKind=useHttpApiRegisteringURI));
-      if j<>NO_ERROR then begin
-        ErrMsg := 'Impossible to register URL';
-        if j=ERROR_ACCESS_DENIED then
-          ErrMsg := ErrMsg+' (administrator rights needed)';
-        raise ECommunicationException.CreateFmt('%s.Create: %s for %s',
-          [ClassName,ErrMsg,aServers[i].Model.Root]);
-        break;
-      end;
-    end;
+    for i := 0 to high(aServers) do
+      RegURL(aServers[i].Model.Root);
+    if aAdditionalURL<>'' then
+      RegURL(aAdditionalURL);
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
@@ -514,9 +527,11 @@ end;
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aServer: TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; aRestAccessRights: PSQLAccessRights;
-  ServerThreadPoolCount: integer; aHttpServerSecurity: TSQLHttpServerSecurity);
+  ServerThreadPoolCount: integer; aHttpServerSecurity: TSQLHttpServerSecurity;
+  const aAdditionalURL: AnsiString);
 begin
-  Create(aPort,[aServer],aDomainName,aHttpServerKind,ServerThreadPoolCount,aHttpServerSecurity);
+  Create(aPort,[aServer],aDomainName,aHttpServerKind,ServerThreadPoolCount,
+    aHttpServerSecurity,aAdditionalURL);
   if aRestAccessRights<>nil then
     DBServerAccessRight[0] := aRestAccessRights;
 end;
