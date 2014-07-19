@@ -19,7 +19,7 @@ var delete: boolean;
 
 procedure Call(const Root: RawByteString);
 begin
-  writeln(REGSTR[delete],' of /',root,':8080/+ for http.sys');
+  writeln(REGSTR[delete],' of http://+:8080/',root,'/ for http.sys');
   writeln(THttpApiServer.AddUrlAuthorize(root,'8080',false,'+',delete));
 end;
 
@@ -28,7 +28,8 @@ begin
   delete := (ParamCount=1) and SameText(ParamStr(1),'/DELETE');
   // perform url (un)registration for http.sys
   // (e.g. to be run as administrator under Windows Vista/Seven)
-  Call('root');
+  Call('root');   // for the TSQLModel as defined in SampleData.pas
+  Call('static'); // for Project04Static.dpr
   // we're done
   WriteLn('Done - Press ENTER to Exit');
   ReadLn;
