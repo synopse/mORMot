@@ -430,7 +430,7 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString);
-procedure RegURL(const URI: AnsiString);
+procedure RegURL(const URI: RawByteString);
 var err: integer;
     ErrMsg: string;
 begin

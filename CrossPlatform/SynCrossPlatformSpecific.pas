@@ -511,7 +511,7 @@ begin
     if Call.Method='PUT' then
       fConnection.Put(fURL+Call.Url,InStr) else
     if Call.Method='DELETE' then
-      fConnection.Delete(fURL+Call.Url,OutStr) else
+      fConnection.Delete(fURL+Call.Url) else
       raise Exception.CreateFmt('Indy does not know method %s',[Call.Method]);
     Call.OutStatus := fConnection.Response.ResponseCode;
     Call.OutHead := fConnection.Response.RawHeaders.Text;
