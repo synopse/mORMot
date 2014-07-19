@@ -5078,15 +5078,15 @@ begin
           if fCompressAcceptEncoding<>'' then
             Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads);
           if Context.OutContentType=HTTP_RESP_STATICFILE then begin
-            // response is file -> let http.sys serve it (OutContent is UTF-8)
+            // response is file -> OutContent is UTF-8 file name to be served
             FileHandle := FileOpen(
               {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
               fmOpenRead or fmShareDenyNone);
             if PtrInt(FileHandle)<0 then begin
-              SendError(404,SysErrorMessagePerModule(GetLastError,HTTPAPI_DLL));
+              SendError(404,SysErrorMessage(GetLastError));
               continue;
             end;
-            try
+            try // http.sys will serve then close the file from kernel
               DataChunkFile.DataChunkType := hctFromFileHandle;
               DataChunkFile.FileHandle := FileHandle;
               flags := 0;
