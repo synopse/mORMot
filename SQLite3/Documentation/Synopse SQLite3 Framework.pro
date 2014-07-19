@@ -6527,7 +6527,7 @@ Both {\f1\fs20 THttpApiServer} and {\f1\fs20 THttpServer} classes will receive a
 If the request is a remote ORM operation, a @*JSON@ response will be retrieved from the internal @*cache@ of the framework, or computed using the {\i @*SQLite3@} database engine. In case of a remote service access - see @11@ - the request will be computed on the server side, also marshalling the data as JSON.
 The resulting JSON content will be compressed using our very optimized {\i @*SynLZ@} algorithm (20 times faster than Zip/Deflate for compression), if the client is a Delphi application knowing about {\i SynLZ} - for an @*AJAX@ client, it won't be compressed by default (even if you can enable the deflate algorithm - which may slow down the server).
 Then the response will be marked as to be sent back to the Client...
-:  High-performance http.sys server
+:88  High-performance http.sys server
 Since {\i Windows XP SP2} and {\i Windows Server 2003}, the Operating System provides a kernel stack to handle @**HTTP@ requests. This {\f1\fs20 @**http.sys@} driver is in fact a full featured HTTP server, running in kernel mode. It is part of the networking subsystem of the {\i Windows} operating system, as a core component.
 The {\f1\fs20 SynCrtSock} unit can implement a HTTP server based on this component. Of course, the {\i Synopse mORMot framework} will use it. If it's not available, it will launch our pure Delphi optimized HTTP server, using I/O completion ports and a Thread Pool.
 What’s good about {\f1\fs20 https.sys}?
@@ -6535,18 +6535,20 @@ What’s good about {\f1\fs20 https.sys}?
 - {\i Enhanced stability}: When a worker process fails, service is not interrupted; the failure is undetectable by the user because the kernel queues the requests while the WWW service starts a new worker process for that application pool.
 - {\i Faster process}: Requests are processed faster because they are routed directly from the kernel to the appropriate user-mode worker process instead of being routed between two user-mode processes, i.e. the good old {\i WinSock} library and the worker process;
 - {\i Embedded @*SSL@ process}, when secure @*HTTPS@ communication is needed.
+:   Use the http.sys server
+Take a look at sample "{\f1\fs20 04 - HTTP Client-Server}", which is able to serve a {\i SQLite3} database content over HTTP, using our RESTful ORM server.\line By default, it will try to use the {\f1\fs20 http.sys} server, then fall-back to plain socket server, in case of failure.
 In fact, two steps are performed by the {\f1\fs20 TSQLHttpServer} constructor:
 - The HTTP Server API is first initialized (if needed) during {\f1\fs20 THttpApiServer.Create} constructor call. The {\f1\fs20 HttpApi.dll} library (which is the wrapper around {\f1\fs20 http.sys}) is loaded dynamically: so if you are running an old system ({\i Windows XP SP1} for instance), you could still be able to use the server.
 - It then tries to register the URI matching the @*REST@ful model - @9@ - via the {\f1\fs20 THttpApiServer.AddUrl} method. In short, the {\f1\fs20 @*TSQLModel@. Root} property is used to compute the RESTful URI needed, just by the book. You can register several {\f1\fs20 TSQLRestServer} instances, each with its own {\f1\fs20 TSQLModel. Root}, if you need it.
 As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sys} is not available, or if it was not possible to register the URLs), the {\f1\fs20 TSQLHttpServer} class will fall back into using the other {\f1\fs20 THttpServer} class, which is a plain Delphi multi-threaded server. It won't be said that we will let you down!
 Inside {\f1\fs20 http.sys} all the magic is made... it will listen to any incoming connection request, then handle the headers, then check against any matching URL.
 {\f1\fs20 http.sys} will handle all the communication by itself, leaving the server threads free to process the next request.
-You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.
-:  URI authorization as Administrator
+You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
+:   URI authorization as Administrator
 This works fine under XP. Performances are very good, and stability is there. But... here comes the UAC nightmare again.
 Security settings have changed since XP. Now only applications running with Administrator rights can register URLs to {\f1\fs20 http.sys}. That is, no real application. So the URI registration step will always fail with the default settings, under Vista and Seven.
 The only case when authorization will be possible is when the application launched as a Windows Service, with default services execution user. By default, Windows services are launched with a User which has the Administrator rights.
-:   Secure specific authorization
+:    Secure specific authorization
 Standard security policy, as requested by Windows for all its {\i http.sys} based systems (i.e. IIS and WCF services) is to explicitly register the URI.
 Depending on the system it runs on (i.e. Windows XP or Vista and up), a diverse command line tool is to be used. Can be confusing.
 To keep it simple, our {\f1\fs20 SynCrtSock} unit provides a dedicated method to authorize a particular URI prefix to be registered by any user.
@@ -6564,7 +6566,8 @@ Here is a sample program which can be launched to allow our {\f1\fs20 TestSQL3.d
 !begin
 !!  THttpApiServer.AddUrlAuthorize('root','888',false,'+'));
 !end.
-:   Automatic authorization
+Take also a look at the {\f1\fs20 Project04ServerRegister.dpr} sample, in the context of a whole client/server RESTful solution over HTTP.
+:    Automatic authorization
 An easier possibility could be to run the server application at least once as system Administrator.
 The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} parameter. By default, it will be set to {\f1\fs20 @*useHttpApi@}. If you specify {\f1\fs20 useHttpApiRegisteringURI}, the class will register the URI before launching the server process.
 All {\i mORMot} samples are compiled with this flag, as such:
@@ -7559,11 +7562,16 @@ If @*authentication@ - see @18@ - is used, the current session, user and group I
 In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content, i.e. all incoming and outgoing values, including headers and message body. Depending on the transmission protocol used, you can retrieve e.g. HTTP header information. For instance, here is how you can access the caller remote IP address and client application user agent:
 ! aRemoteIP := FindIniNameValue(pointer(Ctxt.Call.InHead),'REMOTEIP: ');
 ! aUserAgent := FindIniNameValue(pointer(Ctxt.Call.InHead),'USER-AGENT: ');
+\page
 : Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
 In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
+: Returning file content
+Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
+You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
+Note that this is the preferred way of returning some static file content within {\i mORMot}.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.

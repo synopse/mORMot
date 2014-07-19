@@ -8,6 +8,9 @@
    This sample will serve as REST the data as defined in SampleData,
    and serve 'www' sub-folder content within localhost:8080/static
 
+   It is IMHO preferred and less-error prone to define a method-based service,
+   then let the method return the file using Ctxt.ReturnFile() method.
+   
    See also http://synopse.info/forum/viewtopic.php?id=1896
 
    Version 1.18
