@@ -1345,7 +1345,7 @@ begin
       if IdemPropName(copy(result,5,6),'Record') then
         delete(result,1,10) else
         delete(result,1,4) else
-      if result[1]<>'T' then
+      if result[1]='T' then
         delete(result,1,1);
   end;
 end;
