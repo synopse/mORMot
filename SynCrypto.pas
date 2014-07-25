@@ -1598,10 +1598,10 @@ var A: TAES;
     i,k,ks: integer;
 begin
   // ensure that we have $2000 bytes of contiguous XOR tables ;)
-  result := (cardinal(@TD0)+$400=cardinal(@TD1))and(cardinal(@TD0)+$800=cardinal(@TD2))
-    and(cardinal(@TD0)+$C00=cardinal(@TD3))and(cardinal(@TD0)+$1000=cardinal(@TE0))
-    and(cardinal(@TD0)+$1400=cardinal(@TE1))and(cardinal(@TD0)+$1800=cardinal(@TE2))
-    and(cardinal(@TD0)+$1C00=cardinal(@TE3));
+  result := (PtrUInt(@TD0)+$400=PtrUInt(@TD1))and(PtrUInt(@TD0)+$800=PtrUInt(@TD2))
+    and(PtrUInt(@TD0)+$C00=PtrUInt(@TD3))and(PtrUInt(@TD0)+$1000=PtrUInt(@TE0))
+    and(PtrUInt(@TD0)+$1400=PtrUInt(@TE1))and(PtrUInt(@TD0)+$1800=PtrUInt(@TE2))
+    and(PtrUInt(@TD0)+$1C00=PtrUInt(@TE3));
   if not result then exit;
   // test
   result := false;
@@ -1775,7 +1775,7 @@ begin
       t3 := Te0[s3 and $ff] xor Te1[s0 shr 8 and $ff] xor Te2[s1 shr 16 and $ff] xor Te3[s2 shr 24] xor pK^[55];
     end;
   end;
-  inc(cardinal(pK), (ctx.rounds shl 4));
+  inc(PtrUInt(pK), (ctx.rounds shl 4));
 
   TWA4(BO)[0] := ((SBox[t0        and $ff])        xor
                   (SBox[t1 shr  8 and $ff]) shl  8 xor
@@ -2305,9 +2305,9 @@ begin
       t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[55];
     end;
   end;
-  inc(cardinal(pK), (ctx.rounds shl 4));
+  inc(PtrUInt(pK), (ctx.rounds shl 4));
 
-  // Uses InvSbox and shl, needs type cast cardinal() for   
+  // Uses InvSbox and shl, needs type cast cardinal() for
   // 16 bit compilers: here InvSbox is byte, Td4 is cardinal
   TWA4(BO)[0] := ((InvSBox[t0 and $ff]) xor
     (InvSBox[t3 shr  8 and $ff]) shl  8 xor
@@ -2518,7 +2518,7 @@ var i: integer;
     ctx: TAESContext absolute Context;
 begin
 {$ifdef USEPADLOCK}
-//  assert(cardinal(pIn) and $F=0); // must be 16 bytes aligned
+//  assert(PtrUInt(pIn) and $F=0); // must be 16 bytes aligned
   if ctx.ViaCtx<>nil then begin
     if Count<>0 then begin
       Count := Count*AESBlockSize;
@@ -3098,9 +3098,9 @@ begin
   if KeySize=0 then exit; // no Tmp to be allocated on direct copy
 {$ifdef USEPADLOCK} // PADLOCK prefers 16-bytes alignment
   if (KeySize=32) or (InStream<>nil) or (OutStream<>nil) or
-     (cardinal(bIn) and $f<>0) or (cardinal(bOut) and $f<>0) then begin
+     (PtrUInt(bIn) and $f<>0) or (PtrUInt(bOut) and $f<>0) then begin
     New(Tmp);
-//    assert(cardinal(Tmp) and $F=0);
+//    assert(PtrUInt(Tmp) and $F=0);
   end;
 {$else}
   if (KeySize=32) or (InStream<>nil) or (OutStream<>nil) then 
@@ -3785,11 +3785,11 @@ begin
     Inc(bytes[1]);  // Carry from low to high
   t := 64 - (t and $3f);  // Space available in in (at least 1)
   if t>len then begin
-    Move(p^, Pointer(Cardinal(@in_) + 64 - t)^, len);
+    Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, len);
     Exit;
   end;
   // First chunk is an odd size
-  Move(p^, Pointer(Cardinal(@in_) + 64 - t)^, t);
+  Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, t);
   MD5Transform(buf, in_);
   inc(PtrUInt(p), t);
   dec(len, t);
@@ -4044,7 +4044,7 @@ var Data: TSHAContext absolute Context;
     aLen: integer;
 begin
   if Buffer=nil then exit; // avoid GPF
-  inc(Data.MLen, Int64(cardinal(Len)) shl 3);
+  inc(Data.MLen, Int64(Cardinal(Len)) shl 3);
   while Len > 0 do begin
     aLen := sizeof(Data.Buffer)-Data.Index;
     if aLen<=Len then begin
