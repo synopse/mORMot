@@ -32,6 +32,7 @@ unit mORMot;
     Alexander (chaa)
     Esmond
     Pavel (mpv)
+    Martin Suer
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -792,7 +793,7 @@ unit mORMot;
       TSQLRestServer.SQLAuthUserClass/SQLAuthGroupClass new properties
     - added TSQLRestServer.OnSessionCreate / OnSessionClosed methods
     - added TSQLRestServer.SessionClass property to specify the class type
-      to handle in-memory sessions, and override e.g. IsValidURI() method 
+      to handle in-memory sessions, and override e.g. IsValidURI() method
     - CreateMissingTables() method is not declared as virtual in TSQLRestServer
     - TSQLRestServer.URI() and TSQLRestClientURI.InternalURI() methods now uses
       one TSQLRestURIParams parameter for all request input and output values
@@ -812,6 +813,7 @@ unit mORMot;
     - added JSON serialization of Variant and WideString types, and corresponding
       TJSONToObjectOptions optional parameter in JSONToObject() / ObjectToJSON()
       functions and WriteObject() method - including TDocVariant or TBSONVariant
+    - JSONToObject() is now able to unserialize a nested record - see [5e49b3096a]
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
       'Warning' text as a sllWarning item (will enhance JSONToObject() process)
@@ -31393,13 +31395,18 @@ begin
           SetBit(V,ndx);
         end;
         SetOrdProp(Value,pointer(P),V);
+      end else
+      if (Kind=tkRecord) and (From^='{') then begin // from Delphi XE5+
+        From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,P^.PropType^);
+        if From=nil then
+          exit; // invalid '{record}' content
       end else begin
         if Kind<>tkClass then
-          exit; // true nested object should begin with '[' or '{' 
+          exit; // true nested object should begin with '[' or '{'
         if (IsObj in [oSQLRecord,oSQLMany]) and
            (P^.PropType^^.ClassSQLFieldType=sftID) and
            not TSQLRecord(Value).fFill.JoinedFields then
-          exit; // only TSQLRecordMany properties are true instances  
+          exit; // only TSQLRecordMany properties are true instances
         // will handle '[TCollection...' '[TStrings...' '{TObject...'
         From := P^.ClassFromJSON(Value,From,NestedValid,Options);
         if not NestedValid then begin
