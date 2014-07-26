@@ -62,7 +62,7 @@ program TestSQL3;
 	
   Version 1.18
   - renamed SQLite3*.pas units to mORMot*.pas
-  - included Windows 64 bit regression tests
+  - included Windows 64 bit regression tests (and potential FullDebugMode)
   - all tests passed with Delphi XE3 and XE4 for Win32 and Win64 platforms
 
 
@@ -82,7 +82,12 @@ program TestSQL3;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
-  {$I SynDprUses.inc}
+  {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
+  FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
+  FastMM4 in '..\RTL7\FastMM4.pas',
+  {$else}
+  {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
+  {$endif}
   mORMotSelfTests in 'mORMotSelfTests.pas',
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',
