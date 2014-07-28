@@ -79,6 +79,11 @@ type
 
   PByteDynArray = ^TByteDynArray;
 
+  {$ifndef UNICODE}
+  NativeInt = integer;
+  NativeUInt = cardinal;
+  {$endif}
+
   // this type will store UTF-8 encoded buffer on NextGen platform
 {$ifdef NEXTGEN}
   TUTF8Buffer = TBytes;
@@ -169,7 +174,9 @@ type
   TJSONVariant = class(TInvokeableVariantType)
   protected
     {$ifndef FPC}
+    {$ifndef ISDELPHI6}
     function FixupIdent(const AText: string): string; override;
+    {$endif}
     {$endif}
   public
     procedure Copy(var Dest: TVarData; const Source: TVarData;
@@ -599,6 +606,13 @@ begin
 end;
 
 {$ifdef KYLIX}
+  {$define NOFORMATSETTINGS}
+{$endif}
+{$ifdef ISDELPHI6}
+  {$define NOFORMATSETTINGS}
+{$endif}
+
+{$ifdef NOFORMATSETTINGS}
 procedure DoubleToJSON(Value: double; var result: string);
 var decsep: Char;
 begin // warning: this is NOT thread-safe if you mix settings
@@ -1737,10 +1751,12 @@ begin
 end;
 
 {$ifndef FPC}
+{$ifndef ISDELPHI6}
 function TJSONVariant.FixupIdent(const AText: string): string;
 begin // we expect the names to be case-sensitive
   result := AText;
 end;
+{$endif}
 {$endif}
 
 function TJSONVariant.GetProperty(var Dest: TVarData; const V: TVarData;
@@ -1934,10 +1950,12 @@ end;
 initialization
   JSONVariantType := TJSONVariant.Create;
   {$ifndef FPC}
+  {$ifndef NOFORMATSETTINGS}
   {$ifdef ISDELPHIXE}
   SettingsUS := TFormatSettings.Create('en_US');
   {$else}
   GetLocaleFormatSettings($0409,SettingsUS);
+  {$endif}
   {$endif}
   {$endif}
 

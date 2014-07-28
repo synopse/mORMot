@@ -2223,6 +2223,7 @@ var buf: THttpBody;
     a: integer;
     sha: TSHA256;
 begin
+  result := '';
   sha := TSHA256.Create;
   try
     for a := 0 to high(Values) do begin

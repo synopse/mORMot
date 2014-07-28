@@ -69,6 +69,9 @@
     {$define ISDELPHIXE}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+    {$ifdef VER140} 
+      {$define ISDELPHI6}
+    {$endif}
     {$if CompilerVersion >= 18}    // Delphi 2006 or newer
       {$define HASINLINE}
     {$ifend}
