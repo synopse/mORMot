@@ -257,6 +257,7 @@ unit SynPdf;
     parameter has been also added to TPdfCanvas.RenderMetaFile() - it will
     produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]  
   - fixed text clipping - thanks Pierre for the patch!
+  - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6
 
 }
 
@@ -440,7 +441,7 @@ type
   TPdfDate = PDFString;
 
   /// the internal pdf file format 
-  TPdfFileFormat = (pdf13, pdf14, pdf15);
+  TPdfFileFormat = (pdf13, pdf14, pdf15, pdf16);
 
   /// PDF exception, raised when an invalid value is given to a constructor
   EPdfInvalidValue = class(Exception);
@@ -482,9 +483,11 @@ type
     plSinglePage, plOneColumn, plTwoColumnLeft, plTwoColumnRight);
 
   /// Viewer preferences specifying how the reader User Interface must start
+  // - vpEnforcePrintScaling will set the file version to be PDF 1.6
   TPdfViewerPreference = (
-    vpHideToolbar, vpHideMenubar, vpHideWindowUI, vpFitWindow, vpCenterWindow);
-
+    vpHideToolbar, vpHideMenubar, vpHideWindowUI, vpFitWindow, vpCenterWindow,
+    vpEnforcePrintScaling);
+                         
   /// set of Viewer preferences
   TPdfViewerPreferences = set of TPdfViewerPreference;
 
@@ -2121,6 +2124,7 @@ type
   TPdfCatalog = class(TPdfDictionaryWrapper)
   private
     FOpenAction: TPdfDestination;
+    FOwner: TPdfDocument;
     procedure SetPageLayout(Value: TPdfPageLayout);
     procedure SetPageMode(Value: TPdfPageMode);
     procedure SetNonFullScreenPageMode(Value: TPdfPageMode);
@@ -5382,6 +5386,7 @@ begin
   FXObjectList.FSaveAtTheEnd := true;
   FObjectList := TList.Create;
   FRoot := TPdfCatalog.Create;
+  FRoot.FOwner := self;
   CatalogDictionary := TPdfDictionary.Create(FXref);
   FXref.AddObject(CatalogDictionary);
   CatalogDictionary.AddItem('Type', 'Catalog');
@@ -5543,7 +5548,7 @@ procedure TPdfDocument.SaveToStreamDirectBegin(AStream: TStream;
   ForceModDate: TDateTime);
 const PDFHEADER: array[TPdfFileFormat] of PDFString = (
     '%PDF-1.3'#10, '%PDF-1.4'#10'%'#228#229#230#240#10,
-    '%PDF-1.5'#10'%'#241#242#243#244#10);
+    '%PDF-1.5'#10'%'#241#242#243#244#10, '%PDF-1.6'#10'%'#245#246#247#248#10);
 begin
   if fSaveToStreamWriter<>nil then
     raise EPdfInvalidOperation.Create('SaveToStreamDirectBegin called twice');
@@ -6060,9 +6065,10 @@ end;
 
 procedure TPdfDocument.SetGeneratePDF15File(const Value: boolean);
 begin
-  if Value then
-    fFileFormat := pdf15 else
-    fFileFormat := pdf14;
+  if fFileFormat<>pdf16 then
+    if Value then
+      fFileFormat := pdf15 else
+      fFileFormat := pdf14;
 end;
 
 
@@ -7161,7 +7167,8 @@ end;
 
 const
   PDF_PAGE_VIEWER_NAMES: array[TPdfViewerPreference] of PDFString = (
-    'HideToolbar', 'HideMenubar', 'HideWindowUI', 'FitWindow', 'CenterWindow');
+    'HideToolbar', 'HideMenubar', 'HideWindowUI', 'FitWindow', 'CenterWindow',
+    'PrintScaling');
 
 function TPdfCatalog.GetViewerPreference: TPdfViewerPreferences;
 var FDictionary: TPdfDictionary;
@@ -7212,11 +7219,18 @@ begin
     FDictionary := TPdfDictionary.Create(Data.ObjectMgr);
     FData.AddItem('ViewerPreferences', FDictionary);
   end;
-  if FDictionary<>nil then
+  if FDictionary<>nil then begin
     for V := low(V) to high(V) do
       if V in Value then
         FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V], TPdfBoolean.Create(true)) else
         FDictionary.RemoveItem(PDF_PAGE_VIEWER_NAMES[V]);
+    if vpEnforcePrintScaling in Value then begin
+      FDictionary.AddItem('Enforce', TPdfArray.CreateNames(Data.ObjectMgr,['PrintScaling']));
+      if fOwner<>nil then
+        fOwner.fFileFormat := pdf16;
+    end else
+      FDictionary.RemoveItem('Enforce');
+  end;
 end;
 
 function TPdfCatalog.GetPageMode: TPdfPageMode;
