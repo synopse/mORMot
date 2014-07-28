@@ -9123,6 +9123,7 @@ type
     // !  assert(Doc.Value['name']='John');
     // !  assert(variant(Doc).name='John');
     // !end;
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure Init(aOptions: TDocVariantOptions=[]);
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
@@ -9137,6 +9138,7 @@ type
     // !  Doc.AddValue('name','John');
     // !  Doc.AddValue('year',1972);
     // - this method is called e.g. by _Obj() and _ObjFast() global functions
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObject(const NameValuePairs: array of const;
       aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based array content
@@ -9156,21 +9158,24 @@ type
     // !  Doc.AddItem(3.0);
     // !  assert(Doc.Count=3);
     // !  for i := 0 to Doc.Count-1 do
-    // !    writeln(Doc.Value[i]); 
+    // !    writeln(Doc.Value[i]);
     // !end;
     // - this method is called e.g. by _Arr() and _ArrFast() global functions
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArray(const Items: array of const;
       aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as variant dynamic array
     // - if Items is [], the variant will be set as null
     // - will be almost immediate, since TVariantDynArray is reference-counted
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
       aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as variant dynamic array
     // - if Items is [], the variant will be set as null
     // - will be almost immediate, since TVariantDynArray is reference-counted
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObjectFromVariants(const aNames: TRawUTF8DynArray;
        const aValues: TVariantDynArray; aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based object content
@@ -9179,6 +9184,7 @@ type
     // should make a private copy before running this method
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     function InitJSONInPlace(JSON: PUTF8Char;
       aOptions: TDocVariantOptions=[]; aEndOfObject: PUTF8Char=nil): PUTF8Char;
     /// initialize a variant instance to store some document-based object content
@@ -9186,7 +9192,8 @@ type
     // - a private copy of the incoming JSON buffer will be used, then
     // it will call the other overloaded InitJSONInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
-    function InitJSON(const JSON: RawUTF8; aOptions: TDocVariantOptions=[]): boolean; 
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    function InitJSON(const JSON: RawUTF8; aOptions: TDocVariantOptions=[]): boolean;
     /// ensure a document-based variant instance will have one unique options set
     // - this will create a copy of the supplied TDocVariant instance, forcing
     // all nested events to have the same set of Options
@@ -9195,6 +9202,7 @@ type
     // or per-value (if you set JSON_OPTIONS[false]) whatever options the nested
     // objects or arrays were created with
     // - will raise an EDocVariant if the supplied variant is not a TDocVariant
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitCopy(const SourceDocVariant: variant; aOptions: TDocVariantOptions);
 
     /// to be called before any Init*() method call, when a previous Init*()
