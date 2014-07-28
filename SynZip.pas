@@ -174,9 +174,9 @@ type
   /// the format used for storing data
   TSynZipCompressorFormat = (szcfRaw, szcfZip, szcfGZ);
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
 type // Delphi 5 doesn't have those base types defined :(
-  PInteger = ^Integer;
+  PInteger = ^Integer;            
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;
 {$endif}
@@ -764,7 +764,7 @@ begin
     fHr.fileInfo.neededVersion := $14;
     result := SetFilePointer(Handle,0,nil,FILE_CURRENT);
     fHr.localHeadOff := result-fAppendOffset;
-    {$ifdef CONDITIONALEXPRESSIONS}
+    {$ifndef DELPHI5OROLDER}
     // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
     if Is7BitAnsi(pointer(zipName)) then begin
     {$endif}
@@ -774,7 +774,7 @@ begin
       SetString(intName,PAnsiChar(pointer(zipName)),length(zipName));
       {$endif}
       fHr.fileInfo.UnSetUTF8FileName;
-    {$ifdef CONDITIONALEXPRESSIONS}
+    {$ifndef DELPHI5OROLDER}
     end else begin
       intName := UTF8Encode(WideString(zipName));
       fHr.fileInfo.SetUTF8FileName;

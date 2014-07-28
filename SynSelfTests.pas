@@ -2191,7 +2191,7 @@ end;
   {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
 {$endif}
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
   {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
 {$endif}
 
@@ -6396,45 +6396,6 @@ begin
   Check(CompressSynLZO(s,false)='synlzo');
   Check(s=Data);
 end;
-
-{$ifndef CONDITIONALEXPRESSIONS} // Delphi 5 linking error?
-function CompressSynLZ(var Data: AnsiString; Compress: boolean): AnsiString;
-var DataLen, len: integer;
-    P: PAnsiChar;
-begin
-  DataLen := length(Data);
-  if DataLen<>0 then // '' is compressed and uncompressed to ''
-  if Compress then begin
-    len := SynLZcompressdestlen(DataLen)+8;
-    SetString(result,nil,len);
-    P := pointer(result);
-    PCardinal(P)^ := Hash32(pointer(Data),DataLen);
-    {$ifdef PUREPASCAL}
-    len := SynLZcompress1pas(pointer(Data),DataLen,P+8);
-    {$else}
-    len := SynLZcompress1asm(pointer(Data),DataLen,P+8);
-    {$endif}
-    PCardinal(P+4)^ := Hash32(pointer(P+8),len);
-    SetString(Data,P,len+8);
-  end else begin
-    result := '';
-    P := pointer(Data);
-    if (DataLen<=8) or (Hash32(pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
-      exit;
-    len := SynLZdecompressdestlen(P+8);
-    SetLength(result,len);
-    if (len<>0) and ((
-      {$ifdef PUREPASCAL}SynLZdecompress1pas{$else}SynLZdecompress1asm{$endif}
-        (P+8,DataLen-8,pointer(result))<>len) or
-       (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
-      result := '';
-      exit;
-    end else
-      SetString(Data,PAnsiChar(pointer(result)),len);
-  end;
-  result := 'synlz';
-end;
-{$endif}
 
 procedure TTestCompression._SynLZ;
 var s,t: RawByteString;

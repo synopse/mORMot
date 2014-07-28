@@ -229,7 +229,7 @@ type
   PtrInt = integer;
   PtrUInt = cardinal;
 {$endif}
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
   // Delphi 5 doesn't have those base types defined :(
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;

@@ -263,7 +263,7 @@ type
   PtrUInt = {$ifdef CPUX64} NativeUInt {$else} cardinal {$endif};
 {$endif}
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
 type // Delphi 5 doesn't have those base types defined :(
   PByte = ^Byte;
   PWord = ^Word;

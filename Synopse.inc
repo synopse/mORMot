@@ -207,12 +207,24 @@
   {.$define NOEXCEPTIONINTERCEPT}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$ifdef VER140} // Delphi 6
-      {$define DELPHI6OROLDER}
-      {$undef ENHANCEDRTL} // Delphi 6 doesn't have our Enhanced Runtime library
+    {$ifdef LINUX}
+      {$if RTLVersion = 14.5}
+        // Kylix 3 will be handled just like Delphi 7
+        {$undef ENHANCEDRTL} // Enhanced Runtime library not fully tested yet
+        {$define NOVARCOPYPROC}
+        {$define NOEXCEPTIONINTERCEPT} // no exception interception yet
+      {$else}
+      Kylix1/2 are unsupported
+      {$ifend}
     {$else}
-      {$define WITHUXTHEME}
-    {$endif}
+      {$ifdef VER140} // Delphi 6
+        {$define DELPHI6OROLDER}
+        {$define NOVARCOPYPROC}
+        {$undef ENHANCEDRTL} // Delphi 6 doesn't have our Enhanced Runtime library
+      {$else}
+        {$define WITHUXTHEME} // Delphi 7 and up handle UI theming
+      {$endif}
+    {$endif LINUX}
     {$if CompilerVersion >= 17}
     {$ifend}
     {$if CompilerVersion >= 18}
@@ -264,6 +276,7 @@
     {$define DELPHI5OROLDER}
     {$define MSWINDOWS}
     {$define NOVARIANTS}
+    {$define NOVARCOPYPROC}
     {$undef ENHANCEDRTL} // Delphi 5 doesn't have our Enhanced Runtime library
   {$ENDIF}
 

@@ -2905,10 +2905,12 @@ function FindAnsi(A, UpperValue: PAnsiChar): boolean;
 // - UTF-8 decoding is done on the fly (no temporary decoding buffer is used)
 function FindUTF8(U: PUTF8Char; UpperValue: PAnsiChar): boolean;
 
+{$ifdef MSWINDOWS}
 /// return true if Uppe (Unicode encoded) is contained in U^ (UTF-8 encoded)
 // - will use the slow but accurate Operating System API to perform the
 // comparison at Unicode-level
 function FindUnicode(PW: PWideChar; Upper: PWideChar; UpperLen: integer): boolean;
+{$endif}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a PUTF8Char to avoid any memory allocation
@@ -5638,7 +5640,9 @@ type
     fBuf: PAnsiChar;
     fBufSize: cardinal;
     fFile: THandle;
+    {$ifdef MSWINDOWS}
     fMap: THandle;
+    {$endif}
     fFileSize: Int64;
     fFileLocal: boolean;
   public
@@ -7611,6 +7615,24 @@ function CreateInternalWindow(const aWindowName: string; aObject: TObject): HWND
   - both parameter values are then reset to ''/0 }
 function ReleaseInternalWindow(var aWindowName: string; var aWindow: HWND): boolean;
 
+var
+  /// compatibility function, to be implemented according to the running OS
+  // - will use the corresponding native API function under Vista+, or
+  // will emulate it for older Windows versions
+  GetTickCount64: function: Int64; stdcall;
+
+{$else}
+
+/// compatibility function, to be implemented according to the running OS
+// - expect more or less the same result as the homonymous Win32 API function
+function GetTickCount64: Int64;
+
+/// compatibility function for Linux
+function GetCurrentThreadID: LongWord; cdecl;
+  external 'libpthread.so.0' name 'pthread_self';
+
+{$endif MSWINDOWS}
+
 type
   /// small memory buffer used to backup a RedirectCode() redirection hook
   TPatchCode = array[0..4] of byte;
@@ -7634,20 +7656,6 @@ procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 
 /// self-modifying code - restore a code from its RedirectCode() backup
 procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
-
-var
-  /// compatibility function, to be implemented according to the running OS
-  // - will use the corresponding native API function under Vista+, or
-  // will emulate it for older Windows versions
-  GetTickCount64: function: Int64; stdcall;
-
-{$else}
-
-/// compatibility function, to be implemented according to the running OS
-// - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64;
-
-{$endif MSWINDOWS}
 
 
 type
@@ -9628,8 +9636,6 @@ const
 { ************ Unit-Testing classes and functions }
 
 type
-{$ifdef MSWINDOWS}
-
   /// pointer to ta high resolution timer object/record
   PPrecisionTimer = ^TPrecisionTimer;
 
@@ -9640,7 +9646,9 @@ type
   TPrecisionTimer = {$ifndef UNICODE}object{$else}record{$endif}
   private
     iStart,iStop,iResume: Int64;
+    {$ifdef MSWINDOWS}
     iFreq: Int64;
+    {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
     iTime: Int64;
   public
@@ -9723,7 +9731,9 @@ type
     function ByCount(Count: cardinal): RawUTF8;
   end;
 
+{$ifdef MSWINDOWS}
 {$ifndef DELPHI5OROLDER}
+
   /// a simple class which will set FPU exception flags for a code block
   // - using an IUnknown interface to let the compiler auto-generate a
   // try..finally block statement to reset the FPU exception register
@@ -9768,8 +9778,8 @@ type
     // - this method is thread-safe and re-entrant (by reference-counting)
     class function ForDelphiCode: IUnknown;
   end;
-{$endif DELPHI5OROLDER}
 
+{$endif DELPHI5OROLDER}
 {$endif MSWINDOWS}
 
   /// the prototype of an individual test
@@ -9970,10 +9980,8 @@ type
     // - some internal versions, e.g.
     // - every line of text must explicitly BEGIN with #13#10
     CustomVersions: string;
-{$ifdef MSWINDOWS}
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
-{$endif}
     /// create the test instance
     // - if an identifier is not supplied, the class name is used, after
     // T[Syn][Test] left trim and un-camel-case
@@ -10334,7 +10342,9 @@ type
     fBufferSize: integer;
     fHRTimeStamp: boolean;
     fWithUnitName: boolean;
+    {$ifdef MSWINDOWS}
     fAutoFlush: cardinal;
+    {$endif}
     {$ifndef NOEXCEPTIONINTERCEPT}
     fHandleExceptions: boolean;
     {$endif}
@@ -10346,7 +10356,9 @@ type
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     function CreateSynLog: TSynLog;
+    {$ifdef MSWINDOWS}
     procedure SetAutoFlush(TimeOut: cardinal);
+    {$endif}
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
   public
@@ -10433,6 +10445,7 @@ type
     // - unit name is available from RTTI if the class has published properties
     // - set to FALSE by default
     property WithUnitName: boolean read fWithUnitName write fWithUnitName;
+    {$ifdef MSWINDOWS}
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
     // - by default, the log file will be written for every 4 KB of log - this
@@ -10441,6 +10454,7 @@ type
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal read fAutoFlush write SetAutoFlush;
+    {$endif}
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     // - can be set to a number of rotating files: rotation and compression will 
@@ -10533,7 +10547,9 @@ type
     fThreadIndex: integer;
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
+    {$ifdef MSWINDOWS}
     fFrequencyTimeStamp: Int64;
+    {$endif}
     fFileName: TFileName;
     fFileRotationSize: cardinal;
     fThreadHash: TWordDynArray;
@@ -10812,9 +10828,11 @@ type
     /// as extracted from the .log header
     fExeName, fExeVersion, fHost, fUser, fCPU, fOSDetailed, fInstanceName: RawUTF8;
     fExeDate: TDateTime;
+{$ifdef MSWINDOWS}
     fOS: TWindowsVersion;
     fOSServicePack: integer;
     fWow64: boolean;
+{$endif}
     fStartDateTime: TDateTime;
     /// retrieve all used event levels
     fLevelUsed: TSynLogInfos;
@@ -10910,15 +10928,17 @@ type
     /// the computer CPU in which the process was running on
     // - returns e.g. '1*0-15-1027'
     property CPU: RawUTF8 read fCPU;
+    {$ifdef MSWINDOWS}
     /// the computer Operating System in which the process was running on
     property OS: TWindowsVersion read fOS;
     /// the Operating System Service Pack number
     property ServicePack: integer read fOSServicePack;
+    /// if the 32 bit process was running under WOW 64 virtual emulation
+    property Wow64: boolean read fWow64;
+    {$endif MSWINDOWS}
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     property DetailedOS: RawUTF8 read fOSDetailed;
-    /// if the 32 bit process was running under WOW 64 virtual emulation
-    property Wow64: boolean read fWow64;
     /// the date and time at which the log file was started
     property StartDateTime: TDateTime read fStartDateTime;
     /// number of profiled methods in this .log file
@@ -11150,8 +11170,12 @@ begin
     result := Dest+UnicodeFromLocaleChars(
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
     {$else}
+    {$ifdef MSWINDOWS}
     result := Dest+MultiByteToWideChar(
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
+    {$else}
+    raise ESynException.CreateFmt('AnsiBufferToUnicode() not supported yet for CP=%d',[CodePage]);
+    {$endif}
     {$endif}
     {$ifndef DELPHI5OROLDER}
     if result=Dest then
@@ -11292,6 +11316,12 @@ begin
   result := (aCodePage>=1250) and (aCodePage<=1258);
 end;
 
+{$ifndef MSWINDOWS}
+const
+  GetACP = CODEPAGE_US;
+  CP_UTF8 = 65001;
+{$endif}
+
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 var i: integer;
 begin
@@ -11346,8 +11376,12 @@ begin
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars=0 then
     result := Dest else
+    {$ifdef MSWINDOWS}
     result := Dest+WideCharToMultiByte(
       fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
+    {$else}
+    raise ESynException.CreateFmt('UnicodeBufferToAnsi() not supported yet for CP=%d',[CodePage]);
+    {$endif}
 end;
 
 function TSynAnsiConvert.UTF8BufferToAnsi(Dest: PAnsiChar;
@@ -17102,6 +17136,7 @@ begin
   until false;
 end;
 
+{$ifdef MSWINDOWS}
 function FindUnicode(PW, Upper: PWideChar; UpperLen: integer): boolean;
 var Start: PWideChar;
 begin
@@ -17134,6 +17169,7 @@ begin
     until false;
   until false;
 end;
+{$endif}
 
 function FindUTF8(U: PUTF8Char; UpperValue: PAnsiChar): boolean;
 var ValueStart: PAnsiChar;
@@ -21853,6 +21889,7 @@ begin
 end;
 
 function NowUTC: TDateTime;
+{$ifdef MSWINDOWS}
 var SystemTime: TSystemTime;
 begin
   GetSystemTime(SystemTime);
@@ -21860,6 +21897,18 @@ begin
     result := EncodeDate(wYear,wMonth,wDay)+
               EncodeTime(wHour,wMinute,wSecond,wMilliseconds);
 end;
+{$else}
+var T: TTime_T;
+    TV: TTimeVal;
+    UT: TUnixTime;
+begin
+  gettimeofday(TV, nil);
+  T := TV.tv_sec;
+  gmtime_r(@T, UT);
+  Result := EncodeDate(UT.tm_year + 1900, UT.tm_mon + 1, UT.tm_mday) +
+    EncodeTime(UT.tm_hour, UT.tm_min, UT.tm_sec, TV.tv_usec div 1000);
+end;
+{$endif}
 
 function Iso8601ToDateTimePUTF8Char(P: PUTF8Char; L: integer): TDateTime;
 var tmp: TDateTime;
@@ -22317,6 +22366,7 @@ begin
 end;
 
 procedure TTimeLogBits.FromUTCTime;
+{$ifdef MSWINDOWS}
 var Now: TSystemTime;
     V: cardinal;
 begin
@@ -22325,6 +22375,11 @@ begin
     Now.wYear shl 14-(1 shl 5+1 shl 10);
   Value := Now.wSecond+Now.wMinute shl 6+Int64(V) shl 12;
 end;
+{$else}
+begin
+  From(NowUTC);
+end;
+{$endif}
 
 procedure TTimeLogBits.FromNow;
 {$ifdef MSWINDOWS}
@@ -23551,6 +23606,7 @@ begin
 end;
 
 
+{$ifdef MSWINDOWS}
 
 {$ifdef DELPHI6OROLDER}
 function GetFileVersion(const FileName: TFileName): cardinal;
@@ -23578,8 +23634,6 @@ begin
   end;
 end;
 {$endif}
-
-{$ifdef MSWINDOWS}
 
 function WndProcMethod(Hwnd: HWND; Msg,wParam,lParam: integer): integer; stdcall;
 var obj: TObject;
@@ -23640,50 +23694,6 @@ begin
     result := true;
   end else
     result := false;
-end;
-
-procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
-  LeaveUnprotected: boolean=false);
-var RestoreProtection, Ignore: DWORD;
-    i: integer;
-begin
-  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, RestoreProtection) then
-  begin
-    if Backup<>nil then
-      for i := 0 to Size-1 do  // do not use Move() here
-        PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-    for i := 0 to Size-1 do    // do not use Move() here
-      PByteArray(Old)^[i] := PByteArray(New)^[i];
-    if not LeaveUnprotected then
-      VirtualProtect(Old, Size, RestoreProtection, Ignore);
-    FlushInstructionCache(GetCurrentProcess, Old, Size);
-  end;
-end;
-
-procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
-  LeaveUnprotected: boolean=false);
-begin
-  PatchCode(Code,@Value,SizeOf(Code^),nil,LeaveUnprotected);
-end;
-
-procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
-var NewJump: packed record
-    Code: byte;        // $e9 = jmp {relative}
-    Distance: integer; // relative jump is 32 bit even on CPU64 
-  end;
-begin
-  assert(sizeof(TPatchCode)=sizeof(NewJump));
-  NewJump.Code := $e9;
-  NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
-  PatchCode(Func,@NewJump,sizeof(NewJump),Backup);
-  {$ifndef LVCL}
-  assert(pByte(Func)^=$e9);
-  {$endif}
-end;
-
-procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
-begin
-  PatchCode(Func,@Backup,sizeof(TPatchCode));
 end;
 
 procedure InitConsole;
@@ -23839,8 +23849,74 @@ begin
   result := (Int64(clock)*1000) div CLOCKS_PER_SEC; // ms result
 end;
 
-
 {$endif MSWINDOWS}
+
+
+
+procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
+  LeaveUnprotected: boolean=false);
+{$ifdef MSWINDOWS}
+var RestoreProtection, Ignore: DWORD;
+    i: integer;
+begin
+  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, RestoreProtection) then
+  begin
+    if Backup<>nil then
+      for i := 0 to Size-1 do  // do not use Move() here
+        PByteArray(Backup)^[i] := PByteArray(Old)^[i];
+    for i := 0 to Size-1 do    // do not use Move() here
+      PByteArray(Old)^[i] := PByteArray(New)^[i];
+    if not LeaveUnprotected then
+      VirtualProtect(Old, Size, RestoreProtection, Ignore);
+    FlushInstructionCache(GetCurrentProcess, Old, Size);
+  end;
+end;
+{$else}
+var SysPageSize, PageSize, AlignedAddr: PtrInt;
+    i: integer;
+begin
+  if Backup<>nil then
+    for i := 0 to Size-1 do  // do not use Move() here
+      PByteArray(Backup)^[i] := PByteArray(Old)^[i];
+  SysPageSize := getpagesize;
+  PageSize := SysPageSize;
+  AlignedAddr := PtrInt(Old) and not (PageSize - 1);
+  while PtrInt(Old) + Size >= AlignedAddr + PageSize do
+    Inc(PageSize, SysPageSize);
+  if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
+    try
+      for i := 0 to Size-1 do    // do not use Move() here
+        PByteArray(Old)^[i] := PByteArray(New)^[i];
+    except
+    end;
+end;
+{$endif}
+
+procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
+  LeaveUnprotected: boolean=false);
+begin
+  PatchCode(Code,@Value,SizeOf(Code^),nil,LeaveUnprotected);
+end;
+
+procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
+var NewJump: packed record
+    Code: byte;        // $e9 = jmp {relative}
+    Distance: integer; // relative jump is 32 bit even on CPU64
+  end;
+begin
+  assert(sizeof(TPatchCode)=sizeof(NewJump));
+  NewJump.Code := $e9;
+  NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
+  PatchCode(Func,@NewJump,sizeof(NewJump),Backup);
+  {$ifndef LVCL}
+  assert(pByte(Func)^=$e9);
+  {$endif}
+end;
+
+procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
+begin
+  PatchCode(Func,@Backup,sizeof(TPatchCode));
+end;
 
 
 {$ifndef LVCL}
@@ -24997,9 +25073,9 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         jmp @@finish
         nop; nop; nop
 @@Variant:
-{$ifdef DELPHI6OROLDER}
+{$ifdef NOVARCOPYPROC}
         mov edx,esi
-        call System.@VarCopy
+        call System.@VarCopy       
 {$else} cmp dword ptr [VarCopyProc],0
         mov edx,esi
         jz @@errv
@@ -27448,12 +27524,12 @@ end;
 
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 var i: integer;
-{$ifdef DELPHI6OROLDER}
+{$ifdef NOVARCOPYPROC}
     VarMgr: TVariantManager;
 {$endif}
 begin
   if SynVariantTypes=nil then begin
-    {$ifdef DELPHI6OROLDER}
+    {$ifdef NOVARCOPYPROC}
     GetVariantManager(VarMgr);
     VarMgr.DispInvoke := @SynVarDispProc;
     SetVariantManager(VarMgr);
@@ -31121,6 +31197,8 @@ begin
   B^ := ',';
 end;
 
+{$ifdef MSWINDOWS}
+
 var // can be safely made global since timing is multi-thread safe
   GlobalTime: TSystemTime;
   GlobalClock: cardinal;
@@ -31149,6 +31227,33 @@ begin
   end;
   inc(B,16);
 end;
+
+{$else} // LibC version
+
+procedure TTextWriter.AddCurrentLogTime;
+var T: TTime_T;
+    TV: TTimeVal;
+    UT: TUnixTime;
+begin
+  if B+17>=BEnd then
+    Flush;
+  inc(B);
+  gettimeofday(TV, nil);
+  T := TV.tv_sec;
+  localtime_r(@T, UT);
+  YearToPChar(UT.tm_year+1900,B);
+  PWord(B+4)^ := TwoDigitLookupW[UT.tm_mon+1];
+  PWord(B+6)^ := TwoDigitLookupW[UT.tm_mday];
+  B[8] := ' ';
+  PWord(B+9)^ := TwoDigitLookupW[UT.tm_hour];
+  PWord(B+11)^ := TwoDigitLookupW[UT.tm_min];
+  PWord(B+13)^ := TwoDigitLookupW[UT.tm_sec];
+  PWord(B+15)^ := TwoDigitLookupW[TV.tv_usec div 10000]; // 10 ms precision
+  B[17] := ' ';
+  inc(B,16);
+end;
+
+{$endif}
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
 function Value3Digits(V: Cardinal; P: PUTF8Char): Cardinal;
@@ -33870,7 +33975,6 @@ begin
     result := TwoDigitToString(Micro div (10*1000))+'s';
 end;
 
-{$ifdef MSWINDOWS}
 
 { TPrecisionTimer }
 
@@ -33887,27 +33991,44 @@ begin
     result := 0 else // avoid div per 0 exception
     result := (Int64(Count)*(1000*1000))div iTime;
 end;
+
 procedure TPrecisionTimer.Init;
 begin
   FillChar(self,sizeof(self),0);
 end;
 
+{$ifndef MSWINDOWS}
+procedure QueryPerformanceCounter(var Value: Int64);
+begin
+  Value := clock;
+end;
+{$endif}
+
 procedure TPrecisionTimer.Start;
 begin
   iResume := 0;
+  {$ifdef MSWINDOWS}
   if QueryPerformanceFrequency(iFreq) then
     QueryPerformanceCounter(iStart) else
     iFreq := 0;
+  {$else}
+  iStart := clock;
+  {$endif}
 end;
 
 function TPrecisionTimer.Stop: RawUTF8;
 begin
+  {$ifdef MSWINDOWS}
   QueryPerformanceCounter(iStop);
   if iFreq=0 then
     QueryPerformanceFrequency(iFreq);
   if iFreq=0 then
     iTime := 0 else
     iTime := ((iStop-iStart)*(1000*1000))div iFreq;
+  {$else}
+  iStop := clock;
+  iTime := (iStop-iStart); // CLOCKS_PER_SEC=1000000=1000*1000 -> uS resolution
+  {$endif}
   result := MicroSecToString(iTime);
 end;
 
@@ -33999,6 +34120,7 @@ begin
   fTimer.Start;
 end;  
 
+{$ifdef MSWINDOWS}
 
 {$ifndef DELPHI5OROLDER}
 
@@ -34352,6 +34474,7 @@ begin
   if SizeInBytes>0 then
     fRunConsole := format('%s, %s/s',[fRunConsole,KB(Temp.PerSec(SizeInBytes))]);
 end;
+
 
 { TSynTests }
 
@@ -35439,7 +35562,9 @@ function TMemoryMap.Map(aFile: THandle; aCustomSize: cardinal; aCustomOffset: In
 var Available: Int64;
 begin
   fBuf := nil;
+  {$ifdef MSWINDOWS}
   fMap := 0;
+  {$endif}
   fFileLocal := false;
   fFile := aFile;
   fFileSize := FileSeek64(fFile,0,soFromEnd);
@@ -35460,6 +35585,7 @@ begin
       fBufSize := Int64Rec(Available).Lo;
       fBufSize := aCustomSize;
   end;
+  {$ifdef MSWINDOWS}
   with Int64Rec(fFileSize) do
     fMap := CreateFileMapping(fFile,nil,PAGE_READONLY,Hi,Lo,nil);
   if fMap=0 then
@@ -35472,6 +35598,13 @@ begin
     fMap := 0;
   end else
     result := true;
+  {$else}
+  fBuf := mmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0);
+  if fBuf=MAP_FAILED then begin
+    fBuf := nil;
+    exit;
+  end;
+  {$endif}
 end;
 
 procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: cardinal);
@@ -35479,7 +35612,9 @@ begin
   fBuf := aBuffer;
   fFileSize := aBufferSize;
   fBufSize := aBufferSize;
+  {$ifdef MSWINDOWS}
   fMap := 0;
+  {$endif}
   fFile := 0;
   fFileLocal := false;
 end;
@@ -35489,7 +35624,7 @@ var F: THandle;
 begin
   result := false;
   F := FileOpen(aFileName,fmOpenRead or fmShareDenyNone);
-  if F=INVALID_HANDLE_VALUE then
+  if PtrInt(F)<0 then
     exit;
   if Map(F)  then
     result := true else
@@ -35499,11 +35634,17 @@ end;
 
 procedure TMemoryMap.UnMap;
 begin
+  {$ifdef MSWINDOWS}
   if fMap<>0 then begin
     UnmapViewOfFile(fBuf);
     CloseHandle(fMap);
     fMap := 0;
   end;
+  {$else}
+  if fBuf<>nil then 
+    munmap(fBuf,fBufSize);
+  {$endif}
+  fBuf := nil;
   if fFile<>0 then begin
     if fFileLocal then
       FileClose(fFile);
@@ -35557,6 +35698,7 @@ end;
 
 
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
+{$ifdef MSWINDOWS}
 var R64: packed record Lo, Hi: integer; end absolute Result;
 begin
   Result := Offset;
@@ -35564,6 +35706,11 @@ begin
   if (R64.Lo=-1) and (GetLastError<>0) then
     R64.Hi := -1; // so result=-1
 end;
+{$else}
+begin // warning: this won't handle file size > 2 GB :(
+  result := FileSeek(Handle,Offset,Origin);
+end;
+{$endif}
 
 
 { TFileBufferWriter }
@@ -39039,10 +39186,15 @@ begin
             exit;
           dec(Count,Head.UnCompressedSize);
         end;
+        {$ifdef MSWINDOWS}
         result := FileSetDate(D.Handle,FileGetDate(S.Handle))=0;
+        {$endif}
       finally
         D.Free;
       end;
+      {$ifndef MSWINDOWS}
+      result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
+      {$endif}
     finally
       S.Free;
     end;
@@ -39096,10 +39248,15 @@ begin
           if D.Write(PD^,Head.UncompressedSize)<>Head.UncompressedSize then
             exit;
         end;
+        {$ifdef MSWINDOWS}
         result := FileSetDate(D.Handle,FileGetDate(S.Handle))=0;
+        {$endif}
       finally
         D.Free;
       end;
+      {$ifndef MSWINDOWS}
+      result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
+      {$endif}
     finally
       S.Free;
     end;
@@ -40068,8 +40225,10 @@ begin
       Ctxt.Level := sllError;
     Ctxt.EAddr := Exc.ExceptAddr;
   end else begin
+    {$ifdef MSWINDOWS}
     if Assigned(ExceptClsProc) then
       Ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc) else
+    {$endif}
       Ctxt.EClass := EExternal;
     Ctxt.Level := sllExceptionOS;
     Ctxt.EAddr := Exc.ExceptionAddress;
@@ -40240,6 +40399,8 @@ begin
   end;
 end;
 
+{$ifdef MSWINDOWS}
+
 var
   AutoFlushThread: THandle = 0;
   AutoFlushSecondElapsed: cardinal;
@@ -40285,6 +40446,8 @@ begin
   end;
 end;
 
+{$endif}
+
 destructor TSynLogFamily.Destroy;
 var SR: TSearchRec;
     OldTime: integer;
@@ -40293,10 +40456,12 @@ var SR: TSearchRec;
     aOldLogFileName, aPath: TFileName;
     tmp: array[0..11] of AnsiChar;
 begin
+  {$ifdef MSWINDOWS}
   if AutoFlushThread<>0 then begin
     AutoFlushThread := 0; // mark thread released to avoid GPF in AutoFlushProc
     CloseHandle(AutoFlushThread); // release background thread once for all
   end;
+  {$endif}
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
@@ -40439,14 +40604,18 @@ begin
     result := 1;
 end;
 
+{$ifdef MSWINDOWS}
 var
   RtlCaptureStackBackTraceRetrieved: (btUntested, btOK, btFailed) = btUntested;
   RtlCaptureStackBackTrace: function(FramesToSkip, FramesToCapture: cardinal;
     BackTrace, BackTraceHash: pointer): byte; stdcall;
+{$endif}
 
 function TSynLog._Release: Integer;
+{$ifdef MSWINDOWS}
 {$ifndef CPU64}
 var aStackFrame: PtrInt;
+{$endif}
 {$endif}
 begin
   if fFamily.Level*[sllEnter,sllLeave]<>[] then begin
@@ -40458,6 +40627,7 @@ begin
         if RefCount=0 then begin
           if sllLeave in fFamily.Level then begin
             if MethodName=nil then begin
+              {$ifdef MSWINDOWS}
               {$ifdef CPU64}
               if RtlCaptureStackBackTrace(1,1,@Caller,nil)=0 then
                 Caller := 0 else
@@ -40468,6 +40638,9 @@ begin
                 mov aStackFrame,eax
               end;
               Caller := aStackFrame-5;
+              {$endif}
+              {$else}
+              Caller := 0; // no stack trace yet under Linux
               {$endif}
             end;
             DoEnterLeave(sllLeave);
@@ -40489,6 +40662,7 @@ begin
     aFamily := Family;
   fFamily := aFamily;
   InitializeCriticalSection(fThreadLock);
+  {$ifdef MSWINDOWS}
   if RtlCaptureStackBackTraceRetrieved=btUntested then begin
     if OSVersion<wXP then
       RtlCaptureStackBackTraceRetrieved := btFailed else begin
@@ -40500,6 +40674,7 @@ begin
   end;
   {$ifdef CPU64}
   assert(RtlCaptureStackBackTraceRetrieved=btOK);
+  {$endif}
   {$endif}
   SetLength(fThreadHash,MAXLOGTHREAD);
   SetLength(fThreadContexts,256);
@@ -40555,8 +40730,10 @@ begin
   EnterCriticalSection(fThreadLock);
   try
     fWriter.Flush;
+    {$ifdef MSWINDOWS}
     if ForceDiskWrite and fWriterStream.InheritsFrom(TFileStream) then
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
+    {$endif}
   finally
     LeaveCriticalSection(fThreadLock);
   end;
@@ -40599,6 +40776,7 @@ begin
         inc(RecursionCapacity,32);
         SetLength(Recursion,RecursionCapacity);
       end;
+      {$ifdef MSWINDOWS}
       {$ifdef CPU64}
       if RtlCaptureStackBackTrace(1,1,@aStackFrame,nil)=0 then
         aStackFrame := 0 else
@@ -40609,6 +40787,9 @@ begin
         sub eax,5        // ignore call TSynLog.Enter op codes
         mov aStackFrame,eax
       end;
+      {$endif}
+      {$else}
+      aStackFrame := 0; // No stack trace yet under Linux
       {$endif}
       with Recursion[RecursionCount] do begin
         Instance := aInstance;
@@ -40678,7 +40859,9 @@ begin
 end;
 
 procedure TSynLog.ConsoleEcho(Sender: TTextWriter; const Text: RawUTF8);
+{$ifdef MSWINDOWS}
 var tmp: AnsiString;
+{$endif}
 const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
 //    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
   ccLightGray,ccWhite,ccLightGray,ccBlack,ccBrown,ccLightRed,ccGreen,ccGreen,
@@ -40781,6 +40964,7 @@ begin
   try
     if LastError<>0 then
       AddErrorMessage(LastError);
+    {$ifdef MSWINDOWS}
     {$ifdef CPU64}
     if RtlCaptureStackBackTrace(1,1,@aCaller,nil)=0 then
       aCaller := 0 else
@@ -40791,6 +40975,9 @@ begin
       sub eax,5        // ignore call TSynLog.Enter op codes
       mov aCaller,eax
     end;
+    {$endif}
+    {$else}
+    aCaller := 0; // no stack trace yet under Linux
     {$endif}
     TSynMapFile.Log(fWriter,aCaller);
   finally
@@ -40817,10 +41004,12 @@ end;
 {$endif}
 
 procedure TSynLog.LogFileHeader;
+{$ifdef MSWINDOWS}
 var Env: PAnsiChar;
     P: PUTF8Char;
     L: Integer;
-    WithinEvents: boolean;
+{$endif}
+var WithinEvents: boolean;
 procedure NewLine;
 begin
   if WithinEvents then begin
@@ -40831,17 +41020,22 @@ begin
     fWriter.Add(#13);
 end;
 begin
+  {$ifdef MSWINDOWS}
   if not QueryPerformanceFrequency(fFrequencyTimeStamp) then begin
     fFamily.HighResolutionTimeStamp := false;
     fFrequencyTimeStamp := 0;
   end else
+  {$endif}
     if fFileRotationSize>0 then
       fFamily.HighResolutionTimeStamp := false;
+  {$ifdef MSWINDOWS}
   ExeVersionRetrieve;
+  {$endif}
   if InstanceMapFile=nil then
     GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   WithinEvents := fWriter.fTotalFileSize>0;
   // array of const is buggy under Delphi 5 :( -> use fWriter.Add*()
+  {$ifdef MSWINDOWS}
   with ExeVersion, SystemInfo, OSVersionInfo, fWriter do begin
     if WithinEvents then begin
       LogCurrentTime;
@@ -40851,9 +41045,9 @@ begin
     end;
     AddString(ProgramFullSpec);
     NewLine;
-    AddShort('Host='); AddString(Host);
-    AddShort(' User=');   AddString(User);
-    AddShort(' CPU='); Add(dwNumberOfProcessors); Add('*');
+    AddShort('Host=');  AddString(Host);
+    AddShort(' User='); AddString(User);
+    AddShort(' CPU=');  Add(dwNumberOfProcessors); Add('*');
     Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
     Add(wProcessorRevision);
     AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
@@ -40879,6 +41073,10 @@ begin
     end;
     FreeEnvironmentStringsA(Env);
     CancelLastChar; // trim last #9
+    {$else}
+  with fWriter do begin
+    AddShort('Host=linux User=user CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=1234');
+    {$endif}
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_VERSION+' ');
@@ -40900,17 +41098,20 @@ end;
 {$WARN SYMBOL_DEPRECATED OFF} // for GetHeapStatus
 procedure TSynLog.AddMemoryStats;
 begin
+  {$ifdef MSWINDOWS}
   with GetHeapStatus do
     if TotalAddrSpace<>0 then
     fWriter.Add(' AddrSpace=% Uncommitted=% Committed=% Allocated=% Free=% '+
        'FreeSmall=% FreeBig=% Unused=% Overheap=% ',
       [TotalAddrSpace,TotalUncommitted,TotalCommitted,TotalAllocated,TotalFree,
        FreeSmall,FreeBig,Unused,Overhead]);
+  {$endif}
 end;
 {$WARN SYMBOL_DEPRECATED ON}
 {$endif}
 
 procedure TSynLog.AddErrorMessage(Error: Cardinal);
+{$ifdef MSWINDOWS}
 var Len: Integer;
     Buffer: array[byte] of WideChar;
 begin
@@ -40921,13 +41122,18 @@ begin
   fWriter.Add(' ','"');
   fWriter.AddOnSameLineW(@Buffer,Len);
   fWriter.AddShort('" (');
+{$else}
+begin
+  fWriter.AddShort('Error ');
+{$endif}
   fWriter.Add(Error);
   fWriter.Add(')',' ');
 end;
 
 procedure TSynLog.LogCurrentTime;
 begin
-  if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then begin
+  if fFamily.HighResolutionTimeStamp
+     {$ifdef MSWINDOWS}and (fFrequencyTimeStamp<>0){$endif} then begin
     QueryPerformanceCounter(fCurrentTimeStamp);
     dec(fCurrentTimeStamp,fStartTimeStamp);
     fWriter.AddBinToHexDisplay(@fCurrentTimeStamp,sizeof(fCurrentTimeStamp));
@@ -41077,20 +41283,32 @@ begin
 end;
 
 procedure TSynLog.CreateLogWriter;
+{$ifndef MSWINDOWS}
+var i: integer;
+{$endif}
 begin
   if fWriterStream=nil then begin
+    {$ifdef MSWINDOWS}
     ExeVersionRetrieve;
     fFileName := Ansi7ToString(ExeVersion.ProgramName);
     if fFamily.IncludeComputerNameInFileName then
       fFileName := fFileName+' ('+Ansi7ToString(ExeVersion.Host)+')';
+    {$else}
+    fFileName := ExtractFileName(ParamStr(0));
+    i := Pos('.',fFileName);
+    if i>0 then
+      SetLength(fFileName,i-1);
+    {$endif}
     if (fFamily.fRotateFileCount>0) and (fFamily.fRotateFileSize>0) then begin
       fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
     end else begin
       fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
       fFileRotationSize := 0;
     end;
+    {$ifdef MSWINDOWS}
     if IsLibrary then
       fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
+    {$endif}
     if fFamily.PerThreadLog=ptOneFilePerThread then
         fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
     fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
@@ -41158,14 +41376,19 @@ begin
       end else
         TSynMapFile.Log(fWriter,Caller);
     end;
-    if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then
+    if fFamily.HighResolutionTimeStamp
+       {$ifdef MSWINDOWS}and (fFrequencyTimeStamp<>0){$endif} then
 DoEnt:case aLevel of
       sllEnter:
         EnterTimeStamp := fCurrentTimeStamp;
       sllLeave: begin
+        {$ifdef MSWINDOWS}
         if fFrequencyTimeStamp=0 then
           MS := 0 else // avoid div per 0 exception
           MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
+        {$else}
+        MS := fCurrentTimeStamp-EnterTimeStamp;
+        {$endif}
         fWriter.AddMicroSec(MS);
       end;
       end else
@@ -41192,6 +41415,7 @@ const
   MINIMUM_EXPECTED_STACKTRACE_DEPTH = 2;
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
+{$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifndef CPU64}
 procedure AddStackManual(Stack: PPtrUInt);
@@ -41297,6 +41521,12 @@ begin
     {$endif}
   end;
 end;
+{$else}
+begin // do not write any stack trace yet
+end;
+{$endif}
+
+{$ifdef MSWINDOWS}
 
 procedure ExeVersionRetrieve(DefaultVersion: integer);
 const EXE_FMT: PUTF8Char = '% % (%)';
@@ -41331,6 +41561,8 @@ begin
     User := Tmp;
   end;
 end;
+
+{$endif MSWINDOWS}
 
 
 { TMemoryMapText }
@@ -41623,7 +41855,9 @@ begin
        not GetOne(' OS=',fCPU)    or not GetOne(' WOW64=',fOsDetailed) or
        not GetOne(' FREQ=',aWow64) then
       exit;
+    {$ifdef MSWINDOWS}
     fWow64 := aWow64='1';
+    {$endif}
     SetInt64(PBeg,fFreq);
     if fFreq=0 then
       exit;
@@ -41650,8 +41884,10 @@ begin
     if fStartDateTime=0 then
       exit;
     P := pointer(fOSDetailed);
+    {$ifdef MSWINDOWS}
     fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
-    fOSServicePack := GetNexTItemCardinal(P);
+    fOSServicePack := GetNextItemCardinal(P);
+    {$endif}
     // 3. compute fCount and fLines[] so that all fLevels[]<>sllNone
     CleanLevels(self);
     if Length(fLevels)-fCount>16384 then begin // size down only if worth it
@@ -41946,8 +42182,10 @@ begin
   with TSynLogTestLog.Family do begin
     if integer(Level)=0 then // if no exception is set
       Level := [sllException,sllExceptionOS,sllFail];
+    {$ifdef MSWINDOWS}
     if AutoFlushTimeOut=0 then
       AutoFlushTimeOut := 2; // flush any pending text into .log file every 2 sec
+    {$endif}
     fLogFile := SynLog;
   end;
 end;
@@ -42169,6 +42407,10 @@ begin
   InitializeCriticalSection(fPendingProcessLock);
 end;
 
+{$ifndef MSWINDOWS}
+const INFINITE = LongWord(-1);
+{$endif}
+
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
   SetPendingProcess(flagDestroying);
@@ -42227,14 +42469,15 @@ begin
 end;
 
 function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
-var start, ThreadID: cardinal;
+var start: Int64;
+   ThreadID: cardinal;
     E: Exception;
     IsIdle: boolean;
 function OnIdleProcessNotify: integer;
 begin
-  result := GetTickCount-start;
-  if result<0 then // may occur after 49 days of system up time
-    result := MaxInt;
+  result := GetTickCount64-start;
+  if result<0 then
+    result := maxInt; // just ignore any 32 bit overflow
   if Assigned(fOnIdle) then
     fOnIdle(self,result) ;
 end;
@@ -42246,7 +42489,7 @@ begin
   // wait for any previous request to be finished (should not happen in most cases)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
-  start := GetTickCount;
+  start := GetTickCount64;
   repeat
     EnterCriticalSection(fPendingProcessLock);
     try
