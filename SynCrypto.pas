@@ -862,10 +862,12 @@ procedure XorConst(p: PIntegerArray; Count: integer);
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
+  // - use CompressShaAesSetKey() procedure to set this Key and associated IV
   CompressShaAesKey: TSHA256Digest;
 
   /// the Initialization Vector used by CompressShaAes() global function
   // - this vector is global to the whole process
+  // - use CompressShaAesSetKey() procedure to set this IV and associated Key
   CompressShaAesIV: TAESBlock;
 
   /// the AES-256 encoding class used by CompressShaAes() global function
@@ -884,7 +886,8 @@ procedure CompressShaAesSetKey(const Key: RawByteString; const IV: RawByteString
 // - as expected by THttpSocket.RegisterCompress()
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
 // - will use global CompressShaAesKey and CompressShaAesIV variables to be set
-// according to the expected compression Key and Initialization Vector
+// according to the expected compression Key and Initialization Vector, e.g.
+// via a call to the CompressShaAesSetKey() global procedure
 // - if you want to change the chaining mode, you can customize the global
 // CompressShaAesClass variable to the expected TAES* class name 
 // - will store a hash of both cyphered and clear stream: if the
@@ -2526,8 +2529,8 @@ begin
         padlock_aes_encrypt(ctx.ViaCtx,pIn,pOut,Count) else
         padlock_aes_decrypt(ctx.ViaCtx,pIn,pOut,Count);
     end;
-    oIn := pointer(integer(pIn)+Count);
-    oOut := pointer(integer(pOut)+Count);
+    oIn := pointer(PtrUInt(pIn)+Count);
+    oOut := pointer(PtrUInt(pOut)+Count);
     exit;
   end;
 {$endif}
@@ -2635,8 +2638,8 @@ begin
     DoBlocks(pIn,pOut,pIn,pOut,Count,doEncrypt); // remaining blocks
   {$ifopt C+}
   inc(Count,nOne*nThread);
-  assert(integer(pIn)-integer(bIn)=Count*AESBlockSize);
-  assert(integer(pOut)-integer(bOut)=Count*AESBlockSize);
+  assert(PtrUInt(pIn)-PtrUInt(bIn)=cardinal(Count)*AESBlockSize);
+  assert(PtrUInt(pOut)-PtrUInt(bOut)=cardinal(Count)*AESBlockSize);
   {$endif}
   bIn := pIn;
   bOut := pOut;
@@ -4436,7 +4439,7 @@ begin
   result := Assigned(AcquireContextA);
 end;
 
-procedure TestCryptoAPIAESProvider;
+procedure EnsureCryptoAPIAESProviderAvailable;
 begin
   if CryptoAPIAESProvider=nil then
     raise ESynCrypto.Create('PROV_RSA_AES provider not installed') else
@@ -4457,7 +4460,7 @@ end;
 constructor TAESAbstract_API.Create(const aKey; aKeySize: cardinal;
   const aIV: TAESBlock);
 begin
-  TestCryptoAPIAESProvider;
+  EnsureCryptoAPIAESProviderAvailable;
   inherited Create(aKey,aKeySize,aIV); // check and set fKeySize[Bytes]
   fIV := aIV;
   InternalSetMode;
