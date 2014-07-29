@@ -4630,6 +4630,9 @@ type
     /// serialize a binary internal representation into JSON content
     procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
       Options: TJSONCustomParserSerializationOptions); virtual;
+    /// retrieve a context document defining the corresponding record fields
+    // - will be used e.g. by mORMotWrapper.pas unit to export the record
+    function ContextNestedProperties: variant; virtual;
     /// the property name
     // - may be void for the Root element
     property PropertyName: RawUTF8 read fPropertyName;
@@ -4715,7 +4718,7 @@ type
   // - is used by TTextWriter.RegisterCustomJSONSerializerFromText() method
   TJSONCustomParserFromTextDefinition = class(TJSONCustomParserAbstract)
   protected
-    fDefinition: RawUTF8;
+     fDefinition: RawUTF8;
     procedure Parse(Props: TJSONCustomParserRTTI; var P: PUTF8Char;
       PEnd: TJSONCustomParserRTTIExpectedEnd);
   public
@@ -25451,6 +25454,7 @@ begin
     result := TJSONCustomParserFromTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
     Reg.Reader := result.CustomReader;
     Reg.Writer := result.CustomWriter;
+    Reg.RecordCustomParser := result;
     fParser[ndx] := Reg;
   end else begin
     result := nil;
@@ -25561,7 +25565,13 @@ type
     destructor Destroy; override;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
+    function ContextNestedProperties: variant; override;
   end;
+
+function TJSONCustomParserCustomSimple.ContextNestedProperties: variant;
+begin
+  SetVariantNull(result);
+end;
 
 constructor TJSONCustomParserCustomSimple.Create(
   const aPropertyName, aCustomTypeName: RawUTF8; aCustomType: pointer);
@@ -25720,7 +25730,18 @@ type
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
     procedure FinalizeItem(Data: Pointer); override;
+    function ContextNestedProperties: variant; override;
   end;
+
+function TJSONCustomParserCustomRecord.ContextNestedProperties: variant;
+var parser: PJSONCustomParserRegistration;
+begin
+  parser := GetJSONCustomParserRegistration;
+  if (parser^.RecordCustomParser=nil) or (parser^.RecordCustomParser.Root=nil) then
+    raise ESynException.CreateFmt('%s.ContextNestedProperties without custom parser',
+      [ClassName]);
+  result := parser^.RecordCustomParser.Root.ContextNestedProperties;
+end;
 
 constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName, aCustomTypeName: RawUTF8);
@@ -26370,6 +26391,50 @@ begin
   if soWriteHumanReadable in Options then
     aWriter.AddCRAndIndent;
   aWriter.Add('}');
+end;
+
+function TJSONCustomParserRTTI.ContextNestedProperties: variant;
+const // we rely on TJSONCustomParserRTTIType enumeration to be sorted by name
+  TYPE_NAMES: array[TJSONCustomParserRTTIType] of RawUTF8 =
+    ('**array**','boolean','integer','cardinal','currency','double','int64','integer',
+     'RawByteString','RawJSON','RawUTF8','**record**','single','string','SynUnicode',
+     'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
+     'WideString','word','**custom**');
+var i: integer;
+    prop: variant;
+    subProp: TJSONCustomParserRTTI;
+    typeName: RawUTF8;
+begin
+  case PropertyType of
+  ptRecord: begin
+    TDocVariant.NewFast(result);
+    for i := 0 to high(NestedProperty) do begin
+      subProp := NestedProperty[i];
+      prop := _JsonFastFmt('{propname:?,type:?}',[],
+        [subProp.PropertyName,ord(subProp.PropertyType)]);
+      typeName := TYPE_NAMES[subProp.PropertyType];
+      if typeName[1]<>'*' then
+        prop.typeName := typeName;
+      if subProp.PropertyType=ptArray then begin
+        with subProp.NestedProperty[0] do
+          if PropertyName='' then  // array of simple
+            prop.isSimpleArray := _JsonFastFmt('{type:?,typeName:?}',[],
+              [ord(PropertyType),TYPE_NAMES[PropertyType]]) else
+            prop.isRecordArray := subProp.ContextNestedProperties;
+      end else begin
+        prop.isNotArray := true;
+        case subProp.PropertyType of
+        ptCustom, ptRecord: 
+          prop.isRecord := subProp.ContextNestedProperties;
+        end;
+      end;
+      TDocVariantData(result).AddItem(prop);
+    end;
+  end;
+  else
+    raise ESynException.CreateFmt('ContextOneLevel(Type=%d %s)',
+      [ord(PropertyType),TYPE_NAMES[PropertyType]]);
+  end;
 end;
 
 
