@@ -2244,6 +2244,7 @@ type
     procedure BinaryToText(var Value: RawUTF8; ToSQL: boolean; wasSQLString: PBoolean); virtual;
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
     function GetSQLFieldTypeName: PShortString;
+    function GetSQLFieldRTTITypeName: RawUTF8; virtual;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
@@ -2253,12 +2254,17 @@ type
     /// the property definition Name
     property Name: RawUTF8 read fName;
     /// the property index in the RTTI
-    property PropertyIndex: integer read fPropertyIndex; 
+    property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
     property SQLFieldType: TSQLFieldType read fSQLFieldType;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
+    // - returns e.g. 'sftTimeLog'
     property SQLFieldTypeName: PShortString read GetSQLFieldTypeName;
+    /// the type name, as defined in the RTTI
+    // - returns e.g. 'RawUTF8'
+    // - will return the TSQLPropInfo class name if it is not a TSQLPropInfoRTTI
+    property SQLFieldRTTITypeName: RawUTF8 read GetSQLFieldRTTITypeName;
     /// the ORM attributes of this property
     // - contains aIsUnique e.g for TSQLRecord published properties marked as
     // ! property MyProperty: RawUTF8 stored AS_UNIQUE;
@@ -2360,6 +2366,7 @@ type
   TSQLPropInfoRTTI = class(TSQLPropInfo)
   protected
     fPropInfo: PPropInfo;
+    function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
@@ -2693,6 +2700,7 @@ type
   TSQLPropInfoRecordRTTI = class(TSQLPropInfoCustom)
   protected
     fTypeInfo: PTypeInfo;
+    function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// define a record property from its RTTI definition
     // - handle any kind of record with TypeInfo() generated
@@ -2744,6 +2752,7 @@ type
   protected
     fTypeInfo: PTypeInfo;
     fRecordSize: integer;
+    function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// define an unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
@@ -2780,6 +2789,8 @@ type
   TSQLPropInfoCustomJSON = class(TSQLPropInfoCustom)
   protected
     fCustomParser: TJSONCustomParserRTTI;
+    fTypeInfo: PTypeInfo;
+    function GetSQLFieldRTTITypeName: RawUTF8; override;
     procedure SetCustomParser(aCustomParser: TJSONCustomParserRTTI);
   public
     /// initialize the internal fields
@@ -2832,6 +2843,8 @@ type
         reintroduce; overload;
     /// finalize the instance
     destructor Destroy; override;
+    /// the corresponding custom JSON parser
+    property CustomParser: TJSONCustomParserRTTI read fCustomParser;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -3732,6 +3745,7 @@ type
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+    function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: integer); virtual;
     procedure InternalSetTableFromTableName(const TableName: RawUTF8); virtual;
@@ -3887,6 +3901,8 @@ type
     // - raise an EParsingException if the parameter is not found
     property Input[const ParamName: RawUTF8]: variant read GetInput;
     {$endif}
+    /// retrieve an incoming HTTP header
+    property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
     /// use this method to send back directly a result value to the caller
     // - expects Status to be either HTML_SUCCESS, HTML_NOTMODIFIED or
     // HTML_CREATED, and will return as answer the supplied Result content
@@ -6285,6 +6301,8 @@ type
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].RecordProps values
     property TableProps: TSQLModelRecordPropertiesDynArray read fTableProps;
+    /// the maximum index of TableProps[] class properties array
+    property TablesMax: integer read fTablesMax;
     // performed with this model
     // - Actions are e.g. linked to some buttons in the User Interface
     property Actions: PEnumType read fActions;
@@ -13990,6 +14008,13 @@ begin
     result := PTypeInfo(TypeInfo(TSQLFieldType))^.EnumBaseType^.GetEnumNameOrd(ord(SQLFieldType));
 end;
 
+function TSQLPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
+begin
+  result := GetDisplayNameFromClass(ClassType);
+  if IdemPChar(pointer(result),'PROPINFO') then
+    delete(result,1,8);
+end;
+
 procedure TSQLPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
 begin
   result := BlobToTSQLRawBlob(Value);
@@ -14305,6 +14330,11 @@ begin
       [GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
        GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,aPropInfo^.Name]);
   result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+end;
+
+function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
+begin
+  result := ShortStringToUTF8(fPropInfo^.PropType^.Name);
 end;
 
 function TSQLPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
@@ -15753,6 +15783,13 @@ begin
   RecordCopy(GetFieldAddr(Dest)^,GetFieldAddr(Source)^,fTypeInfo);
 end;
 
+function TSQLPropInfoRecordRTTI.GetSQLFieldRTTITypeName: RawUTF8;
+begin
+  if fTypeInfo=nil then
+    result := inherited GetSQLFieldRTTITypeName else
+    result := ShortStringToUTF8(fTypeInfo^.Name);
+end;
+
 constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PTypeInfo;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
   aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
@@ -15848,6 +15885,13 @@ end;
 procedure TSQLPropInfoRecordFixedSize.CopyValue(Source, Dest: TObject);
 begin
   move(GetFieldAddr(Source)^,GetFieldAddr(Dest)^,fRecordSize);
+end;
+
+function TSQLPropInfoRecordFixedSize.GetSQLFieldRTTITypeName: RawUTF8;
+begin
+  if fTypeInfo=nil then
+    result := inherited GetSQLFieldRTTITypeName else
+    result := ShortStringToUTF8(fTypeInfo^.Name);
 end;
 
 constructor TSQLPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
@@ -15981,6 +16025,7 @@ constructor TSQLPropInfoCustomJSON.Create(aTypeInfo: PTypeInfo;
 begin
   inherited Create(aName,sftUTF8Custom,aAttributes,aFieldWidth,aPropertyIndex,
     aPropertyPointer,nil,nil);
+  fTypeInfo := aTypeInfo;
   SetCustomParser(TJSONCustomParserRTTI.CreateFromRTTI(aName,aTypeInfo,0));
 end;
 
@@ -15991,6 +16036,13 @@ begin
   inherited Create(aName,sftUTF8Custom,aAttributes,aFieldWidth,aPropertyIndex,
     aPropertyPointer,nil,nil);
   SetCustomParser(TJSONCustomParserRTTI.CreateFromTypeName(aName,aTypeName));
+end;
+
+function TSQLPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
+begin
+  if fTypeInfo=nil then
+    result := inherited GetSQLFieldRTTITypeName else
+    result := ShortStringToUTF8(fTypeInfo^.Name);
 end;
 
 procedure TSQLPropInfoCustomJSON.SetCustomParser(
@@ -26435,6 +26487,13 @@ begin
   GetVariantFromJSON(pointer(GetInputUTF8(ParamName)),false,Result);
 end;
 {$endif}
+
+function TSQLRestServerURIContext.GetInHeader(const HeaderName: RawUTF8): RawUTF8;
+var up: array[byte] of AnsiChar;
+begin
+  PWord(UpperCopy255(up,HeaderName))^ := ord(':');
+  result := Trim(FindIniNameValue(pointer(Call.InHead),up));
+end;
 
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
   Status: integer; const CustomHeader: RawUTF8; Handle304NotModified: boolean);
