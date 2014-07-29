@@ -318,6 +318,14 @@ type
   end;
 
 
+const
+  /// this constant can be used to define as JSON a tag value
+  NULL_OR_TRUE: array[boolean] of RawUTF8 = ('null','true');
+  
+  /// this constant can be used to define as JSON a tag value as separator
+  NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
+
+
 implementation
 
 function KindToText(Kind: TSynMustacheTagKind): PShortString;
