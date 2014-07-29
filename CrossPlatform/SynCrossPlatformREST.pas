@@ -174,8 +174,11 @@ type
   /// a published property kind
   // - does not match mORMot.pas TSQLFieldType: here we recognize only types
   // which may expect a special behavior in this unit
+  // - should match TCrossPlatformSQLFieldKind as defined in mORMotWrappers.pas
+  // - more complex fields (e.g. sftMany) are not handled yet
   TSQLFieldKind = (
-    sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime);
+    sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime,
+    sftRecord, sftVariant);
 
   /// a set of published property Kind
   TSQLFieldKinds = set of TSQLFieldKind;
@@ -227,6 +230,10 @@ type
     CreateTimeFields: TSQLFieldBits;
     /// specifies the TModTime and TCreateTime fields
     ModAndCreateTimeFields: TSQLFieldBits;
+    /// specifies the Record fields
+    RecordFields: TSQLFieldBits;
+    /// specifies the Variant fields
+    VariantFields: TSQLFieldBits;
     /// contains all published properties kind
     HasKind: TSQLFieldKinds;
     /// TRUE if has TModTime or TCreateTime fields
@@ -1300,14 +1307,19 @@ constructor TSQLModelInfoPropInfo.CreateFrom(aRTTI: TRTTIPropInfo);
 begin
   RTTI := aRTTI;
   TypeName := RTTIPropInfoTypeName(RTTI);
-  if TypeName='TByteDynArray' then
-    Kind := sftBlob else
-  if TypeName='TDateTime' then
-    Kind := sftDateTime else
-  if TypeName='TCreateTime' then
-    Kind := sftCreateTime else
-  if TypeName='TModTime' then
-    Kind := sftModTime;
+  case RTTI^.PropType^.Kind of
+    tkRecord:  Kind := sftRecord;
+    tkVariant: Kind := sftVariant;
+  else
+    if TypeName='TByteDynArray' then
+      Kind := sftBlob else
+    if TypeName='TDateTime' then
+      Kind := sftDateTime else
+    if TypeName='TCreateTime' then
+      Kind := sftCreateTime else
+    if TypeName='TModTime' then
+      Kind := sftModTime;
+  end;
 end;
 
 {$endif ISDWS}
@@ -1394,6 +1406,10 @@ begin
       include(ModAndCreateTimeFields,f);
       HasTimeFields := true;
     end;
+    sftRecord:
+      include(RecordFields,f);
+    sftVariant:
+      include(VariantFields,f);
     end;
   end;
 end;
@@ -2223,7 +2239,6 @@ var buf: THttpBody;
     a: integer;
     sha: TSHA256;
 begin
-  result := '';
   sha := TSHA256.Create;
   try
     for a := 0 to high(Values) do begin
