@@ -2414,7 +2414,13 @@ function PosEx(const SubStr, S: RawUTF8; Offset: cardinal=1): Integer;
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
-procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean=false);
+procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean=false); overload;
+
+/// split a RawUTF8 string into two strings, according to SepStr separator
+// - this overloaded function returns the right string as function result
+// - if SepStr is not found, LeftStr=Str and result=''
+// - if ToUpperCase is TRUE, then LeftStr and result will be made uppercase
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
 
 /// fast replacement of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
@@ -8939,6 +8945,10 @@ type
       aOptions: TDocVariantOptions=[]); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based content
+    // - same as New(aValue,JSON_OPTIONS[true]);
+    class procedure NewFast(out aValue: variant); 
+      {$ifdef HASINLINE}inline;{$endif}
+    /// initialize a variant instance to store some document-based content
     // - you can use this function to create a variant, which can be nested into
     // another document, e.g.:
     // ! aVariant := TDocVariant.New;
@@ -9626,7 +9636,7 @@ const
 
   /// TDocVariant options which may be used for plain JSON parsing
   // - this won't recognize any extended syntax 
-  JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =  
+  JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoJSONParseDoNotTryCustomVariants];
 
@@ -15024,6 +15034,11 @@ begin
     LeftStr := UpperCaseU(LeftStr);
     RightStr := UpperCaseU(RightStr);
   end;
+end;
+
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
+begin
+  Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
 
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
@@ -28332,6 +28347,11 @@ class procedure TDocVariant.New(out aValue: variant;
   aOptions: TDocVariantOptions);
 begin
   TDocVariantData(aValue).Init(aOptions);
+end;
+
+class procedure TDocVariant.NewFast(out aValue: variant);
+begin
+  TDocVariantData(aValue).Init(JSON_OPTIONS[true]);
 end;
 
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
