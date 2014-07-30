@@ -19729,7 +19729,8 @@ begin
   while true do // unrolled three InheritsFrom() calls
     if CT^.ClassType<>TSQLRecordMany then
     if CT^.ClassType<>TSQLRecord then
-    if (CT^.ClassType<>TPersistent) and (CT^.ClassType<>TRawUTF8List) then
+    if (CT^.ClassType<>TPersistent) and (CT^.ClassType<>TRawUTF8List) and
+       (CT^.ClassType<>TObjectList) then
       if CT^.ParentInfo<>nil then
         {$ifdef FPC}
         CT := CT^.ParentInfo^^.ClassTypes // use typinfo.pp function
