@@ -103,6 +103,7 @@ type
   word = integer;
   cardinal = integer;
   Int64 = integer;
+  currency = float;
   TPersistent = TObject;
   TObjectList = array of TObject;
   TVariantDynArray = array of variant;
@@ -301,7 +302,7 @@ type
     /// initialize the low-level memory structure with a given object
     constructor CreateFrom(const document: variant);
     /// number of items in this jvObject or jvArray
-    function Count: integer;
+    property Count: integer read (Values.Count);
   end;
 
 /// guess the type of a supplied variant
@@ -800,11 +801,6 @@ begin
     @Values=@document;
   end;
   end;
-end;
-
-function TJSONVariantData.Count: integer;
-begin
-  result := Values.Count;
 end;
 
 

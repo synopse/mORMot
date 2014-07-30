@@ -13,6 +13,12 @@ uses
   SysUtils;
 
 type
+  ICalculator = interface(IInvokable)
+    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
+    function Add(n1,n2: integer): integer;
+    procedure ToText(Value: Currency; var Result: RawUTF8);
+  end;
+
   {$ifdef TESTRECORD}
   TTestCustomJSONArraySimpleArray = packed record
     F: RawUTF8;
@@ -59,6 +65,28 @@ procedure StopServer;
 
 implementation
 
+{ TServiceCalculator }
+
+type
+  TServiceCalculator = class(TInterfacedObject, ICalculator)
+  public
+    function Add(n1,n2: integer): integer;
+    procedure ToText(Value: Currency; var Result: RawUTF8);
+  end;
+
+function TServiceCalculator.Add(n1, n2: integer): integer;
+begin
+  result := n1+n2;
+end;
+
+procedure TServiceCalculator.ToText(Value: Currency; var Result: RawUTF8);
+begin
+  result := Curr64ToStr(PInt64(@Value)^);
+end;
+
+
+{ TCustomServer }
+
 procedure TCustomServer.DropTable(Ctxt: TSQLRestServerURIContext);
 begin
   if (Ctxt.Method=mGET) and (Ctxt.TableIndex>=0) then begin
@@ -94,9 +122,10 @@ begin
   end;
   if DB.TableRowCount(TSQLRecordPeople)=0 then
     // we expect at least one record
-    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826]);
+    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},''{$endif}]);
     // in all cases, client will call DropTable method-based service
   DB.ServiceMethodByPassAuthentication('wrapper'); // for our testing purpose
+  DB.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
 end;
 
 procedure StopServer;
@@ -120,6 +149,7 @@ begin
   Props.RegisterCustomPropertyFromRTTI(Self,TypeInfo(TTestCustomJSONArraySimpleArray),
     'Simple',@TSQLRecordPeople(nil).fSimple);
 end;
+
 
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromText(

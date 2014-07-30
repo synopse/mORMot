@@ -19,11 +19,22 @@ uses
 {{<textrec}}{{#fields}}{{propname}} {{#typeName}}{{typeName}}{{/typeName}}{{#isRecord}}{ {{>textrec}} }{{/isRecord}}{{#isSimpleArray}}array of {{typeName}}{{/isSimpleArray}}{{#isRecordArray}}[ {{>textrec}} ]{{/isRecordArray}} {{/fields}}{{/textrec}}
 {{#withRecords}}
 type // define some record types, used as properties below
-  {{#records}}
+{{#records}}
   {{name}} = {{>writerec}} 
-  {{/records}}
+{{/records}}
 {{/withRecords}}
+{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeName}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeName}}{{/dirResult}}{{/args}};{{/method}}
 type
+  {{#soa.services}}
+  /// service accessible via http://{{host}}/{{root}}/{{uri}}
+  I{{interfaceURI}} = interface(IInvokable)
+    ['{{GUID}}']
+{{#methods}}
+    {{>method}}
+{{/methods}}
+  end;
+
+  {{/soa.services}}
   {{#orm}}
   {{^isinmormotpas}}
   /// map "{{tablename}}" table
@@ -62,6 +73,16 @@ const
 
 {{/port}}
 
+{{#soa.enabled}}
+/// define the interface-based services to be consummed by the client
+// - will define the following interfaces:
+{{#soa.services}}
+// ! I{{interfaceURI}}   {{GUID}}
+{{/soa.services}}
+procedure RegisterServices(Client: TSQLRestClientURI);
+{{/soa.enabled}}
+
+
 implementation
 
 {{#orm}}
@@ -86,6 +107,15 @@ function GetModel: TSQLModel;
 begin
   result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
 end;
+
+{{#soa.enabled}}
+procedure RegisterServices(Client: TSQLRestClientURI);
+begin
+{{#soa.services}}
+  Client.ServiceRegister(TypeInfo(I{{interfaceURI}}),sic{{instanceCreationName}});
+{{/soa.services}}
+end;
+{{/soa.enabled}}
 
 {{#withRecords}}
 const

@@ -10,7 +10,7 @@ uses
   System.Types,
   SynCrossPlatformSpecific,
   SynCrossPlatformREST;
-  
+
 {{! recursive partials used to write records type definition}}
 {{<writerec}}record
 {{#fields}}
@@ -32,7 +32,18 @@ type // define some record types, used as properties below
   {{name}} = {{>writerec}} 
   {{/records}}
 {{/withRecords}}
-type
+type{{<methodSignature}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typeName}}; {{/dirInput}}{{/args}}
+      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typeName}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodSignature}}
+{{#soa.services}}
+  /// service accessible via http://{{host}}/{{root}}/{{uri}}
+  TService{{interfaceURI}} = class(TServiceClientAbstract)
+  public
+{{#methods}}
+    procedure {{>methodSignature}}
+{{/methods}}
+  end;
+
+{{/soa.services}}
   {{#orm}}
   {{^isinmormotpas}}
   /// map "{{tablename}}" table
@@ -101,12 +112,7 @@ begin
   case FieldIndex of
   0: fID := Value;
   {{#fields}}
-  {{#isrecord}}
-  {{index}}: f{{name}} := Variant2{{typerttiname}}(Value);
-  {{/isrecord}}
-  {{^isrecord}}
-  {{index}}: f{{name}} := Value;
-  {{/isrecord}}
+  {{index}}: f{{name}} := {{#isrecord}}Variant2{{typerttiname}}({{/isrecord}}Value{{#isrecord}}){{/isrecord}};
   {{/fields}}
   end;
 end;
@@ -116,12 +122,7 @@ begin
   case FieldIndex of
   0: result := fID;
   {{#fields}}
-  {{#isrecord}}
-  {{index}}: result := {{typerttiname}}2Variant(f{{name}});
-  {{/isrecord}}
-  {{^isrecord}}
-  {{index}}: result := f{{name}};
-  {{/isrecord}}
+  {{index}}: result := {{#isrecord}}{{typerttiname}}2Variant({{/isrecord}}f{{name}}{{#isrecord}}){{/isrecord}};
   {{/fields}}
   end;
 end;
@@ -134,5 +135,21 @@ begin
   result := TSQLModel.Create([{{#orm}}{{classname}}{{comma}}{{/orm}}],'{{root}}');
 end;
 
+{{#soa.services}}
+
+{ TService{{interfaceURI}} }
+
+{{#methods}}
+procedure TService{{interfaceURI}}.{{>methodSignature}}
+begin 
+  fClient.CallRemoteService('{{interfaceURI}}','{{methodName}}',{{ArgsOutputCount}},
+    [{{#args}}{{#dirInput}}{{#isrecord}}{{typeName}}2Variant({{argName}}){{/isrecord}}{{^isrecord}}{{argName}}{{/isrecord}}{{commaInSingle}}{{/dirInput}}{{/args}}],
+    lambda (res: array of Variant)
+      onSuccess({{#args}}{{#dirOutput}}{{#isrecord}}Variant2{{typeName}}({{/isrecord}}res[{{indexOutResult}}{{#isrecord}}){{/isrecord}}{{/dirOutput}}{{/args}});
+    end, onError); 
+end;
+
+{{/methods}}
+{{/soa.services}}
 
 end.

@@ -69,6 +69,7 @@ uses
 uses
   SysUtils,
   Classes,
+  TypInfo,
 {$ifdef NEXTGEN}
   System.Generics.Collections,
 {$else}
@@ -174,8 +175,6 @@ type
   /// a published property kind
   // - does not match mORMot.pas TSQLFieldType: here we recognize only types
   // which may expect a special behavior in this unit
-  // - should match TCrossPlatformSQLFieldKind as defined in mORMotWrappers.pas
-  // - more complex fields (e.g. sftMany) are not handled yet
   TSQLFieldKind = (
     sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime,
     sftRecord, sftVariant);
@@ -694,6 +693,15 @@ type
     /// close the session initiated with SetUser()
     // - will reset Authentication property to nil
     procedure SessionClose;
+    {$ifdef ISSMS}
+    /// execute a specified interface-based service method on the server
+    // - under SMS, only this asynchronous method is available, which won't
+    // block the browser, e.g. if the network is offline
+    // - you should not call it, but directly TServiceClient* methods
+    procedure CallRemoteService(const aInterfaceName, aMethodName: string;
+      aExpectedOutputParamsCount: integer; const aInputParams: array of variant;
+      onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
+    {$endif}
     /// set this property to TRUE if the server expects only APPLICATION/JSON
     // - applies only for AJAX clients (i.e. SmartMobileStudio platform)
     // - true will let any remote call be identified as "preflighted requests",
@@ -772,6 +780,15 @@ type
     property KeepAlive: Integer read fKeepAlive write fKeepAlive;
   end;
 
+  /// abstract ancestor to all client-side interface-based services
+  // - any overriden class will in fact call the server to execute its methods
+  TServiceClientAbstract = class{$ifndef ISDWS}(TInterfacedObject){$endif}
+  protected
+    fClient: TSQLRestClientURI;
+  public
+    /// initialize the fake instance
+    constructor Create(aClient: TSQLRestClientURI);
+  end;
 
 /// true if PropName is either 'ID' or 'RowID'
 function IsRowID(const PropName: string): boolean;
@@ -824,24 +841,27 @@ function FormatBind(const SQLWhere: string;
   const BoundsSQLWhere: array of const): string;
 var tmpIsString: Boolean;
     tmp: string;
-    i,deb,arg: integer;
+    i,deb,arg,maxArgs,SQLWhereLen: integer;
 {$ifdef ISSMS}
     args: variant; // open parameters are not a true array in JavaScript
 begin
   asm
     @args=@BoundsSQLWhere;
   end;
+  maxArgs := args.length-1;
 {$else}
 begin
+  maxArgs := high(BoundsSQLWhere);
 {$endif}
   result := '';
   arg := 0;
-  i := 1;
   deb := 1;
-  while i<=length(SQLWhere) do
+  i := 1; // we need i after then main loop -> do not use for i := 1 to ...
+  SQLWhereLen := length(SQLWhere);
+  while i<=SQLWhereLen do
     if SQLWhere[i]='?' then begin
       result := result+copy(SQLWhere,deb,i-deb)+':(';
-      if arg>high(BoundsSQLWhere) then
+      if arg>maxArgs then
         tmp := 'null' else begin
         tmp := VarRecToValue(
           {$ifdef ISSMS}args{$else}BoundsSQLWhere{$endif}[arg],tmpIsString);
@@ -2004,9 +2024,7 @@ end;
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
   aID: integer): string;
-var {$ifdef ISSMS}
-    doc: variant;
-    {$else}
+var {$ifndef ISSMS}
     doc: TJSONVariantData;
     jsonres: string;
     {$endif}
@@ -2016,7 +2034,7 @@ begin
   if Call.OutStatus<>HTML_SUCCESS then
     result := '' else begin
     {$ifdef ISSMS}
-    doc := JSON.Parse(Call.OutBody);
+    var doc := JSON.Parse(Call.OutBody);
     if VarIsValidRef(doc.result) then
       result := doc.result;
     {$else}
@@ -2055,7 +2073,36 @@ begin
   SetAsynch(Call,onSuccess,onError,lambda
     result := (Call.OutStatus=HTML_SUCCESS) and SetServerTimeStamp(Call.OutBody);
   end);
-  CallBackGet('TimeStamp',[],Call);
+  CallBackGet('TimeStamp',[],Call); // asynchronous call
+end;
+
+procedure TSQLRestClientURI.CallRemoteService(const aInterfaceName, aMethodName: string;
+  aExpectedOutputParamsCount: integer; const aInputParams: array of variant;
+  onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
+var Call: TSQLRestURIParams;
+begin
+  // TODO: handle URI+response encodings, and TServiceInstanceImplementation
+  SetAsynch(Call,lambda
+      var doc := JSON.Parse(Call.OutBody);
+      if VarIsValidRef(doc.result) then begin
+        if aExpectedOutputParamsCount=0 then
+          onSuccess([]) else begin
+          var res := TJSONVariantData.CreateFrom(doc.result);
+          if (res.Kind=jvArray) and (res.Count=aExpectedOutputParamsCount) then
+            onSuccess(res.Values) else
+            onError(self);
+        end;
+      end else
+        onError(self);
+    end,
+    onError,
+    lambda
+      result := (Call.OutStatus=HTML_SUCCESS) and (Call.OutBody<>'');
+    end);
+  Call.Url :=  Model.Root+'/'+aInterfaceName+'.'+aMethodName;
+  Call.InBody := JSON.Stringify(variant(aInputParams));
+  Call.Method := 'POST';
+  URI(Call); // asynchronous call
 end;
 
 {$else}
@@ -2234,23 +2281,6 @@ end;
 
 { TSQLAuthUser }
 
-function SHA256Compute(const Values: array of string): string;
-var buf: THttpBody;
-    a: integer;
-    sha: TSHA256;
-begin
-  sha := TSHA256.Create;
-  try
-    for a := 0 to high(Values) do begin
-      buf := TextToHttpBody(Values[a]);
-      sha.Update(buf);
-    end;
-    result := sha.Finalize;
-  finally
-    sha.Free;
-  end;
-end;
-
 {$ifdef ISSMS}
 
 class function TSQLAuthUser.ComputeRTTI: TRTTIPropInfos;
@@ -2285,6 +2315,23 @@ begin
 end;
 
 {$endif}
+
+function SHA256Compute(const Values: array of string): string;
+var buf: THttpBody;
+    a: integer;
+    sha: TSHA256;
+begin
+  sha := TSHA256.Create;
+  try
+    for a := 0 to high(Values) do begin
+      buf := TextToHttpBody(Values[a]);
+      sha.Update(buf);
+    end;
+    result := sha.Finalize;
+  finally
+    sha.Free;
+  end;
+end;
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: string);
 begin
@@ -2359,9 +2406,9 @@ begin
   result := fSessionIDHexa8;
 end;
 
-{ TSQLAuthGroup }
-
 {$ifdef ISSMS}
+
+{ TSQLAuthGroup }
 
 class function TSQLAuthGroup.ComputeRTTI: TRTTIPropInfos;
 begin
@@ -2390,5 +2437,12 @@ begin
 end;
 
 {$endif}
+
+{ TServiceClientAbstract }
+
+constructor TServiceClientAbstract.Create(aClient: TSQLRestClientURI);
+begin
+  fClient := aClient;
+end;
 
 end.

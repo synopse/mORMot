@@ -6928,7 +6928,7 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     ValueKindAsm: set of (vIsString, vPassedByReference);
     /// byte offset in the CPU stack of this argument
-    // - may be -1 if pure register parameter with no backup on stack (x86) 
+    // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
     /// used to specify if the argument is passed as register
     // - contains 0 if parameter is not a register
@@ -6950,6 +6950,11 @@ type
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TTextWriter);
+    {$ifndef NOVARIANTS}
+    /// retrieve a context document defining this method arguments
+    // - will be used e.g. by mORMotWrapper.pas unit to export the service
+    function ContextFromArguments(aRecordParsers: TList): variant;
+    {$endif}
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddJSON(WR: TTextWriter; V: pointer);
@@ -7024,6 +7029,8 @@ type
     ArgsOutFirst: integer;
     /// the index of the last var / out / result argument in Args[]
     ArgsOutLast: integer;
+    /// the index of the last var / out argument in Args[]
+    ArgsOutNotResultLast: integer;
     /// the number of const / var parameters in Args[]
     // - i.e. the number of elements in the input JSON array
     ArgsInputValuesCount: cardinal;
@@ -7199,6 +7206,11 @@ type
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactoryException if the method is not known
     function CheckMethodIndex(aMethodName: PUTF8Char): integer; overload;
+    {$ifndef NOVARIANTS}
+    /// retrieve a context document defining this interface methods
+    // - will be used e.g. by mORMotWrapper.pas unit to export the service
+    function ContextFromMethods(aRecordParsers: TList): variant;
+    {$endif}
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
@@ -7908,6 +7920,12 @@ type
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
     // is set to TRUE (which is not the default setting, for security reasons)
     function RetrieveSignature: RawUTF8; virtual; abstract;
+    {$ifndef NOVARIANTS}
+    /// retrieve a context document defining this interface
+    // - will be used e.g. by mORMotWrapper.pas unit to export the service
+    function ContextFromInterface(aExpectMangledURI: boolean;
+      aRecordParsers: TList): variant; virtual;
+    {$endif}
     /// the associated RESTful instance
     property Rest: TSQLRest read fRest;
     /// access to the registered Interface RTTI information
@@ -8384,6 +8402,11 @@ type
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
+    {$ifndef NOVARIANTS}
+    /// retrieve a context document defining the registered services
+    // - will be used e.g. by mORMotWrapper.pas unit to export the services
+    function ContextFromRegisteredServices(recordParsers: TList): Variant;
+    {$endif}
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -34558,6 +34581,22 @@ begin
   result := nil;
 end;
 
+{$ifndef NOVARIANTS}
+function TServiceContainer.ContextFromRegisteredServices(recordParsers: TList): Variant;
+var serv: TDocVariantData;
+    i: integer;
+begin
+  SetVariantNull(result);
+  if (self=nil) or (fList.Count=0) then
+    exit;
+  serv.Init(JSON_OPTIONS[true]);
+  for i := 0 to fList.Count-1 do
+    serv.AddItem(Index(i).ContextFromInterface(ExpectMangledURI,recordParsers));
+  result := _ObjFast(['enabled',True,'services',variant(serv),
+    'expectMangledURI',ExpectMangledURI]);
+end;
+{$endif}
+
 
 { TInterfacedObjectFake (private class for TInterfaceFactory.CreateFakeInstance) }
 
@@ -35229,6 +35268,43 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS}
+function TInterfaceFactory.ContextFromMethods(aRecordParsers: TList): variant;
+const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+      NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
+var methods,arguments: TDocVariantData;
+    m,a,r: integer;
+    arg: variant;
+begin
+  methods.Init(JSON_OPTIONS[true]);
+  for m := 0 to fMethodsCount-1 do
+  with fMethods[m] do begin
+    r := 0;
+    arguments.Init(JSON_OPTIONS[true]);
+    for a := 1 to high(args) do begin // ignore self as a=0
+      arg := args[a].ContextFromArguments(aRecordParsers);
+      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then begin
+        arg.commaIn := '; ';
+        arg.commaInSingle := ',';
+      end;
+      if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
+        arg.commaOut := '; ';
+      if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+        arg.indexOutResult := UInt32ToUtf8(r)+']';
+        inc(r);
+        if a<ArgsOutLast then
+          arg.commaOutResult := ',';
+      end;
+      arguments.AddItem(arg);
+    end;
+    methods.AddItem(_ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
+      'args',variant(arguments),'argsOutputCount',r]));
+    arguments.Clear;
+  end;
+  result := variant(methods);
+end;
+{$endif}
+
 procedure TInterfaceFactory.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 var P: Pointer absolute aInterface;
     PB: PByte absolute aInterface;
@@ -35286,6 +35362,7 @@ begin
       ArgsInLast := -2;
       ArgsOutFirst := -1;
       ArgsOutLast := -2;
+      ArgsOutNotResultLast := -2;
       for j := 0 to n-1 do
       with Args[j] do begin
         f := PF^;
@@ -35299,6 +35376,8 @@ begin
             ArgsOutFirst := j;
           ArgsOutLast := j;
           inc(ArgsOutputValuesCount);
+          if ValueDirection<>smdResult then
+            ArgsOutNotResultLast := j;
         end;
         ParamName := PS;
         PS := @PS^[ord(PS^[0])+1];
@@ -36377,6 +36456,22 @@ begin
     fContractExpected := fContractHash; // for security
 end;
 
+{$ifndef NOVARIANTS}
+function TServiceFactory.ContextFromInterface(aExpectMangledURI: boolean;
+  aRecordParsers: TList): variant;
+var uri: RawUTF8;
+begin
+  if aExpectMangledURI then
+    uri := InterfaceMangledURI else
+    uri := InterfaceURI;
+  result := _ObjFast(['uri',uri,'interfaceURI',InterfaceURI,
+    'interfaceMangledURI',InterfaceMangledURI,'GUID',GUIDToRawUTF8(fInterface.InterfaceIID),
+    'contractExpected',UnQuoteSQLString(ContractExpected),
+    'instanceCreation',ord(InstanceCreation),'instanceCreationName',ToText(InstanceCreation),
+    'methods',InterfaceFactory.ContextFromMethods(aRecordParsers)]);
+end;
+{$endif}
+
 
 { TServiceContainerServer }
 
@@ -36980,12 +37075,12 @@ end;
 { TServiceMethodArgument }
 
 const
-  CONST_METHODDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
+  CONST_ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
     // convert into generic in/out direction (assume result is out)
     'in','both','out','out');
 
   // AnsiString (Delphi <2009) is handled with care (may loose data otherwise)
-  CONST_METHODTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
+  CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
     'double','datetime','currency','utf8',
     {$ifdef UNICODE}'utf8'{$else}''{$endif},'utf8','',
@@ -36996,7 +37091,7 @@ begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
   WR.AddShort('","direction":"');
-  WR.AddShort(CONST_METHODDIRTOJSON[ValueDirection]);
+  WR.AddShort(CONST_ARGDIRTOJSON[ValueDirection]);
   WR.AddShort('","type":"');
   {$ifndef UNICODE} // should specify the Ansi code page for no data loss
   if ValueType=smvString then begin
@@ -37004,11 +37099,62 @@ begin
     WR.AddU(CurrentAnsiConvert.CodePage);
   end else
   {$endif}
-  if CONST_METHODTYPETOJSON[ValueType]='' then
+  if CONST_ARGTYPETOJSON[ValueType]='' then
     WR.AddShort(TypeInfo^.Name) else
-    WR.AddShort(CONST_METHODTYPETOJSON[ValueType]);
+    WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
   WR.AddShort('"},');
 end;
+
+{$ifndef NOVARIANTS}
+function TServiceMethodArgument.ContextFromArguments(aRecordParsers: TList): variant;
+const
+  CONST_DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
+    'const','var','out','result');
+  CONST_TYPETODELPHI: array[TServiceMethodValueType] of string[8] = (
+    '??','self','boolean', '', '','integer','cardinal','int64',
+    'double','datetime','currency','string','string','string','',
+    'variant','','string','');
+  CONST_SIZETODELPHI: array[1..4] of string[7] = (
+    'byte','word','integer','integer');
+var typ: PShortString;
+    parser: TJSONCustomParserAbstract;
+begin
+  if CONST_TYPETODELPHI[ValueType]='' then
+    typ := @TypeInfo^.Name else
+    typ := @CONST_TYPETODELPHI[ValueType];
+  result := _ObjFast(['argName',ParamName^,'dir',ord(ValueDirection),
+    'dirName',CONST_DIRTODELPHI[ValueDirection],
+    'type',ord(ValueType),'typeName',typ^,
+    'typeRttiName',GetEnumName(System.TypeInfo(TServiceMethodValueType),ord(ValueType))^]);
+  if ValueDirection in [smdConst,smdVar] then
+    result.dirInput := true;
+  if ValueDirection in [smdVar,smdOut,smdResult] then
+    result.dirOutput := true;
+  if ValueDirection=smdResult then
+    result.dirResult := true;
+  case ValueType of
+  smvEnum:     result.isEnum := true;
+  smvSet:      result.isSet := CONST_SIZETODELPHI[SizeInStorage];
+  smvRecord: begin
+    result.isRecord := true;
+    if (ValueDirection=smdResult) and
+       (TypeInfo=System.TypeInfo(TServiceCustomAnswer)) then
+      result.isCustomAnswer := true else
+    if aRecordParsers<>nil then begin
+      parser := TTextWriter.RegisterCustomJSONSerializerFindParser(TypeInfo,True);
+      if (parser<>nil) and (parser.Root<>nil) and
+         (aRecordParsers.IndexOf(parser.Root)<0) then
+        aRecordParsers.Add(parser.Root);
+    end;
+  end;
+  smvVariant:  result.isVariant := true;
+  smvObject:   result.isObject := true;
+  smvDynArray: result.isArray := true;
+  smvRawJSON:  result.isJson := true;
+  else         result.isSimple := true;
+  end;
+end;
+{$endif}
 
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
 begin

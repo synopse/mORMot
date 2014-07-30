@@ -64,11 +64,15 @@ uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,
-  SynCommons, mORMot, SynMustache;
+  Variants,
+  SynCommons,
+  mORMot,
+  SynMustache;
 
 /// compute the Model information, ready to be exported as JSON
-// - will be used e.g. for client code generation via Mustache templates
-function ContextFromModel(const aModel: TSQLModel): variant;
+// - will publish the ORM and SOA properties
+// - to be used e.g. for client code generation via Mustache templates
+function ContextFromModel(const aServer: TSQLRestServer): variant;
 
 /// you can call this procedure within a method-based service to return
 // all available client .template files in the supplied paths 
@@ -88,19 +92,19 @@ type
   // which may expect a special behavior in SynCrossPlatformREST.pas unit
   // - should match TSQLFieldKind in SynCrossPlatformREST.pas
   TCrossPlatformSQLFieldKind = (
-    sftDefault, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime,
+    sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime,
     sftRecord, sftVariant);
 
 const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    sftDefault, sftDefault, sftDefault, sftDefault, sftDefault, sftDefault,
+    sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    sftDefault,sftDefault,sftDefault,sftDefault,sftDateTime,sftTimeLog,sftDefault,
+    sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftDateTime,sftTimeLog,sftUnspecified,
  // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
-    sftDefault,{$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftDefault,
+    sftUnspecified,{$ifndef NOVARIANTS}sftVariant,{$endif}sftBlob,sftUnspecified,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
-    sftDefault,    sftRecord,  sftDefault, sftModTime, sftCreateTime);
+    sftUnspecified,sftRecord,sftUnspecified,sftModTime,sftCreateTime);
 
 function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
 begin
@@ -109,29 +113,30 @@ begin
     result := 'null';
 end;
 
-function ContextFromModel(const aModel: TSQLModel): variant;
+function ContextFromModel(const aServer: TSQLRestServer): variant;
 var orm,fields,records: TDocVariantData;
     rec,field: variant;
     nfoList: TSQLPropInfoList;
     nfo: TSQLPropInfo;
-    t,f: integer;
+    t,f,s: integer;
     kind: TCrossPlatformSQLFieldKind;
-    hasRecord: boolean;
+    hasRecord, recordAlreadyExisting: boolean;
     parser: TJSONCustomParserRTTI;
-    parsers: TList;
+    parsers, parsersServices: TList;
 begin
   SetVariantNull(result);
-  if aModel=nil then
+  if aServer=nil then
     exit;
   // compute ORM Model information
   orm.Init;
   records.Init;
   fields.Init;
   parsers := TList.Create;
+  parsersServices := TList.Create;
   try
-    for t := 0 to aModel.TablesMax do begin
+    for t := 0 to aServer.Model.TablesMax do begin
       hasRecord := false;
-      nfoList := aModel.TableProps[t].Props.Fields;
+      nfoList := aServer.Model.TableProps[t].Props.Fields;
       fields.Clear;
       fields.Init;
       for f := 0 to nfoList.Count-1 do begin
@@ -163,10 +168,10 @@ begin
           end;
         end;
       end;
-      with aModel.TableProps[t] do
+      with aServer.Model.TableProps[t] do
         rec := _JsonFastFmt('{tableName:?,className:?,fields:?,isInMormotPas:%,comma:%}',
           [NULL_OR_TRUE[(Props.Table=TSQLAuthGroup) or (Props.Table=TSQLAuthUser)],
-           NULL_OR_COMMA[t<aModel.TablesMax]],
+           NULL_OR_COMMA[t<aServer.Model.TablesMax]],
           [Props.SQLTableName,Props.Table.ClassName,Variant(fields)]);
       if hasRecord then
         rec.hasRecords := true;
@@ -177,13 +182,30 @@ begin
         records.AddItem(_JsonFastFmt('{name:?,fields:?}',[],
           [SQLFieldRTTITypeName,CustomParser.ContextNestedProperties]));
     // compute the Model information as JSON
-    result := _JsonFastFmt('{time:?,root:?,orm:?}',[],
-      [NowToString,aModel.Root,variant(orm)]);
+    result := _ObjFast(['time',NowToString,'root',aServer.Model.Root,
+      'orm',variant(orm),
+      'soa',aServer.Services.ContextFromRegisteredServices(parsersServices)]);
+    // add the record information defined for services to the list
+    for s := 0 to parsersServices.Count-1 do
+      with TJSONCustomParserRTTI(parsersServices.List[s]) do
+      if CustomTypeName<>'' then begin
+        recordAlreadyExisting := false;
+        for t := 0 to parsers.Count-1 do
+          if IdemPropNameU(TSQLPropInfoCustomJSON(parsers.List[t]).
+               SQLFieldRTTITypeName,CustomTypeName) then begin
+            recordAlreadyExisting := true;
+            break;
+          end;
+        if not recordAlreadyExisting then
+          records.AddItem(_JsonFastFmt('{name:?,fields:?}',[],
+            [CustomTypeName,ContextNestedProperties]));
+      end;
     if records.Count>0 then begin
       result.records := variant(records);
       result.withRecords := true;
     end;
   finally
+    parsersServices.Free;
     parsers.Free;
   end;
 end;
@@ -208,7 +230,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
       [ExpandFileName(Path[0])]);
     exit;
   end;
-  context := ContextFromModel(Ctxt.Server.Model);
+  context := ContextFromModel(Ctxt.Server);
   context.uri := Ctxt.URIWithoutSignature;
   host := Ctxt.InHeader['host'];
   context.host := host;
