@@ -4606,6 +4606,7 @@ type
   protected
     fPropertyName: RawUTF8;
     fPropertyType: TJSONCustomParserRTTIType;
+    fCustomTypeName: RawUTF8;
     fNestedProperty: TJSONCustomParserRTTIs;
     fDataSize: integer;
     fNestedDataSize: integer;
@@ -4636,6 +4637,8 @@ type
     /// retrieve a context document defining the corresponding record fields
     // - will be used e.g. by mORMotWrapper.pas unit to export the record
     function ContextNestedProperties: variant; virtual;
+    /// the associated type name, for a record
+    property CustomTypeName: RawUTF8 read fCustomTypeName; 
     /// the property name
     // - may be void for the Root element
     property PropertyName: RawUTF8 read fPropertyName;
@@ -5156,6 +5159,14 @@ type
     class function RegisterCustomJSONSerializerSetOptions(aTypeInfo: pointer;
       aOptions: TJSONCustomParserSerializationOptions;
       aAddIfNotExisting: boolean=false): boolean;
+    /// retrieve a previously registered custom parser instance from its type
+    // - will return nil if the type info was not available, or defined just
+    // with some callbacks
+    // - if AddIfNotExisting is TRUE, and enhanced RTTI is available (since
+    // Delphi 2010), you would be able to retrieve this type's parser even
+    // if the record type has not been previously used
+    class function RegisterCustomJSONSerializerFindParser(
+      aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONCustomParserAbstract;
     /// define a custom serialization for a given simple type
     // - you should be able to use this type in the RTTI text definition
     // of any further RegisterCustomJSONSerializerFromText() call
@@ -25535,7 +25546,6 @@ type
   /// implement a ptCustom kind of property
   TJSONCustomParserCustom = class(TJSONCustomParserRTTI)
   protected
-    fCustomTypeName: RawUTF8;
     fCustomTypeInfo: pointer;
   public
     constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); virtual;
@@ -31538,6 +31548,25 @@ begin
     GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser.Options := aOptions;
     result := true;
   end;
+end;
+
+class function TTextWriter.RegisterCustomJSONSerializerFindParser(
+  aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONCustomParserAbstract;
+var ndx: integer;
+begin
+  result := nil;
+  if aTypeInfo=nil then
+    exit;
+  case PFieldTable(aTypeInfo)^.kind of
+  tkRecord:
+    ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
+  tkDynArray:
+    ndx := GlobalJSONCustomParsers.DynArraySearch(aTypeInfo,nil,aAddIfNotExisting);
+  else
+    exit;
+  end;
+  if ndx>=0 then
+    result := GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser;
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
