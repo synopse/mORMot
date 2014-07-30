@@ -2463,7 +2463,10 @@ procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
 // - "text "" end"   -> text " end
 // - returns nil if P doesn't contain a valid SQL string
 // - returns a pointer just after the quoted text otherwise
-function UnQuoteSQLString(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+function UnQuoteSQLString(P: PUTF8Char; out Value: RawUTF8): PUTF8Char; overload;
+
+/// unquote a SQL-compatible string
+function UnQuoteSQLString(const Value: RawUTF8): RawUTF8; overload;
 
 /// get the next character after a quoted buffer
 // - the first character in P^ must be either ', either "
@@ -15354,6 +15357,11 @@ begin
     until false;
   end;
   result := P+1;
+end;
+
+function UnQuoteSQLString(const Value: RawUTF8): RawUTF8;
+begin
+  UnQuoteSQLString(pointer(Value),result);
 end;
 
 function isSelect(P: PUTF8Char): boolean;
