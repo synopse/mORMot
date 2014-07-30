@@ -15361,8 +15361,9 @@ begin
   if P<>nil then begin
     P := SQLBegin(P);
     result :=
-      (IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
-      (P[6] in [#0..' ',';']); // avoid VACUUMStoredProcUnsecure security issue
+      ((IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
+       (P[6] in [#0..' ',';'])) or // avoid VACUUMStoredProcUnsecure security issue
+      ((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';']));
   end else
     result := true; // assume '' statement is SELECT command
 end;
