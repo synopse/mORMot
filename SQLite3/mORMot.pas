@@ -1845,6 +1845,8 @@ type
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumName(const Value): PShortString;
        {$ifdef HASINLINE}inline;{$endif}
+    /// get all enumeration names as CSV or JSON array
+    function GetEnumNameAll(asJSONArray: boolean=false): RawUTF8;
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -1899,6 +1901,10 @@ type
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameTrimedValue(Value: PUTF8Char): Integer; overload;
+    /// compute how many bytes this type would use to be stored as a enumerate
+    function SizeInStorageAsEnum: Integer;
+    /// compute how many bytes this type would use to be stored as a set
+    function SizeInStorageAsSet: Integer;
   end;
 
 
@@ -6953,7 +6959,7 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve a context document defining this method arguments
     // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    function ContextFromArguments(aRecordParsers: TList): variant;
+    function ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
     {$endif}
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
@@ -7209,7 +7215,7 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve a context document defining this interface methods
     // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    function ContextFromMethods(aRecordParsers: TList): variant;
+    function ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
     {$endif}
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
@@ -7924,7 +7930,7 @@ type
     /// retrieve a context document defining this interface
     // - will be used e.g. by mORMotWrapper.pas unit to export the service
     function ContextFromInterface(aExpectMangledURI: boolean;
-      aRecordParsers: TList): variant; virtual;
+      aRegisteredTypes: TRawUTF8List): variant; virtual;
     {$endif}
     /// the associated RESTful instance
     property Rest: TSQLRest read fRest;
@@ -8405,7 +8411,7 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve a context document defining the registered services
     // - will be used e.g. by mORMotWrapper.pas unit to export the services
-    function ContextFromRegisteredServices(recordParsers: TList): Variant;
+    function ContextFromRegisteredServices(aRegisteredTypes: TRawUTF8List): Variant;
     {$endif}
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
@@ -14467,7 +14473,7 @@ begin
   fSetEnumType := fPropInfo^.PropType^^.SetEnumType;
 end;
 
-
+                          
 { TSQLPropInfoRTTIEnum }
 
 constructor TSQLPropInfoRTTIEnum.Create(aPropInfo: PPropInfo; aPropIndex: integer;
@@ -20202,6 +20208,33 @@ begin
   end;
 end;
 
+function TEnumType.GetEnumNameAll(asJSONArray: boolean=false): RawUTF8;
+var i: integer;
+    V: PShortString;
+begin
+  with TTextWriter.CreateOwnedStream(1024) do
+  try
+    if asJSONArray then
+      Add('[');
+    V := @NameList;
+    for i := MinValue to MaxValue do begin
+      if asJSONArray then
+        Add('"');
+      AddShort(V^);
+      if asJSONArray then
+        Add('"');
+      Add(',');
+      inc(PtrUInt(V),length(V^)+1);
+    end;
+    CancelLastComma;
+    if asJSONArray then
+      Add(']');
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
 procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
 var i, L: integer;
     Line: array[byte] of AnsiChar;
@@ -20289,6 +20322,24 @@ begin
   end;
 end;
 
+function TEnumType.SizeInStorageAsEnum: Integer;
+begin
+  case MaxValue of
+  0..255:     result := 1;
+  256..65535: result := 2;
+  else        result := 4;
+  end;
+end;
+
+function TEnumType.SizeInStorageAsSet: Integer;
+begin
+  case MaxValue of
+  0..7:   result := 1;
+  8..15:  result := 2;
+  16..31: result := 4;
+  else    result := 0;
+  end;
+end;
 
 function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 begin
@@ -34582,7 +34633,8 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TServiceContainer.ContextFromRegisteredServices(recordParsers: TList): Variant;
+function TServiceContainer.ContextFromRegisteredServices(
+  aRegisteredTypes: TRawUTF8List): Variant;
 var serv: TDocVariantData;
     i: integer;
 begin
@@ -34591,7 +34643,7 @@ begin
     exit;
   serv.Init(JSON_OPTIONS[true]);
   for i := 0 to fList.Count-1 do
-    serv.AddItem(Index(i).ContextFromInterface(ExpectMangledURI,recordParsers));
+    serv.AddItem(Index(i).ContextFromInterface(ExpectMangledURI,aRegisteredTypes));
   result := _ObjFast(['enabled',True,'services',variant(serv),
     'expectMangledURI',ExpectMangledURI]);
 end;
@@ -35168,20 +35220,14 @@ begin
         smvInt64, smvDouble, smvDateTime, smvCurrency:
           SizeInStorage := 8;
         smvEnum:
-          case TypeInfo^.EnumBaseType^.MaxValue of
-          0..255:     SizeInStorage := 1;
-          256..65535: SizeInStorage := 2;
-          else        SizeInStorage := 4;
-          end;
-        smvSet:
-          case TypeInfo^.SetEnumType^.MaxValue of
-          0..7:   SizeInStorage := 1;
-          8..15:  SizeInStorage := 2;
-          16..31: SizeInStorage := 4;
-          else raise EInterfaceFactoryException.CreateFmt(
-            '%s set too big in %s.%s method %s parameter',
-            [TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
-          end;
+          SizeInStorage := TypeInfo^.EnumBaseType^.SizeInStorageAsEnum;
+        smvSet: begin
+          SizeInStorage := TypeInfo^.SetEnumType^.SizeInStorageAsSet;
+          if SizeInStorage=0 then
+            raise EInterfaceFactoryException.CreateFmt(
+              '%s set too big in %s.%s method %s parameter',
+              [TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
+        end;
         smvRecord:
           if TypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateFmt(
@@ -35269,7 +35315,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TInterfaceFactory.ContextFromMethods(aRecordParsers: TList): variant;
+function TInterfaceFactory.ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
 const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
       NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
 var methods,arguments: TDocVariantData;
@@ -35282,7 +35328,7 @@ begin
     r := 0;
     arguments.Init(JSON_OPTIONS[true]);
     for a := 1 to high(args) do begin // ignore self as a=0
-      arg := args[a].ContextFromArguments(aRecordParsers);
+      arg := args[a].ContextFromArguments(aRegisteredTypes);
       if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then begin
         arg.commaIn := '; ';
         arg.commaInSingle := ',';
@@ -36458,7 +36504,7 @@ end;
 
 {$ifndef NOVARIANTS}
 function TServiceFactory.ContextFromInterface(aExpectMangledURI: boolean;
-  aRecordParsers: TList): variant;
+  aRegisteredTypes: TRawUTF8List): variant;
 var uri: RawUTF8;
 begin
   if aExpectMangledURI then
@@ -36468,7 +36514,7 @@ begin
     'interfaceMangledURI',InterfaceMangledURI,'GUID',GUIDToRawUTF8(fInterface.InterfaceIID),
     'contractExpected',UnQuoteSQLString(ContractExpected),
     'instanceCreation',ord(InstanceCreation),'instanceCreationName',ToText(InstanceCreation),
-    'methods',InterfaceFactory.ContextFromMethods(aRecordParsers)]);
+    'methods',InterfaceFactory.ContextFromMethods(aRegisteredTypes)]);
 end;
 {$endif}
 
@@ -37074,19 +37120,17 @@ end;
 
 { TServiceMethodArgument }
 
+procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
 const
   CONST_ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
     // convert into generic in/out direction (assume result is out)
     'in','both','out','out');
-
   // AnsiString (Delphi <2009) is handled with care (may loose data otherwise)
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
     'double','datetime','currency','utf8',
     {$ifdef UNICODE}'utf8'{$else}''{$endif},'utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','');
-
-procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
 begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
@@ -37106,52 +37150,58 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TServiceMethodArgument.ContextFromArguments(aRecordParsers: TList): variant;
+
+function TServiceMethodArgument.ContextFromArguments(
+  aRegisteredTypes: TRawUTF8List): variant;
 const
-  CONST_DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
+  TYPETOSIMPLE: array[TServiceMethodValueType] of TJSONCustomParserRTTIType = (
+    ptCustom,ptCustom,ptBoolean,ptCustom,ptCustom,ptInteger,ptCardinal,ptInt64,
+    ptDouble,ptDateTime,ptCurrency,ptRawUTF8,ptString,ptWideString,ptRecord,
+    ptVariant,ptCustom,ptRawJSON,ptArray);
+  DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
     'const','var','out','result');
-  CONST_TYPETODELPHI: array[TServiceMethodValueType] of string[8] = (
-    '??','self','boolean', '', '','integer','cardinal','int64',
-    'double','datetime','currency','string','string','string','',
-    'variant','','string','');
-  CONST_SIZETODELPHI: array[1..4] of string[7] = (
+  SIZETODELPHI: array[1..4] of string[7] = (
     'byte','word','integer','integer');
-var typ: PShortString;
+var typRtti: RawUTF8;
+    typ: TJSONCustomParserRTTIType;
     parser: TJSONCustomParserAbstract;
 begin
-  if CONST_TYPETODELPHI[ValueType]='' then
-    typ := @TypeInfo^.Name else
-    typ := @CONST_TYPETODELPHI[ValueType];
-  result := _ObjFast(['argName',ParamName^,'dir',ord(ValueDirection),
-    'dirName',CONST_DIRTODELPHI[ValueDirection],
-    'type',ord(ValueType),'typeName',typ^,
-    'typeRttiName',GetEnumName(System.TypeInfo(TServiceMethodValueType),ord(ValueType))^]);
+  typRtti := ShortStringToAnsi7String(TypeInfo^.Name);
+  typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(typRtti);
+  if typ=ptCustom then // guess from RTTI type
+    typ := TYPETOSIMPLE[ValueType];
+  result := TJSONCustomParserRTTI.ContextProperty(typ,typRtti,'','');
+  result.argName := ParamName^;
+  result.dir := ord(ValueDirection);
+  result.dirName := DIRTODELPHI[ValueDirection];
   if ValueDirection in [smdConst,smdVar] then
     result.dirInput := true;
   if ValueDirection in [smdVar,smdOut,smdResult] then
     result.dirOutput := true;
   if ValueDirection=smdResult then
     result.dirResult := true;
-  case ValueType of
-  smvEnum:     result.isEnum := true;
-  smvSet:      result.isSet := CONST_SIZETODELPHI[SizeInStorage];
-  smvRecord: begin
-    result.isRecord := true;
+  case ValueType of // // handle some special complex types
+  smvEnum: begin
+    result.isEnum := true;
+    result.toVariant := 'ord';
+    result.fromVariant := typRtti;
+  end;
+  smvSet: begin
+    result.isSet := true;
+    result.toVariant := SIZETODELPHI[SizeInStorage];
+    result.fromVariant := typRtti;
+  end;
+  smvRecord:
     if (ValueDirection=smdResult) and
        (TypeInfo=System.TypeInfo(TServiceCustomAnswer)) then
       result.isCustomAnswer := true else
-    if aRecordParsers<>nil then begin
+    if aRegisteredTypes<>nil then begin
       parser := TTextWriter.RegisterCustomJSONSerializerFindParser(TypeInfo,True);
-      if (parser<>nil) and (parser.Root<>nil) and
-         (aRecordParsers.IndexOf(parser.Root)<0) then
-        aRecordParsers.Add(parser.Root);
+      if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
+        aRegisteredTypes.AddObjectIfNotExisting(parser.Root.CustomTypeName,parser.Root);
     end;
-  end;
-  smvVariant:  result.isVariant := true;
-  smvObject:   result.isObject := true;
-  smvDynArray: result.isArray := true;
-  smvRawJSON:  result.isJson := true;
-  else         result.isSimple := true;
+  smvObject:
+    result.isObject := true;
   end;
 end;
 {$endif}

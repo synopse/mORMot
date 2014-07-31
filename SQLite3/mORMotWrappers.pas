@@ -90,21 +90,28 @@ type
   /// a cross-platform published property kind
   // - does not match mORMot.pas TSQLFieldType: here we recognize only types
   // which may expect a special behavior in SynCrossPlatformREST.pas unit
-  // - should match TSQLFieldKind in SynCrossPlatformREST.pas
+  // - should match TSQLFieldKind order in SynCrossPlatformREST.pas
   TCrossPlatformSQLFieldKind = (
-    sftUnspecified, sftDateTime, sftTimeLog, sftBlob, sftModTime, sftCreateTime,
-    sftRecord, sftVariant);
+    cpkDefault, cpkDateTime, cpkTimeLog, cpkBlob, cpkModTime, cpkCreateTime,
+    cpkRecord, cpkVariant);
 
 const
+  /// those text values should match TSQLFieldKind in SynCrossPlatformREST.pas
+  CROSSPLATFORMKIND_TEXT: array[TCrossPlatformSQLFieldKind] of RawUTF8 = (
+    'sftUnspecified', 'sftDateTime', 'sftTimeLog', 'sftBlob', 'sftModTime',
+    'sftCreateTime', 'sftRecord', 'sftVariant');
+
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,
+    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDefault,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    sftUnspecified,sftUnspecified,sftUnspecified,sftUnspecified,sftDateTime,sftTimeLog,sftUnspecified,
+    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkTimeLog,cpkDefault,
  // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
-    sftUnspecified,{$ifndef NOVARIANTS}sftVariant,{$endif}sftBlob,sftUnspecified,
+    cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif}cpkBlob,cpkDefault,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
-    sftUnspecified,sftRecord,sftUnspecified,sftModTime,sftCreateTime);
+    cpkDefault,  cpkRecord,   cpkDefault,  cpkModTime, cpkCreateTime);
+  CONST_SIZETODELPHI: array[0..4] of string[7] = (
+    'integer','byte','word','integer','integer');
 
 function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
 begin
@@ -114,15 +121,50 @@ begin
 end;
 
 function ContextFromModel(const aServer: TSQLRestServer): variant;
-var orm,fields,records: TDocVariantData;
+const
+  TYPETOSIMPLE: array[TSQLFieldType] of TJSONCustomParserRTTIType = 
+    (ptCustom,   // sftUnknown
+     ptString,   // sftAnsiText
+     ptRawUTF8,  // sftUTF8Text
+     ptCustom,   // sftEnumerate
+     ptCustom,   // sftSet
+     ptInteger,  // sftInteger
+     ptPtrUInt,  // sftID
+     ptPtrUInt,  // sftRecord
+     ptBoolean,  // sftBoolean
+     ptDouble,   // sftFloat
+     ptDateTime, // sftDateTime
+     ptTimeLog,  // sftTimeLog
+     ptCurrency, // sftCurrency
+     ptCustom,   // sftObject
+{$ifndef NOVARIANTS}
+     ptVariant,  // sftVariant
+{$endif}
+     ptRawByteString, // sftBlob
+     ptRawByteString, // sftBlobDynArray
+     ptRawByteString, // sftBlobCustom
+     ptRecord,   // sftUTF8Custom
+     ptCustom,   // sftMany
+     ptTimeLog,  // sftModTime
+     ptTimeLog); // sftCreateTime
+var orm,fields,records,enumerates,sets: TDocVariantData;
     rec,field: variant;
     nfoList: TSQLPropInfoList;
     nfo: TSQLPropInfo;
     t,f,s: integer;
+    typ: TJSONCustomParserRTTIType;
     kind: TCrossPlatformSQLFieldKind;
-    hasRecord, recordAlreadyExisting: boolean;
+    hasRecord: boolean;
     parser: TJSONCustomParserRTTI;
-    parsers, parsersServices: TList;
+    parsersPropInfo: TRawUTF8List;
+    parsersServices: TRawUTF8List;
+    typeNames: TRawUTF8List;
+function nfoTypeNotRegistered: Boolean;
+begin
+  result := typeNames.IndexOf(nfo.SQLFieldRTTITypeName)<0;
+  if not result then
+    typeNames.AddObject(nfo.SQLFieldRTTITypeName,nfo);
+end;
 begin
   SetVariantNull(result);
   if aServer=nil then
@@ -130,10 +172,16 @@ begin
   // compute ORM Model information
   orm.Init;
   records.Init;
+  enumerates.Init;
+  sets.Init;
   fields.Init;
-  parsers := TList.Create;
-  parsersServices := TList.Create;
+  typeNames := TRawUTF8List.Create;
+  parsersPropInfo := TRawUTF8List.Create;
+  parsersServices := TRawUTF8List.Create;
   try
+    typeNames.CaseSensitive := false;
+    parsersPropInfo.CaseSensitive := false;
+    parsersServices.CaseSensitive := false;
     for t := 0 to aServer.Model.TablesMax do begin
       hasRecord := false;
       nfoList := aServer.Model.TableProps[t].Props.Fields;
@@ -142,30 +190,58 @@ begin
       for f := 0 to nfoList.Count-1 do begin
         nfo := nfoList.List[f];
         kind := CROSSPLATFORM_KIND[nfo.SQLFieldType];
-        field := _JsonFastFmt(
-          '{index:?,name:?,type:?,typeName:?,typeRttiName:?,typeKind:?,typeKindName:?,'+
-           'attr:?,width:%,comma:%}',
-          [NULL_OR_CARDINAL(nfo.FieldWidth),NULL_OR_COMMA[f<nfoList.Count-1]],
-          [f+1,nfo.Name,ord(nfo.SQLFieldType),nfo.SQLFieldTypeName^,
-           nfo.SQLFieldRTTITypeName,ord(kind),
-           GetEnumName(TypeInfo(TCrossPlatformSQLFieldKind),ord(kind))^,
-           byte(nfo.Attributes)]);
+        typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(nfo.SQLFieldRTTITypeName);
+        if typ=ptCustom then // guess from SQL type
+          typ := TYPETOSIMPLE[nfo.SQLFieldType];
+        field := TJSONCustomParserRTTI.ContextProperty(typ,nfo.SQLFieldRTTITypeName,'','');
+        field.index := f+1;
+        field.name := nfo.Name;
+        field.sql := ord(nfo.SQLFieldType);
+        field.sqlName := nfo.SQLFieldTypeName^;
+        field.typeKind := ord(kind);
+        field.typeKindName := CROSSPLATFORMKIND_TEXT[kind];
+        field.attr := byte(nfo.Attributes);
         if aIsUnique in nfo.Attributes then
           field.unique := true;
-        case kind of
-        sftBlob:     field.isBlob := true;
-        sftDateTime: field.isDateTime := true;
-        sftVariant:  field.isVariant := true;
-        sftRecord:   field.isRecord := true;
+        if nfo.FieldWidth>0 then
+          field.width := nfo.FieldWidth;
+        if f<nfoList.Count-1 then
+          field.comma := ',';
+        case nfo.SQLFieldType of // handle some special complex types
+        sftEnumerate: begin
+          field.isEnum := true;
+          field.ToVariant := 'ord';
+          field.fromVariant := nfo.SQLFieldRTTITypeName;
+        end;
+        sftSet: begin
+          field.isSet := true;
+          if nfo.InheritsFrom(TSQLPropInfoRTTISet) then
+            field.toVariant := CONST_SIZETODELPHI[
+              TSQLPropInfoRTTISet(nfo).SetEnumType^.SizeInStorageAsSet] else
+            field.toVariant := 'byte';
+          field.fromVariant := nfo.SQLFieldRTTITypeName;
+        end;
         end;
         fields.AddItem(field);
         if nfo.InheritsFrom(TSQLPropInfoCustomJSON) then begin
           parser := TSQLPropInfoCustomJSON(nfo).CustomParser;
           if (parser<>nil) and (parser.PropertyType in [ptRecord,ptCustom]) then begin
             hasRecord := true;
-            if parsers.IndexOf(nfo)<0 then
-              parsers.Add(nfo);
+            if nfoTypeNotRegistered then
+              parsersPropInfo.AddObjectIfNotExisting(nfo.SQLFieldRTTITypeName,nfo);
           end;
+        end else
+        if nfo.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
+          if nfoTypeNotRegistered then
+            enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
+              [TSQLPropInfoRTTIEnum(nfo).EnumType^.GetEnumNameAll(true)],
+              [nfo.SQLFieldRTTITypeName]));
+        end else
+        if nfo.InheritsFrom(TSQLPropInfoRTTISet) then begin
+          if nfoTypeNotRegistered then
+            sets.AddItem(_JsonFastFmt('{name:?,values:%}',
+              [TSQLPropInfoRTTISet(nfo).SetEnumType^.GetEnumNameAll(true)],
+              [nfo.SQLFieldRTTITypeName]));
         end;
       end;
       with aServer.Model.TableProps[t] do
@@ -177,36 +253,46 @@ begin
         rec.hasRecords := true;
       orm.AddItem(rec);
     end;
-    for t := 0 to parsers.Count-1 do
-      with TSQLPropInfoCustomJSON(parsers.List[t]) do
-        records.AddItem(_JsonFastFmt('{name:?,fields:?}',[],
-          [SQLFieldRTTITypeName,CustomParser.ContextNestedProperties]));
+    for t := 0 to parsersPropInfo.Count-1 do
+      records.AddItem(_ObjFast(['name',parsersPropInfo.Strings[t],
+        'fields',TSQLPropInfoCustomJSON(parsersPropInfo.Objects[t]).
+          CustomParser.ContextNestedProperties(parsersServices)]));
     // compute the Model information as JSON
     result := _ObjFast(['time',NowToString,'root',aServer.Model.Root,
       'orm',variant(orm),
       'soa',aServer.Services.ContextFromRegisteredServices(parsersServices)]);
-    // add the record information defined for services to the list
+    // add the traling RTTI defined for services to the list
     for s := 0 to parsersServices.Count-1 do
-      with TJSONCustomParserRTTI(parsersServices.List[s]) do
-      if CustomTypeName<>'' then begin
-        recordAlreadyExisting := false;
-        for t := 0 to parsers.Count-1 do
-          if IdemPropNameU(TSQLPropInfoCustomJSON(parsers.List[t]).
-               SQLFieldRTTITypeName,CustomTypeName) then begin
-            recordAlreadyExisting := true;
-            break;
-          end;
-        if not recordAlreadyExisting then
-          records.AddItem(_JsonFastFmt('{name:?,fields:?}',[],
-            [CustomTypeName,ContextNestedProperties]));
-      end;
+      with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
+      if typeNames.IndexOf(CustomTypeName)<0 then
+        if PropertyType=ptRecord then
+          records.AddItem(
+            _ObjFast(['name',CustomTypeName,
+              'fields',ContextNestedProperties(parsersServices)]));
+    for s := 0 to parsersServices.Count-1 do
+      with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
+        if InheritsFrom(TJSONCustomParserCustomSimple) then
+        with TJSONCustomParserCustomSimple(parsersServices.Objects[s]) do
+         if KnownType=ktEnumeration then
+            enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
+              [PTypeInfo(CustomTypeInfo)^.EnumBaseType^.GetEnumNameAll(true)],
+              [CustomTypeName]));
     if records.Count>0 then begin
       result.records := variant(records);
       result.withRecords := true;
     end;
+    if enumerates.Count>0 then begin
+      result.enumerates := variant(enumerates);
+      result.withEnumerates := true;
+    end;
+    if sets.Count>0 then begin
+      result.sets := variant(sets);
+      result.withsets := true;
+    end;
   finally
     parsersServices.Free;
-    parsers.Free;
+    parsersPropInfo.Free;
+    typeNames.Free;
   end;
 end;
 

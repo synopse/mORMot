@@ -100,6 +100,7 @@ type
 
   // define some Delphi types not supported natively by DWS/SMS
   char = string;
+  byte = integer;
   word = integer;
   cardinal = integer;
   Int64 = integer;

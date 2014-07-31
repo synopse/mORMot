@@ -815,7 +815,7 @@ begin
       if DocumentType<>nil then
         if ListCount<0 then begin // single item context
           DocumentType.Lookup(Value,Document,pointer(ValueName));
-          if Value.VType>varNull then
+          if Value.VType>=varNull then
             exit;
          end else
         if ValueName='-index' then begin
@@ -825,7 +825,7 @@ begin
         end else
         if (ListCurrent<ListCount) and (ListCurrentDocumentType<>nil) then begin
           ListCurrentDocumentType.Lookup(Value,ListCurrentDocument,pointer(ValueName));
-          if Value.VType>varNull then
+          if Value.VType>=varNull then
             exit;
         end;
 end;

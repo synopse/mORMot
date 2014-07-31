@@ -2,7 +2,7 @@ unit PeopleServer;
 
 interface
 
-{.$define TESTRECORD}
+{$define TESTRECORD}
 
 uses
   SynCommons,
@@ -13,18 +13,36 @@ uses
   SysUtils;
 
 type
+  {$ifdef TESTRECORD}
+  TRecordEnum = (reOne, reTwo, reLast);
+
+  TTestCustomJSONArraySimpleArray = packed record
+    F: RawUTF8;
+    G: array of RawUTF8;
+    H: record
+      H1: integer;
+      H2: WideString;
+      H3: record
+        H3a: boolean;
+        H3b: RawByteString;
+      end;
+    end;
+    I: TDateTime;
+    J: array of packed record
+      J1: byte;
+      J2: TGUID;
+      J3: TRecordEnum;
+    end;
+  end;
+  {$endif TESTRECORD}
+
   ICalculator = interface(IInvokable)
     ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
     function Add(n1,n2: integer): integer;
     procedure ToText(Value: Currency; var Result: RawUTF8);
   end;
 
-  {$ifdef TESTRECORD}
-  TTestCustomJSONArraySimpleArray = packed record
-    F: RawUTF8;
-    G: array of RawUTF8;
-  end;
-  {$endif TESTRECORD}
+  TPeopleSexe = (sFemale, sMale);
 
   TSQLRecordPeople = class(TSQLRecord)
   protected
@@ -34,7 +52,9 @@ type
     fYearOfBirth: integer;
     fYearOfDeath: word;
     {$ifdef TESTRECORD}
+    fSexe: TPeopleSexe;
     fSimple: TTestCustomJSONArraySimpleArray;
+  public
     class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
     {$endif}
   published
@@ -44,6 +64,7 @@ type
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
   {$ifdef TESTRECORD}
+    property Sexe: TPeopleSexe read fSexe write fSexe;
   public
     property Simple: TTestCustomJSONArraySimpleArray read fSimple;
   {$endif}
@@ -122,7 +143,7 @@ begin
   end;
   if DB.TableRowCount(TSQLRecordPeople)=0 then
     // we expect at least one record
-    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},''{$endif}]);
+    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}]);
     // in all cases, client will call DropTable method-based service
   DB.ServiceMethodByPassAuthentication('wrapper'); // for our testing purpose
   DB.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
@@ -141,7 +162,9 @@ end;
 
 const
   __TTestCustomJSONArraySimpleArray =
-  'F RawUTF8 G array of RawUTF8';
+  'F RawUTF8 G array of RawUTF8 '+
+  'H {H1 integer H2 WideString H3{H3a boolean H3b RawByteString}} I TDateTime '+
+  'J [J1 byte J2 TGUID J3 TRecordEnum]';
 
 class procedure TSQLRecordPeople.InternalRegisterCustomProperties(
   Props: TSQLRecordProperties);
@@ -152,9 +175,10 @@ end;
 
 
 initialization
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TRecordEnum));
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArraySimpleArray),__TTestCustomJSONArraySimpleArray);
-    
+
 {$endif TESTRECORD}
 
 end.

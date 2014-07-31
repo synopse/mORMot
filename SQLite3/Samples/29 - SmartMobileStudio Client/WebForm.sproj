@@ -2,7 +2,7 @@
   <Project version="2" subversion="1">
     <Name>WebForm</Name>
     <Created>T00:00:00.000</Created>
-    <Modified>2014-07-18T15:33:24.871</Modified>
+    <Modified>2014-07-31T21:38:22.755</Modified>
     <Author>A. Bouchez</Author>
     <Company>Synopse</Company>
     <Version>
@@ -18,7 +18,7 @@
     <Options>
       <PostBuild>
         <Enabled>0</Enabled>
-        <Script>CopyFile(&apos;.\www\index.html&apos;,&apos;.\www\debug\index.html&apos;,true);</Script>
+        <Script>//CopyFile(&apos;.\www\index.html&apos;,&apos;.\www\debug\index.html&apos;,true);</Script>
       </PostBuild>
       <Compiler>
         <Assertions>1</Assertions>

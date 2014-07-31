@@ -112,6 +112,7 @@ type
   TTimeLog = Int64;
   TModTime = TTimeLog;
   TCreateTime = TTimeLog;
+  TGUID = string;
   TSQLFieldBit = enum (Low = 0, High = MAX_SQLFIELDS-1);
 
   ERestException = class(EW3Exception);
@@ -806,6 +807,14 @@ function TTimeLogToDateTime(Value: TTimeLog): TDateTime;
 
 /// convert a TTimeLog value into an ISO-8601 encoded date/time text
 function TTimeLogToIso8601(Value: TTimeLog): string;
+
+{$ifdef ISSMS}
+/// convert a base-64 encoded blob into its binary representation
+function VariantToBlob(const Value: variant): TSQLRawBlob;
+
+/// convert a binary blob into its base-64 representation
+function BlobToVariant(const Blob: TSQLRawBlob): variant;
+{$endif ISSMS}
 
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
@@ -2434,6 +2443,17 @@ begin
   2: result := fSessionTimeOut;
   3: result := fAccessRights;
   end;
+end;
+
+
+function VariantToBlob(const Value: variant): TSQLRawBlob;
+begin
+  result := w3_base64decode(Value);
+end;
+
+function BlobToVariant(const Blob: TSQLRawBlob): variant;
+begin
+  result := w3_base64encode(Blob);
 end;
 
 {$endif}

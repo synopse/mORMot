@@ -117,6 +117,7 @@ uses
   mORMotHttpClient in 'mORMotHttpClient.pas',
   mORMotHttpServer in 'mORMotHttpServer.pas',
   mORMotService in 'mORMotService.pas',
+  mORMotWrappers in 'mORMotWrappers.pas',
   //mORMotBigTable,
 {$endif FPC}
 {$endif DELPHI5OROLDER}
