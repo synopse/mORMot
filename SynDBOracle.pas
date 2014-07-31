@@ -30,6 +30,7 @@ unit SynDBOracle;
 
   Contributor(s):
   - richard6688
+  - mpv
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -118,6 +119,7 @@ unit SynDBOracle;
   - fixed ticket [5df9d39858] about NULL bindings in TSQLDBOracleStatement
   - fixed ticket [aff1352239] to identify 9999-12-31 dates as valid
   - fixed ticket [73aec05724] about potential BLOB/CURSOR resource leaks
+  - fixed ticket [e9cab7cd97] about OCI_SUCCESS_WITH_INFO not returning any data
   - fixed truncated error message in TSQLDBOracleLib.HandleError() method
   - allow to return NULL columns (ex. "SELECT one, two, NULL AS three FROM table")
   - fix potential ORA-24333 error when using stored procedures
@@ -1325,7 +1327,8 @@ begin
         dec(L);
       end;
       if (Status=OCI_SUCCESS_WITH_INFO) and not InfoRaiseException then
-        LogLevelNoRaise := sllInfo;
+        if LogLevelNoRaise=sllNone then // may be e.g. sllWarning 
+          LogLevelNoRaise := sllInfo;
       msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp,L);
     end;
     OCI_NEED_DATA:
@@ -2572,9 +2575,12 @@ procedure TSQLDBOracleStatement.FetchTest(Status: integer);
 begin
   fRowFetched := 0;
   case Status of
-    OCI_SUCCESS:
+    OCI_SUCCESS, OCI_SUCCESS_WITH_INFO: begin
       if fColumnCount<>0 then
         fRowFetched := fRowCount;
+      if Status = OCI_SUCCESS_WITH_INFO then
+        OCI.Check(Status,fError,false,sllWarning);
+    end;
     OCI_NO_DATA: begin
       assert(fColumnCount<>0);
       OCI.AttrGet(fStatement,OCI_HTYPE_STMT,@fRowFetched,nil,OCI_ATTR_ROWS_FETCHED,fError);
