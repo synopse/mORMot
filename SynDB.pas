@@ -5081,7 +5081,7 @@ begin
       ftDate: begin
         if ValueAlreadyUnquoted then
           tmp := Value else
-          UnQuoteSQLString(pointer(Value),tmp);
+          UnQuoteSQLStringVar(pointer(Value),tmp);
         BindDateTime(Param,Iso8601ToDateTime(tmp),IO);
       end;
       ftUTF8:
@@ -5090,7 +5090,7 @@ begin
           BindNull(Param,IO) else begin
           if ValueAlreadyUnquoted then
             tmp := Value else
-            UnQuoteSQLString(pointer(Value),tmp);
+            UnQuoteSQLStringVar(pointer(Value),tmp);
           BindTextU(Param,tmp,IO);
         end;
       else raise ESQLDBException.CreateFmt('Invalid %s.Bind(%d,TSQLDBFieldType(%d),%s)',

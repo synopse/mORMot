@@ -117,10 +117,11 @@ begin
 end;
 
 {$ifdef TESTRECORD}
+
 function TServiceCalculator.RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
 var n: integer;
 begin
-  result := RecordSaveJSON(Rec,TypeInfo(TTestCustomJSONArraySimpleArray));
+  result := UTF8ToString(RecordSaveJSON(Rec,TypeInfo(TTestCustomJSONArraySimpleArray)));
   Rec.F := Rec.F+'!';
   n := length(Rec.G);
   SetLength(Rec.G,n+1);
@@ -131,6 +132,7 @@ begin
   Rec.J[n].J1 := n;
   Rec.J[n].J3 := TRecordEnum(n mod (ord(high(TRecordEnum))+1));
 end;
+
 {$endif}
 
 { TCustomServer }

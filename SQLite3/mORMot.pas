@@ -29678,7 +29678,7 @@ begin
     exit; // don't allow setting ID field, which is Read Only
   SetValueWasString := SetValue[1]='"';
   if SetValueWasString then
-    UnQuoteSQLString(pointer(SetValue),SetValueString) else
+    UnQuoteSQLStringVar(pointer(SetValue),SetValueString) else
     SetValueString := SetValue;
   // handle search field RTTI
   if IsRowID(pointer(WhereFieldName)) then begin
@@ -29691,7 +29691,7 @@ begin
     inc(WhereFieldIndex); // FindWhereEqual() expects index = RTTI+1
   end;
   if WhereValue[1]='"' then
-    UnQuoteSQLString(pointer(WhereValue),WhereValueString) else
+    UnQuoteSQLStringVar(pointer(WhereValue),WhereValueString) else
     WhereValueString := WhereValue;
   // search indexes, then apply updates
   Where := TList.Create;

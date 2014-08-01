@@ -2628,7 +2628,7 @@ begin
     Check(kr32(0,pointer(U),length(U))=kr32pas(pointer(U),length(U)));
     if U='' then
       continue;
-    Check(UnQuoteSQLString(pointer(QuotedStr(U,'"')),res)<>nil);
+    Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);
     Check(res=U);
     Check(not IsZero(pointer(W),length(W)));
     fillchar(pointer(W)^,length(W),0);
@@ -2677,16 +2677,16 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U)=4) then
     Check(PCardinal(U)^=$92b3a8f0);
-  Check(UnQuoteSQLString('"one two"',U)<>nil);
+  Check(UnQuoteSQLStringVar('"one two"',U)<>nil);
   Check(U='one two');
-  Check(UnQuoteSQLString('one two',U)<>nil);
+  Check(UnQuoteSQLStringVar('one two',U)<>nil);
   Check(U='ne tw');
-  Check(UnQuoteSQLString('"one "" two"',U)<>nil);
+  Check(UnQuoteSQLStringVar('"one "" two"',U)<>nil);
   Check(U='one " two');
-  Check(UnQuoteSQLString('"one " two"',U)<>nil);
+  Check(UnQuoteSQLStringVar('"one " two"',U)<>nil);
   Check(U='one ');
-  Check(UnQuoteSQLString('"one two',U)=nil);
-  Check(UnQuoteSQLString('"one "" two',U)=nil);
+  Check(UnQuoteSQLStringVar('"one two',U)=nil);
+  Check(UnQuoteSQLStringVar('"one "" two',U)=nil);
   Check(IsValidEmail('test@synopse.info'));
   Check(not IsValidEmail('test@ synopse.info'));
   Check(IsValidEmail('test_two@blog.synopse.info'));

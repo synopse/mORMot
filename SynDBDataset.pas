@@ -678,7 +678,7 @@ begin
             P.AsCurrency := PCurrency(@VInt64)^;
         SynCommons.ftDate:
           if aArrayIndex>=0 then begin
-            UnQuoteSQLString(pointer(VArray[aArrayIndex]),tmp);
+            UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
             P.AsDateTime := Iso8601ToDateTime(tmp);
           end else
             P.AsDateTime := PDateTime(@VInt64)^;
@@ -687,7 +687,7 @@ begin
             if (VArray[aArrayIndex]='') and
                fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else begin
-            UnQuoteSQLString(pointer(VArray[aArrayIndex]),tmp);
+            UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
             if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
               P.AsString := UTF8ToString(tmp) else
               P.Value := UTF8ToWideString(tmp);

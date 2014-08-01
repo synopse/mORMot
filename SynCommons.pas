@@ -2463,10 +2463,10 @@ procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
 // - "text "" end"   -> text " end
 // - returns nil if P doesn't contain a valid SQL string
 // - returns a pointer just after the quoted text otherwise
-function UnQuoteSQLString(P: PUTF8Char; out Value: RawUTF8): PUTF8Char; overload;
+function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 
 /// unquote a SQL-compatible string
-function UnQuoteSQLString(const Value: RawUTF8): RawUTF8; overload;
+function UnQuoteSQLString(const Value: RawUTF8): RawUTF8; 
 
 /// get the next character after a quoted buffer
 // - the first character in P^ must be either ', either "
@@ -4756,12 +4756,14 @@ type
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     /// abstract method to read the instance from JSON
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
+    {$ifndef NOVARIANTS}
     /// overriden method which will handle the client context
     // - aRegisteredTypes contains the already registered type, i.e. records and
     // enumerates by now, as TJSONCustomParserRTTI
     function ContextNestedProperties(aRegisteredTypes: TRawUTF8List): variant; override;
     /// overriden method which will handle the client context
     function ContextProperty(aRegisteredTypes: TRawUTF8List): variant; overload; override;
+    {$endif}
     /// which kind of simple property this instance does refer to
     property KnownType: TJSONCustomParserCustomSimpleKnownType read fKnownType;
   end;
@@ -15452,7 +15454,7 @@ begin
   result := P;
 end;
 
-function UnQuoteSQLString(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 var quote: AnsiChar;
     PBeg, PS: PUTF8Char;
     n: PtrInt;
@@ -15504,7 +15506,7 @@ end;
 
 function UnQuoteSQLString(const Value: RawUTF8): RawUTF8;
 begin
-  UnQuoteSQLString(pointer(Value),result);
+  UnQuoteSQLStringVar(pointer(Value),result);
 end;
 
 function isSelect(P: PUTF8Char): boolean;
@@ -15606,7 +15608,7 @@ begin
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   case P^ of
   '''','"': begin
-    P := UnQuoteSQLString(P,ParamValue);
+    P := UnQuoteSQLStringVar(P,ParamValue);
     if P=nil then
       exit; // not a valid quoted string (e.g. unexpected end in middle of it)
     ParamType := sptText;
@@ -25687,6 +25689,7 @@ end;
 
 { TJSONCustomParserCustomSimple }
 
+{$ifndef NOVARIANTS}
 function TJSONCustomParserCustomSimple.ContextNestedProperties(
   aRegisteredTypes: TRawUTF8List): variant;
 begin
@@ -25706,6 +25709,7 @@ begin
   end;
   end;
 end;
+{$endif}
 
 constructor TJSONCustomParserCustomSimple.Create(
   const aPropertyName, aCustomTypeName: RawUTF8; aCustomType: pointer);
@@ -25866,9 +25870,12 @@ type
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
     procedure FinalizeItem(Data: Pointer); override;
+    {$ifndef NOVARIANTS}
     function ContextNestedProperties(aRegisteredTypes: TRawUTF8List): variant; override;
+    {$endif}
   end;
 
+{$ifndef NOVARIANTS}
 function TJSONCustomParserCustomRecord.ContextNestedProperties(
   aRegisteredTypes: TRawUTF8List): variant;
 var parser: PJSONCustomParserRegistration;
@@ -25879,6 +25886,7 @@ begin
       [ClassName]);
   result := parser^.RecordCustomParser.Root.ContextNestedProperties(aRegisteredTypes);
 end;
+{$endif}
 
 constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName, aCustomTypeName: RawUTF8);
@@ -39296,7 +39304,7 @@ begin
       inc(P,2); // ignore :(...): parameter (no prepared statements here)
     if P^ in ['''','"'] then begin
       // SQL String statement
-      P := UnQuoteSQLString(P,WhereValue);
+      P := UnQuoteSQLStringVar(P,WhereValue);
       if P=nil then
         exit; // end of string before end quote -> incorrect
       {$ifndef NOVARIANTS}
