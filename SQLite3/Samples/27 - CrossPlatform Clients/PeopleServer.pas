@@ -6,7 +6,7 @@ interface
 
 uses
   SynCommons,
-  mORMot,
+  mORMot, 
   mORMotHttpServer,
   mORMotWrappers,
   SynMustache,
@@ -36,13 +36,17 @@ type
   end;
   {$endif TESTRECORD}
 
+  TPeopleSexe = (sFemale, sMale);
+
   ICalculator = interface(IInvokable)
     ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
     function Add(n1,n2: integer): integer;
-    procedure ToText(Value: Currency; var Result: RawUTF8);
+    procedure ToText(Value: Currency; const Curr: RawUTF8;
+      var Sexe: TPeopleSexe; var Name: RawUTF8);
+    {$ifdef TESTRECORD}
+    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+    {$endif}
   end;
-
-  TPeopleSexe = (sFemale, sMale);
 
   TSQLRecordPeople = class(TSQLRecord)
   protected
@@ -92,7 +96,11 @@ type
   TServiceCalculator = class(TInterfacedObject, ICalculator)
   public
     function Add(n1,n2: integer): integer;
-    procedure ToText(Value: Currency; var Result: RawUTF8);
+    procedure ToText(Value: Currency; const Curr: RawUTF8;
+      var Sexe: TPeopleSexe; var Name: RawUTF8);
+    {$ifdef TESTRECORD}
+    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+    {$endif}
   end;
 
 function TServiceCalculator.Add(n1, n2: integer): integer;
@@ -100,11 +108,30 @@ begin
   result := n1+n2;
 end;
 
-procedure TServiceCalculator.ToText(Value: Currency; var Result: RawUTF8);
+procedure TServiceCalculator.ToText(Value: Currency; const Curr: RawUTF8;
+  var Sexe: TPeopleSexe; var Name: RawUTF8);
+const SEX_TEXT: array[TPeopleSexe] of RawUTF8 = ('Miss','Mister');
 begin
-  result := Curr64ToStr(PInt64(@Value)^);
+  Name := FormatUTF8('% % for % %',[Curr,Value,SEX_TEXT[Sexe],Name]);
+  Sexe := sFemale;
 end;
 
+{$ifdef TESTRECORD}
+function TServiceCalculator.RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+var n: integer;
+begin
+  result := RecordSaveJSON(Rec,TypeInfo(TTestCustomJSONArraySimpleArray));
+  Rec.F := Rec.F+'!';
+  n := length(Rec.G);
+  SetLength(Rec.G,n+1);
+  Rec.G[n] := UInt32ToUtf8(n+1);
+  inc(Rec.H.H1);
+  n := length(Rec.J);
+  SetLength(Rec.J,n+1);
+  Rec.J[n].J1 := n;
+  Rec.J[n].J3 := TRecordEnum(n mod (ord(high(TRecordEnum))+1));
+end;
+{$endif}
 
 { TCustomServer }
 
@@ -172,7 +199,6 @@ begin
   Props.RegisterCustomPropertyFromRTTI(Self,TypeInfo(TTestCustomJSONArraySimpleArray),
     'Simple',@TSQLRecordPeople(nil).fSimple);
 end;
-
 
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TRecordEnum));

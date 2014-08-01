@@ -132,7 +132,7 @@ type
     // - if returned true, Object published properties will contain this row
     function FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
   end;
-
+ 
   {$else}
 
   /// Exception type raised when working with REST access
@@ -168,6 +168,9 @@ type
   end;
 
   {$endif ISDWS}
+
+  /// Exception type raised when working with interface-based service process
+  EServiceException = class(ERestException);
 
   /// used to store bit set for all available fields in a Table
   // - in this unit, field at index [0] indicates TSQLRecord.ID
@@ -473,6 +476,115 @@ type
     sicSingle, sicShared, sicClientDriven, sicPerSession, sicPerUser, sicPerGroup,
     sicPerThread);
 
+  TSQLRestClientURI = class;
+
+  /// abstract ancestor to all client-side interface-based services
+  // - any overriden class will in fact call the server to execute its methods
+  // - inherited classes are in fact the main entry point for all interface-based
+  // services, without any interface use:
+  // ! aCalculator := TServiceCalculator.Create(aClient);
+  // ! try
+  // !   aIntegerResult := aCalculator.Add(10,20);
+  // ! finally
+  // !   aCalculator.Free;
+  // ! end;
+  // - under SmartMobileStudio, calling Free is mandatory only for
+  // sicClientDriven mode (to release the server-side associated session),
+  // so e.g. for a sicShared instance, you can safely write:
+  // ! aIntegerResult := TServiceCalculator.Create(aClient).Add(10,20);
+  // - as you already noted, server-side interface-based services are in fact
+  // consummed without any interface in this cross-platform unit!
+  TServiceClientAbstract = class
+  protected
+    fClient: TSQLRestClientURI;
+    fServiceName: string;
+    fServiceURI: string;
+    fInstanceImplementation: TServiceInstanceImplementation;
+    fContractExpected: string;
+  public
+    /// initialize the fake instance
+    // - this method will synchronously (i.e. blocking) check the server
+    // contract according to the one expected by the client
+    // - overriden constructors will set the parameters expected by the server
+    constructor Create(aClient: TSQLRestClientURI); virtual;
+    /// the unmangdled remote service name
+    property ServiceName: string read fServiceName;
+    /// the URI to access to the remote service
+    property ServiceURI: string read fServiceURI;
+    /// how this instance lifetime is expected to be handled
+    property InstanceImplementation: TServiceInstanceImplementation read fInstanceImplementation;
+    /// the published service contract, as expected by both client and server
+    property ContractExpected: string read fContractExpected;
+  end;
+
+  /// abstract ancestor to all sicClientDriven interface-based services
+  // - since server-side life-time is driven by the client, this kind of class
+  // expects an explicit call to aService.Free (even on SmartMobileStudio)
+  TServiceClientAbstractClientDriven = class(TServiceClientAbstract)
+  protected
+    fClientID: string;
+  public
+    /// initialize the fake instance and create the remote per-client session
+    // - raise an EServiceException if a per-client session was already started
+    // for the specified TSQLRestClientURI
+    // - overriden constructors will set the parameters expected by the server
+    constructor Create(aClient: TSQLRestClientURI); override;
+    /// this overriden method (called at aService.Free) will notify the server
+    destructor Destroy; override;
+    /// the currently running instance ID on the server side
+    // - only one instance is allowed per TSQLRestClientURI process
+    property ClientID: string read fClientID;
+  end;
+
+  /// class type used to identify an interface-based service
+  // - we do not rely on interfaces here, but simply on abstract classes
+  TServiceClientAbstractClass = class of TServiceClientAbstract;
+
+  /// class used to determine the protocol of interface-based services
+  // - see TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC
+  // for overridden methods - NEVER set this abstract TSQLRestRoutingAbstract
+  // class on TSQLRest.ServicesRouting property !
+  TSQLRestRoutingAbstract = class
+  public
+    /// at Client Side, compute URI and BODY according to the routing scheme
+    // - abstract implementation which is to be overridden
+    // - as input, "method" should be the method name to be executed for "uri",
+    // "params" should contain the incoming parameters as JSON CSV (without []),
+    // and "clientDriven" ID should contain the optional Client ID value
+    // - at output, should update the HTTP "uri" corresponding to the proper
+    // routing, and should return the corresponding HTTP body within "sent"
+    class procedure ClientSideInvoke(var uri: string;
+      const method, params, clientDrivenID: string; var sent: string); virtual; abstract;
+  end;
+
+  /// used to define the protocol of interface-based services
+  TSQLRestRoutingAbstractClass = class of TSQLRestRoutingAbstract;
+
+  /// default simple REST protocol for interface-based services
+  // - this is the default protocol used by TSQLRest
+  TSQLRestRoutingREST = class(TSQLRestRoutingAbstract)
+  public
+    /// at Client Side, compute URI and BODY according to RESTful routing scheme
+    // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
+    // clientDrivenID='1234' -> on output uri='root/Calculator.Add/1234' and
+    // sent='[1,2]'
+    class procedure ClientSideInvoke(var uri: string;
+      const method, params, clientDrivenID: string; var sent: string); override;
+  end;
+
+  /// JSON/RPC protocol for interface-based services
+  // - alternative to the TSQLRestRoutingREST default protocol set by TSQLRest
+  TSQLRestRoutingJSON_RPC = class(TSQLRestRoutingAbstract)
+  public
+    /// at Client Side, compute URI and BODY according to JSON/RPC routing scheme
+    // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
+    // clientDrivenID='1234' -> on output uri='root/Calculator' and
+    // sent={"method":"Add","params":[1,2],"id":1234}
+    class procedure ClientSideInvoke(var uri: string;
+      const method, params, clientDrivenID: string; var sent: string); override;
+  end;
+
+
   /// abstract REST access class
   TSQLRest = class
   protected
@@ -481,6 +593,7 @@ type
     fBatch: string;
     fBatchTable: TSQLRecordClass;
     fBatchCount: integer;
+    fServicesRouting: TSQLRestRoutingAbstractClass;
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
     function InternalBatch(Table: TSQLRecordClass; const CMD: string; var Info: TSQLModelInfo): Integer;
@@ -599,6 +712,10 @@ type
     property Model: TSQLModel read fModel;
     /// the current Date and Time, as retrieved from the server at connection
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
+    /// the access protocol to be used for interface-based services
+    // - is set to TSQLRestRoutingREST by default
+    // - you can set TSQLRestRoutingJSON_RPC if the server expects this protocol
+    property ServicesRouting: TSQLRestRoutingAbstractClass read fServicesRouting;
   end;
 
   {$ifdef ISSMS}
@@ -614,6 +731,14 @@ type
   protected
     fAuthentication: TSQLRestAuthentication;
     fOnlyJSONRequests: boolean;
+    fRunningClientDriven: TStringList;
+    {$ifdef ISSMS}
+    /// connect to the REST server, and retrieve its time stamp offset
+    // - under SMS, you SHOULD use this asynchronous method, which won't block
+    // the browser, e.g. if the network is offline
+    procedure SetAsynch(var Call: TSQLRestURIParams; onSuccess, onError: TSQLRestEvent;
+      onBeforeSuccess: TSQLRestEventProcess);
+    {$endif}
     function getURI(aTable: TSQLRecordClass): string;
     function getURIID(aTableExistingIndex: integer; aID: integer): string;
     function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: integer): string;
@@ -622,16 +747,16 @@ type
     function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
       var Results: TIntegerDynArray): integer; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
-    {$ifdef ISSMS}
-    /// connect to the REST server, and retrieve its time stamp offset
-    // - under SMS, you SHOULD use this asynchronous method, which won't block
-    // the browser, e.g. if the network is offline
-    procedure SetAsynch(var Call: TSQLRestURIParams; onSuccess, onError: TSQLRestEvent;
-      onBeforeSuccess: TSQLRestEventProcess);
-    {$endif}
+    procedure CallRemoteServiceInternal(var Call: TSQLRestURIParams;
+      aCaller: TServiceClientAbstract; const aMethod, aParams: string);
   public
+    {$ifndef ISSMS}
+    /// initialize the class, and associate it to a specified database Model
+    constructor Create(aModel: TSQLModel); override;
+    {$endif}
     /// will call SessionClose
     destructor Destroy; override;
+
     {$ifdef ISSMS}
     /// connect to the REST server, and retrieve its time stamp offset
     // - under SMS, only this asynchronous method is available, which won't
@@ -694,15 +819,24 @@ type
     /// close the session initiated with SetUser()
     // - will reset Authentication property to nil
     procedure SessionClose;
+
     {$ifdef ISSMS}
     /// execute a specified interface-based service method on the server
     // - under SMS, only this asynchronous method is available, which won't
     // block the browser, e.g. if the network is offline
     // - you should not call it, but directly TServiceClient* methods
-    procedure CallRemoteService(const aInterfaceName, aMethodName: string;
-      aExpectedOutputParamsCount: integer; const aInputParams: array of variant;
+    procedure CallRemoteService(aCaller: TServiceClientAbstract;
+      const aMethodName: string; aExpectedOutputParamsCount: integer;
+      const aInputParams: array of variant;
       onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
-    {$endif}
+    {$else}
+    /// execute a specified interface-based service method on the server
+    // - this blocking method would raise an EServiceException on error
+    // - you should not call it, but directly TServiceClient* methods
+    procedure CallRemoteService(aCaller: TServiceClientAbstract;
+      const aMethodName: string; aExpectedOutputParamsCount: integer;
+      const aInputParams: array of variant; out res: TVariantDynArray);
+    {$endif ISSMS}
     /// set this property to TRUE if the server expects only APPLICATION/JSON
     // - applies only for AJAX clients (i.e. SmartMobileStudio platform)
     // - true will let any remote call be identified as "preflighted requests",
@@ -781,16 +915,6 @@ type
     property KeepAlive: Integer read fKeepAlive write fKeepAlive;
   end;
 
-  /// abstract ancestor to all client-side interface-based services
-  // - any overriden class will in fact call the server to execute its methods
-  TServiceClientAbstract = class{$ifndef ISDWS}(TInterfacedObject){$endif}
-  protected
-    fClient: TSQLRestClientURI;
-  public
-    /// initialize the fake instance
-    constructor Create(aClient: TSQLRestClientURI);
-  end;
-
 /// true if PropName is either 'ID' or 'RowID'
 function IsRowID(const PropName: string): boolean;
   {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -808,13 +932,11 @@ function TTimeLogToDateTime(Value: TTimeLog): TDateTime;
 /// convert a TTimeLog value into an ISO-8601 encoded date/time text
 function TTimeLogToIso8601(Value: TTimeLog): string;
 
-{$ifdef ISSMS}
 /// convert a base-64 encoded blob into its binary representation
 function VariantToBlob(const Value: variant): TSQLRawBlob;
 
 /// convert a binary blob into its base-64 representation
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
-{$endif ISSMS}
 
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
@@ -1647,6 +1769,7 @@ constructor TSQLRest.Create(aModel: TSQLModel);
 begin
   inherited Create;
   fModel := aModel;
+  fServicesRouting := TSQLRestRoutingREST;
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -2030,29 +2153,67 @@ begin
   {$endif}
 end;
 
+/// marshall {result:...,id:...} and {result:...} body answers
+function CallGetResult(const aCall: TSQLRestURIParams; var outID: integer): variant;
+{$ifndef ISSMS}
+var doc: TJSONVariantData;
+    jsonres: string;
+{$endif}
+begin
+  VarClear(result);
+  outID := 0;
+  if aCall.OutStatus<>HTML_SUCCESS then
+    exit;
+  {$ifdef ISSMS}
+  var doc := JSON.Parse(aCall.OutBody);
+  if VarIsValidRef(doc.result) then
+    result := doc.result;
+  if VarIsValidRef(doc.id) then
+    outID := doc.id;
+  {$else}
+  HttpBodyToText(aCall.OutBody,jsonres);
+  doc.Init(jsonres);
+  VarCopyNoInd(result,doc.Value['result']); // Value[] -> varByRef
+  outID := doc.Value['id'];
+  {$endif}
+end;
+
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
   aID: integer): string;
-var {$ifndef ISSMS}
-    doc: TJSONVariantData;
-    jsonres: string;
-    {$endif}
-    Call: TSQLRestURIParams;
+var Call: TSQLRestURIParams;
+    dummyID: integer;
 begin
   CallBackGet(aMethodName,aNameValueParameters,Call,aTable,aID);
-  if Call.OutStatus<>HTML_SUCCESS then
-    result := '' else begin
-    {$ifdef ISSMS}
-    var doc := JSON.Parse(Call.OutBody);
-    if VarIsValidRef(doc.result) then
-      result := doc.result;
-    {$else}
-    HttpBodyToText(Call.OutBody,jsonres);
-    doc.Init(jsonres);
-    result := doc.Value['result'];
-    {$endif}
-  end;
+  result := CallGetResult(Call,dummyID);
 end;
+
+procedure TSQLRestClientURI.CallRemoteServiceInternal(var Call: TSQLRestURIParams;
+  aCaller: TServiceClientAbstract; const aMethod, aParams: string);
+var url, clientDrivenID, sent: string;
+begin
+  url := Model.Root+'/'+aCaller.ServiceURI;
+  if aCaller.InstanceImplementation=sicClientDriven then
+    clientDrivenID := (aCaller as TServiceClientAbstractClientDriven).ClientID;
+  ServicesRouting.ClientSideInvoke(url,aMethod,aParams,clientDrivenID,sent);
+  Call.Url := url;
+  {$ifdef ISSMS}
+  Call.InBody := sent;
+  {$else}
+  Call.InBody := TextToHttpBody(sent);
+  {$endif}
+  Call.Method := 'POST';
+  URI(Call); // asynchronous or synchronous call
+end;
+
+{ Some definitions copied from mORMot.pas unit }
+
+type
+  TServiceInternalMethod = (imFree, imContract, imSignature);
+
+const
+  SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of string = (
+    '_free_','_contract_','_signature_');
 
 {$ifdef ISSMS}
 
@@ -2085,33 +2246,38 @@ begin
   CallBackGet('TimeStamp',[],Call); // asynchronous call
 end;
 
-procedure TSQLRestClientURI.CallRemoteService(const aInterfaceName, aMethodName: string;
-  aExpectedOutputParamsCount: integer; const aInputParams: array of variant;
+procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
+  const aMethodName: string; aExpectedOutputParamsCount: integer;
+  const aInputParams: array of variant;
   onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
 var Call: TSQLRestURIParams;
+    outID: integer;
 begin
-  // TODO: handle URI+response encodings, and TServiceInstanceImplementation
+  // TServiceCustomAnswer and ForceServiceResultAsJSONObject not implemented yet
   SetAsynch(Call,lambda
-      var doc := JSON.Parse(Call.OutBody);
-      if VarIsValidRef(doc.result) then begin
+      if not assigned(onSuccess) then
+        exit; // no result to handle
+      var result := CallGetResult(Call,outID); // from {result:...,id:...}
+      if VarIsValidRef(result) then begin
+         if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+           (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
         if aExpectedOutputParamsCount=0 then
           onSuccess([]) else begin
-          var res := TJSONVariantData.CreateFrom(doc.result);
+          var res := TJSONVariantData.CreateFrom(result);
           if (res.Kind=jvArray) and (res.Count=aExpectedOutputParamsCount) then
             onSuccess(res.Values) else
-            onError(self);
+            if Assigned(onError) then
+              onError(self);
         end;
       end else
-        onError(self);
+        if Assigned(onError) then
+          onError(self);
     end,
     onError,
     lambda
       result := (Call.OutStatus=HTML_SUCCESS) and (Call.OutBody<>'');
     end);
-  Call.Url :=  Model.Root+'/'+aInterfaceName+'.'+aMethodName;
-  Call.InBody := JSON.Stringify(variant(aInputParams));
-  Call.Method := 'POST';
-  URI(Call); // asynchronous call
+  CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
 end;
 
 {$else}
@@ -2126,6 +2292,34 @@ begin
     exit;
   HttpBodyToText(Call.OutBody,tmp);
   result := SetServerTimeStamp(tmp);
+end;
+
+procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
+   const aMethodName: string; aExpectedOutputParamsCount: integer;
+   const aInputParams: array of variant; out res: TVariantDynArray);
+var Call: TSQLRestURIParams;
+    params: TJSONVariantData;
+    result: variant;
+    arr: PJSONVariantData;
+    i,outID: integer;
+begin
+  params.Init;
+  for i := 0 to high(aInputParams) do
+    params.AddValue(aInputParams[i]);
+  CallRemoteServiceInternal(Call,aCaller,aMethodName,params.ToJSON);
+  if Call.OutStatus<>HTML_SUCCESS then
+    raise EServiceException.CreateFmt('Error calling %s.%s - returned %d',
+      [aCaller.ServiceName,aMethodName,Call.OutStatus]);
+  result := CallGetResult(Call,outID);
+  if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+    (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
+  if aExpectedOutputParamsCount=0 then
+    exit;
+  arr := JSONVariantDataSafe(result); // Kind=jvUndefined if not a TJSONVariant
+  if (arr^.Kind<>jvArray) or (arr^.Count<>aExpectedOutputParamsCount) then
+    raise EServiceException.CreateFmt('%s.%s returned wrong result array content',
+      [aCaller.ServiceName,aMethodName]);
+  res := arr^.Values;
 end;
 
 {$endif ISSMS}
@@ -2217,8 +2411,19 @@ begin
     end;
 end;
 
+{$ifndef ISSMS}
+constructor TSQLRestClientURI.Create(aModel: TSQLModel);
+begin
+  fRunningClientDriven := TStringList.Create;
+  inherited Create(aModel);
+end;
+{$endif}
+
 destructor TSQLRestClientURI.Destroy;
 begin
+  {$ifndef ISSMS}
+  fRunningClientDriven.Free;
+  {$endif}
   SessionClose;
 end;
 
@@ -2456,13 +2661,111 @@ begin
   result := w3_base64encode(Blob);
 end;
 
-{$endif}
+{$else}
+
+function VariantToBlob(const Value: variant): TSQLRawBlob;
+begin
+  Base64JSONStringToBytes(Value,result);
+end;
+
+function BlobToVariant(const Blob: TSQLRawBlob): variant;
+begin
+  result := BytesToBase64JSONString(Blob);
+end;
+
+{$endif ISSMS}
 
 { TServiceClientAbstract }
 
 constructor TServiceClientAbstract.Create(aClient: TSQLRestClientURI);
+var Call: TSQLRestURIParams; // manual synchronous call
+    dummyID: integer;
+    result: variant;
+    contract: string;
 begin
+  if (ServiceName='') or (ServiceURI='') then
+    raise EServiceException.CreateFmt(
+      'Overriden %s.Create should have set properties',[ClassName]);
+  if aClient=nil then
+    raise EServiceException.CreateFmt('%s.Create(nil)',[ClassName]);
   fClient := aClient;
+  fClient.CallRemoteServiceInternal(Call,self,SERVICE_PSEUDO_METHOD[imContract],'[]');
+  result := CallGetResult(Call,dummyID);
+  {$ifdef ISSMS}
+  if VariantType(result)=jvArray then
+    contract := result[0];
+  {$else}
+  with JSONVariantDataSafe(result)^ do // Kind=jvUndefined if not a TJSONVariant
+    if (Kind=jvArray) and (Count=1) then
+      contract := Values[0];
+  {$endif}
+  if contract<>ContractExpected then
+    raise EServiceException.CreateFmt('Invalid contract "%s" for %s: expected "%s"',
+      [contract,ContractExpected,ClassName]);
+end;
+
+{ TServiceClientAbstractClientDriven }
+
+constructor TServiceClientAbstractClientDriven.Create(aClient: TSQLRestClientURI);
+begin
+  if InstanceImplementation<>sicClientDriven then
+    raise EServiceException.CreateFmt(
+      'Overriden %s.Create should have set sicClientDriven',[ClassName]);
+  if aClient.fRunningClientDriven.IndexOf(ServiceName)>=0 then
+    raise EServiceException.CreateFmt('Only ONE instance of %s is allowed at once',
+      [ClassName]);
+  inherited Create(aClient); // will synchronously check the contract from server
+  aClient.fRunningClientDriven.Add(ServiceName); // mark as opened
+end;
+
+destructor TServiceClientAbstractClientDriven.Destroy;
+var ndx: integer;
+    {$ifndef ISSMS}
+    res: TVariantDynArray;
+    {$endif}
+begin
+  if fClient<>nil then
+  try
+    if fClientID<>'' then
+      {$ifdef ISSMS} // asynchronous call
+      fClient.CallRemoteService(self,SERVICE_PSEUDO_METHOD[imFree],0,[],nil,nil);
+      {$else}
+      try // synchronous blocking call
+        fClient.CallRemoteService(self,SERVICE_PSEUDO_METHOD[imFree],0,[],res);
+      except
+        ; // ignore, since the connection may be broken (will timeout on server)
+      end;
+      {$endif}
+  finally
+    ndx := fClient.fRunningClientDriven.IndexOf(ServiceName);
+    if ndx>=0 then
+      fClient.fRunningClientDriven.Delete(ndx); // mark as closed
+  end;
+  inherited;
+end;
+
+{ TSQLRestRoutingREST }
+
+class procedure TSQLRestRoutingREST.ClientSideInvoke(var uri: String;
+  const method: String; const params: String; const clientDrivenID: String;
+  var sent: String);
+begin
+  if clientDrivenID<>'' then
+    uri := uri+'.'+method+'/'+clientDrivenID else
+    uri := uri+'.'+method;
+  sent := '['+params+']'; // we may also encode them within the URI
+end;
+
+{ TSQLRestRoutingJSON_RPC }
+
+class procedure TSQLRestRoutingJSON_RPC.ClientSideInvoke(var uri: String;
+  const method: String; const params: String; const clientDrivenID: String;
+  var sent: String);
+begin
+  sent := '{"method":"'+method+'","params":['+params;
+  if clientDrivenID='' then
+    sent := sent+']}' else
+    sent := sent+'],"id":'+clientDrivenID+'}';
 end;
 
 end.

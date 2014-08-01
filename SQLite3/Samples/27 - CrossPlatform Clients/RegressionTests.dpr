@@ -10,6 +10,10 @@ program RegressionTests;
 {$endif}
 {$endif}
 
+{$ifdef ISDELPHI5OROLDER}
+  {$undef RUNSERVER} // mORMot.pas not available prior to Delphi 6
+{$endif}
+
 uses
   {$ifndef FPC}
   {$ifndef HASINLINE}

@@ -85,8 +85,10 @@
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$ifend}
-  {$endif}
-  {$endif}
+  {$else}
+    {$define ISDELPHI5OROLDER}
+  {$endif CONDITIONALEXPRESSIONS}
+  {$endif NEXTGEN}
 {$endif DELPHIWEBSCRIPT}
 
 {$endif FPC}

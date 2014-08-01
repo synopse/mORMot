@@ -8029,8 +8029,9 @@ type
 
   /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
-  // - you can specify such a class if you need an interfaced object with a
-  // virtual constructor
+  // - you can specify such a class if you need an object including published
+  // properties (like TPersistent) with a virtual constructor (e.g. to
+  // initialize some class properties)
   TPersistentWithCustomCreate = class(TPersistent)
   public
     /// this virtual constructor will be called at instance creation
@@ -35339,7 +35340,7 @@ begin
         arg.indexOutResult := UInt32ToUtf8(r)+']';
         inc(r);
         if a<ArgsOutLast then
-          arg.commaOutResult := ',';
+          arg.commaOutResult := '; ';
       end;
       arguments.AddItem(arg);
     end;
@@ -36511,10 +36512,14 @@ begin
     uri := InterfaceMangledURI else
     uri := InterfaceURI;
   result := _ObjFast(['uri',uri,'interfaceURI',InterfaceURI,
-    'interfaceMangledURI',InterfaceMangledURI,'GUID',GUIDToRawUTF8(fInterface.InterfaceIID),
+    'interfaceMangledURI',InterfaceMangledURI,
+    'GUID',GUIDToRawUTF8(fInterface.InterfaceIID),
     'contractExpected',UnQuoteSQLString(ContractExpected),
-    'instanceCreation',ord(InstanceCreation),'instanceCreationName',ToText(InstanceCreation),
+    'instanceCreation',ord(InstanceCreation),
+    'instanceCreationName',ToText(InstanceCreation),
     'methods',InterfaceFactory.ContextFromMethods(aRegisteredTypes)]);
+  if InstanceCreation=sicClientDriven then
+    result.isClientDriven := true;
 end;
 {$endif}
 

@@ -9581,6 +9581,14 @@ type
 // ! DocVariantData(aVarDoc.ArrayProp).AddItem('new item');
 function DocVariantData(const DocVariant: variant): PDocVariantData;
 
+/// direct access to a TDocVariantData from a given variant instance
+// - return a pointer to the TDocVariantData corresponding to the variant
+// instance, which may be of kind varByRef (e.g. when retrieved by late binding)
+// - will return a read-only fake TDocVariantData with Kind=dvUndefined if the
+// supplied variant is not a TDocVariant instance
+function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
+
+
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
 // pairs, e.g.
@@ -25381,7 +25389,7 @@ begin
   {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
     inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
-    inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer));
+    inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
     if FieldTable^.AllCount=0 then
       exit; // not enough RTTI -> avoid exception in constructor below
   end;
@@ -26653,6 +26661,11 @@ begin
     result.toVariant := 'BlobToVariant';
     result.fromVariant := 'VariantToBlob';
   end;
+  ptGUID: begin
+    result.isGUID := true;
+    result.toVariant := 'GUIDToString';
+    result.fromVariant := 'StringToGUID';
+  end;
   ptCurrency: result.isCurrency := true;
   ptDateTime: result.isDateTime := true;
   ptVariant:  result.isVariant := true;
@@ -26927,9 +26940,9 @@ begin // only tkRecord is needed here
     raise ESynException.Create('FromEnhancedRTTI(record?)');
   FieldSize := FieldTable^.Size;
   inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
-  inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer));
+  inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
   if FieldTable^.AllCount=0 then
-    exit; // will raise an error in Create()
+    exit; // not enough RTTI -> will raise an error in Create()
   RecField := @FieldTable^.AllFields[0];
   SetLength(ItemFields,FieldTable^.AllCount);
   for i := 0 to FieldTable^.AllCount-1 do begin
@@ -28742,6 +28755,19 @@ begin
     if VType=varByRef or varVariant then
       result := DocVariantData(PVariant(VPointer)^) else
     raise EDocVariant.CreateFmt('DocVariantType.Data(%d<>TDocVariant)',[VType]);
+end;
+
+const // will be in code section of the exe, so will be read-only by design
+  DocVariantDataFake: TDocVariantData = ();
+  
+function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
+begin
+  with TVarData(DocVariant) do
+    if VType=DocVariantType.VarType then
+      result := @DocVariant else
+    if VType=varByRef or varVariant then
+      result := DocVariantData(PVariant(VPointer)^) else
+      Result := @DocVariantDataFake;
 end;
 
 function _Obj(const NameValuePairs: array of const;

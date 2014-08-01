@@ -133,10 +133,17 @@ type
     procedure Init; overload;
     /// initialize the low-level memory structure with a given JSON content
     procedure Init(const JSON: string); overload;
+    /// initialize the low-level memory structure with a given array of variant
+    procedure InitFrom(const aValues: TVariantDynArray); overload;
     /// access to a nested TJSONVariantData item
-    // - returns nil if aName was not found
+    // - returns nil if aName was not found, or not a true TJSONVariantData item
     function Data(const aName: string): PJSONVariantData;
       {$ifdef HASINLINE}inline;{$endif}
+    /// access to a nested TJSONVariantData item, creating it if necessary
+    // - aPath can be specified with any depth, e.g. 'level1.level2.level3' 
+    // - if the item does not exist or is not a true TJSONVariantData, a new
+    // one will be created, and returned as pointer
+    function EnsureData(const aPath: string): PJSONVariantData;
     /// add a value to the jvArray
     // - raise a ESJONException if the instance is a jvObject
     procedure AddValue(const aValue: variant);
@@ -145,6 +152,9 @@ type
     procedure AddNameValue(const aName: string; const aValue: variant);
     /// search for a name in this jvObject
     function NameIndex(const aName: string): integer;
+    /// set a value of this jvObject to a given path
+    // - aPath can be specified with any depth, e.g. 'level1.level2.level3' 
+    procedure SetPath(const aPath: string; const aValue: variant); 
     /// fill this document from a JSON array or object
     function FromJSON(const JSON: string): boolean;
     /// convert this document into JSON array or object
@@ -276,17 +286,27 @@ function JSONVariant(const JSON: string): variant; overload;
 /// create a TJSONVariant TJSONVariant array from a supplied array of values
 function JSONVariant(const values: TVariantDynArray): variant; overload;
 
+/// create a TJSONVariant TJSONVariant array from a supplied array of values
+function JSONVariantFromConst(const constValues: array of variant): variant; 
+
 /// access to a TJSONVariant instance members
 // - e.g. Kind, Count, Names[] or Values[]
 // - will raise an exception if the supplied variant is not a TJSONVariant
 // - this function is safer than TJSONVariant(JSONVariant)
 function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
 
+/// access to a TJSONVariant instance members
+// - e.g. Kind, Count, Names[] or Values[]
+// - will return a read-only fake TJSONVariant with Kind=jvUndefined if the
+// supplied variant is not a TJSONVariant
+// - this function is safer than TJSONVariant(JSONVariant)
+function JSONVariantDataSafe(const JSONVariant: variant): PJSONVariantData;
+
 var
   /// the custom variant type definition registered for TJSONVariant
   JSONVariantType: TInvokeableVariantType;
 
-  
+
 /// compute the quoted JSON string corresponding to the supplied text
 function StringToJSON(const Text: string): string;
 
@@ -416,6 +436,11 @@ function ShortStringToString(Buffer: PByteArray): string;
 /// check that two ASCII-7 latin text do match
 function StartWithPropName(const PropName1,PropName2: string): boolean;
 
+/// overloaded function which won't raise an exception
+function StringToGUID(const S: string): TGUID;
+
+/// overloaded function which won't raise an exception
+function GUIDToString(const GUID: TGUID): string;
 
 implementation
 
@@ -545,6 +570,20 @@ begin
   TJSONVariantData(result).Values := values;
 end;
 
+function JSONVariantFromConst(const constValues: array of variant): variant; 
+var i: integer;
+begin
+  VarClear(result);
+  with TJSONVariantData(result) do begin
+    Init;
+    VKind := jvArray;
+    VCount := length(values);
+    SetLength(Values,VCount);
+    for i := 0 to VCount-1 do
+      Values[i] := constValues[i];
+  end;
+end;
+
 function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
 begin
   with TVarData(JSONVariant) do
@@ -553,6 +592,19 @@ begin
     if VType=varByRef or varVariant then
       result := JSONVariantData(PVariant(VPointer)^) else
     raise EJSONException.CreateFmt('JSONVariantData.Data(%d<>JSONVariant)',[VType]);
+end;
+
+const // will be in code section of the exe, so will be read-only by design
+  JSONVariantDataFake: TJSONVariantData = ();
+  
+function JSONVariantDataSafe(const JSONVariant: variant): PJSONVariantData;
+begin
+  with TVarData(JSONVariant) do
+    if VType=JSONVariantType.VarType then
+      result := @JSONVariant else
+    if VType=varByRef or varVariant then
+      result := JSONVariantDataSafe(PVariant(VPointer)^) else
+      result := @JSONVariantDataFake;
 end;
 
 procedure AppendChar(var str: string; chr: Char);
@@ -1544,6 +1596,13 @@ begin
     Init; // we expect a true JSON array or object here
 end;
 
+procedure TJSONVariantData.InitFrom(const aValues: TVariantDynArray); 
+begin
+  Init;
+  VKind := jvArray;
+  Values := aValues;
+end;
+
 procedure TJSONVariantData.AddNameValue(const aName: string;
   const aValue: variant);
 begin
@@ -1630,12 +1689,47 @@ begin
   result := -1;
 end;
 
+procedure TJSONVariantData.SetPath(const aPath: string; const aValue: variant);
+var i: integer;
+begin
+  for i := length(aPath) downto 1 do 
+    if aPath[i]='.' then begin
+      EnsureData(copy(aPath,1,i-1))^.SetValue(copy(aPath,i+1,maxInt),aValue);
+      exit;
+    end;
+  SetValue(aPath,aValue);
+end;
+
+function TJSONVariantData.EnsureData(const aPath: string): PJSONVariantData;
+var i: integer;
+    new: TJSONVariantData;
+begin // recursive value set
+  i := Pos('.',aPath);
+  if i=0 then begin
+    i := NameIndex(aPath);
+    if i<0 then begin // not existing: create new
+      new.Init;
+      AddNameValue(aPath,variant(new));
+      result := @Values[VCount];
+    end else begin
+      if TVarData(Values[i]).VType<>JSONVariantType.VarType then begin
+        VarClear(Values[i]);
+        TJSONVariantData(Values[i]).Init; // create as TJSONVariantData
+      end;
+      result := @Values[i];
+    end;
+  end else
+    result := EnsureData(copy(aPath,1,i-1))^.EnsureData(copy(aPath,i+1,maxInt));
+end;
+
 procedure TJSONVariantData.SetValue(const aName: string;
   const aValue: variant);
 var i: integer;
 begin
   if @self=nil then
     raise EJSONException.Create('Unexpected Value[] access');
+  if aName='' then
+    raise EJSONException.Create('Unexpected Value['''']');
   i := NameIndex(aName);
   if i<0 then
     AddNameValue(aName,aValue) else
@@ -1946,6 +2040,25 @@ begin
   for i := 0 to length(FieldNames)-1 do
     fPropInfo[i] := GetPropInfo(aTypeInfo,fFieldNames[i]);
 end;
+
+function StringToGUID(const S: string): TGUID;
+begin
+  try
+    result := SysUtils.StringToGUID(S);
+  except
+    FillChar(Result,SizeOf(result),0);
+  end;
+end;
+
+function GUIDToString(const GUID: TGUID): string;
+begin
+  try
+    result := SysUtils.GUIDToString(GUID);
+  except
+    result := '';
+  end;
+end;
+
 
 initialization
   JSONVariantType := TJSONVariant.Create;

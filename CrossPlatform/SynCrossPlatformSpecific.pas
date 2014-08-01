@@ -83,7 +83,6 @@ interface
 {$ifdef ISDWS}
 uses
   SmartCL.System,
-  SmartCL.Inet,
   System.Types,
   w3c.date;
 {$else}
@@ -107,6 +106,7 @@ type
   currency = float;
   TPersistent = TObject;
   TObjectList = array of TObject;
+  TStringList = array of string;
   TVariantDynArray = array of variant;
   TIntegerDynArray = array of integer;
 
@@ -287,6 +287,8 @@ function TryStrToInt64(const S: string; var Value: Int64): Boolean;
 function UpCase(ch: Char): Char; inline;
 function GetNextCSV(const str: string; var index: Integer; var res: string;
   Sep: char): boolean;
+function GUIDToString(const guid: string): string;
+function StringToGUID(const str: string): string;
 
 type
   /// which kind of document the TJSONVariantData contains
@@ -683,6 +685,16 @@ begin
   result := ch.UpperCase;
 end;
 
+function GUIDToString(const guid: string): string; inline;
+begin
+  result := guid;
+end;
+
+function StringToGUID(const str: string): string; inline;
+begin
+  result := str;
+end;
+
 function GetNextCSV(const str: string; var index: Integer; var res: string;
   Sep: char): boolean;
 var i,L: integer;
@@ -889,7 +901,7 @@ end;
 
 
 initialization
-   TestSMS;
+  TestSMS;
 
 {$endif ISDWS}
 end.
