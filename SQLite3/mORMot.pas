@@ -742,7 +742,8 @@ unit mORMot;
       instead of JSON array or object if TServiceFactoryServer.ResultAsJSONObject
       is set (can be useful e.g. when consuming services from XML only clients) -
       as an alternative, ResultAsXMLObjectIfAcceptOnlyXML option will recognize
-      'Accept: application/xml' HTTP header and return XML instead of JSON 
+      'Accept: application/xml' or 'Accept: text/xml' HTTP header and return
+      XML content instead of JSON 
     - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
@@ -8314,8 +8315,9 @@ type
     property ResultAsXMLObject: boolean
       read fResultAsXMLObject write fResultAsXMLObject;
     /// set to TRUE to return XML objects for the interface's methods result
-    // if the Accept: HTTP header is exactly 'application/xml'
-    // - the header should be exactly 'Accept: application/xml' (and no other value)
+    // if the Accept: HTTP header is exactly 'application/xml' or 'text/xml'
+    // - the header should be exactly 'Accept: application/xml' or
+    // 'Accept: text/xml' (and no other value)
     // - in this case, ForceServiceResultAsXMLObject will be set for this
     // particular TSQLRestServerURIContext instance, and result returned as XML
     // - using this method allows to mix standard JSON requests (from JSON
@@ -26219,9 +26221,11 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
   Log.Log(sllServiceCall,URI,Server);
   {$endif}
-  if Service.ResultAsXMLObjectIfAcceptOnlyXML then
-    if FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ')='application/xml' then
+  if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
+    xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
+    if (xml='application/xml') or (xml='text/xml') then
       ForceServiceResultAsXMLObject := true;
+  end;
   ComputeResult;
   if ForceServiceResultAsXMLObject and (Call.OutBody<>'') and (Call.OutHead<>'') and
      CompareMem(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
