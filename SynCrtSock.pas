@@ -470,7 +470,7 @@ type
     Func: THttpSocketCompress;
     /// the size in bytes after which compress will take place
     // - will be 1024 e.g. for 'zip' or 'deflate'
-    // - could be 0 e.g. when encrypting the content 
+    // - could be 0 e.g. when encrypting the content, meaning "always compress" 
     CompressMinSize: integer;
   end;
 
@@ -1920,7 +1920,7 @@ begin
     for i := 0 to high(Handled) do
     if i in Accepted then
     with Handled[i] do
-    if (CompressMinSize=0) or
+    if (CompressMinSize=0) or // 0 here means "always" (e.g. for encryption)
        (OutContentIsText and (OutContentLen>=CompressMinSize)) then begin
       // compression of the OutContent + update header
       result := Func(OutContent,true);
@@ -4972,7 +4972,8 @@ var Req: PHTTP_REQUEST;
   begin
     try
       Resp^.SetStatus(StatusCode,OutStatus);
-      Msg := format('<h1>Server Error %d: %s</h1><p>',
+      Msg := format(
+        '<html><body style="font-family:verdana;"><h1>Server Error %d: %s</h1><p>',
         [StatusCode,OutStatus]);
       if E<>nil then
         Msg := Msg+string(E.ClassName)+' Exception raised:<br>';
@@ -4983,7 +4984,7 @@ var Req: PHTTP_REQUEST;
       Http.SendHttpResponse(fReqQueue,Req^.RequestId,0,Resp^,nil,bytesSent);
     except
       on Exception do
-        ; // ignore any HttpApi level errors here
+        ; // ignore any HttpApi level errors here (client may crashed)
     end;
   end;
 
