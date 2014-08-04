@@ -2726,7 +2726,7 @@ function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 // - expect UpperValues to be any upper value with left side matching, e.g. as
 // used by IsHTMLContentTypeTextual() function:
 // ! result := ExistsIniNameValue(htmlHeaders,HEADER_CONTENT_TYPE_UPPER,
-// !  ['TEXT/','APPLICATION/JSON']);
+// !  ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
   const UpperValues: array of RawUTF8): boolean;
 
@@ -3005,8 +3005,8 @@ function GetMimeContentType(Content: Pointer; Len: integer;
 // can trigger false positives), e.g. begin with zip/gz/gif/wma/png/jpeg markers
 function IsContentCompressed(Content: Pointer; Len: integer): boolean;
 
-/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...'
-// or 'Content-Type: application/json'
+/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
+// 'Content-Type: application/json' or 'Content-Type: application/xml'
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
@@ -5083,6 +5083,7 @@ type
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
     /// append some chars, escaping all HTML special chars as expected
     // - i.e.   < > & "   as   &lt; &gt; &amp; &quote;
+    // - this will also cover XML markup - see @http://www.w3.org/TR/xml/#syntax
     procedure AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
@@ -23584,7 +23585,7 @@ end;
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
-    ['TEXT/','APPLICATION/JSON']);
+    ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
@@ -31984,7 +31985,7 @@ end;
 
 function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
-var objEnd, objFirstChar: AnsiChar;
+var objEnd: AnsiChar;
     Name,Value: PUTF8Char;
     n: integer;
 begin
@@ -32023,14 +32024,12 @@ begin
       if Name=nil then
         exit;
       if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
-      objFirstChar := JSON^;
-      if objFirstChar<>'[' then begin
+      if JSON^='[' then // arrays are written as list of items, without root
+        JSON := AddJSONToXML(JSON,Name,@objEnd) else begin
         Add('<');
         AddHtmlEscape(Name,0);
         Add('>');
-      end;
-      JSON := AddJSONToXML(JSON,Name,@objEnd);
-      if objFirstChar<>'[' then begin
+        JSON := AddJSONToXML(JSON,Name,@objEnd);
         Add('<','/');
         AddHtmlEscape(Name,0);
         Add('>');
@@ -32444,7 +32443,7 @@ var PEnd: PtrUInt;
 begin
   if WideChar=nil then
     exit;
-  BMax := BEnd-7;
+  BMax := BEnd-7; // ensure enough space for biggest Unicode glyph as UTF-8 
   if WideCharCount=0 then
     repeat
       if B>=BMax then
