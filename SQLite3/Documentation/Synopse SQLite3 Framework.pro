@@ -9100,6 +9100,7 @@ This mode will be a little bit slower, but will probably be more AJAX ready.
 It's up to you to select the right routing scheme to be used.
 :   Response format
 :    Standard answer as JSON object
+:     JSON answers
 The framework will always return the data in the same format, whatever the routing mode used.
 Basically, this is a JSON object, with one nested {\f1\fs20 "result":} property, and the client driven {\f1\fs20 "id":} value (e.g. always 0 in {\f1\fs20 sicShared} mode):
 $ POST /root/Calculator.Add
@@ -9166,6 +9167,26 @@ $ {"result":[{"Real":-18,"Imaginary":-27}]}
 Note that if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} is set to {\f1\fs20 true}, the outgoing values won't be emitted within a {\f1\fs20 "result":[...]} JSON array, but via a {\f1\fs20 "result":\{... \}} JSON object, with the {\f1\fs20 var/out} parameter names as object fields, and {\f1\fs20 "Result":} for a function result:
 $ {"result":{"Result":{"Real":-18,"Imaginary":-27}}}
 Both contents fulfill perfectly standard JSON declarations, so can be generated and consumed directly in any @*AJAX@ client. The {\f1\fs20 TServiceFactoryServer. ResultAsJSONObject} option make it even easier to consume {\i mORMot} services, since all outgoing values will be named in the {\f1\fs20 "result":} JSON object.
+:     Returning raw JSON content
+By default, if you want to transmit a JSON content with interface-based services, using a {\f1\fs20 RawUTF8} will convert it to a JSON string. Therefore, any JSON special characters (like {\f1\fs20 "} or {\f1\fs20 \\} or {\f1\fs20 [}) will be escaped. This will slow down the process on both server and client side, and increase transmission bandwidth.
+For instance, if you define such a method:
+!function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawUTF8;
+!var res: ISQLDBRows;
+!begin
+!  if fProps=nil then
+!    raise Exception.Create('Connect call required before Execute');
+!  res := fProps.ExecuteInlined(aSQL,aExpectResults);
+!  if res=nil then
+!    result := '' else
+!!    result := res.FetchAllAsJSON(aExpanded);
+!end;
+The {\f1\fs20 FetchAllAsJSON()} method will return a JSON array content, but will be escaped as a JSON string when transmitted via a {\f1\fs20 RawUTF8} variable.
+A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the UTF-8 text is a valid JSON content, and should not be escaped.
+That is, defining the method as followed will increase process speed and reduce used bandwidth:
+!function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawJSON;
+See sample "{\i 16 - Execute SQL via services}" for some working code using this feature.
+As a consequence, using {\f1\fs20 RawJSON} will also make the transmitted content much more @*AJAX@ friendly, since the returned value will be a valid JSON array or object, and not a JSON string which would need JavaScript "unstringification".
+:     Returning errors
 In case of an error, the standard message object will be returned:
 ${
 $ "ErrorCode":400,
@@ -9191,34 +9212,76 @@ On the client side, you may encounter the following {\f1\fs20 EInterfaceFactoryE
 |returned object record variant array RawJSON|a returned {\f1\fs20 class}, record, variant, dynamic array of {\f1\fs20 RawJSON} value was not properly serialized
 |missing or invalid value|a returned string or numerical value is not valid JSON content
 |%
-:    Returns direct JSON content
-By default, if you want to transmit a JSON content with interface-based services, using a {\f1\fs20 RawUTF8} will convert it to a JSON string. Therefore, any JSON special characters (like {\f1\fs20 "} or {\f1\fs20 \\} or {\f1\fs20 [}) will be escaped. This will slow down the process on both server and client side, and increase transmission bandwidth.
-For instance, if you define such a method:
-!function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawUTF8;
-!var res: ISQLDBRows;
-!begin
-!  if fProps=nil then
-!    raise Exception.Create('Connect call required before Execute');
-!  res := fProps.ExecuteInlined(aSQL,aExpectResults);
-!  if res=nil then
-!    result := '' else
-!!    result := res.FetchAllAsJSON(aExpanded);
-!end;
-The {\f1\fs20 FetchAllAsJSON()} method will return a JSON array content, but will be escaped as a JSON string when transmitted via a {\f1\fs20 RawUTF8} variable.
-A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the UTF-8 text is a valid JSON content, and should not be escaped.
-That is, defining the method as followed will increase process speed and reduce used bandwidth:
-!function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawJSON;
-See sample "{\i 16 - Execute SQL via services}" for some working code using this feature.
-As a consequence, using {\f1\fs20 RawJSON} will also make the transmitted content much more @*AJAX@ friendly, since the returned value will be a valid JSON array or object, and not a JSON string which would need JavaScript "unstringification".
+:    Returning content as XML
+By default, interface-based services of a {\i mORMot} server will always return a JSON array (or a JSON object, if {\f1\fs20 TServiceFactoryServer. ResultAsJSONObject} is {\f1\fs20 true}).
+With some kind of clients (e.g. if they are made by a third party), if could be useful to return @**XML@ content instead.
+:     Always return XML content
+If you want all methods of a given {\f1\fs20 interface} to return XML content instead of JSON, you can set {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} to {\f1\fs20 true}.
+Instead of this JSON content:
+!GET root/Calculator/Add?n1=1&n2=2
+! ...
+!{"result":{"Result":3}}
+The following XML will be returned:
+!GET root/Calculator/Add?n1=1&n2=2
+! ...
+$$<?xml version="1.0" encoding="UTF-8"?>
+$$<result><Result>3</Result></result>
+Conversion is processed from the JSON content generated by the {\i mORMot} kernel, via a call to {\f1\fs20 JSONBufferToXML()} function, which performs the XML generation without almost no memory allocation. So only a slightly performance penalty may be noticed (much slower than most node-based XML producers available).
+One drawback of using this {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} property is that your regular Delphi or AJAX clients won't be able to consume the service any more, since they expect JSON content.\line If you want your service to be consumed either by XML and JSON, you would need two services. You can therefore define a dedicated {\f1\fs20 interface} to return XML, and then register this interface to return only XML:
+!type
+!  ICalculator = interface(IInvokable)
+!    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
+!    /// add two signed 32 bit integers
+!    function Add(n1,n2: integer): integer;
+!  end;
+!!  ICalculatorXML = interface(ICalculator)
+!!    ['{0D682D65-CE0F-441B-B4EC-2AC75E357EFE}']
+!!  end; // no new
+!
+!!  TServiceCalculator = class(TInterfacedObject, ICalculator,ICalculatorXML)
+!  public // implementation class should implement both interfaces
+!    function Add(n1,n2: integer): integer;
+!  end;
+!
+!...
+!  aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!!  aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculatorXML)],sicShared).
+!!    ResultAsXMLObject := True;
+!...
+There would therefore be two running service instances (e.g. here two instances of {\f1\fs20 TServiceCalculator}, one for {\f1\fs20 ICalculator} and one for {\f1\fs20 ICalculatorXML}). It could be an issue, in some cases. And such a dedicated interface may need more testing and code on the server side.
+:     Return XML content on demand
+As an alternative, you can let the {\i mORMot} server inspect the incoming HTTP headers, and return the content as XML if the "{\f1\fs20 Accept: }" header is exactly "{\f1\fs20 application/xml}":
+!  aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+!!    ResultAsXMLObjectIfAcceptOnlyXML := true;
+For standard requests, the incoming HTTP header will be either void, either "{\f1\fs20 Accept: */*}", so will return JSON content.\line But if the client set either "{\f1\fs20 Accept: application/xml}" or "{\f1\fs20 Accept: text/xml}" in its header, then it will return an XML document.
+Instead of this JSON content:
+!GET root/Calculator/Add?n1=1&n2=2
+!Accept: */*
+! ...
+!{"result":{"Result":3}}
+The following XML will be returned:
+!GET root/Calculator/Add?n1=1&n2=2
+!!Accept: application/xml
+! ...
+$$<?xml version="1.0" encoding="UTF-8"?>
+$$<result><Result>3</Result></result>
+Note that the header is expected to be "{\f1\fs20 Accept: application/xml}" or "{\f1\fs20 Accept: text/xml}" as {\i exact value}.\line For instance "{\f1\fs20 Accept: text/html,application/xml,*/*}" won't be detected by the server, and will return regular JSON:
+!GET root/Calculator/Add?n1=1&n2=2
+!Accept: text/html,application/xml,*/*
+! ...
+!{"result":{"Result":3}}
+Your XML client should therefore be able to force the exact content of the HTTP "{\f1\fs20 Accept:}" header.
+Together with parameter values optionally encoded at URI level - available with {\f1\fs20 TSQLRestRoutingREST} default routing scheme (see {\f1\fs20 ?n1=1&n2=2} above)- it could be an useful alternative to consume {\i mORMot} services from any XML-based client.
 :    Custom returned content
-Note that even if the response format is a JSON object by default, and expected as such by our {\f1\fs20 TServiceContainerClient} implementation, there is a way of returning any content from a remote request. It may be used by @*AJAX@ or HTML applications to return any kind of data, i.e. not only JSON results, but pure text, HTML or even binary content. Our {\f1\fs20 TServiceFactoryClient} instance is also able to handle such requests, and will save client-server bandwidth when transmitting some BLOB data (since it won't serialized the content with {\f1\fs20 Base64} encoding).
+Note that even if the response format is a JSON object by default, and expected as such by our {\f1\fs20 TServiceContainerClient} implementation, there is a way of returning any content from a remote request.
+It may be used by @*AJAX@ or HTML applications to return any kind of data, i.e. not only JSON results, but pure text, HTML or even binary content. Our {\f1\fs20 TServiceFactoryClient} instance is also able to handle such requests, and will save client-server bandwidth when transmitting some BLOB data (since it won't serialized the content with {\f1\fs20 Base64} encoding).
 In order to specify a custom format, you can use the following {\f1\fs20 @*TServiceCustomAnswer@ record} type as the {\f1\fs20 result} of an {\f1\fs20 interface function}:
 !  TServiceCustomAnswer = record
 !    Header: RawUTF8;
 !    Content: RawByteString;
 !    Status: cardinal;
 !  end;
-The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overriden with a propert HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from Delphi clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
+The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overridden with a property HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from Delphi clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
 In order to implement such method, you may define such an interface:
 !  IComplexCalculator = interface(ICalculator)
 !    ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
@@ -9238,7 +9301,7 @@ Regression tests will make the following process:
 !    Check(Content=FormatUTF8('%,%',[C3.Real,C3.Imaginary]));
 !  end;
 Note that since there is only one BLOB content returned, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed to be defined for this method. If this is the case, an exception will be raised during the {\f1\fs20 interface} registration step. But you can define any {\f1\fs20 const} parameter needed, to specify your request.
-You may also be able to use this feature to implement custom UTF-8 HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, in conjunction with {\f1\fs20 TSQLRestRoutingJSON_RPC} mode and URI-encoded parameters.
+You may also be able to use this feature to implement custom UTF-8 HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
 \page
 :65 Comparison with WCF
 Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications - see @http://msdn.microsoft.com/en-us/library/dd456779
@@ -9267,7 +9330,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Session|available (optional)|available (optional)
 |Encryption|at Service level|at communication level
 |Compression|at Service level|at communication level
-|Serialization|XML/binary/JSON|JSON (customizable)
+|Serialization|XML/binary/JSON|JSON/XML/custom
 |Communication protocol|HTTP/HTTPS/TCP/pipe/MSMQ|HTTP/HTTPS/TCP/pipe/messages/in-process
 |HTTP/HTTPS server|{\i @*http.sys@}|{\i http.sys}/native (winsock)
 |Authentication|Windows or custom|Windows, ORM-based, or class-driven
@@ -9277,10 +9340,10 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Speed|good|high
 |Extensibility|verbose but complete|customizable
 |Standard|de facto|KISS design (e.g. JSON, HTTP)
-|Source code|closed|Published
+|Source code|closed|published
 |License|proprietary|Open
 |Price|depends|Free
-|Support|official + community|community
+|Support|official + community|Synopse + community
 |Runtime required|.Net framework (+ISS/WAS)|none (blank OS)
 |%
 About instance life time, note that in WCF {\f1\fs20 InstanceContextMode.Single} is in fact the same as {\f1\fs20 sicShared} within {\i mORMot} context: only one instance is used for all incoming calls and is not recycled subsequent to the calls. Therefore, {\f1\fs20 sicSingle} mode (which is {\i mORMot}'s default) maps {\f1\fs20 InstanceContextMode.PerCall} in WCF, meaning that one instance is used per call.
@@ -9291,11 +9354,12 @@ If you need to communicate with an external service provider, you can easily cre
 - Publish the interface as a {\i mORMot} server-side implementation class.
 Since SOAP features a lot of requirements, and expects some plumping according to its format (especially when services are provided from C# or Java), we choose to not re-invent the wheel this time, and rely on existing Delphi libraries (available within the Delphi IDE) for this purpose. If you need a cross-platform SOAP 1.1 compatible solution, or if you version of Delphi does not include SOAP process, you may take a look at @http://wiki.freepascal.org/Web_Service_Toolkit which is a web services package for FPC, Lazarus and Delphi.
 But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
+Optionally, {\i mORMot}'s interface based services allow to publish their result as XML, and encode the incoming parameters at URI level. It makes it a good alternative to SOAP, in the XML world.
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 {\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon07.png
-Current version of the framework units target only Win32 and Win64 systems yet.\line But in a @17@, you would probably need to create clients for other platforms.
+Current version of the main framework units target only Win32 and Win64 systems yet.\line But in a @17@, you would probably need to create clients for other platforms.
 A set of @**cross-platform@ client units is available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository.\line It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform (including @*OSX@, @*iPhone@ or @*Android@);
 - {\i @*FreePascal@} Compiler 2.7.1;
@@ -9311,13 +9375,16 @@ The units are the following:
 This set of units will provide a solid and shared ground for the any kind of clients:
 - Connection to a {\i mORMot} server, using weak or default authentication - see @18@;
 - Definition of the {\f1\fs20 TSQLRecord} class, using RTTI on {\i Delphi} or {\i FreePascal}, and generated code on {\i Smart};
-- Mapping of all supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
+- Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
+- Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms;
 - Remote @*CRUD@ operations, via @*JSON@ and @*REST@, with a {\f1\fs20 TSQLRestClientURI} class, with the same methods as with the {\f1\fs20 mORMot.pas} framework unit;
 - Optimized {\f1\fs20 TSQLTableJSON} class to handle a JSON result table, as returned by {\i mORMot}'s REST server ORM - see @87@;
 - @*Batch@ process - see @28@ - for transactional and high-speed writes;
-- Remote method-based services call, with parameters marshaling;
+- Remote @49@ call, with parameters marshaling;
+- Remote @63@ call, with parameters marshaling and instance-life time;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible for your projects.
-In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats. Then, some code generator may be used to create the wrappers, eventually using the @81@ included on the server side. Any help is welcome!
+In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
+In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client unit for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially when targeting Java or C# clients.
 : REST clients
 Thanks to {\f1\fs20 SynCrossPlatform*} units, you could easily access any {\i mORMot} server with the following code (extracted from "{\f1\fs20 27 - CrossPlatform Clients\RegressionTests}" sample):
 !var Model: TSQLModel;
@@ -9399,11 +9466,12 @@ Those {\f1\fs20 BatchAdd} / {\f1\fs20 BatchDelete} / {\f1\fs20 BatchUpdate} meth
 - Much higher performance, especially on multi-insertion or multi-update of data;
 - Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 AutomaticTransactionPerRow} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, and an ACID rollback in case of any failure.
 You can note that all above code has exactly the same structure and methods than standard {\i mORMot} clients.\line As a result, you are able to {\i share} client code between a Windows project and any supported platform, even AJAX. It would eventually reduce both implementation and debugging time.
-: Delphi Multi-Device
+: Available client platforms
+:  Delphi / NextGen support
 Latest versions of {\i Delphi} include the {\i @*FireMonkey@} FMX framework, able to deliver multi-device, true native applications for Windows, Mac, Android and iOS.\line Our {\f1\fs20 SynCrossPlatform*} units are able to easily create clients for those platforms.
 In order to be compliant with the {\i NextGen} revision, we tried to follow the expectation of this new family of cross-compilers.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would comply on all supported platform.
 Feedback is needed for the mobile targets.\line In fact, we rely for our own projects on {\i Smart Mobile Studio} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. iOS and Android) as deep as other systems. Your input would be very valuable and welcome, here!
-:  Cross-platform JSON
+:   Cross-platform JSON
 We developed our own JSON process units, much faster than the official {\f1\fs20 DBXJSON} unit shipped with Delphi, and cross-platform alternatives, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
 $ 2.2. Table content:
 $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
@@ -9475,9 +9543,9 @@ The unit is also able to serialize any {\f1\fs20 TPersistent} class, i.e. all pu
 !  assert(json2=json);
 !...
 Of course, this serialization feature is used for the {\f1\fs20 TSQLRecord} ORM class.
-:  RESTful Client
+:   RESTful Client
 On Delphi, the {\i Indy} library is used for HTTP requests.\line It is cross-platform by nature, so should work on any supported system.
-: FreePascal support
+:  FreePascal support
 Those units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with Delphi, including RTTI support and all supported types.
 Some restrictions apply, though.
 Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
@@ -9496,7 +9564,7 @@ Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is i
 It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With Delphi, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and Lazarus). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
 We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with Delphi. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
-: Smart Mobile Studio
+:  Smart Mobile Studio support
 {\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} into highly optimized and raw {\i JavaScript}.
 There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
 - {\i JavaScript} super-sets, adding optional {\i strong typing}, and classes, close to the {\i ECMAScript Sixth Edition}: the current main language in this category is certainly {\i TypeScript}, designed by Anders Hejlsberg (father of both the {\i Delphi} language and {\i C#}), and published by {\i Microsoft};
@@ -9504,12 +9572,22 @@ There are several solutions able to compile to {\i JavaScript}.\line In fact, we
 - High-level languages, like {\i Google Web Toolkit} (compiling {\i Java} code), {\i JSIL} (from {\i C#} via {\i Mono}), or {\i Smart Mobile Studio} (from {\i object pascal});
 - Low-level languages, like {\i Emscripten} (compiling C/C++ from LLVM bytecode, using {\i asm.js}).
 Of course, from our point of view, use of modern {\i object pascal} is of great interest, since it will leverage our own coding skills, and make us able to share code between client and server sides.
-:  Beyond JavaScript
+:   Beyond JavaScript
 The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some JavaScript code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
-The resulting HTML5 project is self-sufficient with no external javascript library, and is compiled as a single {\f1\fs20 index.html} file. The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
+The resulting HTML5 project is self-sufficient with no external javascript library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debugg your application directly within the IDE (since revision 2.1), or within your browser, with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
 Using a third-party tool like @http://phonegap.com you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one included with Delphi FMX.
 {\i Smart Mobile Studio} is therefore a great platform for implementing rich client-side AJAX applications, to work with our client-server {\i mORMot} framework.
+:   Using Smart Mobile Studio with mORMot
+There is no package to be installed within {\i Smart Mobile Studio} IDE. The client units will be generated directly from the {\i mORMot} server. Any edition of {\i Smart} - see @http://smartmobilestudio.com/feature-matrix - is enough: you do not need to pay for the {\i Enterprise} edition to consume {\i mORMot} services. But of course, the {\i Professionnal} edition is recommended, since the {\i Basic} edition does not allow to create forms from the IDE, which is the main point for an AJAX application.
+In contrast to the wrappers available in the {\i Professional} edition of Smart, for accessing {\i RemObjects} or {\i DataSnap} servers, our {\i mORMot} clients are 100% written in the {\i SmartPascal} dialect. There is no need to link an external {\f1\fs20 .js} library to your executable, and you will benefit of the obfuscation and smart linking features of the Smart compiler.
+The only requirement is to copy the {\i mORMot} cross-platform units to your {\i Smart Mobile Studio} installation. This can be done in three {\f1\fs20 copy} instructions:
+$xcopy ..\..\..\CrossPlatform\SynCrossPlatformSpecific.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
+$xcopy ..\..\..\CrossPlatform\SynCrossPlatformCrypto.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\\Libraries" /Y
+$xcopy ..\..\..\CrossPlatform\SynCrossPlatformREST.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
+You can find a corresponding BATCH file in {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client\\CopySynCrossPlatformUnits.bat}.
+: Generating client wrappers
+Even if it feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and set of {\i @*Mustache@}-based templates.
 
 {\i (to be continued)}
 
