@@ -880,7 +880,7 @@ type
     class function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
     class procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     procedure SetOptions(aResultAsJSONObject: boolean;
-      {$ifndef LVCL}aRunInOtherThread: boolean;{$endif} aOptions: TServiceMethodOptions);
+      aOptions: TServiceMethodOptions);
     procedure IntSubtractJSON(Ctxt: TOnInterfaceStubExecuteParamsJSON);
     {$ifndef NOVARIANTS}
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
@@ -10169,7 +10169,7 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.SetOptions(aResultAsJSONObject: boolean;
-  {$ifndef LVCL}aRunInOtherThread: boolean;{$endif} aOptions: TServiceMethodOptions);
+  aOptions: TServiceMethodOptions);
 var s: integer;
 begin
   with fClient.Server.Services do
@@ -10199,7 +10199,7 @@ begin
     if optExecInPerInterfaceThread in aOptions then
       GlobalInterfaceTestMode := itmPerInterfaceThread;
   {$endif}
-  SetOptions(aResultAsJSONObject{$ifndef LVCL},aRunInOtherThread{$endif},aOptions);
+  SetOptions(aResultAsJSONObject,aOptions);
   fClient.Server.ServicesRouting := aRouting;
   fClient.ServicesRouting := aRouting;
   (fClient.Server.Services as TServiceContainerServer).PublishSignature := true;
@@ -10250,7 +10250,7 @@ begin
 {$endif}
   Inst.CN.Imaginary;
   Test(Inst);
-  SetOptions(false{$ifndef LVCL},aRunInOtherThread{$endif},[]);
+  SetOptions(false,[]);
 end;
 
 procedure TTestServiceOrientedArchitecture.DirectCall;
@@ -10313,7 +10313,7 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ServiceInitialization;
   function Ask(Method, Params,ParamsURI: RawUTF8; ExpectedResult: cardinal): RawUTF8;
-  var resp,data,uriencoded: RawUTF8;
+  var resp,data,uriencoded,head: RawUTF8;
   begin
     Params := ' [ '+Params+' ]'; // add some ' ' to test real-world values
     uriencoded := '?'+UrlEncode(Params);
@@ -10335,6 +10335,11 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
         Check(data=resp,'alternative URI-encoded-inlined parameters use');
         Check(fClient.URI('root/Calculator/'+Method+'?'+ParamsURI,'GET',@data).Lo=ExpectedResult);
         Check(data=resp,'alternative "param1=value1&param2=value2" URI-encoded scheme');
+        head := 'accept: application/xml';
+        Check(fClient.URI('root/Calculator/'+Method+'?'+ParamsURI,'GET',@data,@head).Lo=ExpectedResult);
+        Check(data<>resp,'returned as XML');
+        check(head=XML_CONTENT_TYPE_HEADER);
+        Check(IdemPChar(pointer(data),'<?XML'),'returned as XML');
       end;
     end else
     if fClient.Server.ServicesRouting=TSQLRestRoutingJSON_RPC then begin
@@ -10346,6 +10351,10 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
     if IdemPChar(Pointer(result),'{"RESULT"') then
       result := JSONDecode(result,'result',nil,false) else
       result := copy(result,2,length(result)-2); // trim '[' + ']'
+    if (ExpectedResult=200) and (fClient.Server.ServicesRouting=TSQLRestRoutingREST) then begin
+      resp := XMLUTF8_HEADER+'<result><Result>'+result+'</Result></result>';
+      check(data=resp);
+    end;
   end;
 var S: TServiceFactory;
     i: integer;
@@ -10442,6 +10451,9 @@ begin
   for rout := low(ROUTING) to high(ROUTING) do begin
     fClient.ServicesRouting := ROUTING[rout];
     fClient.Server.ServicesRouting := ROUTING[rout];
+    if rout=0 then
+      (fClient.Server.Services['Calculator'] as TServiceFactoryServer).
+        ResultAsXMLObjectIfAcceptOnlyXML := true;
     Check(Ask('None','1,2','one=1&two=2',400)='');
     Check(Ask('Add','1,2','n1=1&n2=2',200)='3');
     Check(Ask('Add','1,0','n2=1',200)='1');

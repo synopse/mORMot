@@ -738,6 +738,11 @@ unit mORMot;
     - interface-based services can now return the result value as JSON object
       instead of JSON array if TServiceFactoryServer.ResultAsJSONObject is set
       (can be useful e.g. when consuming services from JavaScript)
+    - interface-based services can now return the result value as XML object
+      instead of JSON array or object if TServiceFactoryServer.ResultAsJSONObject
+      is set (can be useful e.g. when consuming services from XML only clients) -
+      as an alternative, ResultAsXMLObjectIfAcceptOnlyXML option will recognize
+      'Accept: application/xml' HTTP header and return XML instead of JSON 
     - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
@@ -3170,6 +3175,8 @@ const
   /// HTTP header used e.g. by THttpApiServer.Request for http.sys to send
   // a static file in kernel mode
   STATICFILE_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+STATICFILE_CONTENT_TYPE;
+  /// uppercase version of HTTP header for static file content serving
+  STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER+STATICFILE_CONTENT_TYPE;
 
 /// convert any HTML_* constant to a short English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -3851,6 +3858,15 @@ type
     // a JSON object, even if Service.ResultAsJSONObject=false: this may be
     // handy when the method is executed from a JavaScript content
     ForceServiceResultAsJSONObject: boolean;
+    /// force the interface-based service methods to return a XML object
+    // - default behavior is to follow Service.ResultAsJSONObject property value
+    // (which own default is to return a more convenient JSON array)
+    // - if set to TRUE, this execution context will FORCE the method to return
+    // a XML object, by setting ForceServiceResultAsJSONObject then converting
+    // the resulting JSON object into the corresponding XML via JSONBufferToXML()
+    // - TSQLRestServerURIContext.InternalExecuteSOAByInterface will inspect the
+    // Accept HTTP header to check if the answer should be XML rather than JSON
+    ForceServiceResultAsXMLObject: boolean;
     /// URI inlined parameters
     // - use UrlDecodeValue*() functions to retrieve the values
     Parameters: PUTF8Char;
@@ -8092,6 +8108,8 @@ type
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
     fResultAsJSONObject: boolean;
+    fResultAsXMLObject: boolean;
+    fResultAsJSONObjectIfAccept: boolean;
     fBackgroundThread: TSynBackgroundThreadProcedure;
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
@@ -8271,8 +8289,8 @@ type
     // (e.g. for returning some HTML content from a public URI, or to implement
     // a public service catalog)
     property ByPassAuthentication: boolean read fByPassAuthentication write fByPassAuthentication;
-    /// set to TRUE to return the method result as JSON object
-    // - by default (FALSE), method execution will return a JSON array with
+    /// set to TRUE to return the interface's methods result as JSON object
+    // - by default (FALSE), any method execution will return a JSON array with
     // all VAR/OUT parameters, in order 
     // - TRUE will generate a JSON object instead, with the VAR/OUT parameter
     // names as field names (and "Result" for any function result) - may be
@@ -8281,7 +8299,29 @@ type
     // transparently handle both formats
     // - this value can be overridden by setting ForceServiceResultAsJSONObject
     // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
-    property ResultAsJSONObject: boolean read fResultAsJSONObject write fResultAsJSONObject;
+    property ResultAsJSONObject: boolean
+      read fResultAsJSONObject write fResultAsJSONObject;
+    /// set to TRUE to return the interface's methods result as XML object
+    // - by default (FALSE), method execution will return a JSON array with
+    // all VAR/OUT parameters, or a JSON object if ResultAsJSONObject is TRUE
+    // - TRUE will generate a XML object instead, with the VAR/OUT parameter
+    // names as field names (and "Result" for any function result) - may be
+    // useful e.g. when working with some XML-only clients
+    // - Delphi clients (i.e. TServiceFactoryClient/TInterfacedObjectFake) does
+    // NOT handle this XML format yet
+    // - this value can be overridden by setting ForceServiceResultAsXMLObject
+    // for a given TSQLRestServerURIContext instance
+    property ResultAsXMLObject: boolean
+      read fResultAsXMLObject write fResultAsXMLObject;
+    /// set to TRUE to return XML objects for the interface's methods result
+    // if the Accept: HTTP header is exactly 'application/xml'
+    // - the header should be exactly 'Accept: application/xml' (and no other value)
+    // - in this case, ForceServiceResultAsXMLObject will be set for this
+    // particular TSQLRestServerURIContext instance, and result returned as XML
+    // - using this method allows to mix standard JSON requests (from JSON
+    // or AJAX clients) and XML requests (from XML-only clients)
+    property ResultAsXMLObjectIfAcceptOnlyXML: boolean
+      read fResultAsJSONObjectIfAccept write fResultAsJSONObjectIfAccept;
   end;
 
   /// a service provider implemented on the client side
@@ -10829,7 +10869,8 @@ type
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TSQLRestServerCallBack
-    procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8; aInstance: TObject);
+    procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
+      aInstance: TObject);
     /// call this method to disable Authentication method check for a given
     // published method name
     // - by default, only Auth and TimeStamp methods do not require the RESTful
@@ -24757,6 +24798,8 @@ begin
   Call.RestAccessRights := nil;
   Call.OutStatus := 0;
   Call.OutInternalState := 0;
+  if (Head<>nil) and (Head^<>'') then
+    Call.InHead := Head^;
   for Retry := -1 to MaximumAuthentificationRetry do
   try
 DoRetry:
@@ -26089,6 +26132,9 @@ const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_','_contract_','_signature_');
 
+var
+  JSON_CONTENT_TYPE_HEADER_VAR: RawUTF8 = JSON_CONTENT_TYPE_HEADER;
+
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
     ('{"result":[','{"result":{');
@@ -26109,63 +26155,81 @@ begin // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
 end;
 
 procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
-  procedure ServiceResult(const Name,JSONValue: RawUTF8);
-  var WR: TTextWriter;
-  begin
-    WR := TJSONSerializer.CreateOwnedStream;
-    try
-      ServiceResultStart(WR);
-      if ForceServiceResultAsJSONObject then
-        WR.AddFieldName(Name);
-      WR.AddString(JSONValue);
-      ServiceResultEnd(WR,0);
-      Returns(WR.Text);
-    finally
-      WR.Free;
+  procedure ComputeResult;
+    procedure ServiceResult(const Name,JSONValue: RawUTF8);
+    var WR: TTextWriter;
+    begin
+      WR := TJSONSerializer.CreateOwnedStream;
+      try
+        ServiceResultStart(WR);
+        if ForceServiceResultAsJSONObject then
+          WR.AddFieldName(Name);
+        WR.AddString(JSONValue);
+        ServiceResultEnd(WR,0);
+        Returns(WR.Text);
+      finally
+        WR.Free;
+      end;
     end;
+  begin
+    if ServiceParameters=nil then begin
+      Error('Parameters required');
+      exit;
+    end;
+    ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
+      Service.ResultAsXMLObject;
+    ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
+      Service.ResultAsJSONObject or
+      ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
+    inc(Server.fStats.fServices);
+    case ServiceMethodIndex of
+    ord(imFree):
+      // "method":"_free_" to release sicClientDriven..sicPerGroup
+      if ServiceInstanceID<=0 then begin
+        Error('Expects an instance ID to be released');
+        exit;
+      end else
+        ServiceMethodIndex := -1; // notify ExecuteMethod() to release the instance
+    ord(imContract): begin
+      // "method":"_contract_" to retrieve the implementation contract
+      ServiceResult('contract',Service.ContractExpected);
+      exit; // "id":0 for this method -> no instance was created
+    end;
+    ord(imSignature): begin
+      // "method":"_signature_" to retrieve the implementation signature
+      if TServiceContainerServer(Server.Services).PublishSignature then
+        ServiceResult('signature',Service.Contract) else
+        // "id":0 for this method -> no instance was created
+        Error('Not allowed to publish signature');
+      exit;
+    end;
+    else // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
+      dec(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
+    end;
+    if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceMethodIndex>=0) and
+       (SessionGroup-1 in Service.fExecution[ServiceMethodIndex].Denied) then begin
+      Error('Unauthorized method');
+      exit;
+    end;
+    // if we reached here, we have to run the service method
+    Service.ExecuteMethod(self);
   end;
+var xml: RawUTF8;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
   Log.Log(sllServiceCall,URI,Server);
   {$endif}
-  if ServiceParameters=nil then begin
-    Error('Parameters required');
-    exit;
+  if Service.ResultAsXMLObjectIfAcceptOnlyXML then
+    if FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ')='application/xml' then
+      ForceServiceResultAsXMLObject := true;
+  ComputeResult;
+  if ForceServiceResultAsXMLObject and (Call.OutBody<>'') and (Call.OutHead<>'') and
+     CompareMem(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
+    delete(Call.OutHead,15,31);
+    insert(XML_CONTENT_TYPE,Call.OutHead,15);
+    JSONBufferToXML(pointer(Call.OutBody),XMLUTF8_HEADER,xml);
+    Call.OutBody := xml;
   end;
-  ForceServiceResultAsJSONObject :=
-    ForceServiceResultAsJSONObject or Service.ResultAsJSONObject;
-  inc(Server.fStats.fServices);
-  case ServiceMethodIndex of
-  ord(imFree):
-    // "method":"_free_" to release sicClientDriven..sicPerGroup
-    if ServiceInstanceID<=0 then begin
-      Error('Expects an instance ID to be released');
-      exit;
-    end else
-      ServiceMethodIndex := -1; // notify ExecuteMethod() to release the instance
-  ord(imContract): begin
-    // "method":"_contract_" to retrieve the implementation contract
-    ServiceResult('contract',Service.ContractExpected);
-    exit; // "id":0 for this method -> no instance was created
-  end;
-  ord(imSignature): begin
-    // "method":"_signature_" to retrieve the implementation signature
-    if TServiceContainerServer(Server.Services).PublishSignature then
-      ServiceResult('signature',Service.Contract) else 
-      // "id":0 for this method -> no instance was created
-      Error('Not allowed to publish signature');
-    exit;
-  end;
-  else // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
-    dec(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
-  end;
-  if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceMethodIndex>=0) and
-     (SessionGroup-1 in Service.fExecution[ServiceMethodIndex].Denied) then begin
-    Error('Unauthorized method');
-    exit;
-  end;
-  // if we reached here, we have to run the service method
-  Service.ExecuteMethod(self);
 end;
 
 procedure TSQLRestServerURIContext.ExecuteORMGet;
@@ -26581,7 +26645,7 @@ begin
     if CustomHeader<>'' then
       Call.OutHead := CustomHeader else
       if Call.OutHead='' then
-        Call.OutHead := JSON_CONTENT_TYPE_HEADER;
+        Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
     if Handle304NotModified and (Status=HTML_SUCCESS) and
        (Length(Result)>64) then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
@@ -26966,9 +27030,8 @@ begin
     end;
     inc(fStats.fOutcomingBytes,length(Call.OutHead)+length(Call.OutBody)+16);
     if (Call.OutBody<>'') and
-       (length(Call.OutHead)=Length(STATICFILE_CONTENT_TYPE_HEADER)) and
-       (Call.OutHead[Length(HEADER_CONTENT_TYPE)+1]='!') and
-       IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER) then
+       (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
+       IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
       inc(fStats.fOutcomingFiles);
     if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
        TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
@@ -36933,7 +36996,7 @@ begin
       end;
       if Ctxt.Call.OutHead='' then begin // <>'' for TServiceCustomAnswer
         Ctxt.ServiceResultEnd(WR,Inst.InstanceID);
-        Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER;
+        Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
         Ctxt.Call.OutStatus := HTML_SUCCESS;
       end;
       WR.SetText(Ctxt.Call.OutBody);
