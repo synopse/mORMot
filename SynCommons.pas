@@ -621,6 +621,7 @@ unit SynCommons;
   - fixed TTextWriter.RegisterCustomJSONSerializer() method when unregistering
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
   - added TTextWriter.Add(const Values: array of const) method
+  - added JSONToXML() JSONBufferToXML() and TTextWriter.JSONBufferToXML()
   - fixed potential GPF issue in TMemoryMapText.LoadFromMap()
   - allow file size of 0 byte in TMemoryMap.Map()
   - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
@@ -5211,6 +5212,15 @@ type
     // - will handle tkClass,tkEnumeration,tkRecord,tkDynArray,tkVariant types
     // - write null for other types
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue); virtual;
+    /// append a JSON value, array or document as simple XML content
+    // - you can use JSONBufferToXML() and JSONToXML() functions as wrappers
+    // - this method is called recursively to handle all kind of JSON values
+    // - WARNING: the JSON buffer is decoded in-place, so will be changed
+    // - returns the end of the current JSON converted level, or nil if the
+    // supplied content was not correct JSON
+    function AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
+      EndOfObject: PUTF8Char=nil): PUTF8Char;
+
     /// define a custom serialization for a given dynamic array or record
     // - expects TypeInfo() from a dynamic array or a record (will raise an
     // exception otherwise)
@@ -6368,6 +6378,20 @@ function JSONArrayCount(P,PMax: PUTF8Char): integer; overload;
 // !  pLastChar := JSONToObject(sc,pointer(cfg),configValid);
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
 
+const
+  /// standard header for an UTF-8 encoded XML file 
+  XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around TTextWriter.AddJSONToXML
+// - WARNING: the JSON buffer is decoded in-place, so will be changed
+procedure JSONBufferToXML(P: PUTF8Char; const Header: RawUTF8; out result: RawUTF8);
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
+// of the supplied JSON buffer (so that it would stay constant)
+// - the optional header is added at the beginning of the resulting string
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8=XMLUTF8_HEADER): RawUTF8;
 
 const
   /// map a PtrInt type to the TJSONCustomParserRTTIType set
@@ -31958,6 +31982,79 @@ begin
   end;
 end;
 
+function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
+  EndOfObject: PUTF8Char=nil): PUTF8Char;
+var objEnd, objFirstChar: AnsiChar;
+    Name,Value: PUTF8Char;
+    n: integer;
+begin
+  result := nil;
+  if JSON=nil then
+    exit;
+  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  case JSON^ of
+  '[': begin
+    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    if JSON^=']' then
+      JSON := GotoNextNotSpace(JSON+1) else begin
+      n := 0;
+      repeat
+        if JSON=nil then
+          exit;
+        Add('<');
+        if ArrayName=nil then
+          Add(n) else
+          AddHtmlEscape(ArrayName,0);
+        Add('>');
+        JSON := AddJSONToXML(JSON,nil,@objEnd);
+        Add('<','/');
+        if ArrayName=nil then
+          Add(n) else
+          AddHtmlEscape(ArrayName,0);
+        Add('>');
+        inc(n);
+      until objEnd=']';
+    end;
+  end;
+  '{': begin
+    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    repeat
+      Name := GetJSONPropName(JSON);
+      if Name=nil then
+        exit;
+      if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+      objFirstChar := JSON^;
+      if objFirstChar<>'[' then begin
+        Add('<');
+        AddHtmlEscape(Name,0);
+        Add('>');
+      end;
+      JSON := AddJSONToXML(JSON,Name,@objEnd);
+      if objFirstChar<>'[' then begin
+        Add('<','/');
+        AddHtmlEscape(Name,0);
+        Add('>');
+      end;
+    until objEnd='}';
+  end;
+  else begin
+    Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
+    if Value=nil then
+      AddShort('null') else
+      AddHtmlEscape(Value,0);
+    exit;
+  end;
+  end;
+  if JSON<>nil then begin
+    if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    if EndOfObject<>nil then
+      EndOfObject^ := JSON^;
+    if JSON^<>#0 then
+      repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  end;
+  result := JSON;
+end;
+
 procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArray);
 var i, n, Len: integer;
     P: Pointer;
@@ -33662,10 +33759,10 @@ begin
         exit;
       inc(P);
     end;
-    '-','+','0'..'9': // '0123' excluded by JSON, but not handled here
+    '-','+','0'..'9': // '0123' excluded by JSON, but not here
       repeat
         inc(P);
-      until not (P^ in ['0'..'9','.','E','e']);
+      until not (P^ in DigitFloatChars);
     't': if PInteger(P)^=TRUE_LOW then inc(P,4) else goto Prop;
     'f': if PInteger(P)^=FALSE_LOW then inc(P,5) else goto Prop;
     'n': if PInteger(P)^=NULL_LOW then inc(P,4) else goto Prop;
@@ -33759,6 +33856,27 @@ begin // replace comments by ' ' characters which will be ignored by parser
     end;
     inc(P);
   end;
+end;
+
+procedure JSONBufferToXML(P: PUTF8Char; const Header: RawUTF8; out result: RawUTF8);
+begin
+  if P=nil then
+    result := Header else
+    with TTextWriter.CreateOwnedStream do
+    try
+      AddNoJSONEscape(pointer(Header),length(Header));
+      AddJSONToXML(P);
+      SetText(result);
+    finally
+      Free
+    end;
+end;
+
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8): RawUTF8;
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
+  JSONBufferToXML(pointer(tmp),Header,result);
 end;
 
 

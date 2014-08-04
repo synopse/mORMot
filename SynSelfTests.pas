@@ -4231,6 +4231,7 @@ procedure TestJSONSerialization;
 var ab0,ab1: TSubAB;
     cd0,cd1,cd2: TSubCD;
     agg,agg2: TAggregate;
+    X: RawUTF8;
 {$ifndef NOVARIANTS}
     i: Integer;
 {$endif}
@@ -4250,8 +4251,12 @@ begin
   fillchar(JA2,sizeof(JA2),0);
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
   Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
+  X := JSONToXML(U,'');
+  Check(X='<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
   J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
   Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
+  X := JSONToXML(J,'');
+  Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><F></F>');
   JR2.A := 10;
   JR2.D := '**';
   JR2.F := 1;
@@ -4286,6 +4291,8 @@ begin
   JA2.E[1].E2 := '4';
   J := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArray));
   Check(J='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}],"F":"1899-12-31"}');
+  X := JSONToXML(J,'');
+  Check(X='<A>100</A><B>0</B><C>0</C><D>null</D><E><E1>1</E1><E2>2</E2></E><E><E1>3</E1><E2>4</E2></E><F>1899-12-31</F>');
   RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
   Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
   J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
@@ -4293,6 +4300,10 @@ begin
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
   Check(length(JA.E)=1);
   Check(U='{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
+  X := JSONToXML(U,'');
+  Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
+  X := JSONToXML('[1,2,"three"]');
+  Check(X='<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
 
   ab0.a := 'AB0';
   ab0.b := 0;
