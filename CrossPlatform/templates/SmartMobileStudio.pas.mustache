@@ -129,6 +129,18 @@ implementation
     result.{{fullPropName}}.push(dest);
   end;
 {{/nestedRecordArray}}{{/fields}}{{/getrec}}
+{{#withEnumerates}}
+{ Some helpers for enumerates types }
+
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+begin
+  result := {{name}}(VariantToEnum(_variant,[{{#values}}'{{.}}'{{^-last}},{{/-last}}{{/values}}]));
+end;
+
+{{/enumerates}}
+
+{{/withEnumerates}}
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
   that the JSON used for transmission would match record fields naming }

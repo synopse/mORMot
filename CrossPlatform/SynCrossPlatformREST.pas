@@ -549,7 +549,7 @@ type
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overridden
     // - as input, "method" should be the method name to be executed for "uri",
-    // "params" should contain the incoming parameters as JSON CSV (without []),
+    // "params" should contain the incoming parameters as JSON array (with []),
     // and "clientDriven" ID should contain the optional Client ID value
     // - at output, should update the HTTP "uri" corresponding to the proper
     // routing, and should return the corresponding HTTP body within "sent"
@@ -565,7 +565,7 @@ type
   TSQLRestRoutingREST = class(TSQLRestRoutingAbstract)
   public
     /// at Client Side, compute URI and BODY according to RESTful routing scheme
-    // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
+    // - e.g. on input uri='root/Calculator', method='Add', params='[1,2]' and
     // clientDrivenID='1234' -> on output uri='root/Calculator.Add/1234' and
     // sent='[1,2]'
     class procedure ClientSideInvoke(var uri: string;
@@ -577,7 +577,7 @@ type
   TSQLRestRoutingJSON_RPC = class(TSQLRestRoutingAbstract)
   public
     /// at Client Side, compute URI and BODY according to JSON/RPC routing scheme
-    // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
+    // - e.g. on input uri='root/Calculator', method='Add', params='[1,2]' and
     // clientDrivenID='1234' -> on output uri='root/Calculator' and
     // sent={"method":"Add","params":[1,2],"id":1234}
     class procedure ClientSideInvoke(var uri: string;
@@ -937,6 +937,9 @@ function VariantToBlob(const Value: variant): TSQLRawBlob;
 
 /// convert a binary blob into its base-64 representation
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
+
+/// convert a text or integer enumeration representation into its ordinal value
+function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
 
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
@@ -2661,19 +2664,54 @@ begin
   result := w3_base64encode(Blob);
 end;
 
+function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
+var str: string;
+begin
+  if VarIsOrdinal(Value) then
+    result := Value else begin
+    str := Value;
+    if str<>'' then
+      for result := 0 to high(TextValues) do
+        if str=TextValues[result] then
+          exit;
+    result := 0; // return first item by default
+  end;
+end;
+
 {$else}
 
 function VariantToBlob(const Value: variant): TSQLRawBlob;
 begin
-  Base64JSONStringToBytes(Value,result);
+  if VarIsNull(Value) then // avoid conversion error from null to string
+    Finalize(result) else
+    Base64JSONStringToBytes(Value,result);
 end;
 
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
 begin
-  result := BytesToBase64JSONString(Blob);
+  if Blob=nil then
+    result := null else
+    result := BytesToBase64JSONString(Blob);
+end;
+
+function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
+var str: string;
+begin
+  if VarIsOrdinal(Value) then // Value is integer
+    result := Value else begin
+    if VarIsStr(Value) then begin
+      str := Value; // Value is string representation of the item
+      if str<>'' then
+        for result := 0 to high(TextValues) do
+          if str=TextValues[result] then
+            exit;
+    end;
+    result := 0; // return first item by default
+  end;
 end;
 
 {$endif ISSMS}
+
 
 { TServiceClientAbstract }
 
@@ -2693,16 +2731,19 @@ begin
   result := CallGetResult(Call,dummyID);
   {$ifdef ISSMS}
   if VariantType(result)=jvArray then
-    contract := result[0];
+    contract := result[0] else
+    contract := result.contract;  // if ResultAsJSONObject=true
   {$else}
   with JSONVariantDataSafe(result)^ do // Kind=jvUndefined if not a TJSONVariant
     if (Kind=jvArray) and (Count=1) then
-      contract := Values[0];
+      contract := Values[0] else
+      contract := Value['contract']; // if ResultAsJSONObject=true
   {$endif}
   if contract<>ContractExpected then
     raise EServiceException.CreateFmt('Invalid contract "%s" for %s: expected "%s"',
       [contract,ContractExpected,ClassName]);
 end;
+
 
 { TServiceClientAbstractClientDriven }
 
@@ -2753,7 +2794,7 @@ begin
   if clientDrivenID<>'' then
     uri := uri+'.'+method+'/'+clientDrivenID else
     uri := uri+'.'+method;
-  sent := '['+params+']'; // we may also encode them within the URI
+  sent := params; // we may also encode them within the URI
 end;
 
 { TSQLRestRoutingJSON_RPC }
@@ -2762,10 +2803,10 @@ class procedure TSQLRestRoutingJSON_RPC.ClientSideInvoke(var uri: String;
   const method: String; const params: String; const clientDrivenID: String;
   var sent: String);
 begin
-  sent := '{"method":"'+method+'","params":['+params;
+  sent := '{"method":"'+method+'","params":'+params;
   if clientDrivenID='' then
-    sent := sent+']}' else
-    sent := sent+'],"id":'+clientDrivenID+'}';
+    sent := sent+'}' else
+    sent := sent+',"id":'+clientDrivenID+'}';
 end;
 
 end.

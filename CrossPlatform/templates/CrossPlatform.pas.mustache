@@ -25,7 +25,7 @@ uses
 {{! recursive partials used to write records type definition}}
 {{<writerec}}record
 {{#fields}}
-{{nestedIdentation}}    {{propName}}: {{#typeDelphi}}{{typeDelphi}};{{/typeDelphi}}{{#nestedRecord}}{{>writerec}}{{nestedIdentation}}    end;{{/nestedRecord}}{{#nestedSimpleArray}}array of {{typeDelphi}};{{/nestedSimpleArray}}{{#nestedRecordArray}}array of {{>writerec}}{{nestedIdentation}}    end;{{/nestedRecordArray}}
+{{nestedIdentation}}    {{propName}}: {{#typePascal}}{{typePascal}};{{/typePascal}}{{#nestedRecord}}{{>writerec}}{{nestedIdentation}}    end;{{/nestedRecord}}{{#nestedSimpleArray}}array of {{typePascal}};{{/nestedSimpleArray}}{{#nestedRecordArray}}array of {{>writerec}}{{nestedIdentation}}    end;{{/nestedRecordArray}}
 {{/fields}}{{/writerec}}
 {{#withEnumerates}}
 type // define some enumeration types, used below
@@ -48,7 +48,7 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
-{{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
+{{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
 type
 {{#soa.services}}
   /// service accessible via http://{{host}}/{{root}}/{{uri}}
@@ -68,20 +68,20 @@ type
   {{className}} = class(TSQLRecord)
   protected
     {{#fields}}
-    f{{name}}: {{typeDelphi}}; 
+    f{{name}}: {{typePascal}}; 
     {{/fields}}
   {{#hasRecords}}
   public
     {{#fields}}
     {{#isrecord}}
-    property {{name}}: {{typeDelphi}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
+    property {{name}}: {{typePascal}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
     {{/isrecord}}
     {{/fields}}
   {{/hasRecords}}
   published
     {{#fields}}
     {{^isrecord}}
-    property {{name}}: {{typeDelphi}}{{#width}} index {{width}}{{/width}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
+    property {{name}}: {{typePascal}}{{#width}} index {{width}}{{/width}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
     {{/isrecord}}
     {{/fields}}
   end;
@@ -104,9 +104,9 @@ implementation
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := _variant.{{fullPropName}};
 {{/isSimple}}{{#nestedRecord}}{{>setrec}}{{/nestedRecord}}{{#fromVariant}}  result.{{fullPropName}} := {{fromVariant}}(_variant.{{fullPropName}});
-{{/fromVariant}}{{#nestedSimpleArray}}  SetLength(result.{{fullPropName}},length(_variant.{{fullPropName}}));
+{{/fromVariant}}{{#nestedSimpleArray}}  SetLength(result.{{fullPropName}},JSONVariantDataSafe(_variant.{{fullPropName}})^.Count);
   for i := 0 to high(result.{{fullPropName}}) do
-    result.{{fullPropName}}[i] := _variant.{{fullPropName}}[i];
+    result.{{fullPropName}}[i] := JSONVariantDataSafe(_variant.{{fullPropName}})^.Item[i];
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}});
   if _arr.Kind=jvArray then begin
     SetLength(result.{{fullPropName}},_arr.Count);
@@ -126,12 +126,24 @@ implementation
       AddValue(_record.{{fullPropName}}[i]);
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  with res.EnsureData('{{fullPropName}}')^ do
     for i := 0 to high(_record.{{fullPropName}}) do
-    with _record.{{fullPropName}}[i] do begin
+    with AddItem^, _record.{{fullPropName}}[i] do begin
 {{#fields}}
       AddNameValue('{{propName}}',{{#toVariant}}{{toVariant}}({{/toVariant}}{{propName}}{{#toVariant}}){{/toVariant}});
 {{/fields}}
     end;
 {{/nestedRecordArray}}{{/fields}}{{/getrec}}
+{{#withEnumerates}}
+{ Some helpers for enumerates types }
+
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+begin
+  result := {{name}}(VariantToEnum(_variant,[{{#values}}'{{.}}'{{^-last}},{{/-last}}{{/values}}]));
+end;
+
+{{/enumerates}}
+
+{{/withEnumerates}}
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
   that the JSON used for transmission would match record fields naming }

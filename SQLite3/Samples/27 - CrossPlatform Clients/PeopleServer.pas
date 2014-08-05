@@ -130,6 +130,7 @@ begin
   n := length(Rec.J);
   SetLength(Rec.J,n+1);
   Rec.J[n].J1 := n;
+  Rec.J[n].J2.D2 := n;
   Rec.J[n].J3 := TRecordEnum(n mod (ord(high(TRecordEnum))+1));
 end;
 

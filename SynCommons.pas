@@ -25729,7 +25729,8 @@ begin
   ktEnumeration: begin
     result.isEnum := true;
     result.toVariant := 'ord';
-    result.fromVariant := fCustomTypeName;
+    // may be transmitted as integer or text -> use dedicated sub-function
+    result.fromVariant := 'Variant2'+fCustomTypeName;
     aRegisteredTypes.AddObjectIfNotExisting(CustomTypeName,self)
   end;
   end;
@@ -26696,11 +26697,15 @@ begin
   end;
   ptGUID: begin
     result.isGUID := true;
-    result.toVariant := 'GUIDToString';
-    result.fromVariant := 'StringToGUID';
+    result.toVariant := 'GUIDToVariant';
+    result.fromVariant := 'VariantToGUID';
+  end;
+  ptDateTime: begin
+    result.isDateTime := true;
+    result.toVariant := 'DateTimeToIso8601';
+    result.fromVariant := 'Iso8601ToDateTime';
   end;
   ptCurrency: result.isCurrency := true;
-  ptDateTime: result.isDateTime := true;
   ptVariant:  result.isVariant := true;
   ptRawJSON:  result.isJson := true;
   ptArray:    result.isArray := true;

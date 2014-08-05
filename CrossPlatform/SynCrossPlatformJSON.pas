@@ -124,6 +124,8 @@ type
     function GetVarData(const aName: string; var Dest: TVarData): boolean;
     function GetValue(const aName: string): variant;
     procedure SetValue(const aName: string; const aValue: variant);
+    function GetItem(aIndex: integer): variant;
+    procedure SetItem(aIndex: integer; const aItem: variant);
   public
     /// names of this jvObject
     Names: TStringDynArray;
@@ -144,6 +146,8 @@ type
     // - if the item does not exist or is not a true TJSONVariantData, a new
     // one will be created, and returned as pointer
     function EnsureData(const aPath: string): PJSONVariantData;
+    /// add a void TJSONVariantData to the jvArray and return a pointer to it
+    function AddItem: PJSONVariantData;
     /// add a value to the jvArray
     // - raise a ESJONException if the instance is a jvObject
     procedure AddValue(const aValue: variant);
@@ -171,7 +175,11 @@ type
     /// number of items in this jvObject or jvArray
     property Count: integer read GetCount;
     /// access by name to a value of this jvObject
+    // - will return UnAssigned if aName is not correct or this is not a jvObject
     property Value[const aName: string]: variant read GetValue write SetValue; default;
+    /// access by index to a value of this jvArray
+    // - will return UnAssigned if aIndex is not correct or this is not a jvArray
+    property Item[aIndex: integer]: variant read GetItem write SetItem;
   end;
   {$A+}
 
@@ -437,10 +445,10 @@ function ShortStringToString(Buffer: PByteArray): string;
 function StartWithPropName(const PropName1,PropName2: string): boolean;
 
 /// overloaded function which won't raise an exception
-function StringToGUID(const S: string): TGUID;
+function VariantToGUID(const value: variant): TGUID;
 
 /// overloaded function which won't raise an exception
-function GUIDToString(const GUID: TGUID): string;
+function GUIDToVariant(const GUID: TGUID): variant;
 
 implementation
 
@@ -1664,7 +1672,23 @@ end;
 function TJSONVariantData.GetValue(const aName: string): variant;
 begin
   VarClear(result);
-  GetVarData(aName,TVarData(result));
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvObject) then
+    GetVarData(aName,TVarData(result));
+end;
+
+function TJSONVariantData.GetItem(aIndex: integer): variant;
+begin
+  VarClear(result);
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvArray) then
+    if cardinal(aIndex)<cardinal(VCount) then
+      result := Values[aIndex];
+end;
+
+procedure TJSONVariantData.SetItem(aIndex: integer; const aItem: variant);
+begin
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvArray) then
+    if cardinal(aIndex)<cardinal(VCount) then
+      Values[aIndex] := aItem;
 end;
 
 function TJSONVariantData.GetVarData(const aName: string;
@@ -1710,7 +1734,7 @@ begin // recursive value set
     if i<0 then begin // not existing: create new
       new.Init;
       AddNameValue(aPath,variant(new));
-      result := @Values[VCount];
+      result := @Values[VCount-1];
     end else begin
       if TVarData(Values[i]).VType<>JSONVariantType.VarType then begin
         VarClear(Values[i]);
@@ -1720,6 +1744,14 @@ begin // recursive value set
     end;
   end else
     result := EnsureData(copy(aPath,1,i-1))^.EnsureData(copy(aPath,i+1,maxInt));
+end;
+
+function TJSONVariantData.AddItem: PJSONVariantData;
+var new: TJSONVariantData;
+begin
+  new.Init;
+  AddValue(variant(new));
+  result := @Values[VCount-1];
 end;
 
 procedure TJSONVariantData.SetValue(const aName: string;
@@ -1775,7 +1807,7 @@ end;
 
 function TJSONVariantData.ToObject(Instance: TObject): boolean;
 var i: integer;
-    item: TCollectionItem;
+    aItem: TCollectionItem;
 begin
   result := false;
   if Instance=nil then
@@ -1789,8 +1821,8 @@ begin
     if Instance.InheritsFrom(TCollection) then begin
       TCollection(Instance).Clear;
       for i := 0 to Count-1 do begin
-        item := TCollection(Instance).Add;
-        if not JSONVariantData(Values[i]).ToObject(item) then
+        aItem := TCollection(Instance).Add;
+        if not JSONVariantData(Values[i]).ToObject(aItem) then
           exit;
       end;
     end else
@@ -2041,21 +2073,27 @@ begin
     fPropInfo[i] := GetPropInfo(aTypeInfo,fFieldNames[i]);
 end;
 
-function StringToGUID(const S: string): TGUID;
+function VariantToGUID(const value: variant): TGUID;
+var S: string;
 begin
-  try
-    result := SysUtils.StringToGUID(S);
-  except
-    FillChar(Result,SizeOf(result),0);
-  end;
+  FillChar(result,SizeOf(result),0);
+  if not VarIsStr(value) then
+    exit;
+  S := string(Value);
+  if S<>'' then
+    try
+      result := SysUtils.StringToGUID('{'+s+'}');
+    except
+      ; // ignore any conversion error and return void TGUID
+    end;
 end;
 
-function GUIDToString(const GUID: TGUID): string;
+function GUIDToVariant(const GUID: TGUID): variant;
 begin
   try
-    result := SysUtils.GUIDToString(GUID);
+    result := Copy(SysUtils.GUIDToString(GUID),2,36);
   except
-    result := '';
+    result := ''; // should not happen
   end;
 end;
 

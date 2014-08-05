@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 // - retrieved from http://localhost:888/root/wrapper/CrossPlatform/mORMotClient.pas
-// at 2014-08-01 18:49:06 using "CrossPlatform.pas.mustache" template
+// at 2014-08-05 11:54:50 using "CrossPlatform.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -29,11 +29,11 @@ type // define some enumeration types, used below
 
 type // define some record types, used as properties below
   TTestCustomJSONArraySimpleArray = record
-    F: RawUTF8;
-    G: array of RawUTF8;
+    F: string;
+    G: array of string;
     H: record
       H1: integer;
-      H2: WideString;
+      H2: string;
       H3: record
         H3a: boolean;
         H3b: TSQLRawBlob;
@@ -55,15 +55,15 @@ type
   public
     constructor Create(aClient: TSQLRestClientURI); override;
     function Add(const n1: integer; const n2: integer): integer;
-    procedure ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
     function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
   end;
 
   /// map "People" table
   TSQLRecordPeople = class(TSQLRecord)
   protected
-    fFirstName: RawUTF8; 
-    fLastName: RawUTF8; 
+    fFirstName: string; 
+    fLastName: string; 
     fData: TSQLRawBlob; 
     fYearOfBirth: integer; 
     fYearOfDeath: word; 
@@ -72,8 +72,8 @@ type
   public
     property Simple: TTestCustomJSONArraySimpleArray read fSimple write fSimple;
   published
-    property FirstName: RawUTF8 read fFirstName write fFirstName;
-    property LastName: RawUTF8 read fLastName write fLastName;
+    property FirstName: string read fFirstName write fFirstName;
+    property LastName: string read fLastName write fLastName;
     property Data: TSQLRawBlob read fData write fData;
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
@@ -92,6 +92,19 @@ const
 implementation
 
 
+{ Some helpers for enumerates types }
+
+function Variant2TPeopleSexe(const _variant: variant): TPeopleSexe;
+begin
+  result := TPeopleSexe(VariantToEnum(_variant,['sFemale','sMale']));
+end;
+
+function Variant2TRecordEnum(const _variant: variant): TRecordEnum;
+begin
+  result := TRecordEnum(VariantToEnum(_variant,['reOne','reTwo','reLast']));
+end;
+
+
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
   that the JSON used for transmission would match record fields naming }
@@ -102,22 +115,22 @@ var i: integer;
     _arr: PJSONVariantData;
 begin
   result.F := _variant.F;
-  SetLength(result.G,length(_variant.G));
+  SetLength(result.G,JSONVariantDataSafe(_variant.G)^.Count);
   for i := 0 to high(result.G) do
-    result.G[i] := _variant.G[i];
+    result.G[i] := JSONVariantDataSafe(_variant.G)^.Item[i];
   result.H.H1 := _variant.H.H1;
   result.H.H2 := _variant.H.H2;
   result.H.H3.H3a := _variant.H.H3.H3a;
   result.H.H3.H3b := VariantToBlob(_variant.H.H3.H3b);
-  result.I := _variant.I;
+  result.I := Iso8601ToDateTime(_variant.I);
   _arr := JSONVariantDataSafe(_variant.J);
   if _arr.Kind=jvArray then begin
     SetLength(result.J,_arr.Count);
     for _a := 0 to _arr.Count-1 do
     with result.J[_a] do begin
       J1 := _arr.Values[_a].J1;
-      J2 := StringToGUID(_arr.Values[_a].J2);
-      J3 := TRecordEnum(_arr.Values[_a].J3);
+      J2 := VariantToGUID(_arr.Values[_a].J2);
+      J3 := Variant2TRecordEnum(_arr.Values[_a].J3);
     end;
   end;
 end;
@@ -135,12 +148,12 @@ begin
   res.SetPath('H.H2',_record.H.H2);
   res.SetPath('H.H3.H3a',_record.H.H3.H3a);
   res.SetPath('H.H3.H3b',BlobToVariant(_record.H.H3.H3b));
-  res.SetPath('I',_record.I);
+  res.SetPath('I',DateTimeToIso8601(_record.I));
   with res.EnsureData('J')^ do
     for i := 0 to high(_record.J) do
-    with _record.J[i] do begin
+    with AddItem^, _record.J[i] do begin
       AddNameValue('J1',J1);
-      AddNameValue('J2',GUIDToString(J2));
+      AddNameValue('J2',GUIDToVariant(J2));
       AddNameValue('J3',ord(J3));
     end;
   result := variant(res);
@@ -171,7 +184,7 @@ begin
   Result := res[0];
 end;
 
-procedure TServiceCalculator.ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+procedure TServiceCalculator.ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
 var res: TVariantDynArray;
 begin
   fClient.CallRemoteService(self,'ToText',2, // raise EServiceException on error

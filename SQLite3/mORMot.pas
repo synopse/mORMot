@@ -36722,7 +36722,6 @@ begin
       fInstanceTimeOut := aTimeOutSec*1000;
     end;
   end;
-  fResultAsJSONObject := true;
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -37256,7 +37255,7 @@ begin
   smvEnum: begin
     result.isEnum := true;
     result.toVariant := 'ord';
-    result.fromVariant := typRtti;
+    result.fromVariant := typRtti; // always transmitted as integer
   end;
   smvSet: begin
     result.isSet := true;
