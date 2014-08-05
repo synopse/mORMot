@@ -84,14 +84,14 @@ type
   NativeUInt = cardinal;
   {$endif}
 
-  // this type will store UTF-8 encoded buffer on NextGen platform
-{$ifdef NEXTGEN}
+  // this type will store UTF-8 encoded buffer (also on NextGen platform)
+  {$ifdef NEXTGEN}
   TUTF8Buffer = TBytes;
   // TObjecTList is not defined in Mobile platforms
   TObjectList = TObjectList<TObject>;
-{$else}
+  {$else}
   TUTF8Buffer = UTF8String;
-{$endif}
+  {$endif}
 
   /// exception used during standand-alone cross-platform JSON process
   EJSONException = class(Exception);
@@ -424,8 +424,8 @@ function IdemPropName(const PropName1,PropName2: string): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check that two ASCII-7 latin text do match
-// - first parameter is expected to be a shortstring low-level buffer
-// - as such, this overloaded function would work with NEXTGEN encoded RTTI
+// - first parameter is expected to be a shortstring low-level buffer - as such,
+// this overloaded function would work with NEXTGEN encoded RTTI
 function IdemPropName(PropName1: PByteArray; const PropName2: string): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -542,13 +542,13 @@ begin
   try
     len := F.Size;
     SetLength(utf8,len);
-{$ifdef NEXTGEN}
+    {$ifdef NEXTGEN}
     F.Read(utf8[0],len);
     result := TEncoding.UTF8.GetString(utf8);
-{$else}
+    {$else}
     F.Read(utf8[1],len);
     result := UTF8ToString(utf8);
-{$endif}
+    {$endif}
   finally
     F.Free;
   end;

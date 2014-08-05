@@ -1060,13 +1060,13 @@ var i,c: integer;
     utf8: TUTF8Buffer;
 begin
   result := '';
-{$ifdef NEXTGEN}
+  {$ifdef NEXTGEN}
   utf8 := TEncoding.UTF8.GetBytes(aValue);
   for i := 0 to high(utf8) do begin
-{$else}
+  {$else}
   utf8 := UTF8Encode(aValue);
   for i := 1 to length(utf8) do begin
-{$endif}
+  {$endif}
     c := ord(utf8[i]);
     case c of
     ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
@@ -1141,9 +1141,9 @@ begin
   n := 0;
   SetLength(utf8,len);
   while i<=length(aValue) do begin
-{$ifndef NEXTGEN}
+    {$ifndef NEXTGEN} // TUTF8Buffer = UTF8String is [1-based]
     inc(n);
-{$endif}
+    {$endif}
     c := ord(aValue[i]);
     case c of
     ord('+'):
@@ -1159,22 +1159,22 @@ begin
       utf8[n] := AnsiChar(c);
     end;
     inc(i);
-{$ifdef NEXTGEN}
+    {$ifdef NEXTGEN} // TUTF8Buffer = TBytes is [0-based]
     inc(n);
-{$endif}
+    {$endif}
   end;
   SetLength(utf8,n);
-{$ifdef NEXTGEN}
+  {$ifdef NEXTGEN}
   result := TEncoding.UTF8.GetString(utf8);
-{$else}
+  {$else}
   {$ifdef UNICODE}
   result := UTF8ToString(utf8);
   {$else}
   result := Utf8Decode(utf8);
   {$endif}
-{$endif}
+  {$endif}
 end;
-{$endif}
+{$endif ISSMS}
 
 
 { TSQLRecord }

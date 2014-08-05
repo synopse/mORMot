@@ -505,7 +505,7 @@ end;
 procedure TSynCrossPlatformClient.Connection;
 begin
   fModel := GetModel;
-  fClient := TSQLRestClientHTTP.Create('localhost',888,fModel);
+  fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,fModel);
   check(fClient.Connect);
   check(fClient.ServerTimeStamp<>0);
   if fAuthentication<>nil then

@@ -92,9 +92,9 @@ uses
 {$endif}
 
 type
-  /// HTTP body may not match the string type, and could be binary 
   {$ifdef ISDWS}
 
+  // HTTP body may not match the string type, and could be binary 
   THttpBody = string;
 
   // define some Delphi types not supported natively by DWS/SMS
@@ -118,14 +118,18 @@ type
                             rrsDone            = 4);
   {$else}
 
+  /// will store input and output HTTP body content 
+  // - HTTP body may not match the string type, and could be binary 
+  // - this kind of variable is compatible with NextGen version of the compiler
   THttpBody = array of byte;
 
   {$ifdef NEXTGEN}
+  /// see TUTF8Buffer = TBytes in SynCrossPlatformJSON
   AnsiChar = byte;
   {$endif NEXTGEN}
 
   {$endif ISDWS}
-  
+
   /// used to store the request of a REST call
   TSQLRestURIParams = record
     /// input parameter containing the caller URI
@@ -155,15 +159,22 @@ type
     {$endif}
   end;
 
-  /// the connection parameters 
+  /// the connection parameters, as stored and used by TAbstractHttpConnection
   TSQLRestConnectionParams = record
+    /// the server name or IP address
     Server: string;
+    /// the server port
     Port: integer;
+    /// if the connection should be HTTPS
     Https: boolean;
     {$ifndef ISSMS}
+    /// the optional proxy name to be used
     ProxyName: string;
+    /// the optional proxy password to be used
     ProxyByPass: string;
+    /// the timeout when sending data, in ms
     SendTimeout: cardinal;
+    /// the timeout when receiving data, in ms
     ReceiveTimeout: cardinal
     {$endif}
   end;
@@ -181,15 +192,19 @@ type
     // IP addresses, or both, that should not be routed through the proxy
     constructor Create(const aParameters: TSQLRestConnectionParams); virtual;
     /// perform the request
+    // - this is the main entry point of this class
+    // - inherited classes should override this abstract method
     procedure URI(var Call: TSQLRestURIParams;
       const InDataType: string; KeepAlive: integer); virtual; abstract;
 
-    /// the remote server URI
+    /// the remote server full URI
+    // - e.g. 'http://myserver:888/'
     property Server: string read fURL;
     /// the connection parameters
     property Parameters: TSQLRestConnectionParams read fParameters;
   end;
 
+  /// define the inherited class for HTTP client connection
   TAbstractHttpConnectionClass = class of TAbstractHttpConnection;
 
 
