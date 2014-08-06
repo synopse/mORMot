@@ -32340,7 +32340,7 @@ begin
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
-const HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
+const HTML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"')];
 var i,beg: PtrInt;
 begin
   if Text=nil then
@@ -32351,7 +32351,7 @@ begin
   while i<TextLen do begin
     beg := i;
     if not(ord(Text[i]) in HTML_ESCAPE) then begin
-      repeat
+      repeat // it is faster to handle all not-escaped chars at once
         inc(i);
       until (i>=TextLen) or (ord(Text[i]) in HTML_ESCAPE);
       AddNoJSONEscape(Text+beg,i-beg);
@@ -32359,6 +32359,11 @@ begin
     while i<TextLen do begin
       case Text[i] of
       #0:  exit;
+      #1..#31: begin // characters below ' ', #7 e.g. -> // '&#u0007;'
+        AddShort('&#x00');
+        Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
+        Add(';');
+      end;
       '<': AddShort('&lt;');
       '>': AddShort('&gt;');
       '&': AddShort('&amp;');
