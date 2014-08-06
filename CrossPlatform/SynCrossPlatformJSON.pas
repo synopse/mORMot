@@ -444,11 +444,6 @@ function ShortStringToString(Buffer: PByteArray): string;
 /// check that two ASCII-7 latin text do match
 function StartWithPropName(const PropName1,PropName2: string): boolean;
 
-/// overloaded function which won't raise an exception
-function VariantToGUID(const value: variant): TGUID;
-
-/// overloaded function which won't raise an exception
-function GUIDToVariant(const GUID: TGUID): variant;
 
 implementation
 
@@ -2071,30 +2066,6 @@ begin
   SetLength(fPropInfo,Length(fFieldNames));
   for i := 0 to length(FieldNames)-1 do
     fPropInfo[i] := GetPropInfo(aTypeInfo,fFieldNames[i]);
-end;
-
-function VariantToGUID(const value: variant): TGUID;
-var S: string;
-begin
-  FillChar(result,SizeOf(result),0);
-  if not VarIsStr(value) then
-    exit;
-  S := string(Value);
-  if S<>'' then
-    try
-      result := SysUtils.StringToGUID('{'+s+'}');
-    except
-      ; // ignore any conversion error and return void TGUID
-    end;
-end;
-
-function GUIDToVariant(const GUID: TGUID): variant;
-begin
-  try
-    result := Copy(SysUtils.GUIDToString(GUID),2,36);
-  except
-    result := ''; // should not happen
-  end;
 end;
 
 

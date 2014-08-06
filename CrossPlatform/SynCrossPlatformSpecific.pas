@@ -302,8 +302,6 @@ function TryStrToInt64(const S: string; var Value: Int64): Boolean;
 function UpCase(ch: Char): Char; inline;
 function GetNextCSV(const str: string; var index: Integer; var res: string;
   Sep: char): boolean;
-function GUIDToString(const guid: string): string;
-function StringToGUID(const str: string): string;
 
 type
   /// which kind of document the TJSONVariantData contains
@@ -698,16 +696,6 @@ end;
 function UpCase(ch: Char): Char; inline;
 begin
   result := ch.UpperCase;
-end;
-
-function GUIDToString(const guid: string): string; inline;
-begin
-  result := guid;
-end;
-
-function StringToGUID(const str: string): string; inline;
-begin
-  result := str;
 end;
 
 function GetNextCSV(const str: string; var index: Integer; var res: string;

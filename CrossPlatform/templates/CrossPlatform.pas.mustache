@@ -13,6 +13,9 @@ unit {{fileName}};
 
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
+
+  This unit would work on Delphi 6 and later, under all supported platforms
+  (including MacOSX, and NextGen iPhone/iPad), and the Free Pascal Compiler.
 }
 
 interface
@@ -144,9 +147,7 @@ end;
 {{/enumerates}}
 
 {{/withEnumerates}}
-{ Some helpers for record types:
-  due to potential obfuscation of generated JavaScript, we can't assume
-  that the JSON used for transmission would match record fields naming }
+{ Some helpers for record types }
 {{#records}}
 
 function Variant2{{name}}(const _variant: variant): {{name}};

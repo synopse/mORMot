@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 // - retrieved from http://localhost:888/root/wrapper/CrossPlatform/mORMotClient.pas
-// at 2014-08-05 11:54:50 using "CrossPlatform.pas.mustache" template
+// at 2014-08-06 09:58:57 using "CrossPlatform.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -13,6 +13,9 @@ unit mORMotClient;
 
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
+
+  This unit would work on Delphi 6 and later, under all supported platforms
+  (including MacOSX, and NextGen iPhone/iPad), and the Free Pascal Compiler.
 }
 
 interface
@@ -105,9 +108,7 @@ begin
 end;
 
 
-{ Some helpers for record types:
-  due to potential obfuscation of generated JavaScript, we can't assume
-  that the JSON used for transmission would match record fields naming }
+{ Some helpers for record types }
 
 function Variant2TTestCustomJSONArraySimpleArray(const _variant: variant): TTestCustomJSONArraySimpleArray;
 var i: integer;

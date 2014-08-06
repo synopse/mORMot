@@ -108,7 +108,7 @@ type
   Int64 = integer;
   TPersistent = TObject;
   TObjectList = array of TObject;
-  TSQLRawBlob = string;
+  TSQLRawBlob = variant;
   TTimeLog = Int64;
   TModTime = TTimeLog;
   TCreateTime = TTimeLog;
@@ -937,6 +937,12 @@ function VariantToBlob(const Value: variant): TSQLRawBlob;
 
 /// convert a binary blob into its base-64 representation
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
+
+/// convert a string value into a TGUID instance
+function VariantToGUID(const value: variant): TGUID;
+
+/// convert a TGUID instance into a string value
+function GUIDToVariant(const GUID: TGUID): variant;
 
 /// convert a text or integer enumeration representation into its ordinal value
 function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
@@ -2656,27 +2662,29 @@ end;
 
 function VariantToBlob(const Value: variant): TSQLRawBlob;
 begin
-  result := w3_base64decode(Value);
+  var s: string := Value;
+  if s='' then
+    result := null else
+    result := w3_base64decode(s);
 end;
 
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
 begin
-  result := w3_base64encode(Blob);
+  if Blob=null then
+    result := null else
+    result := w3_base64encode(Blob);
 end;
 
-function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
-var str: string;
+function VariantToGUID(const value: variant): TGUID; inline;
 begin
-  if VarIsOrdinal(Value) then
-    result := Value else begin
-    str := Value;
-    if str<>'' then
-      for result := 0 to high(TextValues) do
-        if str=TextValues[result] then
-          exit;
-    result := 0; // return first item by default
-  end;
+  result := value; // no-op since TGUID=string
 end;
+
+function GUIDToVariant(const GUID: TGUID): variant; inline;
+begin
+  result := GUID; // no-op since TGUID=string
+end;
+
 
 {$else}
 
@@ -2694,23 +2702,49 @@ begin
     result := BytesToBase64JSONString(Blob);
 end;
 
-function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
-var str: string;
+function VariantToGUID(const value: variant): TGUID;
+var S: string;
 begin
-  if VarIsOrdinal(Value) then // Value is integer
-    result := Value else begin
-    if VarIsStr(Value) then begin
-      str := Value; // Value is string representation of the item
-      if str<>'' then
-        for result := 0 to high(TextValues) do
-          if str=TextValues[result] then
-            exit;
+  FillChar(result,SizeOf(result),0);
+  if not VarIsStr(value) then
+    exit;
+  S := string(Value);
+  if S<>'' then
+    try
+      result := SysUtils.StringToGUID('{'+s+'}');
+    except
+      ; // ignore any conversion error and return void TGUID
     end;
-    result := 0; // return first item by default
+end;
+
+function GUIDToVariant(const GUID: TGUID): variant;
+begin
+  try
+    result := Copy(SysUtils.GUIDToString(GUID),2,36);
+  except
+    result := ''; // should not happen
   end;
 end;
 
 {$endif ISSMS}
+
+function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
+var str: string;
+begin
+  {$ifdef ISSMS}
+  if TVariant.IsInteger(Value) then
+  {$else}
+  if VarIsOrdinal(Value) then // Value is integer
+  {$endif}
+    result := Value else begin
+    str := Value;
+    if str<>'' then
+      for result := 0 to high(TextValues) do
+        if str=TextValues[result] then
+          exit;
+    result := 0; // return first item by default
+  end;
+end;
 
 
 { TServiceClientAbstract }
