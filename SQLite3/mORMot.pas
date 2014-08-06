@@ -33,6 +33,7 @@ unit mORMot;
     Esmond
     Pavel (mpv)
     Martin Suer
+    Vadim Orel
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -938,6 +939,8 @@ unit mORMot;
     - added TSQLTable.ToDocVariant() and TSQLRest.RetrieveDocVariantArray()
       overloaded methods, which can be used e.g. to process directly some data
       retrieved from the ORM with TSynMustache.Render()
+    - added TSQLTable.GetMSRowSetValues() methods, to return XML content in
+      ADODB.recordset format - thanks mpv and Vadim Orel for the input!
     - added TSQLRecord.CreateAndFillPrepare(aJSON) overloaded method
     - introducing TSQLRecordInterfaced class, if your TSQLRecord definition
       should be able to implement interfaces
@@ -5318,6 +5321,14 @@ type
     // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
     procedure GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar=',';
       AddBOM: boolean=false);
+    /// save the table in 'schemas-microsoft-com:rowset' XML format
+    // - this format is used by ADODB.recordset, easily consummed by MS apps
+    // - see @http://synopse.info/forum/viewtopic.php?pid=11691#p11691
+    procedure GetMSRowSetValues(Dest: TStream; RowFirst,RowLast: integer); overload;
+    /// save the table in 'schemas-microsoft-com:rowset' XML format
+    // - this format is used by ADODB.recordset, easily consummed by MS apps
+    // - see @http://synopse.info/forum/viewtopic.php?pid=11691#p11691
+    function GetMSRowSetValues: RawUTF8; overload;
 
     {/ get the Field index of a FieldName
      - return -1 if not found, index (0..FieldCount-1) if found }
@@ -17238,7 +17249,7 @@ var U: PPUTF8Char;
 begin
   if (self=nil) or (FieldCount<=0) or (RowCount<=0) then
     exit;
-  W := TTextWriter.Create(Dest,8196);
+  W := TTextWriter.Create(Dest,16384);
   try
     if AddBOM then
       W.AddShort(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
@@ -17259,9 +17270,102 @@ begin
           W.Add(CommaSep);
         inc(U); // points to next value
       end;
+    W.FlushShouldNotAutoResize := true;
     W.Flush;
   finally
     W.Free;
+  end;
+end;
+
+procedure TSQLTable.GetMSRowSetValues(Dest: TStream; RowFirst,RowLast: integer);
+const FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
+  // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
+     '','',' dt:type="i8"',' dt:type="float"',' dt:type="number" rs:dbtype="currency"',
+  // ftDate, ftUTF8, ftBlob
+     ' dt:type="dateTime"',' dt:type="string"',' dt:type="bin.hex"');
+var W: TJSONWriter;
+    f,r: integer;
+    U: PPUTF8Char;
+    fieldType: TSQLDBFieldTypeDynArray;
+begin
+  W := TJSONWriter.Create(Dest,16384);
+  try
+    W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" '+
+      'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" '+
+      'xmlns:rs="urn:schemas-microsoft-com:rowset" xmlns:z="#RowsetSchema">');
+    if (self<>nil) and (FieldCount>0) or (RowCount>0) then begin
+      // retrieve normalized field names and types
+      if length(fFieldNames)<>fFieldCount then
+        InitFieldNames;
+      if not Assigned(fFieldType) then
+        InitFieldTypes;
+      SetLength(fieldType,FieldCount);
+      for f := 0 to FieldCount-1 do
+        fieldType[f] := SQLFieldTypeToDB[fFieldType[f].ContentType];
+      // check range
+      if RowLast=0 then
+        RowLast := RowCount else
+      if RowLast>RowCount then
+        RowLast := RowCount;
+      if RowFirst<=0 then
+        RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
+      // write schema from col names and types
+      W.AddShort('<s:Schema id="RowsetSchema"><s:ElementType name="row" content="eltOnly">');
+      for f := 0 to FieldCount-1 do begin
+        W.AddShort('<s:AttributeType name="f');
+        W.Add(f);
+        W.AddShort('" rs:name="');
+        W.AddString(fFieldNames[f]);
+        W.Add('"');
+        W.AddString(FIELDTYPE_TOXML[fieldType[f]]);
+        W.Add('/','>');
+      end;
+      W.AddShort('</s:ElementType></s:Schema>');
+      // write rows data
+      U := @fResults[FieldCount*RowFirst];
+      W.AddShort('<rs:data>');
+      for r := RowFirst to RowLast do begin
+        W.AddShort('<z:row ');
+        for f := 0 to FieldCount-1 do begin
+          if U^<>nil then begin
+            W.Add('f');
+            W.Add(f);
+            W.Add('=','"');
+            case fieldType[f] of
+            ftUnknown:
+              if IsStringJSON(U^) then // no need to guess exact value type here
+                W.AddHtmlEscape(U^,0) else
+                W.AddNoJSONEscape(U^,0);
+            ftInt64, ftDouble, ftCurrency:
+              W.AddNoJSONEscape(U^,0);
+            ftDate, ftUTF8, ftBlob:
+              W.AddHtmlEscape(U^,0);
+            end;
+            W.Add('"',' ');
+          end;
+          inc(U); // points to next value
+        end;
+        W.Add('/','>');
+      end;
+      W.AddShort('</rs:data>');
+    end;
+    W.AddShort('</xml>');
+    W.FlushShouldNotAutoResize := true;
+    W.Flush;
+  finally
+    W.Free;
+  end;
+end;
+
+function TSQLTable.GetMSRowSetValues: RawUTF8;
+var MS: TRawByteStringStream;
+begin
+  MS := TRawByteStringStream.Create;
+  try
+    GetMSRowSetValues(MS,1,RowCount); 
+    result := MS.DataString;
+  finally
+    MS.Free;
   end;
 end;
 

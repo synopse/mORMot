@@ -849,7 +849,7 @@ begin
       VariantToUTF8(Value,ValueText,wasString);
       if UnEscape then
         fWriter.AddNoJSONEscape(pointer(ValueText)) else
-        fWriter.AddHtmlEscape(pointer(ValueText),length(ValueText));
+        fWriter.AddHtmlEscape(pointer(ValueText),0); // len=0 is slightly faster
     end;
 end;
 
