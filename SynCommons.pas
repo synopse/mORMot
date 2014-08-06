@@ -5082,7 +5082,7 @@ type
     // single quotes in a row - as in Pascal." 
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
     /// append some chars, escaping all HTML special chars as expected
-    // - i.e.   < > & "   as   &lt; &gt; &amp; &quote;
+    // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - this will also cover XML markup - see @http://www.w3.org/TR/xml/#syntax
     procedure AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
     /// append some binary data as hexadecimal text conversion
@@ -32340,14 +32340,40 @@ begin
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
-const HTML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"')];
+const HTML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"'),ord('''')];
 var i,beg: PtrInt;
 begin
   if Text=nil then
     exit;
-  if TextLen=0 then
-    TextLen := MaxInt;
   i := 0;
+  if TextLen=0 then begin // length not specified -> will write until #0
+    repeat
+      beg := i;
+      if not(ord(Text[i]) in HTML_ESCAPE) then begin
+        repeat // it is faster to handle all not-escaped chars at once
+          inc(i);
+        until ord(Text[i]) in HTML_ESCAPE;
+        AddNoJSONEscape(Text+beg,i-beg);
+      end;
+      repeat
+        case Text[i] of
+        #0: exit;
+        #1..#31: begin // characters below ' ', #7 e.g. -> // '&#u0007;'
+          AddShort('&#x00');
+          Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
+          Add(';');
+        end;
+        '<': AddShort('&lt;');
+        '>': AddShort('&gt;');
+        '&': AddShort('&amp;');
+        '"': AddShort('&quot;');
+        '''': AddShort('&apos;');
+        else break;
+        end;
+        inc(i);
+      until false;
+    until false;
+  end;
   while i<TextLen do begin
     beg := i;
     if not(ord(Text[i]) in HTML_ESCAPE) then begin
@@ -32358,7 +32384,7 @@ begin
     end;
     while i<TextLen do begin
       case Text[i] of
-      #0:  exit;
+      #0: exit;
       #1..#31: begin // characters below ' ', #7 e.g. -> // '&#u0007;'
         AddShort('&#x00');
         Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
@@ -32368,6 +32394,7 @@ begin
       '>': AddShort('&gt;');
       '&': AddShort('&amp;');
       '"': AddShort('&quot;');
+      '''': AddShort('&apos;');
       else break;
       end;
       inc(i);
