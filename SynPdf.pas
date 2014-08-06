@@ -36,6 +36,7 @@ unit SynPdf;
    Ondrej (reddwarf)
    Sinisa (sinisav)
    Pierre le Riche
+   MChaos
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -257,7 +258,8 @@ unit SynPdf;
     parameter has been also added to TPdfCanvas.RenderMetaFile() - it will
     produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]  
   - fixed text clipping - thanks Pierre for the patch!
-  - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6
+  - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
+    thanks MChaos for the proposal!
 
 }
 
@@ -7222,7 +7224,7 @@ begin
   if FDictionary<>nil then begin
     for V := low(V) to high(V) do
       if V in Value then
-        FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V], TPdfBoolean.Create(true)) else
+        FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V], TPdfName.Create('None')) else
         FDictionary.RemoveItem(PDF_PAGE_VIEWER_NAMES[V]);
     if vpEnforcePrintScaling in Value then begin
       FDictionary.AddItem('Enforce', TPdfArray.CreateNames(Data.ObjectMgr,['PrintScaling']));
