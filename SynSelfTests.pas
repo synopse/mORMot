@@ -10351,6 +10351,8 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
     if IdemPChar(Pointer(result),'{"RESULT"') then
       result := JSONDecode(result,'result',nil,false) else
       result := copy(result,2,length(result)-2); // trim '[' + ']'
+    if (result<>'') and (result[1]='"') then
+      result := UnQuoteSQLString(result); // '"777"' -> '777'
     if (ExpectedResult=200) and (fClient.Server.ServicesRouting=TSQLRestRoutingREST) then begin
       resp := XMLUTF8_HEADER+'<result><Result>'+result+'</Result></result>';
       check(data=resp);
