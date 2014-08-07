@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 // - retrieved from http://localhost:888/root/wrapper/CrossPlatform/mORMotClient.pas
-// at 2014-08-06 09:58:57 using "CrossPlatform.pas.mustache" template
+// at 2014-08-07 11:35:58 using "CrossPlatform.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -173,7 +173,7 @@ begin
   fServiceName := 'Calculator';
   fServiceURI := 'Calculator';
   fInstanceImplementation := sicShared;
-  fContractExpected := 'D9CD85D75F8AE460';
+  fContractExpected := 'B68768749138E69E';
   inherited Create(aClient);
 end;
 

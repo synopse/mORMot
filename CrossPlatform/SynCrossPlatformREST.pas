@@ -2810,7 +2810,7 @@ begin
   {$endif}
   if contract<>ContractExpected then
     raise EServiceException.CreateFmt('Invalid contract "%s" for %s: expected "%s"',
-      [contract,ContractExpected,ClassName]);
+      [contract,ClassName,ContractExpected]);
 end;
 
 

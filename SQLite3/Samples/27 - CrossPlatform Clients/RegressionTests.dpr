@@ -21,6 +21,7 @@ uses
   {$endif}
   {$endif}
   SynCrossPlatformJSON,
+  SynCrossPlatformSpecific,
   SynCrossPlatformREST,
   SynCrossPlatformCrypto,
   SynCrossPlatformTests,

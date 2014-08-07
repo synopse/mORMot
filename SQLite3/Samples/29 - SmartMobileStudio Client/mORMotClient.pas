@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 // - retrieved from http://localhost:888/root/wrapper/SmartMobileStudio/mORMotClient.pas
-// at 2014-08-07 11:03:35 using "SmartMobileStudio.pas.mustache" template
+// at 2014-08-07 11:36:29 using "SmartMobileStudio.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -227,7 +227,7 @@ begin
   fServiceName := 'Calculator';
   fServiceURI := 'Calculator';
   fInstanceImplementation := sicShared;
-  fContractExpected := 'D9CD85D75F8AE460';
+  fContractExpected := 'B68768749138E69E';
   inherited Create(aClient);
 end;
 

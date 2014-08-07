@@ -37300,11 +37300,10 @@ const
   CONST_ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
     // convert into generic in/out direction (assume result is out)
     'in','both','out','out');
-  // AnsiString (Delphi <2009) is handled with care (may loose data otherwise)
+  // AnsiString (Delphi <2009) may loose data depending on the client
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
-    'double','datetime','currency','utf8',
-    {$ifdef UNICODE}'utf8'{$else}''{$endif},'utf8','',
+    'double','datetime','currency','utf8','utf8','utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','');
 begin
   WR.AddShort('{"argument":"');
@@ -37312,12 +37311,6 @@ begin
   WR.AddShort('","direction":"');
   WR.AddShort(CONST_ARGDIRTOJSON[ValueDirection]);
   WR.AddShort('","type":"');
-  {$ifndef UNICODE} // should specify the Ansi code page for no data loss
-  if ValueType=smvString then begin
-    WR.AddShort('ansi');
-    WR.AddU(CurrentAnsiConvert.CodePage);
-  end else
-  {$endif}
   if CONST_ARGTYPETOJSON[ValueType]='' then
     WR.AddShort(TypeInfo^.Name) else
     WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
