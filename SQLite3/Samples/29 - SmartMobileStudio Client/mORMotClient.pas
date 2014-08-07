@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 // - retrieved from http://localhost:888/root/wrapper/SmartMobileStudio/mORMotClient.pas
-// at 2014-08-06 10:00:04 using "SmartMobileStudio.pas.mustache" template
+// at 2014-08-07 11:03:35 using "SmartMobileStudio.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -53,22 +53,25 @@ type // define some record types, used as properties below
 type
   /// service accessible via http://localhost:888/root/Calculator
   // - this service will run in sicShared mode
+  // - synchronous and asynchronous methods are available, depending on use case
+  // - synchronous _*() methods names will block the browser execution, so won't
+  // be appropriate for long process - on error, they may raise EServiceException
   TServiceCalculator = class(TServiceClientAbstract)
   public
     /// will initialize an access to the remote service
     constructor Create(aClient: TSQLRestClientURI); override;
-    /// asynchronous version of the following method:
-    // ! function Add(const n1: integer; const n2: integer): integer;
+
     procedure Add(n1: integer; n2: integer; 
       onSuccess: procedure(Result: integer); onError: TSQLRestEvent);
-    /// asynchronous version of the following method:
-    // ! procedure ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+    function _Add(const n1: integer; const n2: integer): integer;
+
     procedure ToText(Value: currency; Curr: string; Sexe: TPeopleSexe; Name: string; 
       onSuccess: procedure(Sexe: TPeopleSexe; Name: string); onError: TSQLRestEvent);
-    /// asynchronous version of the following method:
-    // ! function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+    procedure _ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+
     procedure RecordToText(Rec: TTestCustomJSONArraySimpleArray; 
       onSuccess: procedure(Rec: TTestCustomJSONArraySimpleArray; Result: string); onError: TSQLRestEvent);
+    function _RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
   end;
 
   /// map "People" table
@@ -109,16 +112,22 @@ implementation
 
 { Some helpers for enumerates types }
 
+{$HINTS OFF} // for begin asm return ... end; end below
+
+// those functions will use the existing generated string array constant
+// defined by the SMS compiler for each enumeration
+
 function Variant2TPeopleSexe(const _variant: variant): TPeopleSexe;
 begin
-  result := TPeopleSexe(VariantToEnum(_variant,['sFemale','sMale']));
+  asm return @VariantToEnum(@_variant,@TPeopleSexe); end;
 end;
 
 function Variant2TRecordEnum(const _variant: variant): TRecordEnum;
 begin
-  result := TRecordEnum(VariantToEnum(_variant,['reOne','reTwo','reLast']));
+  asm return @VariantToEnum(@_variant,@TRecordEnum); end;
 end;
 
+{$HINTS ON}
 
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
@@ -140,6 +149,7 @@ begin
     dest.J1 := source.J1;
     dest.J2 := VariantToGUID(source.J2);
     dest.J3 := Variant2TRecordEnum(source.J3);
+    result.J[n] := dest;
   end;
 end;
 
@@ -221,35 +231,62 @@ begin
   inherited Create(aClient);
 end;
 
+
 procedure TServiceCalculator.Add(n1: integer; n2: integer; 
       onSuccess: procedure(Result: integer); onError: TSQLRestEvent);
 begin 
-  fClient.CallRemoteService(self,'Add',1,
+  fClient.CallRemoteServiceAsynch(self,'Add',1,
     [n1,n2],
     lambda (res: array of Variant)
       onSuccess(res[0]);
     end, onError); 
 end;
 
+function TServiceCalculator._Add(const n1: integer; const n2: integer): integer;
+begin
+  var res := fClient.CallRemoteServiceSynch(self,'Add',1,
+    [n1,n2]);
+  Result := res[0];
+end;
+
+
 procedure TServiceCalculator.ToText(Value: currency; Curr: string; Sexe: TPeopleSexe; Name: string; 
       onSuccess: procedure(Sexe: TPeopleSexe; Name: string); onError: TSQLRestEvent);
 begin 
-  fClient.CallRemoteService(self,'ToText',2,
+  fClient.CallRemoteServiceAsynch(self,'ToText',2,
     [Value,Curr,ord(Sexe),Name],
     lambda (res: array of Variant)
       onSuccess(TPeopleSexe(res[0]),res[1]);
     end, onError); 
 end;
 
+procedure TServiceCalculator._ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+begin
+  var res := fClient.CallRemoteServiceSynch(self,'ToText',2,
+    [Value,Curr,ord(Sexe),Name]);
+  Sexe := TPeopleSexe(res[0]);
+  Name := res[1];
+end;
+
+
 procedure TServiceCalculator.RecordToText(Rec: TTestCustomJSONArraySimpleArray; 
       onSuccess: procedure(Rec: TTestCustomJSONArraySimpleArray; Result: string); onError: TSQLRestEvent);
 begin 
-  fClient.CallRemoteService(self,'RecordToText',2,
+  fClient.CallRemoteServiceAsynch(self,'RecordToText',2,
     [TTestCustomJSONArraySimpleArray2Variant(Rec)],
     lambda (res: array of Variant)
       onSuccess(Variant2TTestCustomJSONArraySimpleArray(res[0]),res[1]);
     end, onError); 
 end;
+
+function TServiceCalculator._RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+begin
+  var res := fClient.CallRemoteServiceSynch(self,'RecordToText',2,
+    [TTestCustomJSONArraySimpleArray2Variant(Rec)]);
+  Rec := Variant2TTestCustomJSONArraySimpleArray(res[0]);
+  Result := res[1];
+end;
+
 
 
 end.

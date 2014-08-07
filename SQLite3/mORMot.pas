@@ -37335,6 +37335,8 @@ const
     ptVariant,ptCustom,ptRawJSON,ptArray);
   DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
     'const','var','out','result');
+  DIRTOSMS: array[TServiceMethodValueDirection] of string[7] = (
+    'const','var','var','result');
   SIZETODELPHI: array[1..4] of string[7] = (
     'byte','word','integer','integer');
 var typRtti: RawUTF8;
@@ -37349,6 +37351,7 @@ begin
   result.argName := ParamName^;
   result.dir := ord(ValueDirection);
   result.dirName := DIRTODELPHI[ValueDirection];
+  result.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
   if ValueDirection in [smdConst,smdVar] then
     result.dirInput := true;
   if ValueDirection in [smdVar,smdOut,smdResult] then

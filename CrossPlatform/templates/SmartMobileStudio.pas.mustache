@@ -51,11 +51,14 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
-type{{<methodSignature}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
-      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodSignature}}{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
+type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
+      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
 {{#soa.services}}
   /// service accessible via http://{{host}}/{{root}}/{{uri}}
   // - this service will run in sic{{instanceCreationName}} mode
+  // - synchronous and asynchronous methods are available, depending on use case
+  // - synchronous _*() methods names will block the browser execution, so won't
+  // be appropriate for long process - on error, they may raise EServiceException
   {{#isClientDriven}}
   // - you should call explicitly Free to release the server instance
   {{/isClientDriven}}
@@ -64,9 +67,9 @@ type{{<methodSignature}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{type
     /// will initialize an access to the remote service
     constructor Create(aClient: TSQLRestClientURI); override;
 {{#methods}}
-    /// asynchronous version of the following method:
-    // ! {{>method}}
-    procedure {{>methodSignature}}
+
+    procedure {{>methodAsynch}}
+    {{verb}} {{>methodSynch}}
 {{/methods}}
   end;
 
@@ -115,6 +118,7 @@ implementation
 {{#fields}}
     dest.{{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}source.{{propName}}{{#fromVariant}}){{/fromVariant}};
 {{/fields}}
+    result.{{fullPropName}}[n] := dest;
   end;
 {{/nestedRecordArray}}{{/fields}}{{/setrec}}
 {{<getrec}}{{#fields}}
@@ -134,13 +138,19 @@ implementation
 {{#withEnumerates}}
 { Some helpers for enumerates types }
 
+{$HINTS OFF} // for begin asm return ... end; end below
+
+// those functions will use the existing generated string array constant
+// defined by the SMS compiler for each enumeration
+
 {{#enumerates}}
 function Variant2{{name}}(const _variant: variant): {{name}};
 begin
-  result := {{name}}(VariantToEnum(_variant,[{{#values}}'{{.}}'{{^-last}},{{/-last}}{{/values}}]));
+  asm return @VariantToEnum(@_variant,@{{name}}); end;
 end;
 
 {{/enumerates}}
+{$HINTS ON}
 
 {{/withEnumerates}}
 { Some helpers for record types:
@@ -214,15 +224,24 @@ begin
   inherited Create(aClient);
 end;
 
+
 {{#methods}}
-procedure TService{{interfaceURI}}.{{>methodSignature}}
+procedure TService{{interfaceURI}}.{{>methodAsynch}}
 begin 
-  fClient.CallRemoteService(self,'{{methodName}}',{{ArgsOutputCount}},
+  fClient.CallRemoteServiceAsynch(self,'{{methodName}}',{{ArgsOutputCount}},
     [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}],
     lambda (res: array of Variant)
       onSuccess({{#args}}{{#dirOutput}}{{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}}{{#commaOutResult}},{{/commaOutResult}}{{/dirOutput}}{{/args}});
     end, onError); 
 end;
+
+{{verb}} TService{{interfaceURI}}.{{>methodSynch}}
+begin
+  var res := fClient.CallRemoteServiceSynch(self,'{{methodName}}',{{ArgsOutputCount}},
+    [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}]);
+{{#args}}{{#dirOutput}}  {{argName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}};
+{{/dirOutput}}{{/args}}end;
+
 
 {{/methods}}
 {{/soa.services}}

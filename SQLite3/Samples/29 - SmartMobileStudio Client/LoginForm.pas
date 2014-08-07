@@ -53,13 +53,19 @@ begin
   var s := model.InfoExisting(people.RecordClass).ToJSONAdd(client,people,true,'');
   assert(s='{"RowID":0,"FirstName":"","LastName":"","YearOfBirth":0,"YearOfDeath":0,'+
     '"Sexe":0,"Simple":{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":[]}}');
-  s := '{"RowID":10,"FirstName":"ab\"c","LastName":"def","YearOfBirth":20,"YearOfDeath":30}';
+  s := '{"RowID":10,"FirstName":"ab\"c","LastName":"def","YearOfBirth":20,"YearOfDeath":30,'+
+    '"Sexe":1,"Simple":{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":['+
+      '{"J1":1,"J2":"","J3":"reLast"}]}}';
   assert(people.FromJSON(s));
   assert(people.ID=10);
   assert(people.FirstName='ab"c');
   assert(people.LastName='def');
   assert(people.YearOfBirth=20);
   assert(people.YearOfDeath=30);
+  assert(people.Sexe=sMale);
+  assert(people.Simple.J.Count=1);
+  assert(people.Simple.J[0].J1=1);
+  assert(people.Simple.J[0].J3=reLast);
   writeln('Connecting to the server at '+ServerAddress.Text+':888');
   client.Free;
   client := TSQLRestClientHTTP.Create(ServerAddress.Text,888,model,false);

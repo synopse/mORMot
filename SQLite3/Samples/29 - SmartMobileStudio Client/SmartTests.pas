@@ -193,33 +193,68 @@ procedure SOATest(client: TSQLRestClientHTTP; onSuccess, onError: TSQLRestEvent)
 var Calc: TServiceCalculator;
     i: integer;
 const SEX_TEXT: array[0..1] of string = ('Miss','Mister');
-begin // code here is asynchronous, so more difficult to read than Delphi's!
+      ITERATIONS = 50;
+begin
   Calc := TServiceCalculator.Create(client); // no need to free instance on SMS
   assert(Calc.InstanceImplementation=sicShared);
   assert(Calc.ServiceName='Calculator');
-  i := 1;
-  procedure CalcToTextRecursive(Sexe: TPeopleSexe; Name: string);
+  // first test synchronous / blocking mode
+  for i := 1 to ITERATIONS do
+    assert(calc._Add(i,i+1)=i*2+1);
+  for i := 1 to ITERATIONS do begin
+    var sex := TPeopleSexe(i and 1);
+    var name := 'Smith';
+    calc._ToText(i,'$',sex,name);
+    assert(sex=sFemale);
+    assert(name=format('$ %d for %s Smith',[i,SEX_TEXT[i and 1]]));
+  end;
+  (* code below won't execute due to issue in generated javascript for SMS 2.1:
+      see https://smartmobilestudio.zendesk.com/hc/en-us/requests/84
+  var j: integer;
+  var rec: TTestCustomJSONArraySimpleArray;
+  for i := 1 to ITERATIONS do begin
+    var name := calc._RecordToText(rec);
+    if i=1 then
+      assert(name='{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":[]}');
+    assert(length(Rec.F)=i);
+    for j := 1 to length(Rec.F) do
+      assert(Rec.F[j]='!');
+    assert(length(Rec.G)=i);
+    for j := 0 to high(Rec.G) do
+      assert(Rec.G[j]=IntToStr(j+1));
+    assert(Rec.H.H1=i);
+    assert(length(Rec.J)=i);
+    for j := 0 to high(Rec.J) do begin
+      assert(Rec.J[j].J1=j);
+      assert(Rec.J[j].J2<>'');
+      assert(Rec.J[j].J3=TRecordEnum(j mod (ord(high(TRecordEnum))+1)));
+    end;
+  end;
+  *)
+  // code below is asynchronous, so more difficult to follow than synchronous !
+  i := 1;  // need two Calc*Asynch() inlined lambdas to access var i
+  procedure CalcToTextAsynch(sexe: TPeopleSexe; name: string);
   begin
     assert(sexe=sFemale);
     assert(name=format('$ %d for %s Smith',[i,SEX_TEXT[i and 1]]));
     inc(i);
     sexe := TPeopleSexe(i and 1);
     name := 'Smith';
-    if i<=100 then // recursive for i := 1 to 100
-      Calc.ToText(i,'$',sexe,name,CalcToTextRecursive,onError) else
+    if i<=ITERATIONS then // recursive for i := 1 to ITERATIONS
+      Calc.ToText(i,'$',sexe,name,CalcToTextAsynch,onError) else
       onSuccess(client);
   end;
-  procedure CalcAddRecursive(res: integer); // inlined lambda to access var i
+  procedure CalcAddAsynch(res: integer);
   begin
     assert(res=i*2+1);
     inc(i);
-    if i<=100 then // recursive for i := 1 to 100
-      Calc.Add(i,i+1,CalcAddRecursive,onError) else begin
+    if i<=ITERATIONS then // recursive for i := 1 to ITERATIONS
+      Calc.Add(i,i+1,CalcAddAsynch,onError) else begin
       i := 1;
-      Calc.ToText(i,'$',TPeopleSexe(i and 1),'Smith',CalcToTextRecursive,onError);
+      Calc.ToText(i,'$',TPeopleSexe(i and 1),'Smith',CalcToTextAsynch,onError);
     end;
   end;
-  Calc.Add(i,i+1,CalcAddRecursive,onError);
+  Calc.Add(i,i+1,CalcAddAsynch,onError);
 end;
 
 end.

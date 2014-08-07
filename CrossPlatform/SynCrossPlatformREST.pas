@@ -821,14 +821,22 @@ type
     procedure SessionClose;
 
     {$ifdef ISSMS}
-    /// execute a specified interface-based service method on the server
-    // - under SMS, only this asynchronous method is available, which won't
-    // block the browser, e.g. if the network is offline
+    /// asynchronous execution a specified interface-based service method on the server
+    // - under SMS, this asynchronous method won't block the browser, e.g. if
+    // the network is offline
     // - you should not call it, but directly TServiceClient* methods
-    procedure CallRemoteService(aCaller: TServiceClientAbstract;
+    procedure CallRemoteServiceAsynch(aCaller: TServiceClientAbstract;
       const aMethodName: string; aExpectedOutputParamsCount: integer;
       const aInputParams: array of variant;
       onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
+    /// synchronous execution a specified interface-based service method on the server
+    // - under SMS, this synchronous method would block the browser, e.g. if
+    // the network is offline, or the server is late to answer
+    // - but synchronous code is somewhat easier to follow than asynchronous
+    // - you should not call it, but directly TServiceClient* methods
+    function CallRemoteServiceSynch(aCaller: TServiceClientAbstract;
+      const aMethodName: string; aExpectedOutputParamsCount: integer;
+      const aInputParams: array of variant): TVariantDynArray;
     {$else}
     /// execute a specified interface-based service method on the server
     // - this blocking method would raise an EServiceException on error
@@ -2080,7 +2088,8 @@ function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string
   {$ifdef ISSMS}inline;{$endif}
 begin
 {$ifdef ISSMS} // faster direct retrieval
-  result := Call.XHR.getResponseHeader(Name);
+  if VarIsValidRef(Call.XHR) then
+    result := Call.XHR.getResponseHeader(Name);
 {$else}
   result := FindHeader(Call.OutHead,Name+':');
 {$endif}
@@ -2255,17 +2264,17 @@ begin
   CallBackGet('TimeStamp',[],Call); // asynchronous call
 end;
 
-procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
+procedure TSQLRestClientURI.CallRemoteServiceASynch(aCaller: TServiceClientAbstract;
   const aMethodName: string; aExpectedOutputParamsCount: integer;
   const aInputParams: array of variant;
   onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
 var Call: TSQLRestURIParams;
-    outID: integer;
 begin
   // TServiceCustomAnswer and ForceServiceResultAsJSONObject not implemented yet
   SetAsynch(Call,lambda
       if not assigned(onSuccess) then
         exit; // no result to handle
+      var outID: integer;
       var result := CallGetResult(Call,outID); // from {result:...,id:...}
       if VarIsValidRef(result) then begin
          if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
@@ -2287,6 +2296,31 @@ begin
       result := (Call.OutStatus=HTML_SUCCESS) and (Call.OutBody<>'');
     end);
   CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
+end;
+
+function TSQLRestClientURI.CallRemoteServiceSynch(aCaller: TServiceClientAbstract;
+  const aMethodName: string; aExpectedOutputParamsCount: integer;
+  const aInputParams: array of variant): TVariantDynArray;
+var Call: TSQLRestURIParams;
+    outResult: variant;
+    outID: integer;
+begin
+  // TServiceCustomAnswer and ForceServiceResultAsJSONObject not implemented yet
+  CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
+  outResult := CallGetResult(Call,outID); // from {result:...,id:...}
+  if not VarIsValidRef(outResult) then
+    raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
+      [aCaller.ServiceName,aMethodName,Call.OutStatus]);
+   if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+     (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
+  if aExpectedOutputParamsCount=0 then
+    exit; // returns default []
+  var res := TJSONVariantData.CreateFrom(outResult);
+  if (res.Kind=jvArray) and (res.Count=aExpectedOutputParamsCount) then
+    result := res.Values else
+    raise EServiceException.CreateFmt('Error calling %s.%s - '+
+      'received %d parameters (expected %d)',
+      [aCaller.ServiceName,aMethodName,res.Count,aExpectedOutputParamsCount]);
 end;
 
 {$else}
@@ -2317,7 +2351,7 @@ begin
     params.AddValue(aInputParams[i]);
   CallRemoteServiceInternal(Call,aCaller,aMethodName,params.ToJSON);
   if Call.OutStatus<>HTML_SUCCESS then
-    raise EServiceException.CreateFmt('Error calling %s.%s - returned %d',
+    raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
       [aCaller.ServiceName,aMethodName,Call.OutStatus]);
   result := CallGetResult(Call,outID);
   if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
@@ -2326,8 +2360,9 @@ begin
     exit;
   arr := JSONVariantDataSafe(result); // Kind=jvUndefined if not a TJSONVariant
   if (arr^.Kind<>jvArray) or (arr^.Count<>aExpectedOutputParamsCount) then
-    raise EServiceException.CreateFmt('%s.%s returned wrong result array content',
-      [aCaller.ServiceName,aMethodName]);
+    raise EServiceException.CreateFmt('Error calling %s.%s - '+
+      'received %d parameters (expected %d)',
+      [aCaller.ServiceName,aMethodName,arr^.Count,aExpectedOutputParamsCount]);
   res := arr^.Values;
 end;
 
@@ -2732,7 +2767,7 @@ function VariantToEnum(const Value: variant; const TextValues: array of string):
 var str: string;
 begin
   {$ifdef ISSMS}
-  if TVariant.IsInteger(Value) then
+  if TVariant.IsNumber(Value) then
   {$else}
   if VarIsOrdinal(Value) then // Value is integer
   {$endif}
@@ -2802,8 +2837,8 @@ begin
   if fClient<>nil then
   try
     if fClientID<>'' then
-      {$ifdef ISSMS} // asynchronous call
-      fClient.CallRemoteService(self,SERVICE_PSEUDO_METHOD[imFree],0,[],nil,nil);
+      {$ifdef ISSMS}
+      fClient.CallRemoteServiceAsynch(self,SERVICE_PSEUDO_METHOD[imFree],0,[],nil,nil);
       {$else}
       try // synchronous blocking call
         fClient.CallRemoteService(self,SERVICE_PSEUDO_METHOD[imFree],0,[],res);
