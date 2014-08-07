@@ -3755,6 +3755,9 @@ type
   protected
     fInput: TRawUTF8DynArray; // even items are parameter names, odd are values
     fSessionAccessRights: RawByteString; // session may be deleted meanwhile
+    fInputCookiesRetrieved: boolean;
+    fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
+    fOutSetCookie: RawUTF8;
     procedure FillInput;
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
@@ -3763,6 +3766,8 @@ type
     function GetInputDouble(const ParamName: RawUTF8): Double;
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
+    function GetInCookie(CookieName: RawUTF8): RawUTF8;
+    procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: integer); virtual;
     procedure InternalSetTableFromTableName(const TableName: RawUTF8); virtual;
@@ -3770,8 +3775,7 @@ type
     /// initialize the execution context
     // - this method has been declared as protected, since it shuold never be
     // called outside the TSQLRestServer.URI() method workflow
-    // - should set Call, URISessionSignaturePos and URIWithoutSignature members
-    // - default constructor will identify trailing SESSION_SIGNATURE=... pattern
+    // - should set Call,  and Method members
     constructor Create(aServer: TSQLRestServer; const aCall: TSQLRestURIParams); virtual;
     /// retrieve RESTful URI routing
     // - should set URI, Table,TableIndex,TableRecordProps,TableEngine,
@@ -3779,6 +3783,7 @@ type
     // - all Table* members will be set via a InternalSetTableFromTableName() call
     // - default implementation expects an URI encoded with
     // 'ModelRoot[/TableName[/TableID][/BlobFieldName]][?param=...]' format
+    // - will also set URISessionSignaturePos and URIWithoutSignature members
     // - return FALSE in case of incorrect URI (e.g. does not match Model.Root)
     function URIDecodeREST: boolean; virtual;
     /// retrieve method-based SOA URI routing with optional RESTful mode
@@ -3824,7 +3829,7 @@ type
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
     URIBlobFieldName: RawUTF8;
-    /// position of the &session_signature=... text in URI
+    /// position of the &session_signature=... text in Call^.url string
     URISessionSignaturePos: integer;
     /// the Table as specified at the URI level (if any)
     Table: TSQLRecordClass;
@@ -3928,7 +3933,15 @@ type
     property Input[const ParamName: RawUTF8]: variant read GetInput;
     {$endif}
     /// retrieve an incoming HTTP header
+    // - the supplied header name is case-insensitive
     property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
+    /// retrieve an incoming HTTP cookie value
+    // - the supplied cookie name is case-insensitive
+    property InCookie[CookieName: RawUTF8]: RawUTF8 read GetInCookie;
+    /// define a new 'name=value' cookie to be returned to the client
+    // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
+    // header in Call^.OutHead
+    property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// use this method to send back directly a result value to the caller
     // - expects Status to be either HTML_SUCCESS, HTML_NOTMODIFIED or
     // HTML_CREATED, and will return as answer the supplied Result content
@@ -26743,6 +26756,36 @@ begin
   result := Trim(FindIniNameValue(pointer(Call.InHead),up));
 end;
 
+function TSQLRestServerURIContext.GetInCookie(CookieName: RawUTF8): RawUTF8;
+var i: integer;
+begin
+  result := '';
+  CookieName := trim(CookieName);
+  if CookieName='' then
+    exit;
+  if not fInputCookiesRetrieved then begin
+    fInputCookiesRetrieved := true;
+    CSVToRawUTF8DynArray(pointer(GetInHeader('cookie')),fInputCookies,';');
+  end;
+  if fInputCookies=nil then
+    exit;
+  CookieName := UpperCase(CookieName)+'=';
+  for i := 0 to length(fInputCookies)-1 do
+    if IdemPChar(pointer(fInputCookies[i]),pointer(CookieName)) then begin
+      result := copy(fInputCookies[i],length(CookieName)+1,MaxInt);
+      exit;
+    end;
+end;
+
+procedure TSQLRestServerURIContext.SetOutSetCookie(aOutSetCookie: RawUTF8);
+begin
+  aOutSetCookie := Trim(aOutSetCookie);
+  if PosEx('=',aOutSetCookie)<2 then
+    raise EBusinessLayerException.CreateFmt(
+      '"%s" is an incorrect "name=value" cookie',[aOutSetCookie]);
+  fOutSetCookie := aOutSetCookie;
+end;
+
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
   Status: integer; const CustomHeader: RawUTF8; Handle304NotModified: boolean);
 var clientHash, serverHash: RawUTF8;
@@ -26853,7 +26896,8 @@ procedure TSQLRestServerURIContext.Error(const ErrorMessage: RawUTF8; Status: in
 var ErrorMsg: RawUTF8;
 begin
   Call.OutStatus := Status;
-  if (Status in [HTML_SUCCESS,HTML_CREATED]) or (Status=HTML_NOTMODIFIED) then begin // not an error
+  if (Status in [HTML_SUCCESS,HTML_CREATED]) or
+     (Status=HTML_NOTMODIFIED) then begin // not an error
     Call.OutBody := ErrorMessage;
     exit;
   end;
@@ -27147,6 +27191,8 @@ begin
       Call.OutInternalState := cardinal(-1) else
       // database state may have changed above
       Call.OutInternalState := InternalState;
+    if Ctxt.OutSetCookie<>'' then
+      Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie);
     {$ifdef WITHSTATPROCESS}
     QueryPerformanceCounter(timeEnd);
     inc(fStats.ProcessTimeCounter,timeEnd-timeStart);
