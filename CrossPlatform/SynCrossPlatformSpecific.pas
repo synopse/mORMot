@@ -29,6 +29,7 @@ unit SynCrossPlatformSpecific;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - danielkuettner
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -336,7 +337,7 @@ uses
 
 {$ifdef USEINDY}
 uses
-  IdHTTP;
+  IdHTTP, IdSSLOpenSSL;
 {$endif}
 
 {$ifdef USESYNCRT}
@@ -497,6 +498,8 @@ constructor TIndyHttpConnectionClass.Create(
 begin
   inherited;
   fConnection := TIdHTTP.Create(nil);
+  if fParameters.Https then
+    fConnection.IOHandler:= TIdSSLIOHandlerSocketOpenSSL.Create(nil);
   if fParameters.ProxyName<>'' then
     fConnection.ProxyParams.ProxyServer := fParameters.ProxyName;
 end;
