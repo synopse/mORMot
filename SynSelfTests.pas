@@ -911,6 +911,8 @@ type
     {$endif}
     /// test the client-side implementation using TSQLRestServerAuthenticationNone
     procedure ClientSideRESTWeakAuthentication;
+    /// test the client-side implementation using TSQLRestServerAuthenticationHttpBasic
+    procedure ClientSideHttpBasicAuthentication;
     /// test the custom record JSON serialization
     procedure ClientSideRESTCustomRecordLayout;
     /// test the client-side implementation in JSON-RPC mode
@@ -8989,7 +8991,8 @@ procedure Direct(const URI: RawUTF8; Hash: cardinal);
 var call: TSQLRestURIParams;
 begin
   call.Method :='GET';
-  call.Url := TSQLRestServerAuthenticationDefault.ClientSessionSign(Client,URI);
+  call.url := URI;
+  TSQLRestServerAuthenticationDefault.ClientSessionSign(Client,call);
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
   Server.URI(call);
   Check(Hash32(call.OutBody)=Hash);
@@ -10403,12 +10406,7 @@ begin
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
   if CheckFailed(length(S.InterfaceFactory.Methods)=7) then exit;
-  {$ifdef UNICODE}
   Check(S.ContractHash='"2C0E079E73D1727B"'); // string -> utf8
-  {$else}
-  if CurrentAnsiConvert.CodePage=CODEPAGE_US then
-    Check(S.ContractHash='"479A33BBAFB6EAE2"'); // string -> ansi1252
-  {$endif}
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
@@ -10620,6 +10618,16 @@ begin
   TSQLRestServerAuthenticationNone.ClientSetUser(fClient,'User','');
   ClientTest(TSQLRestRoutingREST,false);
   fClient.Server.AuthenticationUnregister(TSQLRestServerAuthenticationNone);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideHttpBasicAuthentication;
+begin
+  fClient.SessionClose;
+  fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationHttpBasic);
+  TSQLRestServerAuthenticationHttpBasic.ClientSetUser(fClient,'User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+  fClient.Server.AuthenticationUnregister(TSQLRestServerAuthenticationHttpBasic);
+  // register default authentications
   fClient.Server.AuthenticationRegister(
     [TSQLRestServerAuthenticationSSPI,TSQLRestServerAuthenticationDefault]);
   fClient.SetUser('User','synopse');
@@ -11451,3 +11459,4 @@ end;
 {$endif DELPHI5OROLDER}
 
 end.
+

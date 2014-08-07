@@ -9866,6 +9866,8 @@ Authentication is implemented in {\i mORMot} via the following classes:
 \TSQLRestServerAuthenticationSignedURI\TSQLRestServerAuthenticationURI
 \TSQLRestServerAuthenticationNone\TSQLRestServerAuthenticationURI
 \TSQLRestServerAuthenticationURI\TSQLRestServerAuthentication
+\TSQLRestServerAuthenticationHttpAbstract\TSQLRestServerAuthentication
+\TSQLRestServerAuthenticationHttpBasic\TSQLRestServerAuthenticationHttpAbstract
 \
 In fact, you can use one of the following @*REST@ful authentication schemes:
 |%45%55
@@ -9873,6 +9875,7 @@ In fact, you can use one of the following @*REST@ful authentication schemes:
 |{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication scheme, based on a proprietary dual-pass challenge and SHA-256 hashing
 |{\f1\fs20 TSQLRestServerAuthenticationSSPI}|@*Windows authentication@, via the logged user
 |{\f1\fs20 TSQLRestServerAuthenticationNone}|Weak but simple authentication, based on user name
+|{\f1\fs20 TSQLRestServerAuthenticationHttpBasic}|HTTP Basic authentication\line Warning: password is not encrypted
 |%
 All those classes will identify a {\f1\fs20 TSQLAuthUser} record from a user name. The associated {\f1\fs20 TSQLAuthGroup} is then used later for authorization.
 You can add you own custom authentication scheme by defining your own class, inheriting from {\f1\fs20 TSQLRestServerAuthentication}.
@@ -9976,6 +9979,9 @@ Here is some sample code about how to define this authentication scheme:
 !  // on the Client side:
 !  TSQLRestServerAuthenticationNone.ClientSetUser(Client,'User');
 The performance benefit is very small in comparison to {\f1\fs20 TSQLRestServerAuthenticationDefault}, so should not be used for Delphi clients.
+:   HTTP Basic authentication
+The {\i Basic Authentication} mechanism provides no confidentiality protection for the transmitted credentials. They are merely encoded with {\i Base64} in transit, but not encrypted or hashed in any way. {\i Basic Authentication} is, therefore, typically used over HTTPS.
+The {\f1\fs20 TSQLRestServerAuthenticationHttpBasic} class can be used to enable HTTP Basic authentication.\line This class is not to be used with a {\i mORMot} client, since {\f1\fs20 TSQLRestServerAuthenticationDefault} provides a much better scheme, both safer and faster, but could be used in conjunction with some browser clients, over HTTPS.
 :  Clients authentication
 :   Client interactivity
 Note that with this design, it's up to the Client to react to an authentication error during any request, and ask again for the User pseudo and password at any time to create a new session. For multiple reasons (server restart, session timeout...) the session can be closed by the Server without previous notice.
@@ -10860,6 +10866,9 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |\b File|Description\b0
 |{\f1\fs20 SynCrossPlatform.inc}|Generic header used for cross-platform and cross-compiler support
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for Delphi and FPC
+|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client access
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
 \page
 : Installation

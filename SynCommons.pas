@@ -15154,7 +15154,7 @@ asm  // eax=SubStr, edx=S, ecx=Offset
   mov     ebp,edi             // ebp = Length(Search string) - 2
 @@Char1Loop:
   movzx   eax,word ptr [esi+ebp]
-  cmp     ax,[edx+ebp]
+  cmp     ax,[edx+ebp]       // Compare 2 Chars per Char1Loop (may include #0)
   jne     @@NotChar1
   sub     ebp,2
   jnc     @@Char1Loop
@@ -15165,7 +15165,7 @@ asm  // eax=SubStr, edx=S, ecx=Offset
   mov     ebp,edi             // ebp = Length(Search string) - 2
 @@Char2Loop:
   movzx   eax,word ptr [esi+ebp]
-  cmp     ax,[edx+ebp+1]
+  cmp     ax,[edx+ebp+1]     // Compare 2 Chars per Char2Loop (may include #0)
   jne     @@NotChar2
   sub     ebp,2
   jnc     @@Char2Loop
@@ -17479,6 +17479,8 @@ var B,C: byte;
     i: integer;
 begin
   result := false; // return false if any invalid char
+  if (Hex=nil) or (Bin=nil) then
+    exit;
   inc(Bin,BinBytes-1);
   for i := 1 to BinBytes do begin
     B := ConvertHexToBin[Ord(Hex^)];
