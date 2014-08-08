@@ -208,8 +208,6 @@ begin
     assert(sex=sFemale);
     assert(name=format('$ %d for %s Smith',[i,SEX_TEXT[i and 1]]));
   end;
-  (* code below won't execute due to issue in generated javascript for SMS 2.1:
-      see https://smartmobilestudio.zendesk.com/hc/en-us/requests/84
   var j: integer;
   var rec: TTestCustomJSONArraySimpleArray;
   for i := 1 to ITERATIONS do begin
@@ -230,7 +228,6 @@ begin
       assert(Rec.J[j].J3=TRecordEnum(j mod (ord(high(TRecordEnum))+1)));
     end;
   end;
-  *)
   // code below is asynchronous, so more difficult to follow than synchronous !
   i := 1;  // need two Calc*Asynch() inlined lambdas to access var i
   procedure CalcToTextAsynch(sexe: TPeopleSexe; name: string);

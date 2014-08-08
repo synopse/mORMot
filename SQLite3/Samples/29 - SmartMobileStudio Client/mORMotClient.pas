@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 // - retrieved from http://localhost:888/root/wrapper/SmartMobileStudio/mORMotClient.pas
-// at 2014-08-07 11:36:29 using "SmartMobileStudio.pas.mustache" template
+// at 2014-08-08 14:28:04 using "SmartMobileStudio.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -136,20 +136,25 @@ end;
 function Variant2TTestCustomJSONArraySimpleArray(const Value: variant): TTestCustomJSONArraySimpleArray;
 begin
   result.F := Value.F;
-  for var item in Value.G do result.G.Add(item);
+  if VariantType(Value.G)=jvArray then
+    for var i := 0 to integer(Value.G.length)-1 do
+      result.G.Add(string(Value.G[i]));
   result.H.H1 := Value.H.H1;
   result.H.H2 := Value.H.H2;
   result.H.H3.H3a := Value.H.H3.H3a;
   result.H.H3.H3b := VariantToBlob(Value.H.H3.H3b);
   result.I := Iso8601ToDateTime(Value.I);
-  result.J.SetLength(integer(Value.J.length));
-  for var n := 0 to result.J.High do begin
-    var source := Value.J[n];
-    var dest := result.J[n];
-    dest.J1 := source.J1;
-    dest.J2 := VariantToGUID(source.J2);
-    dest.J3 := Variant2TRecordEnum(source.J3);
-    result.J[n] := dest;
+  if VariantType(Value.J)=jvArray then begin
+    var tmp: TTestCustomJSONArraySimpleArray;
+    tmp.J.SetLength(1);
+    for var n := 0 to integer(Value.J.length)-1 do begin
+      var source := Value.J[n];
+      var dest := tmp.J[0];
+      dest.J1 := source.J1;
+      dest.J2 := VariantToGUID(source.J2);
+      dest.J3 := Variant2TRecordEnum(source.J3);
+      result.J.Add(dest);
+    end;
   end;
 end;
 

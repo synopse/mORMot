@@ -110,15 +110,20 @@ implementation
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := Value.{{fullPropName}};
 {{/isSimple}}{{#nestedRecord}}{{>setrec}}{{/nestedRecord}}{{#fromVariant}}  result.{{fullPropName}} := {{fromVariant}}(Value.{{fullPropName}});
-{{/fromVariant}}{{#nestedSimpleArray}}  for var item in Value.{{fullPropName}} do result.{{fullPropName}}.Add(item);
-{{/nestedSimpleArray}}{{#nestedRecordArray}}  result.{{fullPropName}}.SetLength(integer(Value.{{fullPropName}}.length));
-  for var n := 0 to result.{{fullPropName}}.High do begin
-    var source := Value.{{fullPropName}}[n];
-    var dest := result.{{fullPropName}}[n];
+{{/fromVariant}}{{#nestedSimpleArray}}  if VariantType(Value.{{fullPropName}})=jvArray then
+    for var i := 0 to integer(Value.{{fullPropName}}.length)-1 do
+      result.{{fullPropName}}.Add({{typePascal}}(Value.{{fullPropName}}[i]));
+{{/nestedSimpleArray}}{{#nestedRecordArray}}  if VariantType(Value.{{fullPropName}})=jvArray then begin
+    var tmp: {{name}};
+    tmp.J.SetLength(1);
+    for var n := 0 to integer(Value.{{fullPropName}}.length)-1 do begin
+      var source := Value.{{fullPropName}}[n];
+      var dest := tmp.J[0];
 {{#fields}}
-    dest.{{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}source.{{propName}}{{#fromVariant}}){{/fromVariant}};
+      dest.{{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}source.{{propName}}{{#fromVariant}}){{/fromVariant}};
 {{/fields}}
-    result.{{fullPropName}}[n] := dest;
+      result.{{fullPropName}}.Add(dest);
+    end;
   end;
 {{/nestedRecordArray}}{{/fields}}{{/setrec}}
 {{<getrec}}{{#fields}}

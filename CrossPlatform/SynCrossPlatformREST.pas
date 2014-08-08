@@ -2729,17 +2729,20 @@ end;
 
 function VariantToBlob(const Value: variant): TSQLRawBlob;
 begin
-  var s: string := Value;
-  if s='' then
-    result := null else
-    result := w3_base64decode(s);
+  if TVariant.IsString(Value) then begin
+    var s: string := Value;
+    if s='' then
+      result := null else
+      result := BrowserAPI.Window.atob(s);
+  end else
+    result := null;
 end;
 
 function BlobToVariant(const Blob: TSQLRawBlob): variant;
 begin
-  if Blob=null then
-    result := null else
-    result := w3_base64encode(Blob);
+  if TVariant.IsString(Blob) then
+    result := BrowserAPI.Window.btoa(Blob) else
+    result := null;
 end;
 
 function VariantToGUID(const value: variant): TGUID; inline;
