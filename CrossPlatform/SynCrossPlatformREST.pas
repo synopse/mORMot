@@ -2097,7 +2097,7 @@ begin
   i := 1;
   while GetNextCSV(Headers,i,line,#10) do
     if StartWithPropName(line,Name) then begin
-      result := copy(line,length(Name)+1,maxInt);
+      result := copy(line,length(Name)+1,length(line)-length(Name)-1);
       exit;
     end;
 end;
@@ -2406,8 +2406,8 @@ begin
   location := GetOutHeader(Call,'location');
   for i := length(location) downto 1 do
     if not (ord(location[i]) in [ord('0')..ord('9')]) then begin
-      result := StrToIntDef(Copy(location,i+1,100),0);
-      break; // // 'Location: root/People/11012' e.g.
+      result := StrToIntDef(Copy(location,i+1,length(location)),0);
+      break; // 'Location: root/People/11012' e.g.
     end;
 end;
 
