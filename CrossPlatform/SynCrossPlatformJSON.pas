@@ -307,8 +307,19 @@ function JSONVariantData(const JSONVariant: variant): PJSONVariantData;
 // - e.g. Kind, Count, Names[] or Values[]
 // - will return a read-only fake TJSONVariant with Kind=jvUndefined if the
 // supplied variant is not a TJSONVariant
+// - if ExpectedKind is jvArray of jvObject, it would return a fake TJSONVariant
+// with Kind=jvUndefined if the JSONVariant kind does not match - so you can write:
+// !var _a: integer;
+// !    _arr: PJSONVariantData;
+// !...
+// !   _arr := JSONVariantDataSafe(_variant,jvArray);
+// !   SetLength(result,_arr.Count);
+// !   for _a := 0 to _arr.Count-1 do
+// !     result[_a] := _arr.Values[_a];
+// in the above code, _arr.Count will be 0 if _variant.Kind<>jvArray
 // - this function is safer than TJSONVariant(JSONVariant)
-function JSONVariantDataSafe(const JSONVariant: variant): PJSONVariantData;
+function JSONVariantDataSafe(const JSONVariant: variant;
+  ExpectedKind: TJSONVariantKind=jvUndefined): PJSONVariantData;
 
 var
   /// the custom variant type definition registered for TJSONVariant
@@ -599,12 +610,16 @@ end;
 
 const // will be in code section of the exe, so will be read-only by design
   JSONVariantDataFake: TJSONVariantData = ();
-  
-function JSONVariantDataSafe(const JSONVariant: variant): PJSONVariantData;
+
+function JSONVariantDataSafe(const JSONVariant: variant;
+  ExpectedKind: TJSONVariantKind=jvUndefined): PJSONVariantData;
 begin
   with TVarData(JSONVariant) do
     if VType=JSONVariantType.VarType then
-      result := @JSONVariant else
+      if (ExpectedKind=jvUndefined) or
+         (TJSONVariantData(JSONVariant).VKind=ExpectedKind) then
+        result := @JSONVariant else
+        result := @JSONVariantDataFake else
     if VType=varByRef or varVariant then
       result := JSONVariantDataSafe(PVariant(VPointer)^) else
       result := @JSONVariantDataFake;

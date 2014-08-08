@@ -107,18 +107,17 @@ implementation
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := _variant.{{fullPropName}};
 {{/isSimple}}{{#nestedRecord}}{{>setrec}}{{/nestedRecord}}{{#fromVariant}}  result.{{fullPropName}} := {{fromVariant}}(_variant.{{fullPropName}});
-{{/fromVariant}}{{#nestedSimpleArray}}  SetLength(result.{{fullPropName}},JSONVariantDataSafe(_variant.{{fullPropName}})^.Count);
-  for i := 0 to high(result.{{fullPropName}}) do
-    result.{{fullPropName}}[i] := JSONVariantDataSafe(_variant.{{fullPropName}})^.Item[i];
-{{/nestedSimpleArray}}{{#nestedRecordArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}});
-  if _arr.Kind=jvArray then begin
-    SetLength(result.{{fullPropName}},_arr.Count);
-    for _a := 0 to _arr.Count-1 do
-    with result.{{fullPropName}}[_a] do begin
+{{/fromVariant}}{{#nestedSimpleArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}},jvArray);
+  SetLength(result.{{fullPropName}},_arr.Count);
+  for _a := 0 to high(result.{{fullPropName}}) do
+    result.{{fullPropName}}[_a] := _arr.Values[_a];
+{{/nestedSimpleArray}}{{#nestedRecordArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}},jvArray);
+  SetLength(result.{{fullPropName}},_arr.Count);
+  for _a := 0 to high(result.{{fullPropName}}) do
+  with result.{{fullPropName}}[_a] do begin
 {{#fields}}
-      {{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}_arr.Values[_a].{{propName}}{{#fromVariant}}){{/fromVariant}};
+    {{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}_arr.Values[_a].{{propName}}{{#fromVariant}}){{/fromVariant}};
 {{/fields}}
-    end;
   end;
 {{/nestedRecordArray}}{{/fields}}{{/setrec}}
 {{<getrec}}{{#fields}}
@@ -151,8 +150,7 @@ end;
 {{#records}}
 
 function Variant2{{name}}(const _variant: variant): {{name}};
-var i: integer;
-    _a: integer;
+var _a: integer;
     _arr: PJSONVariantData;
 begin
 {{>setrec}}
