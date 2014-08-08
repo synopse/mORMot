@@ -27129,6 +27129,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     ServiceInstanceID := TableID;
   // now Service, ServiceParameters, ServiceMethodIndex are set
   InternalExecuteSOAByInterface;
+  ServiceParameters := nil; // ensure no GPF later if = pointer(JSON)
 end;
 
 class procedure TSQLRestRoutingREST.ClientSideInvoke(var uri: RawUTF8;
@@ -37302,9 +37303,12 @@ end;
 
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
 procedure Error(const Msg: RawUTF8);
+var method: RawUTF8;
 begin
-  Ctxt.Error('% % for %',[ToText(InstanceCreation),Msg,
-    fInterface.fInterfaceTypeInfo^.Name]);
+  if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
+    method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
+  Ctxt.Error('% % for %%',[ToText(InstanceCreation),Msg,
+    fInterface.fInterfaceTypeInfo^.Name,method]);
 end;
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
@@ -37376,8 +37380,10 @@ begin
              WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
              fExecution[Ctxt.ServiceMethodIndex].Options,
              Ctxt.ForceServiceResultAsJSONObject,
-             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif}) then
+             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif}) then begin
+          Error('execution failed (probably due to bad input parameters)');
           exit; // wrong request
+        end;
       finally
         if optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options then
           LeaveCriticalSection(fInstanceLock);
