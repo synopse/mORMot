@@ -904,6 +904,7 @@ type
     fConnection: TAbstractHttpConnection;
     fParameters: TSQLRestConnectionParams;
     fKeepAlive: Integer;
+    fCustomHttpHeader: RawUTF8; // e.g. for SetHttpBasicAuthHeaders()
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// access to a mORMot server via HTTP
@@ -914,6 +915,13 @@ type
       aReceiveTimeout: Cardinal=30000{$endif}); reintroduce; virtual;
     /// finalize the connection
     destructor Destroy; override;
+    /// force the HTTP headers of any request to contain some HTTP BASIC
+    // authentication, without creating any remote session
+    // - here the password should be given as clear content
+    // - potential use case is to use a mORMot client through a HTTPS proxy
+    // - then you can use TSQLRestServerAuthentication*.ClientSetUser() to
+    // define any another "mORMot only" authentication
+    procedure SetHttpBasicAuthHeaders(const aUserName, aPasswordClear: RawUTF8);
 
     /// the associated connection, if active
     property Connection: TAbstractHttpConnection read fConnection;
@@ -2509,6 +2517,8 @@ begin
       inType := 'text/plain'; // avoid slow CORS preflighted requests
     Call.InHead := trim(Call.InHead+#13#10'content-type:'+inType);
   end;
+  if fCustomHttpHeader<>'' then
+    Call.InHead := Trim(Call.InHead+fCustomHttpHeader);
   for retry := 0 to 1 do begin
     if fConnection=nil then
       try
@@ -2534,6 +2544,18 @@ begin
       end; // will retry once (e.g. if connection broken)
     end;
   end;
+end;
+
+procedure TSQLRestClientHTTP.SetHttpBasicAuthHeaders(const aUserName, aPasswordClear: RawUTF8);
+var base64: RawUTF8;
+begin
+  base64 := aUsername+':'+aPasswordClear;
+  {$ifdef ISSMS}
+  base64 := w3_base64encode(base64);
+  {$else}
+  base64 := BytesToBase64JSONString(TByteDynArray(TextToHttpBody(base64)));
+  {$endif}
+  fCustomHttpHeader := #13#10'Authorization: Basic '+base64;
 end;
 
 
