@@ -678,7 +678,7 @@ unit mORMot;
   Version 1.18
     - full Windows 64 bit compatibility, including RTTI and services
     - renamed SQLite3Commons.pas to mORMot.pas
-    - BREAKING CHANGE in TSQLRestServerCallBackParams which is replace by the
+    - BREAKING CHANGE in TSQLRestServerCallBackParams which is replaced by the
       TSQLRestServerURIContext class: in addition, all method-based services
       should be a procedure, and use Ctxt.Results()/Error() methods to return
       any content - new definition of Ctxt features now full access to
@@ -752,6 +752,7 @@ unit mORMot;
       response to save bandwidth, in TSQLRestServerURIContext.Returns/Results
     - added TSQLRestServerURIContext.ReturnFile() method, for direct fast
       transmission to a HTTP client, handling "304 Not Modified" and mime type
+    - added TSQLRestServerURIContext.Input*OrVoid[] properties
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be available also within
@@ -3761,10 +3762,16 @@ type
     procedure FillInput;
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
+    function GetInputOrVoid(const ParamName: RawUTF8): variant;
     {$endif}
+    function GetInputNameIndex(const ParamName: RawUTF8): integer;
+    function GetInputExists(const ParamName: RawUTF8): Boolean;
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+    function GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
+    function GetInputDoubleOrVoid(const ParamName: RawUTF8): Double;
+    function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
@@ -3911,29 +3918,39 @@ type
     Log: TSynLog;
     {$endif}
     /// retrieve one input parameter from its URI name as Int64
-    // - slower than the direct UrlDecodeValue*() process, but more
-    // convenient to use
     // - raise an EParsingException if the parameter is not found
     property InputInt[const ParamName: RawUTF8]: Int64 read GetInputInt;
     /// retrieve one input parameter from its URI name as double
-    // - slower than the direct UrlDecodeValue*() process, but more
-    // convenient to use
     // - raise an EParsingException if the parameter is not found
     property InputDouble[const ParamName: RawUTF8]: double read GetInputDouble;
     /// retrieve one input parameter from its URI name as RawUTF8
-    // - slower than the direct UrlDecodeValue*() process, but more
-    // convenient to use
     // - raise an EParsingException if the parameter is not found
     property InputUTF8[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8;
+    /// retrieve one input parameter from its URI name as Int64
+    // - returns 0 if the parameter is not found
+    property InputIntOrVoid[const ParamName: RawUTF8]: Int64 read GetInputIntOrVoid;
+    /// retrieve one input parameter from its URI name as double
+    // - returns 0 if the parameter is not found
+    property InputDoubleOrVoid[const ParamName: RawUTF8]: double read GetInputDoubleOrVoid;
+    /// retrieve one input parameter from its URI name as RawUTF8
+    // - returns '' if the parameter is not found
+    property InputUTF8OrVoid[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8OrVoid;
+   /// return TRUE if the input parameter is available at URI
+    // - even if InputUTF8['param']='', there may be '..?param=&another=2'
+    property InputExists[const ParamName: RawUTF8]: Boolean read GetInputExists;
     {$ifndef NOVARIANTS}
     /// retrieve one input parameter from its URI name as variant
-    // - slower than the direct UrlDecodeValue*() process, but more
-    // convenient to use
     // - if the parameter value is text, it is stored in the variant as
     // a generic VCL string content: so before Delphi 2009, you may loose
     // some characters at decoding from UTF-8 input buffer
     // - raise an EParsingException if the parameter is not found
     property Input[const ParamName: RawUTF8]: variant read GetInput;
+    /// retrieve one input parameter from its URI name as variant
+    // - if the parameter value is text, it is stored in the variant as
+    // a generic VCL string content: so before Delphi 2009, you may loose
+    // some characters at decoding from UTF-8 input buffer
+    // - returns Unassigned if the parameter is not found
+    property InputOrVoid[const ParamName: RawUTF8]: variant read GetInputOrVoid;
     {$endif}
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
@@ -21189,6 +21206,7 @@ begin
     // end the JSON object
     if not JSON.Expand then
       JSON.AddNoJSONEscape(PAnsiChar(']}'),2);
+    JSON.FlushShouldNotAutoResize := true;
     JSON.Flush;
   finally
     JSON.Free;
@@ -26794,23 +26812,58 @@ begin
     raise EParsingException.CreateFmt('Invalid parameter %s as Double in URI',[ParamName]);
 end;
 
+function TSQLRestServerURIContext.GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
+begin
+  result := GetInt64(pointer(GetInputUTF8OrVoid(ParamName)));
+end;
+
+function TSQLRestServerURIContext.GetInputDoubleOrVoid(const ParamName: RawUTF8): double;
+begin
+  result := GetExtended(pointer(GetInputUTF8OrVoid(ParamName)));
+end;
+
+function TSQLRestServerURIContext.GetInputNameIndex(const ParamName: RawUTF8): integer;
+begin // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
+  if (fInput=nil) and (Parameters<>nil) then
+    FillInput;
+  for result := 0 to (length(fInput)shr 1)-1 do
+    if IdemPropNameU(ParamName,fInput[result*2]) then
+      exit;
+  result := -1;
+end;
+
 function TSQLRestServerURIContext.GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
 var i: integer;
 begin
-  if (fInput=nil) and (Parameters<>nil) then
-    FillInput;
-  for i := 0 to (length(fInput)shr 1)-1 do
-    if IdemPropNameU(ParamName,fInput[i*2]) then begin
-      result := fInput[i*2+1];
-      exit;
-    end;
-  raise EParsingException.CreateFmt('Parameter %s not found in URI',[ParamName]);
+  i := GetInputNameIndex(ParamName);
+  if i<0 then
+    raise EParsingException.CreateFmt('Parameter %s not found in URI',[ParamName]);
+  result := fInput[i*2+1];
+end;
+
+function TSQLRestServerURIContext.GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
+var i: integer;
+begin
+  i := GetInputNameIndex(ParamName);
+  if i<0 then
+    result := '' else
+    result := fInput[i*2+1];
+end;
+
+function TSQLRestServerURIContext.GetInputExists(const ParamName: RawUTF8): Boolean;
+begin
+  result := GetInputNameIndex(ParamName)>=0;
 end;
 
 {$ifndef NOVARIANTS}
 function TSQLRestServerURIContext.GetInput(const ParamName: RawUTF8): variant;
 begin
   GetVariantFromJSON(pointer(GetInputUTF8(ParamName)),false,Result);
+end;
+
+function TSQLRestServerURIContext.GetInputOrVoid(const ParamName: RawUTF8): variant;
+begin
+  GetVariantFromJSON(pointer(GetInputUTF8OrVoid(ParamName)),false,Result);
 end;
 {$endif}
 
@@ -27017,7 +27070,7 @@ end;
 procedure TSQLRestRoutingREST.ExecuteSOAByInterface;
 var JSON: RawUTF8;
     Par: PUTF8Char;
-    meth,a,i,i1: Integer;
+    meth,a,i,iLow: Integer;
     WR: TTextWriter;
     argDone: boolean;
 begin // here Ctxt.Service and ServiceMethodIndex are set
@@ -27034,7 +27087,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     if IdemPChar(Par,'%5B') then
       // either as JSON array (input is e.g. '+%5B...' for ' [...')
       JSON := UrlDecode(Parameters) else begin
-      // either as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
+      // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
       FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
       if fInput<>nil then begin
         meth := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
@@ -27043,16 +27096,16 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
           try // convert URI parameters into the expected ordered JSON array
             WR.Add('[');
             with Service.InterfaceFactory.fMethods[meth] do begin
-              i1 := 0;
+              iLow := 0;
               for a := ArgsInFirst to ArgsInLast do
               with Args[a] do
               if ValueDirection<>smdOut then begin
                 argDone := false;
-                for i := i1 to high(fInput)shr 1 do // search argument in URI 
+                for i := iLow to high(fInput)shr 1 do // search argument in URI 
                   if IdemPropName(ParamName^,pointer(fInput[i*2]),length(fInput[i*2])) then begin
                     AddValueJSON(WR,fInput[i*2+1]); // will add "" if needed
-                    if i=i1 then
-                      inc(i1); // optimistic in-order search, but allow any order
+                    if i=iLow then
+                      inc(iLow); // optimistic in-order search, but allow any order
                     argDone := true;
                     break;
                   end;
@@ -34295,22 +34348,20 @@ var aUserName: RawUTF8;
     aSessionID: cardinal;
     i: integer;
 begin
-  if UrlDecodeNeedParameters(Ctxt.Parameters,'UserName,Session') then begin
+  aUserName := Ctxt.InputUTF8OrVoid['UserName'];
+  aSessionID := Ctxt.InputIntOrVoid['Session'];
+  if (aUserName<>'') and (aSessionID<>0) then begin
     // GET ModelRoot/auth?UserName=...&Session=... -> release session
-    while Ctxt.Parameters<>nil do begin
-      UrlDecodeValue(Ctxt.Parameters,'USERNAME=',aUserName);
-      UrlDecodeCardinal(Ctxt.Parameters,'SESSION=',aSessionID,@Ctxt.Parameters);
-    end;
-    if (fServer.fSessions<>nil) and
-       // allow only to delete its own session - ticket [7723fa7ebd]
-       (aSessionID=Ctxt.Session) then
-      for i := 0 to fServer.fSessions.Count-1 do
-        with TAuthSession(fServer.fSessions.List[i]) do
-        if (fIDCardinal=aSessionID) and (fUser.LogonName=aUserName) then begin
-          fServer.SessionDelete(i,Ctxt);
-          Ctxt.Success;
-          break;
-        end;
+  if (fServer.fSessions<>nil) and
+     // allow only to delete its own session - ticket [7723fa7ebd]
+     (aSessionID=Ctxt.Session) then
+    for i := 0 to fServer.fSessions.Count-1 do
+      with TAuthSession(fServer.fSessions.List[i]) do
+      if (fIDCardinal=aSessionID) and (fUser.LogonName=aUserName) then begin
+        fServer.SessionDelete(i,Ctxt);
+        Ctxt.Success;
+        break;
+      end;
     result := true;
   end else
     result := false;
@@ -34458,13 +34509,11 @@ begin
   result := true;
   if AuthSessionRelease(Ctxt) then
     exit;
-  if UrlDecodeNeedParameters(Ctxt.Parameters,'UserName,PassWord,ClientNonce') then begin
+  aUserName := Ctxt.InputUTF8OrVoid['UserName'];
+  aPassWord := Ctxt.InputUTF8OrVoid['Password'];
+  aClientNonce := Ctxt.InputUTF8OrVoid['ClientNonce'];
+  if (aUserName<>'') and (aClientNonce<>'') then begin
     // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
-    while Ctxt.Parameters<>nil do begin
-      UrlDecodeValue(Ctxt.Parameters,'USERNAME=',aUserName);
-      UrlDecodeValue(Ctxt.Parameters,'PASSWORD=',aPassWord);
-      UrlDecodeValue(Ctxt.Parameters,'CLIENTNONCE=',aClientNonce,@Ctxt.Parameters);
-    end;
     User := GetUser(Ctxt,aUserName);
     if User<>nil then
     try
@@ -34477,7 +34526,7 @@ begin
       User.Free;
     end;
   end else
-    if UrlDecodeNeedParameters(Ctxt.Parameters,'UserName') then
+    if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
       Ctxt.Results([Nonce(false)]) else
       // parameters does not match any expected layout
@@ -34517,15 +34566,14 @@ function TSQLRestServerAuthenticationNone.Auth(Ctxt: TSQLRestServerURIContext): 
 var aUserName: RawUTF8;
     U: TSQLAuthUser;
 begin
-  if not UrlDecodeNeedParameters(Ctxt.Parameters,'UserName') then begin
+  aUserName := Ctxt.InputUTF8OrVoid['UserName'];
+  if aUserName='' then begin
     result := false;
     exit;
   end;
   result := true;
   if AuthSessionRelease(Ctxt) then
     exit;
-  while Ctxt.Parameters<>nil do
-    UrlDecodeValue(Ctxt.Parameters,'USERNAME=',aUserName,@Ctxt.Parameters);
   U := GetUser(Ctxt,aUserName);
   SessionCreate(Ctxt,U);
 end;
@@ -34656,7 +34704,7 @@ var userPass,user,pass,expectedPass: RawUTF8;
     U: TSQLAuthUser;
     Session: TAuthSession;
 begin
-  if UrlDecodeNeedParameters(Ctxt.Parameters,'UserName') then begin
+  if Ctxt.InputExists['UserName'] then begin
     result := false; // allow other schemes to check this request
     exit;
   end;
@@ -34706,13 +34754,12 @@ var i: integer;
     Session: TAuthSession;
 begin
   result := AuthSessionRelease(Ctxt);
-  if result or not UrlDecodeNeedParameters(Ctxt.Parameters,'UserName,DATA') then
+  if result or (not Ctxt.InputExists['UserName']) or (not Ctxt.InputExists['Data']) then
     exit;
   // use ConnectionID to find authentication session
-  ConnectionID := FindIniNameValue(PUTF8Char(Ctxt.Call.InHead),'CONNECTIONID: ');
+  ConnectionID := Ctxt.InHeader['ConnectionID'];
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
-  while Ctxt.Parameters<>nil do
-    UrlDecodeValue(Ctxt.Parameters,'DATA=',InDataEnc,@Ctxt.Parameters);
+  InDataEnc := Ctxt.InputUTF8['Data'];
   if InDataEnc='' then begin
     // client is browser and used HTTP headers to send auth data
     InDataEnc := FindIniNameValue(PUTF8Char(Ctxt.Call.InHead), SECPKGNAMEHTTPAUTHORIZATION);
