@@ -37301,9 +37301,10 @@ begin
 end;
 
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
-procedure Error(Msg: PUTF8Char);
+procedure Error(const Msg: RawUTF8);
 begin
-  Ctxt.Error(Msg,[UnCamelCase(ToText(InstanceCreation))]);
+  Ctxt.Error('% % for %',[ToText(InstanceCreation),Msg,
+    fInterface.fInterfaceTypeInfo^.Name]);
 end;
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
@@ -37335,7 +37336,7 @@ begin
           sicPerUser:    Inst.InstanceID := Ctxt.SessionUser;
           sicPerGroup:   Inst.InstanceID := Ctxt.SessionGroup;
           end else begin
-            Error('% mode expects an authenticated session');
+            Error('mode expects an authenticated session');
             exit;
           end;
       end;
@@ -37346,7 +37347,7 @@ begin
     end;
   end;
   if Inst.Instance=nil then begin
-    Error('% instance not found or deprecated');
+    Error('instance not found or deprecated');
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
@@ -37969,15 +37970,21 @@ begin
         end;
       smvRecord: begin
         SetLength(Records[IndexVar],TypeInfo^.RecordType^.Size);
-        if ValueDirection in [smdConst,smdVar] then
+        if ValueDirection in [smdConst,smdVar] then begin
           Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
+          if Par=nil then
+            exit;
+        end;
       end;
       {$ifndef NOVARIANTS}
       smvVariant: begin
         SetLength(Records[IndexVar],sizeof(Variant));
-        if ValueDirection in [smdConst,smdVar] then
+        if ValueDirection in [smdConst,smdVar] then begin
           Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
+          if Par=nil then
+            exit;
+        end;
       end;
       {$endif}
       smvBoolean..smvWideString:
