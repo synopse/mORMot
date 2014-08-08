@@ -861,7 +861,7 @@ begin
       if l=0 then
         continue;
       var head := trim(copy(line,1,l-1));
-      var value := trim(copy(line,l+1,maxInt));
+      var value := trim(copy(line,l+1,length(line)));
       if (head<>'') and (value<>'') then
         Call.XHR.setRequestHeader(head,value);
     end;

@@ -2080,6 +2080,16 @@ begin
 end;
 
 function FindHeader(const Headers, Name: string): string;
+{$ifdef ISSMS} // dedicated function using faster JavaScript library
+begin
+  if Headers='' then
+    exit '';
+  var search := UpperCase(Name);
+  for var nameValue in Headers.Split(#13#10) do
+    if uppercase(copy(nameValue,1,length(search)))=search then
+      exit copy(nameValue,length(search)+1,length(nameValue));
+end;
+{$else}
 var i: integer;
     line: string;
 begin
@@ -2087,19 +2097,20 @@ begin
   i := 1;
   while GetNextCSV(Headers,i,line,#10) do
     if StartWithPropName(line,Name) then begin
-      result := trim(copy(line,length(Name)+1,MaxInt));
+      result := copy(line,length(Name)+1,maxInt);
       exit;
     end;
 end;
+{$endif}
 
 function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string;
-  {$ifdef ISSMS}inline;{$endif}
 begin
-{$ifdef ISSMS} // faster direct retrieval
+{$ifdef ISSMS_XHRISBUGGY} // retrieval from Call.XHR is buggy on some browers :(
+  // see http://synopse.info/forum/viewtopic.php?pid=11730#p11730
   if VarIsValidRef(Call.XHR) then
     result := Call.XHR.getResponseHeader(Name);
 {$else}
-  result := FindHeader(Call.OutHead,Name+':');
+  result := FindHeader(Call.OutHead,Name+': ');
 {$endif}
 end;
 
@@ -2249,8 +2260,7 @@ begin
   if Assigned(onSuccess) then
     Call.OnSuccess := lambda
       if Call.XHR.readyState=rrsDone then begin
-        Call.OutInternalState := StrToIntDef(
-          Call.XHR.getResponseHeader('Server-InternalState'),0);
+        Call.OutInternalState := StrToIntDef(GetOutHeader(Call,'Server-InternalState'),0);
         if onBeforeSuccess then
           onSuccess(self) else
           if assigned(onError) then
@@ -2510,15 +2520,15 @@ procedure TSQLRestClientHTTP.InternalURI(var Call: TSQLRestURIParams);
 var inType: string;
     retry: integer;
 begin
-  inType := FindHeader(Call.InHead,'content-type:');
+  inType := FindHeader(Call.InHead,'content-type: ');
   if inType='' then begin
     if OnlyJSONRequests then
       inType := JSON_CONTENT_TYPE else
       inType := 'text/plain'; // avoid slow CORS preflighted requests
-    Call.InHead := trim(Call.InHead+#13#10'content-type:'+inType);
+    Call.InHead := trim(Call.InHead+#13#10'content-type: '+inType);
   end;
   if fCustomHttpHeader<>'' then
-    Call.InHead := Trim(Call.InHead+fCustomHttpHeader);
+    Call.InHead := trim(Call.InHead+fCustomHttpHeader);
   for retry := 0 to 1 do begin
     if fConnection=nil then
       try
