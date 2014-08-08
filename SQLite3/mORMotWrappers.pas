@@ -45,11 +45,7 @@ unit mORMotWrappers;
 
   ***** END LICENSE BLOCK *****
 
-  ---------------------------------------------------------------------------
-   Download the SpiderMonkey library at http://synopse.info/files/synsm.7z !
-  ---------------------------------------------------------------------------
-
-
+  
   Version 1.18
   - first public release, corresponding to Synopse mORMot Framework 1.18
 
