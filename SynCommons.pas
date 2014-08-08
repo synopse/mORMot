@@ -569,7 +569,7 @@ unit SynCommons;
   - fixed ticket [cce54e98ca], [388c2768b6] and [355249a9d1] about overflow in
     TTextWriter.AddJSONEscapeW()
   - fixed ticket [a75c0c6759] about TTextWriter.AddNoJSONEscapeW()
-  - added TTextWriter.AddHtmlEscape() method
+  - added TTextWriter.AddHtmlEscape() and TTextWriter.AddXmlEscape() methods
   - TTextWriter.AddJSONEscape/AddJSONEscapeW methods speed up
   - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
     now a per-thread context will be stored, e.g. for Enter/Leave tracking
@@ -5082,9 +5082,13 @@ type
     // single quotes in a row - as in Pascal." 
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
     /// append some chars, escaping all HTML special chars as expected
+    // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
+    procedure AddHtmlEscape(Text: PUTF8Char);
+    /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
-    // - this will also cover XML markup - see @http://www.w3.org/TR/xml/#syntax
-    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
+    // - and all control chars (i.e. #1..#31) as &#..;
+    // - see @http://www.w3.org/TR/xml/#syntax
+    procedure AddXmlEscape(Text: PUTF8Char);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
     /// fast conversion from binary data into hexa chars, ready to be displayed
@@ -32014,13 +32018,13 @@ begin
         Add('<');
         if ArrayName=nil then
           Add(n) else
-          AddHtmlEscape(ArrayName,0);
+          AddXmlEscape(ArrayName);
         Add('>');
         JSON := AddJSONToXML(JSON,nil,@objEnd);
         Add('<','/');
         if ArrayName=nil then
           Add(n) else
-          AddHtmlEscape(ArrayName,0);
+          AddXmlEscape(ArrayName);
         Add('>');
         inc(n);
       until objEnd=']';
@@ -32036,11 +32040,11 @@ begin
       if JSON^='[' then // arrays are written as list of items, without root
         JSON := AddJSONToXML(JSON,Name,@objEnd) else begin
         Add('<');
-        AddHtmlEscape(Name,0);
+        AddXmlEscape(Name);
         Add('>');
         JSON := AddJSONToXML(JSON,Name,@objEnd);
         Add('<','/');
-        AddHtmlEscape(Name,0);
+        AddXmlEscape(Name);
         Add('>');
       end;
     until objEnd='}';
@@ -32049,7 +32053,7 @@ begin
     Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
     if Value=nil then
       AddShort('null') else
-      AddHtmlEscape(Value,0);
+      AddXmlEscape(Value); 
     exit;
   end;
   end;
@@ -32343,54 +32347,55 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt);
-const HTML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"'),ord('''')];
+procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char);
+const HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
 var i,beg: PtrInt;
 begin
   if Text=nil then
     exit;
   i := 0;
-  if TextLen=0 then begin // length not specified -> will write until #0
-    repeat
-      beg := i;
-      if not(ord(Text[i]) in HTML_ESCAPE) then begin
-        repeat // it is faster to handle all not-escaped chars at once
-          inc(i);
-        until ord(Text[i]) in HTML_ESCAPE;
-        AddNoJSONEscape(Text+beg,i-beg);
-      end;
-      repeat
-        case Text[i] of
-        #0: exit;
-        #1..#31: begin // characters below ' ', #7 e.g. -> // '&#u0007;'
-          AddShort('&#x00');
-          Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
-          Add(';');
-        end;
-        '<': AddShort('&lt;');
-        '>': AddShort('&gt;');
-        '&': AddShort('&amp;');
-        '"': AddShort('&quot;');
-        '''': AddShort('&apos;');
-        else break;
-        end;
-        inc(i);
-      until false;
-    until false;
-  end;
-  while i<TextLen do begin
+  repeat
     beg := i;
     if not(ord(Text[i]) in HTML_ESCAPE) then begin
       repeat // it is faster to handle all not-escaped chars at once
         inc(i);
-      until (i>=TextLen) or (ord(Text[i]) in HTML_ESCAPE);
+      until ord(Text[i]) in HTML_ESCAPE;
       AddNoJSONEscape(Text+beg,i-beg);
     end;
-    while i<TextLen do begin
+    repeat
       case Text[i] of
       #0: exit;
-      #1..#31: begin // characters below ' ', #7 e.g. -> // '&#u0007;'
-        AddShort('&#x00');
+      '<': AddShort('&lt;');
+      '>': AddShort('&gt;');
+      '&': AddShort('&amp;');
+      '"': AddShort('&quot;');
+      else break;
+      end;
+      inc(i);
+    until false;
+  until false;
+end;
+
+procedure TTextWriter.AddXmlEscape(Text: PUTF8Char);
+const XML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"'),ord('''')];
+var i,beg: PtrInt;
+begin
+  if Text=nil then
+    exit;
+  i := 0;
+  repeat
+    beg := i;
+    if not(ord(Text[i]) in XML_ESCAPE) then begin
+      repeat // it is faster to handle all not-escaped chars at once
+        inc(i);
+      until ord(Text[i]) in XML_ESCAPE;
+      AddNoJSONEscape(Text+beg,i-beg);
+    end;
+    repeat
+      case Text[i] of
+      #0: exit;
+      #1..#31: begin // characters below ' ', #7 e.g. -> // '&#x07;'
+        AddShort('&#x');
         Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
         Add(';');
       end;
@@ -32402,8 +32407,8 @@ begin
       else break;
       end;
       inc(i);
-    end;
-  end;
+    until false;
+  until false;
 end;
 
 procedure TTextWriter.AddByteToHex(Value: byte);

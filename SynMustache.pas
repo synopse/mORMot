@@ -126,6 +126,7 @@ type
     fContextCount: integer;
     fWriter: TTextWriter;
     fOwner: TSynMustache;
+    fEscapeInvert: boolean;
     fOnStringTranslate: TOnStringTranslate;
     procedure TranslateBlock(Text: PUTF8Char; TextLen: Integer); virtual;
     procedure PopContext; virtual; abstract;
@@ -143,6 +144,11 @@ type
       read fOnStringTranslate write fOnStringTranslate;
     /// read-only access to the associated text writer instance
     property Writer: TTextWriter read fWriter;
+    /// invert the HTML characters escaping process
+    // - by default, {{value}} will escape value chars, and {{{value}} won't
+    // - set this property to true to force {{value}} NOT to escape HTML chars
+    // and {{{value}} escaping chars (may be useful e.g. for code generation)
+    property EscapeInvert: boolean read fEscapeInvert write fEscapeInvert;
   end;
 
   /// handle {{mustache}} template rendering context from a custom variant
@@ -266,8 +272,8 @@ type
     // - the context is given via our abstract TSynMustacheContext wrapper
     // - the rendering extended in fTags[] is supplied as parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
-    procedure Render(Context: TSynMustacheContext; TagStart,TagEnd: integer;
-      Partials: TSynMustachePartials; NeverFreePartials: boolean); overload;
+    procedure RenderContext(Context: TSynMustacheContext; TagStart,TagEnd: integer;
+      Partials: TSynMustachePartials; NeverFreePartials: boolean); 
     /// renders the {{mustache}} template from a variant defined context
     // - the context is given via a custom variant type implementing
     // TSynInvokeableVariantType.Lookup, e.g. TDocVariant or TSMVariant
@@ -290,7 +296,7 @@ type
     // !   '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
     // !   aClient.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
     function Render(const Context: variant; Partials: TSynMustachePartials=nil;
-      OnTranslate: TOnStringTranslate=nil): RawUTF8; overload;
+      OnTranslate: TOnStringTranslate=nil; EscapeInvert: boolean=false): RawUTF8;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined from UTF-8 buffer
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
@@ -299,7 +305,7 @@ type
     // - you can write e.g. with the extended JSON syntax:
     // ! html := mustache.RenderJSON('{things:["one", "two", "three"]}');
     function RenderJSON(const JSON: RawUTF8; Partials: TSynMustachePartials=nil;
-      OnTranslate: TOnStringTranslate=nil): RawUTF8; overload;
+      OnTranslate: TOnStringTranslate=nil; EscapeInvert: boolean=false): RawUTF8; overload;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined with parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
@@ -308,8 +314,8 @@ type
     // - you can write e.g. with the extended JSON syntax:
     // !   html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
     function RenderJSON(JSON: PUTF8Char; const Args,Params: array of const;
-      Partials: TSynMustachePartials=nil; OnTranslate: TOnStringTranslate=nil): RawUTF8;
-       overload;
+      Partials: TSynMustachePartials=nil; OnTranslate: TOnStringTranslate=nil;
+      EscapeInvert: boolean=false): RawUTF8; overload;
 
     /// read-only access to the raw {{mustache}} template content
     property Template: RawUTF8 read fTemplate;
@@ -624,8 +630,8 @@ end;
 type
   TSynMustacheProcessSection = procedure of object;
 
-procedure TSynMustache.Render(Context: TSynMustacheContext; TagStart,TagEnd: integer;
-  Partials: TSynMustachePartials; NeverFreePartials: boolean);
+procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
+  TagStart,TagEnd: integer; Partials: TSynMustachePartials; NeverFreePartials: boolean);
 var partial: TSynMustache;
 begin
   try
@@ -647,7 +653,7 @@ begin
         end;
         msList: begin
           while Context.GotoNextListItem do
-            Render(Context,TagStart+1,SectionOppositeIndex-1,Partials,true);
+            RenderContext(Context,TagStart+1,SectionOppositeIndex-1,Partials,true);
           TagStart := SectionOppositeIndex;
           continue; // ignore whole section
         end;
@@ -671,7 +677,7 @@ begin
         if (partial=nil) and (Partials<>nil) then
           partial := Partials.GetPartial(Value);
         if partial<>nil then
-          partial.Render(Context,0,high(partial.fTags),Partials,true);
+          partial.RenderContext(Context,0,high(partial.fTags),Partials,true);
       end;
       mtSetPartial:
         TagStart := SectionOppositeIndex; // ignore whole internal {{<partial}}
@@ -691,7 +697,8 @@ begin
 end;
 
 function TSynMustache.Render(const Context: variant;
-  Partials: TSynMustachePartials; OnTranslate: TOnStringTranslate): RawUTF8;
+  Partials: TSynMustachePartials; OnTranslate: TOnStringTranslate;
+  EscapeInvert: boolean): RawUTF8;
 var W: TTextWriter;
     Ctxt: TSynMustacheContext;
 begin
@@ -700,7 +707,8 @@ begin
     Ctxt := TSynMustacheContextVariant.Create(self,W,SectionMaxCount,Context);
     try
       Ctxt.OnStringTranslate := OnTranslate;
-      Render(Ctxt,0,high(fTags),Partials,false);
+      Ctxt.EscapeInvert := EscapeInvert;
+      RenderContext(Ctxt,0,high(fTags),Partials,false);
       W.SetText(result);
     finally
       Ctxt.Free;
@@ -711,20 +719,21 @@ begin
 end;
 
 function TSynMustache.RenderJSON(const JSON: RawUTF8;
-  Partials: TSynMustachePartials; OnTranslate: TOnStringTranslate): RawUTF8;
+  Partials: TSynMustachePartials; OnTranslate: TOnStringTranslate;
+  EscapeInvert: boolean): RawUTF8;
 var context: variant;
 begin
   _Json(JSON,context,JSON_OPTIONS[true]);
-  result := Render(context,Partials,OnTranslate);
+  result := Render(context,Partials,OnTranslate,EscapeInvert);
 end;
 
 function TSynMustache.RenderJSON(JSON: PUTF8Char; const Args,
   Params: array of const; Partials: TSynMustachePartials;
-  OnTranslate: TOnStringTranslate): RawUTF8;
+  OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUTF8;
 var context: variant;
 begin
   _Json(FormatUTF8(JSON,Args,Params,true),context,JSON_OPTIONS[true]);
-  result := Render(context,Partials,OnTranslate);
+  result := Render(context,Partials,OnTranslate,EscapeInvert);
 end;
 
 destructor TSynMustache.Destroy;
@@ -846,10 +855,12 @@ begin
   if TVarData(Value).VType>varNull then
     if VarIsNumeric(Value) then // avoid RawUTF8 conversion for plain numbers
       fWriter.AddVariantJSON(Value,twNone) else begin
+      if fEscapeInvert then
+        UnEscape := not UnEscape;
       VariantToUTF8(Value,ValueText,wasString);
       if UnEscape then
         fWriter.AddNoJSONEscape(pointer(ValueText)) else
-        fWriter.AddHtmlEscape(pointer(ValueText),0); // len=0 is slightly faster
+        fWriter.AddHtmlEscape(pointer(ValueText));
     end;
 end;
 

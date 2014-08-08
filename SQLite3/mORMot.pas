@@ -17434,12 +17434,12 @@ begin
             case fieldType[f] of
             ftUnknown:
               if IsStringJSON(U^) then // no need to guess exact value type here
-                W.AddHtmlEscape(U^,0) else
+                W.AddXmlEscape(U^) else
                 W.AddNoJSONEscape(U^,0);
             ftInt64, ftDouble, ftCurrency:
               W.AddNoJSONEscape(U^,0);
             ftDate, ftUTF8, ftBlob:
-              W.AddHtmlEscape(U^,0);
+              W.AddXmlEscape(U^);
             end;
             W.Add('"',' ');
           end;

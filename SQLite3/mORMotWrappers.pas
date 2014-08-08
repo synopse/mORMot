@@ -370,7 +370,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     context.templateName := templateName;
     context.filename := unitName;
     delete(templateExt,1,1);
-    result := TSynMustache.Parse(template).Render(context);
+    result := TSynMustache.Parse(template).Render(context,nil,nil,true);
   end;
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;
