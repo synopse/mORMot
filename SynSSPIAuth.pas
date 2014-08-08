@@ -301,7 +301,7 @@ begin
     if QuerySecurityPackageInfoW(SECPKGNAMEINTERNAL, SecPkgInfo) <> 0 then
       RaiseLastOSError;
     try
-      if AcquireCredentialsHandleW(nil, SecPkgInfo.Name, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
+      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
         RaiseLastOSError;
     finally
       FreeContextBuffer(SecPkgInfo);
@@ -367,7 +367,7 @@ begin
     if QuerySecurityPackageInfoW(SECPKGNAMEINTERNAL, SecPkgInfo) <> 0 then
       RaiseLastOSError;
     try
-      if AcquireCredentialsHandleW(nil, SecPkgInfo.Name, SECPKG_CRED_INBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
+      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
           RaiseLastOSError;
     finally
       FreeContextBuffer(SecPkgInfo);
@@ -407,7 +407,7 @@ var UserToken: THandle;
     NameLen: Cardinal;
     DomainBuf: array[byte] of Char;
     DomainLen: Cardinal;
-    NameType: Cardinal;
+    NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
 begin
   aUserName := '';
   if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
@@ -423,7 +423,7 @@ begin
       NameLen := 256;
       FillChar(DomainBuf[0], SizeOf(DomainBuf), 0);
       DomainLen := 256;
-      if not LookupAccountSid(nil, UserInfo.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
+      if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
         RaiseLastOSError;
       if NameType = SidTypeUser then
         aUserName := FormatUTF8('%\%', [DomainBuf, NameBuf]);
@@ -440,7 +440,7 @@ var NegotiationInfo: SecPkgContext_NegotiationInfo;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     RaiseLastOSError;
-  Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo.Name, StrLenW(NegotiationInfo.PackageInfo.Name));
+  Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name, StrLenW(NegotiationInfo.PackageInfo^.Name));
 end;
 
 function SecEncrypt(var aSecContext: TSecContext; const aPlain: RawByteString): RawByteString;

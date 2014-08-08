@@ -903,7 +903,7 @@ unit mORMot;
       a server-wide update notification, not coupled to OnUpdateEvent callback -
       see feature request [5688e97251]
     - TSQLRestStorageInMemory.AdaptSQLForEngineList() will now handle
-      'select count(*') from TableName' statements directly, and any RESTful
+      'select count() from TableName' statements directly, and any RESTful
       requests from client
     - TSQLRestStorageInMemory will now handle SELECT .... WHERE ID IN (...)
     - fixed issue in TSQLRestStorageInMemory.EngineList() when only ID
@@ -3907,7 +3907,7 @@ type
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionGroup: integer;
     /// the static instance corresponding to the associated Table (if any)
-    Static: TSQLRest;
+    {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
     /// the kind of static instance corresponding to the associated Table (if any)
     StaticKind: TSQLRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
@@ -6880,9 +6880,15 @@ type
   TSQLRecordInterfaced = class(TSQLRecord, IInterface)
   protected
     fRefCount: Integer;
+    {$ifdef FPC}
+    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
     function _Release: Integer; stdcall;
+    {$endif}
   public
     class function NewInstance: TObject; override;
     procedure AfterConstruction; override;
@@ -13902,10 +13908,11 @@ begin
       Pointer(Obj) := Pointer(PtrInt(Instance)+Entry^.IOffset);
       if Pointer(Obj)<>nil then
         IInterface(Obj)._AddRef;
-    end else
+    end
+  {$ifndef FPC} else
     if PropWrap(Entry^.ImplGetter).Kind=$FF then
       IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance)+PtrUInt(Entry^.ImplGetter and $00FFFFFF))^) else
-      UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj));
+      UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj)){$endif};
   Result := Pointer(Obj)<>nil;
 end;
 
@@ -13989,9 +13996,13 @@ end;
 function TMethodInfo.ReturnInfo: PReturnInfo;
 begin
   if @self<>nil then begin
-    result := {$ifdef FPC}aligntoptr{$endif}(@Name[ord(Name[0])+1]);
+    {$ifdef FPC}
+    result := pointer(PtrUInt(@self)+sizeof(TMethodInfo));
+    {$else}
+    result := @Name[ord(Name[0])+1];
     if PtrUInt(result)-PtrUInt(@self)=Len then
       result := nil;
+    {$endif}
   end else
       result := @self;
 end;
@@ -14183,7 +14194,7 @@ end;
 { TSQLPropInfo }
 
 const
-  NULL_SHORTSTRING: string[0] = '';
+  NULL_SHORTSTRING: string[1] = '';
 
 function TSQLPropInfo.GetSQLFieldTypeName: PShortString;
 begin
@@ -19906,16 +19917,6 @@ begin
 end;
 
 {$ifdef FPC}
-
-// extracted from typeinfo.pp
-function aligntoptr(p : pointer): pointer; inline;
-begin
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-   result := align(p,sizeof(p));
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-   result := p;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-end;
 
 function TPropInfo.Next: PPropInfo;
 begin
@@ -32369,19 +32370,26 @@ begin
     System.Error(reInvalidPtr);
 end;
 
+
+{$ifdef FPC}
+function TSQLRecordInterfaced.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+{$else}
 function TSQLRecordInterfaced.QueryInterface(const IID: TGUID; out Obj): HResult;
+{$endif}
 begin
   if GetInterface(IID,Obj) then
     result := 0 else
     result := E_NOINTERFACE;
 end;
 
-function TSQLRecordInterfaced._AddRef: Integer;
+function TSQLRecordInterfaced._AddRef:
+  {$ifdef FPC}longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF}{$else}integer{$endif};
 begin
   result := InterlockedIncrement(fRefCount);
 end;
 
-function TSQLRecordInterfaced._Release: Integer;
+function TSQLRecordInterfaced._Release:
+  {$ifdef FPC}longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF}{$else}integer{$endif};
 begin
   result := InterlockedDecrement(fRefCount);
   if result=0 then

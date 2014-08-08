@@ -123,6 +123,7 @@ type
     function GetCount: integer;
     function GetVarData(const aName: string; var Dest: TVarData): boolean;
     function GetValue(const aName: string): variant;
+    function GetValueCopy(const aName: string): variant;
     procedure SetValue(const aName: string; const aValue: variant);
     function GetItem(aIndex: integer): variant;
     procedure SetItem(aIndex: integer; const aItem: variant);
@@ -171,12 +172,20 @@ type
     // been registered with RegisterClassForJSON()
     function ToNewObject: TObject;
     /// kind of document this TJSONVariantData contains
+    // - returns jvUndefined if this instance is not a TJSONVariant custom variant
     property Kind: TJSONVariantKind read GetKind;
     /// number of items in this jvObject or jvArray
+    // - returns 0 if this instance is not a TJSONVariant custom variant
     property Count: integer read GetCount;
     /// access by name to a value of this jvObject
+    // - value is returned as (varVariant or varByRef) for best speed
     // - will return UnAssigned if aName is not correct or this is not a jvObject
     property Value[const aName: string]: variant read GetValue write SetValue; default;
+    /// access by name to a value of this jvObject
+    // - value is returned as a true copy (not varByRef) so this property is
+    // slower but safer than Value[], if the owning TJsonVariantData disappears
+    // - will return UnAssigned if aName is not correct or this is not a jvObject
+    property ValueCopy[const aName: string]: variant read GetValueCopy;
     /// access by index to a value of this jvArray
     // - will return UnAssigned if aIndex is not correct or this is not a jvArray
     property Item[aIndex: integer]: variant read GetItem write SetItem;
@@ -1407,7 +1416,7 @@ var doc: TJSONVariantData;
     i: integer;
 begin
   doc.Init(JSON);
-  if (doc.Kind<>jvArray) or (ItemClass=nil) then
+  if (doc.VKind<>jvArray) or (ItemClass=nil) then
     result := nil else begin
     result := TObjectList.Create;
     for i := 0 to doc.Count-1 do begin
@@ -1682,31 +1691,42 @@ end;
 function TJSONVariantData.GetValue(const aName: string): variant;
 begin
   VarClear(result);
-  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvObject) then
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (VKind=jvObject) then
     GetVarData(aName,TVarData(result));
+end;
+
+function TJSONVariantData.GetValueCopy(const aName: string): variant;
+var i: cardinal;
+begin
+  VarClear(result);
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (VKind=jvObject) then begin
+    i := NameIndex(aName);
+    if i<cardinal(length(Values)) then
+      result := Values[i];
+  end;
 end;
 
 function TJSONVariantData.GetItem(aIndex: integer): variant;
 begin
   VarClear(result);
-  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvArray) then
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (VKind=jvArray) then
     if cardinal(aIndex)<cardinal(VCount) then
       result := Values[aIndex];
 end;
 
 procedure TJSONVariantData.SetItem(aIndex: integer; const aItem: variant);
 begin
-  if (@self<>nil) and (VType=JSONVariantType.VarType) and (Kind=jvArray) then
+  if (@self<>nil) and (VType=JSONVariantType.VarType) and (VKind=jvArray) then
     if cardinal(aIndex)<cardinal(VCount) then
       Values[aIndex] := aItem;
 end;
 
 function TJSONVariantData.GetVarData(const aName: string;
   var Dest: TVarData): boolean;
-var i: integer;
+var i: cardinal;
 begin
   i := NameIndex(aName);
-  if (i>=0) and (i<length(Values)) then begin
+  if i<cardinal(length(Values)) then begin
     Dest.VType := varVariant or varByRef;
     Dest.VPointer := @Values[i];
     result := true;

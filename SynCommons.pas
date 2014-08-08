@@ -16372,10 +16372,10 @@ asm // faster version by AB
 @1:     mov     al,[ecx]
         mov     ah,[edx]
         test    al,al
-        lea     ecx,ecx+1
+        lea     ecx,[ecx+1]
         je      @exit
         cmp     al,ah
-        lea     edx,edx+1
+        lea     edx,[edx+1]
         je      @1
 @exit:  xor     edx,edx
         xchg    ah,dl

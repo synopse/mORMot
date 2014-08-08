@@ -139,8 +139,8 @@ uses
   SynSQlite3Static,
   SynDBSQLite3,
 {$ifndef DELPHI5OROLDER}
-  mORMotDB,
   mORMot,
+  mORMotDB,
   mORMotSQLite3,
   mORMotHttpServer,
   mORMotHttpClient,
@@ -245,8 +245,10 @@ type
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
 {$ifndef NOVARIANTS}
+    {$ifndef FPC}
     /// some low-level variant process
     procedure Variants;
+    {$endif FPC}
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
 {$endif}
@@ -3461,6 +3463,8 @@ end;
 
 {$ifndef NOVARIANTS}
 
+{$ifndef FPC}
+
 procedure TTestLowLevelTypes.Variants;
 var v: Variant;
 begin
@@ -3475,6 +3479,8 @@ begin
   ValueVarToVariant('true',sftBoolean,TVarData(v),false);
   Check(boolean(v));
 end;
+
+{$endif FPC}
 
 type
   TMustacheTest = packed record

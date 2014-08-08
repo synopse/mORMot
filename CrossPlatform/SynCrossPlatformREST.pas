@@ -2210,7 +2210,7 @@ begin
   {$else}
   HttpBodyToText(aCall.OutBody,jsonres);
   doc.Init(jsonres);
-  VarCopyNoInd(result,doc.Value['result']); // Value[] -> varByRef
+  result := doc.ValueCopy['result']; // Value[] -> varByRef
   outID := doc.Value['id'];
   {$endif}
 end;
@@ -2376,7 +2376,7 @@ begin
     (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
   if aExpectedOutputParamsCount=0 then
     exit;
-  arr := JSONVariantDataSafe(result); // Kind=jvUndefined if not a TJSONVariant
+  arr := JSONVariantDataSafe(result,jvArray); // Kind=jvUndefined if not jvArray
   if (arr^.Kind<>jvArray) or (arr^.Count<>aExpectedOutputParamsCount) then
     raise EServiceException.CreateFmt('Error calling %s.%s - '+
       'received %d parameters (expected %d)',
@@ -2758,11 +2758,18 @@ end;
 
 {$else}
 
+{$ifdef FPC} // original VarIsStr() does not handle varByRef as expected :(
+function VarIsStr(const Value: variant): boolean; inline;
+begin
+  result := Variants.VarIsStr(PVariant(FindVarData(Value))^);
+end;
+{$endif}
+
 function VariantToBlob(const Value: variant): TSQLRawBlob;
 begin
-  if VarIsNull(Value) then // avoid conversion error from null to string
-    Finalize(result) else
-    Base64JSONStringToBytes(Value,result);
+  if VarIsStr(Value) then // avoid conversion error from null to string
+    Base64JSONStringToBytes(Value,result) else
+    Finalize(result);
 end;
 
 function BlobToVariant(const Blob: TSQLRawBlob): variant;

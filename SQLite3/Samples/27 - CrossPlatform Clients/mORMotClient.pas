@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 // - retrieved from http://localhost:888/root/wrapper/CrossPlatform/mORMotClient.pas
-// at 2014-08-08 11:42:31 using "CrossPlatform.pas.mustache" template
+// at 2014-08-08 17:07:42 using "CrossPlatform.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -116,21 +116,21 @@ var _a: integer;
 begin
   result.F := _variant.F;
   _arr := JSONVariantDataSafe(_variant.G,jvArray);
-  SetLength(result.G,_arr.Count);
+  SetLength(result.G,_arr^.Count);
   for _a := 0 to high(result.G) do
-    result.G[_a] := _arr.Values[_a];
+    result.G[_a] := _arr^.Values[_a];
   result.H.H1 := _variant.H.H1;
   result.H.H2 := _variant.H.H2;
   result.H.H3.H3a := _variant.H.H3.H3a;
   result.H.H3.H3b := VariantToBlob(_variant.H.H3.H3b);
   result.I := Iso8601ToDateTime(_variant.I);
   _arr := JSONVariantDataSafe(_variant.J,jvArray);
-  SetLength(result.J,_arr.Count);
+  SetLength(result.J,_arr^.Count);
   for _a := 0 to high(result.J) do
   with result.J[_a] do begin
-    J1 := _arr.Values[_a].J1;
-    J2 := VariantToGUID(_arr.Values[_a].J2);
-    J3 := Variant2TRecordEnum(_arr.Values[_a].J3);
+    J1 := _arr^.Values[_a].J1;
+    J2 := VariantToGUID(_arr^.Values[_a].J2);
+    J3 := Variant2TRecordEnum(_arr^.Values[_a].J3);
   end;
 end;
 
