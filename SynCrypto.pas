@@ -1421,6 +1421,7 @@ const
   end;
 
 {$ifdef PUREPASCAL}
+
 procedure bswap256(s,d: PIntegerArray);
 begin
   d[0] := bswap32(s[0]);
@@ -1465,7 +1466,7 @@ asm
   pop ebx
 end;
 
-{$endif}
+{$endif PUREPASCAL}
 
 function SHA256SelfTest: boolean;
 function SingleTest(const s: RawByteString; const TDig: TSHA256Digest): boolean;
@@ -1813,7 +1814,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
   call dword ptr [padlock_aes_encrypt] {$else}
   call padlock_aes_encrypt
 {$endif}
-  add esp,16 // cdecl -> caller must restore stack
+  add esp,16 // padlock_aes_encrypt is cdecl -> caller must restore stack
   ret
 @DoAsm: {$endif}
   push ebx
@@ -2345,7 +2346,7 @@ asm // rolled optimized decryption asm version by A. Bouchez
   call dword ptr [padlock_aes_decrypt] {$else}
   call padlock_aes_decrypt
 {$endif}
-  add esp,16 // cdecl -> caller must restore stack
+  add esp,16 // padlock_aes_decrypt is cdecl -> caller must restore stack
   ret
 @DoAsm: {$endif}
   push ebx
