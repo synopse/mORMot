@@ -106,23 +106,28 @@ var people: TSQLRecordPeople;
     i,id: integer;
 begin // all this is run in synchronous mode -> only 200 records in the set
   client.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
+  assert(client.InternalState>0);
   assert(Call.OutStatus=HTML_SUCCESS);
   client.BatchStart(TSQLRecordPeople);
   people := TSQLRecordPeople.Create;
+  assert(people.InternalState=0);
   for i := 1 to 200 do begin
     people.FirstName := 'First'+IntToStr(i);
     people.LastName := 'Last'+IntToStr(i);
     people.YearOfBirth := i+1800;
     people.YearOfDeath := i+1825;
     assert(client.BatchAdd(people,true)=i-1);
+    assert(people.InternalState=0);
   end;
   assert(client.BatchSend(res)=HTML_SUCCESS);
   assert(length(res)=200);
   for i := 1 to 200 do
     assert(res[i-1]=i);
   people := TSQLRecordPeople.CreateAndFillPrepare(client,'','',[]);
+  assert(people.InternalState=0);
   id := 0;
   while people.FillOne do begin
+    assert(people.InternalState=client.InternalState);
     inc(id);
     assert(people.ID=id);
     assert(people.FirstName='First'+IntToStr(id));
@@ -134,8 +139,10 @@ begin // all this is run in synchronous mode -> only 200 records in the set
   people.Free; // release all memory used by the request
   people := TSQLRecordPeople.CreateAndFillPrepare(client,
     'YearOFBIRTH,Yearofdeath,id','',[]);
+  assert(people.InternalState=0);
   id := 0;
   while people.FillOne do begin
+    assert(people.InternalState=client.InternalState);
     inc(id);
     assert(people.ID=id);
     assert(people.FirstName='');
@@ -149,6 +156,7 @@ begin // all this is run in synchronous mode -> only 200 records in the set
     'yearofbirth=?',[1900]);
   id := 0;
   while people.FillOne do begin
+    assert(people.InternalState=client.InternalState);
     inc(id);
     assert(people.ID=100);
     assert(people.FirstName='First100');
@@ -168,14 +176,18 @@ begin // all this is run in synchronous mode -> only 200 records in the set
       people.LastName := 'neitherthisone';
       people.YearOfBirth := id+1800;
       people.YearOfDeath := id+1825;
+      assert(people.InternalState=0);
       assert(client.Update(people,'YEarOFBIRTH,YEarOfDeath'));
-    end;
+      assert(people.InternalState=client.InternalState);
+  end;
   people := new TSQLRecordPeople;
+  assert(people.InternalState=0);
   for i := 1 to 200 do begin
     var read = client.Retrieve(i,people);
     if i and 15=0 then
       assert(not read) else begin
       assert(read);
+      assert(people.InternalState=client.InternalState);
       if i mod 82=0 then
         id := i+1 else
         id := i;

@@ -519,9 +519,11 @@ var people: TSQLRecordPeople;
     i,id: integer;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
+  Check(fClient.InternalState>0);
   Check(Call.OutStatus=HTML_SUCCESS);
   people := TSQLRecordPeople.Create;
   try
+    Check(people.InternalState=0);
     for i := 1 to 200 do begin
       people.FirstName := 'First'+IntToStr(i);
       people.LastName := 'Last'+IntToStr(i);
@@ -529,14 +531,17 @@ begin
       people.YearOfDeath := i+1825;
       people.Sexe := TPeopleSexe(i and 1);
       Check(fClient.Add(people,true)=i);
+      Check(people.InternalState=fClient.InternalState);
     end;
   finally
     people.Free;
   end;
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'','',[]);
   try
+    Check(people.InternalState=0);
     id := 0;
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=id);
       Check(people.FirstName='First'+IntToStr(id));
@@ -552,8 +557,10 @@ begin
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,
     'YearOFBIRTH,Yearofdeath,id','',[]);
   try
+    Check(people.InternalState=0);
     id := 0;
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=id);
       Check(people.FirstName='');
@@ -569,8 +576,10 @@ begin
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'',
     'yearofbirth=?',[1900]);
   try
+    Check(people.InternalState=0);
     id := 0;
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=100);
       Check(people.FirstName='First100');
@@ -594,7 +603,9 @@ begin
         people.LastName := 'Last'+IntToStr(id);
         people.YearOfBirth := id+1800;
         people.YearOfDeath := id+1825;
+        Check(people.InternalState=0);
         Check(fClient.Update(people,'YEarOFBIRTH,YEarOfDeath'));
+        Check(people.InternalState=fClient.InternalState);
       finally
         people.Free;
       end;
@@ -604,6 +615,7 @@ begin
     try
       if i and 15=0 then
         Check(people.ID=0) else begin
+        Check(people.InternalState=fClient.InternalState);
         if i mod 82=0 then
           id := i+1 else
           id := i;
@@ -627,11 +639,13 @@ var people: TSQLRecordPeople;
     i,id: integer;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
+  Check(fClient.InternalState>0);
   Check(Call.OutStatus=HTML_SUCCESS);
   fClient.BatchStart(TSQLRecordPeople);
   people := TSQLRecordPeople.Create;
   try
     for i := 1 to 200 do begin
+      Check(people.InternalState=0);
       people.FirstName := 'First'+IntToStr(i);
       people.LastName := 'Last'+IntToStr(i);
       people.YearOfBirth := i+1800;
@@ -648,8 +662,10 @@ begin
     Check(res[i-1]=i);
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'','',[]);
   try
+    Check(people.InternalState=0);
     id := 0;
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=id);
       Check(people.FirstName='First'+IntToStr(id));
@@ -666,7 +682,9 @@ begin
     'YearOFBIRTH,Yearofdeath,id','',[]);
   try
     id := 0;
+    Check(people.InternalState=0);
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=id);
       Check(people.FirstName='');
@@ -682,8 +700,10 @@ begin
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'',
     'yearofbirth=?',[1900]);
   try
+    Check(people.InternalState=0);
     id := 0;
     while people.FillOne do begin
+      Check(people.InternalState=fClient.InternalState);
       inc(id);
       Check(people.ID=100);
       Check(people.FirstName='First100');
@@ -709,6 +729,7 @@ begin
         people.YearOfBirth := id+1800;
         people.YearOfDeath := id+1825;
         Check(fClient.BatchUpdate(people,'YEarOFBIRTH,YEarOfDeath')>=0);
+        Check(people.InternalState=0);
       finally
         people.Free;
       end;
@@ -722,6 +743,7 @@ begin
     try
       if i and 15=0 then
         Check(people.ID=0) else begin
+        Check(people.InternalState=fClient.InternalState);
         if i mod 82=0 then
           id := i+1 else
           id := i;

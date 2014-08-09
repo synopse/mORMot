@@ -811,6 +811,7 @@ unit mORMot;
       as method-based services
     - added TSQLRestServerFullMemory.Flush method-based service
     - added TSQLRestServerFullMemory.DropDatabase method
+    - TSQLRestServerFullMemory now generates its expected InternalState value 
     - completed HTML_* constant list and messages - feature request [d8de3eb76a]
     - handle HTML_NOTMODIFIED as successful status - as expected by [5d2634e8a3]
     - enhanced sllAuth session creation/deletion logged information
@@ -11174,6 +11175,7 @@ type
     fStoredClass: TSQLRecordClass;
     fStoredClassProps: TSQLModelRecordProperties;
     fStoredClassRecordProps: TSQLRecordProperties;
+    fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fFileName: TFileName;
     fModified: boolean;
     fOwner: TSQLRestServer;
@@ -11584,6 +11586,19 @@ type
     fStaticDataCount: cardinal;
     fStorage: TSQLRestStorageInMemoryDynArray;
     function GetStorage(aTable: TSQLRecordClass): TSQLRestStorageInMemory;
+    /// overridden methods which will call fStorage[TableModelIndex] directly
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+      const IDs: TIntegerDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// overridden methods which will return error (no main DB here)
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
@@ -29590,9 +29605,14 @@ end;
 
 procedure TSQLRestStorageInMemory.DropValues;
 begin
-  fModified := fValue.Count>0;
-  fValue.Clear;
-  UpdateFile;
+  StorageLock(true);
+  try
+    fModified := fValue.Count>0;
+    fValue.Clear;
+    UpdateFile;
+  finally
+    StorageUnLock;
+  end;
 end;
 
 procedure TSQLRestStorageInMemory.LoadFromJSON(const aJSON: RawUTF8);
@@ -29646,20 +29666,25 @@ var i: integer;
 begin
   if self=nil then
     exit;
-  W := fStoredClassRecordProps.CreateJSONWriter(
-    Stream,Expand,true,ALL_FIELDS,fValue.Count);
+  StorageLock(false);
   try
-    if Expand then
-      W.Add('[');
-    for i := 0 to fValue.Count-1 do begin
+    W := fStoredClassRecordProps.CreateJSONWriter(
+      Stream,Expand,true,ALL_FIELDS,fValue.Count);
+    try
       if Expand then
-        W.AddCR; // for better readability
-      TSQLRecord(fValue.List[i]).GetJSONValues(W);
-      W.Add(',');
+        W.Add('[');
+      for i := 0 to fValue.Count-1 do begin
+        if Expand then
+          W.AddCR; // for better readability
+        TSQLRecord(fValue.List[i]).GetJSONValues(W);
+        W.Add(',');
+      end;
+      W.EndJSONObject(fValue.Count,fValue.Count);
+    finally
+      W.Free;
     end;
-    W.EndJSONObject(fValue.Count,fValue.Count);
   finally
-    W.Free;
+    StorageUnLock;
   end;
 end;
 
@@ -29739,27 +29764,32 @@ begin
     exit;
   MS := THeapMemoryStream.Create;
   W := TFileBufferWriter.Create(MS);
-  with fStoredClassRecordProps do
+  StorageLock(false);
   try
-    // primitive magic and fields signature for file type identification
-    W.Write(RawUTF8(ClassName));
-    SaveBinaryHeader(W);
-    // write IDs
-    SetLength(IDs,Count);
-    with fValue do
-      for i := 0 to Count-1 do
-        IDs[i] := TSQLRecord(List[i]).fID;
-    W.WriteVarUInt32Array(IDs,Count,wkSorted); // efficient ID storage
-    // write content, grouped by field (for better compression)
-    for f := 0 to Fields.Count-1 do
-      with Fields.List[f], fValue do
+    with fStoredClassRecordProps do
+    try
+      // primitive magic and fields signature for file type identification
+      W.Write(RawUTF8(ClassName));
+      SaveBinaryHeader(W);
+      // write IDs
+      SetLength(IDs,Count);
+      with fValue do
         for i := 0 to Count-1 do
-          GetBinary(TSQLRecord(List[i]),W);
-    W.Flush;
-    result := StreamSynLZ(MS,Stream,TSQLRestStorageINMEMORY_MAGIC);
+          IDs[i] := TSQLRecord(List[i]).fID;
+      W.WriteVarUInt32Array(IDs,Count,wkSorted); // efficient ID storage
+      // write content, grouped by field (for better compression)
+      for f := 0 to Fields.Count-1 do
+        with Fields.List[f], fValue do
+          for i := 0 to Count-1 do
+            GetBinary(TSQLRecord(List[i]),W);
+      W.Flush;
+      result := StreamSynLZ(MS,Stream,TSQLRestStorageINMEMORY_MAGIC);
+    finally
+      W.Free;
+      MS.Free;
+    end;
   finally
-    W.Free;
-    MS.Free;
+    StorageUnLock;
   end;
 end;
 
@@ -29780,12 +29810,17 @@ end;
 function TSQLRestStorageInMemory.GetOne(aID: integer): TSQLRecord;
 var i: integer;
 begin
-  i := IDToIndex(aID);
-  if i<0 then
-    result := nil else begin
-    result := fStoredClass.Create;
-    CopyObject(fValue.List[i],Result);
-    result.fID := aID;
+  StorageLock(false);
+  try
+    i := IDToIndex(aID);
+    if i<0 then
+      result := nil else begin
+      result := fStoredClass.Create;
+      CopyObject(fValue.List[i],Result);
+      result.fID := aID;
+    end;
+  finally
+    StorageUnLock;
   end;
 end;
 
@@ -29862,27 +29897,32 @@ begin
   result := false;
   if ID<=0 then
     exit;
-  i := IDToIndex(ID);
-  if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
-    exit;
-  if fUniqueFields<>nil then begin
-    Orig := TSQLRecord(fValue.List[i]);
-    Rec := Orig.CreateCopy; // copy since can be a partial update
-    if (not Rec.SetFieldSQLVars(Values)) or
-       (not UniqueFieldsUpdateOK(Rec,i)) then begin
-      Rec.Free; // stored false property duplicated value -> error
+  StorageLock(true);
+  try
+    i := IDToIndex(ID);
+    if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
       exit;
-    end;
-    Orig.Free; // avoid memory leak
-    TSQLRecord(fValue.List[i]) := Rec;
-  end else
-  if not TSQLRecord(fValue.List[i]).SetFieldSQLVars(Values) then
-    exit;
-  fModified := true;
-  result := true;
-  if Owner<>nil then
-    Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,ID,
-      TSQLRecord(fValue.List[i]).GetJSONValues(True,False,soUpdate),nil);
+    if fUniqueFields<>nil then begin
+      Orig := TSQLRecord(fValue.List[i]);
+      Rec := Orig.CreateCopy; // copy since can be a partial update
+      if (not Rec.SetFieldSQLVars(Values)) or
+         (not UniqueFieldsUpdateOK(Rec,i)) then begin
+        Rec.Free; // stored false property duplicated value -> error
+        exit;
+      end;
+      Orig.Free; // avoid memory leak
+      TSQLRecord(fValue.List[i]) := Rec;
+    end else
+    if not TSQLRecord(fValue.List[i]).SetFieldSQLVars(Values) then
+      exit;
+    fModified := true;
+    result := true;
+    if Owner<>nil then
+      Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,ID,
+        TSQLRecord(fValue.List[i]).GetJSONValues(True,False,soUpdate),nil);
+  finally
+    StorageUnLock;
+  end;
 end;
 
 function TSQLRestStorageInMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
@@ -30089,6 +30129,7 @@ begin
         F.Free;
       end;
     end;
+    fModified := false;
   finally
     StorageUnLock;
   end;
@@ -30096,7 +30137,6 @@ begin
   SQLite3Log.Add.Log(sllDB,'UpdateFile(%) done in %',
     [fStoredClassRecordProps.SQLTableName,Timer.Stop],self);
   {$endif}
-  fModified := false;
 end;
 
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8; var ResultID: TIntegerDynArray): boolean;
@@ -30117,11 +30157,16 @@ begin
   end;
   Where := TList.Create;
   try
-    n := FindWhereEqual(WhereField,FieldValue,AddIntegerDynArrayEvent,Where,0,0);
+    StorageLock(false);
+    try
+      n := FindWhereEqual(WhereField,FieldValue,AddIntegerDynArrayEvent,Where,0,0);
+    finally
+      StorageUnLock;
+    end;
     if n=0 then
       exit;
     SetLength(ResultID,n);
-    {$ifdef CPU64}
+    {$ifdef CPU64} // on x64, TList[]=Pointer does not map an integer
     with Where do
       for i := 0 to Count-1 do
         ResultID[i] := PPtrIntArray(List)^[i];
@@ -30261,6 +30306,9 @@ procedure TSQLRestStorage.StorageLock(WillModifyContent: boolean);
 begin
   EnterCriticalSection(fStorageCriticalSection);
   inc(fStorageCriticalSectionCount);
+  if WillModifyContent and fStorageLockShouldIncreaseOwnerInternalState and
+     (Owner<>nil) then
+    inc(Owner.InternalState);
 end;
 
 procedure TSQLRestStorage.StorageUnLock;
@@ -30303,19 +30351,24 @@ begin
   inherited Create(aModel,aHandleUserAuthentication);
   fStaticDataCount := length(fModel.Tables);
   SetLength(fStorage,fStaticDataCount);
-  for t := 0 to fStaticDataCount-1 do
+  for t := 0 to fStaticDataCount-1 do begin
     fStorage[t] := (StaticDataCreate(fModel.Tables[t]) as TSQLRestStorageInMemory);
+    fStorage[t].fStorageLockShouldIncreaseOwnerInternalState := true;
+  end;
   LoadFromFile;
   CreateMissingTables(0);
-end; 
+end;
 
 procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0);
 var t: integer;
 begin
   // create any missing static instances
   if integer(fStaticDataCount)<>length(fModel.Tables) then begin
-    for t := fStaticDataCount to high(fModel.Tables) do
-      StaticDataCreate(fModel.Tables[t]);
+    SetLength(fStorage,length(fModel.Tables));
+    for t := fStaticDataCount to high(fModel.Tables) do begin
+      fStorage[t] := (StaticDataCreate(fModel.Tables[t]) as TSQLRestStorageInMemory);
+      fStorage[t].fStorageLockShouldIncreaseOwnerInternalState := true;
+    end;
     fStaticDataCount := length(fModel.Tables);
   end;
   // initialize new tables
@@ -30455,6 +30508,57 @@ begin
     result := nil else
     result := fStorage[i];
 end;
+
+// Engine*() methods will have direct access to static fStorage[])
+
+function TSQLRestServerFullMemory.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
+begin
+  result := fStorage[TableModelIndex].EngineAdd(TableModelIndex,SentData);
+  InternalState := InternalState+1;
+end;
+
+function TSQLRestServerFullMemory.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+begin
+ result := fStorage[TableModelIndex].EngineRetrieve(TableModelIndex,ID);
+end;
+
+function TSQLRestServerFullMemory.EngineUpdate(TableModelIndex, ID: integer;
+  const SentData: RawUTF8): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineUpdate(TableModelIndex,ID,SentData);
+end;
+
+function TSQLRestServerFullMemory.EngineDelete(TableModelIndex, ID: integer): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineDelete(TableModelIndex,ID);
+end;
+
+function TSQLRestServerFullMemory.EngineDeleteWhere(TableModelIndex: integer;
+  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+end;
+
+function TSQLRestServerFullMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
+end;
+
+function TSQLRestServerFullMemory.EngineUpdateBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
+end;
+
+function TSQLRestServerFullMemory.EngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineUpdateField(TableModelIndex,
+    SetFieldName,SetValue,WhereFieldName,WhereValue);
+end;
+
+// MainEngine*() methods should return error (only access via static fStorage[])
 
 function TSQLRestServerFullMemory.MainEngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): integer; 

@@ -147,9 +147,6 @@ type
     OutBody: THttpBody;
     /// output parameter to be set to the HTTP status integer code
     OutStatus: cardinal;
-    /// output parameter to be set to the database internal state
-    // - this is the only mORMot-specific parameter
-    OutInternalState: cardinal;
     {$ifdef ISDWS}
     /// the associated TXMLHttpRequest instance
     XHR: THandle;

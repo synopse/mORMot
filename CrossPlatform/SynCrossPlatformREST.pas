@@ -594,6 +594,7 @@ type
     fBatchTable: TSQLRecordClass;
     fBatchCount: integer;
     fServicesRouting: TSQLRestRoutingAbstractClass;
+    fInternalState: cardinal;
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
     function InternalBatch(Table: TSQLRecordClass; const CMD: string; var Info: TSQLModelInfo): Integer;
@@ -712,6 +713,9 @@ type
     property Model: TSQLModel read fModel;
     /// the current Date and Time, as retrieved from the server at connection
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
+    /// internal state counter of the mORMot server at last access time
+    // - can be used to check if retrieved data may be out of date
+    property InternalState: cardinal read fInternalState;
     /// the access protocol to be used for interface-based services
     // - is set to TSQLRestRoutingREST by default
     // - you can set TSQLRestRoutingJSON_RPC if the server expects this protocol
@@ -747,6 +751,7 @@ type
     function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
       var Results: TIntegerDynArray): integer; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
+    procedure InternalStateUpdate(const Call: TSQLRestURIParams);
     procedure CallRemoteServiceInternal(var Call: TSQLRestURIParams;
       aCaller: TServiceClientAbstract; const aMethod, aParams: string);
   public
@@ -1423,8 +1428,6 @@ begin
     for var i := 0 to fFieldCount-1 do
       fFieldNames.Add(string(fValues[i]));
     fRowCount := (n div fFieldCount)-1;
-    if fRowCount>0 then
-      fCurrentRow := 1;
   end;
   jvArray: begin
     // expanded format: [{"ID":1,"Int":0},{"ID":2,"Int":0},{"ID":3,...]
@@ -1432,10 +1435,10 @@ begin
       @fValues=@dat;
     end;
     fRowCount := fValues.Count;
-    if fRowCount>0 then
-      fCurrentRow := 1;
   end;
   end;
+  if fRowCount>0 then
+    fCurrentRow := 1;
 end;
 
 function TSQLTableJSON.FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
@@ -1456,6 +1459,8 @@ begin
     result := Value.FromNamesValues(doc.Names,doc.Values,0);
   end;
   inc(fCurrentRow);
+  if result then
+    Value.fInternalState := fInternalState;
 end;
 
 {$else}
@@ -1884,6 +1889,8 @@ begin
   if SendData then
     json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID,'');
   result := ExecuteAdd(tableIndex,json);
+  if result>0 then
+    Value.fInternalState := InternalState;
 end;
 
 function TSQLRest.Update(Value: TSQLRecord; FieldNames: string): boolean;
@@ -1897,6 +1904,8 @@ begin
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
   json := Model.Info[tableIndex].ToJSONUpdate(self,Value,FieldNames,false);
   result := ExecuteUpdate(tableIndex,Value.ID,json);
+  if result then
+    Value.fInternalState := InternalState;
 end;
 
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
@@ -2051,7 +2060,7 @@ begin
     HttpBodyToText(Call.OutBody,json);
     {$endif}
     result := TSQLTableJSON.Create(json);
-    result.fInternalState := Call.OutInternalState;
+    result.fInternalState := fInternalState;
   end;
 end;
 
@@ -2069,13 +2078,13 @@ begin
   URI(Call);
   result := Call.OutStatus=HTML_SUCCESS;
   if result then begin
-    Value.fInternalState := Call.OutInternalState;
     {$ifdef ISSMS}
     json := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
     {$else}
     HttpBodyToText(Call.OutBody,json);
     {$endif}
     Value.FromJSON(json);
+    Value.fInternalState := fInternalState;
   end;
 end;
 
@@ -2114,11 +2123,20 @@ begin
 {$endif}
 end;
 
+procedure TSQLRestClientURI.InternalStateUpdate(const Call: TSQLRestURIParams);
+var receivedState: cardinal;
+begin
+  if Call.OutHead='' then
+    exit; // nothing to update from (e.g. asynchronous call)
+  receivedState := StrToIntDef(GetOutHeader(Call,'Server-InternalState'),0);
+  if receivedState>fInternalState then
+    fInternalState := receivedState;
+end;
+
 procedure TSQLRestClientURI.URI(var Call: TSQLRestURIParams);
 var sign: string;
 begin
   Call.OutStatus := HTML_UNAVAILABLE;
-  Call.OutInternalState := 0;
   if self=nil then
     exit;
   if (fAuthentication<>nil) and (fAuthentication.SessionID<>0) then begin
@@ -2129,7 +2147,7 @@ begin
       fAuthentication.ClientSessionComputeSignature(self,Call.Url);
   end;
   InternalURI(Call);
-  Call.OutInternalState := StrToIntDef(GetOutHeader(Call,'Server-InternalState'),0);
+  InternalStateUpdate(Call);
 end;
 
 procedure TSQLRestClientURI.CallBackGet(const aMethodName: string;
@@ -2260,7 +2278,7 @@ begin
   if Assigned(onSuccess) then
     Call.OnSuccess := lambda
       if Call.XHR.readyState=rrsDone then begin
-        Call.OutInternalState := StrToIntDef(GetOutHeader(Call,'Server-InternalState'),0);
+        InternalStateUpdate(Call);
         if onBeforeSuccess then
           onSuccess(self) else
           if assigned(onError) then
