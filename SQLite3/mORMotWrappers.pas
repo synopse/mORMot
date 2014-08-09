@@ -255,9 +255,11 @@ begin
           CustomParser.ContextNestedProperties(parsersServices)]));
     // compute the Model information as JSON
     result := _ObjFast(['time',NowToString,'year',TimeLogNow shr (6+6+5+5+4),
-      'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-      'root',aServer.Model.Root, 'orm',variant(orm),
+      'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION, 'root',aServer.Model.Root,
+      'orm',variant(orm),
       'soa',aServer.Services.ContextFromRegisteredServices(parsersServices)]);
+    if aServer.AuthenticationSchemes<>nil then
+      result.authClass := aServer.AuthenticationSchemes[0].ClassName;
     // add the traling RTTI defined for services to the list
     for s := 0 to parsersServices.Count-1 do
       with TJSONCustomParserRTTI(parsersServices.Objects[s]) do

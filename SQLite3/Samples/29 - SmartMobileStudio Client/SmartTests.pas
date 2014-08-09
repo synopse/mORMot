@@ -12,9 +12,9 @@ uses
 
 procedure TestSMS;
 
-procedure ORMTest(client: TSQLRestClientHTTP);
+procedure ORMTest(client: TSQLRestClientURI);
 
-procedure SOATest(client: TSQLRestClientHTTP; onSuccess, onError: TSQLRestEvent);
+procedure SOATest(client: TSQLRestClientURI; onSuccess, onError: TSQLRestEvent);
 
 implementation
 
@@ -99,7 +99,7 @@ begin
 end;
 
 
-procedure ORMTest(client: TSQLRestClientHTTP);
+procedure ORMTest(client: TSQLRestClientURI);
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
     res: TIntegerDynArray;
@@ -201,7 +201,7 @@ begin // all this is run in synchronous mode -> only 200 records in the set
   people.Free;
 end;
 
-procedure SOATest(client: TSQLRestClientHTTP; onSuccess, onError: TSQLRestEvent);
+procedure SOATest(client: TSQLRestClientURI; onSuccess, onError: TSQLRestEvent);
 var Calc: TServiceCalculator;
     i: integer;
 const SEX_TEXT: array[0..1] of string = ('Miss','Mister');

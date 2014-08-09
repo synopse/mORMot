@@ -95,15 +95,26 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
 {{/isInMormotPas}}
 {{/orm}}
 
-/// return the database Model corresponding to this server
-function GetModel: TSQLModel;
-
 {{#port}}
 const
   /// the server port, corresponding to http://{{host}}
   SERVER_PORT = {{port}};
 
 {{/port}}
+
+/// return the database Model corresponding to this server
+function GetModel: TSQLModel;
+
+/// create a TSQLRestClientHTTP instance and connect to the server
+// - it will use by default port {{port}}
+{{#authClass}}
+// - secure connection will be established via {{.}}
+// with the supplied credentials
+{{/authClass}}
+// - request will be asynchronous, and trigger onSuccess or onError event
+procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
+
 
 implementation
 {{#withRecords}}
@@ -214,6 +225,35 @@ end;
 function GetModel: TSQLModel;
 begin
   result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
+end;
+
+procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer);
+begin
+  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true);
+  client.Connect(
+  lambda
+    try
+      if client.ServerTimeStamp=0 then begin
+        if Assigned(onError) then
+          onError(client);
+        exit;
+      end;
+{{#authClass}}
+      if not client.SetUser({{.}},aUserName,aPassword) then begin
+        if Assigned(onError) then
+          onError(client);
+        exit;
+      end;
+{{/authClass}}
+      if Assigned(onSuccess) then
+        onSuccess(client);
+    except
+      if Assigned(onError) then
+        onError(client);
+    end;
+  end,
+  onError);
 end;
 
 {{#soa.services}}

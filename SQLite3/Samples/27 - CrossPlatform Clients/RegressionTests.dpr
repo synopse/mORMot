@@ -33,7 +33,7 @@ uses
 var
   TotalFailed: cardinal = 0;
 
-procedure TestWithAuth(aAuth: SynCrossPlatformREST.TSQLRestAuthenticationClass);
+procedure TestWithAuth(aAuth: SynCrossPlatformREST.TSQLRestServerAuthenticationClass);
 begin
   with TSynCrossPlatformClient.Create(aAuth) do
   try
@@ -43,9 +43,9 @@ begin
       Ident := Ident+' using '+string(aAuth.ClassName);
 {$ifdef RUNSERVER}
     try
-      if aAuth=TSQLRestAuthenticationDefault then
+      if aAuth=TSQLRestServerAuthenticationDefault then
         StartServer(psaDefault) else
-      if aAuth=TSQLRestAuthenticationNone then
+      if aAuth=TSQLRestServerAuthenticationNone then
         StartServer(psaWeak) else
         StartServer(psaNone);
 {$endif}
@@ -71,9 +71,9 @@ begin
   writeln;
   {$ifdef RUNSERVER} // only last one should be tested for server-less FPC
   TestWithAuth(nil);
-  TestWithAuth(TSQLRestAuthenticationNone);
+  TestWithAuth(TSQLRestServerAuthenticationNone);
   {$endif}
-  TestWithAuth(TSQLRestAuthenticationDefault);
+  TestWithAuth(TSQLRestServerAuthenticationDefault);
   if TotalFailed>0 then
     writeln(#10'Some tests failed... please fix it ASAP!');
   write(#10'Press [Enter] to quit');

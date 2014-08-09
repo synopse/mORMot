@@ -2,7 +2,7 @@
   <Project version="2" subversion="1">
     <Name>WebForm</Name>
     <Created>T00:00:00.000</Created>
-    <Modified>2014-08-07T11:23:56.339</Modified>
+    <Modified>2014-08-09T19:26:23.009</Modified>
     <Author>A. Bouchez</Author>
     <Company>Synopse</Company>
     <Version>
@@ -87,7 +87,7 @@
       <File type="form">
         <Name>LoginForm</Name>
         <Created>2014-06-17T10:47:09.813Z</Created>
-        <Modified>2014-08-07T08:40:33.039</Modified>
+        <Modified>2014-08-09T19:26:17.569</Modified>
         <Filename>LoginForm.pas</Filename>
         <AutoCreate>
           <IsAutoCreate>1</IsAutoCreate>

@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 // - retrieved from http://localhost:888/root/wrapper/SmartMobileStudio/mORMotClient.pas
-// at 2014-08-08 14:28:04 using "SmartMobileStudio.pas.mustache" template
+// at 2014-08-09 19:09:50 using "SmartMobileStudio.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -99,12 +99,21 @@ type
   end;
   
 
-/// return the database Model corresponding to this server
-function GetModel: TSQLModel;
-
 const
   /// the server port, corresponding to http://localhost:888
   SERVER_PORT = 888;
+
+
+/// return the database Model corresponding to this server
+function GetModel: TSQLModel;
+
+/// create a TSQLRestClientHTTP instance and connect to the server
+// - it will use by default port 888
+// - secure connection will be established via TSQLRestServerAuthenticationDefault
+// with the supplied credentials
+// - request will be asynchronous, and trigger onSuccess or onError event
+procedure GetClient(const aServerAddress, aUserName,aPassword: string;
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
 
 
 implementation
@@ -222,6 +231,33 @@ end;
 function GetModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLAuthUser,TSQLAuthGroup,TSQLRecordPeople],'root');
+end;
+
+procedure GetClient(const aServerAddress, aUserName,aPassword: string;
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer);
+begin
+  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true);
+  client.Connect(
+  lambda
+    try
+      if client.ServerTimeStamp=0 then begin
+        if Assigned(onError) then
+          onError(client);
+        exit;
+      end;
+      if not client.SetUser(TSQLRestServerAuthenticationDefault,aUserName,aPassword) then begin
+        if Assigned(onError) then
+          onError(client);
+        exit;
+      end;
+      if Assigned(onSuccess) then
+        onSuccess(client);
+    except
+      if Assigned(onError) then
+        onError(client);
+    end;
+  end,
+  onError);
 end;
 
 

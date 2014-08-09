@@ -91,16 +91,26 @@ type
   
 {{/isInMormotPas}}
 {{/orm}}
-
-/// return the database Model corresponding to this server
-function GetModel: TSQLModel;
-
 {{#port}}
 const
   /// the server port, corresponding to http://{{host}}
   SERVER_PORT = {{port}};
 
 {{/port}}
+
+/// return the database Model corresponding to this server
+function GetModel: TSQLModel;
+
+/// create a TSQLRestClientHTTP instance and connect to the server
+// - it will use by default port {{port}}
+{{#authClass}}
+// - secure connection will be established via {{.}}
+// with the supplied credentials - on connection or authentication error,
+// this function will raise a corresponding exception
+{{/authClass}}
+function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
+  aServerPort: integer=SERVER_PORT): TSQLRestClientHTTP;
+
 
 implementation
 {{#withRecords}}
@@ -170,6 +180,25 @@ end;
 function GetModel: TSQLModel;
 begin
   result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
+end;
+
+function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
+  aServerPort: integer): TSQLRestClientHTTP;
+begin
+  result := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true); // aOwnModel=true
+  try
+    if (not result.Connect) or (result.ServerTimeStamp=0) then
+      raise ERestException.CreateFmt('Impossible to connect to %s:%d server',
+        [aServerAddress,aServerPort]);
+{{#authClass}}
+    if not result.SetUser({{.}},aUserName,aPassword) then 
+      raise ERestException.CreateFmt('%s:%d server rejected "%s" credentials',
+        [aServerAddress,aServerPort,aUserName]);
+{{/authClass}}
+  except
+    result.Free;
+    raise;
+  end;
 end;
 
 {{#soa.services}}

@@ -460,10 +460,10 @@ type
     property Data: TSQLRawBlob read fData write fData;
   end;
 
-  TSQLRestAuthentication = class;
+  TSQLRestServerAuthentication = class;
 
   /// class used for client authentication
-  TSQLRestAuthenticationClass = class of TSQLRestAuthentication;
+  TSQLRestServerAuthenticationClass = class of TSQLRestServerAuthentication;
 
   /// the possible Server-side instance implementation patterns for
   // interface-based services 
@@ -595,6 +595,7 @@ type
     fBatchCount: integer;
     fServicesRouting: TSQLRestRoutingAbstractClass;
     fInternalState: cardinal;
+    fOwnModel: boolean;
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
     function InternalBatch(Table: TSQLRecordClass; const CMD: string; var Info: TSQLModelInfo): Integer;
@@ -604,7 +605,10 @@ type
       var Results: TIntegerDynArray): integer; virtual; abstract;
   public
     /// initialize the class, and associate it to a specified database Model
-    constructor Create(aModel: TSQLModel); virtual;
+    // - if aOwnModel is TRUE, this class destructor will free aModel instance
+    constructor Create(aModel: TSQLModel; aOwnModel: boolean=false); virtual;
+    /// will release the associated Model, if aOwnModel was TRUE at Create()
+    destructor Destroy; override;
 
     /// get a member from its ID
     // - return true on success, and fill all simple fields
@@ -724,7 +728,7 @@ type
 
   {$ifdef ISSMS}
   /// callback used e.g. by TSQLRestClientURI.Connect() overloaded method
-  TSQLRestEvent = procedure(Client: TSQLRest);
+  TSQLRestEvent = procedure(Client: TSQLRestClientURI);
 
   /// callback which should return TRUE on process success, or FALSE on error
   TSQLRestEventProcess = function: boolean;
@@ -733,7 +737,7 @@ type
   /// REST client access class
   TSQLRestClientURI = class(TSQLRest)
   protected
-    fAuthentication: TSQLRestAuthentication;
+    fAuthentication: TSQLRestServerAuthentication;
     fOnlyJSONRequests: boolean;
     fRunningClientDriven: TStringList;
     {$ifdef ISSMS}
@@ -757,7 +761,8 @@ type
   public
     {$ifndef ISSMS}
     /// initialize the class, and associate it to a specified database Model
-    constructor Create(aModel: TSQLModel); override;
+    // - if aOwnModel is TRUE, this class destructor will free aModel instance
+    constructor Create(aModel: TSQLModel; aOwnModel: boolean=false); override;
     {$endif}
     /// will call SessionClose
     destructor Destroy; override;
@@ -773,8 +778,7 @@ type
     // !    if client.ServerTimeStamp=0 then
     // !      ShowMessage('Impossible to retrieve server time stamp') else
     // !      writeln('ServerTimeStamp='+IntToStr(client.ServerTimeStamp));
-    // !    client.SetUser(TSQLRestAuthenticationDefault,LogonName.Text,LogonPassWord.Text);
-    // !    if client.Authentication=nil then
+    // !    if not client.SetUser(TSQLRestServerAuthenticationDefault,LogonName.Text,LogonPassWord.Text) then
     // !      ShowMessage('Authentication Error');
     // !    writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
     // !    people := TSQLRecordPeople.Create(client,1); // blocking request
@@ -817,10 +821,10 @@ type
       const aNameValueParameters: array of const;
       aTable: TSQLRecordClass=nil; aID: integer=0): string;
     /// authenticate an User to the current connected Server
-    // - using TSQLRestAuthenticationDefault or TSQLRestServerAuthenticationNone
+    // - using TSQLRestServerAuthenticationDefault or TSQLRestServerAuthenticationNone
     // - will set Authentication property on success
-    procedure SetUser(aAuthenticationClass: TSQLRestAuthenticationClass;
-      const aUserName, aPassword: string; aHashedPassword: Boolean=False);
+    function SetUser(aAuthenticationClass: TSQLRestServerAuthenticationClass;
+      const aUserName, aPassword: string; aHashedPassword: Boolean=False): boolean;
     /// close the session initiated with SetUser()
     // - will reset Authentication property to nil
     procedure SessionClose;
@@ -857,11 +861,11 @@ type
     // - the default is false, as in TSQLHttpServer.OnlyJSONRequests
     property OnlyJSONRequests: boolean read fOnlyJSONRequests write fOnlyJSONRequests;
     /// if not nil, point to the current authentication session running
-    property Authentication: TSQLRestAuthentication read fAuthentication;
+    property Authentication: TSQLRestServerAuthentication read fAuthentication;
   end;
 
   /// abstract class used for client authentication
-  TSQLRestAuthentication = class
+  TSQLRestServerAuthentication = class
   protected
     fUser: TSQLAuthUser;
     fSessionID: cardinal;
@@ -886,7 +890,7 @@ type
   end;
 
   /// mORMot secure RESTful authentication scheme
-  TSQLRestAuthenticationDefault = class(TSQLRestAuthentication)
+  TSQLRestServerAuthenticationDefault = class(TSQLRestServerAuthentication)
   protected
     fSessionPrivateKey: hash32;
     function ClientComputeSessionKey(Sender: TSQLRestClientURI): string; override;
@@ -895,7 +899,7 @@ type
   end;
 
   /// mORMot weak RESTful authentication scheme
-  TSQLRestAuthenticationNone = class(TSQLRestAuthentication)
+  TSQLRestServerAuthenticationNone = class(TSQLRestServerAuthentication)
   protected
     function ClientComputeSessionKey(Sender: TSQLRestClientURI): string; override;
     function ClientSessionComputeSignature(Sender: TSQLRestClientURI;
@@ -914,7 +918,7 @@ type
   public
     /// access to a mORMot server via HTTP
     constructor Create(const aServer: string; aPort: integer; aModel: TSQLModel;
-      aHttps: boolean=false
+      aOwnModel: boolean=false; aHttps: boolean=false
     {$ifndef ISSMS}; const aProxyName: string='';
       const aProxyByPass: string=''; aSendTimeout: Cardinal=30000;
       aReceiveTimeout: Cardinal=30000{$endif}); reintroduce; virtual;
@@ -924,7 +928,7 @@ type
     // authentication, without creating any remote session
     // - here the password should be given as clear content
     // - potential use case is to use a mORMot client through a HTTPS proxy
-    // - then you can use TSQLRestServerAuthentication*.ClientSetUser() to
+    // - then you can use SetUser(TSQLRestServerAuthenticationDefault,...) to
     // define any another "mORMot only" authentication
     procedure SetHttpBasicAuthHeaders(const aUserName, aPasswordClear: RawUTF8);
 
@@ -1795,11 +1799,19 @@ end;
 
 { TSQLRest }
 
-constructor TSQLRest.Create(aModel: TSQLModel);
+constructor TSQLRest.Create(aModel: TSQLModel; aOwnModel: boolean);
 begin
   inherited Create;
   fModel := aModel;
+  fOwnModel := aOwnModel;
   fServicesRouting := TSQLRestRoutingREST;
+end;
+
+destructor TSQLRest.Destroy;
+begin
+  inherited;
+  if fOwnModel then
+    fModel.Free;
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -2458,21 +2470,29 @@ begin
   result := Call.OutStatus=HTML_SUCCESS;
 end;
 
-procedure TSQLRestClientURI.SetUser(aAuthenticationClass: TSQLRestAuthenticationClass;
-  const aUserName, aPassword: string; aHashedPassword: Boolean);
+function TSQLRestClientURI.SetUser(aAuthenticationClass: TSQLRestServerAuthenticationClass;
+  const aUserName, aPassword: string; aHashedPassword: Boolean): boolean;
 var aKey, aSessionID: string;
     i: integer;
 begin
+  result := false;
   if fAuthentication<>nil then
     SessionClose;
   if aAuthenticationClass=nil then
     exit;
   fAuthentication := aAuthenticationClass.Create(aUserName,aPassword,aHashedPassword);
-  aKey := fAuthentication.ClientComputeSessionKey(self);
-  i := 1;
-  GetNextCSV(aKey,i,aSessionID,'+');
-  if TryStrToInt(aSessionID,i) then
-    fAuthentication.SetSessionID(i) else begin
+  try
+    aKey := fAuthentication.ClientComputeSessionKey(self);
+    i := 1;
+    GetNextCSV(aKey,i,aSessionID,'+');
+    if TryStrToInt(aSessionID,i) and (i>0) then begin
+      fAuthentication.SetSessionID(i);
+      result := true;
+    end else begin
+      fAuthentication.Free;
+      fAuthentication := nil;
+    end;
+  except
     fAuthentication.Free;
     fAuthentication := nil;
   end;
@@ -2492,10 +2512,10 @@ begin
 end;
 
 {$ifndef ISSMS}
-constructor TSQLRestClientURI.Create(aModel: TSQLModel);
+constructor TSQLRestClientURI.Create(aModel: TSQLModel; aOwnModel: boolean);
 begin
   fRunningClientDriven := TStringList.Create;
-  inherited Create(aModel);
+  inherited Create(aModel,aOwnModel);
 end;
 {$endif}
 
@@ -2505,16 +2525,17 @@ begin
   fRunningClientDriven.Free;
   {$endif}
   SessionClose;
+  inherited Destroy;
 end;
 
 { TSQLRestClientHTTP }
 
 constructor TSQLRestClientHTTP.Create(const aServer: string;
-  aPort: integer; aModel: TSQLModel; aHttps: boolean
+  aPort: integer; aModel: TSQLModel; aOwnModel, aHttps: boolean
   {$ifndef ISSMS}; const aProxyName, aProxyByPass: string;
                    aSendTimeout, aReceiveTimeout: Cardinal{$endif});
 begin
-  inherited Create(aModel);
+  inherited Create(aModel,aOwnModel);
   fParameters.Server := aServer;
   fParameters.Port := aPort;
   fParameters.Https := aHttps;
@@ -2648,9 +2669,9 @@ begin
 end;
 
 
-{ TSQLRestAuthentication }
+{ TSQLRestServerAuthentication }
 
-constructor TSQLRestAuthentication.Create(const aUserName, aPassword: string;
+constructor TSQLRestServerAuthentication.Create(const aUserName, aPassword: string;
   aHashedPassword: Boolean);
 begin
   fUser := TSQLAuthUser.Create;
@@ -2660,21 +2681,21 @@ begin
     fUser.PasswordPlain := aPassword;
 end;
 
-destructor TSQLRestAuthentication.Destroy;
+destructor TSQLRestServerAuthentication.Destroy;
 begin
   fUser.Free;
   inherited;
 end;
 
-procedure TSQLRestAuthentication.SetSessionID(Value: Cardinal);
+procedure TSQLRestServerAuthentication.SetSessionID(Value: Cardinal);
 begin
   fSessionID := Value;
   fSessionIDHexa8 := LowerCase(IntToHex(Value,8));
 end;
 
-{ TSQLRestAuthenticationDefault }
+{ TSQLRestServerAuthenticationDefault }
 
-function TSQLRestAuthenticationDefault.ClientComputeSessionKey(
+function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI): string;
 var aServerNonce, aClientNonce, aPassHash: string;
 begin
@@ -2692,7 +2713,7 @@ begin
   fSessionPrivateKey := crc32ascii(crc32ascii(0,result),fUser.fPasswordHashHexa);
 end;
 
-function TSQLRestAuthenticationDefault.ClientSessionComputeSignature(
+function TSQLRestServerAuthenticationDefault.ClientSessionComputeSignature(
   Sender: TSQLRestClientURI; const url: string): string;
 var nonce: string;
 begin
@@ -2703,13 +2724,13 @@ end;
 
 { TSQLRestServerAuthenticationNone }
 
-function TSQLRestAuthenticationNone.ClientComputeSessionKey(
+function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
   Sender: TSQLRestClientURI): string;
 begin
   result := Sender.CallBackGetResult('auth',['UserName',User.LogonName]);
 end;
 
-function TSQLRestAuthenticationNone.ClientSessionComputeSignature(
+function TSQLRestServerAuthenticationNone.ClientSessionComputeSignature(
   Sender: TSQLRestClientURI; const url: string): string;
 begin
   result := fSessionIDHexa8;

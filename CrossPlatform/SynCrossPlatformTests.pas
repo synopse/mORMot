@@ -113,11 +113,10 @@ type
   /// regression tests of our CrossPlatform units
   TSynCrossPlatformClient = class(TSynTest)
   protected
-    fAuthentication: TSQLRestAuthenticationClass;
-    fModel: TSQLModel;
+    fAuthentication: TSQLRestServerAuthenticationClass;
     fClient: TSQLRestClientHTTP;
   public
-    constructor Create(aAuthentication: TSQLRestAuthenticationClass); reintroduce;
+    constructor Create(aAuthentication: TSQLRestServerAuthenticationClass); reintroduce;
     destructor Destroy; override;
   published
     procedure Connection;
@@ -484,7 +483,7 @@ end;
 { TSynCrossPlatformClient }
 
 constructor TSynCrossPlatformClient.Create(
-  aAuthentication: TSQLRestAuthenticationClass);
+  aAuthentication: TSQLRestServerAuthenticationClass);
 begin
   inherited Create;
   fAuthentication := aAuthentication;
@@ -499,18 +498,19 @@ end;
 procedure TSynCrossPlatformClient.CleanUp;
 begin
   FreeAndNil(fClient);
-  FreeAndNil(fModel);
   check(fClient=nil);
 end;
 
 procedure TSynCrossPlatformClient.Connection;
 begin
-  fModel := GetModel;
-  fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,fModel);
-  check(fClient.Connect);
-  check(fClient.ServerTimeStamp<>0);
-  if fAuthentication<>nil then
-    fClient.SetUser(fAuthentication,'User','synopse');
+  if fAuthentication=TSQLRestServerAuthenticationDefault then
+    fClient := GetClient('localhost','User','synopse') else begin
+    fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,GetModel,true);
+    check(fClient.Connect);
+    check(fClient.ServerTimeStamp<>0);
+    if fAuthentication<>nil then
+      fClient.SetUser(fAuthentication,'User','synopse');
+  end;
 end;
 
 procedure TSynCrossPlatformClient.ORM;

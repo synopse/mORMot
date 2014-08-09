@@ -42,15 +42,14 @@ begin
 end;
 
 procedure TLoginForm.ConnectClick(Sender: TObject);
-var client: TSQLRestClientHTTP;
-    model: TSQLModel;
+var model: TSQLModel;
 begin
   BrowserAPI.console.time('ORM');
   writeln('Creating Data Model');
   model := GetModel;
   model.GetTableIndexExisting(TSQLRecordPeople);
   var people := new TSQLRecordPeople;
-  var s := model.InfoExisting(people.RecordClass).ToJSONAdd(client,people,true,'');
+  var s := model.InfoExisting(people.RecordClass).ToJSONAdd(nil,people,true,'');
   assert(s='{"RowID":0,"FirstName":"","LastName":"","YearOfBirth":0,"YearOfDeath":0,'+
     '"Sexe":0,"Simple":{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":[]}}');
   s := '{"RowID":10,"FirstName":"ab\"c","LastName":"def","YearOfBirth":20,"YearOfDeath":30,'+
@@ -67,16 +66,8 @@ begin
   assert(people.Simple.J[0].J1=1);
   assert(people.Simple.J[0].J3=reLast);
   writeln('Connecting to the server at '+ServerAddress.Text+':888');
-  client.Free;
-  client := TSQLRestClientHTTP.Create(ServerAddress.Text,888,model,false);
-  client.Connect(
-  lambda
-    if client.ServerTimeStamp=0 then
-      ShowMessage('Impossible to retrieve server time stamp') else
-      writeln('ServerTimeStamp='+IntToStr(client.ServerTimeStamp));
-    client.SetUser(TSQLRestAuthenticationDefault,LogonName.Text,LogonPassWord.Text);
-    if client.Authentication=nil then
-      ShowMessage('Authentication Error');
+  GetClient(ServerAddress.Text,LogonName.Text,LogonPassword.Text,
+  lambda(client)
     writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
     people := TSQLRecordPeople.Create(client,1);
     assert(people.ID=1);
@@ -86,11 +77,13 @@ begin
     BrowserAPI.console.timeEnd('ORM');
     BrowserAPI.console.time('SOA');
     writeln('Testing SOA remote access');
-    SOATest(client, lambda
+    SOATest(client,
+    lambda
       writeln('Disconnect from server');
       client.Free;
       BrowserAPI.console.timeEnd('SOA');
-    end, lambda
+    end,
+    lambda
       writeln('ERROR!');
       writeln('Disconnect from server');
       client.Free;
@@ -99,6 +92,7 @@ begin
   end,
   lambda
     ShowMessage('Impossible to connect to the server');
+    writeln('ERROR at GetClient');
     BrowserAPI.console.timeEnd('ORM');
   end);
 end;
