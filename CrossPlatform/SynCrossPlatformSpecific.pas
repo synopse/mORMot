@@ -899,32 +899,5 @@ begin
   result := TSMSHttpConnectionClass;
 end;
 
-
-procedure TestSMS;
-var doc: TJSONVariantData;
-begin
-  assert(VariantType(123)=jvUndefined);
-  assert(VariantType(null)=jvUndefined);
-  assert(VariantType(TVariant.CreateObject)=jvObject);
-  assert(VariantType(TVariant.CreateArray)=jvArray);
-  doc := TJSONVariantData.Create('{"a":1,"b":"B"}');
-  assert(doc.Kind=jvObject);
-  assert(doc.Count=2);
-  assert(doc.Names[0]='a');
-  assert(doc.Names[1]='b');
-  assert(doc.Values[0]=1);
-  assert(doc.Values[1]='B');
-  doc := TJSONVariantData.Create('["a",2]');
-  assert(doc.Kind=jvArray);
-  assert(doc.Count=2);
-  assert(doc.Names.Count=0);
-  assert(doc.Values[0]='a');
-  assert(doc.Values[1]=2);
-end;
-
-
-initialization
-  TestSMS;
-
 {$endif ISDWS}
 end.

@@ -2572,7 +2572,7 @@ end;
 
 { TSQLAuthUser }
 
-{$ifdef ISSMS}
+{$ifdef ISSMS} // manual RTTI for SMS
 
 class function TSQLAuthUser.ComputeRTTI: TRTTIPropInfos;
 begin
@@ -2658,7 +2658,7 @@ end;
 
 function TSQLRestAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI): string;
-var aServerNonce, aClientNonce: string;
+var aServerNonce, aClientNonce, aPassHash: string;
 begin
   if fUser.LogonName='' then
     exit;
@@ -2667,10 +2667,10 @@ begin
   if aServerNonce='' then
     exit;
   aClientNonce := SHA256Compute([Copy(NowToIso8601,1,16)]);
+  aPassHash := Sha256Compute([Sender.Model.Root,aServerNonce,aClientNonce,
+    User.LogonName,User.PasswordHashHexa]);
   result := Sender.CallBackGetResult('auth',
-     ['UserName',User.LogonName,'Password',Sha256Compute(
-      [Sender.Model.Root,aServerNonce,aClientNonce,User.LogonName,User.PasswordHashHexa]),
-      'ClientNonce',aClientNonce]);
+     ['UserName',User.LogonName,'Password',aPassHash,'ClientNonce',aClientNonce]);
   fSessionPrivateKey := crc32ascii(crc32ascii(0,result),fUser.fPasswordHashHexa);
 end;
 
@@ -2699,7 +2699,7 @@ end;
 
 {$ifdef ISSMS}
 
-{ TSQLAuthGroup }
+{ TSQLAuthGroup }  // manual RTTI for SMS
 
 class function TSQLAuthGroup.ComputeRTTI: TRTTIPropInfos;
 begin
@@ -2756,7 +2756,6 @@ begin
   result := GUID; // no-op since TGUID=string
 end;
 
-
 {$else}
 
 {$ifdef FPC} // original VarIsStr() does not handle varByRef as expected :(
@@ -2807,19 +2806,24 @@ end;
 {$endif ISSMS}
 
 function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
+{$ifdef ISSMS}
+begin
+  if TVariant.IsNumber(Value) then
+    result := Value else begin
+    result := TextValues.IndexOf(string(Value));
+    if result>=0 then
+      exit;
+{$else}
 var str: string;
 begin
-  {$ifdef ISSMS}
-  if TVariant.IsNumber(Value) then
-  {$else}
-  if VarIsOrdinal(Value) then // Value is integer
-  {$endif}
+  if VarIsOrdinal(Value) then
     result := Value else begin
     str := Value;
     if str<>'' then
       for result := 0 to high(TextValues) do
         if str=TextValues[result] then
           exit;
+{$endif}
     result := 0; // return first item by default
   end;
 end;
