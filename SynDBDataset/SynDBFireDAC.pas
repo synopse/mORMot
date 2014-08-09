@@ -579,13 +579,13 @@ begin
             for i := 0 to fParamsArrayCount-1 do
             if VArray[i]='null' then
               P.Clear(i) else begin
-              UnQuoteSQLString(pointer(VArray[i]),tmp);
+              UnQuoteSQLStringVar(pointer(VArray[i]),tmp);
               P.AsDateTimes[i] := Iso8601ToDateTime(tmp);
             end else
           if aArrayIndex>=0 then
             if VArray[aArrayIndex]='null' then
               P.Clear else begin
-              UnQuoteSQLString(pointer(VArray[aArrayIndex]),tmp);
+              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
               P.AsDateTime := Iso8601ToDateTime(tmp);
             end else
               P.AsDateTime := PDateTime(@VInt64)^;
@@ -596,7 +596,7 @@ begin
               if (VArray[i]='null') or
                  (StoreVoidStringAsNull and (VArray[i]=#39#39)) then
                 P.Clear(i) else begin
-              UnQuoteSQLString(pointer(VArray[i]),tmp);
+              UnQuoteSQLStringVar(pointer(VArray[i]),tmp);
               {$ifdef UNICODE} // for FireDAC: TADWideString=UnicodeString
               P.AsWideStrings[i] := UTF8ToString(tmp);
               {$else}
@@ -611,7 +611,7 @@ begin
                (fConnection.Properties.StoreVoidStringAsNull and
                 (VArray[aArrayIndex]=#39#39)) then
               P.Clear else begin
-              UnQuoteSQLString(pointer(VArray[aArrayIndex]),tmp);
+              UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
               {$ifdef UNICODE}
               P.AsWideString := UTF8ToString(tmp); // TADWideString=string
               {$else}
