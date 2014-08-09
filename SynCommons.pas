@@ -15203,14 +15203,16 @@ end;
 
 procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean);
 var i: integer;
+    tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
 begin
   i := PosEx(SepStr,Str);
   if i=0 then begin
     LeftStr := Str;
     RightStr := '';
   end else begin
-    LeftStr := copy(Str,1,i-1);
+    tmp := copy(Str,1,i-1);
     RightStr := copy(Str,i+length(SepStr),maxInt);
+    LeftStr := tmp;
   end;
   if ToUpperCase then begin
     LeftStr := UpperCaseU(LeftStr);
