@@ -2564,6 +2564,7 @@ begin
   base64 := w3_base64encode(base64);
   {$else}
   base64 := BytesToBase64JSONString(TByteDynArray(TextToHttpBody(base64)));
+  system.delete(base64,1,sizeof(JSON_BASE64_MAGIC) div sizeof(char)); 
   {$endif}
   fCustomHttpHeader := #13#10'Authorization: Basic '+base64;
 end;

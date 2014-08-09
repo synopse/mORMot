@@ -337,7 +337,7 @@ uses
 
 {$ifdef USEINDY}
 uses
-  IdHTTP, IdSSLOpenSSL;
+  IdHTTP, IdCoderMIME, IdSSLOpenSSL;
 {$endif}
 
 {$ifdef USESYNCRT}
@@ -513,12 +513,29 @@ end;
 procedure TIndyHttpConnectionClass.URI(var Call: TSQLRestURIParams;
   const InDataType: string; KeepAlive: integer);
 var InStr, OutStr: TStream;
-    OutLen: integer;
+    OutLen,i: integer;
+    Auth: string;
 begin
   InStr := TMemoryStream.Create;
   OutStr := TMemoryStream.Create;
   try
     fConnection.Request.RawHeaders.Text := Call.InHead;
+    Auth := fConnection.Request.RawHeaders.Values['Authorization'];
+    if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
+      // see http://synopse.info/forum/viewtopic.php?pid=11761#p11761
+      with TIdDecoderMIME.Create do
+      try
+        Auth := DecodeString(copy(Auth,7,maxInt));
+      finally
+        Free;
+      end;
+      i := Pos(':',Auth);
+      if i>0 then begin
+        fConnection.Request.BasicAuthentication := true;
+        fConnection.Request.Username := copy(Auth,1,i-1);
+        fConnection.Request.Password := Copy(Auth,i+1,maxInt);
+      end;
+    end;
     if Call.InBody<>nil then begin
       InStr.Write(Call.InBody[0],length(Call.InBody));
       InStr.Seek(0,soBeginning);
