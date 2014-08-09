@@ -99,18 +99,19 @@ uses
   SynMongoDB in '..\SynMongoDB.pas',
   {$ifndef NOVARIANTS}
   SynMustache in '..\SynMustache.pas',
-  {$ifndef CPU64}
   {$ifndef FPC}
+  {$ifndef CPU64}
   SynSMAPI in '..\SynSMAPI.pas',
   SynSM in '..\SynSM.pas',
-  {$endif FPC}
   {$endif CPU64}
+  mORMotWrappers in 'mORMotWrappers.pas',
+  {$endif FPC}
   {$endif NOVARIANTS}
   {$endif LVCL}
   SynBigTable in '..\SynBigTable.pas',
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
-{$ifndef FPC}
+  {$ifndef FPC}
   mORMot in 'mORMot.pas',
   mORMotSQLite3 in 'mORMotSQLite3.pas',
   mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
@@ -118,11 +119,10 @@ uses
   mORMotHttpServer in 'mORMotHttpServer.pas',
   mORMotService in 'mORMotService.pas',
   //mORMotBigTable,
-{$endif FPC}
+  {$endif FPC}
 {$endif DELPHI5OROLDER}
 {$ifndef FPC}
 {$ifndef LVCL}
-  mORMotWrappers in 'mORMotWrappers.pas',
   SynPdf in '..\SynPdf.pas',
   SynGdiPlus in '..\SynGdiPlus.pas',
   SynDB in '..\SynDB.pas',

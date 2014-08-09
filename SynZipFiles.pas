@@ -386,7 +386,7 @@ implementation
 
 const // TZipException messages:
   sZlibInternalError = 'zlib: Internal error';
-  sIncorrectZipFormatN = 'Incorrect zip format in file %s';
+  sIncorrectZipFormatN = 'Incorrect zip format in file %s: %s';
   sZipAlgoIDNUnknownN = 'Algo ID %d unknown for %s';
   sZipCrcErrorNN = 'crc32 checksum error for %s in %s';
 
@@ -426,12 +426,12 @@ var i: integer;
     H: ^TFileHeader;
     tmp: WinAnsiString;
     LastHeaderPosition: integer;
-procedure Error;
+procedure Error(const msg: string);
 begin
 //  MessageBox(0,pointer(fFileName),'Incorrect format',MB_ICONERROR);
   Map.UnMap;
   fCount := 0;
-  raise TZipException.CreateFmt(sIncorrectZipFormatN,[fFileName]);
+  raise TZipException.CreateFmt(sIncorrectZipFormatN,[fFileName,msg]);
 end;
 begin
   // 1. open aFileName
@@ -440,13 +440,13 @@ begin
   if Map.buf=nil then exit;
   // 2. find last header, in order to reach the TFileHeader entries
   if Map._size<sizeof(lhr^) then begin
-    Error;
+    Error('file too small');
     exit;
   end;
   lhr := @Map.Buf[Map._Size-sizeof(lhr^)];
   with lhr^ do begin
     if signature<>$06054b50 then begin
-      Error;
+      Error('missing trailing signature');
       exit;
     end;
     fCount := thisFiles;
@@ -458,8 +458,13 @@ begin
   for i := 0 to Count-1 do
   with H^ do begin
     if signature<>$02014b50 then begin
-      Error; 
+      Error('missing local signature');
       break; 
+    end;
+    if (fileInfo.flags and (1 shl 3)<>0) or // crc+sizes in "data descriptor"
+       (fileInfo.zzipSize=0) or (fileInfo.zfullSize=0) then begin
+      Error('unexpected "data descriptor"');
+      break; // not handled yet: use SynZip's TZipRead to access this archive
     end;
     with Entry[i] do begin
       if FileInfo.GetUTF8FileName then

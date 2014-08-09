@@ -139,6 +139,11 @@ unit SynZip;
    - addded CompressZLib() function, as expected by web browsers
    - any zip-related error will now raise a ESynZipException
    - fixed ticket [2e22dd25aa] about TZipRead.UnMap
+   - fixed UnZip() when crc and sizes are stored not within the file header,
+     but in a separate data descriptor block, after the compressed data (this
+     may occur e.g. if the .zip is created with latest Java JRE) - also added
+     corresponding TZipRead.RetrieveFileInfo() method and renamed TZipEntry
+     info field into infoLocal, and introduced infoDirectory new field
    - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
@@ -301,7 +306,7 @@ type
   {$endif}
     neededVersion : word;            // $14
     flags         : word;            // 0
-    zzipMethod    : word;            // 0=stored 8=deflate 12=BZ2 14=LZMA
+    zzipMethod    : word;            // 0=Z_STORED 8=Z_DEFLATED 12=BZ2 14=LZMA
     zlastMod      : integer;         // time in dos format
     zcrc32        : dword;           // crc32 checksum of uncompressed data
     zzipSize      : dword;           // size of compressed data
@@ -353,6 +358,7 @@ type
     headerOffset  : dword;           // @TFileHeader
     commentLen    : word;            // 0
   end;
+  PLastHeader = ^TLastHeader;
 {$A+}
 
 {$ifdef linux}
@@ -395,6 +401,7 @@ const
   Z_ASCII = 1;
   Z_UNKNOWN = 2;
 
+  Z_STORED = 0;
   Z_DEFLATED = 8;
   MAX_WBITS   = 15; // 32K LZ77 window
   DEF_MEM_LEVEL = 8;
@@ -468,6 +475,7 @@ const
   Z_MEM_ERROR = -(4);
   Z_BUF_ERROR = -(5);
 
+  Z_STORED = 0;
   Z_DEFLATED = 8;
   MAX_WBITS   = 15; // 32K LZ77 window
   DEF_MEM_LEVEL = 8;
@@ -539,12 +547,18 @@ type
 
   /// stores an entry of a file inside a .zip archive
   TZipEntry = record
-    /// the information of this file, as stored in the .zip archive
-    info: PFileInfo;
+    /// the information of this file, as stored locally in the .zip archive
+    // - note that infoLocal^.zzipSize/zfullSize/zcrc32 may be 0 if the info
+    // was stored in a "data descriptor" block after the data: in this case,
+    // you should use TZipRead.RetrieveFileInfo() instead of this structure
+    infoLocal: PFileInfo;
+    /// the information of this file, as stored at the end of the .zip archive
+    // - may differ from infoLocal^ content, depending of the zipper tool used 
+    infoDirectory: PFileHeader;
     /// points to the compressed data in the .zip archive, mapped in memory
     data: PAnsiChar;
     /// name of the file inside the .zip archive
-    // - not ASCIIZ: length = info.nameLen
+    // - not ASCIIZ: length = infoLocal.nameLen
     storedName: PAnsiChar;
     /// name of the file inside the .zip archive
     // - converted from DOS/OEM or UTF-8 into generic (Unicode) string
@@ -560,6 +574,7 @@ type
   private
     file_, map: NativeUInt; // we use a memory mapped file to access the zip content
     buf: PByteArray;
+    FirstFileHeader: PFileHeader;
     ReadOffset: cardinal;
     procedure UnMap;
   public
@@ -593,6 +608,14 @@ type
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(const aName, DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
+    /// retrieve information about a file
+    // - in some cases (e.g. for a .zip created by latest Java JRE), 
+    // infoLocal^.zzipSize/zfullSize/zcrc32 may equal 0: this method is able
+    // to retrieve the information either from the ending "central directory",
+    // or by searching the "data descriptor" block
+    // - returns TRUE if the Index is correct and the info was retrieved
+    // - returns FALSE if the information was not successfully retrieved
+    function RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
   end;
 {$endif Linux}
 
@@ -822,7 +845,7 @@ begin
   if Count>=length(Entry) then
     SetLength(Entry,length(Entry)+20);
   with Entry[Count] do begin
-    fhr.fileInfo := ZipEntry.info^;
+    fhr.fileInfo := ZipEntry.infoLocal^;
     InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
   end;
 end;
@@ -878,9 +901,9 @@ begin
     for i := 0 to Count-1 do
     with Entry[i], R.Entry[i] do begin
       fhr.Init;
-      fhr.localHeadOff := NativeUInt(info)-NativeUInt(R.Entry[0].info);
-      fhr.fileInfo := info^;
-      SetString(intName,storedName,info^.nameLen);
+      fhr.localHeadOff := NativeUInt(infoLocal)-NativeUInt(R.Entry[0].infoLocal);
+      R.RetrieveFileInfo(i,fhr.fileInfo);
+      SetString(intName,storedName,infoLocal^.nameLen);
     end;
     SetFilePointer(Handle,R.ReadOffset,nil,FILE_BEGIN);
   finally
@@ -935,9 +958,9 @@ end;
 {$endif}
 
 constructor TZipRead.Create(BufZip: pByteArray; Size: cardinal);
-var lhr: ^TLastHeader;
-    h: ^TFileHeader;
-    lfhr: ^TLocalFileHeader;
+var lhr: PLastHeader;
+    H: PFileHeader;
+    lfhr: PLocalFileHeader;
     i,j: integer;
     {$ifdef CONDITIONALEXPRESSIONS}
     tmp: UTF8String;
@@ -958,35 +981,47 @@ begin
     raise ESynZipException.Create('ZIP format');
   end;
   SetLength(Entry,lhr^.totalFiles); // fill Entry[] with the Zip headers
-  H := @BufZip[lhr^.headerOffset];
   ReadOffset := lhr^.headerOffset;
+  FirstFileHeader := @BufZip[lhr^.headerOffset];
+  H := FirstFileHeader;
   for i := 1 to lhr^.totalFiles do begin
     if H^.signature+1<>$02014b51 then begin
       UnMap;
       raise ESynZipException.Create('ZIP format');
     end;
     lfhr := @BufZip[H^.localHeadOff];
+    with lfhr^.fileInfo do
+    if flags and (1 shl 3)<>0 then begin // crc+sizes in "data descriptor"
+      if (zcrc32<>0) or (zzipSize<>0) or (zfullSize<>0) then
+        raise ESynZipException.Create('ZIP extended format');
+      // UnZip() will call RetrieveFileInfo()
+    end else
+      if (zzipSize=0) or (zfullSize=0) then
+        raise ESynZipException.Create('ZIP format size=0') else
+      if (zzipSize=cardinal(-1)) or (zfullSize=cardinal(-1)) then
+        raise ESynZipException.Create('ZIP64 format not supported');
     with Entry[Count] do begin
-      info := @lfhr^.fileInfo;
+      infoLocal := @lfhr^.fileInfo;
+      infoDirectory := H;
       storedName := PAnsiChar(lfhr)+sizeof(lfhr^);
-      data := storedName+info^.NameLen+info^.extraLen; // data mapped in memory
-      SetString(tmp,storedName,info^.nameLen);
-      for j := 0 to info^.nameLen-1 do
+      data := storedName+infoLocal^.NameLen+infoLocal^.extraLen; // data mapped in memory
+      SetString(tmp,storedName,infoLocal^.nameLen);
+      for j := 0 to infoLocal^.nameLen-1 do
         if storedName[j]='/' then // normalize path delimiter
           PAnsiChar(Pointer(tmp))[j] := '\';
       {$ifdef CONDITIONALEXPRESSIONS}
       // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
-      if info^.GetUTF8FileName then
+      if infoLocal^.GetUTF8FileName then
         // decode UTF-8 file name into native string/TFileName type
         zipName := UTF8Decode(tmp) else
       {$endif}
       begin
         // decode OEM/DOS file name into native string/TFileName type
-        SetLength(zipName,info^.nameLen);
+        SetLength(zipName,infoLocal^.nameLen);
         OemToChar(Pointer(tmp),Pointer(zipName)); // OemToCharW/OemToCharA
       end;
-      inc(PByte(H),sizeof(H^)+info^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
-      if (info^.zZipMethod in [0,Z_DEFLATED]) and
+      inc(PByte(H),sizeof(H^)+infoLocal^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
+      if (infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) and
         (zipName<>'') and (zipName[length(zipName)]<>'\') then // ignore folder
         inc(Count); // known methods: stored + deflate
     end;
@@ -1063,23 +1098,88 @@ begin
   result := -1;
 end;
 
+type
+  TDataDescriptor = packed record
+    signature: dword;
+    crc32: dword;
+    zipSize: dword;
+    fullSize: dword;
+  end;
+  
+function TZipRead.RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
+var P: ^TDataDescriptor;
+    PDataStart: NativeUInt;
+begin
+  if (self=nil) or (cardinal(Index)>=cardinal(Count)) then begin
+    result := false;
+    exit;
+  end;
+  Info := Entry[Index].infoLocal^; // copy information from "local file header"
+  if Info.flags and (1 shl 3)=0 then begin  
+    result := true; // information is correct
+    exit;
+  end;
+  // try to get info from ending "central directory"
+  with Entry[Index].infoDirectory^.fileInfo do
+    if (zzipSize<>0) and (zfullSize<>0) and
+       (zzipSize<>dword(-1)) and (zfullSize<>dword(-1)) then begin
+      Info.zcrc32 := zcrc32;
+      Info.zzipSize := zzipSize;
+      Info.zfullSize := zfullSize;
+      result := true;
+      exit;
+    end;
+  // search manually the "data descriptor" from the binary local data
+  if Index<Count-2 then
+    P := Pointer(Entry[Index+1].infoLocal) else
+    P := Pointer(FirstFileHeader);
+  dec(P);
+  PDataStart := NativeUInt(Entry[Index].data);
+  repeat
+    // same pattern as ReadLocalItemDescriptor() in 7-Zip's ZipIn.cpp
+    // but here, search is done backwards (much faster than 7-Zip algorithm)
+    if P^.signature<>$08074b50 then
+      if NativeUInt(P)>PDataStart then
+        dec(PByte(P)) else
+        break else
+      if P^.zipSize=NativeUInt(P)-PDataStart then begin
+        if (P^.zipSize=0) or (P^.fullSize=0) or
+           (P^.zipSize=dword(-1)) or (P^.fullSize=dword(-1)) then
+          break; // we expect sizes to be there!
+        Info.zcrc32 := P^.crc32;
+        Info.zzipSize := P^.zipSize;
+        Info.zfullSize := P^.fullSize;
+        result := true;
+        exit;
+      end else
+      if NativeUInt(P)>PDataStart then
+        dec(PByte(P)) else
+        break;
+  until false;
+  result := false; // data descriptor block not found
+end;
+
 function TZipRead.UnZip(aIndex: integer): RawByteString;
 var len: cardinal;
+    info: TFileInfo;
 begin
   result := ''; // somewhat faster if memory is reallocated each time
-  if (self=nil) or (cardinal(aIndex)>=cardinal(Count)) then
+  if not RetrieveFileInfo(aIndex,info) then
     exit;
-  with Entry[aIndex] do begin
-    SetLength(result,info^.zfullSize);
-    if info^.zZipMethod=0 then begin // stored method
-      len := info^.zfullsize;
-      move(data^,pointer(result)^,len);
-    end else // deflate method
-      len := UnCompressMem(data,pointer(result),info^.zzipsize,info^.zfullsize);
-    if (len<>info^.zfullsize) or
-       (info^.zcrc32<>SynZip.crc32(0,pointer(result),info^.zfullSize)) then 
-      raise ESynZipException.CreateFmt('Error decompressing %s',[zipName]);
+  SetString(result,nil,info.zfullSize);
+  case info.zZipMethod of
+  Z_STORED: begin
+    len := info.zfullsize;
+    move(Entry[aIndex].data^,pointer(result)^,len);
   end;
+  Z_DEFLATED:
+    len := UnCompressMem(Entry[aIndex].data,pointer(result),info.zzipsize,info.zfullsize);
+  else raise ESynZipException.CreateFmt('Unsupported method %d for %s',
+    [info.zZipMethod,Entry[aIndex].zipName]);
+  end;
+  if (len<>info.zfullsize) or
+     (info.zcrc32<>SynZip.crc32(0,pointer(result),info.zfullSize)) then
+    raise ESynZipException.CreateFmt('Error decompressing %s',[Entry[aIndex].zipName]);
 end;
 
 {$ifndef CONDITIONALEXPRESSIONS}
@@ -1114,12 +1214,13 @@ function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var FS: TFileStream;
     Path: TFileName;
+    info: TFileInfo;
     CRC: Cardinal;
 begin
   result := false;
-  if (self=nil) or (cardinal(aIndex)>=cardinal(Count)) then
+  if not RetrieveFileInfo(aIndex,info) then
     exit;
-  with Entry[aIndex] do begin
+  with Entry[aIndex] do
     if DestDirIsFileName then
       Path := DestDir else begin
       Path := DestDir+ExtractFilePath(zipName); // include sub directories
@@ -1127,26 +1228,30 @@ begin
         exit;
       Path := Path+ExtractFileName(zipName);
     end;
-    FS := TFileStream.Create(Path,fmCreate);
-    try
-      if info^.zZipMethod=0 then begin
-        FS.Write(data^,info^.zfullsize);
-        CRC := SynZip.crc32(0,data,info^.zfullSize);
-      end else
-        if UnCompressStream(data,info^.zzipsize,FS,@CRC)<>info^.zfullsize then
-          exit;
-      result := CRC=info^.zcrc32;
-      if info^.zlastMod<>0 then
+  FS := TFileStream.Create(Path,fmCreate);
+  try
+    case info.zZipMethod of
+    Z_STORED: begin
+      FS.Write(Entry[aIndex].data^,info.zfullsize);
+      CRC := SynZip.crc32(0,Entry[aIndex].data,info.zfullSize);
+    end;
+    Z_DEFLATED:
+      if UnCompressStream(Entry[aIndex].data,info.zzipsize,FS,@CRC)<>info.zfullsize then
+        exit;
+    else raise ESynZipException.CreateFmt('Unsupported method %d for %s',
+      [info.zZipMethod,Entry[aIndex].zipName]);
+    end;
+    result := CRC=info.zcrc32;
+    if info.zlastMod<>0 then
 {$ifdef CONDITIONALEXPRESSIONS}
   {$WARN SYMBOL_PLATFORM OFF}
 {$endif}
-        FileSetDate(FS.Handle,info^.zlastMod);
+      FileSetDate(FS.Handle,info.zlastMod);
 {$ifdef CONDITIONALEXPRESSIONS}
   {$WARN SYMBOL_PLATFORM ON}
 {$endif}
-    finally
-      FS.Free;
-    end;
+  finally
+    FS.Free;
   end;
 end;
 
@@ -4725,16 +4830,18 @@ end;
 
 function TFileInfo.SameAs(aInfo: PFileInfo): boolean;
 begin // tolerate a time change through a network: zcrc32 is accurate enough
-  result := (zzipMethod=aInfo.zzipMethod) and (zcrc32=aInfo.zcrc32) and
-    (zzipSize=aInfo.zzipSize) and (zzipMethod=aInfo.zzipMethod) and
-    (zfullSize=aInfo.zfullSize) and (flags=aInfo.flags);
+  if (zzipSize=0) or (aInfo.zzipSize=0) then
+    raise ESynZipException.Create('SameAs() with crc+sizes in "data descriptor"');
+  result := (zzipMethod=aInfo.zzipMethod) and (flags=aInfo.flags) and
+    (zzipSize=aInfo.zzipSize) and (zfullSize=aInfo.zfullSize) and (zcrc32=aInfo.zcrc32);
 end;
 
 procedure TFileInfo.SetAlgoID(Algorithm: integer);
 begin
-  zzipMethod := 0; // file is stored, accorging to .ZIP standard
+  zzipMethod := Z_STORED; // file is stored, accorging to .ZIP standard
   // in PKware appnote, bits 7..10 of general purpose bit flag are not used
-  flags := (Algorithm and 15) shl 7; // proprietary flag for SynZipFiles.pas
+  flags := (flags and $F87F) or 
+    (Algorithm and 15) shl 7; // proprietary flag for SynZipFiles.pas
 end;
 
 function TFileInfo.GetUTF8FileName: boolean;
