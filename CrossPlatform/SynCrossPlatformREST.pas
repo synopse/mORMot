@@ -2376,8 +2376,8 @@ begin
     (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
   if aExpectedOutputParamsCount=0 then
     exit;
-  arr := JSONVariantDataSafe(result,jvArray); // Kind=jvUndefined if not jvArray
-  if (arr^.Kind<>jvArray) or (arr^.Count<>aExpectedOutputParamsCount) then
+  arr := JSONVariantDataSafe(result,jvArray); // Count=0 if not jvArray
+  if arr^.Count<>aExpectedOutputParamsCount then
     raise EServiceException.CreateFmt('Error calling %s.%s - '+
       'received %d parameters (expected %d)',
       [aCaller.ServiceName,aMethodName,arr^.Count,aExpectedOutputParamsCount]);
@@ -2850,8 +2850,8 @@ begin
     contract := result[0] else
     contract := result.contract;  // if ResultAsJSONObject=true
   {$else}
-  with JSONVariantDataSafe(result)^ do // Kind=jvUndefined if not a TJSONVariant
-    if (Kind=jvArray) and (Count=1) then
+  with JSONVariantDataSafe(result,jvArray)^ do // Count=0 if not jvArray
+    if Count=1 then
       contract := Values[0] else
       contract := Value['contract']; // if ResultAsJSONObject=true
   {$endif}

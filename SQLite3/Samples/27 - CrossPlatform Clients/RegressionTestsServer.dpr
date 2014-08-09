@@ -13,6 +13,7 @@ uses
 
 begin
   // define the log level
+  if false then
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE; // LOG_STACKTRACE;
     //EchoToConsole := LOG_VERBOSE; // events to the console

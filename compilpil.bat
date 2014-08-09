@@ -212,6 +212,8 @@ cd "\dev\lib\sqlite3\Samples\27 - CrossPlatform Clients"
 @if errorlevel 1 pause
 %DCC% VCLClient.dpr %Switches%
 @if errorlevel 1 pause
+%DCC% Project14ServerHttpWrapper.dpr %Switches%
+@if errorlevel 1 pause
 
 cd "\dev\lib\sqlite3\Samples\28 - Simple RESTful ORM Server"
 %DCC% RESTserver.dpr %Switches%
