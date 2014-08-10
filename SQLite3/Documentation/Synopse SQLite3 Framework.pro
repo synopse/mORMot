@@ -8651,7 +8651,7 @@ The code is just the same as on the server. The only functional change is that t
 You can of course cache your {\f1\fs20 TServiceFactory} instance within a local field, if you wish. On the client side, even if the service has been defined as {\f1\fs20 sicPerThread}, you can safely cache and reuse the same instance, since the {\i per-thread} process will take place on the server side only.
 As we stated in the previous paragraph, since the {\f1\fs20 IComplexNumber} is to be executed as {\f1\fs20 sicClientDriven}, it is not mandatory to call the {\f1\fs20 Client.ServiceRegister} method for this interface. In fact, during {\f1\fs20 Client.Services.Info(TypeInfo(IComplexNumber))} method execution, the registration will take place, if it has not been done explicitly before. For code readability, it may be a good idea to explicitly register the interface on the client side also, just to emphasize that this interface is about to be used, and in which mode.
 \page
-: Sample code
+:89 Sample code
 You can find in the "{\f1\fs20 SQLite3/Samples/14 - Interface based services}" folder of the supplied source code distribution, a dedicated sample about this feature.
 Purpose of this code is to show how to create a client-server service, using interfaces, over named pipe communication.
 :  The shared contract
@@ -9387,8 +9387,8 @@ A set of @**cross-platform@ client units is available in the {\f1\fs20 CrossPlat
 - {\i @*FreePascal@} Compiler 2.7.1;
 - {\i @*Smart Mobile Studio@} 2.1, to create AJAX applications.
 The units are the following:
-|%40%60
-|\b Unit name|Description\b0
+|%45%55
+|\b Unit Name|Description\b0
 |{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client access
 |{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Optimized JSON process (not used by {\i Smart})
@@ -9491,16 +9491,16 @@ Those {\f1\fs20 BatchAdd} / {\f1\fs20 BatchDelete} / {\f1\fs20 BatchUpdate} meth
 - Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 AutomaticTransactionPerRow} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, and an ACID rollback in case of any failure.
 You can note that all above code has exactly the same structure and methods than standard {\i mORMot} clients.\line As a result, you are able to {\i share} client code between a Windows project and any supported platform, even AJAX. It would eventually reduce both implementation and debugging time.
 : Available client platforms
-:  Delphi / NextGen support
+:  Delphi / FreePascal cross-platform support
 Latest versions of {\i Delphi} include the {\i @*FireMonkey@} FMX framework, able to deliver multi-device, true native applications for Windows, Mac, Android and iOS.\line Our {\f1\fs20 SynCrossPlatform*} units are able to easily create clients for those platforms.
-In order to be compliant with the {\i NextGen} revision, we tried to follow the expectation of this new family of cross-compilers.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 THttpBody}, {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would compile on all supported platforms.
-Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i Smart Mobile Studio} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. iOS and Android) as deep as other systems. Your input would be very valuable and welcome, here!
+Similarly, these units can be compiled with {\i FreePascal}, so that any {\i mORMot} server could be consummed from the numerous supported platforms of this compiler.
+In order to use those units, ensure in your IDE that the {\f1\fs20 CrossPlatform} sub-folder of the {\i mORMot} source code repository is defined in your {\i Libaray Search Path}.
 :   Cross-platform JSON
-We developed our own JSON process units, running much faster than the official {\f1\fs20 DBXJSON} unit shipped with Delphi, and cross-platform alternatives, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
+We developed our own JSON process unit in {\f1\fs20 SynCrossPlatformJSON.pas}, shared with {\i Delphi} and {\i FreePascal}.\line In fact, it appears to run much faster than the official {\f1\fs20 DBXJSON.pas} unit shipped with latest versions of Delphi, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
 $ 2.2. Table content:
 $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
-Our {\f1\fs20 TSQLTableJSON} class is more than 10 times faster than standard {\f1\fs20 DBXJSON} unit, when processing a list of results as returned by a {\i mORMot} server.\line The latest value above is the memory consumption. It should be of high interest on mobile platforms, where memory allocation tends to be much slower and sensitive than on Windows (the {\i FastMM4} memory manager does wonders). Our unit consumes less than half the memory of the {\i Delphi}'s version.
+Our {\f1\fs20 TSQLTableJSON} class is more than 10 times faster than standard {\f1\fs20 DBXJSON} unit, when processing a list of results as returned by a {\i mORMot} server.\line The latest value on each line above is the memory consumption. It should be of high interest on mobile platforms, where memory allocation tends to be much slower and sensitive than on Windows (where {\i FastMM4} memory manager does wonders). Our unit consumes 5 times less memory than the RTL's version.
 We did not include {\i XSuperObject} here, which is cross-platform, but performs even worse than {\f1\fs20 DBXJSON} in terms of speed. Other libraries - as {\i SuperObject} or {\i dwsJSON} - are not cross-platform.\line See @http://blog.synopse.info/post/json-benchmark-delphi-mormot-superobject-dwsjson-dbxjson for details about this comparison.
 A special mention is due to {\i dwsJSON}, which performs very well, but only on Windows, and is slower than {\i mORMot}'s implementation:
 $- Synopse ORM loop: 41,135 assertions passed  6.18ms  1,330,153/s  1.1 MB
@@ -9509,7 +9509,7 @@ $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- Super object properties: 41,136 assertions passed  2.20s  3,739/s  6.3 MB
 $- dwsJSON: 41,136 assertions passed  32.05ms  256,628/s  4.7 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
-The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized UTF-8 functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory.
+The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized UTF-8 functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory. Some tricks used by {\f1\fs20 Synopse ORM} rely on pointers and are not compatible with the {\i NextGen} compiler or the official {\i Delphi} roadmap, so the {\f1\fs20 Synopse crossplatform} uses diverse algorithm, but offers still pretty good performance.
 This unit features a {\f1\fs20 TJSONVariantData} custom variant type, similar to @80@, available in the main {\i mORMot} framework.\line It allows writing such nice and readable code, with late-binding:
 !var doc: variant;
 !    json,json2: string;
@@ -9567,10 +9567,13 @@ The unit is also able to serialize any {\f1\fs20 TPersistent} class, i.e. all pu
 !  assert(json2=json);
 !...
 Of course, this serialization feature is used for the {\f1\fs20 TSQLRecord} ORM class.
-:   RESTful Client
+Due to lack of RTTI, {\f1\fs20 record} serialization is supported via some functions generated by the server with the code wrappers.
+:   Delphi OSX and NextGen
+In order to be compliant with the {\i NextGen} revision, our {\f1\fs20 SynCrossPlatform*} units follow the expectations of this new family of cross-compilers, which targets {\i Android} and {\i iOS}.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 THttpBody}, {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would compile on all supported platforms.
 On Delphi, the {\i Indy} library is used for HTTP requests.\line It is cross-platform by nature, so should work on any supported system.
-:  FreePascal support
-Those units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with Delphi, including RTTI support and all supported types.
+Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i Smart Mobile Studio} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. iOS and Android) as deep as other systems. Your input would be very valuable and welcome, here!
+:   FreePascal clients
+{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with Delphi, including RTTI support and all supported types.
 Some restrictions apply, though.
 Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
 !  doc.name2 := 3.1415926;
@@ -9589,7 +9592,7 @@ It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} t
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and Lazarus). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
 We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with Delphi. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
 :  Smart Mobile Studio support
-{\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} into highly optimized and raw {\i JavaScript}.
+{\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} (in a modern dialect call {\i @*SmartPascal@}) into highly optimized and raw {\i @*JavaScript@}.
 There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
 - {\i JavaScript} super-sets, adding optional {\i strong typing}, and classes, close to the {\i ECMAScript Sixth Edition}: the current main language in this category is certainly {\i TypeScript}, designed by Anders Hejlsberg (father of both the {\i Delphi} language and {\i C#}), and published by {\i Microsoft};
 - New languages, dedicated to make writing {\i JavaScript} programs easier, with an alternative syntax and new concepts (like classes, lambdas, scoping, splats, comprehensions...): most relevant languages of this family are {\i CoffeeScript} and {\i Dart};
@@ -9597,11 +9600,11 @@ There are several solutions able to compile to {\i JavaScript}.\line In fact, we
 - Low-level languages, like {\i Emscripten} (compiling C/C++ from LLVM bytecode, using {\i asm.js}).
 Of course, from our point of view, use of modern {\i object pascal} is of great interest, since it will leverage our own coding skills, and make us able to share code between client and server sides.
 :   Beyond JavaScript
-The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some JavaScript code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
+The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
 The resulting HTML5 project is self-sufficient with no external javascript library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debugg your application directly within the IDE (since revision 2.1) or within your browser, with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
-Using a third-party tool like @http://phonegap.com you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by Delphi FMX, and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
-{\i Smart Mobile Studio} is therefore a great platform for implementing rich client-side AJAX applications, to work with our client-server {\i mORMot} framework.
+Using a third-party tool like @http://phonegap.com you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by Delphi FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
+{\i Smart Mobile Studio} is therefore a great platform for implementing rich client-side AJAX or {\i Mobile} applications, to work with our client-server {\i mORMot} framework.
 :   Using Smart Mobile Studio with mORMot
 There is no package to be installed within the {\i Smart Mobile Studio} IDE. The client units will be generated directly from the {\i mORMot} server.\line Any edition of {\i Smart} - see @http://smartmobilestudio.com/feature-matrix - is enough: you do not need to pay for the {\i Enterprise} edition to consume {\i mORMot} services. But of course, the {\i Professionnal} edition is recommended, since the {\i Basic} edition does not allow to create forms from the IDE, which is the main point for an AJAX application.
 In contrast to the wrappers available in the {\i Professional} edition of Smart, for accessing {\i RemObjects} or {\i DataSnap} servers, our {\i mORMot} clients are 100% written in the {\i SmartPascal} dialect. There is no need to link an external {\f1\fs20 .js} library to your executable, and you will benefit of the obfuscation and smart linking features of the Smart compiler.
@@ -9610,9 +9613,298 @@ $xcopy SynCrossPlatformSpecific.pas "c:\ProgramData\Optimale Systemer AS\Smart M
 $xcopy SynCrossPlatformCrypto.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
 $xcopy SynCrossPlatformREST.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
 You can find a corresponding BATCH file in the {\f1\fs20 CrossPlatform} folder, and in {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client\\CopySynCrossPlatformUnits.bat}.
+In fact, the {\f1\fs20 SynCrossPlatformJSON.pas} unit is not used under {\i Smart Mobile Studio}: we use the built-in JSON serialization features of {\i JavaScript}, using {\f1\fs20 variant} dynamic type, and the standard {\f1\fs20 JSON.Stringify()} and {\f1\fs20 JSON.Parse()} functions.
+\page
 : Generating client wrappers
 Even if it feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and set of {\i @*Mustache@}-based templates - see @81@.
-
+The following templates are available in the {\f1\fs20 CrossPlatform\\templates} folder:
+|%45%45
+|\b Unit Name|Compiler Target\b0
+|{\f1\fs20 CrossPlatform.pas.mustache}|Delphi / FPC SynCrossPlatform* units
+|{\f1\fs20 Delphi.pas.mustache}|Delphi Win32/Win64 {\i mORMot} units
+|{\f1\fs20 SmartMobileStudio.pas.mustache}|Smart Mobile Studio 2.1
+|%
+In the future, other wrappers may be added. And you can write your own, which could be included within the framework source! Your input is warmly welcome, especially if you want to write a template for {\i Java} or {\f1\fs20 C#} client. The generated data context already contains the data types corresponding  to those compilers: e.g. a {\i mORMot}'s {\f1\fs20 RawUTF8} field or parameter could be identified as {\f1\fs20 "typeCS":"string"} or {\f1\fs20 "typeJava":"String"} in addition to {\f1\fs20 "typeDelphi":"RawUTF8"} and {\f1\fs20 "typePascal":"string"}.
+:  Publishing the code generator
+By default, and for security reasons, the code generation is not embedded to your {\i mORMot} RESTful server. In fact, the {\f1\fs20 mORMotWrapper.pas} unit will link both {\f1\fs20 mORMot.pas} and {\f1\fs20 SynMustache.pas} units, and use {\i Mustache} templates to generate code for a given {\f1\fs20 TSQLRestServer} instance.
+We will start from the interface-based service @89@ as defined in the\line "{\f1\fs20 SQLite3\\Samples\\14 - Interface based services}" folder.\line After some minor modifications, we copied the server source code into\line "{\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\Project14ServerHttpWrapper.dpr}":
+!program Project14ServerHttpWrapper;
+!
+!{$APPTYPE CONSOLE}
+!
+!uses
+!  SysUtils,
+!  Classes,
+!  SynCommons,
+!  mORMot,
+!  mORMotHttpServer,
+!!  mORMotWrappers,
+!  Project14Interface in '..\14 - Interface based services\Project14Interface.pas';
+!
+!type
+!  TServiceCalculator = class(TInterfacedObject, ICalculator)
+!  public
+!    function Add(n1,n2: integer): integer;
+!  end;
+!
+!function TServiceCalculator.Add(n1, n2: integer): integer;
+!begin
+!  result := n1+n2;
+!end;
+!
+!var
+!  aModel: TSQLModel;
+!  aServer: TSQLRestServer;
+!  aHTTPServer: TSQLHttpServer;
+!begin
+!  // create a Data Model
+!  aModel := TSQLModel.Create([],ROOT_NAME);
+!  try
+!    // initialize a TObjectList-based database engine
+!    aServer := TSQLRestServerFullMemory.Create(aModel,'test.json',false,true);
+!    try
+!!      // add the http://localhost:888/root/wrapper code generation web page
+!!      AddToServerWrapperMethod(aServer,
+!!        ['..\..\..\CrossPlatform\templates','..\..\..\..\CrossPlatform\templates']);
+!      // register our ICalculator service on the server side
+!      aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!      // launch the HTTP server
+!      aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
+!      try
+!        aHTTPServer.AccessControlAllowOrigin := '*'; // for AJAX requests to work
+!        writeln(#10'Background server is running.');
+!        writeln('You can test http://localhost:',PORT_NAME,'/wrapper');
+!        writeln(#10'Press [Enter] to close the server.'#10);
+!        readln;
+!      finally
+!        aHTTPServer.Free;
+!      end;
+!    finally
+!      aServer.Free;
+!    end;
+!  finally
+!    aModel.Free;
+!  end;
+!end.
+As you can see, we just added a reference to the {\f1\fs20 mORMotWrappers} unit, and a call to {\f1\fs20 AddToServerWrapperMethod()} in order to publish the available code generators.
+Now, if you run the {\f1\fs20 Project14ServerHttpWrapper} server, and point your favorite browser to {\f1\fs20 http://localhost:888/root/wrapper} you will see the following page:\line
+{\b\fs28 Client Wrappers}
+{\b Available Templates:}
+* {\b CrossPlatform}\line {\i mORMotClient.pas} - {\ul download as file} - {\ul see as text} - {\ul see template}
+* {\b Delphi}\line {\i mORMotClient.pas} - {\ul download as file} - {\ul see as text} - {\ul see template}
+* {\b SmartMobileStudio}\line {\i mORMotClient.pas} - {\ul download as file} - {\ul see as text} - {\ul see template}
+You can also retrieve the corresponding {\ul template context}.\line
+As you can see, each of the {\f1\fs20 *.mustache} template available in the specified folder is listed here. Links above will allow downloading a client source code unit, or displaying it as text in the browser. The template can also be displayed un-rendered, for reference. As true {\i Mustache} templates, the source code are created from a data context, which can be displayed, as JSON, from the {\ul template context} link. It may help you when debugging your own templates. Note that if you modify and save a {\f1\fs20 .mustache} template file, just re-load the {\ul see as text} browser page and your modification is taken in account immediately (you do not need to restart the server).
+:  Smart Mobile Studio client samples
+:   Adding two numbers in AJAX
+You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 web application, connecting securely to your {\i mORMot} server, which will work from any desktop browser, or from any mobile device (either {\i iPhone} / {\i iPad} / {\i Android} / {\i Windows 8}).
+In order to create the application, we just clicked on {\ul download as file} in the {\b SmartMobileStudio} link in the web page, and copied the generated file in the source folder of a new {\i Smart Mobile} project.\line Of course, we did copy the needed {\f1\fs20 SynCrossPlatform*.pas} units from the {\i mORMot} source code tree into the Smart library folder, as stated above.
+Then we added a {\f1\fs20 BtnConnect} button, two edit fields named {\f1\fs20 EditA} and {\f1\fs20 EditB}, and two other buttons, named {\f1\fs20 BtnComputeAsynch} and {\f1\fs20 BtnComputeSynch}.\line Then we added a reference to our both {\f1\fs20 SynCrossPlatformREST} and {\f1\fs20 mORMotClient} units, and some events to the buttons:
+!unit Form1;
+!
+!interface
+!
+!uses
+!  SmartCL.System, SmartCL.Graphics, SmartCL.Components, SmartCL.Forms,
+!  SmartCL.Fonts, SmartCL.Borders, SmartCL.Application, SmartCL.Controls.Panel,
+!  SmartCL.Controls.Label, SmartCL.Controls.EditBox, SmartCL.Controls.Button,
+!!  SynCrossPlatformREST, mORMotClient;
+!
+!type
+!  TForm1 = class(TW3Form)
+!    procedure BtnComputeSynchClick(Sender: TObject);
+!    procedure BtnComputeAsynchClick(Sender: TObject);
+!    procedure BtnConnectClick(Sender: TObject);
+!  private
+!    {$I 'Form1:intf'}
+!  protected
+!!    Client: TSQLRestClientURI;
+!    procedure InitializeForm; override;
+!    procedure InitializeObject; override;
+!    procedure Resize; override;
+!  end;
+The {\f1\fs20 BtnConnect} event will connect asynchronously to the server, using {\f1\fs20 'User'} as log-on name, and {\f1\fs20 'synopse'} as password (those as the framework defaults).\line We just use the {\f1\fs20 GetClient()} function, published in our generated {\f1\fs20 mORMotClient.pas} unit:
+!/// create a TSQLRestClientHTTP instance and connect to the server
+!// - it will use by default port 888
+!// - secure connection will be established via TSQLRestServerAuthenticationDefault
+!// with the supplied credentials
+!// - request will be asynchronous, and trigger onSuccess or onError event
+!procedure GetClient(const aServerAddress, aUserName,aPassword: string;
+!  onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
+It uses two callbacks, the first in case of success, and the second triggered on failure. On success, we will set the global {\f1\fs20 Client} variable with the {\f1\fs20 TSQLRestClientURI} instance just created, then display the two fields and compute buttons:
+!procedure TForm1.BtnConnectClick(Sender: TObject);
+!begin
+!  if Client=nil then
+!!    GetClient('127.0.0.1','User','synopse',
+!!      lambda (aClient: TSQLRestClientURI)
+!        PanelCompute.Visible := true;
+!        W3Label1.Visible := true;
+!        W3Label2.Visible := true;
+!        LabelConnect.Caption := '';
+!        BtnConnect.Caption := 'Disconnect';
+!        LabelResult.Caption := '';
+!!        Client := aClient;
+!      end,
+!      lambda
+!        ShowMessage('Impossible to connect to the server!');
+!      end)
+!  else begin
+!    PanelCompute.Visible := false;
+!    BtnConnect.Caption := 'Server Connect';
+!    Client.Free;
+!    Client := nil;
+!  end;
+!end;
+As you can see in the {\f1\fs20 mORMotClient.pas} generated units, interface-based services can be accessed via a {\f1\fs20 SmartPascal} class (and not an {\f1\fs20 interface}), with two variations of each methods: one {\i asynchronous} method - e.g. {\f1\fs20 TServiceCalculator.Add()} - expecting success/error callbacks, and one {\i synchronous} (blocking) method - e.g. {\f1\fs20 TServiceCalculator._Add()}:
+!type
+!  /// service accessible via http://localhost:888/root/Calculator
+!  // - this service will run in sicShared mode
+!  // - synchronous and asynchronous methods are available, depending on use case
+!  // - synchronous _*() methods will block the browser execution, so won't be
+!  // appropriate for long process - on error, they may raise EServiceException
+!  TServiceCalculator = class(TServiceClientAbstract)
+!  public
+!    /// will initialize an access to the remote service
+!    constructor Create(aClient: TSQLRestClientURI); override;
+!
+!    procedure Add(n1: integer; n2: integer;
+!      onSuccess: procedure(Result: integer); onError: TSQLRestEvent);
+!    function _Add(const n1: integer; const n2: integer): integer;
+!  end;
+We can therefore execute asynchronously the {\f1\fs20 Add()} service as such:
+!procedure TForm1.BtnComputeAsynchClick(Sender: TObject);
+!begin
+!  TServiceCalculator.Create(Client).Add(
+!    StrToInt(EditA.Text),StrToInt(EditB.Text),
+!    lambda (res: integer)
+!      LabelResult.Caption := format('Result = %d',[res]);
+!    end,
+!    lambda
+!      ShowMessage('Error calling the method!');
+!    end);
+!end;
+Or execute synchronously the {\f1\fs20 _Add()} service:
+!procedure TForm1.BtnComputeSynchClick(Sender: TObject);
+!begin
+!  LabelResult.Caption := format('Result = %d',
+!    [TServiceCalculator.Create(Client)._Add(
+!      StrToInt(EditA.Text),StrToInt(EditB.Text))]);
+!end;
+Of course, the synchronous code is much easier to follow and maintain. To be fair, the {\i SmartPascal} {\f1\fs20 lambda} syntax is not difficult to read nor write. In the browser debugger, you can easily set a break point within any {\f1\fs20 lambda} block, and debug your code.
+Note that if the server is slow to answer, your whole web application will be unresponsive, and the browser may even complain about the page, proposing the kill its process!\line As a consequence, simple services may be written in a synchronous manner, but your serious business code should rather use asynchronous callbacks, just as with any modern AJAX application.
+:   CRUD/ORM remote access
+If the server did have some ORM model, its {\f1\fs20 TSQLRecord} classes will also be part of the {\f1\fs20 mORMotClient.pas} generated unit. All types, even complex record structures, will be marshaled as expected.
+For instance, if you run the {\f1\fs20 RegressionTestsServer.dpr} server (available in the same folder), a much more complete unit could be generated from {\f1\fs20 http://localhost:888/root/wrapper}:
+!type // define some enumeration types, used below
+!  TPeopleSexe = (sFemale, sMale);
+!  TRecordEnum = (reOne, reTwo, reLast);
+!
+!type // define some record types, used as properties below
+!  TTestCustomJSONArraySimpleArray = record
+!    F: string;
+!    G: array of string;
+!    H: record
+!      H1: integer;
+!      H2: string;
+!      H3: record
+!        H3a: boolean;
+!        H3b: TSQLRawBlob;
+!      end;
+!    end;
+!    I: TDateTime;
+!    J: array of record
+!      J1: byte;
+!      J2: TGUID;
+!      J3: TRecordEnum;
+!    end;
+!  end;
+!
+!type
+!  /// service accessible via http://localhost:888/root/Calculator
+!  // - this service will run in sicShared mode
+!  // - synchronous and asynchronous methods are available, depending on use case
+!  // - synchronous _*() methods will block the browser execution, so won't be
+!  // appropriate for long process - on error, they may raise EServiceException
+!  TServiceCalculator = class(TServiceClientAbstract)
+!  public
+!    /// will initialize an access to the remote service
+!    constructor Create(aClient: TSQLRestClientURI); override;
+!
+!    procedure Add(n1: integer; n2: integer;
+!      onSuccess: procedure(Result: integer); onError: TSQLRestEvent);
+!    function _Add(const n1: integer; const n2: integer): integer;
+!
+!    procedure ToText(Value: currency; Curr: string; Sexe: TPeopleSexe; Name: string;
+!      onSuccess: procedure(Sexe: TPeopleSexe; Name: string); onError: TSQLRestEvent);
+!    procedure _ToText(const Value: currency; const Curr: RawUTF8; var Sexe: TPeopleSexe; var Name: RawUTF8);
+!
+!    procedure RecordToText(Rec: TTestCustomJSONArraySimpleArray;
+!      onSuccess: procedure(Rec: TTestCustomJSONArraySimpleArray; Result: string); onError: TSQLRestEvent);
+!    function _RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+!  end;
+!
+!  /// map "People" table
+!  TSQLRecordPeople = class(TSQLRecord)
+!  protected
+!    fFirstName: string;
+!    fLastName: string;
+!    fData: TSQLRawBlob;
+!    fYearOfBirth: integer;
+!    fYearOfDeath: word;
+!    fSexe: TPeopleSexe;
+!    fSimple: TTestCustomJSONArraySimpleArray;
+!    // those overriden methods will emulate the needed RTTI
+!    class function ComputeRTTI: TRTTIPropInfos; override;
+!    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
+!    function GetProperty(FieldIndex: integer): variant; override;
+!  public
+!    property FirstName: string read fFirstName write fFirstName;
+!    property LastName: string read fLastName write fLastName;
+!    property Data: TSQLRawBlob read fData write fData;
+!    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+!    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+!    property Sexe: TPeopleSexe read fSexe write fSexe;
+!    property Simple: TTestCustomJSONArraySimpleArray read fSimple write fSimple;
+!  end;
+In the above code, you can see several methods to the {\f1\fs20 ICalculator} service, some involving the complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record type. The {\f1\fs20 implementation} section of the unit will in fact allow serialization of such records to/from JSON, even with obfuscated {\i JavaScript} field names, via {\f1\fs20 ComputeRTTI() GetProperty()} and {\f1\fs20 SetProperty()}.
+Some {\i enumerations} types are also defined, so will help your business code be very expressive, thanks to the {\i SmartPascal} strong typing. This is a huge improvement when compared to {\i JavaScript} native weak and dynamic typing.
+There is a {\f1\fs20 TSQLRecordPeople} class generated, which will map the following {\i Delphi} class type, as defined in the {\f1\fs20 PeopleServer.pas} unit:
+!  TSQLRecordPeople = class(TSQLRecord)
+!  protected
+!    fData: TSQLRawBlob;
+!    fFirstName: RawUTF8;
+!    fLastName: RawUTF8;
+!    fYearOfBirth: integer;
+!    fYearOfDeath: word;
+!    fSexe: TPeopleSexe;
+!    fSimple: TTestCustomJSONArraySimpleArray;
+!  public
+!    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
+!  published
+!    property FirstName: RawUTF8 read fFirstName write fFirstName;
+!    property LastName: RawUTF8 read fLastName write fLastName;
+!    property Data: TSQLRawBlob read fData write fData;
+!    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+!    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+!    property Sexe: TPeopleSexe read fSexe write fSexe;
+!  public
+!    property Simple: TTestCustomJSONArraySimpleArray read fSimple;
+!  end;
+Here, a complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record field has been published, thanks to a manual {\f1\fs20 InternalRegisterCustomProperties()} registration, as we already stated above.\line You can see that types like {\f1\fs20 RawUTF8} were mapped to the standard {\i SmartPascal} {\f1\fs20 string} type, as expected.
+Your AJAX client can then access to this {\f1\fs20 TSQLRecordPeople} content easily, via standard CRUD operations:
+!!  people := new TSQLRecordPeople;
+!  for i := 1 to 200 do begin
+!!    assert(client.Retrieve(i,people));
+!    assert(people.ID=i);
+!    assert(people.FirstName='First'+IntToStr(i));
+!    assert(people.LastName='Last'+IntToStr(i));
+!    assert(people.YearOfBirth=id+1800);
+!    assert(people.YearOfDeath=id+1825);
+!  end;
+Here, the {\f1\fs20 client} variable is a {\f1\fs20 TSQLRestClientURI} instance, as returned by the {\f1\fs20 GetClient() onSuccess} callback generated in {\f1\fs20 mORMotClient.pas}.\line You have {\f1\fs20 Add() Delete() Update() FillPrepare() CreateAndFillPrepare()} and {\f1\fs20 Batch*()} methods available, ready to safely access your data from your AJAX client.
+If you update your data model on the server, just re-generate your {\f1\fs20 mORMotClient.pas} unit from {\f1\fs20 http://localhost:888/root/wrapper}, then rebuild your {\i Smart Mobile Studio} project to reflect all changes made to your ORM data model, or your SOA available services.
+Thanks to the {\i SmartPascal} strong typing, any breaking change of the server expectations would immediately be reported at compilation, and not at runtime, as it would with regular {\i JavaScript} clients...
+:  Delphi / FreePascal samples
 {\i (to be continued)}
 
 :75Hosting
