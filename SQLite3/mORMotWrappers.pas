@@ -70,14 +70,28 @@ uses
 // - to be used e.g. for client code generation via Mustache templates
 function ContextFromModel(const aServer: TSQLRestServer): variant;
 
-/// you can call this procedure within a method-based service to return
-// all available client .template files in the supplied paths 
+/// you can call this procedure within a method-based service allow
+// code-generation of an ORM and SOA client from a web browser
+// - you have to specify one or several client *.mustache file paths
+// - the first path containing any *.mustache file will be used as templates
 // - for instance:
 // ! procedure TCustomServer.Wrapper(Ctxt: TSQLRestServerURIContext);
 // ! begin // search in the current path
 // !   WrapperMethod(Ctxt,['.']);
 // ! end;
 procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName);
+
+/// you can call this procedure to add a 'Wrapper' method-based service
+//  to a given server, to allow code-generation of an ORM and SOA client
+// - you have to specify one or several client *.mustache file paths
+// - the first path containing any *.mustache file will be used as templates
+// - if no path is specified (i.e. as []), it will search in the .exe folder
+// - the root/wrapper URI will be accessible without authentication (i.e.
+// from any plain browser)
+// - for instance:
+// ! aServer := TSQLRestServerFullMemory.Create(aModel,'test.json',false,true);
+// ! AddToServerWrapperMethod(aServer,['..']);
+procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
 
 
 implementation
@@ -311,7 +325,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
       break;
     end;
   if templateFound<0 then begin
-    Ctxt.Error('Please copy some .template files in the expected folder (e.g. %)',
+    Ctxt.Error('Please copy some .mustache files in the expected folder (e.g. %)',
       [ExpandFileName(Path[0])]);
     exit;
   end;
@@ -373,5 +387,39 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;
 
+{ TWrapperMethodHook }
+
+type
+  TWrapperMethodHook = class(TPersistent)
+  public
+    SearchPath: array of TFileName;
+  published
+    procedure Wrapper(Ctxt: TSQLRestServerURIContext);
+  end;
+
+procedure TWrapperMethodHook.Wrapper(Ctxt: TSQLRestServerURIContext);
+begin
+  WrapperMethod(Ctxt,SearchPath);
+end;
+
+procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
+var hook: TWrapperMethodHook;
+    i: integer;
+begin
+  if Server=nil then
+    exit;
+  hook := TWrapperMethodHook.Create;
+  Server.PrivateGarbageCollector.Add(hook); // Server.Free will call hook.Free
+  if length(Path)=0 then begin
+    SetLength(hook.SearchPath,1);
+    hook.SearchPath[0] := ExtractFilePath(paramstr(0)); // use .exe path
+  end else begin
+    SetLength(hook.SearchPath,length(Path));
+    for i := 0 to high(Path) do
+      hook.SearchPath[i] := Path[i];
+  end;
+  Server.ServiceMethodRegisterPublishedMethods('',hook);
+  Server.ServiceMethodByPassAuthentication('wrapper');
+end;
 
 end.

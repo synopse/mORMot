@@ -23,20 +23,6 @@ begin
   result := n1+n2;
 end;
 
-{ TMyServer }
-
-type
-  TMyServer = class(TSQLRestServerFullMemory)
-  published
-    procedure Wrapper(Ctxt: TSQLRestServerURIContext);
-  end;
-
-procedure TMyServer.Wrapper(Ctxt: TSQLRestServerURIContext);
-begin // search in current and parent (may be compiled in an 'exe' sub-folder)
-  WrapperMethod(Ctxt,['..\..\..\CrossPlatform\templates',
-                      '..\..\..\..\CrossPlatform\templates']);
-end;
-
 var
   aModel: TSQLModel;
   aServer: TSQLRestServer;
@@ -51,9 +37,11 @@ begin
   aModel := TSQLModel.Create([],ROOT_NAME);
   try
     // initialize a TObjectList-based database engine
-    aServer := TMyServer.Create(aModel,'test.json',false,true);
+    aServer := TSQLRestServerFullMemory.Create(aModel,'test.json',false,true);
     try
-      aServer.ServiceMethodByPassAuthentication('wrapper');
+      // add the http://localhost:888/root/wrapper code generation web page
+      AddToServerWrapperMethod(aServer,
+        ['..\..\..\CrossPlatform\templates','..\..\..\..\CrossPlatform\templates']);
       // register our ICalculator service on the server side
       aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
       // launch the HTTP server

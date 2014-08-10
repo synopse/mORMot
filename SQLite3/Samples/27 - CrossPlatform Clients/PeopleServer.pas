@@ -77,7 +77,6 @@ type
   TCustomServer = class(TSQLRestServerFullMemory)
   published
     procedure DropTable(Ctxt: TSQLRestServerURIContext);
-    procedure Wrapper(Ctxt: TSQLRestServerURIContext);
   end;
 
   TPeopleServerAuthentication = (psaNone,psaWeak,psaDefault);
@@ -146,12 +145,6 @@ begin
   end;
 end;
 
-procedure TCustomServer.Wrapper(Ctxt: TSQLRestServerURIContext);
-begin // search in current and parent (may be compiled in an 'exe' sub-folder)
-  WrapperMethod(Ctxt,['..\..\..\CrossPlatform\templates',
-                      '..\..\..\..\CrossPlatform\templates']);
-end;
-
 
 var Model: TSQLModel;
     DB: TCustomServer;
@@ -175,7 +168,8 @@ begin
     // we expect at least one record
     DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}]);
     // in all cases, client will call DropTable method-based service
-  DB.ServiceMethodByPassAuthentication('wrapper'); // for our testing purpose
+  AddToServerWrapperMethod(DB,['..\..\..\CrossPlatform\templates',
+                                '..\..\..\..\CrossPlatform\templates']);
   DB.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
 end;
 
