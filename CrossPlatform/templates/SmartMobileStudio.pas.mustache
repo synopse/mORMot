@@ -57,8 +57,8 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
   /// service accessible via http://{{host}}/{{root}}/{{uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   // - synchronous and asynchronous methods are available, depending on use case
-  // - synchronous _*() methods names will block the browser execution, so won't
-  // be appropriate for long process - on error, they may raise EServiceException
+  // - synchronous _*() methods will block the browser execution, so won't be
+  // appropriate for long process - on error, they may raise EServiceException
   {{#isClientDriven}}
   // - you should call explicitly Free to release the server instance
   {{/isClientDriven}}

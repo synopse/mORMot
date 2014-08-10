@@ -417,7 +417,7 @@ begin
   if fDBMS in [dOracle,dPostgreSQL,dFireBird] then begin
     {$ifdef ZEOS72UP} // new since 7.2up
     // Always load the lobs? Or just on accessing them?
-    // if you allways copy the data by fetching the row than it doesn't make sence.
+    // if you allways copy the data by fetching the row than it doesn't make sense.
     fStatementParams.Add('cachedlob=false'); //default = False
     {$endif}
   end;

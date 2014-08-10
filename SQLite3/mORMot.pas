@@ -718,6 +718,8 @@ unit mORMot;
       URI parameters sets for request paging (in addition to YUI syntax),
       and an optional "total":... field within the JSON result (calling
       "SELECT count()" may be slow, especially on external databases)
+    - added TSQLRestServer.PrivateGarbageCollector property, to manage lifetime
+      of user class instances linked to a given TSQLRestServer
     - deep code refactoring, introducing TSQLPropInfo* classes in order to
       decouple the ORM definitions from the RTTI - will allow definition of
       any class members, even if there is no RTTI generated or via custom
@@ -10576,6 +10578,7 @@ type
     fNoAJAXJSON: boolean;
     fHandleAuthentication: boolean;
     fAfterCreation: boolean;
+    fPrivateGarbageCollector: TObjectList;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
     fSQLAuthGroupClass: TSQLAuthGroupClass;
@@ -10883,6 +10886,7 @@ type
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
+    
     /// you can call this method to prepare the server for shutting down
     // - it will reject any incoming request from now on, and will wait until
     // all pending requests are finished, for proper server termination
@@ -11076,7 +11080,11 @@ type
     // the VirtualTableExternalRegister() global function
     property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
       read GetVirtualTable;
-  published
+    /// a local "Garbage collector" list, for some classes instances which must
+    // live during the whole TSQLRestServer process
+    // - is used internally by the class, but can be used for business code
+    property PrivateGarbageCollector: TObjectList read fPrivateGarbageCollector;
+  published 
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
     // used in AJAX environnement (like in TSQLite3HttpServer)
@@ -25566,6 +25574,7 @@ end;
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
 var t,n: integer;
 begin
+  fPrivateGarbageCollector := TObjectList.Create;
   // specific server initialization
   fVirtualTableDirect := true; // faster direct Static call by default
   // needed by AuthenticationRegister() below
@@ -25590,6 +25599,8 @@ begin
   inherited Create(aModel);
   fAfterCreation := true;
   fStats := TSQLRestServerStats.Create;
+  fPrivateGarbageCollector.Add(fStats);
+  fSessions := TObjectList.Create;
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   fSessionCounter := GetTickCount; // force almost-random session ID
   if fSessionCounter>cardinal(maxInt) then
@@ -25628,7 +25639,14 @@ begin
   {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
-  fStats.Free; 
+  for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
+  try
+    fPrivateGarbageCollector.Delete(i); // will call fPrivate...[i].Free
+  except
+    on Exception do
+      ; // just ignore exceptions in such destructors
+  end;
+  fPrivateGarbageCollector.Free;
 end;
 
 procedure TSQLRestServer.Shutdown;
@@ -27411,8 +27429,6 @@ begin
         Ctxt.Call^.OutStatus := HTML_NOTALLOWED;
         exit; // user already connected -> error 404
       end;
-  if fSessions=nil then
-    fSessions := TObjectList.Create;
   Session := fSessionClass.Create(Ctxt,User);
   if Assigned(OnSessionCreate) then
     if OnSessionCreate(self,Session,Ctxt) then begin
@@ -27492,7 +27508,7 @@ function TSQLRestServer.SessionGetUser(aSessionID: Cardinal): TSQLAuthUser;
 var i: integer;
 begin
   result := nil;
-  if (self=nil) or (fSessions=nil) then
+  if self=nil then
     exit;
   EnterCriticalSection(fSessionCriticalSection);
   try
