@@ -9541,7 +9541,7 @@ You can find a corresponding BATCH file in the {\f1\fs20 CrossPlatform} folder, 
 In fact, the {\f1\fs20 SynCrossPlatformJSON.pas} unit is not used under {\i Smart Mobile Studio}: we use the built-in JSON serialization features of {\i JavaScript}, using {\f1\fs20 variant} dynamic type, and the standard {\f1\fs20 JSON.Stringify()} and {\f1\fs20 JSON.Parse()} functions.
 \page
 : Generating client wrappers
-Even if it feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and set of {\i @*Mustache@}-based templates - see @81@.
+Even if it is feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and a set of {\i @*Mustache@}-based templates - see @81@.
 The following templates are available in the {\f1\fs20 CrossPlatform\\templates} folder:
 |%45%45
 |\b Unit Name|Compiler Target\b0
@@ -10013,7 +10013,7 @@ For instance, if you run the {\f1\fs20 RegressionTestsServer.dpr} server (availa
 !    property Sexe: TPeopleSexe read fSexe write fSexe;
 !    property Simple: TTestCustomJSONArraySimpleArray read fSimple write fSimple;
 !  end;
-In the above code, you can see several methods to the {\f1\fs20 ICalculator} service, some involving the complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record type. The {\f1\fs20 implementation} section of the unit will in fact allow serialization of such records to/from JSON, even with obfuscated {\i JavaScript} field names, via {\f1\fs20 ComputeRTTI() GetProperty()} and {\f1\fs20 SetProperty()}.
+In the above code, you can see several methods to the {\f1\fs20 ICalculator} service, some involving the complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record type. The {\f1\fs20 implementation} section of the unit will in fact allow serialization of such records to/from JSON, even with obfuscated {\i JavaScript} field names.
 Some {\i enumerations} types are also defined, so will help your business code be very expressive, thanks to the {\i @*SmartPascal@} strong typing. This is a huge improvement when compared to {\i JavaScript} native weak and dynamic typing.
 There is a {\f1\fs20 TSQLRecordPeople} class generated, which will map the following {\i Delphi} class type, as defined in the {\f1\fs20 PeopleServer.pas} unit:
 !  TSQLRecordPeople = class(TSQLRecord)
@@ -10037,7 +10037,7 @@ There is a {\f1\fs20 TSQLRecordPeople} class generated, which will map the follo
 !  public
 !    property Simple: TTestCustomJSONArraySimpleArray read fSimple;
 !  end;
-Here, a complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record field has been published, thanks to a manual {\f1\fs20 InternalRegisterCustomProperties()} registration, as we already stated above.\line You can see that types like {\f1\fs20 RawUTF8} were mapped to the standard {\i SmartPascal} {\f1\fs20 string} type, as expected, when converted to the {\f1\fs20 mORMotClient.pas} generated unit.
+Here, a complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record field has been published, thanks to a manual {\f1\fs20 InternalRegisterCustomProperties()} registration, as we already stated above. Since {\i SmartPascal} is limited in terms of RTTI, the code generator did define some {\f1\fs20 ComputeRTTI() GetProperty()} and {\f1\fs20 SetProperty()} protected methods, which will, at runtime, perform all the properties marshaling to and from JSON.\line You can see that types like {\f1\fs20 RawUTF8} in the original {\i Delphi} {\f1\fs20 TSQLRecord} were mapped to the standard {\i SmartPascal} {\f1\fs20 string} type, as expected, when converted to the {\f1\fs20 mORMotClient.pas} generated unit.
 Your AJAX client can then access to this {\f1\fs20 TSQLRecordPeople} content easily, via standard CRUD operations.\line See the {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client} sample, for instance the following line:
 !!  people := new TSQLRecordPeople;
 !  for i := 1 to 200 do begin
