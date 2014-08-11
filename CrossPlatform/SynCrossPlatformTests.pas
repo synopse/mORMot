@@ -761,47 +761,43 @@ begin
 end;
 
 procedure TSynCrossPlatformClient.Services;
-var Calc: TServiceCalculator;
+var calc: ICalculator;
     i,j: integer;
     sex: TPeopleSexe;
     name: string;
     rec: TTestCustomJSONArraySimpleArray;
 const SEX_TEXT: array[0..1] of RawUTF8 = ('Miss','Mister');
 begin
-  Calc := TServiceCalculator.Create(fClient);
-  try
-    check(Calc.InstanceImplementation=sicShared);
-    check(Calc.ServiceName='Calculator');
-    for i := 1 to 200 do
-      check(calc.Add(i,i+1)=i*2+1);
-    for i := 1 to 200 do begin
-      sex := TPeopleSexe(i and 1);
-      name := 'Smith';
-      calc.ToText(i,'$',sex,name);
-      check(sex=sFemale);
-      check(name=format('$ %d for %s Smith',[i,SEX_TEXT[i and 1]]));
+  calc := TServiceCalculator.Create(fClient);
+  check(calc.InstanceImplementation=sicShared);
+  check(calc.ServiceName='Calculator');
+  for i := 1 to 200 do
+    check(calc.Add(i,i+1)=i*2+1);
+  for i := 1 to 200 do begin
+    sex := TPeopleSexe(i and 1);
+    name := 'Smith';
+    calc.ToText(i,'$',sex,name);
+    check(sex=sFemale);
+    check(name=format('$ %d for %s Smith',[i,SEX_TEXT[i and 1]]));
+  end;
+  Fillchar(rec,SizeOf(rec),0);
+  for i := 1 to 100 do begin
+    name := calc.RecordToText(rec);
+    if i=1 then
+      check(name='{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":[]}');
+    check(length(Rec.F)=i);
+    for j := 1 to length(Rec.F) do
+      check(Rec.F[j]='!');
+    check(length(Rec.G)=i);
+    for j := 0 to high(Rec.G) do
+      check(Rec.G[j]=IntToStr(j+1));
+    check(Rec.H.H1=i);
+    check(length(Rec.J)=i);
+    for j := 0 to high(Rec.J) do begin
+      Check(Rec.J[j].J1=j);
+      Check(Rec.J[j].J2.D2=j);
+      Check(Rec.J[j].J3=TRecordEnum(j mod (ord(high(TRecordEnum))+1)));
     end;
-    Fillchar(rec,SizeOf(rec),0);
-    for i := 1 to 100 do begin
-      name := calc.RecordToText(rec);
-      if i=1 then
-        check(name='{"F":"","G":[],"H":{"H1":0,"H2":"","H3":{"H3a":false,"H3b":null}},"I":"","J":[]}');
-      check(length(Rec.F)=i);
-      for j := 1 to length(Rec.F) do
-        check(Rec.F[j]='!');
-      check(length(Rec.G)=i);
-      for j := 0 to high(Rec.G) do
-        check(Rec.G[j]=IntToStr(j+1));
-      check(Rec.H.H1=i);
-      check(length(Rec.J)=i);
-      for j := 0 to high(Rec.J) do begin
-        Check(Rec.J[j].J1=j);
-        Check(Rec.J[j].J2.D2=j);
-        Check(Rec.J[j].J3=TRecordEnum(j mod (ord(high(TRecordEnum))+1)));
-      end;
-    end;
-  finally
-    Calc.Free;
   end;
 end;
 

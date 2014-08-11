@@ -494,28 +494,61 @@ type
   // ! aIntegerResult := TServiceCalculator.Create(aClient).Add(10,20);
   // - as you already noted, server-side interface-based services are in fact
   // consummed without any interface in this cross-platform unit!
-  TServiceClientAbstract = class
+  TServiceClientAbstract = class{$ifndef ISDWS}(TInterfacedObject){$endif}
   protected
     fClient: TSQLRestClientURI;
     fServiceName: string;
     fServiceURI: string;
     fInstanceImplementation: TServiceInstanceImplementation;
     fContractExpected: string;
+    function GetClient: TSQLRestClientURI;
+    function GetContractExpected: string;
+    function GetInstanceImplementation: TServiceInstanceImplementation;
+    function GetRunningInstance: TServiceClientAbstract;
+    function GetServiceName: string;
+    function GetServiceURI: string;
   public
     /// initialize the fake instance
     // - this method will synchronously (i.e. blocking) check the server
     // contract according to the one expected by the client
     // - overriden constructors will set the parameters expected by the server
     constructor Create(aClient: TSQLRestClientURI); virtual;
+    /// the associated TSQLRestClientURI instance
+    property Client: TSQLRestClientURI read GetClient;
     /// the unmangdled remote service name
-    property ServiceName: string read fServiceName;
+    property ServiceName: string read GetServiceName;
     /// the URI to access to the remote service
-    property ServiceURI: string read fServiceURI;
+    property ServiceURI: string read GetServiceURI;
     /// how this instance lifetime is expected to be handled
-    property InstanceImplementation: TServiceInstanceImplementation read fInstanceImplementation;
+    property InstanceImplementation: TServiceInstanceImplementation read GetInstanceImplementation;
     /// the published service contract, as expected by both client and server
-    property ContractExpected: string read fContractExpected;
+    property ContractExpected: string read GetContractExpected;
   end;
+
+  {$ifndef ISDWS}
+  /// all generated client interfaces will inherit from this abstract parent
+  IServiceAbstract = interface
+    ['{06F02DCC-0DD1-4961-A5F4-C11AE375F03B}']
+    function GetClient: TSQLRestClientURI;
+    function GetContractExpected: string;
+    function GetInstanceImplementation: TServiceInstanceImplementation;
+    function GetRunningInstance: TServiceClientAbstract;
+    function GetServiceName: string;
+    function GetServiceURI: string;
+    /// the associated TSQLRestClientURI instance
+    property Client: TSQLRestClientURI read GetClient;
+    /// the unmangdled remote service name
+    property ServiceName: string read GetServiceName;
+    /// the URI to access to the remote service
+    property ServiceURI: string read GetServiceURI;
+    /// how this instance lifetime is expected to be handled
+    property InstanceImplementation: TServiceInstanceImplementation read GetInstanceImplementation;
+    /// the published service contract, as expected by both client and server
+    property ContractExpected: string read GetContractExpected;
+    /// the client class instance currently implementing this interface
+    property RunningInstance: TServiceClientAbstract read GetRunningInstance;
+  end;
+  {$endif}
 
   /// abstract ancestor to all sicClientDriven interface-based services
   // - since server-side life-time is driven by the client, this kind of class
@@ -2259,8 +2292,8 @@ procedure TSQLRestClientURI.CallRemoteServiceInternal(var Call: TSQLRestURIParam
   aCaller: TServiceClientAbstract; const aMethod, aParams: string);
 var url, clientDrivenID, sent: string;
 begin
-  url := Model.Root+'/'+aCaller.ServiceURI;
-  if aCaller.InstanceImplementation=sicClientDriven then
+  url := Model.Root+'/'+aCaller.fServiceURI;
+  if aCaller.fInstanceImplementation=sicClientDriven then
     clientDrivenID := (aCaller as TServiceClientAbstractClientDriven).ClientID;
   ServicesRouting.ClientSideInvoke(url,aMethod,aParams,clientDrivenID,sent);
   Call.Url := url;
@@ -2325,7 +2358,7 @@ begin
       var outID: integer;
       var result := CallGetResult(Call,outID); // from {result:...,id:...}
       if VarIsValidRef(result) then begin
-         if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+         if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
            (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
         if aExpectedOutputParamsCount=0 then
           onSuccess([]) else begin
@@ -2358,8 +2391,8 @@ begin
   outResult := CallGetResult(Call,outID); // from {result:...,id:...}
   if not VarIsValidRef(outResult) then
     raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
-      [aCaller.ServiceName,aMethodName,Call.OutStatus]);
-   if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+      [aCaller.fServiceName,aMethodName,Call.OutStatus]);
+   if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
      (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
   if aExpectedOutputParamsCount=0 then
     exit; // returns default []
@@ -2368,7 +2401,7 @@ begin
     result := res.Values else
     raise EServiceException.CreateFmt('Error calling %s.%s - '+
       'received %d parameters (expected %d)',
-      [aCaller.ServiceName,aMethodName,res.Count,aExpectedOutputParamsCount]);
+      [aCaller.fServiceName,aMethodName,res.Count,aExpectedOutputParamsCount]);
 end;
 
 {$else}
@@ -2400,9 +2433,9 @@ begin
   CallRemoteServiceInternal(Call,aCaller,aMethodName,params.ToJSON);
   if Call.OutStatus<>HTML_SUCCESS then
     raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
-      [aCaller.ServiceName,aMethodName,Call.OutStatus]);
+      [aCaller.fServiceName,aMethodName,Call.OutStatus]);
   result := CallGetResult(Call,outID);
-  if (aCaller.InstanceImplementation=sicClientDriven) and (outID<>0) then
+  if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
     (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
   if aExpectedOutputParamsCount=0 then
     exit;
@@ -2410,7 +2443,7 @@ begin
   if arr^.Count<>aExpectedOutputParamsCount then
     raise EServiceException.CreateFmt('Error calling %s.%s - '+
       'received %d parameters (expected %d)',
-      [aCaller.ServiceName,aMethodName,arr^.Count,aExpectedOutputParamsCount]);
+      [aCaller.fServiceName,aMethodName,arr^.Count,aExpectedOutputParamsCount]);
   res := arr^.Values;
 end;
 
@@ -2876,7 +2909,7 @@ var Call: TSQLRestURIParams; // manual synchronous call
     result: variant;
     contract: string;
 begin
-  if (ServiceName='') or (ServiceURI='') then
+  if (fServiceName='') or (fServiceURI='') then
     raise EServiceException.CreateFmt(
       'Overriden %s.Create should have set properties',[ClassName]);
   if aClient=nil then
@@ -2894,9 +2927,39 @@ begin
       contract := Values[0] else
       contract := Value['contract']; // if ResultAsJSONObject=true
   {$endif}
-  if contract<>ContractExpected then
+  if contract<>fContractExpected then
     raise EServiceException.CreateFmt('Invalid contract "%s" for %s: expected "%s"',
-      [contract,ClassName,ContractExpected]);
+      [contract,ClassName,fContractExpected]);
+end;
+
+function TServiceClientAbstract.GetClient: TSQLRestClientURI;
+begin
+  result := fClient;
+end;
+
+function TServiceClientAbstract.GetContractExpected: string;
+begin
+  result := fContractExpected;
+end;
+
+function TServiceClientAbstract.GetInstanceImplementation: TServiceInstanceImplementation;
+begin
+  result := fInstanceImplementation;
+end;
+
+function TServiceClientAbstract.GetRunningInstance: TServiceClientAbstract;
+begin
+  result := self;
+end;
+
+function TServiceClientAbstract.GetServiceName: string;
+begin
+  result := fServiceName;
+end;
+
+function TServiceClientAbstract.GetServiceURI: string;
+begin
+  result := fServiceURI;
 end;
 
 
@@ -2904,14 +2967,14 @@ end;
 
 constructor TServiceClientAbstractClientDriven.Create(aClient: TSQLRestClientURI);
 begin
-  if InstanceImplementation<>sicClientDriven then
+  if fInstanceImplementation<>sicClientDriven then
     raise EServiceException.CreateFmt(
       'Overriden %s.Create should have set sicClientDriven',[ClassName]);
-  if aClient.fRunningClientDriven.IndexOf(ServiceName)>=0 then
+  if aClient.fRunningClientDriven.IndexOf(fServiceName)>=0 then
     raise EServiceException.CreateFmt('Only ONE instance of %s is allowed at once',
       [ClassName]);
   inherited Create(aClient); // will synchronously check the contract from server
-  aClient.fRunningClientDriven.Add(ServiceName); // mark as opened
+  aClient.fRunningClientDriven.Add(fServiceName); // mark as opened
 end;
 
 destructor TServiceClientAbstractClientDriven.Destroy;

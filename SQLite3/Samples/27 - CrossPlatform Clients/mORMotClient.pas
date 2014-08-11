@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 // - retrieved from http://localhost:888/root/wrapper/CrossPlatform/mORMotClient.pas
-// at 2014-08-09 18:53:00 using "CrossPlatform.pas.mustache" template
+// at 2014-08-11 13:19:14 using "CrossPlatform.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -52,9 +52,23 @@ type // define some record types, used as properties below
 
 
 type
-  /// service accessible via http://localhost:888/root/Calculator
+  /// service implemented by TServiceCalculator
+  // - you can access this service as such:
+  // !var aCalculator: ICalculator;
+  // !begin
+  // !   aCalculator := TCalculator.Create(aClient);
+  // !   // now you can use aCalculator methods
+  // !...
+  ICalculator = interface(IServiceAbstract)
+    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
+    function Add(const n1: integer; const n2: integer): integer;
+    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
+    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+  end;
+
+  /// implements ICalculator from http://localhost:888/root/Calculator
   // - this service will run in sicShared mode
-  TServiceCalculator = class(TServiceClientAbstract)
+  TServiceCalculator = class(TServiceClientAbstract,ICalculator)
   public
     constructor Create(aClient: TSQLRestClientURI); override;
     function Add(const n1: integer; const n2: integer): integer;

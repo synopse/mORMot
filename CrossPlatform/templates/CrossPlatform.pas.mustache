@@ -54,9 +54,23 @@ type // define some record types, used as properties below
 {{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
 type
 {{#soa.services}}
-  /// service accessible via http://{{host}}/{{root}}/{{uri}}
+  /// service implemented by TService{{interfaceURI}}
+  // - you can access this service as such:
+  // !var a{{interfaceURI}}: I{{interfaceURI}};
+  // !begin
+  // !   a{{interfaceURI}} := T{{interfaceURI}}.Create(aClient);
+  // !   // now you can use a{{interfaceURI}} methods
+  // !...
+  I{{interfaceURI}} = interface(IServiceAbstract)
+    ['{{GUID}}']
+{{#methods}}
+    {{verb}} {{>method}}
+{{/methods}}
+  end;
+
+  /// implements I{{interfaceURI}} from http://{{host}}/{{root}}/{{uri}}
   // - this service will run in sic{{instanceCreationName}} mode
-  TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}})
+  TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}},I{{interfaceURI}})
   public
     constructor Create(aClient: TSQLRestClientURI); override;
 {{#methods}}
