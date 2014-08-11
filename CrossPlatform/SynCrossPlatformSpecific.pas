@@ -335,6 +335,9 @@ uses
 {$ifdef USEINDY}
 uses
   IdHTTP, IdCoderMIME, IdSSLOpenSSL;
+  // for SSL support with iOS and Android client, please follow instructions at
+  // http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html and you may
+  // download the *.a files from http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
 {$endif}
 
 {$ifdef USESYNCRT}
