@@ -124,17 +124,18 @@ This document is intended to describe the Design Input Product Specifications.
 This document focuses on the {\i Synopse mORMot Framework} library.
 The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 1.18 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
-It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the Delphi programing environment.
-Latest versions of Delphi (i.e. Delphi 2010/XE/XE2/XE3/XE4/XE5/XE6) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the Delphi compiler as well, with a more open architecture.
-This framework shall use a innovative ORM (Object-relational mapping) approach, based on the RTTI (Runtime Type Information) provided by the Delphi language. It shall expose Server data access and business services to Clients, using JSON over several communication protocols.
+It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
+Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.
+This framework shall use a innovative ORM (Object-relational mapping) approach, based on the RTTI (Runtime Type Information) provided by the {\i Delphi} language. It shall expose Server data access and business services to Clients, using JSON over several communication protocols.
 After evaluation of most used database engines, the {\i SQLite3} engine was found out to be secure, fast, and perfectly adapted as a stand-alone database engine for this framework, able to access other remote database engines using its unique {\i Virtual Tables} mechanism.
 Together with this Client-Server data and business architecture, a set of User Interface components (especially Database Grid and Reporting system) are provided within the framework.
 The main approach of this framework is to avoid @*RAD@ in the development of projects. RAD has been proved to be a good candidate about prototyping, but is not the best approach for creating a robust and maintainable application. Best practices (as MVC, n-Tier or SOA) shall be used instead.
 : Expected Use
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
-This framework was developed in order to run under any Delphi compiler, from version Delphi 6 to version Delphi XE6. It targets both {\i Win32} and {\i Win64} platforms, using the 64 bit compiler included in latest Delphi XE2 and up.
-It was conceived so that it could be compatible also with the {\i @*FreePascal@ Compiler}, which is more advanced than the Embarcadero Delphi compiler for cross-platform support. This support is not tested nor fully supported, but was taken in account during coding.
+This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi} XE6.
+On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64 bit compiler included in latest {\i Delphi} XE2 and up).
+For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
 \page
 :Software Design Input
@@ -397,7 +398,7 @@ ShortName=Windows Messages protocol
 
 [SRS-DI-2.1.1.2.4]
 Parent=DI-2.1.1.2
-Ident=Client-Server HTTP/1.1 over TCP/IP protocol communication shall be made available by some dedicated classes, and ready to be accessed from outside any Delphi Client (e.g. the implement should be AJAX ready)
+Ident=Client-Server HTTP/1.1 over TCP/IP protocol communication shall be made available by some dedicated classes, and ready to be accessed from outside any {\i Delphi} Client (e.g. the implement should be AJAX ready)
 ShortName=HTTP/1.1 protocol
 
 [SRS-DI-2.1.2]
@@ -411,8 +412,8 @@ The {\i Synopse mORMot Framework} shall use UTF-8 encoding for the character tra
 [SRS-DI-2.1.3]
 ; DI-2.1.3 - The framework shall use an innovative ORM (Object-relational mapping) approach, based on classes RTTI (Runtime Type Information)
 
-ORM, as defined in the @SAD@, is used in the {\i Synopse mORMot Framework} for accessing data record fields directly from Delphi Code.
-Object-relational mapping (ORM, O/RM, and O/R mapping) is a programming technique for converting data between incompatible type systems in relational databases and object-oriented programming languages. This creates, in effect, a "virtual object database" that can be used from within the Delphi programming language.
+ORM, as defined in the @SAD@, is used in the {\i Synopse mORMot Framework} for accessing data record fields directly from {\i Delphi} Code.
+Object-relational mapping (ORM, O/RM, and O/R mapping) is a programming technique for converting data between incompatible type systems in relational databases and object-oriented programming languages. This creates, in effect, a "virtual object database" that can be used from within the {\i Delphi} programming language.
 The {\f1\fs20 published} properties of classes inheriting from a new generic type named {\f1\fs20 TSQLRecord} are used to define the field properties of the data. Accessing database records (for reading or update) shall be made by using these classes properties, and some dedicated Client-side methods.
 
 [SRS-DI-2.1.4]
@@ -426,14 +427,14 @@ All crosscutting scenarios are coupled, so you benefit of consisting APIs and do
 
 In order to follow a {\i Service Oriented Architecture} design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @SRS-DI-2.1.3@;
-- By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native Delphi methods;
-- Defining some RESTful {\i service @*contract@s} as standard Delphi {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
+- By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native {\i Delphi} methods;
+- Defining some RESTful {\i service @*contract@s} as standard {\i Delphi} {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
 
 [SRS-DI-2.2.1]
 ; DI-2.2.1 - The SQLite3 engine shall be embedded to the framework
 
 The {\i SQLite3} database engine is used in the {\i Synopse mORMot Framework} as its kernel database engine. {\i SQLite3} is an ACID-compliant embedded relational database management system contained in a C programming library.
-This library shall be linked statically to the {\i Synopse mORMot Framework}, or using official external {\f1\fs20 sqlite3.dll} distribution, and interact directly from the Delphi application process.
+This library shall be linked statically to the {\i Synopse mORMot Framework}, or using official external {\f1\fs20 sqlite3.dll} distribution, and interact directly from the {\i Delphi} application process.
 The {\i Synopse mORMot Framework} shall enhance the standard {\i SQLite3} database engine by introducing some new features stated in the @SAD@, related to the Client-Server purpose or the framework - see @SRS-DI-2.1.1@.
 
 [SRS-DI-2.2.2]
@@ -460,13 +461,13 @@ The {\i Synopse mORMot Framework} shall provide User Interface and Report genera
 Such a ribbon-oriented interface shall be made available, in a per-table approach, and associated reports.
 Here is a sample of screen content, using proprietary TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from Delphi 6 up to XE6:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE6:
 %synfilevcl.png
 
 [SRS-DI-2.3.1]
 ; DI-2.3.1 - An User Interface, with buttons and toolbars shall be easily being created from the code, with no RAD needed, using RTTI and data auto-description
 
-The {\i Synopse mORMot Framework} shall provide some User-Interface dedicated units, allowing database grid display, on screen tool-bar creation (by an internal system of actions using Delphi RTTI - see the corresponding paragraph in the @SAD@), and integrated reporting - see @SRS-DI-2.3.2@.
+The {\i Synopse mORMot Framework} shall provide some User-Interface dedicated units, allowing database grid display, on screen tool-bar creation (by an internal system of actions using {\i Delphi} RTTI - see the corresponding paragraph in the @SAD@), and integrated reporting - see @SRS-DI-2.3.2@.
 No RAD approach is to be provided: the Client application User Interface will be designed not by putting components on the IDE screen, but directly from code.
 
 [SRS-DI-2.3.1.1]
@@ -481,7 +482,7 @@ ShortName=RTTI generated Toolbars
 
 [SRS-DI-2.3.1.3]
 Parent=DI-2.3.1
-Ident=Internationalization (i18n) of the whole User Interface shall be made available by defined some external text files: Delphi resourcestring shall be translatable on the fly, custom window dialogs automaticaly translated before their display, and User Interface generated from RTTI should be included in this i18n mechanism
+Ident=Internationalization (i18n) of the whole User Interface shall be made available by defined some external text files: {\i Delphi} resourcestring shall be translatable on the fly, custom window dialogs automaticaly translated before their display, and User Interface generated from RTTI should be included in this i18n mechanism
 ShortName=Automated i18n
 
 [SRS-DI-2.3.2]
@@ -565,22 +566,24 @@ TitleOffset=0
 DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
-{\i Synopse mORMot} is a @*Client-Server@ @*ORM@ and Service Oriented Architecture framework (@*SOA@) for Delphi 6 up to XE6, targeting {\i Win32} and {\i Win64} platforms.
+{\i Synopse mORMot} is a @*Client-Server@ @*ORM@ and Service Oriented Architecture framework (@*SOA@) for {\i Delphi} 6 up to XE6, targeting {\i Win32} and {\i Win64} platforms on the server, and any platform for clients (including mobile or AJAX).
 %IamLost.png
 The main two features of {\i mORMot} are therefore:
 - Client-Server {\i ORM/ODM}: objects persistence and remote access;
 - Client-Server {\i Services}: remote call of high-level data process.
-It provides an Open Source {\i self-sufficient set of units} (even Delphi starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
-- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich Delphi clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
+It provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
+- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
-- {\i Domain Model layer} handling all the needed business logic in plain Delphi objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents;
+- {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
 - {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
-With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture, ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
-The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in Delphi or any other mean, including AJAX).
+With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
+The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in {\i Delphi} or any other mean, including AJAX).
 The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
-No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.\line Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than DataSnap, WCF or node.js, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
+No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich {\i Delphi} clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Client authentication is performed via several secure methods, and communication can be encrypted via HTTS or with proprietary SHA/AES-256 algorithm. SOA endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.
+Cross-platform clients can be easily created, as {\i Win32} and {\i Win64} executables of course, but also for any platform supported by the {\i Delphi} compiler (including {\i Mac @*OSX@}, {\i @*iPhone@}/{\i @*iPad@} and {\i @*Android@}), or by {\i @*FreePascal@} / {\i @*Lazarus@}. AJAX applications can easily be created via {\i @*Smart Mobile Studio@}, as would any mobile operating system be accessible as an HTML5 web rich client or stand-alone {\i @*PhoneGap@} application, ready to be added to the {\i Windows}, {\i Apple} or {\i Google} store. See @86@ for how {\i mORMot} client code generation leverages all platforms.
+Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than {\i DataSnap}, {\f1\fs20 WCF} or {\f1\fs20 node.js}, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
 In short, with {\i mORMot}, your ROI is maximized.
 \page
 :41 Client-Server ORM/SOA framework
@@ -632,22 +635,22 @@ Switch from this embedded architecture to the Client-Server one is just a matter
 At first, some points can be highlighted, which make this framework distinct to other available solutions:
 - @*Client-Server@ orientation, with optimized request caching and intelligent update over a @*REST@ful architecture - but can be used in stand-alone applications;
 - No @*RAD@ components, but true @*ORM@ and @*SOA@ approach;
-- Multi-@*Tier@ architecture, with integrated @*Business rules@ as fast ORM-based classes (not via external scripting or such) and {\i @*Domain-Driven@} design;
+- Multi-@*Tier@ architecture, with integrated @*Business rules@ as fast ORM-based classes and {\i @*Domain-Driven@} design;
 - {\i Service-Oriented-Architecture} model, using custom RESTful JSON services - you can send as JSON any {\f1\fs20 TStrings, TCollection, TPersistent} or {\f1\fs20 TObject} (via registration of a custom serializer) instance, or even a {\i dynamic array}, or any record content, with integrated JSON @*serialization@, via an @*interface@-based contract shared on both client and server sides;
 - Truly RESTful authentication with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
 - Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
-- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the Delphi {\f1\fs20 DB.pas} unit nor any third-party (so even the Delphi Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
+- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
 - RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
 - Full @*Text Search@ engine included, with enhanced Google-like ranking algorithm;
 - Direct User Interface generation: grids are created on the fly, together with a modern Ribbon ('Office 2007'-like) screen layout - the code just has to define actions, and assign them to the tables, in order to construct the whole interface from a few lines of code, without any IDE usage;
 - Integrated @*Report@ing system, which could serve complex @*PDF@ reports from your application;
 - Designed to be as fast as possible (asm used when needed, buffered reading and writing avoid most memory consumption, multi-thread ready architecture...) so benchmarks sound impressive when compared to other solutions - see @59@;
-- More than 1000 pages of documentation;
-- Delphi and @*AJAX@ clients can share the same server;
+- More than 1500 pages of documentation;
+- {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from Delphi 6 up to XE6, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of Delphi (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to XE6, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
@@ -661,7 +664,7 @@ Benefits of {\i mORMot} are therefore:
 - Open Source, documented and maintained: project is developed since years, with some active members - {\i mORMot} won't leave you soon!
 \page
 :66 Legacy code and existing projects
-Even if {\i mORMot} will be more easily used in a project designed from scratch, it fits very well the purpose of evolving any existing Delphi project, or creating the server side part of an AJAX application.\line One benefit of such a framework is to facilitate the transition from a traditional @*Client-Server@ architecture to a N-@*Tier@ layered pattern.
+Even if {\i mORMot} will be more easily used in a project designed from scratch, it fits very well the purpose of evolving any existing {\i Delphi} project, or creating the server side part of an AJAX application.\line One benefit of such a framework is to facilitate the transition from a traditional @*Client-Server@ architecture to a N-@*Tier@ layered pattern.
 Due to its modular design, you can integrate some framework bricks to your existing application:
 - You may add logging to your code - see @16@, to track unresolved issues, and add customer-side performance profiling;
 - Use low-level classes like {\f1\fs20 record} or {\i dynamic array} wrappers - see @48@, or our dynamic document storage via {\f1\fs20 variant} - see @80@, including @*JSON@ or binary persistence;
@@ -669,10 +672,10 @@ Due to its modular design, you can integrate some framework bricks to your exist
 - Reports could benefit of the {\f1\fs20 mORMotReport.pas} code-based system, which is very easy to use even on the server side (serving @*PDF@ files), when your business logic heavily relies on objects, not direct DB - see @67@;
 - HTTP requests may be made available using Client-Server services via methods - see @49@, e.g. for rendering HTML pages generated on the fly with {\i @*Mustache@} templates- see @81@, pictures or @*PDF@ reports;
 - You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migration to @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
-- Make your application ready to offer a RESTful interface, e.g. for consuming JSON content via AJAX or mobile clients;
+- Make your application ready to offer a RESTful interface, e.g. for consuming JSON content via AJAX or mobile clients - see @86@;
 - New tables may be defined via the ORM/ODM features of {\i mORMot}, still hosted in your external SQL server - see @27@, as any previous data; in particular, mixed pure-ORM and regular-SQL requests may coexist; or {\i mORMot}'s data modeling may balance your storage among several servers (and technologies, like NoSQL);
 - You may benefit from our very fast in-memory engine, a dedicated {\i @*SQLite3@}-based consolidation database or even the caching features - see @38@, shared on the server side, when performance is needed - it may help integrating some @*CQRS@ pattern ({\i Command Query Responsibility Segregation}) into your application via a @*REST@ful interface, and delegate some queries from your main database;
-- If you are still using an old version of Delphi, and can't easily move up due to some third party components or existing code base, {\i mORMot} will offer all the needed features to start ORM, N-Tier and SOA, starting with a Delphi 6 edition.
+- If you are still using an old version of {\i Delphi}, and can't easily move up due to some third party components or existing code base, {\i mORMot} will offer all the needed features to start ORM, N-Tier and SOA, starting with a {\i Delphi} 6 edition.
 {\i mORMot} implements the needed techniques for introducing what Michael Feathers calls, in his book {\i Working Effectively With Legacy Code}, a @**seam@. A seam is an area where you can start to cleave off some legacy code and begin to introduce changes. Even mocking abilities of {\i mORMot} - see @62@ - will help you in this delicate task - see @http://www.infoq.com/articles/Utilizing-Logging
 Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit and support for such a migration. The sooner, the better.
 \page
@@ -683,10 +686,10 @@ Feel free to give your feedback in the very same forum, asking new questions or 
 {\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes!
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services and "manual" SQL statements - in this case, you have at hand @27@ classes in {\i mORMot}, which allow very high performance and direct export to JSON.
-{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can use standard Delphi types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of Delphi, before and after Delphi 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
-{\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the Delphi IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
-{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database, you would need additional work, since we do not offer direct access to VCL data-sources.
-{\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode.
+{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can use standard {\i Delphi} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
+{\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
+{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database and linked to VCL components, you would find in the {\f1\fs20 mORMotVCL.pas} unit a way to map JSON results, as returned by a {\i mORMot} server, to a {\f1\fs20 TDataSet} fast in-memory instance. See also sample "{\i 17 - TClientDataset use}".
+{\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server} - and integrated {\i @*Mustache@} logic-less templates rendering - see @81@.
 {\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a KISS approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
@@ -857,11 +860,11 @@ Both @*ORM@ and @*SOA@ aspects of our @*REST@ful framework make it easy to devel
 \Logic Tier\Data Tier
 \
 The {\i Synopse mORMot Framework} follows this development pattern:
-- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from Delphi classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
-- {\i Logic Tier} is performed by pure ORM aspect and SOA implementation: you write Delphi classes which are mapped by the {\i Data Tier} into the database, and you can write your business logic as Services called as Delphi {\f1\fs20 interface}, up to a {\i @*Domain-Driven@} design - see @54@ - if your project reaches some level of complexity;
-- {\i Presentation Tier} is either a Delphi Client, or an @*AJAX@ application, because the framework can communicate using @*REST@ful @*JSON@ over @*HTTP@/1.1 (the Delphi Client User Interface is generated from Code, by using @*RTTI@ and structures, not as a RAD - and the Ajax applications need to be written by using your own tools and @*JavaScript@ framework, there is no "official" Ajax framework included yet).
+- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from {\i Delphi} classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
+- {\i Logic Tier} is performed by pure ORM aspect and SOA implementation: you write {\i Delphi} classes which are mapped by the {\i Data Tier} into the database, and you can write your business logic as Services called as {\i Delphi} {\f1\fs20 interface}, up to a {\i @*Domain-Driven@} design - see @54@ - if your project reaches some level of complexity;
+- {\i Presentation Tier} is either a {\i Delphi} Client, or an @*AJAX@ application, because the framework can communicate using @*REST@ful @*JSON@ over @*HTTP@/1.1 (the {\i Delphi} Client User Interface is generated from Code, by using @*RTTI@ and structures, not as a RAD - and the Ajax applications need to be written by using your own tools and @*JavaScript@ framework, there is no "official" Ajax framework included yet).
 In fact, {\i mORMot} can scales up to a {\i @*Domain-Driven@} Design four-tier architecture - see @54@ - as such:
-- {\i Presentation Tier} which can be e.g. a Delphi or AJAX client;
+- {\i Presentation Tier} which can be e.g. a {\i Delphi} or AJAX client;
 - {\i Application Tier} which serves JSON content according to the client application;
 - {\i Business Logic Tier} which centralizes all the {\i Domain} processing, shared among all applications;
 - {\i Persistence/Data Tier} which can be either in-process (like {\i @*SQLite3@} or in-memory) or external (e.g. {\i Oracle, MS SQL, DB2, PostgreSQL, MySQL}...).
@@ -960,13 +963,13 @@ SOA is mainly about {\i decoupling}.\line That is, it enables implementation ind
 |Versions|New services shall be introduced without requiring upgrades of clients|Contract marshaling can be implemented on the Server side
 |%
 SOA and ORM - see @13@ - do not exclude themselves. In fact, even if some software architects tend to use only one of the two features, both can coexist and furthermore complete each other, in any @*Client-Server@ application:
-- ORM access could be used to access to the data with objects, that is with the native presentation of the Server or Client side (Delphi, @*JavaScript@...) - so ORM can be used to provide efficient access to the data or the business logic - this is the idea of @*CQRS@ pattern;
+- ORM access could be used to access to the data with objects, that is with the native presentation of the Server or Client side ({\i Delphi}, {\i @*JavaScript@}...) - so ORM can be used to provide efficient access to the data or the business logic - this is the idea of @*CQRS@ pattern;
 - SOA will provide a more advanced way of handling the business logic: with custom parameters and data types, it is possible to provide some high-level Services to the clients, hiding most of the business logic, and reducing the needed bandwidth.
 In particular, SOA will help leaving the business logic on the Server side, therefore will help increasing the @7@. By reducing the back-and-forth between the Client and the Server, it will also reduce the network bandwidth, and the Server resources (it will always cost less to run the service on the Server than run the service on the Client, adding all remote connection and @*serialization@ to the needed database access). Our @*interface@-based SOA model allows the same code to run on both the client and the server side, with a much better performance on the server side, but a full interoperability of both sides.
 \page
 :13 Object-Relational Mapping (ORM)
 In practice, @**ORM@ gives a set of methods to ease high-level objects persistence into a @*RDBMS@.
-Our Delphi {\f1\fs20 class} instances are not directly usable with a relational database, which is since decades the most convenient way of persisting data. So some kind of "glue" is needed to let class properties be saved into one or several tables. You can interact with the database using its native language, aka SQL. But SQL by itself is a full programming language, with diverse flavors depending on the exact backend engine (just think about how you define a column type able to store text). So writing and maintaining your SQL statements may become a time-consuming, difficult and error-prone task.
+Our {\i Delphi} {\f1\fs20 class} instances are not directly usable with a relational database, which is since decades the most convenient way of persisting data. So some kind of "glue" is needed to let class properties be saved into one or several tables. You can interact with the database using its native language, aka SQL. But SQL by itself is a full programming language, with diverse flavors depending on the exact backend engine (just think about how you define a column type able to store text). So writing and maintaining your SQL statements may become a time-consuming, difficult and error-prone task.
 Sometimes, there will be nothing better than a tuned SQL statement, able to aggregate and join information from several tables. But most of the time, you will need just to perform some basic operations, known as @**CRUD@ (for {\i Create Retrieve Update Delete} actions) on well identified objects: this is where ORM may give you a huge hint, since it is able to generate the SQL statements for you.
 The ORM works in fact as such:
 \graph mORMotORMprocess ORM Process
@@ -987,7 +990,7 @@ The ORM core retrieve information to perform the mapping:
 \data model\RDBMS
 \
 Since several implementation schemes are possible, we will first discuss the pros and the cons of each one.
-First, here is a diagram presenting some common implementation schemes of database access with Delphi (which maps most other languages or frameworks, including C# or Java).
+First, here is a diagram presenting some common implementation schemes of database access with {\i Delphi} (which maps most other languages or frameworks, including C# or Java).
 \graph mORMotORM Why a Client-Server ORM
 \UI Components\DataBase\RAD
 \UI\Delphi classes\code mapping
@@ -1006,13 +1009,13 @@ The table below is a very suggestive (but it doesn't mean wrong) {\i Resumé} of 
 |%17%40%44
 |\b\qc Scheme|Pros|Cons\b0
 |Use DB views and tables, with GUI components|- @*SQL@ is a powerful language\line - Can use high-level DB tools (UML) and RAD approach|- Business logic can't be elaborated without stored procedures\line - SQL code and stored procedures will bind you to a DB engine\line - Poor Client interaction\line - Reporting must call the DB directly\line - No Multi-tier architecture
-|Map DB tables or views with Delphi classes|- Can use elaborated business logic, in Delphi\line - Separation from UI and data|- SQL code must be coded by hand and synchronized with the classes\line - Code tends to be duplicated\line - SQL code could bind you to a DB engine\line - Reports can be made from code or via DB related tools\line - Difficult to implement true Multi-tier architecture
-|Use a Database ORM|- Can use very elaborated business logic, in Delphi\line - SQL code is generated (in most cases) by the ORM\line - ORM will adapt the generated SQL to the DB engine|- More abstraction needed at design time (no RAD approach)\line - In some cases, could lead to retrieve more data from DB than needed\line - Not yet a true Multi-tier architecture, because ORM is for DB access only and business logic will need to create separated classes
-|Use a @*Client-Server@ ORM|- Can use very elaborated business logic, in Delphi\line - SQL code is generated (in most cases) by the ORM\line - ORM will adapt the generated SQL to the DB engine\line - Services will allow to retrieve or process only needed data\line - Server can create objects viewed by the Client as if they were DB objects, even if they are only available in memory or the result of some business logic defined in Delphi\line - Complete Multi-tier architecture|- More abstraction needed at design time (no RAD approach)
+|Map DB tables or views with {\i Delphi} classes|- Can use elaborated business logic, in {\i Delphi}\line - Separation from UI and data|- SQL code must be coded by hand and synchronized with the classes\line - Code tends to be duplicated\line - SQL code could bind you to a DB engine\line - Reports can be made from code or via DB related tools\line - Difficult to implement true Multi-tier architecture
+|Use a Database ORM|- Can use very elaborated business logic, in {\i Delphi}\line - SQL code is generated (in most cases) by the ORM\line - ORM will adapt the generated SQL to the DB engine|- More abstraction needed at design time (no RAD approach)\line - In some cases, could lead to retrieve more data from DB than needed\line - Not yet a true Multi-tier architecture, because ORM is for DB access only and business logic will need to create separated classes
+|Use a @*Client-Server@ ORM|- Can use very elaborated business logic, in {\i Delphi}\line - SQL code is generated (in most cases) by the ORM\line - ORM will adapt the generated SQL to the DB engine\line - Services will allow to retrieve or process only needed data\line - Server can create objects viewed by the Client as if they were DB objects, even if they are only available in memory or the result of some business logic defined in {\i Delphi}\line - Complete Multi-tier architecture|- More abstraction needed at design time (no RAD approach)
 |%
 Of course, you'll find out that our framework implements a Client-Server ORM, which can be down-sized to @*stand-alone@ mode if needed, but which is, thanks to its unique implementation, scalable to any complex Domain-Driven Design.
 As far as we found out, looking at every language and technology around, almost no other ORM supports such a native Client-Server orientation. Usual practice is to use a @17@ for remote access to the ORM. Some projects allow remote access to an existing ORM, but they are separated projects. Our {\i mORMot} is pretty unique, in respect to its @*REST@ful Client-Server orientation, from the ground up.
-If you entered the Delphi world years ago, you may be pretty fluent with the RAD approach. But you probably also discovered how difficult it is to maintain an application which mixes UI components, business logic and database queries. Today's software users have some huge ergonomic expectations about software usability: some screens with grids and buttons, mapping the database, won't definitively be appealing. Using {\i mORMot}'s ORM /SOA approach will help you focus on your business and your clients expectations, letting the framework perform most of the plumbing for you.
+If you entered the {\i Delphi} world years ago, you may be pretty fluent with the RAD approach. But you probably also discovered how difficult it is to maintain an application which mixes UI components, business logic and database queries. Today's software users have some huge ergonomic expectations about software usability: some screens with grids and buttons, mapping the database, won't definitively be appealing. Using {\i mORMot}'s ORM /SOA approach will help you focus on your business and your clients expectations, letting the framework perform most of the plumbing for you.
 \page
 :82 NoSQL and Object-Document Mapping (ODM)
 @**SQL@ is the De-Facto standard for data manipulation
@@ -1049,7 +1052,7 @@ In fact, {\i Aggregate}-oriented databases can be specified as three main implem
 - Column family (e.g. {\i Cassandra, HiBase}).
 Some of them can be {\i schema-less} (meaning that the data layout is not fixed, and can evolve on the fly without re-indexing the whole database) - but column-driven bases do have a schema, or even storing plain BLOB of data (this is the purpose of Key/Value engines, which focus on storage speed and rely on the client side to process the data).
 In short, RDBMS stores data per table, and need to JOIN the references to get the aggregated information:
-\graph NoSQLAggregJoin NoSQL Aggregate via JOINed tables
+\graph NoSQLAggregJoin SQL Aggregate via JOINed tables
 rankdir=LR;
 node [shape=Mrecord];
 struct1 [label="ID|UserName"];
@@ -1229,9 +1232,9 @@ Then detailed information will be available in the second part of this document 
 :45SynCommons unit
 %cartoon01.png
 First of all, let us introduce some cross-cutting features, used everywhere in the {\i Synopse} source code. Even if you do not need to go deeply into the implementation details, it will help you not be disturbed with some classes and types you may encounter in the framework source, and its documentation.
-It was a design choice to use some custom low-level types, classes and functions instead of calling the official Delphi RTL.\line Benefits could be:
+It was a design choice to use some custom low-level types, classes and functions instead of calling the official {\i Delphi} RTL.\line Benefits could be:
 - Cross-platform and cross-compiler support (e.g. leverage specificities, about memory model or RTTI);
-- Unicode support for all version of Delphi, even before Delphi 2009, or with @*FPC@;
+- Unicode support for all version of {\i Delphi}, even before {\i Delphi} 2009, or with @*FPC@;
 - Optimized for process speed, multi-thread friendliness and re-usability;
 - Sharing of most common features (e.g. for text/data processing);
 - KISS design.
@@ -1246,16 +1249,16 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage;
 - @*Log@ging.
 :32 Unicode and UTF-8
-Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under Delphi 2009 and up (including latest XE6 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from Delphi 6 up to Delphi 2007.
-Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of Delphi (even pre-Unicode versions, especially the Delphi 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
+Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE6 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
+Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
 - {\f1\fs20 WinAnsiString} where {\i WinAnsi}-encoded {\f1\fs20 AnsiString} (code page 1252) are needed;
-- Generic {\f1\fs20 string} for {\i @*i18n@} (e.g. in unit {\f1\fs20 mORMoti18n}), i.e. text ready to be used within the VCL, as either {\f1\fs20 AnsiString} (for Delphi 2 to 2007) or {\f1\fs20 UnicodeString} (for Delphi 2009 and later);
-- {\f1\fs20 RawUnicode} in some technical places (e.g. direct Win32 *W() API call in Delphi 7) - note: this type is NOT compatible with Delphi 2009 and later {\f1\fs20 UnicodeString};
+- Generic {\f1\fs20 string} for {\i @*i18n@} (e.g. in unit {\f1\fs20 mORMoti18n}), i.e. text ready to be used within the VCL, as either {\f1\fs20 AnsiString} (for {\i Delphi} 2 to 2007) or {\f1\fs20 UnicodeString} (for {\i Delphi} 2009 and later);
+- {\f1\fs20 RawUnicode} in some technical places (e.g. direct Win32 *W() API call in {\i Delphi} 7) - note: this type is NOT compatible with {\i Delphi} 2009 and later {\f1\fs20 UnicodeString};
 - {\f1\fs20 @**RawByteString@} for byte storage (e.g. for {\f1\fs20 FileFromString()} function);
-- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @*WideString@} before Delphi 2009, and {\f1\fs20 UnicodeString} since);
-- Some special conversion functions to be used for Delphi 2009+ {\f1 UnicodeString} (defined inside {\f1\fs20 \{$ifdef UNICODE\}...\{$endif\}} blocks);
+- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @*WideString@} before {\i Delphi} 2009, and {\f1\fs20 UnicodeString} since);
+- Some special conversion functions to be used for {\i Delphi} 2009+ {\f1 UnicodeString} (defined inside {\f1\fs20 \{$ifdef UNICODE\}...\{$endif\}} blocks);
 - Never use {\f1\fs20 AnsiString} directly, but one of the types above.
 Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used in our framework when defining textual properties in a {\f1\fs20 @*TSQLRecord@} and for all internal data processing. It is only when you're reaching the User Interface layer that you may convert explicitly the {\f1\fs20 RawUTF8} content into the generic VCL {\f1\fs20 string} type, using either the {\f1\fs20 Language. UTF8ToString} method (from {\f1\fs20 mORMoti18n.pas} unit) or the following function from {\f1\fs20 SynCommons.pas}:
 !/// convert any UTF-8 encoded String into a generic VCL Text
@@ -1267,7 +1270,7 @@ Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used 
 !// WideString usage)
 !function UTF8ToString(const Text: RawUTF8): string;
 Of course, the {\f1\fs20 StringToUTF8} method or function are available to send back some text to the @*ORM@ layer.\line A lot of dedicated conversion functions (including to/from numerical values) are included in {\f1\fs20 SynCommons.pas}. Those were optimized for speed and multi-thread capabilities, and to avoid implicit conversions involving a temporary {\f1\fs20 string} variable.
-Warning during the compilation process are not allowed, especially under Unicode version of Delphi (e.g. Delphi 2010): all string conversion from the types above are made explicitly in the framework's code, to avoid any unattended data loss.
+Warning during the compilation process are not allowed, especially under Unicode version of {\i Delphi} (e.g. {\i Delphi} 2010): all string conversion from the types above are made explicitly in the framework's code, to avoid any unattended data loss.
 :33 Currency handling
 Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly to map the variables to their internal {\f1\fs20 Int64} binary representation, as such:
 !function CompCurrency(var A,B: currency): Int64;
@@ -1292,10 +1295,10 @@ Version 1.13 of the {\f1\fs20 SynCommons.pas} unit introduced two kinds of wrapp
 - Low-level @*RTTI@ functions for handling record types: {\f1\fs20 RecordEquals, RecordSave, RecordSaveLength, RecordLoad};
 - {\f1\fs20 TDynArray} and {\f1\fs20 TDynArrayHashed} objects, which are wrappers around any {\i @*dynamic array@}.
 With {\f1\fs20 TDynArray}, you can access any {\i dynamic array} (like {\f1\fs20 TIntegerDynArray = array of integer}) using {\f1\fs20 TList}-like properties and methods, e.g. {\f1\fs20 Count, Add, Insert, Delete, Clear, IndexOf, Find, Sort} and some new methods like {\f1\fs20 LoadFromStream, SaveToStream, LoadFrom, SaveTo, Slice, Reverse,} and {\f1\fs20 AddArray}. It includes e.g. fast binary @*serialization@ of any {\i dynamic array}, even containing strings or records - a {\f1\fs20 CreateOrderedIndex} method is also available to create individual index according to the {\i dynamic array} content. You can also serialize the array content into @*JSON@, if you wish.
-One benefit of {\i dynamic arrays} is that they are reference-counted, so they do not need any {\f1\fs20 Create/try..finally...Free} code, and are well handled by the Delphi compiler (access is optimized, and all array content will be allocated at once, therefore reducing the memory fragmentation and CPU cache slow-down).
+One benefit of {\i dynamic arrays} is that they are reference-counted, so they do not need any {\f1\fs20 Create/try..finally...Free} code, and are well handled by the {\i Delphi} compiler (access is optimized, and all array content will be allocated at once, therefore reducing the memory fragmentation and CPU cache slow-down).
 They are no replacement to a {\f1\fs20 @*TCollection@} nor a {\f1\fs20 TList} (which are the standard and efficient way of storing class instances, and are also handled as @*published properties@ since revision 1.13 of the framework), but they are very handy way of having a list of content or a dictionary at hand, with no previous class nor properties definition.
-You can look at them like Python's list, tuples (via records handling) and dictionaries (via {\f1\fs20 Find} method, especially with the dedicated {\f1\fs20 TDynArrayHashed} wrapper), in pure Delphi. Our new methods (about searching and serialization) allow most usage of those script-level structures in your Delphi code.
-In order to handle {\i dynamic arrays} in our @*ORM@, some @*RTTI@-based structure were designed for this task. Since {\i dynamic array of records} should be necessary, some low-level fast access to the record content, using the common RTTI, has also been implemented (much faster than the "new" @*enhanced RTTI@ available since Delphi 2010).
+You can look at them like Python's list, tuples (via records handling) and dictionaries (via {\f1\fs20 Find} method, especially with the dedicated {\f1\fs20 TDynArrayHashed} wrapper), in pure {\i Delphi}. Our new methods (about searching and serialization) allow most usage of those script-level structures in your {\i Delphi} code.
+In order to handle {\i dynamic arrays} in our @*ORM@, some @*RTTI@-based structure were designed for this task. Since {\i dynamic array of records} should be necessary, some low-level fast access to the record content, using the common RTTI, has also been implemented (much faster than the "new" @*enhanced RTTI@ available since {\i Delphi} 2010).
 :  TList-like properties
 Here is how you can have method-driven access to the {\i dynamic array}:
 !type
@@ -1322,7 +1325,7 @@ This {\f1\fs20 TDynArray} wrapper will work also with {\f1\fs20 array of string}
 Records need only to be packed and have only not reference counted fields ({\f1\fs20 byte, integer, double}...) or {\f1\fs20 string} or {\f1\fs20 variant} reference-counted fields (there is no support of nested {\f1\fs20 Interface} yet). {\f1\fs20 TDynArray} is able to handle {\f1\fs20 record} within {\f1\fs20 record}, and even {\i dynamic arrays} within {\f1\fs20 record}.
 Yes, you read well: it will handle a {\i dynamic array} of {\f1\fs20 record}, in which you can put some {\f1\fs20 string} or whatever data you need.
 The {\f1\fs20 IndexOf()} method will search by content. That is e.g. for an {\f1\fs20 array of record}, all record fields content (including {\f1\fs20 string} properties) must match.
-Note that {\f1\fs20 TDynArray} is just a wrapper around an existing {\i dynamic array} variable. In the code above, {\f1\fs20 Add} and {\f1\fs20 Delete} methods are modifying the content of the {\f1\fs20 Group} variable. You can therefore initialize a {\f1\fs20 TDynArray} wrapper on need, to access more efficiently any native Delphi {\i dynamic array}. {\f1\fs20 TDynArray} doesn't contain any data: the elements are stored in the {\i dynamic array} variable, not in the {\f1\fs20 TDynArray} instance.
+Note that {\f1\fs20 TDynArray} is just a wrapper around an existing {\i dynamic array} variable. In the code above, {\f1\fs20 Add} and {\f1\fs20 Delete} methods are modifying the content of the {\f1\fs20 Group} variable. You can therefore initialize a {\f1\fs20 TDynArray} wrapper on need, to access more efficiently any native {\i Delphi} {\i dynamic array}. {\f1\fs20 TDynArray} doesn't contain any data: the elements are stored in the {\i dynamic array} variable, not in the {\f1\fs20 TDynArray} instance.
 :  Enhanced features
 Some methods were defined in the {\f1\fs20 TDynArray} wrapper, which are not available in a plain {\f1\fs20 TList} - with those methods, we come closer to some native generics implementation:
 - Now you can save and load a {\i dynamic array} content to or from a stream or a string (using {\f1\fs20 LoadFromStream/SaveToStream} or {\f1\fs20 LoadFrom/SaveTo} methods) - it will use a proprietary but very fast binary stream layout;
@@ -1344,9 +1347,9 @@ Here is how those new methods work:
 !  if GroupA.Find(v)<0 then // fast binary search
 !    ShowMessage('Error: 1500 not found!');
 Some unique methods like {\f1\fs20 Slice, Reverse} or {\f1\fs20 AddArray} are also available, and mimic well-known Python methods.
-Still closer to the generic paradigm, working for Delphi 6 up to XE6, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
+Still closer to the generic paradigm, working for {\i Delphi} 6 up to XE6, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
 :  Capacity handling via an external Count
-One common speed issue with the default usage of {\f1\fs20 TDynArray} is that the internal memory buffer is reallocated when you change its length, just like a regular Delphi {\i dynamic array}.
+One common speed issue with the default usage of {\f1\fs20 TDynArray} is that the internal memory buffer is reallocated when you change its length, just like a regular {\i Delphi} {\i dynamic array}.
 That is, whenever you call {\f1\fs20 Add} or {\f1\fs20 Delete} methods, an internal call to {\f1\fs20 SetLength(DynArrayVariable)} is performed. This could be slow, because it always executes some extra code, including a call to {\f1\fs20 ReallocMem}.
 In order not to suffer for this, you can define an external {\i Count} value, as an {\f1\fs20 Integer} variable.
 In this case, the {\f1\fs20 Length(DynArrayVariable)} will be the memory capacity of the {\i dynamic array}, and the exact number of stored item will be available from this {\i Count} variable. A {\f1\fs20 Count} property is exposed by {\f1\fs20 TDynArray}, and will always reflect the number of items stored in the {\i dynamic array}. It will point either to the external {\f1\fs20 Count} variable, if defined; or it will reflect the {\f1\fs20 Length(DynArrayVariable)}, just as usual. A {\f1\fs20 Capacity} property is also exposed by {\f1\fs20 TDynArray}, and will reflect the capacity of the {\i dynamic array}: in case of an external {\i Count} variable, it will reflect {\f1\fs20 Length(DynArrayVariable)}.
@@ -1451,7 +1454,7 @@ Here are the main features of this custom variant type:
 - Perfectly integrated with our @48@ and its JSON serialization - see @53@, as with the {\f1\fs20 record} serialization - see @51@;
 - Designed to work with our {\i mORMot} @*ORM@: any {\f1\fs20 @*TSQLRecord@} instance containing such {\f1\fs20 variant} custom types as published properties will be recognized by the ORM core, and work as expected with any database back-end (storing the content as JSON in a TEXT column);
 - Designed to work with our {\i mORMot} @*SOA@: any {\f1\fs20 interface}-based service - see @63@ - is able to consume or publish such kind of content, as {\f1\fs20 variant} kind of parameters;
-- Fully integrated with the Delphi IDE: any {\f1\fs20 variant} instance will be displayed as JSON in the IDE debugger, making it very convenient to work with.
+- Fully integrated with the {\i Delphi} IDE: any {\f1\fs20 variant} instance will be displayed as JSON in the IDE debugger, making it very convenient to work with.
 To create instances of such {\f1\fs20 variant}, you can use some easy-to-remember functions:
 - {\f1\fs20 _Obj() _ObjFast()} global functions to create a {\f1\fs20 variant} {\i object} document;
 - {\f1\fs20 _Arr() _ArrFast()} global functions to create a {\f1\fs20 variant} {\i array} document;
@@ -1478,7 +1481,7 @@ Then you can convert those objects into JSON, by two means:
 ! writeln(VariantSaveJson(V2)); // explicit conversion into RawUTF8
 ! writeln(V2);                  // implicit conversion from variant into string
 ! // both commands will write '{"name":"john","doc":{"one":1,"two":2.5}}'
-As a consequence, the Delphi IDE debugger is able to display such variant values as their JSON representation. That is, {\f1\fs20 V1} will be displayed as {\f1\fs20 '\{"name":"john","year":1982\}'} in the IDE debugger {\i Watch List} window, or in the {\i Evaluate/Modify} (F7) expression tool. This is pretty convenient, and much more user friendly than any class-based solution (which requires the installation of a specific design-time package in the IDE).
+As a consequence, the {\i Delphi} IDE debugger is able to display such variant values as their JSON representation. That is, {\f1\fs20 V1} will be displayed as {\f1\fs20 '\{"name":"john","year":1982\}'} in the IDE debugger {\i Watch List} window, or in the {\i Evaluate/Modify} (F7) expression tool. This is pretty convenient, and much more user friendly than any class-based solution (which requires the installation of a specific design-time package in the IDE).
 You can access to the object properties via @*late-binding@, with any depth of nesting objects, in your code:
 ! writeln('name=',V1.name,' year=',V1.year);
 ! // will write 'name=John year=1972'
@@ -1571,7 +1574,7 @@ Then you can convert those objects into JSON, by two means:
 ! writeln(VariantSaveJson(V2));
 ! writeln(V2);  // implicit conversion from variant into string
 ! // both commands will write '{"name":"john","array":["one","two",2.5]}'
-As a with any {\i object} document, the Delphi IDE debugger is able to display such {\i array} {\f1\fs20 variant} values as their JSON representation.
+As a with any {\i object} document, the {\i Delphi} IDE debugger is able to display such {\i array} {\f1\fs20 variant} values as their JSON representation.
 @*Late-binding@ is also available, with a special set of pseudo-methods:
 !  writeln(V1._Count); // will write 3 i.e. the number of items in the array document
 !  writeln(V1._Kind);  // will write 2 i.e. ord(dvArray)
@@ -1627,9 +1630,9 @@ With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i 
 !  writeln(VariantSaveJSON(V3));
 !  // all commands will write '{"name":"john","year":1982}'
 Of course, you can nest objects or arrays as parameters to the {\f1\fs20 _JsonFmt()} function.
-The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} extended syntax, i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the Delphi code to forget about @*quotes@ around the property names of your JSON.
+The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} extended syntax, i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
 Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
-As a with any {\i object} or {\i array} document, the Delphi IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
+As a with any {\i object} or {\i array} document, the {\i Delphi} IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
 :   Per-value or per-reference
 By default, the {\f1\fs20 variant} instance created by {\f1\fs20 _Obj() _Arr() _Json() _JsonFmt()} will use a {\i copy-@**by-value@} pattern. It means that when an instance is affected to another variable, a new {\f1\fs20 variant} document will be created, and all internal values will be copied. Just like a {\f1\fs20 record} type.
 This will imply that if you modify any item of the copied variable, it won't change the original variable:
@@ -1657,7 +1660,7 @@ This particular option will set the {\i copy-@**by-reference@} pattern:
 ! V2.name := 'James';   // modifies V2.name, but also V1.name
 ! writeln(V1.name,' and ',V2.name);
 ! // will write 'James and James'
-You may think that this behavior is somewhat weird for a {\f1\fs20 variant} type. But if you forget about {\i per-value} objects and consider those {\f1\fs20 TDocVariant} types as a Delphi {\f1\fs20 class} instance (which is a {\i per-reference} type), without the need of having a fixed schema nor handling manually the memory, it will probably start to make sense.
+You may think that this behavior is somewhat weird for a {\f1\fs20 variant} type. But if you forget about {\i per-value} objects and consider those {\f1\fs20 TDocVariant} types as a {\i Delphi} {\f1\fs20 class} instance (which is a {\i per-reference} type), without the need of having a fixed schema nor handling manually the memory, it will probably start to make sense.
 Note that a set of global functions have been defined, which allows direct creation of documents with {\i per-reference} instance lifetime, named {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()}. Those are just wrappers around the corresponding {\f1\fs20 _Obj() _Arr() _Json() _JsonFmt()} functions, with the following {\f1\fs20 JSON_OPTIONS[true]} constant passed as options parameter:
 !const
 !  /// some convenient TDocVariant options
@@ -1698,7 +1701,7 @@ In fact, whenever a dynamic {\i schema-less} storage structure is needed, you ma
 - Since JSON support is implemented with any {\f1\fs20 TDocVariant} value from the ground up, it makes a perfect fit for working with AJAX clients, in a script-like approach;
 - If you use our {\f1\fs20 SynMongoDB.pas mORMotMongoDB.pas} units to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access nested @*BSON@ arrays or objects documents - that is, it will allow proper @*ODM@ storage;
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
-We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like {\i Python} or {\i JavaScript}: Delphi is perfectly able to handle dynamic coding!
+We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like {\i Python} or {\i JavaScript}: {\i Delphi} is perfectly able to handle dynamic coding!
 \page
 :16 Enhanced logging
 A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
@@ -1708,7 +1711,7 @@ Here are some of its features:
 - Can load {\f1\fs20 .map} file symbols to be displayed in logging (i.e. source code file name and line numbers are logged instead of a hexadecimal value);
 - Compression of {\f1\fs20 .map} into binary {\f1\fs20 .mab} (900 KB -> 70 KB);
 - Inclusion of the {\f1\fs20 .map/.mab} into the {\f1\fs20 .exe}, with very slow size increase;
-- Exception logging (Delphi or low-level exceptions) with unit names and line numbers;
+- Exception logging ({\i Delphi} or low-level exceptions) with unit names and line numbers;
 - Optional stack trace with units and line numbers;
 - Methods or procedure recursive tracing, with {\i Enter} and {\i auto-Leave} (using a fake {\f1\fs20 interface} instance);
 - High resolution time stamps, for customer-side profiling of the application execution;
@@ -1791,7 +1794,7 @@ $20110325 19325801  -
 Note that by default you have human-readable {\i time and date} written to the log, but it is also possible to replace this timing with {\i high-resolution timestamps}. With this, you'll be able to profile your application with data coming from the customer side, on its real computer. Via the {\f1\fs20 Enter} method (and its {\i auto-Leave} feature), you have all information needed for this.
 :  Including symbol definitions
 In the above logging content, the method name is set in the code (as {\f1\fs20 'SQLExecute'}). But if the logger class is able to find a {\f1\fs20 .map} file associated to the {\f1\fs20 .exe}, the logging mechanism is able to read this symbol information, and write the exact line number of the event.
-By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the Delphi IDE.
+By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the {\i Delphi} IDE.
 In the following log entries, you'll see both high-resolution time stamp, and the entering and leaving of a {\f1\fs20 TTestCompression.TestLog} method traced with no additional code (with accurate line numbers, extracted from the {\f1\fs20 .map} content):
 $0000000000000B56  +    TTestCompression(00AB3570).000E6C79 SynSelfTests.TTestCompression.TestLog (376)
 $0000000000001785  -
@@ -1801,18 +1804,18 @@ This {\f1\fs20 .mab} file is very optimized: for instance, a {\f1\fs20 .map} of 
 :  Exception handling
 Of course, this @*log@ging mechanism is able to intercept the raise of exceptions, including the worse (e.g. {\f1\fs20 EAccessViolation}), to be logged automatically in the log file, as such:
 $000000000000090B EXCOS EAccessViolation (C0000005) at 000E9C7A SynSelfTests.Proc1 (785)  stack trace 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9E2E SynSelfTests.TestsLog (818) 000EA0FB SynSelfTests (853) 00003BF4 System.InitUnits 00003C5B System.@StartExe 000064AB SysInit.@InitExe 000EA3EC TestSQL3 (153)
-The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level Delphi exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
+The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level {\i Delphi} exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
 For instance, if you add to your program:
 !uses
 !  SynCommons;
 !(...)
 !  TSynLog.Family.Level := [sllExceptionOS];
-all OS exceptions (excluding pure Delphi exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
+all OS exceptions (excluding pure {\i Delphi} exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
 !TSynLog.Family.Level := [sllException,sllExceptionOS];
-will trace also Delphi exceptions, for instance.
+will trace also {\i Delphi} exceptions, for instance.
 You can specify some {\f1\fs20 Exception} class to be ignored, by adding them to {\f1\fs20 Family.ExceptionIgnore} internal list. It could make sense to add this setting, if your code often triggers some non-breaking exceptions, e.g. with {\f1\fs20 StrToInt()}:
 !  TSynLog.Family.ExceptionIgnore.Add(EConvertError);
-If your Delphi code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
+If your {\i Delphi} code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
 You can set the following global variable to assign a customized callback, and be able to customize the logging content associated to any exception:
 !type
 !  /// global hook callback to customize exceptions logged by TSynLog
@@ -1974,7 +1977,7 @@ Following the three previous purposes, these properties will be used:
 - To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
 Our ORM engine has genuine advanced features like convention-over-configuration, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
 :26 TSQLRecord fields definition
-For example, a database {\f1\fs20 Baby} Table is defined in Delphi code as:
+For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !/// some enumeration
 !// - will be written as 'Female' or 'Male' in our UI Grid
 !// - will be stored as its ordinal value, i.e. 0 for sFemale, 1 for sMale
@@ -2011,11 +2014,11 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 extended}|FLOAT|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|FLOAT|safely converted to/from {\f1\fs20 currency} type with fixed decimals, without rounding error
 |{\f1\fs20 @*RawUTF8@}|TEXT|this is the {\b preferred} field type for storing some textual content in the ORM
-|{\f1\fs20 WinAnsiString}|TEXT|{\i WinAnsi} char-set (code page 1252) in Delphi
-|{\f1\fs20 RawUnicode}|TEXT|{\i UCS2} char-set in Delphi, as {\f1\fs20 AnsiString}
-|{\f1\fs20 @*WideString@}|TEXT|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of Delphi)
-|{\f1\fs20 @*SynUnicode@}|TEXT|Will be either {\f1\fs20 WideString} before Delphi 2009, or {\f1\fs20 UnicodeString} later
-|{\f1\fs20 string}|TEXT|Not to be used before Delphi 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
+|{\f1\fs20 WinAnsiString}|TEXT|{\i WinAnsi} char-set (code page 1252) in {\i Delphi}
+|{\f1\fs20 RawUnicode}|TEXT|{\i UCS2} char-set in {\i Delphi}, as {\f1\fs20 AnsiString}
+|{\f1\fs20 @*WideString@}|TEXT|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
+|{\f1\fs20 @*SynUnicode@}|TEXT|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
+|{\f1\fs20 string}|TEXT|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time
 |{\f1\fs20 TTimeLog}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
@@ -2033,7 +2036,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TSQLRawBlob@}|@*BLOB@|This type is an alias to {\f1\fs20 @*RawByteString@}
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
-|{\f1\fs20 record}|TEXT|JSON string or object\line directly handled since Delphi XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} for prior versions
+|{\f1\fs20 record}|TEXT|JSON string or object\line directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} for prior versions
 |%
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
 - If the property is marked as {\f1\fs20 stored AS_UNIQUE} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
@@ -2055,12 +2058,12 @@ For instance, the following {\f1\fs20 class} definition will create an index for
 !    property Baby: TSQLBaby read fBaby write fBaby;
 !end;
 :  Text fields
-In practice, the generic {\f1\fs20 string} type is handled (as {\f1\fs20 UnicodeString} under Delphi 2009 and later), but you may loose some content if you're working with pre-Unicode version of Delphi (in which {\f1\fs20 string = AnsiString} with the current system code page). So we won't recommend its usage.
-The natural Delphi type to be used for TEXT storage in our framework is {\f1\fs20 @**RawUTF8@}. All business process should be made using {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of Delphi (starting with Delphi 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of Delphi (up to Delphi 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters.
+In practice, the generic {\f1\fs20 string} type is handled (as {\f1\fs20 UnicodeString} under {\i Delphi} 2009 and later), but you may loose some content if you're working with pre-Unicode version of {\i Delphi} (in which {\f1\fs20 string = AnsiString} with the current system code page). So we won't recommend its usage.
+The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @**RawUTF8@}. All business process should be made using {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters.
 You will find in {\f1\fs20 SynCommons.pas} unit all low-level {\f1\fs20 RawUTF8} processing functions and classes, to be used instead of any {\f1\fs20 SysUtils.pas} functions. The {\f1\fs20 mORMot} core implementation about {\f1\fs20 RawUTF8} is very optimized for speed and multi-threading, so it is recommended not to use {\f1\fs20 string} in your code, unless you access to the VCL / User Interface layer.
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :  Date and time fields
-Delphi {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database.
+{\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database.
 As alternatives,  {\f1\fs20 @**TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 TTimeLogBits} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 The resolution of such values is one second. In fact, it uses internally for computation an abstract "year" of 16 months of 32 days of 32 hours of 64 minutes of 64 seconds.\line As a consequence, any date/time information can be retrieved from its internal bit-level representation:
 - 0..5 bits will map seconds,
@@ -2081,7 +2084,7 @@ Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i
 !  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
 !end;
 But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
-Due to compiler limitation in older versions of Delphi, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you would have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above. But in most case, you should better use the following functions to manage such timestamps:
+Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you would have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above. But in most case, you should better use the following functions to manage such timestamps:
 ! function TimeLogNow: TTimeLog;
 ! function TimeLogNowUTC: TTimeLog;
 ! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
@@ -2093,14 +2096,14 @@ In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exc
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
 :  Floating point and Currency fields
 For standard floating-point values, the framework natively handles the {\f1\fs20 double} and {\f1\fs20 @**currency@} kind of variables.
-In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by Delphi XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
-The {\f1\fs20 currency} type is the standard Delphi type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
-As stated by the official Delphi documentation:
+In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
+The {\f1\fs20 currency} type is the standard {\i Delphi} type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
+As stated by the official {\i Delphi} documentation:
 {\i {\f1\fs20 Currency} is a fixed-point data type that minimizes rounding errors in monetary calculations. On the Win32 platform, it is stored as a scaled 64-bit integer with the four least significant digits implicitly representing decimal places. When mixed with other real types in assignments and expressions, {\f1\fs20 Currency} values are automatically divided or multiplied by 10000.}
 In fact, this type matches the corresponding {\f1\fs20 OLE} and {\f1\fs20 .Net} implementation of {\f1\fs20 currency}. It is still implemented the same in the {\i Win64} platform (since XE 2). The {\f1\fs20 Int64} binary representation of the {\f1\fs20 currency} type (i.e. {\f1\fs20 value*10000} as accessible via a typecast like {\f1\fs20 PInt64(@aCurrencyValue)^}) is a safe and fast implementation pattern.
 In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB} units will try to avoid any conversion to/from double for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
 :  TSQLRecord fields
-It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular Delphi code. After runing {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
+It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After runing {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
 In fact, their definition is used to define a "@*one to many@" or "@*one to one@" relationship between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
 Only exception to this rule is {\f1\fs20 TSQLRecordMany} kind of published properties, which, by design, are true instances, needed to access the pivot table data of "@*many to many@" relationship. {\i auto-instantiate} all {\f1\fs20 TSQLRecordMany} published properties (then release them at {\f1\fs20 Destroy}).
 Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor to {\i auto-instantiate} and load all {\f1\fs20 TSQLRecord} published properties at once.
@@ -2112,10 +2115,10 @@ At loading, it will check their content:
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
 - It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 double}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
-Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in Delphi code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
+Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in {\i Delphi} code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
 At JSON level, {\f1\fs20 variant} fields will be transmitted as JSON text or number, depending on the stored value.
 :  Record fields
-Since Delphi XE5, you can define and work directly with published record properties of {\f1\fs20 @*TSQLRecord@}:
+Since {\i Delphi} XE5, you can define and work directly with published record properties of {\f1\fs20 @*TSQLRecord@}:
 !  TSQLMyRecord = class(TSQLRecordPeople)
 !  protected
 !    fGUID: TGUID;
@@ -2123,9 +2126,9 @@ Since Delphi XE5, you can define and work directly with published record propert
 !    property GUID: TGUID read fGUID write fGUID index 38;
 !  end;
 The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.
-Published properties of {\i records} are handled by our code, but Delphi doesn't create the corresponding @*RTTI@ for such properties before Delphi XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of Delphi, or {\i @*FreePascal@}.
+Published properties of {\i records} are handled by our code, but {\i Delphi} doesn't create the corresponding @*RTTI@ for such properties before {\i Delphi} XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of {\i Delphi}, or {\i @*FreePascal@}.
 You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
-If you want to work with such properties before Delphi XE5, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
+If you want to work with such properties before {\i Delphi} XE5, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
 For instance, to register a {\f1\fs20 @*GUID@} property mapping a {\f1\fs20 TSQLMyRecord.fGUID: TGUID} field:
 ! type
 !   TSQLMyRecord = class(TSQLRecord)
@@ -2214,7 +2217,7 @@ You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateA
 This request loops through all matching records, accessing each row content via a {\f1\fs20 TSQLBaby} instance.
 The {\f1\fs20 mORMot} engine will create a SQL statement with the appropriate SELECT query, retrieve all data as JSON, transmit it between the Client and the Server (if any), then convert the values into properties of our {\f1\fs20 TSQLBaby} object instance. Internally, the {\f1\fs20 [CreateAnd]FillPrepare} / {\f1\fs20 FillOne} methods use a list of records, retrieved as @*JSON@ from the Server, and parsed in memory one row a time (using an internal {\f1\fs20 @*TSQLTableJSON@} instance).
 Note that there is an optional {\f1\fs20 aCustomFieldsCSV} parameter available in all {\f1\fs20 FillPrepare / CreateAndFillPrepare} methods, by which you may specify a CSV list of field names to be retrieved. It may save some remote bandwidth, if not all record fields values are needed in the loop. Note that you should use this {\f1\fs20 aCustomFieldsCSV} parameter only to retrieve some data, and that the other fields will remain untouched (i.e. void in case of {\f1\fs20 CreateAndFillPrepare}): any later call to {\f1\fs20 Update} should lead into a data loss, since the method will know that is has been called during a {\f1\fs20 FillPrepare / CreateAndFillPrepare} process, and only the retrieved filled will be updated on the server side.
-You could also create a {\f1\fs20 TObjectList}, or - even better for newer versions of Delphi supporting the generics syntax - a {\f1\fs20 TObjectList<T>} instance to retrieve all values of a table:
+You could also create a {\f1\fs20 TObjectList}, or - even better for newer versions of {\i Delphi} supporting the generics syntax - a {\f1\fs20 TObjectList<T>} instance to retrieve all values of a table:
 !var aList: TObjectList<TSQLBaby>;
 !    aMale: TSQLBaby;
 !...
@@ -2439,7 +2442,7 @@ Or with a {\f1\fs20 with} statement:
 !    MyFile.Free;
 !  end;
 !end;
-Mapping a {\f1\fs20 TSQLRecord} field into an {\f1\fs20 integer} ID is a bit difficult to learn at first. It was the only way we found out in order to define a "one to one" or "one to many" relationship within the class definition, without any property attribute features of the Delphi compiler (only introduced in newer versions). The main drawback is that the compiler won't be able to identify at compile time some potential GPF issues at run time. This is up to the developer to write correct code, when dealing with {\f1\fs20 TSQLRecord} properties. Using {\f1\fs20 AsTSQLRecord} property and overloaded {\f1\fs20 TSQLRecord. Create(aPublishedRecord)} constructor will help a lot.
+Mapping a {\f1\fs20 TSQLRecord} field into an {\f1\fs20 integer} ID is a bit difficult to learn at first. It was the only way we found out in order to define a "one to one" or "one to many" relationship within the class definition, without any property attribute features of the {\i Delphi} compiler (only introduced in newer versions). The main drawback is that the compiler won't be able to identify at compile time some potential GPF issues at run time. This is up to the developer to write correct code, when dealing with {\f1\fs20 TSQLRecord} properties. Using {\f1\fs20 AsTSQLRecord} property and overloaded {\f1\fs20 TSQLRecord. Create(aPublishedRecord)} constructor will help a lot.
 :   Automatic instantiation and JOINed query
 Having to manage at hand all nested {\f1\fs20 TSQLRecord} instances can be annoying, and error-prone.
 As an alternative, if you want to retrieve a whole {\f1\fs20 TSQLRecord} instance including its nested {\f1\fs20 TSQLRecord} published properties, you can use either of those two constructors:
@@ -2493,9 +2496,9 @@ The "{\i has many}" and "{\i has many through}" relationship we just described d
 One drawback of this approach is that the data is split into several tables, and you should carefully take care of data integrity to ensure for instance that when you delete a record, all references to it are also deleted in the associated tables. Our @*ORM@ engine will take care of it, but could fail sometimes, especially if you play directly with the tables via SQL, instead of using high-level methods like {\f1\fs20 FillMany*} or {\f1\fs20 DestGetJoined}.
 Another potential issue is that one business logical unit is split into several tables, therefore into several diverse {\f1\fs20 @*TSQLRecord@} and {\f1\fs20 @*TSQLRecordMany@} classes. From the @*ORM@ point of view, this could be confusing.
 Starting with the revision 1.13 of the framework, {\i @*dynamic array@s}, {\f1\fs20 @*TStrings@} and {\f1\fs20 @*TCollection@} can be used as @*published properties@ in the {\f1\fs20 TSQLRecord} class definition. This won't be strong enough to implement all possible "Has many" architectures, but could be used in most case, when you need to add a list of records within a particular record, and when this list won't have to be referenced as a stand-alone table.
-{\i @*Dynamic array@s} will be stored as @*BLOB@ fields in the database, retrieved with {\i @*Base64@} encoding in the @*JSON@ transmitted stream, then serialized using the {\f1\fs20 TDynArray} wrapper. Therefore, only Delphi clients would be able to use this field content: you'll loose the @*AJAX@ capability of the ORM, at the benefit of better integration with object pascal code. Some dedicated SQL functions have been added to the {\i SQLite} engine, like {\f1\fs20 @*IntegerDynArrayContains@}, to search inside this @*BLOB@ field content from the WHERE clause of any search (see @21@). Those functions are available from AJAX queries.
+{\i @*Dynamic array@s} will be stored as @*BLOB@ fields in the database, retrieved with {\i @*Base64@} encoding in the @*JSON@ transmitted stream, then serialized using the {\f1\fs20 TDynArray} wrapper. Therefore, only {\i Delphi} clients would be able to use this field content: you'll loose the @*AJAX@ capability of the ORM, at the benefit of better integration with object pascal code. Some dedicated SQL functions have been added to the {\i SQLite} engine, like {\f1\fs20 @*IntegerDynArrayContains@}, to search inside this @*BLOB@ field content from the WHERE clause of any search (see @21@). Those functions are available from AJAX queries.
 {\f1\fs20 @*TPersistent@ / @*TStrings@} and {\f1\fs20 @*TCollection@ / @*TObjectList@} will be stored as TEXT fields in the database, following the {\f1\fs20 ObjectToJSON} function format: you can even serialize any {\f1\fs20 @*TObject@} class, via a previous call to the {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} class method - see @52@ - or {\f1\fs20 @*TObjectList@} list of instances, if they are previously registered by {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} - see @71@. This format contains only valid JSON arrays or objects: so it could be un-serialized via an AJAX application, for instance.
-About this (trolling?) subject, and why/when you should use plain Delphi objects or arrays instead of classic @*Master/Detail@ DB relationship, please read "{\i Objects, not tables}" and "{\i ORM is not DB}" paragraphs below.
+About this (trolling?) subject, and why/when you should use plain {\i Delphi} objects or arrays instead of classic @*Master/Detail@ DB relationship, please read "{\i Objects, not tables}" and "{\i ORM is not DB}" paragraphs below.
 :     TDocVariant and variant fields
 As we just wrote, first perfect candidate for {\i data sharding} in a {\f1\fs20 TSQLRecord} is our @80@.
 You may define:
@@ -2511,7 +2514,7 @@ You may define:
 Here, we defined two indexed keys, ready to access any data record:
 - Via the {\f1\fs20 ID: integer} property defined at {\f1\fs20 TSQLRecord} level, which will map the {\i SQLite3} {\f1\fs20 RowID} primary key;
 - Via the {\f1\fs20 Name: RawUTF8} property, which will was marked to be indexed by setting the "{\f1\fs20 stored AS_UNIQUE}" attribute.
-Then, any kind of data may be stored in the {\f1\fs20 Data: variant} published property. In the database, it will be stored as @*JSON@ @*UTF-8@ text, ready to be retrieved from any client, including AJAX / HTML5 applications. Delphi clients or servers will access those data via {\i @*late-binding@}, from its {\f1\fs20 TDocVariant} instance.
+Then, any kind of data may be stored in the {\f1\fs20 Data: variant} published property. In the database, it will be stored as @*JSON@ @*UTF-8@ text, ready to be retrieved from any client, including AJAX / HTML5 applications. {\i Delphi} clients or servers will access those data via {\i @*late-binding@}, from its {\f1\fs20 TDocVariant} instance.
 You just reproduced the {\i @**schema-less@} approach of the @*NoSQL@ database engines, in a few lines of code! Thanks to the {\i mORMot}'s @6@ design, your applications are able to store any kind of document, and easily access to them via HTTP.
 The documents stored in such a database can have varying sets of fields, with different types for each field.  One could have the following objects in a single collection of our {\f1\fs20 Data: variant} rows:
 ! { name : "Joe", x : 3.3, y : [1,2,3] }
@@ -2520,7 +2523,7 @@ The documents stored in such a database can have varying sets of fields, with di
 Of course, when using the database for real problems, the data does have a fairly consistent structure. Something like the following would be more common, e.g. for a table persisting {\i student} objects:
 ! { name : "Joe", age : 30, interests : "football" }
 ! { name : "Kate", age : 25 }
-Generally, there is a direct analogy between this {\i schema-less} style and dynamically typed languages. Constructs such as those above are easy to represent in {\i PHP}, {\i Python} and {\i Ruby}. And, thanks to our {\f1\fs20 TDocVariant} {\i late-binding} magic, even our good Delphi is able to handle those structures in our code. What we are trying to do here is make this mapping to the database natural, like:
+Generally, there is a direct analogy between this {\i schema-less} style and dynamically typed languages. Constructs such as those above are easy to represent in {\i PHP}, {\i Python} and {\i Ruby}. And, thanks to our {\f1\fs20 TDocVariant} {\i late-binding} magic, even our good {\i Delphi} is able to handle those structures in our code. What we are trying to do here is make this mapping to the database natural, like:
 !var aRec: TSQLRecordData;
 !    aID: integer;
 !begin
@@ -2925,8 +2928,8 @@ You can notice the following:
 - Fields are aliased with short unique identifiers ({\f1\fs20 AID, A01, BID, B02...}), for all {\i simple} properties of every classes;
 - The JOIN clause is created ({\f1\fs20 B.Source=A.ID and B.Dest=C.ID});
 - Our manual WHERE clause has been translated into proper SQL, including the table internal aliases ({\f1\fs20 A,B,C}) - in fact, {\f1\fs20 DestList.Dest} has been replaced by {\f1\fs20 C}, the main {\f1\fs20 ID} property has been declared properly as {\f1\fs20 A.ID}, and the {\f1\fs20 "DestList.AssociationTime"} text remained untouched, because it was bounded with quotes.
-That is, our @*ORM@ did make all the dirty work for you! You can use Delphi-level conditions in your query, and the engine will transparently convert them into a valid SQL statement. Benefit of this will become clear in case of multiple pivot tables, which are likely to occur in real-world applications.
-After the statement has been prepared, you can use the standard {\f1\fs20 FillOne} method to loop through all returned rows of data, and access to the JOINed columns within the Delphi objects instances:
+That is, our @*ORM@ did make all the dirty work for you! You can use {\i Delphi}-level conditions in your query, and the engine will transparently convert them into a valid SQL statement. Benefit of this will become clear in case of multiple pivot tables, which are likely to occur in real-world applications.
+After the statement has been prepared, you can use the standard {\f1\fs20 FillOne} method to loop through all returned rows of data, and access to the JOINed columns within the {\i Delphi} objects instances:
 !  Check(MS.FillTable.RowCount=length(sID));
 !  for i := 1 to high(sID) do begin
 !!   MS.FillOne;
@@ -3085,11 +3088,11 @@ Take a look at the documentation of this method (or the comments in its declarat
 When you compare @*ORM@ and standard @*SQL@, some aspects must be highlighted.
 First, you do not have to worry about field orders and names, and can use field completion in the IDE. It is much more convenient to type {\f1\fs20 Baby}. then select the {\f1\fs20 Name} property, and access to its value.
 The ORM code is much more readable than the SQL. You do not have to switch your mind from one syntax to another, in your code. Because @*SQL@ is a true language (see {\i SQL Is A High-Level Scripting Language} at @http://www.fossil-scm.org/index.html/doc/tip/www/theory1.wiki ). You can even forget about the SQL itself for most projects; only some performance-related or complex queries should be written in SQL, but you will avoid it most of the time. Think object pascal. And happy coding. Your software architecture will thank you for it.
-Another good impact is the naming consistency. For example, what about if you want to rename your table? Just change the class definition, and your IDE will do all refactoring for you, without any risk of missing a hidden SQL statement anywhere. Do you want to rename or delete a field? Change the class definition, and the Delphi compiler will let you know all places where this property was used in your code. Do you want to add a field to an existing database? Just add the property definition, and the framework will create the missing field in the database schema for you.
-Another risk-related improvement is about the @**strong type@ checking, included into the Delphi language during compile time, and only during execution time for the SQL. You will avoid most runtime exceptions for your database access: your clients will thank you for that. In one word, forget about field typing mismatch or wrong type assignment in your database tables. Strong typing is great in such cases for code SQA, and if you worked with some scripting languages (like {\i @*JavaScript@}, Python or Ruby), you should have wished to have this feature in your project!
-It is worth noting that our framework allows writing triggers and stored procedures (or like @*stored procedure@s) in Delphi code, and can create key indexing and perform foreign key checking in class definition.
+Another good impact is the naming consistency. For example, what about if you want to rename your table? Just change the class definition, and your IDE will do all refactoring for you, without any risk of missing a hidden SQL statement anywhere. Do you want to rename or delete a field? Change the class definition, and the {\i Delphi} compiler will let you know all places where this property was used in your code. Do you want to add a field to an existing database? Just add the property definition, and the framework will create the missing field in the database schema for you.
+Another risk-related improvement is about the @**strong type@ checking, included into the {\i Delphi} language during compile time, and only during execution time for the SQL. You will avoid most runtime exceptions for your database access: your clients will thank you for that. In one word, forget about field typing mismatch or wrong type assignment in your database tables. Strong typing is great in such cases for code SQA, and if you worked with some scripting languages (like {\i @*JavaScript@}, Python or Ruby), you should have wished to have this feature in your project!
+It is worth noting that our framework allows writing triggers and stored procedures (or like @*stored procedure@s) in {\i Delphi} code, and can create key indexing and perform foreign key checking in class definition.
 Another interesting feature is the enhanced Grid component supplied with this framework, and the @*AJAX@-ready orientation, by using natively @*JSON@ flows for @*Client-Server@ data streaming. The @*REST@ protocol can be used in most application, since the framework provides you with an easy to use "Refresh" and caching mechanism. You can even work off line, with a local database replication of the remote data.
-For Client-Server - see @6@ - you do not have to open a connection to the database, just create an instance of a {\f1\fs20 TSQLRestClient} object (with the communication layer you want to use: direct access, Windows Messages, named pipe or @*HTTP@), and use it as any normal Delphi object. All the @*SQL@ coding or communication and error handling will be done by the framework. The same code can be used in the Client or Server side: the parent {\f1\fs20 @*TSQLRest@} object is available on both sides, and its properties and methods are strong enough to access the data.
+For Client-Server - see @6@ - you do not have to open a connection to the database, just create an instance of a {\f1\fs20 TSQLRestClient} object (with the communication layer you want to use: direct access, Windows Messages, named pipe or @*HTTP@), and use it as any normal {\i Delphi} object. All the @*SQL@ coding or communication and error handling will be done by the framework. The same code can be used in the Client or Server side: the parent {\f1\fs20 @*TSQLRest@} object is available on both sides, and its properties and methods are strong enough to access the data.
 : ORM is not Database
 It is worth emphasizing that you should not think about the @*ORM@ like a mapping of an existing DB schema. This is an usual mistake in ORM design.
 The database is just one way of your objects persistence:
@@ -3137,7 +3140,7 @@ The correct ORM-oriented implementation should be the following:
 In the above lines, no SQL was written. It is up to the @*ORM@ to:
 - Create all missing tables, via the {\f1\fs20 CreateMissingTables} method - and not compute by hand a "{\f1\fs20 CREATE TABLE IF NOT EXISTS...}" SQL statement;
 - Check if there is some rows of data, via the {\f1\fs20 TableRowCount} method - instead of a "{\f1\fs20 SELECT COUNT(*) FROM DRIVES}";
-- Append some data using an high-level {\f1\fs20 TDrives} Delphi instance and the {\f1\fs20 Add} method - and not any "{\f1\fs20 INSERT OR IGNORE INTO DRIVES...}".
+- Append some data using an high-level {\f1\fs20 TDrives} {\i Delphi} instance and the {\f1\fs20 Add} method - and not any "{\f1\fs20 INSERT OR IGNORE INTO DRIVES...}".
 Then, in order to retrieve some data, you'll be tempted to code something like that (extracted from the same forum article):
 !procedure TMyClient.FillDrives(aList: TStrings);
 !var
@@ -3193,16 +3196,16 @@ It is certainly worth reading all the (verbose) interface part of the {\f1\fs20 
 And do not forget the framework is able to have several level of objects, thanks to our @*Client-Server@ architecture - see @6@. Such usage is not only possible, but strongly encouraged.
 You should have business-logic level objects at the Client side. Then both business-logic and DB objects at the Server side.
 If you have a very specific database schema, business-logic objects can be of very high level, encapsulating some @*SQL@ views for reading, and accessed via some @*REST@ful @*service@ commands for writing - see @11@.
-Another possibility to access your high-level type, is to use either custom {\i @*SQLite3@} @*SQL function@s or @*stored procedure@s - see @23@ - both coded in Delphi.
+Another possibility to access your high-level type, is to use either custom {\i @*SQLite3@} @*SQL function@s or @*stored procedure@s - see @23@ - both coded in {\i Delphi}.
 : One ORM to rule them all
 Just before entering deeper into the {\i mORMot} material in the following pages (Database layer, Client-Server, Services), you may find out that this implementation may sounds restricted.
 Some common (and founded) criticisms are the following (quoting from our forum):
-- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing Delphi constructs like "{\f1\fs20 index n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
+- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing {\i Delphi} constructs like "{\f1\fs20 index n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
 - "You have to inherit from {\f1\fs20 TSQLRecord}, and can't persist any plain class";
 - "There is no way to easily map an existing complex database".
 Those concerns are pretty understandable. Our {\i mORMot} framework is not meant to fit any purpose, but it is worth understanding why it has been implemented as such, and why it may be quite unique within the family of ORMs - which almost all are following the {\i Hibernate} way of doing.
 :  Rude class definition
-Attributes do appear in Delphi 2010, and it is worth saying that @*FPC@ has an alternative syntax. Older versions of Delphi (still very deployed) do not have attributes available in the language, so it was not possible to be compatible with Delphi 6 up to latest versions (as we wished for our units).
+Attributes do appear in {\i Delphi} 2010, and it is worth saying that @*FPC@ has an alternative syntax. Older versions of {\i Delphi} (still very deployed) do not have attributes available in the language, so it was not possible to be compatible with {\i Delphi} 6 up to latest versions (as we wished for our units).
 It is perfectly right to speak about 'mis-use of {\f1\fs20 index}' - but this was the easiest and only way we found out to have such information, just using RTTI. Since this parameter was ignored and not used for most classes, it was re-used (also for dynamic array properties, to have faster lookup).\line There is another "mis-use" for the "{\f1\fs20 stored AS_UNIQUE}" property, which is used to identify unique mandatory columns.
 Using attributes is one of the most common ways of describing tables in most ORMs.\line On the other hand, some coders have a concern about such class definitions. They are mixing DB and logic: you are somewhat polluting the business-level class definition with DB-related stuff.
 That is why other kind of ORMs provide a way of mapping classes to tables using external files (some ORMs provide both ways of definition). And why those days, even code gurus identified the attributes overuse as a potential weakness of code maintainability.\line Attributes do have a huge downsize, when you are dealing with a Client-Server ORM, like ours: on the Client side, those attributes are pointless (client does not need to know anything about the database), and you need to link to all the DB plumbing code to your application. For {\i mORMot}, it was some kind of strong argument.
@@ -3217,7 +3220,7 @@ About the fact that you need to inherit from {\f1\fs20 @*TSQLRecord@}, and can't
 In fact, for {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} / @*ORM@ remote access, you have already all @*Client-Server@ @*CRUD@ operations available. Those classes are abstract common Supertypes, ready to be used in your projects. It has been optimized a lot (e.g. with a cache and other nice features), so I do not think reinventing a CRUD / database service is worth the prize. You have secure access to the ORM classes, with user/group attributes. Almost everything is created by code, just from the {\f1\fs20 TSQLRecord} class definition, via @*RTTI@. So it may be faster (and safer) to rely on it, than defining all your class hierarchy by hand.
 Having a dedicated class help the layer separation, and therefore a cleaner design. See @68@ for more details about DDD and how {\i mORMot}'s {\f1\fs20 TSQLRecord} can help you reuse existing code, write less and safer.
 The concern of not being able to persist any class (it needs to inherit from {\f1\fs20 TSQLRecord}) does perfectly make sense.
-On the other hand, from the implementation point of view, it is very powerful, since you have a lot of methods included within this class definition. It does also make sense to have a common ancestor able to identify all three kind of {\i mORMot}'s table definitions: the same abstract ancestor is used, and clients won't even need to know that they are implemented in-memory, using a {\i SQLite3} engine, or any external database. Another benefit of using a parent {\f1\fs20 class} is to enforce code safety using Delphi's {\i @*strong type@} abilities: you won't be able to pass a non-persistent type to methods which expect one.
+On the other hand, from the implementation point of view, it is very powerful, since you have a lot of methods included within this class definition. It does also make sense to have a common ancestor able to identify all three kind of {\i mORMot}'s table definitions: the same abstract ancestor is used, and clients won't even need to know that they are implemented in-memory, using a {\i SQLite3} engine, or any external database. Another benefit of using a parent {\f1\fs20 class} is to enforce code safety using {\i Delphi}'s {\i @*strong type@} abilities: you won't be able to pass a non-persistent type to methods which expect one.
 From the {\i @*Domain-Driven@} / @*SOA@ point of view, it is now an established rule to make a distinction between {\i Data Transfer Objects} (@*DTO@) and @*Domain Values@ ({\i Entity objects} or {\i Aggregates}). In most implementations, persistence objects (aka ORM objects) should be either the aggregate roots themselves (you do not store Entity objects and even worse DTOs), or dedicated classes. Do not mix layers, unless you like your software to be a maintenance nightmare!
 :  Several ORMs at once
 To be clear, {\i mORMot} offers several kind of table definitions:
@@ -3279,7 +3282,7 @@ So you may use code like this:
 \page
 :56 Filtering and Validating
 According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
-If you were used to develop RAD database application using Delphi, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure Delphi code.
+If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
 In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
 \graph HierTSynFilter Filtering and Validation classes hierarchy
 \TSynValidate\TSynFilterOrValidate
@@ -3347,18 +3350,18 @@ It is up to your code to filter and validate the record content. By default, the
 \page
 : Views
 The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
-- For Desktop clients written in Delphi, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
-- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure Delphi has been integrated, and allows easy creation of HTML views, with a clear MVC design.
+- For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
+- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
 :  Desktop clients
 :5   RTTI
-The Delphi language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in Delphi has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
+The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
 In short, it allows the software logic to be extracted from the code itself. Here are the places where this technology was used:
 - All database structures are set in the code by normal classes definition, and most of the needed @*SQL@ code is created on the fly by the framework, before calling the {\i @*SQLite3@} database engine, resulting in a true Object-relational mapping (@*ORM@) framework;
 - All User Interface is generated by the code, by using some simple data structures, relying on enumerations (see next paragraph);
 - Most of the text displayed on the screen does rely on RTTI, thanks to the @*Camel@ approach (see below), ready to be translated into local languages;
 - All internal Event process (such as Button press) relies on enumerations RTTI;
 - Options and program parameters are using RTTI for data persistence and screen display (e.g. the Settings window of your program can be created by pure code): adding an option is a matter of a few code lines.
-In Delphi, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
+In {\i Delphi}, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
 For example, some tool-bar actions can be defined with:
 !type
 !  /// item toolbar actions
@@ -3390,7 +3393,7 @@ constant array, and will use {\f1\fs20 TFileAction / TFileEvent} enumeration typ
 \page
 :  Web clients
 :81   Mustache template engine
-{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure Delphi implementation of it, with a perfect integration with other bricks of the framework.
+{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure {\i Delphi} implementation of it, with a perfect integration with other bricks of the framework.
 Generally speaking, a @**Template@ system can be used to separate output formatting specifications, which govern the appearance and location of output text and data elements, from the executable logic which prepares the data and makes decisions about what appears in the output.
 Most template systems (e.g. PHP, smarty, Razor...) feature in fact a full scripting engine within the template content. It allows powerful constructs like variable assignment or conditional statements in the middle of the HTML content. It makes it easy to modify the look of an application within the template system exclusively, without having to modify any of the underlying "application logic". They do so, however, at the cost of separation, turning the templates themselves into part of the application logic.
 {\i Mustache} inherits from Google's {\i ctemplate} library, and is used in many famous applications, including the "main" Google web search, or the Twitter web site.\line The {\i Mustache} template system leans strongly towards preserving the separation of logic and presentation, therefore ensures a perfect  @*MVC@ - @10@ - design, and ready to consume @*SOA@ services.
@@ -3557,7 +3560,7 @@ $${{/user}}
 The same file will define both the partial and the main template. Note that we defined the internal partial after the main template, but we may have defined it anywhere in the main template logic: internal partials definitions are ignored when rendering the main template, just like comments.
 :   SynMustache unit
 Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} template engine in the {\f1\fs20 SynMustache} unit:
-- It is the first Delphi implementation of {\i Mustache};
+- It is the first {\i Delphi} implementation of {\i Mustache};
 - It has a separate parser and renderer (so you can compile your templates ahead of time);
 - The parser features a shared cache of compiled templates;
 - It passes all official {\i Mustache} specification tests, as defined at @http://github.com/mustache/spec - including all weird whitespace process;
@@ -3672,7 +3675,7 @@ In conjunction with method-based services - see @49@ - which can return directly
 In the future, this MVC design will probably be enhanced, and benefit from interface-based services - see @63@ - to write:
 - Some part of the {\i Model} (i.e. the business logic);
 - Some part of the {\i Controller} (i.e. the application logic).
-Both {\i Model} and {\i Controller} logic, even if defined via {\f1\fs20 interface}, may be implemented in {\i Delphi} or even in {\i JavaScript} - see @79@. Delphi code would gives strong typing, full integration to the framework, and the best performance possible. {\i JavaScript} code may be changed on the fly, and even stored as separated files.
+Both {\i Model} and {\i Controller} logic, even if defined via {\f1\fs20 interface}, may be implemented in {\i Delphi} or even in {\i JavaScript} - see @79@. {\i Delphi} code would gives strong typing, full integration to the framework, and the best performance possible. {\i JavaScript} code may be changed on the fly, and even stored as separated files.
 :42Database layer
 %cartoon05.png
 : SQLite3-powered, not SQLite3-limited
@@ -3696,11 +3699,11 @@ As stated below, you can use any other database access layer, if you wish:
 \
 {\i SQlite3} will be used as the main SQL engine, able to @*JOIN@ all those tables, thanks to its {\i @*Virtual Table@} unique feature. You can in fact {\i mix} internal and external engines, in the same database model, and access all data in one unique SQL statement.
 :  SQLite3 as core
-This framework uses a compiled version of the official {\i SQLite3} library source code, and includes it natively into Delphi code. This framework therefore adds some very useful capabilities to the Standard {\i SQLite3} database engine, but keeping all its advantages, as listed in the previous paragraph of this document:
+This framework uses a compiled version of the official {\i SQLite3} library source code, and includes it natively into {\i Delphi} code. This framework therefore adds some very useful capabilities to the Standard {\i SQLite3} database engine, but keeping all its advantages, as listed in the previous paragraph of this document:
 - Can be either statically linked to the executable, or load external {\f1\fs20 sqlite3.dll};
 - Faster database access, through unified memory model, and usage of the {\f1\fs20 FastMM4} memory manager (which is almost 10 times faster than the default Windows memory manager for memory allocation);
 - Optional direct encryption of the data on the disk (up to AES-256 level, that is Top-Secret @*security@);
-- Use via {\i mORMot}'s @*ORM@ let database layout be declared once in the Delphi source code (as @*published properties@ of classes), avoiding most SQL writing, hence common field or table names mismatch;
+- Use via {\i mORMot}'s @*ORM@ let database layout be declared once in the {\i Delphi} source code (as @*published properties@ of classes), avoiding most SQL writing, hence common field or table names mismatch;
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
@@ -3709,9 +3712,9 @@ From the technical point of view, here are the current compilation options used 
 - It can include @*FTS@3/FTS4 full text search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
 - Additional {\i @*collation@s} (i.e. sorting functions) were added to handle efficiently not only @*UTF-8@ text, but also e.g. @*ISO 8601@ time encoding, fast {\i Win1252} diacritic-agnostic comparison and native slower but accurate Windows UTF-16 functions;
-- Additional @*SQL@ functions like {\i Soundex} for English/French/Spanish phonemes, {\f1\fs20 MOD} or {\f1\fs20 CONCAT}, and some dedicated functions able to directly search for data within @*BLOB@ fields containing an Delphi high-level type (like a serialized dynamic array);
+- Additional @*SQL@ functions like {\i Soundex} for English/French/Spanish phonemes, {\f1\fs20 MOD} or {\f1\fs20 CONCAT}, and some dedicated functions able to directly search for data within @*BLOB@ fields containing an {\i Delphi} high-level type (like a serialized dynamic array);
 - Additional {\f1\fs20 REGEXP} operator/function using the Open Source PCRE library to perform @*regular expression@ queries in SQL statements;
-- Custom @*SQL@ functions can be defined in Delphi code;
+- Custom @*SQL@ functions can be defined in {\i Delphi} code;
 - Automatic SQL statement parameter preparation, for execution speed up;
 - {\f1\fs20 TSQLDatabase} can cache the last results for SELECT statements, or use a tuned client-side or server-side per-record caching, in order to speed up most read queries, for lighter web server or client User Interface e.g.;
 - User @*authentication@ handling ({\i SQLite3} is user-free designed);
@@ -3736,7 +3739,7 @@ Process below includes all aspects of our ORM:
 - Access to the database engines via several libraries or providers.
 In those tests, we just bypassed the communication layer, since {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} are run in-process, in the same thread - as a {\f1\fs20 TSQLRestServerDB} instance. So you have here some raw performance testimony of our framework's ORM and RESTful core, and may expect good scaling abilities when running on high-end hardware, over a network.
 On a recent notebook computer ({\i Core i7} and SSD drive), depending on the back-end database interfaced, {\i mORMot} excels in speed, as will show the following @**benchmark@:
-- You can persist up to 570,000 objects per second, or retrieve 870,000 objects per second (for our pure Delphi in-memory engine);
+- You can persist up to 570,000 objects per second, or retrieve 870,000 objects per second (for our pure {\i Delphi} in-memory engine);
 - When data is retrieved from server or client @38@, you can read more than 900,000 objects per second, whatever the database back-end is;
 - With a high-performance database like @*Oracle@, and our direct access classes, you can write 70,000 (via @*array bind@ing) and read 160,000 objects per second, over a 100 MB network;
 - When using alternate database access libraries (e.g. @*Zeos@, or {\f1\fs20 DB.pas} based classes), speed is lower (even if comparable for @*DB2@, @*MS SQL@, @*PostgreSQL@, @*MySQL@) but still enough for most work, due to some optimizations in the {\i mORMot} code (e.g. caching of prepared statements, SQL multi-values insertion, direct export to/from JSON, {\i SQlite3} virtual mode design, avoid most temporary memory allocation...).
@@ -3758,7 +3761,7 @@ In these tables:
 - '@*ODBC@ *' for a direct access to ODBC;
 - '@*MongoDB@ ack/no ack' for direct {\i MongoDB} access ({\f1\fs20 SynMongoDB.pas}) with or without write acknowledge.
 This list of database providers is to be extended in the future. Any feedback is welcome!
-Numbers are expressed in rows/second (or objects/second). This benchmark was compiled with Delphi XE4, since newer compilers tends to give better results, mainly thanks to function in-lining (which was not existing e.g. in Delphi 6-7).
+Numbers are expressed in rows/second (or objects/second). This benchmark was compiled with {\i Delphi} XE4, since newer compilers tends to give better results, mainly thanks to function in-lining (which was not existing e.g. in {\i Delphi} 6-7).
 Note that these tests are not about the relative speed of each database engine, but reflect the current status of the integration of several DB libraries within the {\i mORMot} database access.
 Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a standard SSD, including anti-virus and background applications:
 - Linked to a shared {\i @*Oracle@} 11.2.0.1 database over 100 Mb Ethernet;
@@ -3770,7 +3773,7 @@ Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a sta
 - {\i @*NexusDB@} 3.11 in Free Embedded Version;
 - {\i MongoDB} 2.6 in 64 bit mode.
 So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i Linux} configuration, you can expect even better numbers.
-Tests were compiled with the Delphi XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
+Tests were compiled with the {\i Delphi} XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
 From our tests, the UniDAC version we were using had huge stability issues when used with DB2: the tests did not pass, and the DB2 server just hang processing the queries, whereas there was no problem with other libraries. It may have been fixed since, but you won't find any "UniDAC DB2" results in the benchmark below in the meanwhile.
 :   Insertion speed
@@ -3896,17 +3899,17 @@ Above table results were run on a Core 2 duo laptop, so numbers are lower than w
 During the tests, internal caching - see @37@ and @38@ - was disabled, so you may expect speed enhancements for real applications, when data is more read than written: for instance, when an object is retrieved from the cache, you achieve more than 1,00,000 read requests per second, whatever database is used.
 :   Analysis and use case proposal
 When declared as virtual table (via a {\f1\fs20 VirtualTableRegister} call), you have the full power of SQL (including @*JOIN@s) at hand, with incredibly fast @*CRUD@ operations: 100,000 requests per second for objects read and write, including serialization and Client-Server communication!
-Some providers are first-class citizens to {\i mORMot}, like {\i @*SQLite3@}, {\i @*Oracle@}, {\i @*MS SQL@}, @*PostgreSQL@, @*MySQL@ or IBM @*DB2@. You can connect to them without the bottleneck of the {\f1\fs20 DB.pas} unit, nor any restriction of your Delphi license (a {\i Starter edition} is enough).
+Some providers are first-class citizens to {\i mORMot}, like {\i @*SQLite3@}, {\i @*Oracle@}, {\i @*MS SQL@}, @*PostgreSQL@, @*MySQL@ or IBM @*DB2@. You can connect to them without the bottleneck of the {\f1\fs20 DB.pas} unit, nor any restriction of your {\i Delphi} license (a {\i Starter edition} is enough).
 First of all, {\i SQLite3} is still to be considered, even for a production server. Thanks to {\i mORMot}'s architecture and design, this "embedded" database could be used as main database engine for a client-server application with heavy concurrent access - if you have doubts about its scaling abilities, see @25@. Here, "embedded" is not restricted to "mobile", but sounds like a self-contained, zero-configuration proven engine.
 Most recognized {\i closed source} databases are available:
 - Direct access to {\i Oracle} gives impressive results in BATCH mode (aka @*array bind@ing). It may be an obligation if your end-customer stores already its data in such a server, for instance, and want to leverage the licensing cost of its own IT solution. {\i Oracle Express} edition is free, but somewhat heavy and limited in terms of data/hardware size (see its licensing terms);
 - {\i MS SQL Server}, directly accessed via {\i OleDB} (or {\i ODBC}) gives pretty good timing. A {\i MS SQL Server 2008 R2 Express} instance is pretty well integrated with the {\i Windows} environment, for a very affordable price (i.e. for free) - the {\i LocalDB} (MSI installer) edition is enough to start with, but also with data/hardware size limitation, just like {\i Oracle Express};
 - IBM {\i DB2} is another good candidate, and the {\i Express-C} ("C" standing for Community) offers a no-charge opportunity to run an industry standard engine, with no restriction on the data size, and somewhat high hardware limitations (16 GB of RAM and 2 CPU cores for the latest 10.5 release) or enterprise-level features;
-- {\i @*NexusDB@} may be considered, if you have existing Delphi code and data - but it is less known and recognized as the its commercial competitors.
+- {\i @*NexusDB@} may be considered, if you have existing {\i Delphi} code and data - but it is less known and recognized as the its commercial competitors.
 {\i Open Source} databases are worth considering, especially in conjunction with an Open Source framework like {\i mORMot}:
 - {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i Linux Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
 - {\i PostgreSQL} is an Enterprise class database, with amazing features among its Open Source alternatives, and really competes with commercial solutions. Even under Windows, we think it is easy to install and administrate, and uses less resource than the other commercial engines.
-- {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of Delphi programmers are skilled with this free alternative to {\i Interbase};
+- {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of {\i Delphi} programmers are skilled with this free alternative to {\i Interbase};
 - {\i @*MongoDB@} appears as a serious competitor to SQL databases, with the potential benefit of horizontal scaling and installation/administration ease - performance is very high, and its document-based storage fits perfectly with {\i mORMot}'s advanced ORM features like @29@.
 To access those databases, @*OleDB@, @*ODBC@ or @*ZDBC@ providers may also be used, with direct access. {\i mORMot} is a very open-minded rodent: you can use any {\f1\fs20 DB.pas} provider, e.g. {\i @*FireDAC@}, {\i @*UniDAC@}, {\i @*DBExpress@}, {\i @*NexusDB@} or even the {\i @*BDE@}, but with the additional layer introduced by using a {\f1\fs20 @*TDataSet@} instance, at reading.
 Therefore, the typical use may be the following:
@@ -4077,7 +4080,7 @@ In your code, you should better use, for instance:
  or instead of a plain
 ! aName := OneFieldValue(TSQLMyRecord,'Name','ID='+Int32ToUtf8(aID));
 In fact, from your client code, you may not use directly the {\f1\fs20 :(...):} expression in your request, but would rather use the overloaded {\f1\fs20 TSQLRecord.Create, TSQLRecord.FillPrepare, TSQLRecord.CreateAndFillPrepare, TSQLRest.OneFieldValue, TSQLRest.MultiFieldValues, TQLRestClient.EngineExecuteFmt} and {\f1\fs20 TSQLRestClient.ListFmt} methods, available since revision 1.15 of the framework, which will accept both '%' and '?' characters in the SQL WHERE format text, in-lining '?' parameters with proper {\f1\fs20 :(...):} encoding and quoting the {\f1\fs20 @*RawUTF8@} / strings parameters on purpose.
-I found out that this SQL format enhancement is much easier to use (and faster) in the Delphi code than using parameters by name or by index, like in this classic VCL code:
+I found out that this SQL format enhancement is much easier to use (and faster) in the {\i Delphi} code than using parameters by name or by index, like in this classic VCL code:
 $SQL.Text := 'SELECT Name FROM Table WHERE ID=:Index';
 $SQL.ParamByName('Index').AsInteger := aID;
 At a lowest-level, in-lining the bounds values inside the statement enabled better serialization in a Client-Server architecture, and made caching easier on the Server side: the whole SQL query contains all parameters within one unique {\f1\fs20 RawUTF8} value, and can be therefore directly compared to the cached entries. As such, our framework is able to handle prepared statements without keeping bound parameters separated from the main SQL text.
@@ -4086,7 +4089,7 @@ It is also worth noting that external databases (see next paragraph) will also b
 Since the 2010-06-25 source code repository update, the @*RTREE@ extension is now compiled by default within all supplied {\f1\fs20 .obj} files.
 An R-Tree is a special index that is designed for doing range queries. R-Trees are most commonly used in geospatial systems where each entry is a rectangle with minimum and maximum X and Y coordinates. Given a query rectangle, an R-Tree is able to quickly find all entries that are contained within the query rectangle or which overlap the query rectangle. This idea is easily extended to three dimensions for use in CAD systems. R-Trees also find use in time-domain range look-ups. For example, suppose a database records the starting and ending times for a large number of events. A R-Tree is able to quickly find all events, for example, that were active at any time during a given time interval, or all events that started during a particular time interval, or all events that both started and ended within a given time interval. And so forth. See @http://www.sqlite.org/rtree.html
 A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS3}).
-Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. Delphi {\f1\fs20 double}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
+Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 double}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
 Queries against the ID or the coordinate ranges are almost immediate: so you can e.g. extract some coordinates box from the main regular {\f1\fs20 TSQLRecord} table, then use a {\f1\fs20 TSQLRecordRTree}-joined query to make the process faster; this is exactly what the {\f1\fs20 TSQLRestClient. RTreeMatch} method offers: for instance, running with {\f1\fs20 aMapData. @*Blob@Field} filled with {\f1\fs20 [-81,-79.6,35,36.2]} the following lines:
 ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
 !   aMapData.BlobField,ResultID);
@@ -4135,7 +4138,7 @@ For example (extracted from the regression @*test@ code), you can define this ne
 !    property Subject: RawUTF8 read fSubject write fSubject;
 !    property Body: RawUTF8 read fBody write fBody;
 !  end;
-Note that FTS tables must only content @*UTF-8@ text field, that is {\f1\fs20 @*RawUTF8@} (under Delphi 2009 and up, you could also use the Unicode {\f1\fs20 string} type, which is mapped as a UTF-8 text field for the {\i SQLite3} engine).
+Note that FTS tables must only content @*UTF-8@ text field, that is {\f1\fs20 @*RawUTF8@} (under {\i Delphi} 2009 and up, you could also use the Unicode {\f1\fs20 string} type, which is mapped as a UTF-8 text field for the {\i SQLite3} engine).
 Then you can add some {\i Body/Subject} content to this FTS3 table, just like any regular {\f1\fs20 TSQLRecord} content, via the @*ORM@ feature of the framework:
 !  FTS := TSQLFTSTest.Create;
 !  try
@@ -4165,7 +4168,7 @@ This method expects some additional constant parameters for weighting each FTS t
 The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
-The {\f1\fs20 rank} internal @*SQL function@ has been implemented in Delphi, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
+The {\f1\fs20 rank} internal @*SQL function@ has been implemented in {\i Delphi}, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
@@ -4226,10 +4229,10 @@ The above code will execute the following SQL statement (with a prepared paramet
 ! SELECT * from People WHERE Firstname REGEXP '\bFinley\b';
 That is, it will find all objects where {\f1\fs20 TSQLRecordPeople.FirstName} will contain the {\f1\fs20 'Finley'} word - in a regular expression, {\f1\fs20 \\b} defines a word {\f1\fs20 b}oundary search.
 In fact, the {\f1\fs20 REGEXP} operator is a special syntax for the {\f1\fs20 regexp()} user function. No {\f1\fs20 regexp()} user function is defined by default and so use of the {\f1\fs20 REGEXP} operator will normally result in an error message. Calling {\f1\fs20 CreateRegExFunction()} for a given connection will add a SQL function named "{\f1\fs20 regexp()}" at run-time, which will be called in order to implement the {\f1\fs20 REGEXP} operator.
-It will use the statically linked PCRE library as available since Delphi XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of Delphi.
+It will use the statically linked PCRE library as available since {\i Delphi} XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of {\i Delphi}.
 This unit will call directly the UTF-8 API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
 :  NULL handling
-Since you access Delphi properties, NULL doesn't exist as such (it is a @*SQL@ concept). So you will have {\f1\fs20 0} for an integer field, {\f1\fs20 nil} for a field referring to another record, and {\f1\fs20 ''} for a string field. At the SQL and @*JSON@ levels, the NULL value does exist and are converted as expected. At higher level (Delphi code or {\i @*JavaScript@}/@*AJAX@ code) the NULL value is to be handled explicitly. In fact, no null-oriented ORM methods are implemented in our framework, since the object pascal language does not allow defining a nullable type (yet).
+Since you access {\i Delphi} properties, NULL doesn't exist as such (it is a @*SQL@ concept). So you will have {\f1\fs20 0} for an integer field, {\f1\fs20 nil} for a field referring to another record, and {\f1\fs20 ''} for a string field. At the SQL and @*JSON@ levels, the NULL value does exist and are converted as expected. At higher level ({\i Delphi} code or {\i @*JavaScript@}/@*AJAX@ code) the NULL value is to be handled explicitly. In fact, no null-oriented ORM methods are implemented in our framework, since the object pascal language does not allow defining a nullable type (yet).
 In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).
 There is no direct way of making a difference between NULL and {\f1\fs20 ''} for a string field, for example. It can be performed by using a simple SQL statement, which can be added to your database class, as a method common to all your application classes.
 In the {\i mORMot} ORM/SQL code, NULL will appear only in case of a BLOB storage with a size of {\f1\fs20 0} bytes. Otherwise, you should not see it as a value.
@@ -4295,7 +4298,7 @@ Example of virtual tables, already included in the {\i SQLite3} engine, are @*FT
 Our framework introduces new types of custom virtual table. You'll find classes like {\f1\fs20 @*TSQLVirtualTableJSON@} or {\f1\fs20 @*TSQLVirtualTableBinary@} which handle in-memory data structures. Or it might represent a view of data on disk that is not in the {\i SQLite3} format (e.g. {\f1\fs20 TSQLVirtualTableLog}). It can be used to access any external database, just as if they were native {\i SQLite3} tables - see @27@. Or the application might compute the content of the virtual table on demand.
 Thanks to the generic implementation of Virtual Table in {\i SQLite3}, you can use such tables in your SQL statement, and even safely execute a {\f1\fs20 SELECT} statement with {\f1\fs20 @*JOIN@} or custom functions, mixing normal {\i SQLite3} tables and any other Virtual Table. From the @*ORM@ point of view, virtual tables are just tables, i.e. they inherit from {\f1\fs20 TSQLRecordVirtual}, which inherits from the common base {\f1\fs20 TSQLRecord} class.
 :  Virtual Table module classes
-A dedicated mechanism has been added to the framework, beginning with revision 1.13, in order to easily add such virtual tables with pure Delphi code.
+A dedicated mechanism has been added to the framework, beginning with revision 1.13, in order to easily add such virtual tables with pure {\i Delphi} code.
 In order to implement a new @*Virtual Table@ type, you'll have to define a so called {\i Module} to handle the fields and data access and an associated {\i Cursor} for the {\f1\fs20 SELECT} statements. This is implemented by the two {\f1\fs20 TSQLVirtualTable} and {\f1\fs20 TSQLVirtualTableCursor} classes as defined in the @!TSQLVirtualTable,TSQLVirtualTableCursor,TSQLVirtualTableJSON,TSQLVirtualTableBinary,TSQLVirtualTableLog,TSQLVirtualTableCursorLog,TSQLVirtualTableCursorJSON,TSQLVirtualTableCursorIndex!Lib\SQLite3\mORMot.pas@ unit.
 For instance, here are the default Virtual Table classes deriving from those classes:
 \graph HierTSQLVirtualTable Virtual Tables classes hierarchy
@@ -4311,7 +4314,7 @@ Note that the virtual table module name is retrieved from the class name. For in
 To handle external databases, two dedicated classes, named {\f1\fs20 TSQLVirtualTableExternal} and {\f1\fs20 TSQLVirtualTableCursorExternal} will be defined in a similar manner - see @%%HierExternalTables@ @30@.
 As you probably have already stated, all those Virtual Table mechanism is implemented in {\f1\fs20 mORMot.pas}. Therefore, it is independent from the {\i @*SQLite3@} engine, even if, to my knowledge, there is no other SQL database engine around able to implement this pretty nice feature.
 :  Defining a Virtual Table module
-Here is how the {\f1\fs20 TSQLVirtualTableLog} class type is defined, which will implement a @*Virtual Table@ module named "{\f1\fs20 Log}". Adding a new module is just made by overriding some Delphi methods:
+Here is how the {\f1\fs20 TSQLVirtualTableLog} class type is defined, which will implement a @*Virtual Table@ module named "{\f1\fs20 Log}". Adding a new module is just made by overriding some {\i Delphi} methods:
 !  TSQLVirtualTableLog = class(TSQLVirtualTable)
 !  protected
 !    fLogFile: TSynLogFile;
@@ -4345,7 +4348,7 @@ The supplied feature set defines a read-only module (since {\f1\fs20 vtWrite} is
 !    /// the textual message associated to the log event
 !    property Content: RawUTF8 read fContent;
 !  end;
-You could have overridden the {\f1\fs20 Structure} method in order to provide the {\f1\fs20 CREATE TABLE} SQL statement expected. But using Delphi class RTTI allows the construction of this SQL statement with the appropriate column type and @*collation@, common to what the rest of the @*ORM@ will expect.
+You could have overridden the {\f1\fs20 Structure} method in order to provide the {\f1\fs20 CREATE TABLE} SQL statement expected. But using {\i Delphi} class RTTI allows the construction of this SQL statement with the appropriate column type and @*collation@, common to what the rest of the @*ORM@ will expect.
 Of course, this {\f1\fs20 RecordClass} property is not mandatory. For instance, the {\f1\fs20 TSQLVirtualTableJSON.GetTableModuleProperties} method won't return any associated {\f1\fs20 TSQLRecordClass}, since it will depend on the table it is implementing, i.e. the running {\f1\fs20 @*TSQLRestStorageInMemory@} instance. Instead, the {\f1\fs20 Structure} method is overridden, and will return the corresponding field layout of each associated table.
 Here is how the {\f1\fs20 Prepare} method is implemented, and will handle the {\f1\fs20 vtWhereIDPrepared} feature:
 !function TSQLVirtualTable.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
@@ -4446,8 +4449,8 @@ The framework @*ORM@ is able to use @*Virtual Table@ modules, just by defining s
 \TSQLRecordLogFile\TSQLRecordVirtualTableAutoID
 \TSQLRecordVirtualTableForcedID\TSQLRecordVirtual
 \
-{\f1\fs20 @*TSQLRecordVirtualTableAutoID@} children can be defined for Virtual Table implemented in Delphi, with a new {\f1\fs20 ID} generated automatically at {\f1\fs20 INSERT}.
-{\f1\fs20 @*TSQLRecordVirtualTableForcedID@} children can be defined for Virtual Table implemented in Delphi, with an {\f1\fs20 ID} value forced at {\f1\fs20 INSERT} (in a similar manner than for {\f1\fs20 TSQLRecordRTree} or {\f1\fs20 TSQLRecordFTS3/4}).
+{\f1\fs20 @*TSQLRecordVirtualTableAutoID@} children can be defined for Virtual Table implemented in {\i Delphi}, with a new {\f1\fs20 ID} generated automatically at {\f1\fs20 INSERT}.
+{\f1\fs20 @*TSQLRecordVirtualTableForcedID@} children can be defined for Virtual Table implemented in {\i Delphi}, with an {\f1\fs20 ID} value forced at {\f1\fs20 INSERT} (in a similar manner than for {\f1\fs20 TSQLRecordRTree} or {\f1\fs20 TSQLRecordFTS3/4}).
 {\f1\fs20 TSQLRecordLogFile} was defined to map the column name as retrieved by the {\f1\fs20 TSQLVirtualTableLog} ('{\f1\fs20 log}') module, and should not to be used for any other purpose.
 The Virtual Table module associated from such classes is retrieved from an association made to the server {\f1\fs20 @*TSQLModel@}. In a @*Client-Server@ application, the association is not needed (nor to be used, since it may increase code size) on the Client side. But on the server side, the {\f1\fs20 TSQLModel. VirtualTableRegister} method must be called to associate a {\f1\fs20 TSQLVirtualTableClass} (i.e. a Virtual Table module implementation) to a {\f1\fs20 TSQLRecordVirtualClass} (i.e. its ORM representation).
 For instance, the following code will register two {\f1\fs20 TSQLRecord} classes, the first using the '{\f1\fs20 JSON}' virtual table module, the second using the '{\f1\fs20 Binary}' module:
@@ -4460,8 +4463,8 @@ Why use such a database type, when you can create a {\i @*SQLite3@} in-memory ta
 - {\i SQlite3} in-memory tables are not persistent, whereas our {\f1\fs20 JSON} or {\f1\fs20 Binary} virtual table modules can be written on disk on purpose, if the {\f1\fs20 aServer.StaticVirtualTable[aClass].CommitShouldNotUpdateFile} property is set to {\f1\fs20 true} - in this case, file writing should be made by calling explicitly the {\f1\fs20 aServer.StaticVirtualTable[aClass].UpdateToFile} method;
 - {\i SQlite3} in-memory tables will need two database connections, or call to the {\f1\fs20 @*ATTACH DATABASE@} SQL statement - both of them are not handled natively by our @*Client-Server@ framework;
 - {\i SQlite3} in-memory tables are only accessed via SQL statements, whereas {\f1\fs20 @*TSQLRestStorageInMemory@} tables can have faster direct access for most common @*REST@ful commands ({\f1\fs20 GET / POST / PUT / DELETE} individual rows) - this could make a difference in server CPU load, especially with the @*Batch@ feature of the framework;
-- On the server side, it could be very convenient to have a direct list of in-memory {\f1\fs20 @*TSQLRecord@} instances to work with in pure Delphi code; this is exactly what {\f1\fs20 TSQLRestStorageInMemory} allows, and definitively makes sense for an @*ORM@ framework;
-- On the client or server side, you could create calculated fields easily with {\f1\fs20 TSQLRestStorageInMemory} dedicated "getter" methods written in Delphi, whereas {\i SQlite3} in-memory tables would need additional SQL coding;
+- On the server side, it could be very convenient to have a direct list of in-memory {\f1\fs20 @*TSQLRecord@} instances to work with in pure {\i Delphi} code; this is exactly what {\f1\fs20 TSQLRestStorageInMemory} allows, and definitively makes sense for an @*ORM@ framework;
+- On the client or server side, you could create calculated fields easily with {\f1\fs20 TSQLRestStorageInMemory} dedicated "getter" methods written in {\i Delphi}, whereas {\i SQlite3} in-memory tables would need additional SQL coding;
 - {\i SQLite3} tables are stored in the main database file - in some cases, it could be much convenient to provide some additional table content in some separated database file (for a round robin table, a configuration table written in JSON, some content to be shared among users...): this is made possible using our {\f1\fs20 JSON} or {\f1\fs20 Binary} virtual table modules (but, to be honest, the {\f1\fs20 @*ATTACH DATABASE@} statement could provide a similar feature);
 - The {\f1\fs20 TSQLRestStorageInMemory} class can be used stand-alone, i.e. without the {\i SQLite3} engine so it could be used to produce small efficient server software - see the "{\f1\fs20 SQLite3\\Samples\\01 - In Memory ORM}" folder.
 :   In-Memory tables
@@ -4632,7 +4635,7 @@ The current list of available external RDBMS database classes is:
 - {\i @*Oracle@} direct access (via OCI);
 - {\i SQLite3} database file.
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
-In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party Delphi library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
+In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party {\i Delphi} library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
 Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
 An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
@@ -4720,19 +4723,19 @@ The {\f1\fs20 @**SynDB@} units have the following features:
 - Thin wrapper around any {\f1\fs20 DB.pas} / {\f1\fs20 TDataset} based components (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@, @*BDE@...);
 - Generic abstract @*OOP@ layout, able to work with any SQL-based database engine;
 - Tested with {\i @*MS SQL@ Server 2008, @*Firebird@ 2.5.1, @PostgreSQL 9.2@, @*MySQL@ 5.6, IBM @*DB2@ 10.5, Oracle 11g}, and the latest {\i SQLite3} engine;
-- Could access any local or remote Database, from any edition of Delphi (even {\i Delphi 7 personal}, the {\i Turbo Explorer} or {\i Starter edition}), just for free (in fact, it does not use the {\f1\fs20 DB.pas} standard unit and all its dependencies);
-- Ability to be truly Unicode, even with pre-Unicode version of Delphi (like Delphi 7 or 2007) - use internally UTF-8 encoding;
+- Could access any local or remote Database, from any edition of {\i Delphi} (even {\i Delphi 7 personal}, the {\i Turbo Explorer} or {\i Starter edition}), just for free (in fact, it does not use the {\f1\fs20 DB.pas} standard unit and all its dependencies);
+- Ability to be truly Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007) - use internally UTF-8 encoding;
 - Handle NULL or BLOB content for parameters and results, including stored procedures;
 - Avoid most memory copy or unnecessary allocation: we tried to access the data directly from the retrieved data buffer, just as given from {\i OleDB / ODBC} or the low-level database client (e.g. OCI for Oracle, or the {\i SQLite3} engine);
 - Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
 - Could be safely used in a multi-threaded application/server (with dedicated thread-safe methods, usable even if the database client is not officially multi-thread);
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
-- Column values accessible with most Delphi types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / WideString};
+- Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / WideString};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
 - @*Late-binding@ column access, via a custom variant type;
 - Direct @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
 - High-level catalog / database layout abstract methods, able to retrieve the table and column properties (including indexes), for database reverse-engineering; provide also SQL statements to create a table or an index in a database-abstract manner; those features will be used directly by our ORM;
-- Designed to be used with our ORM, but could be used stand-alone (a full Delphi 7 client executable is just about 200 KB), or even in any existing Delphi application, thanks to a {\f1\fs20 TQuery}-like wrapper;
+- Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 TQuery}-like wrapper;
 - {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to the deprecated @*BDE@ technology;
 - Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, about all available engines; it is also a good sample program of a stand-alone usage of those libraries.
 :  Data types
@@ -4740,8 +4743,8 @@ Of course, our ORM does not need a whole feature set (do not expect to use this 
 They are defined as such in {\f1\fs20 @*SynDB@}:
 !  TSQLDBFieldType =
 !    (ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
-Those types will map low-level database-level access types, not high-level Delphi types as {\f1\fs20 TSQLFieldType} defined in {\f1\fs20 mORMot.pas}, or the generic huge {\f1\fs20 TFieldType} as defined in the standard VCL {\f1\fs20 DB.pas} unit. In fact, it is more tied to the standard {\i @*SQLite3@} generic types, i.e. NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a {\f1\fs20 ftCurrency} and {\f1\fs20 ftDate} type, for better support of most DB engines) see @http://www.sqlite.org/datatype3.html
-You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-Delphi true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding.
+Those types will map low-level database-level access types, not high-level {\i Delphi} types as {\f1\fs20 TSQLFieldType} defined in {\f1\fs20 mORMot.pas}, or the generic huge {\f1\fs20 TFieldType} as defined in the standard VCL {\f1\fs20 DB.pas} unit. In fact, it is more tied to the standard {\i @*SQLite3@} generic types, i.e. NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a {\f1\fs20 ftCurrency} and {\f1\fs20 ftDate} type, for better support of most DB engines) see @http://www.sqlite.org/datatype3.html
+You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-{\i Delphi} true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding.
 BLOB columns or parameters are accessed as {\f1\fs20 @*RawByteString@} variables, which may be mapped to a standard {\f1\fs20 TStream} via our {\f1\fs20 TRawByteStringStream}.
 :  SynDB Units
 Here are the units implementing the external database-agnostic features:
@@ -4860,7 +4863,7 @@ In fact, the {\f1\fs20 MyConnProps.Execute} method returns a {\f1\fs20 TSQLDBSta
 Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @16@.
 :  Late-binding
 We implemented @*late-binding@ access of column values, via a custom variant time. It uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties.
-The resulting Delphi code to write is just clear and obvious:
+The resulting {\i Delphi} code to write is just clear and obvious:
 !procedure UseProps(Props: TSQLDBConnectionProperties);
 !var Row: Variant;
 !begin
@@ -4871,7 +4874,7 @@ The resulting Delphi code to write is just clear and obvious:
 !end;
 Note that {\f1\fs20 Props.Execute} returns an {\f1\fs20 ISQLDBRows} interface, so the code above will initialize (or reuse an existing) thread-safe connection (OleDB uses a per-thread model), initialize a statement, execute it, access the rows via the {\f1\fs20 Step} method and the {\f1\fs20 Row} variant, retrieving the column value via a direct {\f1\fs20 Row.AccountNumber} statement.
 The above code is perfectly safe, and all memory will be released with the reference count garbage-collector feature of the {\f1\fs20 ISQLDBRows} interface. You are not required to add any {\f1\fs20 try..finally Free; end} statements in your code.
-This is the magic of late-binding in Delphi. Note that a similar feature is available for our {\f1\fs20 SynBigTable} unit.
+This is the magic of late-binding in {\i Delphi}. Note that a similar feature is available for our {\f1\fs20 SynBigTable} unit.
 In practice, this code is slower than using a standard property based access, like this:
 !while Step do
 !  assert(Copy(ColumnUTF8('AccountNumber'),1,8)='AW000001');
@@ -4939,7 +4942,7 @@ Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS
 \ODBC\Jet/Access
 \ODBC\Advantage
 \
-By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the Delphi high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/AnyDAC component sets.
+By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/AnyDAC component sets.
 Most {\i OleDB / ODBC} providers are free (even maintained by the database owner), others would need a paid license.
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i OleDB} or {\i ODBC} remote access expects only the database instance to be reachable on the Server side. Clients could communicate via standard HTTP, so won't need any specific port forwarding or other IT configuration to work as expected.
 :  ZEOS via direct ZDBC
@@ -4984,9 +4987,9 @@ Here are the main features of this unit:
 - Dedicated to work with {\i any version} of the Oracle OCI interface, starting from revision 8;
 - {\i Optimized for the latest features} of Oracle 11g (e.g. using native {\f1\fs20 Int64} for retrieving NUMBER fields with no decimal);
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
-- {\i Natively Unicode} (uses internal UTF-8 encoding), for all version of Delphi, with special handling of each database char-set;
+- {\i Natively Unicode} (uses internal UTF-8 encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
-- Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled Delphi application, i.e. only 32 bit for this current version);
+- Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32 bit for this current version);
 - {\i @*Late-binding@} access to column names, using a new dedicated {\f1\fs20 Variant} type (similar to Ole Automation runtime properties);
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
@@ -5025,7 +5028,7 @@ Since there are a lot of potential combinations here - see @%%SynDBLayers@ - fee
 \
 We used and tested the free embedded edition, which is a perfect match for a Client-Server ORM framework like {\i mORMot} - see @http://www.nexusdb.com/support/index.php?q=FreeEmbedded
 :   FireDAC / AnyDAC library
-{\i @**FireDAC@} is an unique set of {\i Universal Data Access} Components for developing cross platform database applications on Delphi. This was in fact a third-party component set, bought by {\i Embarcadero} to {\i DA-SOFT Technologies} (formerly known as @**AnyDAC@), and included with several editions of Delphi XE3 and up. This is the new official platform for high-speed database development in Delphi, in favor to the now deprecated {\i DBExpress}.
+{\i @**FireDAC@} is an unique set of {\i Universal Data Access} Components for developing cross platform database applications on {\i Delphi}. This was in fact a third-party component set, bought by {\i Embarcadero} to {\i DA-SOFT Technologies} (formerly known as @**AnyDAC@), and included with several editions of {\i Delphi} XE3 and up. This is the new official platform for high-speed database development in {\i Delphi}, in favor to the now deprecated {\i DBExpress}.
 \graph SynDBFireDAC SynDB and FireDAC / AnyDAC
 \SynDB\DB
 =DB=DB.pas¤TDataset
@@ -5054,7 +5057,7 @@ We used and tested the free embedded edition, which is a perfect match for a Cli
 \
 Our integration within {\f1\fs20 SynDB.pas} units and the {\i mORMot} persistence layer has been tuned. For instance, you can have direct access to high-speed FireDAC {\i Array DML} feature, via the ORM @*batch@ process, via so-called @*array bind@ing - see @78@.
 :   UniDAC library
-{\i Universal Data Access Components} ({\i @**UniDAC@}) is a cross-platform library of components that provides direct access to multiple databases from Delphi. See @http://www.devart.com/unidac
+{\i Universal Data Access Components} ({\i @**UniDAC@}) is a cross-platform library of components that provides direct access to multiple databases from {\i Delphi}. See @http://www.devart.com/unidac
 \graph SynDBUniDAC SynDB and UniDAC
 \SynDB\DB
 =DB=DB.pas¤TDataset
@@ -5088,7 +5091,7 @@ For instance, to access to a @*MySQL@ remote database, you should be able to con
 !  'world', 'root', 'dev');
 This library gives pretty stable results, but lack of the array binding feature, in comparison to {\i FireDAC}.
 :   BDE engine
-{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of Delphi. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB} provider.
+{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of {\i Delphi}. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB} provider.
 \graph SynDBBDE SynDB and BDE
 \SynDB\DB
 =DB=DB.pas¤TDataset
@@ -5244,7 +5247,7 @@ You can customize this default mapping, writing e.g.
 !!  MapField('ID','Key').
 !!  MapField('YearOfDeath','YOD');
 ! (...) // the remaining code stays the same
-Then you use your {\f1\fs20 TSQLRecordPeopleExt} table as usual from Delphi code, with {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} fields.
+Then you use your {\f1\fs20 TSQLRecordPeopleExt} table as usual from {\i Delphi} code, with {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} fields.
 But, under the hood, the mORMot ORM will do the mapping when creating all needed SQL statements:
 - The "internal" {\f1\fs20 TSQLRecord} class will be stored within the {\f1\fs20 PeopleExternal} external table;
 - The "internal" {\f1\fs20 TSQLRecord.ID} field will be an external "{\f1\fs20 Key: INTEGER}" column;
@@ -5334,7 +5337,7 @@ Integration is made at two levels:
 The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
 It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex or {\i Javascript}):
 - For instance, a {\f1\fs20 TBSONObjectID} can be used to create some genuine document identifiers on the client side ({\i MongoDB} does not generate the IDs for you: a common way is to generate unique IDs on the client side);
-- Generation of BSON content from any Delphi types (via {\f1\fs20 TBSONWriter});
+- Generation of BSON content from any {\i Delphi} types (via {\f1\fs20 TBSONWriter});
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
 - A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
 - Interaction with the {\f1\fs20 SynCommons}' @80@ as document storage and late-binding access;
@@ -5645,11 +5648,11 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 extended}|double|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|double|stored as {\f1\fs20 double} ({\i MongoDB} does not have a BSD type)
 |{\f1\fs20 @*RawUTF8@}|UTF-8|this is the {\b preferred} field type for storing some textual content in the ORM
-|{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in Delphi
-|{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in Delphi, as {\f1\fs20 AnsiString}
-|{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of Delphi)
-|{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before Delphi 2009, or {\f1\fs20 UnicodeString} later
-|{\f1\fs20 string}|UTF-8|Not to be used before Delphi 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
+|{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in {\i Delphi}
+|{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in {\i Delphi}, as {\f1\fs20 AnsiString}
+|{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
+|{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
+|{\f1\fs20 string}|UTF-8|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
 |{\f1\fs20 TTimeLog}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
@@ -5860,35 +5863,35 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 JSON @**serialization@  will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
-Standard Delphi value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 double} values are stored as their corresponding floating-point representation.
+Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 double} values are stored as their corresponding floating-point representation.
 All {\f1\fs20 string} content is serialized as standard JSON text field, i.e. nested with double quotes ({\f1\fs20 "}). Since JSON uses @*UTF-8@ encoding, it is one of the reasons why we introduced the {\f1\fs20 @*RawUTF8@} type, and use it everywhere in our framework.
 :51  Record serialization
-In Delphi, the {\f1\fs20 @**record@} has some nice advantages:
+In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
 - {\f1\fs20 record} are value objects, i.e. accessed by value, not by reference - this can be very convenient, e.g. when defining @54@;
 - {\f1\fs20 record} can contain any other {\f1\fs20 record} or {\i dynamic array}, so are very convenient to work with (no need to define sub-classes or lists);
 - {\f1\fs20 record} variables can be allocated on stack, so won't solicited the global heap;
 - {\f1\fs20 record} instances automatically freed by the compiler when they come out of scope, so you won't need to write any {\f1\fs20 try..finally Free; end} block.
 Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}.
 :   Automatic serialization via Enhanced RTTI
-Since Delphi 2010, the compiler generates additional RTTI at compilation, so that all {\f1\fs20 record} fields are described, and available at runtime.\line By the way, this @**enhanced RTTI@ is one of the reasons why executables did grow so much in newer versions of the compiler.
+Since {\i Delphi} 2010, the compiler generates additional RTTI at compilation, so that all {\f1\fs20 record} fields are described, and available at runtime.\line By the way, this @**enhanced RTTI@ is one of the reasons why executables did grow so much in newer versions of the compiler.
 Our {\f1\fs20 SynCommons.pas} unit is able to use this enhanced information, and let any {\f1\fs20 record} be serialized via {\f1\fs20 RecordLoad()} and {\f1\fs20 RecordSave()} functions, and all internal JSON marshalling process.
-In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with Delphi 2010 and up, they will be serialized as valid JSON objects.
+In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with {\i Delphi} 2010 and up, they will be serialized as valid JSON objects.
 :   Serialization for older Delphi versions
-Sadly, the information needed to serialize a {\f1\fs20 record} is available only since Delphi 2010.
-If your application is developped on any older revision (e.g. Delphi 7, Delphi 2007 or Delphi 2009), you won't be able to automatically serialize {\f1\fs20 records} as plain JSON objects directly.
+Sadly, the information needed to serialize a {\f1\fs20 record} is available only since {\i Delphi} 2010.
+If your application is developped on any older revision (e.g. {\i Delphi} 7, {\i Delphi} 2007 or {\i Delphi} 2009), you won't be able to automatically serialize {\f1\fs20 records} as plain JSON objects directly.
 You have several paths available:
 - By default, the {\f1\fs20 record} will be serialized as binary, and encoded as {\i Base64} text;
 - Or you can define method callbacks which will write or read the data as you expect;
 - Or you can define the {\f1\fs20 record} layout as plain text.
 Note that any custom serialization (either via callbacks, or via text definition), will override any previous registered method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
 :    Default Binary/Base64 serialization
-On any version of the compiler prior to Delphi 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
+On any version of the compiler prior to {\i Delphi} 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
 A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
 $ { "MyRecord": "ï¿°w6nDoMOnYQ==" }
 You will find in {\f1\fs20 SynCommons} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
 When working with most part of the framework, you do not have anything to do: any record will by default follow this {\i Base64} serialization, so you will be able e.g. to publish or consume interface-based services with records.
 :    Custom serialization
-{\i Base64} encoding is pretty convenient for a computer (it is a compact and efficient format), but it is very limited about its interoperability. Our format is proprietary, and will use the internal Delphi serialization scheme: it means that it won't be readable nor writable outside the scope of your own {\i mORMot} applications. In a @*REST@ful/@*SOA@ world, this sounds not like a feature, but a limitation.
+{\i Base64} encoding is pretty convenient for a computer (it is a compact and efficient format), but it is very limited about its interoperability. Our format is proprietary, and will use the internal {\i Delphi} serialization scheme: it means that it won't be readable nor writable outside the scope of your own {\i mORMot} applications. In a @*REST@ful/@*SOA@ world, this sounds not like a feature, but a limitation.
 Custom {\f1\fs20 record} @*JSON@ serialization can therefore be defined, as with any {\f1\fs20 class} - see @52@. It will allow writing and parsing {\f1\fs20 record} variables as regular JSON objects, ready to be consumed by any client or server. Internally, some callbacks will be used to perform the serialization.
 In fact, there are two entry points to specify a custom JSON serialization for {\f1\fs20 record}:
 - When setting a custom {\i dynamic array} JSON serializer - see @53@ - the associated {\f1\fs20 record} will also use the same {\f1\fs20 Reader} and {\f1\fs20 Writer} callbacks;
@@ -6019,9 +6022,9 @@ $   "id": 296074
 $  }
 $ },
 $...
-During the parsing process, all unneeded JSON members will just be ignored. The parser will jump the data, without doing any temporary memory allocation. This is a huge difference with other existing Delphi JSON parsers, which first create a tree of all JSON values into memory, then allow to browse all the branches on request.
+During the parsing process, all unneeded JSON members will just be ignored. The parser will jump the data, without doing any temporary memory allocation. This is a huge difference with other existing {\i Delphi} JSON parsers, which first create a tree of all JSON values into memory, then allow to browse all the branches on request.
 Note also that the fields have been ordered following the {\f1\fs20 TTestCustomJSONGitHub} record definition, which may not match the original JSON layout (here {\f1\fs20 name/id} fields order is inverted, and {\f1\fs20 owner} is set at the end of each item, for instance).
-With {\i mORMot}, you can then access directly the content from your Delphi code as such:
+With {\i mORMot}, you can then access directly the content from your {\i Delphi} code as such:
 !  if git[0].id=8079771 then begin
 !    Check(git[0].name='Component_ZendAuthentication');
 !    Check(git[0].description='Authentication component from Zend Framework 2');
@@ -6083,10 +6086,10 @@ You can refer to the supplied regression tests (in {\f1\fs20 TTestLowLevelTypes.
 :   Standard JSON arrays
 Note that @*dynamic array@s are handled in two separated contexts:
 - Within the @*ORM@ part of the framework, they are stored as BLOB and always transmitted after {\i Base64} encoding - see @26@;
-- Within the scope of {\f1\fs20 interface}-based services, dynamic arrays values and parameters are using the advanced JSON serialization made available in the {\f1\fs20 @*TDynArray@} wrapper, i.e. could be either a true JSON array, or, in default, use generic binary and {\i Base64} encoding, prior to Delphi 2010.
+- Within the scope of {\f1\fs20 interface}-based services, dynamic arrays values and parameters are using the advanced JSON serialization made available in the {\f1\fs20 @*TDynArray@} wrapper, i.e. could be either a true JSON array, or, in default, use generic binary and {\i Base64} encoding, prior to {\i Delphi} 2010.
 In fact, this {\f1\fs20 @*TDynArray@} wrapper - see @48@ - recognizes most common kind of {\i dynamic arrays}, like {\f1\fs20 array of byte, word, integer, cardinal, Int64, double, @*currency@, @*RawUTF8@, @*SynUnicode@, WinAnsiString, string}. They will be serialized as a valid JSON array, i.e. a list of valid JSON elements of the matching type (number, floating-point value or string).\line If you have any ideas of standard {\i dynamic arrays} which should be handled, feel free to post your proposal in the forum!
-Since Delphi 2010, the framework will use the @*enhanced RTTI@ to create a JSON array corresponding to the data layout of each {\i dynamic array} item, just as for @51@.
-For version of the compiler up to Delphi 2009, not-known {\i dynamic arrays} (like any {\f1\fs20 array of packed record}) will be serialized by default as binary, then {\i Base64} encoded. This method will always work, but won't be easy to deal with from an AJAX client.
+Since {\i Delphi} 2010, the framework will use the @*enhanced RTTI@ to create a JSON array corresponding to the data layout of each {\i dynamic array} item, just as for @51@.
+For version of the compiler up to {\i Delphi} 2009, not-known {\i dynamic arrays} (like any {\f1\fs20 array of packed record}) will be serialized by default as binary, then {\i Base64} encoded. This method will always work, but won't be easy to deal with from an AJAX client.
 Of course, your applications can supply a custom JSON serialization for any other dynamic array, via the {\f1\fs20 TTextWriter.@**RegisterCustomJSONSerializer@()} class method. Two callbacks are to be defined in association with dynamic array type information, in order to handle proper serialization and un-serialization of the JSON array.\line As an alternative, you can call the {\f1\fs20 @*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format - see above.
 In fact, if you register a {\i dynamic array} custom serializer, it will also be used for the associated internal {\f1\fs20 record}.
 :   Customized serialization
@@ -6098,8 +6101,8 @@ For instance, we would like to serialize a dynamic array of the following record
 !  end;
 !  TFVs = array of TFV;
 With the default serialization, such a dynamic array will be serialized either:
-- As a {\i Base64} encoded binary buffer, before Delphi 2010 - this won't be easy to understand from an AJAX client, for instance;
-- As a JSON array of JSON object, with all property names listed within each object, since Delphi 2010 and its enhanced RTTI.
+- As a {\i Base64} encoded binary buffer, before {\i Delphi} 2010 - this won't be easy to understand from an AJAX client, for instance;
+- As a JSON array of JSON object, with all property names listed within each object, since {\i Delphi} 2010 and its enhanced RTTI.
 This default serialization can be overriden, by defining callbacks. It could be handy, e.g. if you do not like the fact that all field names are written in the data, which may be a waste of space:
 # {"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"}
 In order to add a custom serialization for this kind of record, we need to implement the two needed callbacks.\line Our expected format will be a JSON array of all fields, i.e.:
@@ -6140,7 +6143,7 @@ The registration process itself is as simple as:
 !  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
 !    TCollTstDynArray.FVReader,TCollTstDynArray.FVWriter);
 Then, from the user code point of view, this dynamic array handling won't change: once registered, the JSON serializers are used everywhere in the framework, as soon as this type is globally registered.
-Here is a {\i Writer} method using a JSON object layout, which may be used for Delphi up to 2009, to obtain a serialization similar to the one generated via the enhanced RTTI.
+Here is a {\i Writer} method using a JSON object layout, which may be used for {\i Delphi} up to 2009, to obtain a serialization similar to the one generated via the enhanced RTTI.
 !class procedure TCollTstDynArray.FVWriter2(const aWriter: TTextWriter; const aValue);
 !var V: TFV absolute aValue;
 !begin
@@ -6177,7 +6180,7 @@ You can define now your custom JSON serializers, starting for the above code as 
 Note that if the {\i record} corresponding to its item dynamic array has some associated RTTI (i.e. if it contains some reference-counted types, like any {\f1\fs20 string}), it will be serialized as JSON during the {\i mORMot} service process, just as stated with @51@.
 :  TSQLRecord TPersistent TStrings TRawUTF8List
 Classes with {\f1\fs20 published} properties, i.e. every class inheriting from {\f1\fs20 @*TPersistent@} or our ORM-dedicated {\f1\fs20 @*TSQLRecord@} class will be serialized as a true JSON object, containing all their {\f1\fs20 published} properties values. See @26@ for a corresponding table with the ORM database types and the JSON content.
-List of delphi strings, i.e. {\f1\fs20 @*TStrings@} kind of classes will be serialized as a JSON array of strings. This is the reason why we also introduced a dedicated {\f1\fs20 @**TRawUTF8List@} class, for direct @*UTF-8@ content storage, via our dedicated {\f1\fs20 RawUTF8} type, reducing the need of encoding conversion, therefore increasing process speed.
+List of {\i Delphi} strings, i.e. {\f1\fs20 @*TStrings@} kind of classes will be serialized as a JSON array of strings. This is the reason why we also introduced a dedicated {\f1\fs20 @**TRawUTF8List@} class, for direct @*UTF-8@ content storage, via our dedicated {\f1\fs20 RawUTF8} type, reducing the need of encoding conversion, therefore increasing process speed.
 :52  TObject serialization
 In fact, any {\f1\fs20 @*TObject@} can be serialized as @*JSON@ in the whole framework: not only for the ORM part (for {\f1\fs20 published} properties), but also for SOA (as parameters of interface-based service methods). All JSON @**serialization@ is centralized in {\f1\fs20 ObjectToJSON()} and {\f1\fs20 JSONToObject()} (aka {\f1\fs20 TJSONSerializer.WriteObject}) functions.
 In some cases, it may be handy to have a custom serialization, for instance if you want to manage some third-party classes, or to adapt the serialization scheme to a particular purpose, at runtime.
@@ -6333,7 +6336,7 @@ The following methods were added to the standard REST definition, for locking in
 - {\f1\fs20 END} to commit a transaction;
 - {\f1\fs20 ABORT} to rollback a transaction.
 The {\f1\fs20 GET} method has an optional pagination feature, compatible with the YUI DataSource Request Syntax for data pagination - see {\f1\fs20 TSQLRestServer.URI} method and @http://developer.yahoo.com/yui/datatable/#data . Of course, this breaks the "Every Resource is Identified by a Unique Identifier" RESTful principle - but it is much more easy to work with, e.g. to implement paging or custom filtering.
-From the Delphi code point of view, a RESTful @*Client-Server@  architecture is implemented by inheriting some common methods and properties from a main class.
+From the {\i Delphi} code point of view, a RESTful @*Client-Server@  architecture is implemented by inheriting some common methods and properties from a main class.
 \graph HierTSQLRestClient TSQLRestClient classes hierarchy
 \TSQLRestServer\TSQLRest
 \TSQLRestClientURI\TSQLRestClient
@@ -6341,7 +6344,7 @@ From the Delphi code point of view, a RESTful @*Client-Server@  architecture is 
 \
 This diagram states how the {\f1\fs20 @*TSQLRest@} class implements a common ancestor for both Client and Server classes.
 :1   BLOB fields
-@**BLOB@ fields are defined as {\f1\fs20 @**TSQLRawBlob@} @*published properties@ in the classes definition - which is an alias to the {\f1\fs20 @*RawByteString@} type (defined in {\f1\fs20 SynCommons.pas} for Delphi up to 2007, since it appeared only with Delphi 2009). But their content is not included in standard @*REST@ful methods of the framework, to spare network bandwidth.
+@**BLOB@ fields are defined as {\f1\fs20 @**TSQLRawBlob@} @*published properties@ in the classes definition - which is an alias to the {\f1\fs20 @*RawByteString@} type (defined in {\f1\fs20 SynCommons.pas} for {\i Delphi} up to 2007, since it appeared only with {\i Delphi} 2009). But their content is not included in standard @*REST@ful methods of the framework, to spare network bandwidth.
 The RESTful protocol allows BLOB to be retrieved (GET) or saved (PUT) via a specific URL, like:
 $ ModelRoot/TableName/TableID/BlobFieldName
 This is even better than the standard @*JSON@ encoding, which works well but convert BLOB to/from hexadecimal values, therefore need twice the normal size of it. By using such dedicated URL, data can be transfered as full binary.
@@ -6403,7 +6406,7 @@ $ [{"ID":0,"Int":0,"Test":"abcde+¬ef+á+¬","Unicode":"abcde+¬ef+á+¬","Ansi":"abcd
 2. the {\i "not expanded" layout}, which reflects exactly the layout of the @*SQL@ request: first line/row are the field names, then all next lines.row are the field content:
 $ {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord","ValDate","Next",0,0,"abcde+¬ef+á+¬","abcde+¬ef+á+¬","abcde+¬ef+á+¬",3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0,..]}
 By default, the {\f1\fs20 NoAJAXJSON} property is set to {\f1\fs20 true} when the {\f1\fs20 TSQLRestServer. ExportServerNamedPipe} is called: if you use named pipes for communication, you probably won't use a {\i JavaScript} client since all browsers communicate via @*HTTP@ only!
-But otherwise, {\f1\fs20 NoAJAXJSON} property is set to {\f1\fs20 false}. You could force its value to {\f1\fs20 true} and you will save some bandwidth if {\i JavaScript} is never executed: even the parsing of the JSON Content will be faster with Delphi if JSON content is not expanded.
+But otherwise, {\f1\fs20 NoAJAXJSON} property is set to {\f1\fs20 false}. You could force its value to {\f1\fs20 true} and you will save some bandwidth if {\i JavaScript} is never executed: even the parsing of the JSON Content will be faster with {\i Delphi} if JSON content is not expanded.
 In this "not expanded" layout, the following JSON content:
 $ [{"ID":1},{"ID":2},{"ID":3},{"ID":4},{"ID":5},{"ID":6},{"ID":7}]
 will be transfered as shorter:
@@ -6526,11 +6529,11 @@ The {\f1\fs20 THttpServerGeneric} abstract class provides one {\f1\fs20 OnReques
 This event handler prototype is shared by both {\f1\fs20 TThread} classes instances able to implement a {\f1\fs20 HTTP/1.1} server.
 Both {\f1\fs20 THttpApiServer} and {\f1\fs20 THttpServer} classes will receive any incoming request, pass it to the {\f1\fs20 TSQLRestServer} instance matching the incoming URI request, via the {\f1\fs20 OnRequest} event handler.
 If the request is a remote ORM operation, a @*JSON@ response will be retrieved from the internal @*cache@ of the framework, or computed using the {\i @*SQLite3@} database engine. In case of a remote service access - see @11@ - the request will be computed on the server side, also marshalling the data as JSON.
-The resulting JSON content will be compressed using our very optimized {\i @*SynLZ@} algorithm (20 times faster than Zip/Deflate for compression), if the client is a Delphi application knowing about {\i SynLZ} - for an @*AJAX@ client, it won't be compressed by default (even if you can enable the deflate algorithm - which may slow down the server).
+The resulting JSON content will be compressed using our very optimized {\i @*SynLZ@} algorithm (20 times faster than Zip/Deflate for compression), if the client is a {\i Delphi} application knowing about {\i SynLZ} - for an @*AJAX@ client, it won't be compressed by default (even if you can enable the deflate algorithm - which may slow down the server).
 Then the response will be marked as to be sent back to the Client...
 :88  High-performance http.sys server
 Since {\i Windows XP SP2} and {\i Windows Server 2003}, the Operating System provides a kernel stack to handle @**HTTP@ requests. This {\f1\fs20 @**http.sys@} driver is in fact a full featured HTTP server, running in kernel mode. It is part of the networking subsystem of the {\i Windows} operating system, as a core component.
-The {\f1\fs20 SynCrtSock} unit can implement a HTTP server based on this component. Of course, the {\i Synopse mORMot framework} will use it. If it's not available, it will launch our pure Delphi optimized HTTP server, using I/O completion ports and a Thread Pool.
+The {\f1\fs20 SynCrtSock} unit can implement a HTTP server based on this component. Of course, the {\i Synopse mORMot framework} will use it. If it's not available, it will launch our pure {\i Delphi} optimized HTTP server, using I/O completion ports and a Thread Pool.
 What’s good about {\f1\fs20 https.sys}?
 - {\i Kernel-mode request queuing}: Requests cause less overhead in context switching, because the kernel forwards requests directly to the correct worker process. If no worker process is available to accept a request, the kernel-mode request queue holds the request until a worker process picks it up.
 - {\i Enhanced stability}: When a worker process fails, service is not interrupted; the failure is undetectable by the user because the kernel queues the requests while the WWW service starts a new worker process for that application pool.
@@ -6541,7 +6544,7 @@ Take a look at sample "{\f1\fs20 04 - HTTP Client-Server}", which is able to ser
 In fact, two steps are performed by the {\f1\fs20 TSQLHttpServer} constructor:
 - The HTTP Server API is first initialized (if needed) during {\f1\fs20 THttpApiServer.Create} constructor call. The {\f1\fs20 HttpApi.dll} library (which is the wrapper around {\f1\fs20 http.sys}) is loaded dynamically: so if you are running an old system ({\i Windows XP SP1} for instance), you could still be able to use the server.
 - It then tries to register the URI matching the @*REST@ful model - @9@ - via the {\f1\fs20 THttpApiServer.AddUrl} method. In short, the {\f1\fs20 @*TSQLModel@. Root} property is used to compute the RESTful URI needed, just by the book. You can register several {\f1\fs20 TSQLRestServer} instances, each with its own {\f1\fs20 TSQLModel. Root}, if you need it.
-As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sys} is not available, or if it was not possible to register the URLs), the {\f1\fs20 TSQLHttpServer} class will fall back into using the other {\f1\fs20 THttpServer} class, which is a plain Delphi multi-threaded server. It won't be said that we will let you down!
+As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sys} is not available, or if it was not possible to register the URLs), the {\f1\fs20 TSQLHttpServer} class will fall back into using the other {\f1\fs20 THttpServer} class, which is a plain {\i Delphi} multi-threaded server. It won't be said that we will let you down!
 Inside {\f1\fs20 http.sys} all the magic is made... it will listen to any incoming connection request, then handle the headers, then check against any matching URL.
 {\f1\fs20 http.sys} will handle all the communication by itself, leaving the server threads free to process the next request.
 You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
@@ -6606,7 +6609,7 @@ Here are some PROs and CONs of those solutions:
 |User interactivity|None|Excellent (authentication, dial-up)|None
 |%
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
-Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a Delphi client application.
+Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
 Note that even if {\i WinHTTP} does not share by default any proxy settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a global lock. See @25@.
 :  HTTPS server
@@ -6656,7 +6659,7 @@ $Netsh http delete sslcert ipport=0.0.0.0:8005
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
 :  AES encryption over HTTP
 In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and AES-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
-Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server Delphi applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
+Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
 ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
 On the client side, you can just set the {\f1\fs20 TSQLHttpClientGeneric.Compression} property as expected:
@@ -6664,7 +6667,7 @@ On the client side, you can just set the {\f1\fs20 TSQLHttpClientGeneric.Compres
 Once those parameters have been set, a new proprietary encoding will be defined in the HTTP headers:
 $ ACCEPT-ENCODING: synshaaes
 Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CTR/256 encryption.
-Since it is a proprietary algorithm, it will work only for Delphi clients. When accessing for a plain AJAX client, or a Delphi application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
+Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
@@ -6704,7 +6707,7 @@ When we are talking about thread-safety, nothing compares to a dedicated stress 
 In the supplied regression tests, we designed a whole class of multi-thread testing, named {\f1\fs20 TTestMultiThreadProcess}. Its methods will run every and each Client-Server protocols available (direct access via {\f1\fs20 TSQLRestServerDB} or {\f1\fs20 TSQLRestCLientDB}, Windows Messages, named pipes, and both HTTP servers - i.e. {\f1\fs20 http.sys} based or WinSock-based)- see @35@.
 Each protocol will execute in parallel a list of INSERTs - i.e. {\f1\fs20 TSQLRest.Add()} - followed by a list of SELECTs - i.e. {\f1\fs20 TSQLRest.Retrieve()}. Those requests will be performed in 1 thread, then 2, 5, 10, 30 and 50 concurrent threads. The very same {\i SQLite3} database (in {\f1\fs20 lmExclusive} locking mode) is accessed at once by all those clients. Then the IDs generated by each thread are compared together, to ensure no cross-insertion did occur during the process.
 Those automated tests did already reveal some issues in the initial implementation of the framework. We fixed any encountered problems, as soon as possible. Feel free to send us any feedback, with code to reproduce the issue: but do not forget that multi-threading is also difficult to test - problems may occur not in the framework, but in the testing code itself!
-When setting {\f1\fs20 OperationCount} to 1000 instead of the default 200, i.e. running 1000 INSERTions and 1000 SELECTs in concurrent threads, the numbers are the following, on the local machine (compiled with Delphi XE4):
+When setting {\f1\fs20 OperationCount} to 1000 instead of the default 200, i.e. running 1000 INSERTions and 1000 SELECTs in concurrent threads, the numbers are the following, on the local machine (compiled with {\i Delphi} XE4):
 $ Multi thread process:
 $  - Create thread pool: 1 assertion passed  3.11ms
 $  - TSQLRestServerDB: 24,061 assertions passed  903.31ms
@@ -7155,7 +7158,7 @@ In fact, when using a remote database on a physical network, you won't be able t
 Of course, this 1 ms latency due to the external database additional round-trip may sounds negligible, but in @17@ when most process is done on the server side, it may introduce a huge performance difference. Your customers would not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for.
 Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing {\i array binding} for faster database batch modifications. It is working in conjunction with our BATCH methods, so CRUD modification actions are grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
-The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available Delphi libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
+The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
 :  Optimized SQL for bulk insert
 Sadly, array binding is not available for all databases or libraries. In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once.
@@ -7186,7 +7189,7 @@ If you want to use a {\i @*map/reduce@} algorithm in your application, or the @1
 :39 CRUD level cache
 :  Where to cache
 Starting with revision 1.16 of the framework, tuned record cache has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides. See @38@ for the other cache patterns available in the framework.
-In fact, a unique caching mechanism is shared at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, Delphi clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
+In fact, a unique caching mechanism is shared at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
 \graph mORMotCaching CRUD caching in mORMot
 \Internet (VPN)\Local Network
 node [shape=box];
@@ -7259,12 +7262,12 @@ It's worth warning once again that it's up to the code responsibility to ensure 
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
 %cartoon02.png
-The framework is able to handle a custom type of "@**stored procedure@" at SQL level in pure Delphi code, like any powerful @*Client-Server@ RDBMS solution.
+The framework is able to handle a custom type of "@**stored procedure@" at SQL level in pure {\i Delphi} code, like any powerful @*Client-Server@ RDBMS solution.
 In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the server side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature will be much faster than a pure client-sided solution.
 The Server-Side services - see @49@ and @63@ - appear to be the more @*REST@ful compatible way of implementing a stored procedure mechanism in our framework. But custom SQL WHERE statements may improve the client code, and therefore ORM CRUD requests could be optimized via some server-side process.
 According to the current state of our framework, there are several ways of handling such a server-side SQL/ORM process:
 - Write your own @*SQL function@ to be used in {\i @*SQLite3@} WHERE statements;
-- Low-level dedicated Delphi stored procedures;
+- Low-level dedicated {\i Delphi} stored procedures;
 - External databases stored procedures.
 \page
 :22 Custom SQL functions
@@ -7281,7 +7284,7 @@ $ UPDATE MyTable SET SomeField=0 WHERE IntegerDynArrayContains(IntArrayField,:(1
 : Implementing a function
 Let us implement a {\f1\fs20 CharIndex()} SQL function, defined as such:
 ! CharIndex ( SubText, Text [ , StartPos ] )
-In here, {\f1\fs20 SubText} is the string of characters to look for in {\f1\fs20 Text}. {\f1\fs20 StartPos} indicates the starting index where {\f1\fs20 charindex()} should start looking for {\f1\fs20 SubText} in {\f1\fs20 Text}. Function shall return the position where the match occurred, 0 when no match occurs. Characters are counted from 1, just like in {\f1\fs20 PosEx()} Delphi function.
+In here, {\f1\fs20 SubText} is the string of characters to look for in {\f1\fs20 Text}. {\f1\fs20 StartPos} indicates the starting index where {\f1\fs20 charindex()} should start looking for {\f1\fs20 SubText} in {\f1\fs20 Text}. Function shall return the position where the match occurred, 0 when no match occurs. Characters are counted from 1, just like in {\f1\fs20 PosEx()} {\i Delphi} function.
 The SQL function implementation pattern itself is explained in the {\f1\fs20 sqlite3.create_function_v2()} and {\f1\fs20 TSQLFunctionFunc}:
 - {\f1\fs20 argc} is the number of supplied parameters, which are available in {\f1\fs20 argv[]} array (you can call {\f1\fs20 ErrorWrongNumberOfArgs(Context)} in case of unexpected incoming number of parameters);
 - Use {\f1\fs20 sqlite3.value_*(argv[*])} functions to retrieve a parameter value;
@@ -7413,10 +7416,10 @@ In order to speed up the process, you may define some RDMS stored procedures in 
 %cartoon03.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @35@;
-- By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native Delphi methods;
-- Defining some RESTful {\i service @*contract@s} as standard Delphi {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
+- By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native {\i Delphi} methods;
+- Defining some RESTful {\i service @*contract@s} as standard {\i Delphi} {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
 The first is similar to {\i RemObject's DataAbstract} product, which allows remote access to database, over several protocols. There are some similarities with {\i mORMot} (like on-the-fly SQL translation for external databases), but also a whole diverse use case (RAD/components and wizards versus ORM/MVC) and implementation ({\i mORMot} takes advantages of the {\i @*SQLite3@} SQL core and is much more optimized for speed and scaling).
-If you paid for a {\i Delphi Architect} edition, the first two items can be compared to the {\i DataSnap} Client-Server features. Since Delphi 2010, you can in fact define @*JSON@-based RESTful services, in addition to the original {\i DCOM/DBExpress} remote data broker. It makes uses of the new RTTI available since Delphi 2010, but it has some known stability and performance issues, and lack of strong security. It is also RAD/Wizard based, whereas {\i mORMot} uses a code approach.
+If you paid for a {\i Delphi Architect} edition, the first two items can be compared to the {\i DataSnap} Client-Server features. Since {\i Delphi} 2010, you can in fact define @*JSON@-based RESTful services, in addition to the original {\i DCOM/DBExpress} remote data broker. It makes uses of the new RTTI available since {\i Delphi} 2010, but it has some known stability and performance issues, and lack of strong security. It is also RAD/Wizard based, whereas {\i mORMot} uses a code approach.
 The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a KISS manner.
 So {\i mORMot} is quite unique, in the fact that it features, in an unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a Domain-Driven Design, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
@@ -7442,7 +7445,7 @@ Then we implement this method:
 !    Results([Input['a']+Input['b']]);
 !end;
 The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 double}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
-Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of Delphi. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
+Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
 Those methods would raise an {\f1\fs20 EParsingException} exception if the parameter is not available at the URI. So you may want to use {\f1\fs20 InputExists[]} or even {\f1\fs20 InputIntOrVoid[] InputDoubleOrVoid[] InputUTF8OrVoid[] InputOrVoid[]} methods, which won't raise any exception but return a void value (i.e. either {\f1\fs20 0}, {\f1\fs20 ""} or {\f1\fs20 Unassigned}).
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !begin
@@ -7539,7 +7542,7 @@ The corresponding client method may be defined as such:
 !  if CallBackGet('GetFile',['filename',aFileName],RawUTF8(result))<>HTML_SUCCESS then
 !    raise Exception.CreateFmt('Impossible to get file: %s',[result]);
 !end;
-If you use HTTP as communication protocol, you can consume these services, implemented Server-Side in fast Delphi code, with any @*AJAX@ application on the client side.
+If you use HTTP as communication protocol, you can consume these services, implemented Server-Side in fast {\i Delphi} code, with any @*AJAX@ application on the client side.
 Using {\f1\fs20 GetMimeContentType()} when sending non JSON content (e.g. picture, pdf file, binary...) will be interpreted as expected by any standard Internet browser: it could be used to serve some good old HTML content within a page, not necessary consume the service via {\i JavaScript} .
 \page
 : Advanced process on server side
@@ -7607,8 +7610,8 @@ But with this implementation, a lot of process (e.g. parameter marshalling) is t
 : Delphi and interfaces
 :  Declaring an interface
 No, interface(-book) is not another social network, sorry.
-In Delphi @*OOP@ model, an {\f1\fs20 @**interface@} defines a type that comprises abstract virtual methods. The short, easy definition is that an interface is a declaration of functionality without an implementation of that functionality. It defines "what" is available, not "how" it is made available. This is the so called "abstraction" benefit of interfaces (there are another benefits, like orthogonality of interfaces to classes, but we'll see it later).
-In Delphi, we can declare an interface like so:
+In {\i Delphi} @*OOP@ model, an {\f1\fs20 @**interface@} defines a type that comprises abstract virtual methods. The short, easy definition is that an interface is a declaration of functionality without an implementation of that functionality. It defines "what" is available, not "how" it is made available. This is the so called "abstraction" benefit of interfaces (there are another benefits, like orthogonality of interfaces to classes, but we'll see it later).
+In {\i Delphi}, we can declare an interface like so:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
@@ -7619,7 +7622,7 @@ It just sounds like a class definition, but, as you can see:
 - It is named {\f1\fs20 ICalculator}, and not {\f1\fs20 TCalculator}: it is a common convention to start an interface name with a {\f1\fs20 I}, to make a difference with a {\f1\fs20 T} for a class or other implementation-level type definition;
 - There is no visibility attribute (no {\f1\fs20 private / protected / public / published} keywords): in fact, it is just as if all methods were published;
 - There is no fields, just methods (fields are part of the implementation, not of the interface): in fact, you can have properties in your interface definition, but those properties shall redirect to existing getter and setter methods, via {\f1\fs20 read} and {\f1\fs20 write} keywords;
-- There is a strange number below the interface name, called a {\f1\fs20 @*GUID@}: this is an unique identifier of the interface - you can create such a genuine constant on the editor cursor position by pressing {\f1\fs20 Ctrl + Shift + G} in the Delphi IDE;
+- There is a strange number below the interface name, called a {\f1\fs20 @*GUID@}: this is an unique identifier of the interface - you can create such a genuine constant on the editor cursor position by pressing {\f1\fs20 Ctrl + Shift + G} in the {\i Delphi} IDE;
 - But the methods are just defined as usual.
 :  Implementing an interface with a class
 Now that we have an interface, we need to create an implementation.
@@ -7675,7 +7678,7 @@ What's up over there?
 - We defined the local variable as {\f1\fs20 ICalculator}: so it will be an {\f1\fs20 interface}, not a regular class instance;
 - We assigned a {\f1\fs20 TServiceCalculator} instance to this {\f1\fs20 interface} variable: the variable will now handle the instance life time;
 - We called the method just as usual - in fact, the computation is performed with the same exact expression: {\f1\fs20 result := Calculator.Add(a,b)};
-- We do not need any {\f1\fs20 try...finally} block here: in Delphi, interface variables are {\i @*reference-counted@}: that is, the use of the interface is tracked by the compiler and the implementing instance, once created, is automatically freed when the compiler realizes that the number of references to a given interface variable is zero;
+- We do not need any {\f1\fs20 try...finally} block here: in {\i Delphi}, interface variables are {\i @*reference-counted@}: that is, the use of the interface is tracked by the compiler and the implementing instance, once created, is automatically freed when the compiler realizes that the number of references to a given interface variable is zero;
 - And the performance cost is negligible: this is more or less the same as calling a virtual method (just one more redirection level).
 In fact, the compiler creates an hidden {\f1\fs20 try...finally} block in the {\f1\fs20 MyAdd} function, and the instance will be released as soon as the {\f1\fs20 Calculator} variable is out of scope. The generated code could look like this:
 !function MyAdd(a,b: integer): integer;
@@ -7737,7 +7740,7 @@ Therefore:
 - Classes shall have few dependencies on other classes;
 - Classes shall be abstract from the particular layer they are running - see @7@.
 For instance, a {\f1\fs20 TRectangle} object should not have both {\f1\fs20 ComputeArea} and {\f1\fs20 Draw} methods defined at once - they would define two responsibilities or axis of change: the first responsibility is to provide a mathematical model of a rectangle, and the second is to render it on GUI.
-When you define an @*ORM@ object, do not put GUI methods within. In fact, the fact that our {\f1\fs20 @*TSQLRecord@} class definitions are common to both Client and Server sides makes this principle mandatory. You won't have any GUI related method on the Server side, and the Client side could use the objects instances with several GUI implementations (Delphi Client, AJAX Client...).
+When you define an @*ORM@ object, do not put GUI methods within. In fact, the fact that our {\f1\fs20 @*TSQLRecord@} class definitions are common to both Client and Server sides makes this principle mandatory. You won't have any GUI related method on the Server side, and the Client side could use the objects instances with several GUI implementations ({\i Delphi} Client, AJAX Client...).
 Therefore, if you want to change the GUI, you won't have to recompile the {\f1\fs20 TSQLRecord} class and the associated database model.
 Another example is how our database classes are defined in {\f1\fs20 @*SynDB@.pas} - see @27@:
 - The {\i connection properties} feature is handled by {\f1\fs20 TSQLDBConnectionProperties} classes;
@@ -7792,7 +7795,7 @@ Furthermore, a more direct {\i Design by Contract} implementation pattern is als
 This principle states that once an @*interface@ has become too 'fat' it shall be split into smaller and more specific interfaces so that any clients of the interface will only know about the methods that pertain to them. In a nutshell, no client should be forced to depend on methods it does not use.
 As a result, it will help a system stay decoupled  and thus easier to re-factor, change, and redeploy.
 Beginning with revision 1.16, our framework allows direct use of {\f1\fs20 interfaces} to implement services. This great @*Client-Server@ @*SOA@ implementation pattern - see @11@ - helps decoupling all services to individual small methods. In this case also, the @*stateless@ used design will also reduce the use of 'fat' session-related processes: an object life time can be safely driven by the {\f1\fs20 interface} scope.
-By defining Delphi {\f1\fs20 interface} instead of plain {\f1\fs20 class}, it helps creating small and business-specific contracts, which can be executed on both client and server side, with the same exact code.
+By defining {\i Delphi} {\f1\fs20 interface} instead of plain {\f1\fs20 class}, it helps creating small and business-specific contracts, which can be executed on both client and server side, with the same exact code.
 :  Dependency Inversion Principle
 Another form of decoupling is to invert the dependency between high and low level of a software design:
 - High-level modules should not depend on low-level modules. Both should depend on abstractions;
@@ -7800,12 +7803,12 @@ Another form of decoupling is to invert the dependency between high and low leve
 In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the Liskov's substitution principle.
 The goal of the {\i dependency inversion principle} is to decouple high-level components from low-level components such that reuse with different low-level component implementations becomes possible. A simple implementation pattern could be to use only @*interface@s owned by, and existing only with the high-level component package.
 In other languages (like Java or .Net), various patterns such as {\i Plug-in, Service Locator}, or {\i Dependency Injection} are then employed to facilitate the run-time provisioning of the chosen low-level component implementation to the high-level component.
-Our @*Client-Server@ architecture facilitated this decoupling pattern, and allows the use of native Delphi {\f1\fs20 interface} to call services from an abstract @*factory@.
+Our @*Client-Server@ architecture facilitated this decoupling pattern, and allows the use of native {\i Delphi} {\f1\fs20 interface} to call services from an abstract @*factory@.
 \page
 : Circular reference and (zeroing) weak pointers
 :  Weak pointers
-The memory allocation model of the Delphi {\f1\fs20 interface} type uses some kind of {\i Automatic Reference Counting} (@*ARC@). In order to avoid memory and resource leaks and potential random errors in the applications (aka the terrible {\f1\fs20 EAccessViolation} exception on customer side) when using @46@, a @*SOA@ framework like {\i mORMot} has to offer so-called {\i @**Weak pointers@} and {\i @**Zeroing Weak pointers@} features.
-By default in Delphi, all references are defined:
+The memory allocation model of the {\i Delphi} {\f1\fs20 interface} type uses some kind of {\i Automatic Reference Counting} (@*ARC@). In order to avoid memory and resource leaks and potential random errors in the applications (aka the terrible {\f1\fs20 EAccessViolation} exception on customer side) when using @46@, a @*SOA@ framework like {\i mORMot} has to offer so-called {\i @**Weak pointers@} and {\i @**Zeroing Weak pointers@} features.
+By default in {\i Delphi}, all references are defined:
 - as {\i weak references} for pointer and class instances;
 - with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, currency, double} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
 - via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, widestring, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
@@ -7834,9 +7837,9 @@ The following implementation will definitively leak memory:
 !begin
 !  FParent := Value;
 !end;
-In Delphi, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not value objects, but reference objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
+In {\i Delphi}, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not value objects, but reference objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
 One common solution is to use {\i Weak pointers}, by which the {\f1\fs20 interface} is assigned to a property without incrementing the reference count.
-Note that garbage collector based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why Delphi is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
+Note that garbage collector based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
 :  Handling weak pointers
 In order to easily create a weak pointer, the following function was added to {\f1\fs20 mORMot.pas}:
 !procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);
@@ -7857,7 +7860,7 @@ Therefore, it could be used as such:
 :  Zeroing weak pointers
 But there are still some cases where it is not enough. Under normal circumstances, a {\f1\fs20 class} instance should not be deallocated if there are still outstanding references to it. But since weak references don't contribute to an {\f1\fs20 interface} reference count, a {\f1\fs20 class} instance can be released when there are outstanding weak references to it. Some memory leak or even random access violations could occur. A debugging nightmare...
 In order to solve this issue, ARC's {\i Zeroing Weak pointers} come to mind.\line It means that weak references will be set to {\f1\fs20 nil} when the object they reference is released. When this happens, the automatic zeroing of the outstanding weak references prevents them from becoming dangling pointers. And {\i voilà}! No access violation any more!
-Such a {\i Zeroing} ARC model has been implemented in {\i Objective C} by Apple, starting with Mac OS X 10.7 Lion, in replacement (and/or addition) to the previous manual memory handling implementation pattern: in its Apple's flavor, ARC is available not only for interfaces, but for objects, and is certainly more sophisticated than the basic implementation available in the Delphi compiler: it is told (at least from the marketing paper point of view) to use some deep knowledge of the software architecture to provide an accurate access to all instances - whereas the Delphi compiler just relies on a {\i out-of-scope} pattern. In regard to classic {\i garbage collector} memory model, ARC is told to be much more efficient, due to its deterministic nature: Apple's experts ensure that it does make a difference, in term of memory use and program latency - which both are very sensitive on "modest" mobile devices. In short, thanks to ARC, your phone UI won't glitch during background garbage recycling. So {\f1\fs20 mORMot} will try to offer a similar feature, even if the Delphi compiler does not implement it (yet).
+Such a {\i Zeroing} ARC model has been implemented in {\i Objective C} by Apple, starting with Mac OS X 10.7 Lion, in replacement (and/or addition) to the previous manual memory handling implementation pattern: in its Apple's flavor, ARC is available not only for interfaces, but for objects, and is certainly more sophisticated than the basic implementation available in the {\i Delphi} compiler: it is told (at least from the marketing paper point of view) to use some deep knowledge of the software architecture to provide an accurate access to all instances - whereas the {\i Delphi} compiler just relies on a {\i out-of-scope} pattern. In regard to classic {\i garbage collector} memory model, ARC is told to be much more efficient, due to its deterministic nature: Apple's experts ensure that it does make a difference, in term of memory use and program latency - which both are very sensitive on "modest" mobile devices. In short, thanks to ARC, your phone UI won't glitch during background garbage recycling. So {\f1\fs20 mORMot} will try to offer a similar feature, even if the {\i Delphi} compiler does not implement it (yet).
 In order to easily create a so-called zeroing weak pointer, the following function was defined in {\f1\fs20 mORMot.pas}:
 !procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PIInterface;
 !  const aValue: IInterface);
@@ -7871,7 +7874,7 @@ A potential use case could be:
 !begin
 !  SetWeakZero(self,@FParent,Value);
 !end;
-We also defined a {\f1\fs20 class helper} around the {\f1\fs20 TObject} class, to avoid the need of supplying the {\f1\fs20 self} parameter, but unfortunately, the {\f1\fs20 class helper} implementation is so buggy it won't be even able to compile before Delphi XE version of the compiler. But it will allow to write code as such:
+We also defined a {\f1\fs20 class helper} around the {\f1\fs20 TObject} class, to avoid the need of supplying the {\f1\fs20 self} parameter, but unfortunately, the {\f1\fs20 class helper} implementation is so buggy it won't be even able to compile before {\i Delphi} XE version of the compiler. But it will allow to write code as such:
 !procedure TParent.SetChild(const Value: IChild);
 !begin
 !  SetWeak0(@FChild,Value);
@@ -7886,16 +7889,16 @@ For instance, the following code is supplied in the regression tests, and will e
 !  Check(Parent.HasChild=(aWeakRef=weakref),'ZEROed Weak');
 Here, {\f1\fs20 aWeakRef=weakref} is {\f1\fs20 true} when {\f1\fs20 SetWeak()} has been called, and equals {\f1\fs20 false} when {\f1\fs20 SetWeakZero()} has been used to assign the {\f1\fs20 Child} element to its {\f1\fs20 Parent} interface.
 :  Weak pointers functions implementation details
-The {\f1\fs20 SetWeak()} function itself is very simple. The Delphi RTL/VCL itself use similar code when necessary.
+The {\f1\fs20 SetWeak()} function itself is very simple. The {\i Delphi} RTL/VCL itself use similar code when necessary.
 But the {\f1\fs20 SetWeakZero()} function has a much more complex implementation, due to the fact that a list of all weak references has to be maintained per {\f1\fs20 class} instance, and set to {\f1\fs20 nil} when this referring instance is released.
 The {\i mORMot} implementation tries to implement:
 - Best performance possible when processing the {\i Zeroing} feature;
 - No performance penalty for other classes not involved within weak references;
 - Low memory use, and good scalability when references begin to define huge graphs;
 - Thread safety - which is mandatory at least on the server side of our framework;
-- Compatible with Delphi 6 and later (avoid syntax tricks like {\f1\fs20 generic}).
+- Compatible with {\i Delphi} 6 and later (avoid syntax tricks like {\f1\fs20 generic}).
 Some good existing implementations can be found on the Internet:
-- {\i Andreas Hausladen} provided a classical and complete implementation at @http://andy.jgknet.de/blog/2009/06/weak-interface-references using some nice tricks (like per-instance optional speed up using a void {\f1\fs20 IWeakInterface interface} whose VMT slot will refer to the references list), is thread-safe and is compatible with most Delphi versions - but it will slow down all {\f1\fs20 TObject.FreeInstance} calls (i.e. within {\f1\fs20 Free / Destroy}) and won't allow any overridden {\f1\fs20 FreeInstance} method implementation;
+- {\i Andreas Hausladen} provided a classical and complete implementation at @http://andy.jgknet.de/blog/2009/06/weak-interface-references using some nice tricks (like per-instance optional speed up using a void {\f1\fs20 IWeakInterface interface} whose VMT slot will refer to the references list), is thread-safe and is compatible with most {\i Delphi} versions - but it will slow down all {\f1\fs20 TObject.FreeInstance} calls (i.e. within {\f1\fs20 Free / Destroy}) and won't allow any overridden {\f1\fs20 FreeInstance} method implementation;
 - {\i Vincent Parrett} proposed at @http://www.finalbuilder.com/Resources/Blogs/PostId/410/WeakRefence-in-Delphi-solving-circular-interfac.aspx a {\f1\fs20 generic}-based solution (not thread-safe nor optimized for speed), but requiring to inherit from a base class for any {\f1\fs20 class} that can have a weak reference pointing to it;
 - More recently, {\i Stefan Glienke} published at @http://delphisorcery.blogspot.fr/2012/06/weak-interface-references.html another {\f1\fs20 generic}-based solution, not requiring to inherit from a base class, but not thread-safe and suffering from the same limitations related to {\f1\fs20 TObject.FreeInstance}.
 The implementation included within {\i mORMot} uses several genuine patterns, when compared to existing solutions:
@@ -7910,7 +7913,7 @@ In order to fulfill the @47@, two features are to be available when handling int
 - Stubbing and mocking of interfaces for proper testing.
 We will show now how {\i mORMot} provides all needed features for such patterns, testing a simple "forgot my password" scenario: a password shall be computed for a given user name, then transmitted via SMS, and its record shall be updated in the database.
 :  Dependency injection
-A direct implementation of dependency injection at a {\f1\fs20 class} level can be implemented in Delphi as such:
+A direct implementation of dependency injection at a {\f1\fs20 class} level can be implemented in {\i Delphi} as such:
 - All external dependencies shall be defined as abstract {\f1\fs20 interface};
 - An external @*factory@ could be used to retrieve an {\f1\fs20 interface} instance, {\b or} class {\f1\fs20 constructor} shall receive the dependencies as parameters.
 Using an external factory can be made within {\i mORMot} via {\f1\fs20 @**TServiceFactory@} - see @63@. In the future, we may implement automated dependency injection.
@@ -7949,7 +7952,7 @@ Note also that all those code will use a plain {\f1\fs20 record} as {\i @**Data 
 !    MobilePhoneNumber: RawUTF8;
 !    ID: Integer;
 !  end;
-Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistency layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in Delphi ensure it won't be part of a complex business logic, but will remain used as value objects.
+Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistency layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in {\i Delphi} ensure it won't be part of a complex business logic, but will remain used as value objects.
 Now, let's come back to our {\f1\fs20 TLoginController} class.\line Here is the method we want to test:
 !procedure TLoginController.ForgotMyPassword(const UserName: RawUTF8);
 !var U: TUser;
@@ -7984,7 +7987,7 @@ With {\i mORMot}, it is as simple as:
 !    Returns('Send',[true]);
 It will create a fake class (here called a "@*stub@") emulating the whole {\f1\fs20 ISmsSender} interface, store it in the local {\f1\fs20 SmsSender} variable, and let its {\f1\fs20 Send} method return {\f1\fs20 true}.
 What is nice with this subbing / mocking implementation is that:
-- The "fluent" style of coding makes it easy to write and read the class behavior, without any actual coding in Delphi, nor class definition;
+- The "fluent" style of coding makes it easy to write and read the class behavior, without any actual coding in {\i Delphi}, nor class definition;
 - Even if {\f1\fs20 ISmsSender} has a lot of methods, only {\f1\fs20 Send} matters for us: {\f1\fs20 TInterfaceStub} will create all those methods, and let them return default values, with additional line of code needed;
 - Memory allocation will be handled by the framework: when {\f1\fs20 SmsSender} instance will be released, the associated {\f1\fs20 TInterfaceStub} data will also be freed (and in case a mock, any expectations will be verified).
 :  Defining a mock
@@ -8014,7 +8017,7 @@ Let's put all this together.
 \page
 : Stubs and Mocks in mORMot
 :  Features and motivations
-Our {\i mORMot} framework is therefore able to @*stub@ or @*mock@ any Delphi {\f1\fs20 interface}.
+Our {\i mORMot} framework is therefore able to @*stub@ or @*mock@ any {\i Delphi} {\f1\fs20 interface}.
 As usual, the best way to explain what a library does is to look at the code using it. Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario, we remembered to call the {\f1\fs20 Save()} method properly:
 !procedure TMyTest.ForgotMyPassword;
 !var SmsSender: ISmsSender;
@@ -8065,7 +8068,7 @@ If you want to follow the "test spy" pattern, you can use:
 If you compare with existing mocking frameworks, even in other languages / platforms like the two above, you will find out that the features included in {\i mORMot} are quite complete:
 - Stubbing of any method, returning default values for results;
 - Definition of the stubbed behavior via a simple fluent interface, with {\f1\fs20 TInterfaceStub.Returns()}, including easy definition of returned results values, for the whole method or following parameters/arguments matchers;
-- Handle methods with {\f1\fs20 var, out} or function result returned values - i.e. not only the function result (as other Delphi implementations does, due to a limitation of the {\f1\fs20 TVirtualInterface} standard implementation, on which {\i mORMot} does not rely), but all outgoing values, as an array of values;
+- Handle methods with {\f1\fs20 var, out} or function result returned values - i.e. not only the function result (as other {\i Delphi} implementations does, due to a limitation of the {\f1\fs20 TVirtualInterface} standard implementation, on which {\i mORMot} does not rely), but all outgoing values, as an array of values;
 - Stubbed methods can use delegates or event callbacks with {\f1\fs20 TInterfaceStub.Executes()} rule definitions, for the whole method or following parameters/arguments matchers,  to run a more complex process;
 - Stubbed methods can also raise exceptions with {\f1\fs20 TInterfaceStub.Raises()} rule definitions, for the whole method or following parameters/arguments matchers, if this is the behavior to be tested;
 - Clear distinction between {\i mocks} and {\i stubs}, with two dedicated classes, named {\f1\fs20 TInterfaceStub} and {\f1\fs20 TInterfaceMock};
@@ -8073,11 +8076,11 @@ If you compare with existing mocking frameworks, even in other languages / platf
 - Mocked methods can trigger test case failure with {\f1\fs20 TInterfaceMock.Fails()} definitions, for the whole method or following parameters/arguments matchers;
 - Mocking via "expect-run-verify" or "run-verify" (aka "test spy") patterns, on choice, depending on your testing expectations;
 - Mocking validation against number of execution of a method, or a method with arguments/parameters matchers, or the global execution trace - in this case, pass count can be compared with operators like {\f1\fs20 < <= = <> > >=} and not only the classic exact-number-of-times and at-least-once verifications;
-- Most common parameters and results can be defined as simple {\f1\fs20 array of const} in the Delphi code, or by supplying JSON arrays (needed e.g. for more complex structures like {\f1\fs20 record} values);
+- Most common parameters and results can be defined as simple {\f1\fs20 array of const} in the {\i Delphi} code, or by supplying JSON arrays (needed e.g. for more complex structures like {\f1\fs20 record} values);
 - Execution trace retrieval in easy to read or write text format (and not via complex "fluent" interface e.g. with {\f1\fs20 When} clauses);
 - Auto-release of the {\f1\fs20 TInterfaceStub TInterfaceMock TInterfaceMockSpy} generator instance, when the interface is no longer required, to minimize the code to type, and avoid potential memory leaks;
-- Works from Delphi 6 up to XE6 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
-- Very good performance (the faster Delphi mocking framework, for sure), due to very low overhead and its reuse of {\i mORMot}'s low-level interface-based services kernel using JSON serialization, which does not rely on the slow and limited {\f1\fs20 TVirtualInterface}.
+- Works from {\i Delphi} 6 up to XE6 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
+- Very good performance (the faster {\i Delphi} mocking framework, for sure), due to very low overhead and its reuse of {\i mORMot}'s low-level interface-based services kernel using JSON serialization, which does not rely on the slow and limited {\f1\fs20 TVirtualInterface}.
 :  Stubbing complex return values
 Just imagine that the {\f1\fs20 ForgotMyPassword} method does perform an internal test:
 !procedure TLoginController.ForgotMyPassword(const UserName: RawUTF8);
@@ -8234,12 +8237,12 @@ Here are the key features of the current implementation of services using interf
 |%25%75
 |\b Feature|Remarks\b0
 |Service Orientation|Allow loosely-coupled relationship
-|Design by contract|Service Contracts are defined in Delphi code as standard {\f1\fs20 interface} custom types
+|Design by contract|Service Contracts are defined in {\i Delphi} code as standard {\f1\fs20 interface} custom types
 |Factory driven|Get an implementation instance from a given interface
 |Server factory|You can get an implementation on the server side
 |Client factory|You can get a "fake" implementation on the client side, remotely calling the server to execute the process
 |Cross-platform clients|A {\i mORMot} server is able to generate cross-platform client code via a set of templates - see @86@
-|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from Delphi 6 up to XE6
+|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE6
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
 |Stateless|Following a standard request/reply pattern
@@ -8266,7 +8269,7 @@ We will describe those items.
 In a @*SOA@, services tend to create a huge list of operations. In order to facilitate implementation and maintenance, operations shall be grouped within common services.
 Before defining how such services are defined within {\i mORMot}, it is worth applying the @17@ main principles, i.e. loosely-coupled relationship. When you define {\i mORMOt} contracts, ensure that this contract will stay un-coupled with other contracts. It will help writing @*SOLID@ code, enhance maintenability, and allow introducing other service providers on demand (some day or later, you'll certainly be asked to replace one of your service with a third-party existing implementation of the corresponding feature: you shall at least ensure that your own implementation would be easily re-coded with external code, using e.g. a @*SOAP@/WSDL @*gateway@).
 :  Define an interface
-The service contract is to be defined as a plain Delphi {\f1\fs20 interface} type. In fact, the sample type as stated above - see @46@ - can be used directly:
+The service contract is to be defined as a plain {\i Delphi} {\f1\fs20 interface} type. In fact, the sample type as stated above - see @46@ - can be used directly:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
@@ -8276,9 +8279,9 @@ The service contract is to be defined as a plain Delphi {\f1\fs20 interface} typ
 This {\f1\fs20 ICalculator.Add} method will define one "{\i Add}" operation, under the "{\i ICalculator}" service (which will be named internally {\f1\fs20 'Calculator'} by convention). This operation will expect two numbers as input, and then return the sum of those numbers.
 The current implementation of service has the following expectations:
 - Any interface inheriting from {\f1\fs20 IInvokable}, with a @*GUID@, can be used - we expect the RTTI to be available, so {\f1\fs20 IInvokable} is a good parent type;
-- You can inherit an interface from an existing one: in this case, the inherited methods will be part of the child interface, and will be expected to be implemented (just as with standard Delphi code);
+- You can inherit an interface from an existing one: in this case, the inherited methods will be part of the child interface, and will be expected to be implemented (just as with standard {\i Delphi} code);
 - Only plain ASCII names are allowed for the type definition (as it is conventional to use English spelling for service and operation naming);
-- Calling convention shall be {\f1\fs20 register} (the Delphi's default) - nor {\f1\fs20 stdcall} nor {\f1\fs20 cdecl} is available yet, but this won't be a restriction since the {\f1\fs20 interface} definition is dedicated to Delphi code scope;
+- Calling convention shall be {\f1\fs20 register} (the {\i Delphi}'s default) - nor {\f1\fs20 stdcall} nor {\f1\fs20 cdecl} is available yet, but this won't be a restriction since the {\f1\fs20 interface} definition is dedicated to {\i Delphi} code scope;
 - Methods can have a result, and accept per-value or per-reference parameters.
 In fact, parameters expectations are the following:
 - Simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records and dynamic arrays) are handled - see below for the details;
@@ -8296,7 +8299,7 @@ Handled types of parameters are:
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (UTF-8 encoded)
-|{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to Delphi 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
+|{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
 |{\f1\fs20 @*TPersistent@}|Published properties will be transmitted as JSON object
 |{\f1\fs20 @*TSQLRecord@}|All published fields (including ID) will be transmitted as JSON object
@@ -8305,7 +8308,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*TObjectList@}|Transmitted as a JSON array of JSON objects, with a {\f1\fs20 "ClassName": "TMyClass"} field to identify the type - see @71@
 |any {\f1\fs20 @*TObject@}|See @52@
 |dynamic arrays|Transmitted as JSON arrays - see @48@
-|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular Delphi {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding before Delphi 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
+|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular {\i Delphi} {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding before {\i Delphi} 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
 |{\f1\fs20 variant}|Transmitted as JSON, with support of @80@ for objects and arrays; OLE {\f1\fs20 variant} arrays are not handled: use {\f1\fs20 _Arr([]) _ArrFast([])} instead
 |{\f1\fs20 @*TServiceCustomAnswer@}|If used as a {\f1\fs20 function} result (not as parameter), the supplied content will be transmitted directly to the client (with no JSON @*serialization@); in this case, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed in the method - it will be compatible with both our {\f1\fs20 TServiceFactoryClient} implementation, and any other service consumers (e.g. @*AJAX@)
 |%
@@ -8334,7 +8337,7 @@ You can therefore define complex {\f1\fs20 interface} types, as such:
 !    /// test variant kind of parameters
 !    function TestVariants(const Text: RawUTF8; V1: variant; var V2: variant): variant;
 !  end;
-Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. And simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way, thanks to the enhanced RTTI available since to Delphi 2010.
+Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. And simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way, thanks to the enhanced RTTI available since to {\i Delphi} 2010.
 :  TPersistent / TSQLRecord parameters
 As stated above, {\i mORMot} does not allow a method {\f1\fs20 function} to return a {\f1\fs20 class} instance.
 That is, you can't define such a method:
@@ -8342,13 +8345,13 @@ That is, you can't define such a method:
 !    ['{770D009F-15F4-4307-B2AD-BBAE42FE70C0}']
 !    function NewCustomer: TCustomer;
 !  end;
-Who will be in charge of freeing the instance, in client-server mode? There is no standard allocation scheme, in Delphi, for such parameters. So every {\f1\fs20 TObject} parameter instance shall be managed by the caller, i.e. allocated before the call and released after it. The method will just read or write the instance published properties, and serialize them as JSON.
+Who will be in charge of freeing the instance, in client-server mode? There is no standard allocation scheme, in {\i Delphi}, for such parameters. So every {\f1\fs20 TObject} parameter instance shall be managed by the caller, i.e. allocated before the call and released after it. The method will just read or write the instance published properties, and serialize them as JSON.
 What you can define is such a method:
 !  ICustomerFactory = interface(IInvokable)
 !    ['{770D009F-15F4-4307-B2AD-BBAE42FE70C0}']
 !    procedure NewCustomer(out aCustomer: TCustomer);
 !  end;
-Note that here the {\f1\fs20 out} keyword does not indicate how the memory is allocated, but shows the communication direction of the remote service, i.e. it will serialize the object at method return. The caller shall instantiate an instance before call - whereas for "normal" Delphi code, it may be up to the method to instantiate the instance, and return it.
+Note that here the {\f1\fs20 out} keyword does not indicate how the memory is allocated, but shows the communication direction of the remote service, i.e. it will serialize the object at method return. The caller shall instantiate an instance before call - whereas for "normal" {\i Delphi} code, it may be up to the method to instantiate the instance, and return it.
 Then your client code can use it as such:
 !var Factory: ICustomerFactory;
 !    Repository: ICustomerRepository;
@@ -8385,7 +8388,7 @@ That is, it will append the supplied {\f1\fs20 Item} object to the provided {\f1
 - Setting {\f1\fs20 List} as {\f1\fs20 var} parameter will let this collection to be serialized from client to server, and back from server to the client;
 - Setting {\f1\fs20 Copy} as {\f1\fs20 out} parameter will let this collection to be serialized only from server to client.
 Note that {\f1\fs20 const / var / out} kind of parameters are used at the contract level in order to specify the direction of serialization, and not as usual (i.e. to define if it is passed {\i by value} or {\i by reference}). All {\f1\fs20 class} parameters shall be instantiated before method call: you can not pass any object parameter as nil (nor use it in a function result): it will raise an error.
-Due to the current implementation pattern of the {\f1\fs20 TCollection} type in Delphi, it was not possible to implement directly this kind of parameter.
+Due to the current implementation pattern of the {\f1\fs20 TCollection} type in {\i Delphi}, it was not possible to implement directly this kind of parameter.
 In fact, the {\f1\fs20 TCollection} constructor is defined as such:
 ! constructor Create(ItemClass: TCollectionItemClass);
 And, on the server side, we do not know which kind of {\f1\fs20 TCollectionItemClass} is to be passed. Therefore, the {\f1\fs20 TServiceFactoryServer} is unable to properly instantiate the object instances, supplying the expected item class.
@@ -8438,7 +8441,7 @@ Thanks to this internal registration table, {\i mORMot} will be able to serializ
 \page
 : Server side
 :  Implementing the service contract
-In order to have an operating service, you'll need to implement a Delphi class which matches the expected {\f1\fs20 interface}.
+In order to have an operating service, you'll need to implement a {\i Delphi} class which matches the expected {\f1\fs20 interface}.
 In fact, the sample type as stated above - see @46@ - can be used directly:
 !type
 !  TServiceCalculator = class(TInterfacedObject, ICalculator)
@@ -8450,8 +8453,8 @@ In fact, the sample type as stated above - see @46@ - can be used directly:
 !begin
 !  result := n1+n2;
 !end;
-And... That is all we need. The Delphi IDE will check at compile time that the class really implements the specified {\f1\fs20 interface} definition, so you'll be sure that your code meets the service contract expectations. Exact match (like handling type of parameters) will be checked by the framework when the service factory will be initialized, so you won't face any runtime exception due to a wrong definition.
-Here the class inherits from {\f1\fs20 TInterfacedObject}, but you could use any plain Delphi class: the only condition is that it implements the {\f1\fs20 ICalculator} interface.
+And... That is all we need. The {\i Delphi} IDE will check at compile time that the class really implements the specified {\f1\fs20 interface} definition, so you'll be sure that your code meets the service contract expectations. Exact match (like handling type of parameters) will be checked by the framework when the service factory will be initialized, so you won't face any runtime exception due to a wrong definition.
+Here the class inherits from {\f1\fs20 TInterfacedObject}, but you could use any plain {\i Delphi} class: the only condition is that it implements the {\f1\fs20 ICalculator} interface.
 :  Set up the Server factory
 In order to have a working service, you'll need to initialize a server-side @*factory@, as such:
 ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
@@ -8573,7 +8576,7 @@ You will have access to the following information, which could be useful for {\f
 !    RunningThread: TThread;
 !  end;
 When used, a local copy or a {\f1\fs20 PServiceRunningContext} pointer should better be created, since accessing a {\f1\fs20 threadvar} has a non negligible performance cost.
-If your code is compiled within some @*packages@, {\f1\fs20 threadvar} read won't work, due to a Delphi compiler/RTL restriction (bug?). In such case, you have to call the following {\f1\fs20 function} instead of directly access the {\f1\fs20 threadvar}:
+If your code is compiled within some @*packages@, {\f1\fs20 threadvar} read won't work, due to a {\i Delphi} compiler/RTL restriction (bug?). In such case, you have to call the following {\f1\fs20 function} instead of directly access the {\f1\fs20 threadvar}:
 ! function CurrentServiceContext: TServiceRunningContext;
 Note that this global {\f1\fs20 threadvar} is reset to 0 outside an {\f1\fs20 interface}-based service method call. It would therefore be useless to read it from a method-based service, for instance.
 :  Using services on the Server side
@@ -8599,7 +8602,7 @@ or, for a more complex service:
 !  assert(SameValue(CN.Real,100.01));
 !  assert(SameValue(CN.Imaginary,203.1415));
 !end; // here CN will be released
-For newer generic-aware versions of Delphi (i.e. Delphi 2010 and up, since Delphi 2009 is buggy about generics), you can use such a method, which enables compile-time checking:
+For newer generic-aware versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up, since {\i Delphi} 2009 is buggy about generics), you can use such a method, which enables compile-time checking:
 !var I: ICalculator;
 !begin
 !  I := Server.Service<ICalculator>;
@@ -8631,7 +8634,7 @@ That is, you may code:
 !  if Client.Services['Calculator'].Get(I)) then
 !    result := I.Add(10,20);
 !end;
-For Delphi 2010 and up, you can use a generic-based method, which enables compile-time checking:
+For {\i Delphi} 2010 and up, you can use a generic-based method, which enables compile-time checking:
 !var I: ICalculator;
 !begin
 !  I := Client.Service<ICalculator>;
@@ -8731,7 +8734,7 @@ Note that since the database expectations of this server are basic (only CRUD co
 !!      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
 !      if ExportServerNamedPipe(APPLICATION_NAME) then
 !  (...)
-Using this class will include the {\f1\fs20 CreateMissingTables} call to create both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables needed for authentication. But the resulting executable will be lighter: only 200 KB when compiled with Delphi 7 and our LVCL classes, for a full service provider.
+Using this class will include the {\f1\fs20 CreateMissingTables} call to create both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables needed for authentication. But the resulting executable will be lighter: only 200 KB when compiled with {\i Delphi} 7 and our LVCL classes, for a full service provider.
 :  The client sample application
 The client is just a simple form with two {\f1\fs20 TEdit} fields ({\f1\fs20 edtA} and {\f1\fs20 edtB}), and a "{\i Call}" button, which {\f1\fs20 OnClick} event is implemented as:
 !procedure TForm1.btnCallClick(Sender: TObject);
@@ -8780,7 +8783,7 @@ The corresponding service contract has been defined:
 Purpose of this service is:
 - To {\f1\fs20 Connect()} to any external database, given the parameters as expected by a standard {\f1\fs20 TSQLDBConnectionProperties.Create()} constructor call;
 - Retrieve all table names of this external database as a list;
-- Execute any SQL statement, returning the content as JSON array, ready to be consumed by AJAX applications (if {\f1\fs20 aExpanded} is {\f1\fs20 true}), or a Delphi client (e.g. via a {\f1\fs20 TSQLTableJSON} and the {\f1\fs20 mORMotUI} unit).
+- Execute any SQL statement, returning the content as JSON array, ready to be consumed by AJAX applications (if {\f1\fs20 aExpanded} is {\f1\fs20 true}), or a {\i Delphi} client (e.g. via a {\f1\fs20 TSQLTableJSON} and the {\f1\fs20 mORMotUI} unit).
 Of course, this service will be defined in {\f1\fs20 sicClientDriven} mode. That is, the framework will be able to manage a client-driven {\f1\fs20 TSQLDBProperties} instance life time.
 Benefit of this service is that no database connection is required on the client side: a regular HTTP connection is enough. No need to neither install nor configure any database provider.
 Due to {\i mORMot} optimized JSON serialization, it will probably be faster to work with such plain HTTP / JSON services, instead of a database connection through a VPN. In fact, database connections are made to work on a local network, and do not like high-latency connections, which are typical on the Internet. On the contrary, the {\i mORMot} Client-Server process is optimized for such kind of connection.
@@ -8989,7 +8992,7 @@ Since {\f1\fs20 TSQLRestServer.ServiceRegister} method returns the first created
 !    DenyAll.AllowAllByName(['Supervisor']);
 This will allow access to the {\f1\fs20 ICalculator} methods only for the {\i Supervisor} group of users.
 :  Implementation class types
-Most of the time, your implementation class will inherit from {\f1\fs20 TInterfacedObject}. As stated above, you could in fact inherit from any plain Delphi class: the only condition is that it implements the expected interface, and has a @*GUID@.
+Most of the time, your implementation class will inherit from {\f1\fs20 TInterfacedObject}. As stated above, you could in fact inherit from any plain {\i Delphi} class: the only condition is that it implements the expected interface, and has a @*GUID@.
 But if you need a special process to take place during the class instance initialization, you can inherit from the {\f1\fs20 TInterfacedObjectWithCustomCreate} class, which provides the following virtual {\f1\fs20 constructor}, ready to be overridden with your customized initialization:
 !  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
 !  public
@@ -9067,13 +9070,13 @@ Here is typical request for {\f1\fs20 ICalculator.Add}:
 $ POST /root/Calculator.Add
 $ (...)
 $ [1,2]
-Here we use a {\f1\fs20 POST} verb, but the framework will also allows other methods like {\f1\fs20 GET}, if needed (e.g. from a regular browser). The pure Delphi client implementation will use only {\f1\fs20 POST}.
+Here we use a {\f1\fs20 POST} verb, but the framework will also allows other methods like {\f1\fs20 GET}, if needed (e.g. from a regular browser). The pure {\i Delphi} client implementation will use only {\f1\fs20 POST}.
 For a {\f1\fs20 sicClientDriven} mode service, the needed instance ID is appended to the URI:
 $ POST /root/ComplexNumber.Add/1234
 $ (...)
 $ [20,30]
 Here, {\f1\fs20 1234} is the identifier of the server-side instance ID, which is used to track the instance life-time, in {\f1\fs20 sicClientDriven} mode.  One benefit of transmitting the Client Session ID within the URI is that it will be more secure in our RESTful authentication scheme - see @18@: each method (and even any client driven session ID) will be signed properly.
-In this {\f1\fs20 TSQLRestRoutingREST} mode, the server is also able to retrieve the parameters from the URI, if the message body is left void. This is not used from a Delphi client (since it will be more complex and therefore slower), but it can be used for a client, if needed:
+In this {\f1\fs20 TSQLRestRoutingREST} mode, the server is also able to retrieve the parameters from the URI, if the message body is left void. This is not used from a {\i Delphi} client (since it will be more complex and therefore slower), but it can be used for a client, if needed:
 $ POST root/Calculator.Add?+%5B+1%2C2+%5D
 $ GET root/Calculator.Add?+%5B+1%2C2+%5D
 In the above line, {\f1\fs20 +%5B+1%2C2+%5D} will be decoded as {\f1\fs20 [1,2]} on the server side. In conjunction with the use of a {\f1\fs20 GET} verb, it may be more suitable for a remote @*AJAX@ connection.
@@ -9088,7 +9091,7 @@ $ POST /root/ComplexNumber/Add/1234
 $ POST root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?n1=1&n2=2
-From a Delphi client, the {\f1\fs20 /RootName/InterfaceName.MethodName} scheme will always be used.
+From a {\i Delphi} client, the {\f1\fs20 /RootName/InterfaceName.MethodName} scheme will always be used.
 :    JSON-RPC
 If {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is used, the URI will define the interface, and then the method name will be inlined with parameters, e.g.
 $ POST /root/Calculator
@@ -9235,7 +9238,7 @@ The following XML will be returned if {\f1\fs20 TServiceFactoryServer.ResultAsXM
 $$<?xml version="1.0" encoding="UTF-8"?>
 $$<result><Result>3</Result></result>
 Conversion is processed from the JSON content generated by the {\i mORMot} kernel, via a call to {\f1\fs20 JSONBufferToXML()} function, which performs the XML generation without almost no memory allocation. So only a slightly performance penalty may be noticed (much faster in practice than most node-based XML producers available).
-One drawback of using this {\f1\fs20 TServiceFactoryServer.ResultAsXMLObject} property is that your regular Delphi or AJAX clients won't be able to consume the service any more, since they expect JSON content.\line If you want your service to be consumed either by XML and JSON, you would need two services. You can therefore define a dedicated {\f1\fs20 interface} to return XML, and then register this interface to return only XML:
+One drawback of using this {\f1\fs20 TServiceFactoryServer.ResultAsXMLObject} property is that your regular {\i Delphi} or AJAX clients won't be able to consume the service any more, since they expect JSON content.\line If you want your service to be consumed either by XML and JSON, you would need two services. You can therefore define a dedicated {\f1\fs20 interface} to return XML, and then register this interface to return only XML:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
@@ -9305,7 +9308,7 @@ In order to specify a custom format, you can use the following {\f1\fs20 @*TServ
 !    Content: RawByteString;
 !    Status: cardinal;
 !  end;
-The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overridden with a property HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from Delphi clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
+The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overridden with a property HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from {\i Delphi} clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
 In order to implement such method, you may define such an interface:
 !  IComplexCalculator = interface(ICalculator)
 !    ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
@@ -9373,25 +9376,25 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 About instance life time, note that in WCF {\f1\fs20 InstanceContextMode.Single} is in fact the same as {\f1\fs20 sicShared} within {\i mORMot} context: only one instance is used for all incoming calls and is not recycled subsequent to the calls. Therefore, {\f1\fs20 sicSingle} mode (which is {\i mORMot}'s default) maps {\f1\fs20 InstanceContextMode.PerCall} in WCF, meaning that one instance is used per call.
 We may be tempted to say that {\i mORMot} SOA architecture is almost complete, even for a young and {\i Open Source} project. Some features (like {\i per user}, {\i per group} or {\i client-driven} instance life time, or Windows Messages local communication) are even unique to {\i mORMot}. In fact, {\f1\fs20 sicClientDriven} is pretty convenient when implementing a Service Oriented Architecture.
 Of course, WCF features its @**SOAP@-based architecture. But WCF also suffers from it: due to this ground-up message design, it will always endure its SOAP overweight, which is "Simple" only by name, not by reputation.
-If you need to communicate with an external service provider, you can easily create a SOAP @*gateway@ from Delphi, as such:
-- Import the WSDL (Web Service Definition Language) definition of a web service and turn it into a Delphi import unit;
+If you need to communicate with an external service provider, you can easily create a SOAP @*gateway@ from {\i Delphi}, as such:
+- Import the WSDL (Web Service Definition Language) definition of a web service and turn it into a {\i Delphi} import unit;
 - Publish the interface as a {\i mORMot} server-side implementation class.
-Since SOAP features a lot of requirements, and expects some plumping according to its format (especially when services are provided from C# or Java), we choose to not re-invent the wheel this time, and rely on existing Delphi libraries (available within the Delphi IDE) for this purpose. If you need a cross-platform SOAP 1.1 compatible solution, or if you version of Delphi does not include SOAP process, you may take a look at @http://wiki.freepascal.org/Web_Service_Toolkit which is a web services package for FPC, Lazarus and Delphi.
+Since SOAP features a lot of requirements, and expects some plumping according to its format (especially when services are provided from C# or Java), we choose to not re-invent the wheel this time, and rely on existing {\i Delphi} libraries (available within the {\i Delphi} IDE) for this purpose. If you need a cross-platform SOAP 1.1 compatible solution, or if you version of {\i Delphi} does not include SOAP process, you may take a look at @http://wiki.freepascal.org/Web_Service_Toolkit which is a web services package for FPC, Lazarus and {\i Delphi}.
 But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
 Optionally, {\i mORMot}'s interface based services allow to publish their result as XML, and encode the incoming parameters at URI level. It makes it a good alternative to SOAP, in the XML world.
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 {\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon07.png
-Current version of the main framework units target only Win32 and Win64 systems. It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, and allow to pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for other platforms.
-A set of @**cross-platform@ client units is available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository.\line It allows writing any client in modern {\i object pascal} language, for:
-- Any version of {\i Delphi}, on any platform (including @*OSX@, @*iPhone@ or @*Android@);
+Current version of the main framework units target only {\i Win32} and {\i Win64} systems.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the {\i Windows} world, especially mobile devices.
+A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
+- Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
 - {\i @*FreePascal@} Compiler 2.7.1;
-- {\i @*Smart Mobile Studio@} 2.1, to create AJAX applications.
+- {\i @*Smart Mobile Studio@} 2.1, to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
 The units are the following:
-|%45%55
+|%37%63
 |\b Unit Name|Description\b0
-|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client access
+|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, implementing secured ORM and SOA @*REST@ful client
 |{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Optimized JSON process (not used by {\i Smart})
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
@@ -9400,24 +9403,25 @@ The units are the following:
 This set of units will provide a solid and shared ground for the any kind of clients:
 - Connection to a {\i mORMot} server via HTTP, with full REST support;
 - Support of weak or default authentication to secure the transfer - see @18@;
-- Definition of the {\f1\fs20 TSQLRecord} class, using RTTI on {\i Delphi} or {\i FreePascal}, and generated code on {\i Smart};
+- Definition of the {\f1\fs20 TSQLRecord} class, using RTTI when available on {\i Delphi} or {\i FreePascal}, and generated code for {\i Smart Mobile Studio};
 - Remote @*CRUD@ operations, via @*JSON@ and @*REST@, with a {\f1\fs20 TSQLRestClientURI} class, with the same methods as with the {\f1\fs20 mORMot.pas} framework unit;
 - Optimized {\f1\fs20 TSQLTableJSON} class to handle a JSON result table, as returned by {\i mORMot}'s REST server ORM - see @87@;
 - @*Batch@ process - see @28@ - for transactional and high-speed writes;
-- Remote @49@ call, with parameters marshaling;
-- Remote @63@ call, with parameters marshaling and instance-life time;
+- @49@ with parameters marshaling;
+- @63@ with parameters marshaling and instance-life time;
 - Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
 In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
 In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client source file for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially for targeting Java or C# clients.
+\page
 : Available client platforms
-:  Delphi / FreePascal cross-platform support
-Latest versions of {\i Delphi} include the {\i @**FireMonkey@} (FMX) framework, able to deliver multi-device, true native applications for Windows, Mac, Android and iOS.\line Our {\f1\fs20 SynCrossPlatform*} units are able to easily create clients for those platforms.
+:69  Delphi FMX / FreePascal FCL cross-platform support
+Latest versions of {\i Delphi} include the {\i @**FireMonkey@} (FMX) framework, able to deliver multi-device, true native applications for {\i Windows}, {\i Mac @*OSX@}, {\i @*Android@} and {\i iOS} ({\i @*iPhone@}/{\i @*iPad@}).\line Our {\f1\fs20 SynCrossPlatform*} units are able to easily create clients for those platforms.
 Similarly, these units can be compiled with @*FreePascal@, so that any {\i mORMot} server could be consumed from the numerous supported platforms of this compiler.
 In order to use those units, ensure in your IDE that the {\f1\fs20 CrossPlatform} sub-folder of the {\i mORMot} source code repository is defined in your {\i Library Search Path}.
 :   Cross-platform JSON
-We developed our own cross-platform @*JSON@ process unit in {\f1\fs20 SynCrossPlatformJSON.pas}, shared with {\i Delphi} and {\i FreePascal}.\line In fact, it appears to be easier to use (since it is {\f1\fs20 variant}-based and with {\i late-binding} abilities) and run much faster than the official {\f1\fs20 DBXJSON.pas} unit shipped with latest versions of Delphi, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
+We developed our own cross-platform @*JSON@ process unit in {\f1\fs20 SynCrossPlatformJSON.pas}, shared with {\i Delphi} and {\i FreePascal}.\line In fact, it appears to be easier to use (since it is {\f1\fs20 variant}-based and with {\i late-binding} abilities) and run much faster than the official {\f1\fs20 DBXJSON.pas} unit shipped with latest versions of {\i Delphi}, as stated by the "{\f1\fs20 25 - JSON performance}" sample:
 $ 2.2. Table content:
 $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
@@ -9490,11 +9494,11 @@ The unit is also able to serialize any {\f1\fs20 TPersistent} class, i.e. all pu
 Of course, this serialization feature is used for the {\f1\fs20 TSQLRecord} ORM class.
 Due to lack of RTTI, {\f1\fs20 record} serialization is supported via some functions generated by the server with the code wrappers.
 :   Delphi OSX and NextGen
-In order to be compliant with the {\i NextGen} revision, our {\f1\fs20 SynCrossPlatform*} units follow the expectations of this new family of cross-compilers, which targets {\i Android} and {\i iOS}.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 THttpBody}, {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would compile on all supported platforms.
-On Delphi, the {\i @*Indy@} library is used for HTTP requests. It is cross-platform by nature, so should work on any supported system. For SSL support with {\i iOS} and {\i Android} clients, please follow instructions at @http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html you may also download the needed {\f1\fs20 libcrypto.a} and {\f1\fs20 libssl.a} files from @http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
-Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i @*Smart Mobile Studio@} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. iOS and Android) as deep as other systems. Your input would be very valuable and welcome, here!
+In order to be compliant with the {\i NextGen} revision, our {\f1\fs20 SynCrossPlatform*} units follow the expectations of this new family of cross-compilers, which targets {\i @*Android@} and {\i @*iOS@}.\line In particular, we rely only on the {\f1\fs20 string} type for text process and storage, even at JSON level, and we tried to make object allocation ARC-compatible. Some types have been defined, e.g. {\f1\fs20 THttpBody}, {\f1\fs20 TUTF8Buffer} or {\f1\fs20 AnsiChar}, to ensure that our units would compile on all supported platforms.
+On {\i Delphi}, the {\i @*Indy@} library is used for HTTP requests. It is cross-platform by nature, so should work on any supported system. For SSL support with {\i iOS} and {\i Android} clients, please follow instructions at @http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html you may also download the needed {\f1\fs20 libcrypto.a} and {\f1\fs20 libssl.a} files from @http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
+Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i @*Smart Mobile Studio@} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. {\i iOS} and {\i Android}) as deep as other systems. Your input would be very valuable and welcome, here!
 :   FreePascal clients
-{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with Delphi, including RTTI support and all supported types.
+{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
 Some restrictions apply, though.
 Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
 !  doc.name2 := 3.1415926;
@@ -9509,9 +9513,9 @@ Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is i
 !  ...
 !  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
 !  ...
-It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With Delphi, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
+It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With {\i Delphi}, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and {\i @*Lazarus@}). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
-We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with Delphi. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
+We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with {\i Delphi}. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
 :90  Smart Mobile Studio support
 {\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} (in a modern dialect call {\i @*SmartPascal@}) into highly optimized and raw {\i @*JavaScript@}.
 There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
@@ -9524,7 +9528,7 @@ Of course, from our point of view, use of modern {\i object pascal} is of great 
 The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
 The resulting HTML5 project is self-sufficient with no external {\i JavaScript} library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debug your application directly within the IDE (since revision 2.1 - even if it is not yet always stable) or within your browser (IE, Chrome or FireBug have great debuggers), with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
-Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by Delphi FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
+Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
 {\i @*Smart Mobile Studio@} is therefore a great platform for implementing rich client-side AJAX or {\i Mobile} applications, to work with our client-server {\i mORMot} framework.
 :   Using Smart Mobile Studio with mORMot
 There is no package to be installed within the {\i Smart Mobile Studio} IDE. The client units will be generated directly from the {\i mORMot} server.\line Any edition of {\i Smart} - see @http://smartmobilestudio.com/feature-matrix - is enough: you do not need to pay for the {\i Enterprise} edition to consume {\i mORMot} services. But of course, the {\i Professionnal} edition is recommended, since the {\i Basic} edition does not allow to create forms from the IDE, which is the main point for an AJAX application.
@@ -9541,8 +9545,8 @@ Even if it feasible to write the client code by hand, your {\i mORMot} server is
 The following templates are available in the {\f1\fs20 CrossPlatform\\templates} folder:
 |%45%45
 |\b Unit Name|Compiler Target\b0
-|{\f1\fs20 CrossPlatform.pas.mustache}|Delphi / FPC SynCrossPlatform* units
-|{\f1\fs20 Delphi.pas.mustache}|Delphi Win32/Win64 {\i mORMot} units
+|{\f1\fs20 CrossPlatform.pas.mustache}|{\i Delphi} / FPC SynCrossPlatform* units
+|{\f1\fs20 Delphi.pas.mustache}|{\i Delphi} Win32/Win64 {\i mORMot} units
 |{\f1\fs20 SmartMobileStudio.pas.mustache}|@*Smart Mobile Studio@ 2.1
 |%
 In the future, other wrappers may be added. And you can write your own, which could be included within the framework source! Your input is warmly welcome, especially if you want to write a template for {\i Java} or {\f1\fs20 C#} client. The generated data context already contains the data types corresponding  to those compilers: e.g. a {\i mORMot}'s {\f1\fs20 RawUTF8} field or parameter could be identified as {\f1\fs20 "typeCS":"string"} or {\f1\fs20 "typeJava":"String"} in addition to {\f1\fs20 "typeDelphi":"RawUTF8"} and {\f1\fs20 "typePascal":"string"}.
@@ -9615,13 +9619,13 @@ Now, if you run the {\f1\fs20 Project14ServerHttpWrapper} server, and point your
 * {\b Delphi}\line {\i mORMotClient.pas} - {\ul download as file} - {\ul see as text} - {\ul see template}
 * {\b SmartMobileStudio}\line {\i mORMotClient.pas} - {\ul download as file} - {\ul see as text} - {\ul see template}
 You can also retrieve the corresponding {\ul template context}.\line
-Each of the {\f1\fs20 *.mustache} template available in the specified folder is listed here. Links above will allow downloading a client source code unit, or displaying it as text in the browser. The template can also be displayed un-rendered, for reference. As true {\i Mustache} templates, the source code are created from a {\i data context}, which can be displayed, as JSON, from the {\ul template context} link. It may help you when debugging your own templates. Note that if you modify and save a {\f1\fs20 .mustache} template file, just re-load the {\ul see as text} browser page and your modification is taken in account immediately (you do not need to restart the server).
+Each of the {\f1\fs20 *.mustache} template available in the specified folder is listed here. Links above will allow downloading a client source code unit, or displaying it as text in the browser. The template can also be displayed un-rendered, for reference. As true {\i Mustache} templates, the source code files are generated from a {\i data context}, which can be displayed, as JSON, from the "{\ul template context}" link. It may help you when debugging your own templates. Note that if you modify and save a {\f1\fs20 .mustache} template file, just re-load the "{\ul see as text}" browser page and your modification is taken in account immediately (you do not need to restart the server).
 Generated source code will follow the template name, and here will always be downloaded as {\f1\fs20 mORMotClient.pas}. Of course, you can change the unit name for your end-user application. It could be even mandatory if the same client would access to several {\i mORMot} servers at once, which could be the case in a @17@ project.
-Just ensure that you never changed the {\f1\fs20 mORMotClient.pas} generated content by hand. If necessary, you can customize your own {\i Mustache} template, to be used for your exact purpose. The purpose of this code generation is to re-create the client unit each time the server ORM or SOA structure is modified. In fact, as stated in the {\f1\fs20 mORMotClient.pas} comment, any manual modification of this file may be lost after regeneration. You have been warned!
-If you feel that the current templates have some issue or need some enhancements, you are very welcome to send us your change requests on our forums. Once you are used at it, {\i Mustache} templates are fairly easy to work with. Similarly, if you find out that some information is missing in the generated {\i data context}, e.g. for a new platform or language, we would be pleased to enhance the official {\f1\fs20 mORMotWrapper.pas} process.
+Just ensure that you will never change the {\f1\fs20 mORMotClient.pas} generated content by hand. If necessary, you can create and customize your own {\i Mustache} template, to be used for your exact purpose. By design, such automated code generation will require to re-create the client unit each time the server ORM or SOA structure is modified. In fact, as stated in the {\f1\fs20 mORMotClient.pas} comment, any manual modification of this file may be lost after regeneration. You have been warned!
+If you feel that the current templates have some issues or need some enhancements, you are very welcome to send us your change requests on our forums. Once you are used at it, {\i Mustache} templates are fairly easy to work with. Similarly, if you find out that some information is missing in the generated {\i data context}, e.g. for a new platform or language, we would be pleased to enhance the official {\f1\fs20 mORMotWrapper.pas} process.
 :  Delphi / FreePascal client samples
 The "{\f1\fs20 27 - CrossPlatform Clients\RegressionTests.dpr}" sample creates a {\i mORMot} server with its own ORM data model, containing a {\f1\fs20 TSQLRecordPeople} class, and a set of interface-based SOA services, some including complex types like a record.
-Then this sample uses a generated {\f1\fs20 mORMotClient.pas}, retrieved from the {\ul download as file} link of the {\b CrossPlatform} template above.\line Its set of regression tests (written using a small cross-platform {\f1\fs20 TSynTest} unit test class) will then perform remote ORM and SOA calls to the {\f1\fs20 PeopleServer} embedded instance, over all supported authentication schemes - see @18@:
+Then this sample uses a generated {\f1\fs20 mORMotClient.pas}, retrieved from the "{\ul download as file}" link of the {\b CrossPlatform} template above.\line Its set of regression tests (written using a small cross-platform {\f1\fs20 TSynTest} unit test class) will then perform remote ORM and SOA calls to the {\f1\fs20 PeopleServer} embedded instance, over all supported authentication schemes - see @18@:
 $ Cross Platform Units for mORMot
 $---------------------------------
 $
@@ -9813,7 +9817,7 @@ Here is an extract of the {\f1\fs20 mORMotClient.pas} unit as generated for the 
 !    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
 !    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
 !  end;
-As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard Delphi / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of Delphi and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} Delphi type, or as UTF-8 for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
+As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as UTF-8 for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
 The supplied regression tests show how to use remotely those services:
 !!var calc: ICalculator;
 !    i,j: integer;
@@ -9838,10 +9842,10 @@ The service-side contract of the {\f1\fs20 ICalculator} signature is retrieved a
 The cross-platform clients are able to manage the service instance life-time, especially the {\f1\fs20 sicPerClient} mode. In this case, an implementation class instance will be created on the server for each client, until the corresponding {\f1\fs20 interface} instance will released (i.e. out of scope or assigned to {\f1\fs20 nil}), which will release the server-side instance - just like with a regular {\i mORMot} client code.
 Note that all process here is executed {\i synchronously}, i.e. in blocking mode. It is up to you to ensure that your application is able to still be responsive, even if the server does a lot of process, so may be late to answer. A dedicated thread may help in this case.
 :  Smart Mobile Studio client samples
-In addition to Delphi and {\i FreePascal} clients, our framework is able to access any {\i mORMot} server from HTML5 / AJAX rich client, thanks to {\i @*Smart Mobile Studio@}.
+In addition to {\i Delphi} and {\i FreePascal} clients, our framework is able to access any {\i mORMot} server from HTML5 / AJAX rich client, thanks to {\i @*Smart Mobile Studio@}.
 :   Adding two numbers in AJAX
-You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 web application, connecting securely to your {\i mORMot} server, which will work from any desktop browser, or from any mobile device (either {\i iPhone} / {\i iPad} / {\i Android} / {\i Windows 8}).
-In order to create the application, we just clicked on {\ul download as file} in the {\b SmartMobileStudio} link in the web page, and copied the generated file in the source folder of a new {\i Smart Mobile} project.\line Of course, we did copy the needed {\f1\fs20 SynCrossPlatform*.pas} units from the {\i mORMot} source code tree into the Smart library folder, as stated above. Just ensure you run {\f1\fs20 CopySynCrossPlatformUnits.bat} from the {\f1\fs20 CrossPlatform} folder at least once from the latest revision of the framework source code.
+You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 web application, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i Linux}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
+In order to create the application, we just clicked on "{\ul download as file}" in the {\b SmartMobileStudio} link in the web page, and copied the generated file in the source folder of a new {\i Smart Mobile} project.\line Of course, we did copy the needed {\f1\fs20 SynCrossPlatform*.pas} units from the {\i mORMot} source code tree into the Smart library folder, as stated above. Just ensure you run {\f1\fs20 CopySynCrossPlatformUnits.bat} from the {\f1\fs20 CrossPlatform} folder at least once from the latest revision of the framework source code.
 Then, on the form visual editor, we added a {\f1\fs20 BtnConnect} button, then a {\f1\fs20 PanelCompute} panel with two edit fields named {\f1\fs20 EditA} and {\f1\fs20 EditB}, and two other buttons, named {\f1\fs20 BtnComputeAsynch} and {\f1\fs20 BtnComputeSynch}. A {\f1\fs20 LabelResult} label will be used to display the computation result. The {\f1\fs20 BtnConnect} is a toggle which will show or display the {\f1\fs20 PanelCompute} panel, which is hidden by default, depending on the connection status.
 %SmartCalculator.png
 In the {\f1\fs20 Form1.pas}  unit source code side, we added a reference to our both {\f1\fs20 SynCrossPlatformREST} and {\f1\fs20 mORMotClient} units, and some events to the buttons:
@@ -10056,7 +10060,7 @@ We could identify several implementation patterns of a {\i mORMot} server and it
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
 : Windows hosted
-The current version of the framework only supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the Delphi compiler - as a {\i Win64} executable. For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the Delphi compiler (which is planned, but not scheduled).
+The current version of the framework only supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable. For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the {\i Delphi} compiler (which is planned, but not scheduled).
 In practice, a {\i mORMot} server expects much lower hardware requirements (in CPU, storage and RAM terms) than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack. And it requires almost no maintenance.
 As a consequence, the potential implementation schemes could be hosted as such:
 - Windows stand-alone application, without any explicit server;
@@ -10099,7 +10103,7 @@ label="PC Server";
 \Client 2¤(AJAX)\Internet (VPN)\JSON + REST¤over HTTP/1.1
 \
 You can tune this solution, as such:
-- Setting the group user rights properly - see @18@ - you can disable the remote ORM access from the Internet, for the AJAX Clients - but allow rich Delphi clients (like {\f1\fs20 PC1}) to access the ORM;
+- Setting the group user rights properly - see @18@ - you can disable the remote ORM access from the Internet, for the AJAX Clients - but allow rich {\i Delphi} clients (like {\f1\fs20 PC1}) to access the ORM;
 - You can have direct in-process access to the service interfaces from the ORM, and vice-versa: if your services and @*ORM@ are deeply inter-dependent, direct access will be the faster solution.
 \page
 :  Two servers
@@ -10139,8 +10143,7 @@ label="PC Server internal";
 Of course, the database will be located on "PC Server internal", i.e. the one hosting the ORM, and the Services will be one regular client: so we may use @39@ on purpose to enhance performance. In order to access the remote ORM features, and provide a communication endpoint to the embedded services, a {\f1\fs20 @*TSQLRestServerRemoteDB@} kind of server class can be used.
 \page
 :  Two instances on the same server
-This is the most complex configuration.
-In this case, only one physical server is deployed:
+This is the most complex configuration. In this case, only one physical server is deployed:
 - A dedicated "HTTP server 2" instance will serve service content over the Internet (via a DMZ configuration of the associated network card);
 - "PC Client 1" will access to the ORM via "HTTP server 1", or to services via "HTTP server 3";
 - For performance reasons, since ORM and Services are on the same computer, using named pipes (or even local Windows Messages) instead of slower HTTP-TCP/IP is a good idea: in such case, ORM will access services via "Named Pipe server 2", whereas Services will serve their content to the ORM via "Named Pipe server 1".
@@ -10196,6 +10199,7 @@ The framework tries to implement @**security@ via:
 - General high-level security attributes, for SQL or Service remote execution.
 Process safety has already been documented (see links above).
 We will now give general information about both authentication and authorization in the framework.
+\page
 :18 Authentication
 Extracted from {\i Wikipedia}:
 {\i Authentication (from Greek: "real" or "genuine", from "author") is the act of confirming the truth of an attribute of a datum or entity. This might involve confirming the identity of a person or software program, tracing the origins of an artifact, or ensuring that a product is what its packaging and labeling claims to be. Authentication often involves verifying the validity of at least one form of identification.}
@@ -10322,9 +10326,9 @@ Authentication is implemented in {\i mORMot} via the following classes:
 \TSQLRestServerAuthenticationHttpBasic\TSQLRestServerAuthenticationHttpAbstract
 \
 In fact, you can use one of the following @*REST@ful authentication schemes:
-|%45%55
+|%50%50
 |\b class|Scheme\b0
-|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication scheme, based on a proprietary dual-pass challenge and SHA-256 hashing
+|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication, as a proprietary dual-pass challenge and SHA-256 hashing
 |{\f1\fs20 TSQLRestServerAuthenticationSSPI}|@*Windows authentication@, via the logged user
 |{\f1\fs20 TSQLRestServerAuthenticationNone}|Weak but simple authentication, based on user name
 |{\f1\fs20 TSQLRestServerAuthenticationHttpBasic}|HTTP Basic authentication\line Warning: password is not encrypted
@@ -10360,13 +10364,13 @@ In order to enhance security, the {\f1\fs20 session_signature} parameter will co
 Such a classical 3 points signature will avoid most {\i man-in-the-middle} (MITM) or {\i re-play} attacks.
 Here is typical signature to access the {\f1\fs20 root} URL
 $ root?session_signature=0000004C000F6BE365D8D454
-In this case, {\f1\fs20 0000004C} is the Session ID, {\f1\fs20 000F6BE3} is the client time stamp (aka nonce), and {\f1\fs20 65D8D454} is the signature, computed by the following Delphi expression:
+In this case, {\f1\fs20 0000004C} is the Session ID, {\f1\fs20 000F6BE3} is the client time stamp (aka nonce), and {\f1\fs20 65D8D454} is the signature, computed by the following {\i Delphi} expression:
 !(crc32(crc32(fPrivateSaltHash,PTimeStamp,8),pointer(aURL),aURLlength)=aSignature);
 For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=6 will have the following URI:
 $ root/People/6?session_signature=0000004C000F6DD02E24541C
 For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA-256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA-256, to enhance security with no performance penalty.
-In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a Delphi Client or from a @*AJAX@ / {\i JavaScript} client.
-On practice, this scheme is secure and very fast, perfect for a Delphi client, or an AJAX application.
+In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a {\i Delphi} Client or from a @*AJAX@ / {\i JavaScript} client.
+On practice, this scheme is secure and very fast, perfect for a {\i Delphi} client, or an AJAX application.
 :   Authentication using Windows credentials
 :    Windows Authentication
 By default, the {\i hash} of the user password is stored safely on the server side. This may be an issue for corporate applications, since a new user name / password pair is to be defined by each client, which may be annoying.
@@ -10430,7 +10434,7 @@ Here is some sample code about how to define this authentication scheme:
 !  ...
 !  // on the Client side:
 !  TSQLRestServerAuthenticationNone.ClientSetUser(Client,'User');
-The performance benefit is very small in comparison to {\f1\fs20 TSQLRestServerAuthenticationDefault}, so should not be used for Delphi clients.
+The performance benefit is very small in comparison to {\f1\fs20 TSQLRestServerAuthenticationDefault}, so should not be used for {\i Delphi} clients.
 :   HTTP Basic authentication
 The {\i Basic Authentication} mechanism provides no confidentiality protection for the transmitted credentials. They are merely encoded with {\i Base64} in transit, but not encrypted or hashed in any way. {\i Basic Authentication} is, therefore, typically used over HTTPS.
 The {\f1\fs20 TSQLRestServerAuthenticationHttpBasic} class can be used to enable HTTP Basic authentication.\line This class is not to be used with a {\i mORMot} client, since {\f1\fs20 TSQLRestServerAuthenticationDefault} provides a much better scheme, both safer and faster, but could be used in conjunction with some browser clients, over HTTPS.
@@ -10490,7 +10494,7 @@ You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to dis
 :79Scripting Engine
 %cartoon02.png
 : Scripting abilities
-As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the Delphi source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a Delphi IDE installed (and paid), and know the Delphi language.
+As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the {\i Delphi} source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a {\i Delphi} IDE installed (and paid), and know the {\i Delphi} language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
 If your business model is to publish a core domain expertise (e.g. accounting, peripheral driving, database model, domain objects, communication, AJAX clients...) among several clients, you will sooner or later need to adapt your application to one or several of your customers. There is no "one {\f1\fs20 exe} to rule them all". Maintaining several executables could become a "branch-hell". Scripting is welcome here: speed and memory critical functionality (in which {\i mORMot} excels) will be hard-coded within the main executable, then everything else could be defined in script.
 There are plenty of script languages available.\line We considered @http://code.google.com/p/dwscript which is well maintained and expressive (it is the code of our beloved {\i SmartMobileStudio}), but is not very commonly used. We still want to include it in the close future.\line Then @http://www.lua.org defines a light and versatile general-purpose language, dedicated to be embedded in any application. Sounds like a viable solution: if you can help with it, your contribution is welcome!\line We did also take into consideration @http://www.python.org and @http://www.ruby-lang.org but both are now far from light, and are not meant to be embedded, since they are general-purpose languages, with a huge set of full-featured packages.
@@ -10509,18 +10513,18 @@ As a consequence, {\i mORMot} introduced direct {\i JavaScript} support via {\i 
 - Handle {\i JavaScript} or {\i Delphi} objects as @32@ @2@, ready to be published or consumed via @6@ remote access.
 : SpiderMonkey integration
 :  A powerful JavaScript engine
-{\i @**SpiderMonkey@}, the Mozilla {\i @*JavaScript@} engine, can be embedded in your {\i mORMot} application. It could be used on client side, within a Delphi application (e.g. for reporting), but the main interest of it may be on the server side.
+{\i @**SpiderMonkey@}, the Mozilla {\i @*JavaScript@} engine, can be embedded in your {\i mORMot} application. It could be used on client side, within a {\i Delphi} application (e.g. for reporting), but the main interest of it may be on the server side.
 The word {\i JavaScript} may bring to mind features such as event handlers (like {\f1\fs20 onclick}), {\f1\fs20 DOM} objects, {\f1\fs20 window.open}, and {\f1\fs20 XMLHttpRequest}.\line But all of these features are actually not provided by the {\i SpiderMonkey} engine itself.
 {\i SpiderMonkey} provides a few core {\i JavaScript} data types—numbers, strings, Arrays, Objects, and so on—and a few methods, such as {\f1\fs20 Array.push}. It also makes it easy for each application to expose some of its own objects and functions to {\i JavaScript} code. Browsers expose DOM objects. Your application will expose objects that are relevant for the kind of scripts you want to write. It is up to the application developer to decide what objects and methods are exposed to scripts.
 :  Direct access to the SpiderMonkey API
 The {\f1\fs20 SynSMAPI.pas} unit is a tuned conversion of the {\i SpiderMonkey} API, providing full {\i ECMAScript 5} support and {\i JIT}. The {\i SpiderMonkey} revision 24 engine is included, with a custom C wrapper around the original C++ code. \line You could take a look at @http://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey for a full description of this low-level API, and find our patched version of the library, modified to be published from C instead of C++, in the {\f1\fs20 synsm-mozjs} folder of the {\i mORMot} source code repository.
-But the {\f1\fs20 SynSM.pas} unit will encapsulate most of it into higher level Delphi classes and structures (including a custom {\f1\fs20 variant} type), so you probably won't need to use {\f1\fs20 SynSMAPI.pas} directly in your code:
+But the {\f1\fs20 SynSM.pas} unit will encapsulate most of it into higher level {\i Delphi} classes and structures (including a custom {\f1\fs20 variant} type), so you probably won't need to use {\f1\fs20 SynSMAPI.pas} directly in your code:
 |%25%75
 |\b Type|Description\b0
 |{\f1\fs20 TSMEngineManager}|main access point to the {\i SpiderMonkey} per-thread scripting engines
 |{\f1\fs20 TSMEngine}|implements a Thread-Safe {\i JavaScript} engine instance
 |{\f1\fs20 TSMObject}|wrap a {\i JavaScript} object and its execution context
-|{\f1\fs20 TSMValue}|wrap a {\i JavaScript} value, and interfaces it with Delphi types
+|{\f1\fs20 TSMValue}|wrap a {\i JavaScript} value, and interfaces it with {\i Delphi} types
 |{\f1\fs20 TSMVariant} /\line {\f1\fs20 TSMVariantData}|define a custom {\f1\fs20 variant} type, for direct access to any {\i JavaScript} object, with late-binding
 |%
 We will see know how to work with all those classes.
@@ -10587,7 +10591,7 @@ Of course, you can use so-called {\i Promises} and some nice libraries - mainly 
 #  );
 Taken from @http://domenic.me/2012/10/14/youre-missing-the-point-of-promises
 This kind of code will be perfectly readable for a {\i JavaScript} daily user, or someone fluent with functional languages.
-But the following blocking/synchronous code may sound much more familiar, safer and less verbose, to most Delphi / Java / C# programmer:
+But the following blocking/synchronous code may sound much more familiar, safer and less verbose, to most {\i Delphi} / Java / C# programmer:
 #try {
 #  var tweets = getTweetsFor("domenic"); // blocking
 #  var shortUrls = parseTweetsForUrls(tweets);
@@ -10617,7 +10621,7 @@ For this, you set the corresponding {\f1\fs20 OnNewEngine} callback event to the
 !  fSMManager := TSMEngineManager.Create;
 !  fSMManager.OnNewEngine := DoOnNewEngine;
 !  ...
-In {\f1\fs20 DoOnNewEngine}, you will initialize every newly created {\f1\fs20 TSMEngine} instance, to register all needed Delphi methods and prepare access to {\i JavaScript} via the runtime's global {\f1\fs20 JSObject}.
+In {\f1\fs20 DoOnNewEngine}, you will initialize every newly created {\f1\fs20 TSMEngine} instance, to register all needed {\i Delphi} methods and prepare access to {\i JavaScript} via the runtime's global {\f1\fs20 JSObject}.
 Then each time you want to access the {\i JavaScript} engine, you will write for instance:
 !function TTestServer.Process(Ctxt: THttpServerRequest): cardinal;
 !var engine: TSMEngine;
@@ -10686,7 +10690,7 @@ Then its implementation:
 !end;
 As you can see, this {\f1\fs20 nsm_loadFile()} function is much more difficult to follow:
 - Your code shall begin with a cryptic {\f1\fs20 TSynFPUException.ForDelphiCode} instruction, to protect the FPU exception flag during execution of native code ({\i Delphi} RTL expects its own set of FPU exception mask during execution, which does not match the FPU exception mask expected by {\i SpiderMonkey});
-- You have to explicitly catch any Delphi exception which may raise, with a {\f1\fs20 try...finally} block, and marshal them back as {\i JavaScript} errors;
+- You have to explicitly catch any {\i Delphi} exception which may raise, with a {\f1\fs20 try...finally} block, and marshal them back as {\i JavaScript} errors;
 - You need to do a lot of manual low-level conversions - via {\f1\fs20 JS_ARGV()} then e.g. {\f1\fs20 JSVAL_TO_STRING()} macros - to retrieve the actual values of the arguments;
 - And the returning function is to be marshaled by hand - see the {\f1\fs20 JS_SET_RVAL()} line.
 Since the {\f1\fs20 variant}-based callback has only a slight performance impact (nothing measurable, when compared to the {\i SpiderMonkey} engine performance itself), and still have access to all the transmitted information, we strongly encourage you to use this safer and cleaner pattern, and do not define any native function via low-level API.
@@ -10809,7 +10813,7 @@ In practice, {\i Aggregates} may be the only kind of objects which will be persi
 DDD services may just permit remote access to {\i Aggregates} methods, where the domain logic will be defined and isolated.
 :  Factory and Repository patterns
 DDD then favors some patterns to use those objects efficiently.
-The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in Delphi, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).
+The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).
 The {\i Factory pattern} can also be used to create {\f1\fs20 interface} instances - see @46@. Main benefit is that alternative implementations may be easily interchanged. Such abstraction helps testing - see @62@ - but also introduces interface-based services - see @63@.
 {\i @**Repository@ pattern} is used to save and dispense each {\i Aggregate Root}.\line It matches the "@*Layer Supertype@" pattern (see above), e.g. via our {\i mORMot} {\f1\fs20 TSQLRecord} and {\f1\fs20 TSQLRest} classes and their Client-Server @*ORM@ features, or via dedicated repository classes - saving data is indeed a concern orthogonal to the model itself. DDD architects claim that persistence is infrastructure, not domain. You may benefit in defining your own repository interface, if the standard ORM / CRUD operations are not enough.
 :  DTO and Events
@@ -10870,7 +10874,7 @@ Then {\i Application @*Service@s} will define the {\i workflows} of all end-user
 Out on the edges you see User Interface, Infrastructure (including e.g. database persistence), and Tests. This outer layer is separated from the other three internal layers, which are sometimes called {\i Application Core}.\line This is where all technical particularities will be concentrated, e.g. where RDBMS / SQL / ORM mapping will be defined, or platform-specific code will reside. This is the right level to test your end-user workflows, e.g. using @**Behavior-Driven Development@ (abbreviated BDD), with the help of your Domain experts.
 The premise of this Architecture is that {\i it controls coupling}. The main rule is that all coupling is toward the center: all code can depend on layers more central, but code cannot depend on layers further out from the core. This is clearly stated in the @%%mORMotDesignOnion@ diagram: just follow the arrows, and you will find out the coupling order. This architecture is unashamedly biased toward object-oriented programming, and it puts objects before all others.
 This {\i Clean Architecture} relies heavily on the {\i Dependency Inversion} principle - see @47@. It emphasizes the use of {\f1\fs20 interface}s for behavior contracts, and it forces the externalization of infrastructure to dedicated implementation classes. The {\i Application Core} needs implementation of core interfaces, and if those implementing classes reside at the edges of the application, we need some mechanism for injecting that code at runtime so the application can do something useful. {\i mORMot}'s @63@ provide all needed process to access, even remotely, e.g. to persistence or any third party services, in an abstract way.
-With {\i Clean Architecture}, the database is not the center of your logic, nor the bottom of your physical design - it is {\i external}. Externalizing the database can be quite a challenge for some people used to thinking about applications as "database applications", especially for Delphi programmers with a RAD / {\f1\fs20 TDataSet} background. With Clean Architecture, there are no database applications. There are applications that might use a database as a storage service but only though some external infrastructure code that implements an interface which makes sense to the application core. The domain could be even decoupled from any @*ORM@ pattern, if needed. Decoupling the application from the database, file system, third party services and all technical details lowers the cost of maintenance for the life of the application, and allows proper testing of the code, since all Domain interfaces can be mocked on purpose - see @62@.
+With {\i Clean Architecture}, the database is not the center of your logic, nor the bottom of your physical design - it is {\i external}. Externalizing the database can be quite a challenge for some people used to thinking about applications as "database applications", especially for {\i Delphi} programmers with a RAD / {\f1\fs20 TDataSet} background. With Clean Architecture, there are no database applications. There are applications that might use a database as a storage service but only though some external infrastructure code that implements an interface which makes sense to the application core. The domain could be even decoupled from any @*ORM@ pattern, if needed. Decoupling the application from the database, file system, third party services and all technical details lowers the cost of maintenance for the life of the application, and allows proper testing of the code, since all Domain interfaces can be mocked on purpose - see @62@.
 \page
 : mORMot's DDD
 :  Designer's commitments
@@ -10888,27 +10892,27 @@ Before going a bit deeper into the low-level stuff, here are some key sentences 
 - I shall always {\i adapt my model} as soon as possible, once it appears inadequate.
 As a consequence, you will find in {\i mORMot} no magic powder to build your DDD, but all the tools you need to focus on your business, without loosing time in re-inventing the wheel, or fixing technical details.
 :  Defining objects in Delphi
-How to implement all those DDD concepts in an object-oriented language like Delphi? Let's go back to the basics. Objects are defined by a state, a behavior and an identity. A factory helps creating objects with the same state and behavior.
-In Delphi and most Object-Oriented languages (@**OOP@ - including C# or Java) each {\f1\fs20 @*class@} instance (always inheriting from @*TObject@):
+How to implement all those DDD concepts in an object-oriented language like {\i Delphi}? Let's go back to the basics. Objects are defined by a state, a behavior and an identity. A factory helps creating objects with the same state and behavior.
+In {\i Delphi} and most Object-Oriented languages (@**OOP@ - including C# or Java) each {\f1\fs20 @*class@} instance (always inheriting from @*TObject@):
 - State is defined by all its property / member values;
 - Behavior are defined by all its methods;
 - Identity is defined {\i by reference}, i.e. {\f1\fs20 a=b} is true only if {\f1\fs20 a} and {\f1\fs20 b} refers to the same object;
 - Factory is in fact the {\f1\fs20 class} type definition itself, which will force each instance to have the same members and methods.
-In Delphi, the {\f1\fs20 @*record@} type (and deprecated {\f1\fs20 object} type for older versions of the compiler) has an alternative behavior:
+In {\i Delphi}, the {\f1\fs20 @*record@} type (and deprecated {\f1\fs20 object} type for older versions of the compiler) has an alternative behavior:
 - State is also defined by all its property / member values;
 - Behavior are also defined by all its methods;
 - But identity is defined {\i by content}, i.e. {\f1\fs20 RecordEquals(a,b)} is true only if {\f1\fs20 a} and {\f1\fs20 b} have the same exact property values;
 - Factory is in fact the {\f1\fs20 record} / {\f1\fs20 object} type definition itself, which will force each instance to have the same members and methods.
 We propose to use either one of the two kinds of object types, depending on the behavior expected by DDD patterns.
 :  Defining DDD objects in mORMot
-DDD's {\i @*Value Objects@} are probably meant to be defined as {\f1\fs20 record}, with methods (i.e. in this case as {\f1\fs20 object} for older versions of Delphi). You may also use {\f1\fs20 TComponent} or {\f1\fs20 TSQLRecord} classes, ensuring the {\f1\fs20 published} properties do not have setters but just {\f1\fs20 read F...} definition, to make them read-only, and, at the same time, directly serializable.\line If you use {\f1\fs20 record} / {\f1\fs20 object} types, you may need to customize the JSON serialization - see @51@ - when targeting AJAX clients, especially for any version prior to Delphi 2010 (by default, {\f1\fs20 record}s are serialized as binary + @*Base64@ encoding due to the lack of @*enhanced RTTI@, but you can define easily the record serialization e.g. from text). Note that since {\f1\fs20 record} / {\f1\fs20 object} defines in Delphi {\i by-value} types (whereas {\f1\fs20 class} defines {\i by-reference} types - see previous paragraph), they are probably the cleanest way of defining {\i Value Objects}.
-DDD's {\i @**Entity objects@} could be either regular Delphi classes, or inherit from {\f1\fs20 TSQLRecord}:
+DDD's {\i @*Value Objects@} are probably meant to be defined as {\f1\fs20 record}, with methods (i.e. in this case as {\f1\fs20 object} for older versions of {\i Delphi}). You may also use {\f1\fs20 TComponent} or {\f1\fs20 TSQLRecord} classes, ensuring the {\f1\fs20 published} properties do not have setters but just {\f1\fs20 read F...} definition, to make them read-only, and, at the same time, directly serializable.\line If you use {\f1\fs20 record} / {\f1\fs20 object} types, you may need to customize the JSON serialization - see @51@ - when targeting AJAX clients, especially for any version prior to {\i Delphi} 2010 (by default, {\f1\fs20 record}s are serialized as binary + @*Base64@ encoding due to the lack of @*enhanced RTTI@, but you can define easily the record serialization e.g. from text). Note that since {\f1\fs20 record} / {\f1\fs20 object} defines in {\i Delphi} {\i by-value} types (whereas {\f1\fs20 class} defines {\i by-reference} types - see previous paragraph), they are probably the cleanest way of defining {\i Value Objects}.
+DDD's {\i @**Entity objects@} could be either regular {\i Delphi} classes, or inherit from {\f1\fs20 TSQLRecord}:
 - Using PODOs ({\i Plain Old Delphi Object} - see so-called POJO or POCO for Java or C#) has some advantages. Since your domain has to be uncoupled from the rest of your code, using plain {\f1\fs20 class} helps keeping your code clean and maintainable.
 - Inheriting from {\f1\fs20 TSQLRecord} will give it access to a whole set of methods supplied by {\i mORMot}. It will implement the "@**Layer Supertype@" pattern, as explained by Martin Fowler.
 DDD's {\i @**Aggregates@} may either benefit of using {\i mORMot}'s {\i @3@}, or you can use a repository service.
 - In the first case, your aggregate roots will be defined as {\f1\fs20 TSQLRecord}, and you will benefit of all @*CRUD@ methods made available by the framework;
-- Otherwise, you should define a dedicated persistence service, then use plain @*DTO@ - like Delphi {\f1\fs20 record} or our @80@ - or even publish the {\f1\fs20 TSQLRecord} types, and benefit of their automated JSON serialization.
-In all cases, when defining domain objects, we should always make the implicit {\i explicit}, i.e. defining one type (either {\f1\fs20 record/object} or {\f1\fs20 class}) per reality in the model. Thanks to Delphi's strong typing, it will ensure that the Domain {\i Ubiquitous language} will appear in the code.
+- Otherwise, you should define a dedicated persistence service, then use plain @*DTO@ - like {\i Delphi} {\f1\fs20 record} or our @80@ - or even publish the {\f1\fs20 TSQLRecord} types, and benefit of their automated JSON serialization.
+In all cases, when defining domain objects, we should always make the implicit {\i explicit}, i.e. defining one type (either {\f1\fs20 record/object} or {\f1\fs20 class}) per reality in the model. Thanks to {\i Delphi}'s strong typing, it will ensure that the Domain {\i Ubiquitous language} will appear in the code.
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
 DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a KISS implementation.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
@@ -10972,7 +10976,7 @@ label="Cross-Cutting";
 }
 =Services=Services¤(interface-based)
 \
-As we already stated, the main point of this {\i Clean Architecture} is to control coupling, and isolate the {\i Domain} core from the outer layers. In Delphi, unit dependencies (as displayed e.g. by our {\i @*SynProject@} tool) will be a good testimony of proper objects uncoupling: in the units defining your domain, you may split it between {\i Domain Model} and {\i Domain Services} (the 2nd using the first, and not vice-versa), and you should {\i never} have any dependency to a particular DB unit, just to the framework's core units, i.e. {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas}. @62@ - via @63@ or at @*ORM@ initialization level - will ensure that your code is uncoupled from any low-level technical dependency. It will also allow proper testing of your application workflows, e.g. stubbing the database if necessary.
+As we already stated, the main point of this {\i Clean Architecture} is to control coupling, and isolate the {\i Domain} core from the outer layers. In {\i Delphi}, unit dependencies (as displayed e.g. by our {\i @*SynProject@} tool) will be a good testimony of proper objects uncoupling: in the units defining your domain, you may split it between {\i Domain Model} and {\i Domain Services} (the 2nd using the first, and not vice-versa), and you should {\i never} have any dependency to a particular DB unit, just to the framework's core units, i.e. {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas}. @62@ - via @63@ or at @*ORM@ initialization level - will ensure that your code is uncoupled from any low-level technical dependency. It will also allow proper testing of your application workflows, e.g. stubbing the database if necessary.
 In fact, since a @17@ tends to ensure that services comprise unassociated, loosely coupled units of functionality that have no calls to each other embedded in them, we may define two levels of services, implemented by two {\f1\fs20 interface} factories, using their own @*hosting@ and communication:
 - One set of @*service@s at {\i Application layer}, to define the uncoupled contracts available from Client applications;
 - One set of services at {\i Domain Model layer}, which will allow all involved domains to communicate with each other, without exposing it to the remote clients.
@@ -11009,9 +11013,9 @@ And even better, testing-driven coding can be encouraged:
 - Launch the test - it must pass;
 - Add some features, and repeat all previous tests every time you add a new feature.
 It could sounds like a waste of time, but such coding improve your code quality a lot, and, at least, it help you write and optimize every implementation feature.
-The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other Delphi frameworks offer (e.g. {\i DUnit / DUnitX}), it is very much integrated with other elements of the framework (like logging), and provide a complete {\i stubbing / mocking} mechanism to cover @62@.
+The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), it is very much integrated with other elements of the framework (like logging), and provide a complete {\i stubbing / mocking} mechanism to cover @62@.
 :  Involved classes in Unitary testing
-The @!TSynTest,TSynTestCase,TSynTests!Lib\SynCommons.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from Delphi 6 up to XE6, no external dependency).
+The @!TSynTest,TSynTestCase,TSynTests!Lib\SynCommons.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE6, no external dependency).
 The following diagram defines this class hierarchy:
 \graph HierTSynTest TSynTest classes hierarchy
 \TSynTests\TSynTest
@@ -11119,15 +11123,15 @@ This test program has been uploaded in the {\f1\fs20 SQLite3\\Sample\\07 - SynTe
 :  Implemented tests
 The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 35,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
 Before any release all unitary regression tests are performed with the following compilers:
-- Delphi 5 (for a limited scope, including {\i SynCommons} and {\i SynDB});
-- Delphi 6;
-- Delphi 7, with and without our Enhanced Run Time Library;
-- Delphi 2007;
-- Delphi 2010 (we assume that if it works with Delphi 2010, it will work with Delphi 2009, with the exception of {\f1\fs20 generic} compilation);
-- Delphi XE2;
-- Delphi XE3;
-- Delphi XE4.
+- {\i Delphi} 5 (for a limited scope, including {\i SynCommons}, {\i SynPdf} and {\i SynDB});
+- {\i Delphi} 6;
+- {\i Delphi} 7, with and without our Enhanced Run Time Library;
+- {\i Delphi} 2007;
+- {\i Delphi} 2010 (we assume that if it works with {\i Delphi} 2010, it will work with {\i Delphi} 2009, with the exception of {\f1\fs20 generic} compilation);
+- {\i Delphi} XE4;
+- {\i Delphi} XE6.
 Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBExplorer@} sophisticated tools) are compiled, and user-level testing is performed against those applications.
+You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
 \page
 :73 Logging
 The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynCommons} unit - see @16@.
@@ -11188,26 +11192,27 @@ Follow these steps:
 - Select a version of the source code you want to download: a version is identified by an hexadecimal link (e.g. {\f1\fs20 6b684fb2}). Note that you must successfully log in as "{\i anonymous}" in steps 1-3 above in order to see the link to the detailed version information.
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
-The framework source code tree will compile and is tested for the following platform:
-- Delphi 6 up to Delphi XE6 compiler and IDE (@**FPC@ support is not yet finished);
-- For Windows 32 bit and @**64 bit@ platform (Delphi XE2 and up is expected when targeting {\i Win64});
-- GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
-Some part of the library (e.g. {\f1\fs20 SynCommons.pas} or the @27@ units) are also compatible with Delphi 5.
+The framework source code tree will compile and is tested for the following platforms:
+- {\i Delphi} 6 up to {\i Delphi} XE6 compiler and IDE (@**FPC@ support is not yet finished);
+- Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
+- VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
+- @69@ clients on any supported platforms;
+- @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
+Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPDF.pas} or the @27@ units) are also compatible with {\i Delphi} 5.
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
-For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or Android applications (via {\i @*PhoneGap@}).
-The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than Delphi (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the Delphi IDE? with Lazarus, it is painless), even if the compiler is slower than Delphi's, and if the debugger is less integrated and even more unstable than Delphi's (yes, it is possible!). At least, it works, and works pretty well.\line As we just stated, we were able to make our cross-platform clients compatible with this developping environement, so every door is open! Stay tuned!
+For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s (yes, it is possible!). At least, it works, and works pretty well.\line As we just stated, we were able to make our cross-platform clients compatible with this developping environement, so every door is open! Stay tuned!
 :  32 bit sqlite3*.obj and 64 bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native @*64 bit@ applications (since Delphi XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i Win64} library yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For native @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i Win64} library yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
 You can download the needed files from @http://synopse.info/files/synsm.7z
 Do not forget to copy both files in the executable folder. For instance, put both {\f1\fs20 mozjs.dll} and {\f1\fs20 nspr4.dll} files with your {\f1\fs20 JSHttpApiServer.exe}.
-\page
 :  Folder layout
 As retrieved from our source code repository, you'll find the following folder layout:
 \graph mORMotSourceCodeFolders mORMot Source Code Folders
@@ -11223,13 +11228,14 @@ In fact, you will get:
 |{\f1\fs20 /}|Root folder, containing common files
 |{\f1\fs20 CrossPlatform}|Contains code for cross-platform clients
 |{\f1\fs20 HtmlView/}|A fork of the freeware {\f1\fs20 THtmlView} component, used as a demo of the {\f1\fs20 SynPdf} unit - not finished, and not truly Unicode ready
-|{\f1\fs20 LVCL/}|{\i Light VCL} replacement files for standard VCL (for Delphi 6-7 only)
-|{\f1\fs20 RTL7/}|Enhanced RTL .dcu for Delphi 7 (not mandatory at all), and {\i FastMM4} memory manager to be used before Delphi 2006
+|{\f1\fs20 LVCL/}|{\i Light VCL} replacement files for standard VCL (for {\i Delphi} 6-7 only)
+|{\f1\fs20 RTL7/}|Enhanced RTL .dcu for {\i Delphi} 7 (not mandatory at all), and {\i FastMM4} memory manager to be used before {\i Delphi} 2006
 |{\f1\fs20 SQLite3/}|Contains all @*ORM@ / @*SOA@ related files of the framework (i.e. {\i mORMot} itself) and its documentation
 |{\f1\fs20 SynDBDataset/}|{\f1\fs20 DB.pas}-based external database providers
 |{\f1\fs20 SynProject/}|Source code of the {\i @*SynProject@} tool, used to edit and generate this documentation
 ;|{\f1\fs20 zeos/}|A fork of the freeware {\i Zeos} library - not finished, and not truly Unicode ready
 |%
+:   Root folder
 In the {\i Root folder}, some common files are defined:
 |%30%70
 |\b File|Description\b0
@@ -11245,7 +11251,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynGdiPlus.pas}|GDI+ library API access with anti-aliasing drawing
 |{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
 |{\f1\fs20 SynLZO.pas}|LZO compression decompression unit
-|{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode Delphi only
+|{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode {\i Delphi} only
 |{\f1\fs20 SynMongoDB.pas}|Direct {\i @*MongoDB@} @*NoSQL@ database access
 |{\f1\fs20 SynMustache.pas}|{\i @*Mustache@} logic-less template engine
 |{\f1\fs20 SynPdf.pas}|@*PDF@ file generation unit
@@ -11264,7 +11270,6 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 vista.*}|A resource file enabling theming under XP
 |{\f1\fs20 vistaAdm.*}|A resource file enabling theming under XP and Administrator rights under Vista
 |%
-\page
 In the same {\i Root folder}, the external database-agnostic units are located:
 |%30%70
 |\b File|Description\b0
@@ -11277,6 +11282,7 @@ In the same {\i Root folder}, the external database-agnostic units are located:
 |{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB} data access
 |{\f1\fs20 SynDBZEOS.pas}|{\i @*Zeos@Lib} / ZDBC direct access classes
 |%
+:   SynDBDataset folder
 In a {\f1\fs20 SynDBDataset} folder, some external database providers are available, to be used with the {\f1\fs20 SynDBDataset.pas} classes:
 |%30%70
 |\b File|Description\b0
@@ -11285,6 +11291,7 @@ In a {\f1\fs20 SynDBDataset} folder, some external database providers are availa
 |{\f1\fs20 SynDBFireDAC.pas}|{\i @*FireDAC@} / {\i @*AnyDAC@} library access classes
 |{\f1\fs20 SynDBUniDAC.pas}|{\i @*UniDAC@} library access classes
 |%
+:   SQLite3 folder
 In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot framework} itself, i.e. its @*ORM@ and @*SOA@ features (using units from the {\i Root folder}):
 |%30%70
 |\b File|Description\b0
@@ -11312,12 +11319,13 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 TestSQL3Register.dpr}|Run as administrator for {\i TestSQL3} to use {\i @*http.sys@} on Vista/Seven
 |{\f1\fs20 c.bat sqlite3.c}|Source code of the {\i SQLite3} embedded Database engine
 |%
+:   CrossPlatform folder
 In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} client for compilers or platforms not supported by the main branch:
-|%30%70
+|%40%60
 |\b File|Description\b0
-|{\f1\fs20 SynCrossPlatform.inc}|Generic header used for cross-platform and cross-compiler support
-|{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for Delphi and FPC
-|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client access
+|{\f1\fs20 SynCrossPlatform.inc}|Includes cross-platform and cross-compiler conditionals
+|{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for {\i Delphi} and FPC
+|{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client
 |{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
@@ -11331,10 +11339,11 @@ Download and uncompress the framework archives, including all sub-folders, into 
 |{\b 32 bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
-In short, add the following paths to your Delphi IDE (in {\i Tools/Environment/Library} menu):
+In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} menu):
 - {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
 - {\i Search path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
-Note that before Delphi 2006, you would need to download and install {\i FastMM4} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with Delphi 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
+For any cross-platform client, do not forget to include the {\f1\fs20 D:\\Dev\\Lib\\CrossPlatform} to the {\i Delphi} or {\i FreePascal} IDE paths of the corresponding targets.\line For {\i @*Smart Mobile Studio@}, execute {\f1\fs20 CopySynCrossPlatformUnits.bat} to set the needed units in the IDE repository.
+Note that before {\i Delphi} 2006, you would need to download and install {\i FastMM4} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with {\i Delphi} 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
 Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder. You should be able to compile it and run all regression @*test@s on your computer.\line If you want to run the tests with the fast @*http.sys@ kernel-based HTTP server, you'll need to compile and run (as administrator) {\f1\fs20 TestSQL3Register.dpr} once before launching {\f1\fs20 TestSQL3.dpr}.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
@@ -11378,7 +11387,7 @@ We hope this part of the @SAD@ would be able to be a reliable guideline for usin
 : General architecture
 According to the Multi-tier architecture, some units will define the three layers of the {\i SynFile} application:
 {\b Database Model}
-First, the database tables are defined as regular Delphi classes, like a true @*ORM@ framework. Classes are translated to database tables. @*Published properties@ of these classes are translated to table fields. No external configuration files to write - only Delphi code. Nice and easy. See @!TSQLFile,TSQLMemo,TSQLData,TSQLSafeMemo,TSQLSafeData,TSQLAuditTrail!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit.
+First, the database tables are defined as regular {\i Delphi} classes, like a true @*ORM@ framework. Classes are translated to database tables. @*Published properties@ of these classes are translated to table fields. No external configuration files to write - only {\i Delphi} code. Nice and easy. See @!TSQLFile,TSQLMemo,TSQLData,TSQLSafeMemo,TSQLSafeData,TSQLAuditTrail!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit.
 This unit is shared by both client and server sides, with a shared data model, i.e. a {\f1\fs20 @*TSQLModel@} class instance, describing all ORM tables/classes.
 It contains also internal event descriptions, and actions, which will be used to describe the software UI.
 {\b Business Logic}
@@ -11386,7 +11395,7 @@ The {\i server side} is defined in a dedicated class, which implements an automa
 The {\i client side} is defined in another class, which is able to communicate with the server, and fill/update/delete/add the database content playing with classes instances. It's also used to call the Audit Trail related service, and create the reports. See @!TFileClient!Lib\SQLite3\Samples\MainDemo\FileClient.pas@ unit.
 Client-Server logic will be detailed in the next paragraph.
 {\b Presentation Layer}
-The main form of the Client is void, if you open its {\f1\fs20 FileMain.dfm} file. All the User Interface is created by the framework, dynamically from the database model and some constant values and enumeration types (thanks to Delphi @*RTTI@) as defined in @!TFileRibbonTabParameters.Actions!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit (the first one, which defines also the classes/tables).
+The main form of the Client is void, if you open its {\f1\fs20 FileMain.dfm} file. All the User Interface is created by the framework, dynamically from the database model and some constant values and enumeration types (thanks to {\i Delphi} @*RTTI@) as defined in @!TFileRibbonTabParameters.Actions!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit (the first one, which defines also the classes/tables).
 It's main method is {\f1\fs20 TMainForm.ActionClick}, which will handle the actions, triggered when a button is pressed.
 The @**report@s use {\i GDI+} for anti-aliased drawing, can be zoomed and saved as @*pdf@ or text files.
 The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the form used for editing the data. It also performs the encryption of "safe memo" and "safe data" records, using our @!TAESFull.EncodeDecode!Lib\SynCrypto.pas@ unit.
@@ -11404,7 +11413,7 @@ The @!TSQLFile,TSQLMemo,TSQLData,TSQLSafeMemo,TSQLSafeData,TSQLAuditTrail!Lib\SQ
 \TSQLFile\TSQLRecordSigned
 \TSQLRecordSigned\TSQLRecord
 \
-Most common @*published properties@ (i.e. {\f1\fs20 Name, Created, Modified, Picture, KeyWords}) are taken from the {\f1\fs20 TSQLFile} abstract parent class. It's called "{\i abstract}", not in the current Delphi @*OOP@ terms, but as a class with no "real" database table associated. It was used to defined the properties only once, without the need of writing the private variables nor the getter/setter for children classes. Only {\f1\fs20 TSQLAuditTrail} won't inherit from this parent class, because it's purpose is not to contain data, but just some information.
+Most common @*published properties@ (i.e. {\f1\fs20 Name, Created, Modified, Picture, KeyWords}) are taken from the {\f1\fs20 TSQLFile} abstract parent class. It's called "{\i abstract}", not in the current {\i Delphi} @*OOP@ terms, but as a class with no "real" database table associated. It was used to defined the properties only once, without the need of writing the private variables nor the getter/setter for children classes. Only {\f1\fs20 TSQLAuditTrail} won't inherit from this parent class, because it's purpose is not to contain data, but just some information.
 The database itself will define {\f1\fs20 TSQLAuditTrail, TSQLMemo, TSQLData, TSQLSafeMemo}, and {\f1\fs20 TSQLSafeData} classes. They will be stored as {\i AuditTrail, Memo, Data, SafeMemo} and {\i SafeData} tables in the {\i @*SQlite3@} database (the table names are extract from the class name, trimming the left '{\f1\fs20 TSQL}' characters).
 Here is this common ancestor type declaration:
 !  TSQLFile = class(TSQLRecordSigned)
@@ -11421,8 +11430,8 @@ Here is this common ancestor type declaration:
 !    property Picture: TSQLRawBlob read fPicture write fPicture;
 !    property KeyWords: RawUTF8 read fKeyWords write fKeyWords;
 !  end;
-Sounds like a regular Delphi class, doesn't it? The only fact to be noticed is that it does not inherit from a {\f1\fs20 @*TPersistent@} class, but from a {\f1\fs20 @*TSQLRecord@} class, which is the parent object type to be used for our ORM. The {\f1\fs20 TSQLRecordSigned} class type just defines some {\f1\fs20 Signature} and {\f1\fs20 SignatureTime} additional properties, which will be used here for handling digital signing of records.
-Here follows the Delphi code written, and each corresponding database field layout of each registered class:
+Sounds like a regular {\i Delphi} class, doesn't it? The only fact to be noticed is that it does not inherit from a {\f1\fs20 @*TPersistent@} class, but from a {\f1\fs20 @*TSQLRecord@} class, which is the parent object type to be used for our ORM. The {\f1\fs20 TSQLRecordSigned} class type just defines some {\f1\fs20 Signature} and {\f1\fs20 SignatureTime} additional properties, which will be used here for handling digital signing of records.
+Here follows the {\i Delphi} code written, and each corresponding database field layout of each registered class:
 !  TSQLMemo = class(TSQLFile)
 !  public
 !    fContent: RawUTF8;
@@ -11566,16 +11575,16 @@ The {\i Office UI licensing program} was designed by {\i Microsoft} for software
 If you want to design your user interface using a Office 2007/2010 ribbon look, please take a look at those official guidelines: @http://msdn.microsoft.com/en-us/library/cc872782.aspx
 Here is the screen content, using the TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from Delphi 6 up to XE6:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE6:
 %synfilevcl.png
-We did not use yet the Ribbon component as was introduced in Delphi 2009. Its action-driven design won't make it easy to interface with the event-driven design of our User Interface handling, and we have to confess that this component has rather bad reputation (at least in the Delphi 2009 version). Feel free to adapt our Open Source code to use it - we'll be very pleased to release a new version supporting it, but we don't have time nor necessity to do it by ourself.
+We did not use yet the Ribbon component as was introduced in {\i Delphi} 2009. Its action-driven design won't make it easy to interface with the event-driven design of our User Interface handling, and we have to confess that this component has rather bad reputation (at least in the {\i Delphi} 2009 version). Feel free to adapt our Open Source code to use it - we'll be very pleased to release a new version supporting it, but we don't have time nor necessity to do it by ourself.
 :  Enumeration types
 A list of available actions should be defined, as an enumeration type:
 !  TFileAction = (
 !    faNoAction, faMark, faUnmarkAll, faQuery, faRefresh, faCreate,
 !    faEdit, faCopy, faExport, faImport, faDelete, faSign, faPrintPreview,
 !    faExtract, faSettings );
-Thanks to the Delphi @*RTTI@, and "{\i Un @*Camel@ Casing}", the following list will generate a set of available buttons on the User Interface, named "Mark", "Unmark all", "Query", "Refresh", "Create", "Edit", "Copy", "Export", "Import", "Delete", "Sign", "Print preview", "Extract" and "Settings". Thanks to the @!TLanguageFile.Translate!Lib\SQLite3\mORMoti18n.pas@ unit (responsible of application @*i18n@) and the {\f1\fs20 TLanguageFile. Translate} method, it could be translated on-the-fly from English into the current desired language, before display on screen or report creation.
+Thanks to the {\i Delphi} @*RTTI@, and "{\i Un @*Camel@ Casing}", the following list will generate a set of available buttons on the User Interface, named "Mark", "Unmark all", "Query", "Refresh", "Create", "Edit", "Copy", "Export", "Import", "Delete", "Sign", "Print preview", "Extract" and "Settings". Thanks to the @!TLanguageFile.Translate!Lib\SQLite3\mORMoti18n.pas@ unit (responsible of application @*i18n@) and the {\f1\fs20 TLanguageFile. Translate} method, it could be translated on-the-fly from English into the current desired language, before display on screen or report creation.
 See both above screen-shots to guess how the button captions match the enumeration names - i.e. @%synfilevcl.png@ and @%synfilevcl.png@.
 A list of events, as used for the {\f1\fs20 TSQLAuditTrail} table, was also defined. Some events reflect the change made to the database rows (like {\f1\fs20 feRecordModified}), or generic application status (like {\f1\fs20 feServerStarted}):
 !  TFileEvent = (
@@ -11822,7 +11831,7 @@ You perhaps did notice that textual constant were defined as {\f1\fs20 @*resourc
 !  sSignedN = 'Signed,By %s on %s';
 !  sPictureN = '%s Picture';
 The @!Lib\SQLite3\mORMoti18n.pas@ unit is able to parse all those {\f1\fs20 resourcestring} from a running executable, via its {\f1\fs20 ExtractAllResources} function, and create a reference text file to be translated into any handled language.
-Creating a report from code does make sense in an ORM. Since we have most useful data at hand as Delphi classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
+Creating a report from code does make sense in an ORM. Since we have most useful data at hand as {\i Delphi} classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
 \page
 : Application i18n and L10n
 In computing, internationalization and localization (also spelled internationalisation and localisation) are means of adapting computer software to different languages, regional differences and technical requirements of a target market:
@@ -11856,7 +11865,7 @@ For instance, here is how this is implemented in @!TMainForm.FormShow!Lib\SQLite
 !{$endif}
 !  Ribbon.ToolBar.ActivePageIndex := 1;
 !end;
-A global {\f1\fs20 EXTRACTALLRESOURCES} conditional can be defined temporarly for the project: from the Delphi IDE, {\i Project/Options} then enabling the conditional, {\i Project/Run} to create the {\f1\fs20 .messages} file as expected, and finally {\i Project/Options} to undefine the {\f1\fs20 EXTRACTALLRESOURCES} conditional and rebuild a regular executable.
+A global {\f1\fs20 EXTRACTALLRESOURCES} conditional can be defined temporarly for the project: from the {\i Delphi} IDE, {\i Project/Options} then enabling the conditional, {\i Project/Run} to create the {\f1\fs20 .messages} file as expected, and finally {\i Project/Options} to undefine the {\f1\fs20 EXTRACTALLRESOURCES} conditional and rebuild a regular executable.
 The {\f1\fs20 TFileEvent} and {\f1\fs20 TFileAction} enumerations RTTI information is supplied, together with the current {\f1\fs20 TSQLModel} instance. All {\f1\fs20 TSQLRecord} classes (and therefore properties) will be scanned, and all needed English caption text will be extracted.
 The {\f1\fs20 Close} method is then called, since we don't want to use the application itself, but only extract all resources from the executable.
 Running once the executable will create a {\f1\fs20 SynFile.messages} text file in the {\f1\fs20 SynFile.exe} folder, containing all English text:
@@ -11927,7 +11936,7 @@ In manual translation mode:
 - It will work also for any third-party dialog, even if you do not have the source of it;
 - But you can't change the language on the fly: you need to restart the application.
 :    Manual transaction
-Once for the application, you should call {\f1\fs20 SetCurrentLanguage()} to set the global {\f1\fs20 Language} object and all related Delphi locale settings.
+Once for the application, you should call {\f1\fs20 SetCurrentLanguage()} to set the global {\f1\fs20 Language} object and all related {\i Delphi} locale settings.
 The, in each {\f1\fs20 OnShow} event of any form, you should call {\f1\fs20 FormTranslateOne()} e.g.
 !procedure TMyForm.FormShow(Sender: TObject);
 !begin
@@ -12206,7 +12215,7 @@ To illustrate that, here is some interesting question published in our forum - s
 {\i So my question is: which way is better? Are the services meant to be used like this? Is it safer to access directly to the database from clients? I started with the services way thinking that may be more secure the usage of services instead of direct accessing. But since the framework already has a lot of security functionalities maybe I am overloading the server without achieving anything...}
 {\i Note that my clients will be AJAX basically, not Delphi clients (don't know if it is relevant).}
 In fact, for {\f1\fs20 TSQLRecord} / @*ORM@ remote access, you have already all @*Client-Server@ @*CRUD@ operations available. It has been optimized a lot (e.g. with a cache and other nice features), so I do not think reinventing a CRUD / database service is worth the prize. You have secure access to the ORM classes, with user/group attributes. Almost everything is created by code, just from the {\f1\fs20 TSQLRecord} class definition, via @*RTTI@. So it may be faster (and safer) to rely on the existing.
-If you use AJAX clients, high-level only services, with records (which will be mapped as JavaScript objects) do make sense. Our ORM / {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} classes do amazing work in the world of Delphi classes (including filtering or validation, strong typing, shared model between client and server, and abstract {\f1\fs20 TSQLRest} CRUD methods), but for AJAX clients, the benefit is less obvious. Note that in order to serialize the {\f1\fs20 TDatabaseRecord} records as pure JSON (i.e. AJAX-friendly), you would need to code the writer and reader routines by hand - see @51@ - whereas it is already included with {\f1\fs20 TSQLPerson}. So AJAX does make a difference here. That's why, in case of AJAX clients, I would tend to make services with small records dedicated to your client applications, or even {\f1\fs20 TSQLRecord} (which will be published directly as JavaScript objects) in some cases. It will depend on the nature of your business logic.
+If you use AJAX clients, high-level only services, with records (which will be mapped as JavaScript objects) do make sense. Our ORM / {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} classes do amazing work in the world of {\i Delphi} classes (including filtering or validation, strong typing, shared model between client and server, and abstract {\f1\fs20 TSQLRest} CRUD methods), but for AJAX clients, the benefit is less obvious. Note that in order to serialize the {\f1\fs20 TDatabaseRecord} records as pure JSON (i.e. AJAX-friendly), you would need to code the writer and reader routines by hand - see @51@ - whereas it is already included with {\f1\fs20 TSQLPerson}. So AJAX does make a difference here. That's why, in case of AJAX clients, I would tend to make services with small records dedicated to your client applications, or even {\f1\fs20 TSQLRecord} (which will be published directly as JavaScript objects) in some cases. It will depend on the nature of your business logic.
 Architecturally speaking, the question faces another point: the layer separation. It will now be time to enter into DDD material. See @68@.
 
 [SDD]
@@ -12282,7 +12291,7 @@ The in-process communication is implemented by using a global function, named {\
 This function can be exported from a DLL to remotely access to a {\f1\fs20 TSQLRestServer}, or used in the same process:
 - Use {\f1\fs20 TSQLRestServer.ExportServer} to assign a server to this function;
 - Return {\i 501 NOT IMPLEMENTED} error if no {\f1\fs20 TSQLRestServer.ExportServer} has been assigned yet;
-- Memory for {\f1\fs20 Resp} and {\f1\fs20 Head} parameters are allocated with {\f1\fs20 GlobalAlloc()} Windows API function: client must release this pointers with {\f1\fs20 GlobalFree()} after having retrieved their content - you can force using the Delphi heap (and {\f1\fs20 GetMem} function which is much faster than {\f1\fs20 GlobalAlloc}) by setting the {\f1\fs20 USEFASTMM4ALLOC} variable to TRUE: in this case, client must release this pointers with {\f1\fs20 Freemem()}.
+- Memory for {\f1\fs20 Resp} and {\f1\fs20 Head} parameters are allocated with {\f1\fs20 GlobalAlloc()} Windows API function: client must release this pointers with {\f1\fs20 GlobalFree()} after having retrieved their content - you can force using the {\i Delphi} heap (and {\f1\fs20 GetMem} function which is much faster than {\f1\fs20 GlobalAlloc}) by setting the {\f1\fs20 USEFASTMM4ALLOC} variable to TRUE: in this case, client must release this pointers with {\f1\fs20 Freemem()}.
 : Client-Side
 The Client should simply use a {\f1\fs20 TSQLRestClientURIDll} instance to access to an exported {\f1\fs20 URIRequest()} function.
 
@@ -12313,7 +12322,7 @@ The communication is not implemented directly in the {\f1\fs20 TSQLRestServer} c
 This class will instantiate a {\f1\fs20 THttpServerGeneric} instance, defined in @!THttpServer.Create,THttpApiServer.Create,THttpServerGeneric.Request,THttpServerGeneric.OnRequest!Lib\SynCrtSock.pas@, which implements a HTTP/1.1 server over TCP/IP communication.
 This server can be implemented by two means:
 - Via {\f1\fs20 THttpApiServer} for using the fast kernel-mode {\i http.sys} server;
-- Via {\f1\fs20 THttpServer}, which is an optimized pure Delphi HTTP/1.1 compliant server, using {\i Thread pool} to reduce resources, and provide best possible performance in user land.
+- Via {\f1\fs20 THttpServer}, which is an optimized pure {\i Delphi} HTTP/1.1 compliant server, using {\i Thread pool} to reduce resources, and provide best possible performance in user land.
 You can register several {\f1\fs20 TSQLRestServer} instance to the same HTTP server, via its {\f1\fs20 AddServer} method.  Each {\f1\fs20 TSQLRestServer} class must have an unique {\f1\fs20 Model.Root} value, to identify which instance must handle a particular request from its URI root string.
 A dedicated property, named {\f1\fs20 DBServer}, is an array to all registered {\f1\fs20 TSQLRestServer} instances, which are used to process any request, and answer to it by using the corresponding {\f1\fs20 URI} method - via the {\f1\fs20 OnRequest} standard event prototype.
 : Client-Side
@@ -12330,7 +12339,7 @@ The JSON encoding and decoding is handled at diverse levels:
 - At the database request table level.
 : JSON-dedicated functions and classes
 The main class for producing JSON content is {\f1\fs20 TJSONWriter}. This class is a simple writer to a Stream, specialized for the JSON format. Since it makes
-use of an internal buffer, and avoid most temporary {\f1\fs20 string} allocation ({\i e.g.} using the stack instead of a temporary {\f1\fs20 string} via {\f1\fs20 IntToStr()} when converting a numerical value to text), it is much faster than a string append (standard Delphi {\f1\fs20 string := string+string} clauses) to produce its content. In particular, its {\f1\fs20 AddJSONEscape} method will handle JSON content escape, according to the official JSON RFC - see @http://www.ietf.org/rfc/rfc4627.txt paragraph 2.5, directly into the destination buffer. It was also designed to scales well on multi-core sytems.
+use of an internal buffer, and avoid most temporary {\f1\fs20 string} allocation ({\i e.g.} using the stack instead of a temporary {\f1\fs20 string} via {\f1\fs20 IntToStr()} when converting a numerical value to text), it is much faster than a string append (standard {\i Delphi} {\f1\fs20 string := string+string} clauses) to produce its content. In particular, its {\f1\fs20 AddJSONEscape} method will handle JSON content escape, according to the official JSON RFC - see @http://www.ietf.org/rfc/rfc4627.txt paragraph 2.5, directly into the destination buffer. It was also designed to scales well on multi-core sytems.
 Some JSON-dedicated function are also available:
 - {\f1\fs20 GetJSONObjectAsSQL} decodes a JSON fields object into an UTF-8 encoded SQL-ready statement;
 - {\f1\fs20 IsJSONString} returns TRUE if the supplied content must be encoded as a JSON string according to the JSON encoding schema, i.e. if it's some null/false/true content or any pure numerical data (integer or floating point);
@@ -12375,7 +12384,7 @@ When it deals with parsing some (textual) content, two directions are usually en
 - A DOM parser, which creates an in-memory tree structure of objects mapping the XML nodes;
 - A SAX parser, which reads the XML content, then call pre-defined {\i events} for each XML content element.
 In fact, DOM parsers use internally a SAX parser to read the XML content. Therefore, with the overhead of object creation and their property initialization, DOM parsers are typically three to five times slower than SAX. But, DOM parsers are much more powerful for handling the data: as soon as it's mapped in native objects, code can access with no time to any given node, whereas a SAX-based access will have to read again the whole XML content.
-Most JSON parser available in Delphi use a DOM-like approach. For instance, the {\i DBXJSON} unit included since Delphi 2010 or the {\i SuperObject} library create a class instance mapping each JSON node.
+Most JSON parser available in {\i Delphi} use a DOM-like approach. For instance, the {\i DBXJSON} unit included since {\i Delphi} 2010 or the {\i SuperObject} library create a class instance mapping each JSON node.
 In a JSON-based Client-Server ORM like ours, profiling shows that a lot of time is spent in JSON parsing, on both Client and Server side. Therefore, we tried to optimize this part of the library.
 In order to achieve best speed, we try to use a mixed approach:
 - All the necessary conversion (e.g. un-escape text) is made in-memory, from and within the JSON buffer, to avoid memory allocation;
@@ -12445,8 +12454,8 @@ This code will create a string for each key/value in {\f1\fs20 Fields2[]} and {\
 [SDD-DI-2.1.3]
 ; SRS-DI-2.1.3 - The framework must use an innovative ORM (Object-relational mapping) approach, based on classes RTTI (Runtime Type Information)
 :Implementation
-Some Delphi @*RTTI@ (Runtime Type Information) objects and classes are implemented in the @!TClassProp,TClassType,TEnumType,TTypeInfo,TSQLRecord.ClassProp,TSQLRecord.GetJSONValues,TPropInfo.GetValue,TPropInfo.SetValue,TSQLRecordProperties!Lib\SQLite3\mORMot.pas@ unit. The {\i Synopse mORMot Framework} uses this custom functions and objects in order to access to the Delphi @*RTTI@.
-The generic functions supplied by the standard {\f1\fs20 TypInfo.pas} unit where not found to be easy to use: there are some record types from one hand, which details the internal @*RTTI@ memory layout generated by the compiler, and there are some functions on the other hand. So the framework unified both RTTI memory layout and methods by defining some {\f1\fs20 object} types (i.e. not Delphi classes, but raw objects which can map directly the RTTI memory layout via a {\f1\fs20 pointer}) with some methods dedicated for RTTI handling and @*ORM@. These {\f1\fs20 object} types are {\f1\fs20 TClassProp, TClassType, TEnumType, TTypeInfo} and {\f1\fs20 TPropInfo}.
+Some {\i Delphi} @*RTTI@ (Runtime Type Information) objects and classes are implemented in the @!TClassProp,TClassType,TEnumType,TTypeInfo,TSQLRecord.ClassProp,TSQLRecord.GetJSONValues,TPropInfo.GetValue,TPropInfo.SetValue,TSQLRecordProperties!Lib\SQLite3\mORMot.pas@ unit. The {\i Synopse mORMot Framework} uses this custom functions and objects in order to access to the {\i Delphi} @*RTTI@.
+The generic functions supplied by the standard {\f1\fs20 TypInfo.pas} unit where not found to be easy to use: there are some record types from one hand, which details the internal @*RTTI@ memory layout generated by the compiler, and there are some functions on the other hand. So the framework unified both RTTI memory layout and methods by defining some {\f1\fs20 object} types (i.e. not {\i Delphi} classes, but raw objects which can map directly the RTTI memory layout via a {\f1\fs20 pointer}) with some methods dedicated for RTTI handling and @*ORM@. These {\f1\fs20 object} types are {\f1\fs20 TClassProp, TClassType, TEnumType, TTypeInfo} and {\f1\fs20 TPropInfo}.
 Since this ORM is the core of the framework, the code of most of these objects has been tuned for performance: quit all of the methods have two versions in the framework, one in pure pascal code (easy to maintain and understand, and @*64 bit@ compatible), and one in optimized i386 assembler.
 As a result, ORM code based on RTTI is fairly easy to use. See for example who a database field index is retrieved for a {\f1\fs20 TSQLRecord} class:
 !function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
@@ -12481,7 +12490,7 @@ And will be available from {\f1\fs20 TSQLRecord.RecordProps.FieldIndex}.
 : Per-class variable needed
 For our ORM, we needed a {\i class variable} to be available for each {\f1\fs20 TSQLRecord} class type. This variable is used to store the properties of this class type, i.e. the database Table properties (e.g. table and column names and types) associated with a particular {\f1\fs20 TSQLRecord} class, from which all our ORM objects inherit.
 The {\f1\fs20 class var} statement was not enough for us:
-- It's not available on earlier Delphi versions, and we try to have our framework work with Delphi 6-7;
+- It's not available on earlier {\i Delphi} versions, and we try to have our framework work with {\i Delphi} 6-7;
 - This {\f1\fs20 class var} instance will be shared by all classes inheriting from the class where it is defined - and we need ONE instance PER class type, not ONE instance for ALL
 We need to find another way to implement this {\i class variable}. An unused VMT slot in the class type description was identified, then each class definition was patched in the process memory to contain our class variable.
 : Patching a running process code
@@ -12501,7 +12510,7 @@ We'll need to override a {\f1\fs20 pointer} value in the code memory. The follow
 The {\f1\fs20 VirtualProtect} low-level Windows API is called to force the corresponding memory to be written (via the {\f1\fs20 PAGE_EXECUTE_READWRITE} flag), then modify the corresponding {\f1\fs20 pointer} value, then the original memory page protection setting (should be {\f1\fs20 PAGE_EXECUTE_READ}) is restored.
 According to the MSDN documentation, we'd need to flush the CPU operation cache in order to force the modified code to be read on next access.
 : Per-class variable in the VMT
-The VMT is the {\i Virtual-Method Table}, i.e. a Table which defines every Delphi {\f1\fs20 class}. In fact, every Delphi {\f1\fs20 class} is defined internally by its VMT, contains a list of pointers to the {\f1\fs20 class}’s {\f1\fs20 virtual} methods. This VMT also contains non-method values, which are class-specific information at negative offsets:
+The VMT is the {\i Virtual-Method Table}, i.e. a Table which defines every {\i Delphi} {\f1\fs20 class}. In fact, every {\i Delphi} {\f1\fs20 class} is defined internally by its VMT, contains a list of pointers to the {\f1\fs20 class}’s {\f1\fs20 virtual} methods. This VMT also contains non-method values, which are class-specific information at negative offsets:
 |%30%10%60
 |\b Name|Offset|Description\b0
 |{\f1\fs20 vmtSelfPtr}|–76|points back to the beginning of the table
@@ -12516,7 +12525,7 @@ The VMT is the {\i Virtual-Method Table}, i.e. a Table which defines every Delph
 |{\f1\fs20 vmtInstanceSize}|–40|bytes needed by one class Instance
 |{\f1\fs20 vmtParent}|–36|parent VMT
 |%
-We'll implement the low-level trick as detailed in this reference article available at @http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html in order to use the {\f1\fs20 vmtAutoTable} deprecated entry in the VMT. This entry was used in Delphi 2 only for implementing {\i Automation}. Later version of Delphi (our goal) won't use it any more. But the slot is still here, ready for being used by the framework.
+We'll implement the low-level trick as detailed in this reference article available at @http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html in order to use the {\f1\fs20 vmtAutoTable} deprecated entry in the VMT. This entry was used in {\i Delphi} 2 only for implementing {\i Automation}. Later version of {\i Delphi} (our goal) won't use it any more. But the slot is still here, ready for being used by the framework.
 We'll therefore be able to store a pointer to the {\f1\fs20 TSQLRecordProperties} instance corresponding to a {\f1\fs20 TSQLRecord} class, which will be retrieved as such:
 !class function TSQLRecord.RecordProps: TSQLRecordProperties;
 !begin
@@ -12561,9 +12570,9 @@ Even most sophisticated methods of the @*ORM@ (like {\f1\fs20 TSQLRecord. GetJSO
 ; SRS-DI-2.1.4 - The framework shall provide some Cross-Cutting components
 :Intercepting exceptions
 In order to let our {\f1\fs20 TSynLog} logging class, as defined in @!TSynLog,PatchCodePtrUInt!Lib\SynCommons.pas@, intercept all exceptions, we use the low-level global {\f1\fs20 RtlUnwindProc} pointer, defined in {\f1\fs20 System.pas}.
-Alas, under Delphi 5, this global {\f1\fs20 RtlUnwindProc} variable is not existing. The code calls directly the {\f1\fs20 RtlUnWind} Windows API function, with no hope of custom interception.
+Alas, under {\i Delphi} 5, this global {\f1\fs20 RtlUnwindProc} variable is not existing. The code calls directly the {\f1\fs20 RtlUnWind} Windows API function, with no hope of custom interception.
 Two solutions could be envisaged:
-- Modify the {\f1\fs20 Sytem.pas} source code, adding the new {\f1\fs20 RtlUnwindProc} variable, just like Delphi 7;
+- Modify the {\f1\fs20 Sytem.pas} source code, adding the new {\f1\fs20 RtlUnwindProc} variable, just like {\i Delphi} 7;
 - Patch the assembler code, directly in the process memory.
 The first solution is simple. Even if compiling {\f1\fs20 System.pas} is a bit more difficult than compiling other units, we already made that for our {\i Enhanced RTL units}. But you'll have to change the whole build chain in order to use your custom {\f1\fs20 System.dcu} instead of the default one. And some third-party units (only available in {\f1\fs20 .dcu} form) may not like the fact that the {\i System.pas} interface changed...
 So we used the second solution: change the assembler code in the running process memory, to let call our {\f1\fs20 RtlUnwindProc} variable instead of the Windows API.
@@ -12571,7 +12580,7 @@ So we used the second solution: change the assembler code in the running process
 The first feature we have to do is to allow on-the-fly change of the assembler code of a process.
 In fact, we already use this in order to provide class-level variables, as stated by @SDD-DI-2.1.3@.
 We have got the {\f1\fs20 PatchCodePtrUInt} function at hand to change the address of each a {\f1\fs20 RtlUnWind} call.
-We'll first define the missing global variable, available since Delphi 6, for the Delphi 5 compiler:
+We'll first define the missing global variable, available since {\i Delphi} 6, for the {\i Delphi} 5 compiler:
 !{$ifdef DELPHI5OROLDER}
 !// Delphi 5 doesn't define the needed RTLUnwindProc variable :(
 !// so we will patch the System.pas RTL in-place
@@ -12675,10 +12684,10 @@ You will find out in @!TServiceFactory,TServiceFactoryServer,TServiceFactoryClie
 There are two levels of implementation:
 - A {\i services catalog}, available in {\f1\fs20 TSQLRest.Services} property, declared as {\f1\fs20 TServiceContainer} (with two {\f1\fs20 inherited} versions, one for each side);
 - A {\i service factory} for each interface, declared as {\f1\fs20 TServiceFactory} (also with two {\f1\fs20 inherited} versions, one for each side).
-In fact, the {\f1\fs20 TServiceFactory.Create constructor} will retrieve all needed RTTI information of the given interface, i.e. GUID, name and all methods (with their arguments). It will compute the low-level stack memory layout needed at execution to emulate a call of a native Delphi {\f1\fs20 interface}.  It will use JSON serialization as its internal mean of data persistence and transmission And the corresponding "contract" will be computed from the signature of all interfaces and methods, to validate that both client and server expect the exact same content.
+In fact, the {\f1\fs20 TServiceFactory.Create constructor} will retrieve all needed RTTI information of the given interface, i.e. GUID, name and all methods (with their arguments). It will compute the low-level stack memory layout needed at execution to emulate a call of a native {\i Delphi} {\f1\fs20 interface}.  It will use JSON serialization as its internal mean of data persistence and transmission And the corresponding "contract" will be computed from the signature of all interfaces and methods, to validate that both client and server expect the exact same content.
 Note that {\f1\fs20 TServiceFactory} will also be used for the stubbing/mocking features of the framework.
 On the server side, {\f1\fs20 TServiceFactoryServer.ExecuteMethod} method (and then a nested {\f1\fs20 TServiceMethod.InternalExecute} call) is used to prepare a valid call to the implementation class code from a remote JSON request.
-On the client side, a {\f1\fs20 TInterfacedObjectFake} class will be created, and will emulate a regular Delphi interface call using some on-the-fly asm code generated in the {\f1\fs20 TServiceFactoryClient.Create} constructor.
+On the client side, a {\f1\fs20 TInterfacedObjectFake} class will be created, and will emulate a regular {\i Delphi} interface call using some on-the-fly asm code generated in the {\f1\fs20 TServiceFactoryClient.Create} constructor.
 For technical information about how interfaces are called in {\i Delphi}, see @http://sergworks.wordpress.com/2010/07/06/delphi-interfaces-on-binary-level and the {\f1\fs20 FakeCall} method implementation.
 Here is the core of this client-side implementation of the "call stubs":
 !  for i := 0 to fMethodsCount-1 do begin
@@ -12761,10 +12770,10 @@ The {\f1\fs20 sqlite3.obj} file won't include FTS3/FTS4, whereas {\f1\fs20 sqlit
 !{$else}
 !{$L sqlite3.obj}       // link SQlite3 database engine
 !{$endif}
-Some low-level functions, necessary for linking to the {\i Borland C++} generated {\f1\fs20 .obj} files, are coded in asm. These runtime functions will call Delphi equivalences, which are indeed close from the {\f1\fs20 BCC32} need - see for instance {\f1\fs20 _ftol() _ftoul() malloc() free() memset() memmove() atol() _lldiv() strlen()} and such. Even higher-level functions - like {\f1\fs20 localtime()} or {\f1\fs20 qsort()} - are coded in pure Delphi code.
+Some low-level functions, necessary for linking to the {\i Borland C++} generated {\f1\fs20 .obj} files, are coded in asm. These runtime functions will call {\i Delphi} equivalences, which are indeed close from the {\f1\fs20 BCC32} need - see for instance {\f1\fs20 _ftol() _ftoul() malloc() free() memset() memmove() atol() _lldiv() strlen()} and such. Even higher-level functions - like {\f1\fs20 localtime()} or {\f1\fs20 qsort()} - are coded in pure {\i Delphi} code.
 :  SQLite3 API access
 Some types are defined in @!TSQLite3Blob,TSQLite3DB,TSQLite3FunctionContext,TSQLite3Statement,TSQLite3Value,TSQLite3ValueArray,TSQLite3Library!Lib\SynSQLite3.pas@ to map the types used by {\i SQLite3}: {\f1\fs20 TSQLite3DB, TSQLite3Statement, TSQLite3Blob, TSQLite3Value, TSQLite3FunctionContext}, which are mapped to a {\f1\fs20 PtrUInt}, i.e. an unsigned integer matching the current pointer size. This is the {\i handle} type exposed by the {\i SQLite} API.
-Then most C-language interface to {\i SQLite} has been converted into pure Delphi external {\f1\fs20 function} or {\f1\fs20 procedure} calls (see @http://www.sqlite.org/c3ref/intro.html for a complete reference). The conversion rule was to match the API name (all {\f1\fs20 sqlite3: TSQLite3Library} identifiers), then provide the most Delphi-standard access to the parameters: for instance, we use standard Integer/Int64/PUTF8Char types, or a {\f1\fs20 var} declaration instead of a C pointer.
+Then most C-language interface to {\i SQLite} has been converted into pure {\i Delphi} external {\f1\fs20 function} or {\f1\fs20 procedure} calls (see @http://www.sqlite.org/c3ref/intro.html for a complete reference). The conversion rule was to match the API name (all {\f1\fs20 sqlite3: TSQLite3Library} identifiers), then provide the most {\i Delphi}-standard access to the parameters: for instance, we use standard Integer/Int64/PUTF8Char types, or a {\f1\fs20 var} declaration instead of a C pointer.
 A global variable is used to access the {\i SQLite3} engine shared instance:
 !var
 !  /// global access to linked SQLite3 library API calls
@@ -12778,7 +12787,7 @@ A global variable is used to access the {\i SQLite3} engine shared instance:
 !  sqlite3: TSQLite3Library;
 All the framework code will use this {\f1\fs20 sqlite3} global instance - using e.g. {\f1\fs20 qlite3.open()} instead of {\f1\fs20 sqlite3_open()} - but some custom low-level code may use several {\i SQLite3} implementations at once.
 : High level access
-Some Delphi classes are introduced to manage all calls and statements to C-language interface to {\i SQLite}, mapping all {\f1\fs20 sqlite3*} functions and methods to object-oriented methods.
+Some {\i Delphi} classes are introduced to manage all calls and statements to C-language interface to {\i SQLite}, mapping all {\f1\fs20 sqlite3*} functions and methods to object-oriented methods.
 The @!TSQLTableDB,TSQLRequest,TSQLDataBase,TSQLBlobStream,ESQLException!Lib\SynSQLite3.pas@ unit defines the following classes:
 - {\f1\fs20 ESQLException} is a custom {\i SQLite3} dedicated Exception type;
 - {\f1\fs20 TSQLDataBase} is a simple wrapper for direct {\i SQLite3} database manipulation;
@@ -12833,12 +12842,12 @@ For instance, we can write:
 !  // now V contains {"name":"john","year":1982}
 This is just another implementation of KISS design in our framework.
 : Speed issue
-But, in practice, this approach is slower, due to the current implementation of the Delphi RTL.
+But, in practice, this approach is slower, due to the current implementation of the {\i Delphi} RTL.
 Late-binding uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties. There is plenty of space for speed improvement here.
 So, how does the variant type used by {\i Ole Automation} and our custom variant types (i.e. {\f1\fs20 TSynTableVariantType} or {\f1\fs20 TSQLDBRowVariantType}) handle their properties access?
-Behind the scene, the Delphi compiler calls the {\f1\fs20 DispInvoke} function, as defined in the {\i Variant.pas} unit.
+Behind the scene, the {\i Delphi} compiler calls the {\f1\fs20 DispInvoke} function, as defined in the {\i Variant.pas} unit.
 The default implementation of this {\f1\fs20 DispInvoke} is some kind of slow:
-- It uses a {\f1\fs20 TMultiReadExclusiveWriteSynchronizer} under Delphi 6, which is a bit over-sized for its purpose: since Delphi 7, it uses a lighter critical section;
+- It uses a {\f1\fs20 TMultiReadExclusiveWriteSynchronizer} under {\i Delphi} 6, which is a bit over-sized for its purpose: since {\i Delphi} 7, it uses a lighter critical section;
 - It makes use of {\f1\fs20 WideString} for string handling (not at all the better for speed), and tends to define a lot of temporary string variables;
 - For the getter method, it always makes a temporary local copy during process, which is not useful for our classes.
 : Fast and furious
@@ -12937,15 +12946,15 @@ As you can see, the returned variant content is computed with the following meth
 !    end;
 !    end;
 !end;
-This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 WideString} variant for pre-Unicode version of Delphi, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since Delphi 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
+This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 WideString} variant for pre-Unicode version of {\i Delphi}, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since {\i Delphi} 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
 : Hacking the VCL
 In order to enable this speed-up, we'll need to change each call to {\f1\fs20 DispInvoke} into a call to our custom {\f1\fs20 SynVarDispProc} function.
-With Delphi 6, we can do that by using {\f1\fs20 GetVariantManager   /SetVariantManager} functions, and the following code:
+With {\i Delphi} 6, we can do that by using {\f1\fs20 GetVariantManager   /SetVariantManager} functions, and the following code:
 !    GetVariantManager(VarMgr);
 !    VarMgr.DispInvoke := @SynVarDispProc;
 !    SetVariantManager(VarMgr);
-But since Delphi 7, the {\f1\fs20 DispInvoke} function is hard-coded by the compiler into the generated asm code. If the {\i Variants} unit is used in the project, any late-binding variant process will directly call the {\f1\fs20 _DispInvoke} private function of {\f1\fs20 Variants.pas}.
-First of all, we'll have to retrieve the address of this {\f1\fs20 _DispInvoke}. We just can't use {\f1\fs20 _DispInvoke} or {\f1\fs20 DispInvoke} symbol, which is not exported by the Delphi linker... But this symbol is available from asm!
+But since {\i Delphi} 7, the {\f1\fs20 DispInvoke} function is hard-coded by the compiler into the generated asm code. If the {\i Variants} unit is used in the project, any late-binding variant process will directly call the {\f1\fs20 _DispInvoke} private function of {\f1\fs20 Variants.pas}.
+First of all, we'll have to retrieve the address of this {\f1\fs20 _DispInvoke}. We just can't use {\f1\fs20 _DispInvoke} or {\f1\fs20 DispInvoke} symbol, which is not exported by the {\i Delphi} linker... But this symbol is available from asm!
 So we will first define a pseudo-function which is never called, but will be compiled to provide a pointer to this {\f1\fs20 _DispInvoke} function:
 !procedure VariantsDispInvoke;
 !asm
@@ -12981,13 +12990,13 @@ $... (previous function content, never executed)
 That is, it will jump ({\f1\fs20 jmp}) to our very own {\f1\fs20 SynVarDispProc}, just as expected.
 In fact, the resulting code is very close to a direct {\f1\fs20 ISQLDBRows.Column['AccountNumber']} call. Using {\i late-binding} can be both fast on the execution side, and easier on the code side.
 :   Delphi XE2 and up
-Since Delphi XE2, some modifications were introduced to the official {\f1\fs20 DispInvoke()} RTL implementation:
+Since {\i Delphi} XE2, some modifications were introduced to the official {\f1\fs20 DispInvoke()} RTL implementation:
 - A new {\f1\fs20 varUStrArg} kind of parameter has been defined, which will allow to transmit {\f1\fs20 UnicodeString} property values;
 - All text property values would be transmitted as BSTR {\f1\fs20 / WideString / varOleStr} variants to the invoked variant type;
 - All textual property names were normalized to be in UPPERCASE.
-The first modification does make sense, and was indeed a welcome fix for an Unicode version of Delphi. It should have been as such since Delphi 2009.
-Temporary conversion to {\f1\fs20 WideString} does make sense in the COM / OLE world, but is an awfull performance bottleneck in the pure Delphi realm, i.e. when using late-binding with custom type of variants (as for all our custom variant types). This may be a noticeable speed penalty, in comparison to previous versions of the compiler.
-Last but not least, the conversion to uppercase is a bug. For instance, the following code won't work as expected since Delphi XE2:
+The first modification does make sense, and was indeed a welcome fix for an Unicode version of {\i Delphi}. It should have been as such since {\i Delphi} 2009.
+Temporary conversion to {\f1\fs20 WideString} does make sense in the COM / OLE world, but is an awfull performance bottleneck in the pure {\i Delphi} realm, i.e. when using late-binding with custom type of variants (as for all our custom variant types). This may be a noticeable speed penalty, in comparison to previous versions of the compiler.
+Last but not least, the conversion to uppercase is a bug. For instance, the following code won't work as expected since {\i Delphi} XE2:
 !var V: variant;
 ! ...
 !  TDocVariant.New(V); // or slightly slower V := TDocVariant.New;
@@ -12996,7 +13005,7 @@ Last but not least, the conversion to uppercase is a bug. For instance, the foll
 !  // before Delphi XE2, V contains {"name":"john","year":1982} - as expected
 !  // since Delphi XE2,  V contains {"NAME":"john","YEAR":1982} - sounds like a bug, doesn't it?
 This sounds indeed like an awfull regression.
-Since revision 1.18 of the framework, the patch described in this {\i Design Input} has been modified for Delphi XE2 and up, as such:
+Since revision 1.18 of the framework, the patch described in this {\i Design Input} has been modified for {\i Delphi} XE2 and up, as such:
 - It will handle {\f1\fs20 varUStrArg} kind of parameter as exepcted;
 - It will avoid any temporary conversion to {\f1\fs20 WideString} for textual values;
 - It will by-pass the property name change into uppercase.
@@ -13336,7 +13345,7 @@ This release updates the {\i mORMot Framework} software modules to the following
 : Software specifications
 This release is compatible with the following software:
 - Windows XP (or later) Operating system;
-- Delphi 7 up to Delphi 2010.
+- {\i Delphi} 7 up to {\i Delphi} 2010.
 :Release Notes
 : New features
 New features implemented in this release are listed below.
