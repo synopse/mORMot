@@ -33,6 +33,7 @@ unit mORMot;
     Esmond
     Pavel (mpv)
     Martin Suer
+    Sabbiolina
     Vadim Orel
 
   Alternatively, the contents of this file may be used under the terms of
@@ -35912,7 +35913,7 @@ begin
       arg := args[a].ContextFromArguments(aRegisteredTypes);
       if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then begin
         arg.commaIn := '; ';
-        arg.commaInSingle := ',';
+        arg.commaInSingle := string(',');
       end;
       if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
         arg.commaOut := '; ';

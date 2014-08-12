@@ -29,6 +29,7 @@ unit mORMotWrappers;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Sabbiolina
 
   
   Alternatively, the contents of this file may be used under the terms of
@@ -216,7 +217,7 @@ begin
         if nfo.FieldWidth>0 then
           field.width := nfo.FieldWidth;
         if f<nfoList.Count-1 then
-          field.comma := ',';
+          field.comma := string(',');
         case nfo.SQLFieldType of // handle some special complex types
         sftEnumerate: begin
           field.isEnum := true;
