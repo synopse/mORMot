@@ -35913,7 +35913,7 @@ begin
       arg := args[a].ContextFromArguments(aRegisteredTypes);
       if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then begin
         arg.commaIn := '; ';
-        arg.commaInSingle := string(',');
+        arg.commaInSingle := RawUTF8(',');
       end;
       if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
         arg.commaOut := '; ';

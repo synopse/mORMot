@@ -6004,6 +6004,22 @@ var i: integer;
     valid: boolean;
 {$endif}
 begin
+  Check(isSelect('select * from toto'));
+  Check(isSelect(' select * from toto'));
+  Check(isSelect('vacuum'));
+  Check(isSelect(' vacuum'));
+  Check(isSelect('pragma'));
+  Check(isSelect(' pragma'));
+  Check(isSelect('with recursive cnt(x) as (values(1) union all '+
+    'select x+1 from cnt where x<1000000) select x from cnt'));
+  Check(not isSelect('update toto'));
+  Check(not isSelect(' update toto'));
+  Check(not isSelect('insert into toto'));
+  Check(not isSelect(' insert into toto'));
+  Check(not isSelect('delete from toto'));
+  Check(not isSelect(' delete from toto'));
+  Check(not isSelect('with recursive cnt(x) as (values(1) union all '+
+    'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
   T := TSQLRecordTest.Create;
   M := TSQLModel.Create([TSQLRecordTest]);
   with InternalClassProp(TSQLRecordTest)^ do begin

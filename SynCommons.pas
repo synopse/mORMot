@@ -1937,7 +1937,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 // and Win64 platforms: please note that in this case, it may read up to 15 bytes
 // before or beyond the string; this is rarely a problem but it can in principle
 // generate a protection violation (e.g. when used over mapped files) - in this
-// case, you can use the slower StrLenPas() function instead 
+// case, you can use the slower StrLenPas() function instead
 function StrLen(S: pointer): PtrInt;
 
 /// slower version of StrLen(), but which will never read over the buffer
@@ -2203,7 +2203,7 @@ function GetHighUTF8UCS4(var U: PUTF8Char): cardinal;
 // - will return '?' if the UCS4 value is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUTF8 function)
-function GetNextUTF8Upper(var U: PUTF8Char): cardinal; 
+function GetNextUTF8Upper(var U: PUTF8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// points to the beginning of the next word stored in U
@@ -15549,7 +15549,9 @@ begin
     result :=
       ((IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
        (P[6] in [#0..' ',';'])) or // avoid VACUUMStoredProcUnsecure security issue
-      ((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';']));
+      (((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';'])) and
+        not (ContainsUTF8(P,'INSERT') or ContainsUTF8(P,'UPDATE') or
+             ContainsUTF8(P,'DELETE')));
   end else
     result := true; // assume '' statement is SELECT command
 end;
@@ -35373,7 +35375,7 @@ begin
   if self=nil then
     exit; // avoid GPF
   if Count<>0 then begin
-    if Count<10 then // no need to change capacity for small cache content
+    if fValueSize<131072 then // no capacity change for small cache content
       fNameValue.Count := 0 else
       with fNameValue.fDynArray{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do begin
         Capacity := 0;   // force free all fNameValue.List[] key/value pairs
