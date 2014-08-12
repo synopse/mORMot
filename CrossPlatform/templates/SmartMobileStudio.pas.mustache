@@ -1,6 +1,11 @@
 /// remote access to a mORMot server using SmartMobileStudio
+{{#uri}}
 // - retrieved from http://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
+{{/uri}}
+{{^uri}}
+// - generated at {{time}}
+{{/uri}}
 unit {{fileName}};
 
 {
@@ -54,7 +59,7 @@ type // define some record types, used as properties below
 type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
       onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
 {{#soa.services}}
-  /// service accessible via http://{{host}}/{{root}}/{{uri}}
+  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   // - synchronous and asynchronous methods are available, depending on use case
   // - synchronous _*() methods will block the browser execution, so won't be
@@ -95,12 +100,10 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
 {{/isInMormotPas}}
 {{/orm}}
 
-{{#port}}
 const
-  /// the server port, corresponding to http://{{host}}
+  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
 
-{{/port}}
 
 /// return the database Model corresponding to this server
 function GetModel: TSQLModel;

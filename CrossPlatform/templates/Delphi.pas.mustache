@@ -1,6 +1,11 @@
 /// remote access to a mORMot server using mORMot units
+{{#uri}}
 // - retrieved from http://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
+{{/uri}}
+{{^uri}}
+// - generated at {{time}}
+{{/uri}}
 unit {{fileName}};
 
 {
@@ -52,7 +57,7 @@ type // define some record types, used as properties below
 {{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
 type
   {{#soa.services}}
-  /// service accessible via http://{{host}}/{{root}}/{{uri}}
+  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   I{{interfaceURI}} = interface(IInvokable)
     ['{{GUID}}']
@@ -93,12 +98,10 @@ type
 /// return the database Model corresponding to this server
 function GetModel: TSQLModel;
 
-{{#port}}
 const
-  /// the server port, corresponding to http://{{host}}
+  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
 
-{{/port}}
 
 {{#soa.enabled}}
 /// define the interface-based services to be consummed by the client

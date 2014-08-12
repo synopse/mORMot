@@ -1,6 +1,11 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
+{{#uri}}
 // - retrieved from http://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
+{{/uri}}
+{{^uri}}
+// - generated at {{time}}
+{{/uri}}
 unit {{fileName}};
 
 {
@@ -68,7 +73,7 @@ type
 {{/methods}}
   end;
 
-  /// implements I{{interfaceURI}} from http://{{host}}/{{root}}/{{uri}}
+  /// implements I{{interfaceURI}} {{#uri}}from http://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}},I{{interfaceURI}})
   public
@@ -105,12 +110,10 @@ type
   
 {{/isInMormotPas}}
 {{/orm}}
-{{#port}}
 const
-  /// the server port, corresponding to http://{{host}}
+  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
 
-{{/port}}
 
 /// return the database Model corresponding to this server
 function GetModel: TSQLModel;

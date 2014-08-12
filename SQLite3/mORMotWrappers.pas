@@ -69,7 +69,18 @@ uses
 /// compute the Model information, ready to be exported as JSON
 // - will publish the ORM and SOA properties
 // - to be used e.g. for client code generation via Mustache templates
-function ContextFromModel(const aServer: TSQLRestServer): variant;
+function ContextFromModel(aServer: TSQLRestServer): variant;
+
+/// generate a code wrapper for a given Model and Mustache template content
+// - will use all ORM and SOA properties of the supplied server
+// - aFileName will be transmitted as {{filename}}, e.g. 'mORMotClient'
+// - you should also specify the HTTP port e.g. 888
+// - the template content could be retrieved from a file via StringFromFile()
+// - this function may be used to generate the client at build time, directly
+// from a just built server, in an automated manner
+function WrapperFromModel(aServer: TSQLRestServer;
+  const aMustacheTemplate, aFileName: RawUTF8;
+  aPort: integer): RawUTF8;
 
 /// you can call this procedure within a method-based service allow
 // code-generation of an ORM and SOA client from a web browser
@@ -131,7 +142,7 @@ begin
     result := 'null';
 end;
 
-function ContextFromModel(const aServer: TSQLRestServer): variant;
+function ContextFromModel(aServer: TSQLRestServer): variant;
 const
   TYPETOSIMPLE: array[TSQLFieldType] of TJSONCustomParserRTTIType = 
     (ptCustom,   // sftUnknown
@@ -333,10 +344,12 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   context := ContextFromModel(Ctxt.Server);
   context.uri := Ctxt.URIWithoutSignature;
   host := Ctxt.InHeader['host'];
-  context.host := host;
+  if host<>'' then
+    context.host := host;
   port := GetInteger(pointer(split(host,':',host)));
-  if port>0 then
-    context.port := port;
+  if port=0 then
+    port := 80;
+  context.port := port;
   if IdemPropNameU(Ctxt.URIBlobFieldName,'context') then begin
     Ctxt.Returns(VariantToUTF8(context));
     exit;
@@ -382,11 +395,23 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     result := template else begin
     context.templateName := templateName;
     context.filename := unitName;
-    delete(templateExt,1,1);
     result := TSynMustache.Parse(template).Render(context,nil,nil,true);
   end;
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;
+
+function WrapperFromModel(aServer: TSQLRestServer;
+  const aMustacheTemplate, aFileName: RawUTF8; aPort: integer): RawUTF8;
+var context: variant;
+begin
+  context := ContextFromModel(aServer); // no context.uri nor context.host here
+  if aPort=0 then
+    aPort := 80;
+  context.port := aPort;
+  context.filename := aFileName;
+  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,true); 
+end;
+
 
 { TWrapperMethodHook }
 
