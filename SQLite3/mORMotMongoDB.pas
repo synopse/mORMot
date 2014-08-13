@@ -437,8 +437,10 @@ begin
           fBatchWriter.BSONWriteDoc(doc);
         end else begin
         fCollection.Insert([variant(doc)]);
-        if Owner<>nil then
+        if Owner<>nil then begin
           Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
+          Owner.FlushInternalDBCache;
+        end;
       end;
     except
       result := 0;
@@ -458,8 +460,10 @@ begin
       query := BSONVariant(['_id',ID]);
       update := BSONVariant(['$set',variant(Doc)]);
       fCollection.Update(query,update);
-      if Owner<>nil then
+      if Owner<>nil then begin
         Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
+        Owner.FlushInternalDBCache;
+      end;
       result := true;
     except
       result := false;
@@ -484,6 +488,7 @@ begin
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
         Owner.InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
+        Owner.FlushInternalDBCache;
       end;
       result := true;
     except
@@ -518,9 +523,11 @@ begin
   if update.Count>0 then
     try
       fCollection.Update(query,BSONVariant(['$set',variant(update)]));
-      if Owner<>nil then
+      if Owner<>nil then begin
         Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
+        Owner.FlushInternalDBCache;
+      end;
       result := true;
     except
       result := false;
@@ -537,8 +544,10 @@ begin
       if fBatchMethod<>mDelete then
         exit else
         AddInteger(fBatchIDs,fBatchIDsCount,ID) else begin
-      if Owner<>nil then // notify BEFORE deletion
+      if Owner<>nil then begin // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
+        Owner.FlushInternalDBCache;
+      end;
       fCollection.RemoveOne(ID);
     end;
     result := true;
@@ -556,10 +565,12 @@ begin // here we use the pre-computed IDs[]
      (Model.Tables[TableModelIndex]=fStoredClass) and (IDs<>nil) then
     try
       if Owner<>nil then // notify BEFORE deletion
-      for i := 0 to high(IDs) do
-        Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
+        for i := 0 to high(IDs) do
+          Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
       fCollection.Remove(BSONVariant(
         ['_id',BSONVariant(['$in',BSONVariantFromIntegers(IDs)])]));
+      if Owner<>nil then
+        Owner.FlushInternalDBCache;
       result := true;
     except
       result := false;

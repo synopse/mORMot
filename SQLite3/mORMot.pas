@@ -10931,8 +10931,8 @@ type
     // cache used at SQLite3 database level; but some virtual tables (e.g.
     // TSQLRestStorageExternal classes defined in mORMotDB) could flush
     // the database content without proper notification
-    // - this default implementation just do nothing, but SQlite3 unit
-    // will call TSQLDataBase.CacheFlush method
+    // - this default implementation will just do nothing, but mORMotSQlite3
+    // unit will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; virtual;
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
@@ -11290,7 +11290,7 @@ type
     property StoredClassProps: TSQLModelRecordProperties read fStoredClassProps;
     /// read only access to the RTTI properties of the associated record type
     property StoredClassRecordProps: TSQLRecordProperties read fStoredClassRecordProps;
-    /// read only access to the TSQLRestServer using this in-memory database
+    /// read only access to the TSQLRestServer using this storage engine
     property Owner: TSQLRestServer read fOwner;
   end;
 
@@ -11565,6 +11565,11 @@ type
   // in order to be consistent with the internal DB cache
   TSQLRestStorageInMemoryExternal = class(TSQLRestStorageInMemory)
   public
+    /// initialize the server data, reading it from a file if necessary
+    // - data encoding on file is UTF-8 JSON format by default, or
+    // should be some binary format if aBinaryFile is set to true
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
+      const aFileName: TFileName = ''; aBinaryFile: boolean=false); override;
     /// this overridden method will notify the Owner when the internal DB content
     // is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
@@ -25751,8 +25756,7 @@ begin
 end;
 
 procedure TSQLRestServer.FlushInternalDBCache;
-begin
-  // do nothing by default
+begin // do nothing by default
 end;
 
 function SQLGetOrder(const SQL: RawUTF8): RawUTF8;
@@ -30197,6 +30201,13 @@ end;
 
 
 { TSQLRestStorageInMemoryExternal }
+
+constructor TSQLRestStorageInMemoryExternal.Create(aClass: TSQLRecordClass;
+  aServer: TSQLRestServer; const aFileName: TFileName = ''; aBinaryFile: boolean=false);
+begin
+  inherited Create(aClass,aServer,aFileName,aBinaryFile);
+  fStorageLockShouldIncreaseOwnerInternalState := false; // done by overriden StorageLock() 
+end;
 
 procedure TSQLRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean);
 begin

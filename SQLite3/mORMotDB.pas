@@ -104,6 +104,7 @@ unit mORMotDB;
   - fixed ticket [3c41462594] in TSQLRestStorageExternal.ExecuteFromJSON()
   - fixed ticket [9a821d26ee] in TSQLRestStorageExternal.Create() not
     creating any missing field
+  - fixed ticket [b109c22750] about SQLite3 cache not flushed after CRUD updates
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
   - ensure DESC INDEX is created for Firebird ID column, as expected for
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
@@ -1039,13 +1040,16 @@ begin
         Fields := nil; // force new sending block
         BatchBegin := BatchEnd+1;
       until BatchBegin>=fBatchCount;
-      if (Owner<>nil) and (fBatchMethod in [mPost,mPut]) then begin
-        if fBatchMethod=mPost then
-          NotifySQLEvent := seAdd else
-          NotifySQLEvent := seUpdate;
-        for i := 0 to fBatchCount-1 do
-          Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClassProps.TableIndex,
-            fBatchIDs[i],fBatchValues[i],nil);
+      if Owner<>nil then begin
+        if fBatchMethod in [mPost,mPut] then begin
+          if fBatchMethod=mPost then
+            NotifySQLEvent := seAdd else
+            NotifySQLEvent := seUpdate;
+          for i := 0 to fBatchCount-1 do
+            Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClassProps.TableIndex,
+              fBatchIDs[i],fBatchValues[i],nil);
+        end;
+        Owner.FlushInternalDBCache;
       end;
     end;
   finally
@@ -1088,8 +1092,10 @@ begin
       result := 0 else
       result := InternalBatchAdd(SentData,0) else begin
     result := ExecuteFromJSON(SentData,soInsert,0); // UpdatedID=0 -> insert with EngineLockedNextID
-    if (result>0) and (Owner<>nil) then
+    if (result>0) and (Owner<>nil) then begin
       Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
+      Owner.FlushInternalDBCache;
+    end;
   end;
 end;
 
@@ -1103,8 +1109,10 @@ begin
         result := false else
         result := InternalBatchAdd(SentData,ID)>=0 else begin
       result := ExecuteFromJSON(SentData,soUpdate,ID)=ID;
-      if result and (Owner<>nil) then
+      if result and (Owner<>nil) then begin
         Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
+        Owner.FlushInternalDBCache;
+      end;
     end;
 end;
 
@@ -1120,6 +1128,8 @@ begin
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
+      if result and (Owner<>nil) then 
+        Owner.FlushInternalDBCache;
     end;
 end;
 
@@ -1161,6 +1171,8 @@ begin
     end else
     if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
       exit;
+    if result and (Owner<>nil) then
+      Owner.FlushInternalDBCache;
   end;
   result := true;
 end;
@@ -1281,16 +1293,19 @@ begin
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
         [fTableName,InternalToExternal(SetFieldName),SetValue,
          ExtWhereFieldName,WhereValue],false)<>nil;
-    if result and (Owner<>nil) and Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
-      Rows := ExecuteInlined('select % from % where %=:(%):',
-        [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
-      if Rows=nil then
-        exit;
-      JSON := '{"'+SetFieldName+'":'+SetValue+'}';
-      while Rows.Step do
-        Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+    if result and (Owner<>nil) then begin
+      if Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
+        Rows := ExecuteInlined('select % from % where %=:(%):',
+          [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
+        if Rows=nil then
+          exit;
+        JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+        while Rows.Step do
+          Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+      end;
+      Owner.FlushInternalDBCache;
     end;
-    end;
+  end;
 end;
 
 function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex, aID: integer;
@@ -1318,6 +1333,7 @@ begin
       if Owner<>nil then begin
         fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
         Owner.InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
+        Owner.FlushInternalDBCache;
       end;
       result := true; // success
     end;
@@ -1348,9 +1364,11 @@ begin
     result := ExecuteDirectSQLVar('update % set % where %=?',
       [fTableName,fUpdateBlobFieldsSQL,StoredClassProps.ExternalDB.RowIDFieldName],
        Params,aID,false);
-    if result and (Owner<>nil) then
+    if result and (Owner<>nil) then begin
       Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
           @fStoredClassRecordProps.BlobFieldsBits);
+      Owner.FlushInternalDBCache;
+    end;
   end else
     result := true; // as TSQLRest.UpdateblobFields()
 end;
