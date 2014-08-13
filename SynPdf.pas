@@ -7224,7 +7224,9 @@ begin
   if FDictionary<>nil then begin
     for V := low(V) to high(V) do
       if V in Value then
-        FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V], TPdfName.Create('None')) else
+        if V=vpEnforcePrintScaling then
+          FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V],TPdfName.Create('None')) else
+          FDictionary.AddItem(PDF_PAGE_VIEWER_NAMES[V],TPdfBoolean.Create(true)) else
         FDictionary.RemoveItem(PDF_PAGE_VIEWER_NAMES[V]);
     if vpEnforcePrintScaling in Value then begin
       FDictionary.AddItem('Enforce', TPdfArray.CreateNames(Data.ObjectMgr,['PrintScaling']));
