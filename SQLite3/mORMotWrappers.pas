@@ -144,7 +144,7 @@ end;
 
 function ContextFromModel(aServer: TSQLRestServer): variant;
 const
-  TYPETOSIMPLE: array[TSQLFieldType] of TJSONCustomParserRTTIType = 
+  TYPETOSIMPLE: array[TSQLFieldType] of TJSONCustomParserRTTIType =
     (ptCustom,   // sftUnknown
      ptString,   // sftAnsiText
      ptRawUTF8,  // sftUTF8Text
@@ -177,16 +177,11 @@ var orm,fields,records,enumerates,sets: TDocVariantData;
     typ: TJSONCustomParserRTTIType;
     kind: TCrossPlatformSQLFieldKind;
     hasRecord: boolean;
+    nfoSQLFieldRTTITypeName: RawUTF8;
     parser: TJSONCustomParserRTTI;
     parsersPropInfo: TRawUTF8List;
     parsersServices: TRawUTF8List;
-    typeNames: TRawUTF8List;
-function nfoTypeNotRegistered: Boolean;
-begin
-  result := typeNames.IndexOf(nfo.SQLFieldRTTITypeName)<0;
-  if not result then
-    typeNames.AddObject(nfo.SQLFieldRTTITypeName,nfo);
-end;
+    typeNames: TPropNameList;
 begin
   SetVariantNull(result);
   if aServer=nil then
@@ -197,11 +192,10 @@ begin
   enumerates.Init;
   sets.Init;
   fields.Init;
-  typeNames := TRawUTF8List.Create;
+  typeNames.Init;
   parsersPropInfo := TRawUTF8List.Create;
   parsersServices := TRawUTF8List.Create;
   try
-    typeNames.CaseSensitive := false;
     parsersPropInfo.CaseSensitive := false;
     parsersServices.CaseSensitive := false;
     for t := 0 to aServer.Model.TablesMax do begin
@@ -211,11 +205,12 @@ begin
       fields.Init;
       for f := 0 to nfoList.Count-1 do begin
         nfo := nfoList.List[f];
+        nfoSQLFieldRTTITypeName := nfo.SQLFieldRTTITypeName;
         kind := CROSSPLATFORM_KIND[nfo.SQLFieldType];
-        typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(nfo.SQLFieldRTTITypeName);
+        typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(nfoSQLFieldRTTITypeName);
         if typ=ptCustom then // guess from SQL type
           typ := TYPETOSIMPLE[nfo.SQLFieldType];
-        field := TJSONCustomParserRTTI.ContextProperty(typ,nfo.SQLFieldRTTITypeName,'','');
+        field := TJSONCustomParserRTTI.ContextProperty(typ,nfoSQLFieldRTTITypeName,'','');
         field.index := f+1;
         field.name := nfo.Name;
         field.sql := ord(nfo.SQLFieldType);
@@ -233,7 +228,7 @@ begin
         sftEnumerate: begin
           field.isEnum := true;
           field.ToVariant := 'ord';
-          field.fromVariant := nfo.SQLFieldRTTITypeName;
+          field.fromVariant := nfoSQLFieldRTTITypeName;
         end;
         sftSet: begin
           field.isSet := true;
@@ -241,7 +236,7 @@ begin
             field.toVariant := CONST_SIZETODELPHI[
               TSQLPropInfoRTTISet(nfo).SetEnumType^.SizeInStorageAsSet] else
             field.toVariant := 'byte';
-          field.fromVariant := nfo.SQLFieldRTTITypeName;
+          field.fromVariant := nfoSQLFieldRTTITypeName;
         end;
         end;
         fields.AddItem(field);
@@ -249,21 +244,21 @@ begin
           parser := TSQLPropInfoCustomJSON(nfo).CustomParser;
           if (parser<>nil) and (parser.PropertyType in [ptRecord,ptCustom]) then begin
             hasRecord := true;
-            if nfoTypeNotRegistered then
-              parsersPropInfo.AddObjectIfNotExisting(nfo.SQLFieldRTTITypeName,nfo);
+            if (typ<>ptGuid) and typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
+              parsersPropInfo.AddObjectIfNotExisting(nfoSQLFieldRTTITypeName,nfo);
           end;
         end else
         if nfo.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
-          if nfoTypeNotRegistered then
+          if (typ<>ptBoolean) and typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
             enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
               [TSQLPropInfoRTTIEnum(nfo).EnumType^.GetEnumNameAll(true)],
-              [nfo.SQLFieldRTTITypeName]));
+              [nfoSQLFieldRTTITypeName]));
         end else
         if nfo.InheritsFrom(TSQLPropInfoRTTISet) then begin
-          if nfoTypeNotRegistered then
+          if typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
             sets.AddItem(_JsonFastFmt('{name:?,values:%}',
               [TSQLPropInfoRTTISet(nfo).SetEnumType^.GetEnumNameAll(true)],
-              [nfo.SQLFieldRTTITypeName]));
+              [nfoSQLFieldRTTITypeName]));
         end;
       end;
       with aServer.Model.TableProps[t] do
@@ -289,8 +284,8 @@ begin
     // add the traling RTTI defined for services to the list
     for s := 0 to parsersServices.Count-1 do
       with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
-      if typeNames.IndexOf(CustomTypeName)<0 then
-        if PropertyType=ptRecord then
+      if PropertyType=ptRecord then
+        if typeNames.AddPropName(CustomTypeName) then
           records.AddItem(
             _ObjFast(['name',CustomTypeName,
               'fields',ContextNestedProperties(parsersServices)]));
@@ -298,7 +293,8 @@ begin
       with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
         if InheritsFrom(TJSONCustomParserCustomSimple) then
         with TJSONCustomParserCustomSimple(parsersServices.Objects[s]) do
-         if KnownType=ktEnumeration then
+        if KnownType=ktEnumeration then
+          if typeNames.AddPropName(CustomTypeName) then
             enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
               [PTypeInfo(CustomTypeInfo)^.EnumBaseType^.GetEnumNameAll(true)],
               [CustomTypeName]));
@@ -317,7 +313,6 @@ begin
   finally
     parsersServices.Free;
     parsersPropInfo.Free;
-    typeNames.Free;
   end;
 end;
 
