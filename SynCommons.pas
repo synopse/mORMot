@@ -469,6 +469,7 @@ unit SynCommons;
   - added Utf8DecodeToRawUnicodeUI() overloaded function returning text as var
   - added TRawUTF8DynArrayFrom(const Values: array of RawUTF8) function
   - added overloaded function FindRawUTF8() using array of RawUTF8 parameter
+  - added TPropNameList record/object to maintain a stack-based list of names
   - speeed enhancement for TRawUTF8List.Add()
   - added optional aOwnObjects parameter to TRawUTF8List.Create() constructor
   - new TRawUTF8List.GetObjectByName() method
@@ -2621,6 +2622,21 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
+
+type
+  /// simple stack-allocated type for handling a type names list
+  TPropNameList = {$ifndef UNICODE}object{$else}record{$endif}
+    Values: TRawUTF8DynArray;
+    Count: Integer;
+    /// initialize the list
+    // - set Count := 0
+    procedure Init;
+    /// search for a Value within Values[0..Count-1] using IdemPropNameU()
+    function FindPropName(const Value: RawUTF8): Integer;
+    /// if Value is in Values[0..Count-1] using IdemPropNameU() returns FALSE
+    // - otherwise, returns TRUE and add Value to Values[]
+    function AddPropName(const Value: RawUTF8): Boolean;
+  end;
 
 /// true if both TRawUTF8DynArray are the same
 // - comparison is case-sensitive
@@ -18194,6 +18210,33 @@ begin
     if A[i]<>B[i] then
       exit;
   result := true;
+end;
+
+{ TPropNameList }
+
+procedure TPropNameList.Init;
+begin
+  Count := 0;
+end;
+
+function TPropNameList.FindPropName(const Value: RawUTF8): Integer;
+begin
+  for result := 0 to Count-1 do
+    if IdemPropNameU(Values[result],Value) then
+      exit;
+  result := -1;
+end;
+
+function TPropNameList.AddPropName(const Value: RawUTF8): Boolean;
+begin
+  if FindPropName(Value)<0 then begin
+    if Count=length(Values) then
+      SetLength(Values,Count+16);
+    Values[Count] := Value;
+    inc(Count);
+    result := true;
+  end else
+    result := false;
 end;
 
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
