@@ -1814,12 +1814,6 @@ end;
 
 { TSQLVirtualTableExternal }
 
-function TSQLVirtualTableExternal.Delete(aRowID: Int64): boolean;
-begin
-  result := (self<>nil) and (Static<>nil) and
-    (Static as TSQLRestStorageExternal).EngineDelete(StaticTableIndex,aRowID);
-end;
-
 function TSQLVirtualTableExternal.Drop: boolean;
 begin
   if (self=nil) or (Static=nil) then
@@ -1834,25 +1828,6 @@ begin
   aProperties.Features := [vtWrite];
   aProperties.CursorClass := TSQLVirtualTableCursorExternal;
   aProperties.StaticClass := TSQLRestStorageExternal;
-end;
-
-function TSQLVirtualTableExternal.Insert(aRowID: Int64;
-  var Values: TSQLVarDynArray; out insertedRowID: Int64): boolean;
-begin // aRowID is just ignored here since IDs are always auto calculated
-  result := false;
-  if (self<>nil) and (Static<>nil) then
-  with Static as TSQLRestStorageExternal do begin
-    StorageLock(false); // to avoid race condition against max(RowID)
-    try
-      insertedRowID := EngineLockedNextID;
-      with StoredClassProps.ExternalDB do
-        result := ExecuteDirectSQLVar('insert into % (%,%) values (%,?)',
-          [fTableName,SQL.InsertSet,RowIDFieldName,CSVOfValue('?',length(Values))],
-          Values,insertedRowID,true);
-    finally
-      StorageUnLock;
-    end;
-  end;
 end;
 
 function TSQLVirtualTableExternal.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
@@ -1894,6 +1869,37 @@ begin
       Prepared.OmitOrderBy := true; // order handled via SQL query
     end;
     result := true; // success
+  end;
+end;
+
+// here below, virtual write operations do not call Engine*() but direct SQL
+// -> InternalUpdateEvent() were already called by MainEngine*() methods
+
+function TSQLVirtualTableExternal.Delete(aRowID: Int64): boolean;
+begin
+  if (self<>nil) and (Static<>nil) and (aRowID>0) then 
+    with Static as TSQLRestStorageExternal do
+      result := ExecuteDirect('delete from % where %=?',
+        [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[aRowID],false)<>nil else
+    result := false;
+end;
+
+function TSQLVirtualTableExternal.Insert(aRowID: Int64;
+  var Values: TSQLVarDynArray; out insertedRowID: Int64): boolean;
+begin // aRowID is just ignored here since IDs are always auto calculated
+  result := false;
+  if (self<>nil) and (Static<>nil) then
+  with Static as TSQLRestStorageExternal do begin
+    StorageLock(false); // to avoid race condition against max(RowID)
+    try
+      insertedRowID := EngineLockedNextID;
+      with StoredClassProps.ExternalDB do
+        result := ExecuteDirectSQLVar('insert into % (%,%) values (%,?)',
+          [fTableName,SQL.InsertSet,RowIDFieldName,CSVOfValue('?',length(Values))],
+          Values,insertedRowID,true);
+    finally
+      StorageUnLock;
+    end;
   end;
 end;
 

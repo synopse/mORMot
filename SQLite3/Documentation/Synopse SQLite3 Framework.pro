@@ -5631,8 +5631,8 @@ In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !    property Data: TSQLRawBlob read fData write fData;
 !    property CreateTime: TCreateTime read fCreateTime write fCreateTime;
 !  end;
-Note that we did not define any {\f1\fs20 {\b index} ...} values for the {\f1\fs20 RawUTF8} property, as we need for external SQL databases, since {\i MongoDB} does not expect any restriction about text fields length.
-The property values will be stored in the native {\i MongoDB} layout, i.e. with a better coverage than the SQL types:
+Note that we did not define any {\f1\fs20 {\b index} ...} values for the {\f1\fs20 RawUTF8} property, as we need for external SQL databases, since {\i MongoDB} does not expect any restriction about text fields length (AFAIK the only SQL engines which allow this natively without any performance penalty are {\i SQlite3} and {\i @*PostgreSQL@}).
+The property values will be stored in the native {\i MongoDB} layout, i.e. with a better coverage than the SQL types recognized by our {\f1\fs20 SynDB*} unit:
 |%24%14%64
 |\b Delphi|{\i MongoDB}|Remarks\b0
 |{\f1\fs20 byte}|int32|
@@ -5670,7 +5670,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 TByteDynArray}|binary|Used to embed a BLOB property stored as BSON binary within a document - so that {\f1\fs20 @*TSQLRawBlob@} may be restricted in the future to @*GridFS@ external content
 |{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} BSON binary format
 |{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID})
-|{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties}
+|{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} to produce true JSON
 |%
 On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
