@@ -26859,24 +26859,22 @@ end;
 constructor TJSONCustomParserFromTextDefinition.Create(aRecordTypeInfo: pointer;
   const aDefinition: RawUTF8);
 var P: PUTF8Char;
-    TypeName: RawUTF8;
     recordInfoSize: integer;
 begin
   inherited Create;
   fDefinition := aDefinition;
   fRoot := TJSONCustomParserRTTI.Create('',ptRecord);
+  TypeInfoToName(aRecordTypeInfo,fRoot.fCustomTypeName);
   fItems.Add(fRoot);
   P := pointer(aDefinition);
   Parse(fRoot,P,eeNothing);
   fRoot.ComputeDataSizeAfterAdd;
   recordInfoSize := RecordTypeInfoSize(aRecordTypeInfo);
-  if (recordInfoSize<>0) and (fRoot.fDataSize<>recordInfoSize) then begin
-    TypeInfoToName(aRecordTypeInfo,TypeName);
+  if (recordInfoSize<>0) and (fRoot.fDataSize<>recordInfoSize) then
     raise ESynException.CreateFmt('%s text definition is not accurate, '+
       'or the type has not been defined as PACKED record: record size is %d '+
       'bytes but text definition generated %d bytes',
-      [TypeName,recordInfoSize,fRoot.fDataSize]);
-  end;
+      [fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
 procedure TJSONCustomParserFromTextDefinition.Parse(Props: TJSONCustomParserRTTI;
@@ -31932,7 +31930,7 @@ class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
 begin
   if aTypeName='' then
     TypeInfoToName(aTypeInfo,aTypeName);
-  GlobalCustomJSONSerializerFromTextSimpleType.AddObject(aTypeName,aTypeInfo);
+  GlobalCustomJSONSerializerFromTextSimpleType.AddObjectIfNotExisting(aTypeName,aTypeInfo);
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);

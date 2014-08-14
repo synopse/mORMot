@@ -7030,6 +7030,8 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve a context document defining this method arguments
     // - will be used e.g. by mORMotWrapper.pas unit to export the service
+    // - if an enumeration is added to aRegisteredTypes.Objects[], this
+    // TJSONCustomParserCustomSimple instance shall be released by the caller
     function ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
     {$endif}
     /// append the JSON value corresponding to this argument
@@ -37783,6 +37785,9 @@ begin
     result.isEnum := true;
     result.toVariant := 'ord';
     result.fromVariant := typRtti; // always transmitted as integer
+    if (aRegisteredTypes<>nil) and (aRegisteredTypes.IndexOf(typRtti)<0) then
+      // warning; this instance should be released by caller!
+      aRegisteredTypes.AddObject(typRtti,TJSONCustomParserCustomSimple.Create('',typRtti,TypeInfo));
   end;
   smvSet: begin
     result.isSet := true;

@@ -182,6 +182,8 @@ var orm,fields,records,enumerates,sets: TDocVariantData;
     parsersPropInfo: TRawUTF8List;
     parsersServices: TRawUTF8List;
     typeNames: TPropNameList;
+    rtti: TJSONCustomParserRTTI;
+    simple: TJSONCustomParserCustomSimple;
 begin
   SetVariantNull(result);
   if aServer=nil then
@@ -282,22 +284,28 @@ begin
     if aServer.AuthenticationSchemes<>nil then
       result.authClass := aServer.AuthenticationSchemes[0].ClassName;
     // add the traling RTTI defined for services to the list
-    for s := 0 to parsersServices.Count-1 do
-      with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
-      if PropertyType=ptRecord then
-        if typeNames.AddPropName(CustomTypeName) then
+    for s := 0 to parsersServices.Count-1 do begin
+      rtti := TJSONCustomParserRTTI(parsersServices.Objects[s]);
+      if rtti.PropertyType=ptRecord then
+        if typeNames.AddPropName(rtti.CustomTypeName) then
           records.AddItem(
-            _ObjFast(['name',CustomTypeName,
-              'fields',ContextNestedProperties(parsersServices)]));
-    for s := 0 to parsersServices.Count-1 do
-      with TJSONCustomParserRTTI(parsersServices.Objects[s]) do
-        if InheritsFrom(TJSONCustomParserCustomSimple) then
-        with TJSONCustomParserCustomSimple(parsersServices.Objects[s]) do
-        if KnownType=ktEnumeration then
-          if typeNames.AddPropName(CustomTypeName) then
+            _ObjFast(['name',rtti.CustomTypeName,
+              'fields',rtti.ContextNestedProperties(parsersServices)]));
+    end;
+    for s := 0 to parsersServices.Count-1 do begin
+      simple := TJSONCustomParserCustomSimple(parsersServices.Objects[s]);
+      if simple.InheritsFrom(TJSONCustomParserCustomSimple) then begin
+        if simple.KnownType=ktEnumeration then begin
+          if typeNames.AddPropName(simple.CustomTypeName) then
             enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
-              [PTypeInfo(CustomTypeInfo)^.EnumBaseType^.GetEnumNameAll(true)],
-              [CustomTypeName]));
+              [PTypeInfo(simple.CustomTypeInfo)^.EnumBaseType^.GetEnumNameAll(true)],
+              [simple.CustomTypeName]));
+          if simple.PropertyName='' then // <>'' if initialized from record
+            // TServiceMethodArgument.ContextFromArguments() simple is temporary
+            simple.Free;
+        end;
+      end;
+    end;
     if records.Count>0 then begin
       result.records := variant(records);
       result.withRecords := true;
