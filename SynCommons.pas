@@ -27036,6 +27036,7 @@ begin // only tkRecord is needed here
   inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
   if FieldTable^.AllCount=0 then
     exit; // not enough RTTI -> will raise an error in Create()
+  TypeInfoToName(Info,Props.fCustomTypeName);
   RecField := @FieldTable^.AllFields[0];
   SetLength(ItemFields,FieldTable^.AllCount);
   for i := 0 to FieldTable^.AllCount-1 do begin
