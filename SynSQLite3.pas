@@ -155,7 +155,8 @@ unit SynSQLite3;
   - added sqlite3.column_text16() - to be used e.g. for UnicodeString in
     TSQLRequest.FieldS()
   - added sqlite3.profile() experimental support 
-  - added sqlite3.limit() and corresponding TSQLDatabase.Limit[] property 
+  - added sqlite3.limit() and corresponding TSQLDatabase.Limit[] property
+  - added sqlite3.backup_*() Online Backup API functions 
   - set SQLITE_TRANSIENT_VIRTUALTABLE constant, to circumvent Win64 Sqlite3 bug
   - TSQLStatementCached.Prepare won't call BindReset, since it is not mandatory;
     see http://hoogli.com/items/Avoid_sqlite3_clear_bindings().html
@@ -219,6 +220,9 @@ type
   // - A pointer to an sqlite3.context object is always first parameter to
   // application-defined SQL functions, i.e. a TSQLFunctionFunc prototype
   TSQLite3FunctionContext = type PtrUInt;
+
+  /// internaly store a SQLite3 Backup process handle
+  TSQLite3Backup = type PtrUInt;
 
   /// internaly store any array of  SQLite3 value
   TSQLite3ValueArray = array[0..63] of TSQLite3Value;
@@ -1749,6 +1753,102 @@ type
       value of a limit without changing it, simply invoke this interface with
       the third parameter set to -1. }
     limit: function(DB: TSQLite3DB; id,newValue: integer): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
+    {/ Initialize a backup process of a given SQLite3 database instance
+      - The DestDB and DestDatabaseName arguments are the database connection
+      associated with the destination database and the database name,
+      respectively.  The database name is "main" for the main database,
+      "temp" for the temporary database, or the name specified after
+      the AS keyword in an ATTACH statement for an attached database.
+      - The SourceDB and SourceDatabaseName arguments identify the database
+      connection and database name of the source database, respectively.
+      - The source and destination database connections (parameters SourceDB and
+      DestDB) must be different or else function will fail with an error.
+      - If an error occurs within backup_init(), then nil is returned and an
+      error code and error message are stored in the destination database
+      connection DestDB. The error code and message for the failed call to
+      backup_init() can be retrieved using the errcode() or errmsg() functions.
+      - A successful call to backup_init() returns a pointer to an TSQLite3Backup
+      object. The TSQLite3Backup object may be used with the backup_step() and
+      backup_finish() functions to perform the specified backup operation. }
+    backup_init: function(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
+      SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    {/ perform a backup step to transfer the data between the two databases
+    - backup_step() will copy up to nPages pages between the source and
+    destination databases specified by TSQLite3Backup object Backup.
+    - If nPages is negative, all remaining source pages are copied.
+    - If backup_step() successfully copies nPages pages and there are still more
+    pages to be copied, then the function returns SQLITE_OK.
+    - If backup_step() successfully finishes copying all pages from source to
+    destination, then it returns SQLITE_DONE.
+    - If an error occurs while running backup_step(), an error code is returned.
+    - As well as SQLITE_OK and SQLITE_DONE, a call to backup_step() may return
+    SQLITE_READONLY, SQLITE_NOMEM, SQLITE_BUSY, SQLITE_LOCKED, or an
+    SQLITE_IOERR_XXX extended error code. The function might return
+    SQLITE_READONLY if the destination database was opened read-only, or is
+    using WAL journaling and the destination and source page sizes differ, or
+    the destination database is an in-memory database and the destination and
+    source page sizes differ. SQLITE_BUSY indicates that the file-system lock
+    did not succeed: in this case the call to backup_step() can be retried later.
+    If the source database connection is being used to write to the source
+    database when backup_step() is called, then SQLITE_LOCKED is returned
+    immediately. Again, in this case the call to backup_step() can be retried
+    later on. If SQLITE_IOERR_XXX, SQLITE_NOMEM, or SQLITE_READONLY is returned,
+    then there is no point in retrying the call to backup_step(). These errors
+    are considered fatal. The application must accept that the backup operation
+    has failed and pass the backup operation handle to the backup_finish() to
+    release associated resources.
+    - The first call to sqlite3_backup_step() obtains an exclusive lock on the
+    destination file. The exclusive lock is not released until either
+    backup_finish() is called or the backup operation is complete and
+    backup_step() returns SQLITE_DONE. Every call to backup_step() obtains a
+    shared lock on the source database that lasts for the duration of the
+    backup_step() call.
+    - Because the source database is not locked between calls to backup_step(),
+    the source database may be modified mid-way through the backup process.
+    If the source database is modified by an external process or via a database
+    connection other than the one being used by the backup operation, then the
+    backup will be automatically restarted by the next call to backup_step().
+    If the source database is modified by the using the same database connection
+    as is used by the backup operation (which is the case in the SynSQLite3 and
+    mORMotSQLite3 units), then the backup database is automatically updated at
+    the same time, so you won't loose any data. }
+    backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    {/ finalize a Backup process on a given database
+    - When backup_step() has returned SQLITE_DONE, or when the application
+    wishes to abandon the backup operation, the application should destroy the
+    TSQLite3Backup by passing it to backup_finish().
+    - The backup_finish() interfaces releases all resources associated with the
+    TSQLite3Backup object. If backup_step() has not yet returned SQLITE_DONE,
+    then any active write-transaction on the destination database is rolled back.
+    - The TSQLite3Backup object is invalid and may not be used following a call
+    to backup_finish().
+    - The value returned by backup_finish is SQLITE_OK if no backup_step() errors
+    occurred, regardless or whether or not backup_step() completed. If an
+    out-of-memory condition or IO error occurred during any prior backup_step()
+    call on the same TSQLite3Backup object, then backup_finish() returns the
+    corresponding error code.
+    - A return of SQLITE_BUSY or SQLITE_LOCKED from backup_step() is not a
+    permanent error and does not affect the return value of backup_finish(). }
+    backup_finish: function(Backup: TSQLite3Backup): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// returns the number of pages still to be backed up for a given Backup
+    // - The values returned by this function is only updated by backup_step().
+    // If the source database is modified during a backup operation, then the
+    // values are not updated to account for any extra pages that need to be
+    // updated or the size of the source database file changing.
+    backup_remaining: function(Backup: TSQLite3Backup): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// returns the the total number of pages in the source database file
+    // for a given Backup process
+    // - The values returned by this function is only updated by backup_step().
+    // If the source database is modified during a backup operation, then the
+    // values are not updated to account for any extra pages that need to be
+    // updated or the size of the source database file changing.
+    backup_pagecount: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   end;
 
@@ -4367,7 +4467,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..78] of TFileName =
+  SQLITE3_ENTRIES: array[0..83] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close','libversion',
    'errmsg','create_function_v2','create_collation','last_insert_rowid',
    'busy_timeout','busy_handler','prepare_v2','finalize','next_stmt','reset',
@@ -4383,7 +4483,9 @@ const
    'blob_open','blob_close','blob_read','blob_write','blob_bytes',
    'create_module_v2','declare_vtab','set_authorizer','update_hook',
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
-   'free','memory_used','memory_highwater','trace','profile','limit');
+   'free','memory_used','memory_highwater','trace','profile','limit',
+   'backup_init','backup_step','backup_finish','backup_remaining',
+   'backup_pagecount');
 
 constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;

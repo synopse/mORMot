@@ -67,6 +67,7 @@ unit SynSQLite3Static;
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
   - under Win64, expects an external sqlite3-64.dll file to be available
+  - added sqlite3.backup_*() Online Backup API functions 
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
 
 
@@ -1259,6 +1260,12 @@ procedure sqlite3_free(p: Pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} ext
 function sqlite3_memory_used: Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_memory_highwater(resetFlag: Integer): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_backup_init(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
+  SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 
 {$ifdef INCLUDE_TRACE}
 function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
@@ -1354,6 +1361,12 @@ begin
   profile              := @sqlite3_profile;
 {$endif}
   limit                := @sqlite3_limit;
+  backup_init          := @sqlite3_backup_init;
+  backup_step          := @sqlite3_backup_step;
+  backup_finish        := @sqlite3_backup_finish;
+  backup_remaining     := @sqlite3_backup_remaining;
+  backup_pagecount     := @sqlite3_backup_pagecount;  
+
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
   sqlite3_initialize;
 end;
