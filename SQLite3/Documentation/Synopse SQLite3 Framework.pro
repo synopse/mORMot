@@ -4257,6 +4257,7 @@ But if you defined some {\i SQLite3} external tables - see @27@, you can define 
 !VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!TSQLDBSQLite3Connection(Props.MainConnection).Synchronous := smOff;
+Never forget that you may have several {\i SQlite3} engines within a single {\i mORMot} server!
 :   File locking
 You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLDataBase.LockingMode} property to {\f1\fs20 lmExclusive} instead of the default {\f1\fs20 lmNormal} setting. When {\f1\fs20 LockingMode} is set to {\f1\fs20 lmExclusive}, {\i SQLite} will lock the database file for exclusive use during the whole session. It will prevent other processes (e.g. database viewer tools) to access the file at the same time, but small write transactions will be much faster, by a factor usually greater than 40. Bigger transactions involving several hundredths/thousands of INSERT won't be accelerated - but individual insertions will have a major speed up - see @59@.
 To change the main {\i SQLite3} engine locking mode parameter, you may code for instance:
@@ -4282,10 +4283,11 @@ Or, for external tables:
 !!TSQLDBSQLite3Connection(Props.MainConnection).Synchronous := smOff;
 !!TSQLDBSQLite3Connection(Props.MainConnection).LockingMode := lmExclusive;
 If you can afford loosing some data in very rare border case, or if you are sure your hardware configuration is safe (e.g. if the server is connected to a power inverter and has RAID disks) and that you have backups at hand, setting {\f1\fs20 Synchronous := smOff} would help your application scale for writing. Setting {\f1\fs20 LockingMode := lmExclusive} will benefit of both writing and reading speed. Consider using an external and dedicated database (like {\i @*Firebird@}, {\i @*Oracle@, @*PostgreSQL@, @*MySQL@, @*DB2@} or @*MS SQL@) if your security expectations are very high, and if the default safe but slow setting is not enough for you.
-In all cases, do not forget to perform @*backup@s as often as possible (at least several times a day). You may use {\f1\fs20 TSQLRestServerDB.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods for a fast backup of a running database. Adding a backup feature on the server side is as simple as running:
-!Client.Server.BackupGZ(MainDBFileName+'.gz');
-Server will stop working during this phase, so a lower-level backup mechanism could be used instead, if you need 100% of service availability. Using an external database would perhaps keep you main {\i mORMot} database small in size, so that its backup time will remain unnoticeable on the client side.
-Note that with the current implementation, low-level backup is not working as expected on the {\i Win64} platform. The error seems to be at the {\i SQlite3} @*64 bit@ library level, since it is not able to release all internal instance statements before backup. We were not able to fix this issue yet.
+:  Database backup
+In all cases, do not forget to perform @*backup@s of your {\i SQlite3} database as often as possible (at least several times a day). Adding a backup feature on the server side is as simple as running:
+! Server.DB.BackupBackground('backup.db3',1024,10,nil);
+The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 page sizes (it would be processing 1 MB per step, since default page size is 1024), performing a little sleep of 10 milliseconds between each step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specifies an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
+Note that {\f1\fs20 TSQLRestServerDB.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
 \page
 :20 Virtual Tables magic
 The {\i @*SQlite3@} engine has the unique ability to create @**Virtual Table@s from code. From the perspective of an @*SQL@ statement, the virtual table object looks like any other table or view. But behind the scenes, queries from and updates to a virtual table invoke callback methods on the virtual table object instead of reading and writing to the database file.

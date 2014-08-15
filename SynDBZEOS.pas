@@ -225,6 +225,10 @@ type
     // ! PropsFirebird := TSQLDBZEOSConnectionProperties.Create(
     // !   TSQLDBZEOSConnectionProperties.URI(dFirebird,'','Firebird\fbembed.dll'),
     // !   'databasefilename','',');
+    // ! PropsFirebird := TSQLDBZEOSConnectionProperties.Create(
+    // !   TSQLDBZEOSConnectionProperties.URI(dFirebird,'192.168.1.10:3055',
+    // !     'c:\Firebird_2_5\bin\fbclient.dll',false),
+    // !  '3camadas', 'sysdba', 'masterkey');
     class function URI(aServer: TSQLDBDefinition;
       const aServerName: RawUTF8; const aLibraryLocation: TFileName='';
       aLibraryLocationAppendExePath: boolean=true): RawUTF8;

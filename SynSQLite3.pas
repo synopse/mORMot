@@ -2650,8 +2650,15 @@ type
        background thread for the process
      - this will be asynchronous, and would block the main database process
        only when copying the StepPageNumber numer of pages for each step,
-       waiting StepSleepMS milliseconds before performing the next step
-     - if StepPageNumber is -1, the whole DB will be copied in a single step
+       waiting StepSleepMS milliseconds before performing the next step:
+       as a result, the copy operation can be done incrementally, by blocks of
+       StepPageNumber pages, in which case the source database does not need
+       to be locked for the duration of the copy, only for the brief periods of
+       time when it is actually being read from: this allows other database
+       users to continue uninterrupted (at least during StepSleepMS
+       milliseconds) while a backup is running
+     - if StepPageNumber is -1, the whole DB will be copied in a single step,
+       therefore in blocking mode, e.g. with BackupBackgroundWaitUntilFinished
      - the supplied OnProgress event handler will be called at each step, in
        the context of the background thread
      - the background thread will be released when the process is finished
@@ -2664,12 +2671,10 @@ type
        encrypted database file later via ChangeSQLEncryptTablePassWord()
      - returns TRUE if backup started as expected, or FALSE in case of error
        (e.g. if there is already another backup started, if the source or
-       destination databases are locked or invalid, or if the sqlite3.dll is
-       too old and does not support the Online Backup API)
-     - you can run the backup process in blocking mode, as such:
-     ! if aDB.BackupBackground('backup.db3',-1,0) then
-     !   aDB.BackupBackgroundWaitUntilFinished;
-     - you can also use this method to save an SQLite3 ':memory:' database }
+       destination databases are locked or invalid, or if the sqlite3.dll is too
+       old and does not support the Online Backup API)
+     - you can also use this method to save an SQLite3 ':memory:' database,
+       perhaps in conjunction with the BackupBackgroundWaitUntilFinished method }
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
       const aPassword: RawUTF8=''): boolean;
@@ -2678,7 +2683,11 @@ type
     // be called from main thread, unless the UI may become unresponsive: you
     // should better rely on OnProgress() callback for any GUI application
     // - by default, it will wait for ever so that process is finished, but you
-    // can set a time out (in seconds) after which the process will be aborted 
+    // can set a time out (in seconds) after which the process will be aborted
+    // - could be used with BackupBackground() and StepPageNumber=-1 to perform
+    // a whole copy of a database in one shot:
+    // ! if aDB.BackupBackground('backup.db3',-1,0,nil) then
+    // !   aDB.BackupBackgroundWaitUntilFinished;
     procedure BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer=-1);
     /// flush the internal SQL-based JSON cache content
     // - to be called when the regular Lock/LockJSON methods are not called,
