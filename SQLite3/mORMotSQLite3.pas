@@ -404,13 +404,15 @@ type
     function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     {{ backup of the opened Database into an external stream (e.g. a file,
       compressed or not)
-     - this method doesn't use the experimental SQLite Online Backup API
-      (which restart the backup process on any write: so no good performance
-      could be achieved on a working database: this method uses a faster
-      lock + copy approach)
+     - this method doesn't use the SQLite Online Backup API, but low-level
+       database file copy which may lock the database process if the data
+       is consistent - consider using DB.BackupBackground() method instead
      - database is closed, VACCUUMed, copied, then reopened }
     function Backup(Dest: TStream): boolean;
     {{ backup of the opened Database into a .gz compressed file
+     - this method doesn't use the SQLite Online Backup API, but low-level
+       database file copy which may lock the database process if the data
+       is consistent - consider using DB.BackupBackground() method instead
      - database is closed, VACCUUMed, compressed into .gz file, then reopened
      - default compression level is 2, which is very fast, and good enough for
        a database file content: you may change it into the default 6 level }

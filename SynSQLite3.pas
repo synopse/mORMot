@@ -151,14 +151,17 @@ unit SynSQLite3;
   - added TSQLDataBase.CacheSize and LockingMode properties for performance tuning
   - added TSQLDataBase.MemoryMappedMB for optional Memory-Mapped I/O process
   - added TSQLDatabase.LogResultMaximumSize property to reduce logged extend
-  - added TSQLDataBase.LockAndFlushCache method to be used instead of Lock('')
+  - added TSQLDataBase.LockAndFlushCache method to be used instead of Lock('ALTER')
+  - added TSQLDataBase.Lock() method to be used instead of Lock('S')
   - added sqlite3.open_v2() support and optional flags for TSQLDataBase.Create()
     plus associated read-only TSQLDataBase.OpenV2Flags property
   - added sqlite3.column_text16() - to be used e.g. for UnicodeString in
     TSQLRequest.FieldS()
   - added sqlite3.profile() experimental support 
   - added sqlite3.limit() and corresponding TSQLDatabase.Limit[] property
-  - added sqlite3.backup_*() Online Backup API functions 
+  - added sqlite3.backup_*() Online Backup API functions
+  - added TSQLDataBase.BackupBackground() and BackupBackgroundWaitUntilFinished
+    for performing asynchronous backup as requested by [31eaadc5a5]/[428e45644c] 
   - set SQLITE_TRANSIENT_VIRTUALTABLE constant, to circumvent Win64 Sqlite3 bug
   - TSQLStatementCached.Prepare won't call BindReset, since it is not mandatory;
     see http://hoogli.com/items/Avoid_sqlite3_clear_bindings().html
@@ -1121,9 +1124,9 @@ type
     {/ Returns English-language text that describes an error,
        using UTF-8 encoding (which, with English text, is the same as Ansi).
       - Memory to hold the error message string is managed internally.
-         The application does not need to worry about freeing the result.
-         However, the error string might be overwritten or deallocated by
-         subsequent calls to other SQLite interface functions. }
+      The application does not need to worry about freeing the result.
+      However, the error string might be overwritten or deallocated by
+      subsequent calls to other SQLite interface functions. }
     errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ Function creation routine used to add SQL functions or aggregates or to redefine
@@ -1840,7 +1843,7 @@ type
     /// returns the number of pages still to be backed up for a given Backup
     // - The values returned by this function is only updated by backup_step().
     // If the source database is modified during a backup operation, then the
-    // values are not updated to account for any extra pages that need to be
+    // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
     backup_remaining: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -1848,7 +1851,7 @@ type
     // for a given Backup process
     // - The values returned by this function is only updated by backup_step().
     // If the source database is modified during a backup operation, then the
-    // values are not updated to account for any extra pages that need to be
+    // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
     backup_pagecount: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -1972,7 +1975,6 @@ function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
   - raise a ESQLite3Exception if the result state is an error
   - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) }
 function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
-
 
 var
   /// global access to linked SQLite3 library API calls
@@ -2402,6 +2404,17 @@ type
     tbImmediate,
     tbExclusive);
 
+  TSQLDatabaseBackupThread = class;
+
+  /// callback called asynchronously during TSQLDatabase.BackupBackground()
+  // - implementation should return TRUE to continue the process: if the method
+  // returns FALSE, backup will be aborted, and destination file deleted
+  // - this method allows to monitor the backup process, thanks to
+  // TSQLDatabaseBackupThread properties (especialy the Step property)
+  // - this method will be executed in the context of the associated
+  // TSQLDatabaseBackupThread: so you should use Synchronize() to update the UI
+  TSQLDatabaseBackupEvent = function(Sender: TSQLDatabaseBackupThread): boolean of object;
+
   /// simple wrapper for direct SQLite3 database manipulation
   // - embed the SQLite3 database calls into a common object
   // - thread-safe call of all SQLite3 queries (SQLITE_THREADSAFE 0 in sqlite.c)
@@ -2419,6 +2432,7 @@ type
     fInternalState: PCardinal;
     fBusyTimeout: Integer;
     fOpenV2Flags: Integer;
+    fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
     {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
     fLog: TSynLog;
@@ -2442,15 +2456,22 @@ type
     procedure SetMemoryMappedMB(const Value: cardinal);
     function GetLimit(Category: TSQLLimitCategory): integer;
     procedure SetLimit(Category: TSQLLimitCategory; Value: integer);
+    function GetBackupBackgroundInProcess: boolean;
   public
     /// enter the TRTLCriticalSection: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
-    // - is the SQL statement is void, assume a SELECT statement (no cache flush)
-    procedure Lock(const aSQL: RawUTF8);
+    // - if the SQL statement is void, assume a SELECT statement (no cache flush)
+    procedure Lock(const aSQL: RawUTF8); overload;
+    /// enter the TRTLCriticalSection without any cache flush
+    // - same as Lock('');
+    procedure Lock; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// flush the internal statement cache, and enter the TRTLCriticalSection
+    // - same as Lock('ALTER');
     procedure LockAndFlushCache;
     /// leave the TRTLCriticalSection: called after any DB access
     procedure UnLock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// enter the TRTLCriticalSection: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
     // - if this SQL statement has an already cached JSON response, return it and
@@ -2619,10 +2640,46 @@ type
       RowID: Int64; ReadWrite: boolean=false): TSQLBlobStream;
     {/ backup of the opened Database into an external file name
      - warning: this method won't use the SQLite Online Backup API
-     - database is closed, VACCUUMed, copied, then reopened: it's very fast
+     - database is closed, VACCUUMed, copied, then reopened: it's very fast for
+       small databases, but is blocking and should be an issue
      - if you use some virtual tables, they won't be restored after backup:
-       this method may not work e.g. in the context of mORMot.pas }
+       this method would probably fail e.g. in the context of mORMot.pas }
     function Backup(const BackupFileName: TFileName): boolean;
+    {/ backup of the opened Database into an external file name
+     - this method will use the SQLite Online Backup API and a dedicated
+       background thread for the process
+     - this will be asynchronous, and would block the main database process
+       only when copying the StepPageNumber numer of pages for each step,
+       waiting StepSleepMS milliseconds before performing the next step
+     - if StepPageNumber is -1, the whole DB will be copied in a single step
+     - the supplied OnProgress event handler will be called at each step, in
+       the context of the background thread
+     - the background thread will be released when the process is finished
+     - if only one connection to the database does exist (e.g. if you use only
+       one TSQLDataBase instance on the same database file), any modification
+       to the source database during the background process will be included in
+       the backup - so this method will work perfectly e.g. for mORMot.pas
+     - if specified, a password will be used to cypher BackupFileName on disk
+       (it will work only with SynSQLite3Static) - you can uncypher the resulting
+       encrypted database file later via ChangeSQLEncryptTablePassWord()
+     - returns TRUE if backup started as expected, or FALSE in case of error
+       (e.g. if there is already another backup started, if the source or
+       destination databases are locked or invalid, or if the sqlite3.dll is
+       too old and does not support the Online Backup API)
+     - you can run the backup process in blocking mode, as such:
+     ! if aDB.BackupBackground('backup.db3',-1,0) then
+     !   aDB.BackupBackgroundWaitUntilFinished;
+     - you can also use this method to save an SQLite3 ':memory:' database }
+    function BackupBackground(const BackupFileName: TFileName;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
+      const aPassword: RawUTF8=''): boolean;
+    /// wait until any previous BackupBackground() is finished
+    // - warning: this method won't call the Windows message loop, so should not
+    // be called from main thread, unless the UI may become unresponsive: you
+    // should better rely on OnProgress() callback for any GUI application
+    // - by default, it will wait for ever so that process is finished, but you
+    // can set a time out (in seconds) after which the process will be aborted 
+    procedure BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer=-1);
     /// flush the internal SQL-based JSON cache content
     // - to be called when the regular Lock/LockJSON methods are not called,
     // e.g. with external tables as defined in SQLite3DB unit
@@ -2714,6 +2771,9 @@ type
     property user_version: cardinal read GetUserVersion write SetUserVersion;
     /// reflects how the database connection was created in the constructor
     property OpenV2Flags: Integer read fOpenV2Flags;
+    /// is set to TRUE while a BackupBackground() process is still running
+    // - see also BackupBackgroundWaitUntilFinished() method 
+    property BackupBackgroundInProcess: boolean read GetBackupBackgroundInProcess;
   end;
 
   /// used to read or write a BLOB Incrementaly
@@ -2745,6 +2805,58 @@ type
     {/ read-only access to the BLOB object handle }
     property Handle: TSQLite3Blob read fBlob;
   end;
+
+  /// kind of event triggerred during TSQLDatabase.BackupBackground() process
+  // - you can use (Sender.Step in backupAnyStep), to check for normal step,
+  // or (Sender.Step in backupFinished) to check for process end 
+  TSQLDatabaseBackupEventStep = (
+    backupNone, backupStart, backupSuccess, backupFailure,
+    backupStepOk, backupStepBusy, backupStepLocked);
+
+  /// background thread used for TSQLDatabase.BackupBackground() process
+  TSQLDatabaseBackupThread = class(TThread)
+  protected
+    fSourceDB: TSQLDatabase;
+    fDestDB: TSQLDatabase;
+    fStepPageNumber, fStepSleepMS: Integer;
+    fBackup: TSQLite3Backup;
+    fStep: TSQLDatabaseBackupEventStep;
+    fStepNumberToFinish, fStepNumberTotal: integer;
+    fOnProgress: TSQLDatabaseBackupEvent;
+    fError: Exception;
+    /// main process
+    procedure Execute; override;
+  public
+    /// initialize the background thread
+    // - execution is started immediately - caller may call the WaitFor
+    // inherited method to run the process in blocking mode
+    constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
+      StepPageNumber,StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent); reintroduce;
+    /// the current state of the backup process
+    // - only set before a call to TSQLDatabaseBackupEvent
+    property Step: TSQLDatabaseBackupEventStep read fStep;
+    /// the number of pages which remain before end of backup
+    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
+    property StepNumberToFinish: integer read fStepNumberToFinish;
+    /// the number of pages for the whole database
+    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
+    property StepNumberTotal: integer read fStepNumberTotal;
+    /// the source database of the backup process
+    property SourceDB: TSQLDatabase read fSourceDB;
+    /// the destination database of the backup process
+    property DestDB: TSQLDatabase read fDestDB;
+    /// the raised exception in case of backupFailure notification 
+    property FailureError: Exception read fError;
+  end;
+
+const
+  /// identify the iterative step events during TSQLDatabase.BackupBackground() 
+  // - you can use (Sender.Step in backupAnyStep), to check for normal step
+  backupAnyStep = [backupStepOk,backupStepBusy,backupStepLocked];
+  /// identify the end step events during TSQLDatabase.BackupBackground()
+  // - you can use (Sender.Step in backupFinished) to check for process end
+  backupFinished = [backupSuccess,backupFailure];
+
 
 {$ifdef WITHLOG}
 var
@@ -2815,7 +2927,7 @@ begin
   end;
   if RowID=0 then
     RowID := LastInsertRowID; // warning: won't work on multi-thread process
-  Lock('');
+  Lock;
   try
     result := TSQLBlobStream.Create(DB,DBName,TableName,ColumnName,RowID,ReadWrite);
   finally
@@ -3174,7 +3286,7 @@ begin
   Log := SynSQLite3Log.Enter(self,nil,true);
   Log.Log(sllSQL,aSQL);
 {$endif}
-  Lock('ALTER'); // don't trust aSQL -> assume modify -> inc(InternalState^)
+  LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB,aSQl);
   finally
@@ -3340,7 +3452,7 @@ begin
   if (self=nil) or (DB=0) then
     result := 0 else
     try
-      Lock('');
+      Lock;
       result := sqlite3.last_insert_rowid(DB);
       {$ifdef WITHLOG}
       {$ifdef DELPHI5OROLDER}
@@ -3359,7 +3471,7 @@ begin
   if (self=nil) or (DB=0) then
     result := 0 else
     try
-      Lock('');
+      Lock;
       result := sqlite3.changes(DB);
       {$ifdef WITHLOG}
       {$ifdef DELPHI5OROLDER}
@@ -3389,7 +3501,7 @@ var R: TSQLRequest;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  Lock('');
+  Lock;
   try
     try
       R.Prepare(fDB,'PRAGMA table_info('+TableName+');'); // ESQLite3Exception
@@ -3428,7 +3540,7 @@ procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  if isSelect(pointer(aSQL)) then
+  if (aSQL='') or isSelect(pointer(aSQL)) then
     EnterCriticalSection(fLock) else // on non-concurent calls, is very fast
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
 end;
@@ -3446,6 +3558,12 @@ begin
       raise;
     end;
   end;
+end;
+
+procedure TSQLDataBase.Lock;
+begin
+  if self<>nil then
+    EnterCriticalSection(fLock); // on non-concurent calls, this API is very fast
 end;
 
 procedure TSQLDataBase.UnLock;
@@ -3533,6 +3651,58 @@ begin
   end;
 end;
 
+function TSQLDataBase.GetBackupBackgroundInProcess: boolean;
+begin
+  result := (self<>nil) and (fBackupBackgroundInProcess<>nil); 
+end;
+
+function TSQLDataBase.BackupBackground(const BackupFileName: TFileName;
+  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
+  const aPassword: RawUTF8): boolean;
+var Dest: TSQLDatabase;
+    Backup: TSQLite3Backup;
+begin
+  result := false;
+  if (self=nil) or (BackupFileName='') or not Assigned(sqlite3.backup_init) or
+     (fBackupBackgroundInProcess<>nil) then
+    exit;
+  if FileExists(BackupFileName) then
+    if not DeleteFile(BackupFileName) then
+      exit;
+  Dest := TSQLDatabase.Create(BackupFileName,aPassword);
+  Backup := sqlite3.backup_init(Dest.DB,'main',DB,'main');
+  if Backup=0 then begin
+    Dest.Free;
+    exit;
+  end; 
+  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
+    Backup,self,Dest,StepPageNumber,StepSleepMS,OnProgress);
+  result := true;
+end;
+
+procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer);
+var i: integer;
+begin
+  if fBackupBackgroundInProcess<>nil then
+    if TimeOutSeconds<0 then // TimeOutSeconds=-1 for infinite wait
+      while fBackupBackgroundInProcess=nil do Sleep(10) else begin
+      for i := 1 to TimeOutSeconds*100 do begin // wait for process end
+        Sleep(10);
+        if fBackupBackgroundInProcess=nil then
+          break;
+      end;
+      Lock;
+      if fBackupBackgroundInProcess<>nil then
+        fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion 
+      UnLock;
+      for i := 1 to 500 do begin // wait 5 seconds for process to be aborted
+        Sleep(10);
+        if fBackupBackgroundInProcess=nil then
+          break;
+      end;
+    end;
+end;
+
 function TSQLDataBase.DBClose: integer;
 begin
   result := SQLITE_OK;
@@ -3543,6 +3713,8 @@ begin
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.Create('DBClose called with no sqlite3 global');
+  if fBackupBackgroundInProcess<>nil then
+    BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
   fDB := 0;
 end;
@@ -3556,7 +3728,7 @@ begin
   fLog.Enter;
 {$else}
 begin
-  {$endif}
+{$endif}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
@@ -4507,6 +4679,79 @@ begin
 end;
 
 
+{ TSQLDatabaseBackupThread }
+
+constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
+  Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
+  OnProgress: TSQLDatabaseBackupEvent);
+begin
+  fBackup := Backup;
+  fSourceDB := Source;
+  fDestDB := Dest;
+  if StepPageNumber=0 then
+    fStepPageNumber := 1 else
+    fStepPageNumber := StepPageNumber;
+  if (cardinal(StepSleepMS)<=1000) and (StepPageNumber>0) then
+    fStepSleepMS := StepSleepMS;
+  fOnProgress := OnProgress;
+  inherited Create(false);
+  FreeOnTerminate := true;
+end;
+
+procedure TSQLDatabaseBackupThread.Execute;
+  function NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep): boolean;
+  begin
+    fStep := aStep;
+    if Assigned(fOnProgress) then
+      result := fOnProgress(self) else
+      result := true;
+  end;
+var res: integer;
+begin
+  try
+    try
+      if NotifyProgressAndContinue(backupStart) then
+      repeat
+        fSourceDB.Lock; // naive multi-thread protection of main process
+        res := sqlite3.backup_step(fBackup,fStepPageNumber);
+        fSourceDB.UnLock;
+        fStepNumberToFinish := sqlite3.backup_remaining(fBackup);
+        fStepNumberTotal := sqlite3.backup_pagecount(fBackup);
+        case res of
+        SQLITE_OK:
+          if not NotifyProgressAndContinue(backupStepOk) then
+            break;
+        SQLITE_BUSY:
+          if not NotifyProgressAndContinue(backupStepBusy) then
+            break;
+        SQLITE_LOCKED:
+          if not NotifyProgressAndContinue(backupStepLocked) then
+            break;
+        SQLITE_DONE:
+          break;
+        else raise ESQLite3Exception.Create(fDestDB.DB,res);
+        end;
+        if Terminated then
+          raise ESQLite3Exception.Create('Background process terminated');
+        Sleep(fStepSleepMS);
+      until false;
+      NotifyProgressAndContinue(backupSuccess);
+    finally
+      sqlite3.backup_finish(fBackup);
+      fDestDB.Free; // close destination backup database
+      fSourceDB.Lock;
+      fSourceDB.fBackupBackgroundInProcess := nil;
+      fSourceDB.Unlock;
+    end;
+  except
+    on E: Exception do begin
+      fError := E;
+      NotifyProgressAndContinue(backupFailure);
+    end;
+  end;
+end;
+
+
 { TSQLite3LibraryDynamic }
 
 const
@@ -4570,4 +4815,3 @@ initialization
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
 end.
-

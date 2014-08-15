@@ -422,11 +422,14 @@ type
   TTestSQLite3Engine = class(TSynTestCase)
   protected
     { these values are used internaly by the published methods below }
+    BackupProgressStep: TSQLDatabaseBackupEventStep; // should be the first
     TempFileName: TFileName;
     EncryptedFile: boolean;
     Demo: TSQLDataBase;
     Req: RawUTF8;
     JS: RawUTF8;
+    BackupTimer: TPrecisionTimer;
+    function OnBackupProgress(Sender: TSQLDatabaseBackupThread): Boolean;
   published
     /// test direct access to the SQLite3 engine
     // - i.e. via TSQLDataBase and TSQLRequest classes
@@ -7002,6 +7005,14 @@ end;
 
 { TTestSQLite3Engine }
 
+function TTestSQLite3Engine.OnBackupProgress(Sender: TSQLDatabaseBackupThread): Boolean;
+begin
+  if Sender.Step in backupFinished then
+    SQLite3Log.Add.Log(sllTrace,'Background backup finished in '+BackupTimer.Stop);
+  BackupProgressStep := Sender.Step;
+  result := true;
+end;
+
 procedure InternalSQLFunctionCharIndex(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 var StartPos: integer;
@@ -9226,6 +9237,10 @@ begin
         Client.RollBack;
       end;
 {$endif}
+      // test backup API
+      deleteFile('backupbackground.db3');
+      BackupTimer.Start;
+      Check(Client.DB.BackupBackground('backupbackground.db3',1024,0,OnBackupProgress));
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
         Server := TSQLRestServerTest.Create(ModelC,false);
@@ -9395,6 +9410,7 @@ begin
           Server.Free;
         end;
       end;
+      Client.DB.BackupBackgroundWaitUntilFinished;
     finally
       Client.Free;
     end;
