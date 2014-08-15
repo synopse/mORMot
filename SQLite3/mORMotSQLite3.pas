@@ -203,7 +203,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.8.5
+    - updated SQLite3 engine to latest version 3.8.6
     - fixed potential GPF issue in TSQLRestServerDB.Destroy when registered
       TSQLVVirtualtableModuleDBs are already destroyed
     - fixed ticket [64c90ade80] in TSQLRestClientDB.Destroy when associated
