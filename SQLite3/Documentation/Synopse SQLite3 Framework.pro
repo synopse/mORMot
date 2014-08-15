@@ -4286,8 +4286,12 @@ If you can afford loosing some data in very rare border case, or if you are sure
 :  Database backup
 In all cases, do not forget to perform @*backup@s of your {\i SQlite3} database as often as possible (at least several times a day). Adding a backup feature on the server side is as simple as running:
 ! Server.DB.BackupBackground('backup.db3',1024,10,nil);
-The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 page sizes (it would be processing 1 MB per step, since default page size is 1024), performing a little sleep of 10 milliseconds between each step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specifies an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
+The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 pages (i.e. it would process 1 MB per step, since default page size is 1024 bytes), performing a little sleep of 10 milliseconds between each 1 MB copy step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specify an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
 Note that {\f1\fs20 TSQLRestServerDB.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
+The same backup process can be used e.g. to save an in-memory {\i SQLite3} database into a {\i SQLite3} file, as such:
+! if aInMemoryDB.BackupBackground('backup.db3',-1,0,nil) then
+!   aInMemoryDB.BackupBackgroundWaitUntilFinished;
+Above code will save the {\f1\fs20 aInMemoryDB} database into the '{\f1\fs20 backup.db3}' file.
 \page
 :20 Virtual Tables magic
 The {\i @*SQlite3@} engine has the unique ability to create @**Virtual Table@s from code. From the perspective of an @*SQL@ statement, the virtual table object looks like any other table or view. But behind the scenes, queries from and updates to a virtual table invoke callback methods on the virtual table object instead of reading and writing to the database file.

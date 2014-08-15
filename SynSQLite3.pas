@@ -3731,12 +3731,9 @@ end;
 function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
+begin
 {$ifdef WITHLOG}
-const ERR_MSG: PWinAnsiChar = 'open ("%") failed with error % (%)';
-begin
   fLog.Enter;
-{$else}
-begin
 {$endif}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
@@ -3748,7 +3745,12 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    fLog.Log(sllError,ERR_MSG,[utf8,sqlite3_resultToErrorText(result),result]);
+    {$ifdef DELPHI5OROLDER}
+    fLog.Log(sllError,'Open('+utf8+') error '+sqlite3_resultToErrorText(result));
+    {$else}
+    fLog.Log(sllError,'open ("%") failed with error % (%)',
+      [utf8,sqlite3_resultToErrorText(result),result]);
+    {$endif}
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
