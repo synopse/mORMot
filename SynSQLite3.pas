@@ -4708,18 +4708,18 @@ begin
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;
-  function NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep): boolean;
+  procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
   begin
     fStep := aStep;
     if Assigned(fOnProgress) then
-      result := fOnProgress(self) else
-      result := true;
+      if not fOnProgress(self) then
+        raise ESQLite3Exception.Create('Backup process aborted by OnProgress');
   end;
 var res: integer;
 begin
   try
     try
-      if NotifyProgressAndContinue(backupStart) then
+      NotifyProgressAndContinue(backupStart);
       repeat
         fSourceDB.Lock; // naive multi-thread protection of main process
         res := sqlite3.backup_step(fBackup,fStepPageNumber);
@@ -4728,20 +4728,17 @@ begin
         fStepNumberTotal := sqlite3.backup_pagecount(fBackup);
         case res of
         SQLITE_OK:
-          if not NotifyProgressAndContinue(backupStepOk) then
-            break;
+          NotifyProgressAndContinue(backupStepOk);
         SQLITE_BUSY:
-          if not NotifyProgressAndContinue(backupStepBusy) then
-            break;
+          NotifyProgressAndContinue(backupStepBusy);
         SQLITE_LOCKED:
-          if not NotifyProgressAndContinue(backupStepLocked) then
-            break;
+          NotifyProgressAndContinue(backupStepLocked);
         SQLITE_DONE:
           break;
         else raise ESQLite3Exception.Create(fDestDB.DB,res);
         end;
         if Terminated then
-          raise ESQLite3Exception.Create('Background process terminated');
+          raise ESQLite3Exception.Create('Backup process forced to terminate');
         Sleep(fStepSleepMS);
       until false;
       NotifyProgressAndContinue(backupSuccess);
@@ -4755,7 +4752,9 @@ begin
   except
     on E: Exception do begin
       fError := E;
-      NotifyProgressAndContinue(backupFailure);
+      fStep := backupFailure;
+      if Assigned(fOnProgress) then
+        fOnProgress(self);
     end;
   end;
 end;
