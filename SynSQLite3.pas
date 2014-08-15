@@ -137,6 +137,8 @@ unit SynSQLite3;
   - updated SQLite3 engine to latest version 3.8.5
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
+  - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
+    or sqlite3_resultToErrorText() functions (used e.g. by ESQLite3Exception)
   - TSQLDataBase.DBClose returns now the sqlite3_close() status code
   - ensure TSQLDataBase internal critical section is released in case of
     any exception within the Lock*() / UnLockJSON() methods
@@ -1122,7 +1124,7 @@ type
          The application does not need to worry about freeing the result.
          However, the error string might be overwritten or deallocated by
          subsequent calls to other SQLite interface functions. }
-    errmsg: function(DB: TSQLite3DB): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ Function creation routine used to add SQL functions or aggregates or to redefine
        the behavior of existing SQL functions or aggregates
@@ -1936,18 +1938,35 @@ const
     'SELECT name FROM sqlite_master WHERE type=''table'' AND name NOT LIKE ''sqlite_%'';';
 
 type
+  /// the main possible return codes, including error codes
+  TSQLite3ErrorCode = (
+    secUnknown,
+    secOK,secERROR,secINTERNAL,secPERM,secABORT,secBUSY,secLOCKED,secNOMEM,
+    secREADONLY,secINTERRUPT,secIOERR,secCORRUPT,secNOTFOUND,secFULL,secCANTOPEN,
+    secPROTOCOL,secEMPTY,secSCHEMA,secTOOBIG,secCONSTRAINT,secMISMATCH,secMISUSE,
+    secNOLFS,secAUTH,secFORMAT,secRANGE,secNOTADB, secROW,secDONE);
+
   /// custom SQLite3 dedicated Exception type
   ESQLite3Exception = class(ESynException)
   public
     /// the DB which raised this exception
     DB: TSQLite3DB;
-    /// the corresponding error code
+    /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
     ErrorCode: integer;
+    /// the corresponding error code, e.g. secMISUSE
+    SQLite3ErrorCode: TSQLite3ErrorCode;
     /// create the exception, getting the message from DB
     constructor Create(aDB: TSQLite3DB; aErrorCode: integer); reintroduce; overload;
     /// create the exception, getting the message from caller
     constructor Create(const aMessage: string; aErrorCode: integer); reintroduce; overload;
   end;
+
+/// convert a SQLite3 result code into a TSQLite3ErrorCode item
+function sqlite3_resultToErrorCode(aResult: integer): TSQLite3ErrorCode;
+
+/// convert a SQLite3 result code into a TSQLite3ErrorCode item
+// - e.g. sqlite3_resultToErrorText(secOK)='SQLITE_OK'
+function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
 
 {/ test the result state of a sqlite3.*() function
   - raise a ESQLite3Exception if the result state is an error
@@ -2784,9 +2803,6 @@ end;
 
 // ************ objects to access SQLite3 database engine
 
-resourcestring
-  sErrorSQLite3NoDB = 'Invalid SQlite3 database handle (%d)';
-
 
 { TSQLDataBase }
 
@@ -3534,9 +3550,12 @@ end;
 function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
+{$ifdef WITHLOG}
+const ERR_MSG: PWinAnsiChar = 'open ("%") failed with error % (%)';
 begin
-  {$ifdef WITHLOG}
   fLog.Enter;
+{$else}
+begin
   {$endif}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
@@ -3548,7 +3567,7 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    fLog.Log(sllError,'open("'+utf8+'") failed',self);
+    fLog.Log(sllError,ERR_MSG,[utf8,sqlite3_resultToErrorText(result),result]);
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
@@ -4289,15 +4308,17 @@ end;
 
 constructor ESQLite3Exception.Create(aDB: TSQLite3DB; aErrorCode: integer);
 begin
+  CreateFmt('Error %s (%d)',[sqlite3_resultToErrorText(aErrorCode),aErrorCode]);
   if aDB=0 then
-    CreateFmt(sErrorSQLite3NoDB,[aErrorCode]) else
-    Create(string(sqlite3.errmsg(aDB)),aErrorCode);
+    Message := Message+' with an invalid SQLite3 database handle' else
+    Message := Format('%s - "%s"',[Message,sqlite3.errmsg(aDB)]);
   DB := aDB;
 end;
 
 constructor ESQLite3Exception.Create(const aMessage: string; aErrorCode: integer);
 begin
   ErrorCode := aErrorCode;
+  SQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   Create(aMessage);
 end;
 
@@ -4306,6 +4327,28 @@ begin
   if (DB=0) or (aResult in [SQLITE_ERROR..SQLITE_ROW-1]) then // possible error codes
     raise ESQLite3Exception.Create(DB,aResult);
   result := aResult;
+end;
+
+function sqlite3_resultToErrorCode(aResult: integer): TSQLite3ErrorCode;
+begin
+  case aResult of
+  SQLITE_OK..SQLITE_NOTADB:
+    result := TSQLite3ErrorCode(aResult+ord(secOK));
+  SQLITE_ROW..SQLITE_DONE:
+    result := TSQLite3ErrorCode(aResult+ord(secROW));
+  else
+    result := secUnknown;
+  end;
+end;
+
+function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
+var err: TSQLite3ErrorCode;
+begin
+  err := sqlite3_resultToErrorCode(aResult);
+  if err=secUnknown then
+    result := 'unknown SQLITE_*' else
+    result := 'SQLITE_'+Copy(ShortStringToUTF8(GetEnumName(
+      TypeInfo(TSQLite3ErrorCode),ord(err))^),4,100);
 end;
 
 
