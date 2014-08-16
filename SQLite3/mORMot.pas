@@ -13156,7 +13156,7 @@ type
   // - will write TObject/TSQLRecord, enumerations and sets content as JSON
   // - is the default logging family used by the mORMot framework
   // - mORMotDB.pas unit will set SynDBLog := TSQLLog
-  // - moRMotSQLite3.pas unit will set SynSQLite3Log := TSQLLog
+  // - mORMotSQLite3.pas unit will set SynSQLite3Log := TSQLLog
   TSQLLog = class(TSynLog)
   protected
     procedure CreateLogWriter; override;
@@ -33965,12 +33965,9 @@ end;
 
 procedure TSQLLog.CreateLogWriter;
 begin
-  if integer(fFamily.EchoToConsole)=0 then // force fWriter=TTextWriterEcho
-    fWriter := TJSONSerializer.Create(nil,fFamily.BufferSize);
+  fWriterClass := TJSONSerializer;
   inherited CreateLogWriter;
-  fWriter.Stream := fWriterStream;
 end;
-
 
 
 { TSQLVirtualTableCursorIndex }

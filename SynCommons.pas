@@ -461,7 +461,10 @@ unit SynCommons;
   - added TTextWriter.AddTypedJSON() and AddCRAndIdent methods
   - added TJSONWriter.EndJSONObject() method, for writing an optional
     ',"rowCount":' field in non expanded mode - used for all JSON creation
-  - introducing new TTextWriterEcho class, dedicated to row text multicast
+  - added TTextWriter.EchoAdd() and EchoRemove() methods
+  - added TSynLogFamily's NoFile and EchoCustom properties - see [91a114d2f6]
+  - added MultiEventAdd(), MultiEventRemove() and MultiEventFind() functions,
+    allowing easy implementation of a dynamic list of callbacks
   - added QuickSortIndexedPUTF8Char() and FastFindIndexedPUTF8Char()
   - added overloaded QuickSortInteger() for synchronous sort of two arrays
   - added RawUnicodeToUtf8() and UTF8ToSynUnicode() overloaded procedures
@@ -4894,6 +4897,52 @@ type
     property Definition: RawUTF8 read fDefinition;
   end;
 
+  /// the available logging events, as handled by TSynLog
+  // - sllInfo will log general information events
+  // - sllDebug will log detailed debugging information
+  // - sllTrace will log low-level step by step debugging information
+  // - sllWarning will log unexpected values (not an error)
+  // - sllError will log errors
+  // - sllEnter will log every method start
+  // - sllLeave will log every method exit
+  // - sllLastError will log the GetLastError OS message
+  // - sllException will log all exception raised - available since Windows XP
+  // - sllExceptionOS will log all OS low-level exceptions (EDivByZero,
+  // ERangeError, EAccessViolation...)
+  // - sllMemory will log memory statistics
+  // - sllStackTrace will log caller's stack trace (it's by default part of
+  // TSynLogFamily.LevelStackTrace like sllError, sllException, sllExceptionOS,
+  // sllLastError and sllFail)
+  // - sllFail was defined for TSynTestsLogged.Failed method, and can be used
+  // to log some customer-side assertions (may be notifications, not errors)
+  // - sllSQL is dedicated to trace the SQL statements
+  // - sllCache should be used to trace the internal caching mechanism
+  // - sllResult could trace the SQL results, JSON encoded
+  // - sllDB is dedicated to trace low-level database engine features
+  // - sllHTTP could be used to trace HTTP process
+  // - sllClient/sllServer could be used to trace some Client or Server process
+  // - sllServiceCall/sllServiceReturn to trace some remote service or library
+  // - sllUserAuth to trace user authentication (e.g. for individual requests)
+  // - sllCustom* items can be used for any purpose
+  // - sllNewRun will be written when a process opens a rotated log
+  TSynLogInfo = (
+    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+    sllEnter, sllLeave,
+    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+    sllServiceCall, sllServiceReturn, sllUserAuth,
+    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
+
+  /// used to define a logging level
+  // - i.e. a combination of none or several logging event
+  // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
+  // to log all errors and exceptions
+  TSynLogInfos = set of TSynLogInfo;
+
+  /// a dynamic array of logging event levels
+  TSynLogInfoDynArray = array of TSynLogInfo;
+
+
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
@@ -4917,6 +4966,13 @@ type
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
+  /// callback used to echo each line of TTextWriter class
+  TOnTextWriterEcho = procedure(Sender: TTextWriter; Level: TSynLogInfo;
+    const Text: RawUTF8) of object;
+
+  /// class of our simple writer to a Stream, specialized for the TEXT format
+  TTextWriterClass = class of TTextWriter;
+
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
   // - some dedicated methods is able to encode any data with JSON escape
@@ -4931,8 +4987,12 @@ type
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fHumanReadableLevel: integer;
+    fEchoBuf: RawUTF8;
+    fEchoStart: integer;
+    fEchos: array of TOnTextWriterEcho;
     function GetLength: cardinal;
     procedure SetStream(aStream: TStream);
+    function EchoFlush: integer;
   public
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -4944,8 +5004,10 @@ type
     // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
     constructor CreateOwnedStream(aBufSize: integer=4096);
-    /// release fStream is is owned
+    /// release all internal structures
+    // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
+
     /// retrieve the data as a string
     function Text: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4959,6 +5021,13 @@ type
     // - if you don't call Flush, some pending characters may be not yet
     // copied to the Stream: you should call it before using the Stream property
     procedure Flush; virtual;
+    /// add a callback to echo each line written by this class
+    // - this class expects AddEndOfLine to mark the end of each line
+    procedure EchoAdd(const aEcho: TOnTextWriterEcho);
+    /// remove a callback to echo each line written by this class
+    // - event should have been previously registered by a EchoAdd() call
+    procedure EchoRemove(const aEcho: TOnTextWriterEcho);
+
     /// append one char to the buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -5013,9 +5082,14 @@ type
     /// append some values at once
     // - text values (e.g. RawUTF8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
-    /// append CR+LF chars
-    procedure AddCR; virtual;
-    /// append CR+LF chars and #9 indentation
+    /// append CR+LF (#13#10) chars
+    procedure AddCR;
+    /// append a CR (#13) char to the buffer to indicate an end of line
+    // - any callback registered via EchoAdd() will monitor this line
+    // - used e.g. by TSynLog for console output, as stated by Level parameter
+    procedure AddEndOfLine(aLevel: TSynLogInfo=sllNone);
+    /// append CR+LF (#13#10) chars and #9 indentation
+    // - indentation depth is defined by fHumanReadableLevel protected field
     procedure AddCRAndIndent; 
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: integer);
@@ -5378,32 +5452,6 @@ type
     // TTextWriter constructor, it can be forced via this property, before
     // any writting
     property Stream: TStream read fStream write SetStream;
-  end;
-
-  /// callback used to echo each line of TTextWriterEcho class
-  TOnTextWriterEcho = procedure(Sender: TTextWriter; const Text: RawUTF8) of object;
-  
-  /// writer to a Stream, with each line sent to a custom Echo() method
-  // - can be used e.g. to echo some log on the output console (see
-  // TSynLogFamily.EchoToConsole property)
-  // - do not use this class instead of TTextWriter, since it could be
-  // much slower
-  TTextWriterEcho = class(TTextWriter)
-  protected        
-    fEcho: TOnTextWriterEcho;
-    fEchoBuf: RawUTF8;
-  public
-    /// append CR+LF chars
-    // - this overridden method will send all pending buffer to Echo()
-    // - note that any manual #13#10 added without calling AddCR won't be
-    // notified to Echo() as individual line
-    procedure AddCR; override;
-    /// flush the internal buffer to the output TStream
-    // - this overridden method will store temporary the content, until AddCR
-    // method is called
-    procedure Flush; override;
-    /// callback used to echo each line of TTextWriterEcho class
-    property Echo: TOnTextWriterEcho read fEcho write fEcho;
   end;
 
   /// simple writer to a Stream, specialized for the JSON format and SQL export
@@ -7236,6 +7284,55 @@ type
     property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
   end;
 
+/// low-level wrapper to add a callback to a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to add one callback
+// to this list of events
+// - if the event was already registered, do nothing (i.e. won't call it twice)
+// - since this function uses an unsafe typeless EventList parameter, you should
+// not use it in high-level code, but only as wrapper within dedicated methods
+// - will add Event to EventList[] unless Event is already registered
+// - is used e.g. by TTextWriter as such:
+// ! ...
+// !   fEchos: array of TOnTextWriterEcho;
+// ! ...
+// !   procedure EchoAdd(const aEcho: TOnTextWriterEcho);
+// ! ...
+// ! procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
+// ! begin
+// !   MultiEventAdd(fEchos,TMethod(aEcho));
+// ! end;
+// then callbacks are then executed as such:
+// ! if fEchos<>nil then
+// !   for i := 0 to length(fEchos)-1 do
+// !     fEchos[i](self,fEchoBuf);
+// - use MultiEventRemove() to un-register a callback from the list
+procedure MultiEventAdd(var EventList; const Event: TMethod);
+
+/// low-level wrapper to remove a callback from a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to remove one
+// callback already registered by MultiEventAdd() to this list of events
+// - since this function uses an unsafe typeless EventList parameter, you should
+// not use it in high-level code, but only as wrapper within dedicated methods
+// - is used e.g. by TTextWriter as such:
+// ! ...
+// !   fEchos: array of TOnTextWriterEcho;
+// ! ...
+// !   procedure EchoRemove(const aEcho: TOnTextWriterEcho);
+// ! ...
+// ! procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+// ! begin
+// !   MultiEventRemove(fEchos,TMethod(aEcho));
+// ! end;
+procedure MultiEventRemove(var EventList; const Event: TMethod);
+
+/// low-level wrapper to check if a callback is in a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to check if
+// a callback has already been registered to this list of events
+// - used internally by MultiEventAdd() and MultiEventRemove() functions
+function MultiEventFind(var EventList; const Event: TMethod): integer;
 
 
 { ************ fast ISO-8601 types and conversion routines }
@@ -10375,51 +10472,6 @@ type
     property HasDebugInfo: boolean read fHasDebugInfo;
   end;
   {$M-}
-  
-  /// the available logging events, as handled by TSynLog
-  // - sllInfo will log general information events
-  // - sllDebug will log detailed debugging information
-  // - sllTrace will log low-level step by step debugging information
-  // - sllWarning will log unexpected values (not an error)
-  // - sllError will log errors
-  // - sllEnter will log every method start
-  // - sllLeave will log every method exit
-  // - sllLastError will log the GetLastError OS message
-  // - sllException will log all exception raised - available since Windows XP
-  // - sllExceptionOS will log all OS low-level exceptions (EDivByZero,
-  // ERangeError, EAccessViolation...)
-  // - sllMemory will log memory statistics
-  // - sllStackTrace will log caller's stack trace (it's by default part of
-  // TSynLogFamily.LevelStackTrace like sllError, sllException, sllExceptionOS,
-  // sllLastError and sllFail)
-  // - sllFail was defined for TSynTestsLogged.Failed method, and can be used
-  // to log some customer-side assertions (may be notifications, not errors)
-  // - sllSQL is dedicated to trace the SQL statements
-  // - sllCache should be used to trace the internal caching mechanism
-  // - sllResult could trace the SQL results, JSON encoded
-  // - sllDB is dedicated to trace low-level database engine features
-  // - sllHTTP could be used to trace HTTP process
-  // - sllClient/sllServer could be used to trace some Client or Server process
-  // - sllServiceCall/sllServiceReturn to trace some remote service or library
-  // - sllUserAuth to trace user authentication (e.g. for individual requests)
-  // - sllCustom* items can be used for any purpose
-  // - sllNewRun will be written when a process opens a rotated log
-  TSynLogInfo = (
-    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
-    sllEnter, sllLeave,
-    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    sllServiceCall, sllServiceReturn, sllUserAuth,
-    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
-
-  /// used to define a logging level
-  // - i.e. a combination of none or several logging event
-  // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
-  // to log all errors and exceptions
-  TSynLogInfos = set of TSynLogInfo;
-
-  /// a dynamic array of logging event levels
-  TSynLogInfoDynArray = array of TSynLogInfo;
 
   {$M+} { we need the RTTI for the published methods of the logging classes }
 
@@ -10547,6 +10599,7 @@ type
     fBufferSize: integer;
     fHRTimeStamp: boolean;
     fWithUnitName: boolean;
+    fNoFile: boolean;
     {$ifdef MSWINDOWS}
     fAutoFlush: cardinal;
     {$endif}
@@ -10557,6 +10610,7 @@ type
     fStackTraceUse: TSynLogStackTraceUse;
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
+    fEchoCustom: TOnTextWriterEcho;
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
@@ -10660,6 +10714,10 @@ type
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal read fAutoFlush write SetAutoFlush;
     {$endif}
+    /// force no log to be written to any file
+    // - may be usefull in conjunction e.g. with EchoToConsole or any other
+    // third-party logging component 
+    property NoFile: boolean read fNoFile write fNoFile;
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     // - can be set to a number of rotating files: rotation and compression will 
@@ -10692,12 +10750,17 @@ type
     // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
     property StackTraceUse: TSynLogStackTraceUse read fStackTraceUse write fStackTraceUse;
     /// if the some kind of events shall be echoed to the console
-    // - note that it will slow down the logging process a lot, but may be
-    // convenient for interactive debugging of services, for instance
+    // - note that it will slow down the logging process a lot (console output
+    // is slow by nature under Windows, but may be convenient for interactive
+    // debugging of services, for instance
     // - this property shall be set before any actual logging, otherwise it
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
+    /// can be set to a callback which will be called for each log line
+    // - could be used with a third-party logging system
+    // - you may even disable the integrated file output, via NoFile := true
+    property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
   end;
 
   /// thread-specific internal context used during logging
@@ -10745,6 +10808,7 @@ type
   protected
     fFamily: TSynLogFamily;
     fWriter: TTextWriter;
+    fWriterClass: TTextWriterClass;
     fWriterStream: TStream;
     fThreadLock: TRTLCriticalSection;
     fThreadContext: PSynLogThreadContext;
@@ -10797,7 +10861,8 @@ type
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
     procedure LockAndGetThreadContextInternal(ID: DWORD);
     function Instance: TSynLog;
-    procedure ConsoleEcho(Sender: TTextWriter; const Text: RawUTF8); virtual;
+    procedure ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8); virtual;
   public
     /// intialize for a TSynLog class instance
     // - WARNING: not to be called directly! Use Enter or Add class function instead
@@ -11159,6 +11224,7 @@ const
   LOG_VERBOSE: TSynLogInfos = [succ(sllNone)..high(TSynLogInfo)];
 
   /// contains the logging levels for which stack trace should be dumped
+  // - which are mainly exceptions or application errors
   LOG_STACKTRACE: TSynLogInfos = [sllLastError,sllError,sllException,sllExceptionOS];
 
   /// the text equivalency of each logging level, as written in the log file
@@ -31609,6 +31675,21 @@ begin
   inc(B,2);
 end;
 
+procedure TTextWriter.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
+var i: integer;
+begin
+  if B>=BEnd then
+    Flush;
+  B[1] := #13; // CR
+  inc(B);
+  if fEchos<>nil then begin
+    fEchoStart := EchoFlush;
+    for i := 0 to length(fEchos)-1 do
+      fEchos[i](self,aLevel,fEchoBuf);
+    fEchoBuf := '';
+  end;
+end;
+
 procedure TTextWriter.AddCRAndIndent;
 begin
   if cardinal(fHumanReadableLevel)>=cardinal(fTempBufSize) then
@@ -33056,6 +33137,10 @@ end;
 
 procedure TTextWriter.Flush;
 begin
+  if fEchos<>nil then begin
+    EchoFlush;
+    fEchoStart := 0;
+  end;
   inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
   if (not fFlushShouldNotAutoResize) and (fTempBufSize<49152) and
      (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
@@ -33165,40 +33250,28 @@ begin
     Add('"');
 end;
 
-
-{ TTextWriterEcho }
-
-procedure TTextWriterEcho.Flush;
-var LI,L: integer;
-    P: PWord;
+procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
 begin
-  L := B-fTempBuf+1;
-  if L=0 then
-    exit;
-  inc(fTotalFileSize,fStream.Write(fTempBuf^,L));
-  if Assigned(fEcho) then begin
-    P := pointer(fTempBuf);
-    if (L>2) and (P^=13+10 shl 8) then begin
-      dec(L,2); // trim left #13#10 = previous AddCR call
-      inc(P);
-    end;
-    LI := length(fEchoBuf);
-    SetLength(fEchoBuf,LI+L);
-    Move(P^,PByteArray(fEchoBuf)[LI],L);
-  end;
-  B := fTempBuf-1;
+  MultiEventAdd(fEchos,TMethod(aEcho));
 end;
 
-procedure TTextWriterEcho.AddCR;
+procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
 begin
-  if Assigned(fEcho) then begin
-    Flush; // slow if fStream is a TFileStream, but simple and safe
-    fEcho(self,fEchoBuf);
-    fEchoBuf := '';
-    pWord(fTempBuf)^ := 13+10 shl 8; // CR + LF
-    B := fTempBuf+1; // continue to write in buffer after CRLF
-  end else
-    inherited;
+  MultiEventRemove(fEchos,TMethod(aEcho));
+end;
+
+function TTextWriter.EchoFlush: integer;
+var L,LI: Integer;
+    P: PByteArray;
+begin
+  result := B-fTempBuf+1;
+  L := result-fEchoStart;
+  P := @PByteArray(fTempBuf)[fEchoStart];
+  while (L>0) and (P[L-1]=13) do // trim right CR/#13 char
+    dec(L);
+  LI := length(fEchoBuf); // faster append to fEchoBuf
+  SetLength(fEchoBuf,LI+L);
+  Move(P^,PByteArray(fEchoBuf)[LI],L);
 end;
 
 
@@ -40863,8 +40936,8 @@ begin
   {$endif}
         break;
       until false;
+      SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
       SynLog.fWriter.Flush; // we expect exceptions to be available on disk
-      SynLog.fWriter.AddCR;
     finally
       LeaveCriticalSection(SynLog.fThreadLock);
     end;
@@ -41029,9 +41102,9 @@ begin
         if (fFamily.fAutoFlush<>0) and (fWriter<>nil) and
            (AutoFlushSecondElapsed mod fFamily.fAutoFlush=0) then
           if fWriter.B-fWriter.fTempBuf>1 then begin
-            if not IsMultiThread and
-               not fWriterStream.InheritsFrom(TFileStream) then
-              IsMultiThread := true; // only TFileStream is thread-safe
+            if not IsMultiThread then
+              if not fWriterStream.InheritsFrom(TFileStream) then
+                IsMultiThread := true; // only TFileStream is thread-safe
             Flush(false); // write pending data
           end;
      finally
@@ -41463,7 +41536,8 @@ begin
   result := self;
 end;
 
-procedure TSynLog.ConsoleEcho(Sender: TTextWriter; const Text: RawUTF8);
+procedure TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8);
 {$ifdef MSWINDOWS}
 var tmp: AnsiString;
 {$endif}
@@ -41479,13 +41553,13 @@ const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
 //    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun
   ccLightGray, ccLightGray,ccLightGray,ccLightGray,ccLightMagenta);
 begin
-  if not (fCurrentLevel in fFamily.fEchoToConsole) then
+  if not (Level in fFamily.fEchoToConsole) then
     exit;
   {$ifdef MSWINDOWS}
   if StdOut=0 then
     exit;
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
-  TextColor(LOGCOLORS[fCurrentLevel]);
+  TextColor(LOGCOLORS[Level]);
   AnsiToOem(pointer(tmp),pointer(tmp));
   tmp := tmp+#13#10;
   FileWrite(stdOut,PByte(tmp)^,length(tmp));
@@ -41618,7 +41692,7 @@ var WithinEvents: boolean;
 procedure NewLine;
 begin
   if WithinEvents then begin
-    fWriter.AddCR;
+    fWriter.AddEndOfLine(sllNewRun);
     LogCurrentTime;
     fWriter.AddShort(LOG_LEVEL_TEXT[sllNewRun]);
   end else
@@ -41687,11 +41761,8 @@ begin
     AddShort(' '+SYNOPSE_FRAMEWORK_VERSION+' ');
     AddDateTime(Now);
     if WithinEvents then
-      AddCR else
+      AddEndOfLine(sllNone) else
       Add(#13,#13);
-  end;
-  if fWriter.InheritsFrom(TTextWriterEcho) then
-  with TTextWriterEcho(fWriter) do begin
     Flush;
     fEchoBuf := ''; // header is not to be sent to console
   end;
@@ -41811,7 +41882,7 @@ begin
   try
     if Level in fFamily.fLevelStackTrace then
       AddStackTrace(nil);
-    fWriter.AddCR;
+    fWriter.AddEndOfLine(fCurrentLevel);
     if (fFileRotationSize>0) and (fWriter.fTotalFileSize>fFileRotationSize) then
       PerformRotation;
   finally
@@ -41917,21 +41988,24 @@ begin
     if fFamily.PerThreadLog=ptOneFilePerThread then
         fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
     fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
-    if (fFileRotationSize=0) or not FileExists(fFileName) then
-      TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
-    fWriterStream := TFileStream.Create(fFileName, // open it with read sharing
-      fmOpenReadWrite or fmShareDenyWrite);
+    if fFamily.NoFile then
+      fWriterStream := TFakeWriterStream.Create else begin
+      if (fFileRotationSize=0) or not FileExists(fFileName) then
+        TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
+      fWriterStream := TFileStream.Create(fFileName, // open with read sharing
+        fmOpenReadWrite or fmShareDenyWrite);
+    end;
     if fFileRotationSize>0 then
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
+  if fWriterClass=nil then
+    fWriterClass := TTextWriter;
   if fWriter=nil then
-    {$ifdef MSWINDOWS}
-    if integer(fFamily.EchoToConsole)<>0 then begin
-      fWriter := TTextWriterEcho.Create(nil,4096);
-      TTextWriterEcho(fWriter).Echo := ConsoleEcho;
-    end else
-    {$endif}
-      fWriter := TTextWriter.Create(fWriterStream,fFamily.BufferSize);
+    fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
+  if integer(fFamily.EchoToConsole)<>0 then
+    fWriter.EchoAdd(ConsoleEcho);
+  if Assigned(fFamily.EchoCustom) then
+    fWriter.EchoAdd(fFamily.EchoCustom);
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
@@ -42003,7 +42077,7 @@ DoEnt:case aLevel of
       goto DoEnt;
     end;
   end;
-  fWriter.AddCR;
+  fWriter.AddEndOfLine(aLevel);
 end;
 
 procedure TSynLog.DoEnterLeave(aLevel: TSynLogInfo);
@@ -42662,7 +42736,7 @@ begin
   if fLineLevelOffset=0 then begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
       exit; // definitively does not sound like a .log content
-    if LineBeg[8]=' ' then // YYYYMMDD HHMMSS one character bigger than Time Stamp
+    if LineBeg[8]=' ' then // YYYYMMDD HHMMSS is one char bigger than TimeStamp
       fLineLevelOffset := 19 else
       fLineLevelOffset := 18;
     if LineBeg[19]='!' then begin // thread number = 1 -> '  !'
@@ -43194,6 +43268,47 @@ begin
   if not Assigned(fOnProcess) then
     raise ESynException.CreateFmt('Invalid %s.RunAndWait() call',[ClassName]);
   fOnProcess(fParam);
+end;
+
+
+function MultiEventFind(var EventList; const Event: TMethod): integer;
+var Events: array of TMethod absolute EventList;
+begin
+  if Event.Code<>nil then
+    for result := 0 to length(Events)-1 do
+      if (Events[result].Code=Event.Code) and
+         (Events[result].Data=Event.Data) then
+        exit;
+  result := -1;
+end;
+
+procedure MultiEventAdd(var EventList; const Event: TMethod);
+var Events: array of TMethod absolute EventList;
+    n: integer;
+begin
+  if Event.Code=nil then
+    exit; // callback not assigned
+  n := MultiEventFind(EventList,Event);
+  if n>=0 then
+    exit; // already registered
+  n := length(Events);
+  SetLength(Events,n+1);
+  Events[n] := Event;
+end;
+
+procedure MultiEventRemove(var EventList; const Event: TMethod);
+var Events: array of TMethod absolute EventList;
+    max,i: integer;
+begin
+  if Event.Code=nil then
+    exit; // callback not assigned
+  i := MultiEventFind(EventList,Event);
+  if i>=0 then begin
+    max := length(Events)-1;
+    move(Events[i+1],Events[i],(max-i)*sizeof(Events[i]));
+    SetLength(Events,max);
+    exit;
+  end;
 end;
 
 

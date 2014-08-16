@@ -1883,7 +1883,27 @@ The {\f1\fs20 EchoToConsole} property enable you to select which events are to b
 !!    EchoToConsole := LOG_VERBOSE; // log all events to the console
 !  end;
 Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
-Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and flushes each row to the log file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
+Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and writing to the console under {\i Windows} is much slower than writing to a file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
+:  Log to third-party libraries
+Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
+It could be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs. Those loggers also provide multiple options, including some possibilities not yet available with {\f1\fs20 TSynLog}, like live remote logging, or statistics extraction.
+You can define the {\f1\fs20 TSynLogFamily.EchoCustom} property to specify a simple event to be triggered for each log operation: the application can then decide to log to a third party logger application.
+Note that there is also the {\f1\fs20 TSynLogFamily.NoFile} property, which allows to disable completely the built-in file logging mechanism.
+For instance, you may write:
+!procedure TMyClass.Echo(Sender: TTextWriter; Level: TSynLogInfo; const Text: RawUTF8);
+!begin
+!  if Level in LOG_STACKTRACE then // filter only errors
+!    writeln(Text); // could be any third-party logger
+!end;
+!
+!...
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    // EchoToConsole := LOG_VERBOSE; // log all events to the console
+!!    EchoCustom := aMyClass.Echo; // register third-party logger
+!!    NoFile := true; // ensure TSynLog won't use the default log file
+!  end;
+A process similar to {\f1\fs20 TSynLogFile.ProcessOneLine()} could then parse the incoming {\f1\fs20 Text} value, if needed.
 :  Automated log archival
 Log archives can be created with the following settings:
 ! with TSynLogDB.Family do
