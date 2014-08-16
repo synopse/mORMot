@@ -7855,7 +7855,7 @@ type
   /// available console colors under Windows
   TConsoleColor = (
     ccBlack, ccBlue, ccGreen, ccCyan, ccRed, ccMagenta, ccBrown, ccLightGray,
-    ccDarkGray, LightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
+    ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
     ccYellow, ccWhite);
 
 /// change the Windows console text writing color
@@ -16638,7 +16638,7 @@ const
   PROCESSOR_ARCHITECTURE_AMD64 = 9;
 
 var
-  TextAttr: integer;
+  TextAttr: integer = ord(ccDarkGray);
 
 {$ifndef UNICODE}
 function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall;
@@ -16661,6 +16661,15 @@ begin
    {$endif}
 end;
 
+procedure InitConsole;
+begin
+  if StdOut=0 then begin
+   StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+   if StdOut=INVALID_HANDLE_VALUE then
+     StdOut := 0;
+  end;
+end;
+
 procedure RetrieveSystemInfo;
 var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
@@ -16674,9 +16683,7 @@ begin
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
   if not Assigned(GetTickCount64) then
     GetTickCount64 := @GetSystemTimeMillisecondsForXP;
-  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  if StdOut=INVALID_HANDLE_VALUE then
-    StdOut := 0;
+  InitConsole;
   IsWow64Process := GetProcAddress(Kernel,'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
@@ -23948,37 +23955,24 @@ begin
     result := false;
 end;
 
-procedure InitConsole;
-var BufferInfo: TConsoleScreenBufferInfo;
-begin
-  if StdOut=0 then begin
-   StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-   if StdOut=INVALID_HANDLE_VALUE then
-     StdOut := 0;
-  end;
-  if not GetConsoleScreenBufferInfo(StdOut,BufferInfo) then
-    TextAttr := -1 else
-    TextAttr := BufferInfo.wAttributes;
-end;
-
 procedure TextColor(Color: TConsoleColor);
+var oldAttr: integer;
 begin
-  if TextAttr<=0 then
-    InitConsole;
-  if TextAttr<0 then
-    exit;
-  TextAttr := (TextAttr and $F0) or (ord(Color) and $0F);
-  SetConsoleTextAttribute(StdOut,TextAttr);
+  InitConsole;
+  oldAttr := TextAttr;
+  TextAttr := (TextAttr and $F0) or ord(Color);
+  if TextAttr<>oldAttr then
+    SetConsoleTextAttribute(StdOut,TextAttr);
 end;
 
 procedure TextBackground(Color: TConsoleColor);
+var oldAttr: integer;
 begin
-  if TextAttr=0 then
-    InitConsole;
-  if TextAttr<0 then
-    exit;
-  TextAttr := (TextAttr and $0F) or ((ord(Color) shl 4) and $F0);
-  SetConsoleTextAttribute(StdOut,TextAttr);
+  InitConsole;
+  oldAttr := TextAttr;
+  TextAttr := (TextAttr and $0F) or (ord(Color) shl 4);
+  if TextAttr<>oldAttr then
+    SetConsoleTextAttribute(StdOut,TextAttr);
 end;
 
 procedure ConsoleWaitForEnterKey;
@@ -41475,7 +41469,7 @@ var tmp: AnsiString;
 {$endif}
 const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
 //    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
-  ccLightGray,ccWhite,ccLightGray,ccBlack,ccBrown,ccLightRed,ccGreen,ccGreen,
+  ccLightGray,ccWhite,ccLightGray,ccLightBlue,ccBrown,ccLightRed,ccGreen,ccGreen,
 //    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
   ccLightRed, ccLightRed, ccLightRed, ccLightGray, ccCyan,
 //    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,

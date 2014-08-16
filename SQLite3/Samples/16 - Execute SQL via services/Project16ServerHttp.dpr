@@ -90,7 +90,7 @@ begin
   end;
   // manual switch to console mode
   AllocConsole;
-  TextColor(ccLightGray);
+  TextColor(ccLightGray); // needed to notify previous AllocConsole
   // create a Data Model
   aModel := TSQLModel.Create([],ROOT_NAME);
   try
@@ -105,6 +105,7 @@ begin
       aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
       try
         aHTTPServer.AccessControlAllowOrigin := '*'; // for AJAX requests to work
+        Sleep(200); // allow all HTTP threads to be launched and logged
         writeln(#10'Background server is running.'#10);
         writeln('Press [Enter] to close the server.'#10);
         ConsoleWaitForEnterKey;
