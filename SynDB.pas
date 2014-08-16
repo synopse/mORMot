@@ -1253,7 +1253,9 @@ type
     /// an optional Schema name to be used for SQLGetField() instead of UserID
     // - by default, UserID will be used as schema name, if none is specified
     // (i.e. if table name is not set as SCHEMA.TABLE)
-    // - you can set a custom schema to be used, e.g. 'dbo' for MS SQL
+    // - depending on the DBMS identified, the class may also set automatically
+    // the default 'dbo' for MS SQL or 'public' for PostgreSQL
+    // - you can set a custom schema to be used instead
     property ForcedSchemaName: RawUTF8 read fForcedSchemaName write fForcedSchemaName;
     /// TRUE if an internal cache of SQL statement should be used
     // - cache will be accessed for NewStatementPrepared() method only, by
