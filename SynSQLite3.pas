@@ -3694,11 +3694,11 @@ var i: integer;
 begin
   if fBackupBackgroundInProcess<>nil then
     if TimeOutSeconds<0 then // TimeOutSeconds=-1 for infinite wait
-      while fBackupBackgroundInProcess=nil do Sleep(10) else begin
+      while fBackupBackgroundInProcess<>nil do Sleep(10) else begin
       for i := 1 to TimeOutSeconds*100 do begin // wait for process end
         Sleep(10);
         if fBackupBackgroundInProcess=nil then
-          break;
+          exit;
       end;
       Lock;
       if fBackupBackgroundInProcess<>nil then
