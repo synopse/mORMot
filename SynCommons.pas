@@ -5958,6 +5958,14 @@ type
   end;
 {$M-}
 
+  /// a fake TStream, which will just count the number of bytes written
+  TFakeWriterStream = class(TStream)
+  public
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(Offset: Longint; Origin: Word): Longint; override;
+  end;
+
   /// a TStream using a RawByteString as internal storage
   // - default TStringStream uses WideChars since Delphi 2009, so it is
   // not compatible with previous versions, and it does make sense to
@@ -27479,31 +27487,6 @@ begin // not very optimized, but fast enough in practice, and creates valid JSON
   end;
 end;
 
-type
-  /// a fake TStream, which will just count the number of bytes written
-  TFakeWriterStream = class(TStream)
-  public
-    function Read(var Buffer; Count: Longint): Longint; override;
-    function Write(const Buffer; Count: Longint): Longint; override;
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
-  end;
-
-function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
-begin // do nothing
-  result := Count;
-end;
-
-function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
-begin // do nothing
-  result := Count;
-end;
-
-function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Offset;
-end;
-
-
 function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind): integer;
 var Fake: TFakeWriterStream;
 begin // will avoid most memory allocations, except for one 2KB internal buffer
@@ -43029,6 +43012,24 @@ begin
 end;
 
 
+{ TFakeWriterStream }
+
+function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
+begin // do nothing
+  result := Count;
+end;
+
+function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
+begin // do nothing
+  result := Count;
+end;
+
+function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Offset;
+end;
+
+
 { TSynNameValue }
 
 procedure TSynNameValue.Add(const aName, aValue: RawUTF8; aTag: PtrInt);
@@ -43298,7 +43299,7 @@ end;
 
 
 function MultiEventFind(var EventList; const Event: TMethod): integer;
-var Events: array of TMethod absolute EventList;
+var Events: TMethodDynArray absolute EventList;
 begin
   if Event.Code<>nil then
     for result := 0 to length(Events)-1 do
@@ -43309,7 +43310,7 @@ begin
 end;
 
 procedure MultiEventAdd(var EventList; const Event: TMethod);
-var Events: array of TMethod absolute EventList;
+var Events: TMethodDynArray absolute EventList;
     n: integer;
 begin
   if Event.Code=nil then
@@ -43323,7 +43324,7 @@ begin
 end;
 
 procedure MultiEventRemove(var EventList; const Event: TMethod);
-var Events: array of TMethod absolute EventList;
+var Events: TMethodDynArray absolute EventList;
     max,i: integer;
 begin
   if Event.Code=nil then
