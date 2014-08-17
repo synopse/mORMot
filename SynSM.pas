@@ -35,6 +35,7 @@ unit SynSM;
   Contributor(s):
   - Arnaud Bouchez
   - Vadim Orel
+  - win2014
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1987,7 +1988,7 @@ end;
 procedure TSMObject.DefineProperty(const name: SynUnicode;
   const value: variant; attrs: TJSPropertyAttrs);
 begin
-  DefineProperty(name,VariantToJsVal(cx,value),attrs);
+  DefineProperty(name,TSMValue(VariantToJsVal(cx,value)),attrs);
 end;
 
 procedure TSMObject.DefineProperty(const name: SynUnicode;
