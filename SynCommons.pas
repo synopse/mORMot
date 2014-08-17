@@ -362,11 +362,11 @@ unit SynCommons;
   - internal FillChar() will now use faster SSE2 instructions on supported CPUs
 
   Version 1.18
-  - breaking change of TTextWriter.WriteObject() method: serialization is now
+  - BREAKING CHANGE of TTextWriter.WriteObject() method: serialization is now
     defined with a new TTextWriterWriteObjectOptions set
-  - renamed Iso8601 low-level structure as TTimeLogBits, and use explicitly the
-    TTimeLog type and name for all Int64 bit-oriented functions - now *Iso8601*
-    will be used only for standard ISO-8601 textual representation
+  - BREAKING CHANGE rename of Iso8601 low-level structure as TTimeLogBits, to use
+    explicitly the TTimeLog type and name for all Int64 bit-oriented functions -
+    now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
   - Delphi XE4/XE5/XE6 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
@@ -447,7 +447,8 @@ unit SynCommons;
   - added TTextWriter.AddQuotedStr() method
   - added TTextWriter.AddVoidRecordJSON() method
   - added TTextWriter.AddJSONEscapeAnsiString() method
-  - added TTextWriter.AddAnyAnsiString() method and AnyAnsiToUTF8() function   
+  - added TTextWriter.AddAnyAnsiString() method and AnyAnsiToUTF8() function
+  - added TTextWriter.EndOfLineCRLF and TSynLogFamily.EndOfLineCRLF properties   
   - for Delphi 2010 and up, RecordSaveJSON/RecordLoadJSON will use enhanced RTTI
   - before Delphi 2010, you can specify the record layout as text to
     TTextWriter.RegisterCustomJSONSerializerFromText() for JSON serialization
@@ -4987,6 +4988,7 @@ type
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fHumanReadableLevel: integer;
+    fEndOfLineCRLF: boolean;
     fEchoBuf: RawUTF8;
     fEchoStart: integer;
     fEchos: array of TOnTextWriterEcho;
@@ -5083,8 +5085,12 @@ type
     // - text values (e.g. RawUTF8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
     /// append CR+LF (#13#10) chars
+    // - this method won't call EchoAdd() registered events - use AddEndOfLine()
+    // method instead
     procedure AddCR;
-    /// append a CR (#13) char to the buffer to indicate an end of line
+    /// mark an end of line, ready to be "echoed" to registered listeners
+    // - append a CR (#13) char or CR+LF (#13#10) chars to the buffer, depending
+    // on the EndOfLineCRLF property value (default is CR, to minimize storage)
     // - any callback registered via EchoAdd() will monitor this line
     // - used e.g. by TSynLog for console output, as stated by Level parameter
     procedure AddEndOfLine(aLevel: TSynLogInfo=sllNone);
@@ -5437,14 +5443,20 @@ type
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place 
     procedure CancelAll;
+
     /// count of added bytes to the stream
     property TextLength: cardinal read GetLength;
     /// if a call to Flush should try to resize the internal buffer if it sounds
     // too small
     // - set to FALSE by default, you may set TRUE if you make an ending Flush
-    // without any more potential content adding 
+    // without any more potential content adding
     property FlushShouldNotAutoResize: boolean
       read fFlushShouldNotAutoResize write fFlushShouldNotAutoResize;
+    /// define how AddEndOfLine method stores its line feed characters 
+    // - by default (FALSE), it will append a CR (#13) char to the buffer
+    // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
+    // be appended instead
+    property EndOfLineCRLF: boolean read fEndOfLineCRLF write fEndOfLineCRLF;
     /// the internal TStream used for storage
     // - you should call the Flush method before using this TStream content,
     // to flush all pending characters to the stream
@@ -10611,6 +10623,7 @@ type
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
     fEchoCustom: TOnTextWriterEcho;
+    fEndOfLineCRLF: boolean;
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
@@ -10761,6 +10774,13 @@ type
     // - could be used with a third-party logging system
     // - you may even disable the integrated file output, via NoFile := true
     property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
+    /// define how the logger will emit its line feed
+    // - by default (FALSE), a single CR (#13) char will be written, to save
+    // storage space 
+    // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
+    // be appended instead
+    // - TSynLogFile class and our LogView tool will handle both patterns
+    property EndOfLineCRLF: boolean read fEndOfLineCRLF write fEndOfLineCRLF;
   end;
 
   /// thread-specific internal context used during logging
@@ -31678,10 +31698,15 @@ end;
 procedure TTextWriter.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
 var i: integer;
 begin
-  if B>=BEnd then
+  if B+1>=BEnd then
     Flush;
-  B[1] := #13; // CR
-  inc(B);
+  if fEndOfLineCRLF then begin
+    pWord(B+1)^ := 13+10 shl 8; // CR + LF
+    inc(B,2);
+  end else begin
+    B[1] := #13; // CR
+    inc(B);
+  end;
   if fEchos<>nil then begin
     fEchoStart := EchoFlush;
     for i := 0 to length(fEchos)-1 do
@@ -33267,7 +33292,7 @@ begin
   result := B-fTempBuf+1;
   L := result-fEchoStart;
   P := @PByteArray(fTempBuf)[fEchoStart];
-  while (L>0) and (P[L-1]=13) do // trim right CR/#13 char
+  while (L>0) and (P[L-1] in [10,13]) do // trim right CR/LF chars
     dec(L);
   LI := length(fEchoBuf); // faster append to fEchoBuf
   SetLength(fEchoBuf,LI+L);
@@ -42002,6 +42027,7 @@ begin
     fWriterClass := TTextWriter;
   if fWriter=nil then
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
+  fWriter.EndOfLineCRLF := fFamily.EndOfLineCRLF;
   if integer(fFamily.EchoToConsole)<>0 then
     fWriter.EchoAdd(ConsoleEcho);
   if Assigned(fFamily.EchoCustom) then
