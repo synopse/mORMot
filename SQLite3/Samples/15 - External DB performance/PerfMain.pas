@@ -685,7 +685,7 @@ begin
               TSQLRestStorageMongoDB).Drop else
           {$endif}
           if not DBIsFile then
-            Client.Server.EngineExecuteAll('drop table '+Value.SQLTableName);
+            Client.Server.ExecuteFmt('drop table %',[Value.SQLTableName]);
         finally
           Client.Free;
         end;

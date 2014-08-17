@@ -125,6 +125,8 @@ type
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
+    // method not implemented: always return false
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
@@ -691,7 +693,7 @@ begin
       with item[result] do
         if IdemPropNameU(aName,Name,NameLen) then
           exit;
-  raise EORMMongoDBException.CreateFmt('Unexpected field "%s" in row',[aName]);
+  raise EORMMongoDBException.CreateFmt('Missing field "%s" in row',[aName]);
 end;
 begin
   result := 0; // number of data rows in JSON output
@@ -720,10 +722,10 @@ begin
       for col := 0 to colCount-1 do begin
         if W.Expand then
           W.AddString(W.ColNames[col]);
-        with item[col] do
+        with item[col] do // BSON document may not follow expected field order
           if IdemPropNameU(extFieldNames[col],Name,NameLen) then
-            colFound := col else
-            colFound := itemFind(extFieldNames[col]);
+            colFound := col else // optimistic O(1) match
+            colFound := itemFind(extFieldNames[col]); // handle border cases
         item[colFound].AddMongoJSON(W,modNoMongo);
         W.Add(',');
       end;
@@ -851,7 +853,12 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
   if ReturnedRowCount<>nil then
     ReturnedRowCount^ := ResCount;
 end;
-    
+
+function TSQLRestStorageMongoDB.EngineExecute(const aSQL: RawUTF8): boolean;
+begin
+  result := false; // it is a NO SQL engine, we said! :)
+end;
+
 function TSQLRestStorageMongoDB.InternalBatchStart(
   Method: TSQLURIMethod): boolean;
 begin

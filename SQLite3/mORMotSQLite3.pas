@@ -213,8 +213,10 @@ unit mORMotSQLite3;
     - SQLVarToContext() will now bind '' text instead of null value
     - TSQLRestServerDB.GetAndPrepareStatement() will now recognize
       'INSERT INTO ... DEFAULT VALUES;' as a potential prepared statement
-    - added optional LastInsertedID parameter to TSQLRestServerDB.EngineExecute()
-      for proper multi-threaded execution - used e.g. by EngineAdd()
+    - renamed TSQLRestServerDB.EngineExecute() as InternalExecute() and added
+      optional LastInsertedID parameter for proper multi-threaded execution -
+      used e.g. by EngineAdd()
+    - renamed TSQLRestServerDB.InternalExecute() as explicit StoredProcExecute()
     - added TSQLRestServerDB.PrepareVacuum() private method to fix ticket
       [9f3faa8e44] - since VACUUM is buggy in SQLite3, and disconnect all
       virtual tables, it is now a no-op if such virtual tables are defined
@@ -350,37 +352,13 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
     /// execute one SQL statement
     // - intercept any DB exception and return false on error, true on success
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
     // retrieve the proper ID when aSQL is an INSERT statement (thread safe)
-    function EngineExecute(const aSQL: RawUTF8; ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil;
-      ValueInts: PIntegerDynArray=nil; LastInsertedID: PInt64=nil): boolean; overload;
-    /// EngineExecute directly a SQL statement with supplied parameters
-    // - expect the same format as FormatUTF8() function, that is only % with
-    // strings (already quoted) and integers (not ? with parameters)
-    // - return true on success
-    function EngineExecuteFmt(SQLFormat: PUTF8Char; const Args: array of const): boolean;
-    /// execute one SQL statement, which must return an integer (Int64) value
-    // - intercept any DB exception and return false on error, true on success
-    function EngineExecute(const aSQL: RawUTF8; out Value: Int64): boolean; overload;
-    /// execute one SQL statement, which must return a UTF-8 encoded value
-    // - intercept any DB exception and return false on error, true on success
-    function EngineExecute(const aSQL: RawUTF8; out Value: RawUTF8): boolean; overload;
-    /// execute one SQL statement, which must return a list of integer values
-    // - intercept any DB exception and return false on error, true on success
-    function EngineExecute(const aSQL: RawUTF8; out Value: TIntegerDynArray): boolean; overload;
-    /// execute one SQL statement, and apply an Event to every record
-    // - lock the database during the run
-    // - call a fast "stored procedure"-like method for each row of the request;
-    // this method must use low-level DB access in any attempt to modify the
-    // database (e.g. a prepared TSQLRequest with Reset+Bind+Step), and not
-    // the TSQLRestServerDB.Engine*() methods which include a Lock(): this Lock()
-    // is performed by the main loop in EngineExecute() and any attempt to
-    // such high-level call will fail into an endless loop
-    // - caller may use a transaction in order to speed up StoredProc() writing
-    // - intercept any DB exception and return false on error, true on success
-    function EngineExecute(const aSQL: RawUTF8; StoredProc: TOnSQLStoredProc): boolean; overload;
+    function InternalExecute(const aSQL: RawUTF8; ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil;
+      ValueInts: PIntegerDynArray=nil; LastInsertedID: PInt64=nil): boolean;
   public
     {{ begin a transaction (implements REST BEGIN Member)
      - to be used to speed up some SQL statements like Insert/Update/Delete
@@ -394,22 +372,23 @@ type
     {{ abort a transaction (implements REST ABORT Member)
      - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=1); override;
+
      /// overridden method for direct SQLite3 database engine call
      // - it will update all BLOB fields at once, in one SQL statement
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
      /// overridden method for direct SQLite3 database engine call
      // - it will retrieve all BLOB fields at once, in one SQL statement
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
-     /// overridden method for direct SQLite3 database engine call
-    function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
+
     {{ backup of the opened Database into an external stream (e.g. a file,
-      compressed or not)
+      compressed or not) - deprecated - use DB.BackupBackground() instead
      - this method doesn't use the SQLite Online Backup API, but low-level
        database file copy which may lock the database process if the data
        is consistent - consider using DB.BackupBackground() method instead
      - database is closed, VACCUUMed, copied, then reopened }
-    function Backup(Dest: TStream): boolean;
-    {{ backup of the opened Database into a .gz compressed file
+    function Backup(Dest: TStream): boolean; deprecated;
+    {{ backup of the opened Database into a .gz compressed file  - deprecated -
+       use DB.BackupBackground() instead
      - this method doesn't use the SQLite Online Backup API, but low-level
        database file copy which may lock the database process if the data
        is consistent - consider using DB.BackupBackground() method instead
@@ -417,14 +396,20 @@ type
      - default compression level is 2, which is very fast, and good enough for
        a database file content: you may change it into the default 6 level }
     function BackupGZ(const DestFileName: TFileName; CompressionLevel: integer=2): boolean;
+      deprecated;
     {{ restore a database content on the fly
      - database is closed, source DB file is replaced by the supplied content,
-       then reopened }
+       then reopened
+     - there are cases where this method will fail and return FALSE: consider
+       shuting down the server, replace the file, then relaunch the server instead }
     function Restore(const ContentToRestore: RawByteString): boolean;
     {{ restore a database content on the fly, from a .gz compressed file
      - database is closed, source DB file is replaced by the supplied content,
-       then reopened }
+       then reopened 
+     - there are cases where this method will fail and return FALSE: consider
+       shuting down the server, replace the file, then relaunch the server instead }
     function RestoreGZ(const BackupFileName: TFileName): boolean;
+
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
     // - will register all *_in() functions for available TSQLRecordRTree
@@ -440,6 +425,17 @@ type
     // the database content without proper notification
     // - this overridden implementation will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; override;
+    /// execute one SQL statement, and apply an Event to every record
+    // - lock the database during the run
+    // - call a fast "stored procedure"-like method for each row of the request;
+    // this method must use low-level DB access in any attempt to modify the
+    // database (e.g. a prepared TSQLRequest with Reset+Bind+Step), and not
+    // the TSQLRestServerDB.Engine*() methods which include a Lock(): this Lock()
+    // is performed by the main loop in EngineExecute() and any attempt to
+    // such high-level call will fail into an endless loop
+    // - caller may use a transaction in order to speed up StoredProc() writing
+    // - intercept any DB exception and return false on error, true on success
+    function StoredProcExecute(const aSQL: RawUTF8; StoredProc: TOnSQLStoredProc): boolean; 
   public
     /// initialize a REST server with a database
     // - any needed TSQLVirtualTable class should have been already registered
@@ -665,7 +661,7 @@ begin
     SQL := SQL+' DEFAULT VALUES;' else
     SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
       JSONRetrieveIDField(pointer(SentData)))+';';
-  if EngineExecute(SQL,nil,nil,nil,@LastID) then begin
+  if InternalExecute(SQL,nil,nil,nil,@LastID) then begin
     result := LastID;
     InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
   end;
@@ -807,7 +803,7 @@ begin
     result := false else begin
     // notify BEFORE deletion
     InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
-    result := EngineExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',
+    result := ExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,ID]);
   end;
 end;
@@ -828,7 +824,7 @@ begin
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
       aSQLWhere := IntegerDynArrayToCSV(IDs,length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
-    result := EngineExecuteFmt('DELETE FROM % WHERE %',
+    result := ExecuteFmt('DELETE FROM % WHERE %',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,aSQLWhere]);
   end;
 end;
@@ -864,7 +860,7 @@ begin
     fStatementCache.ReleaseAllDBStatements;
 end;
 
-function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8;
+function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
   ValueInt: PInt64; ValueUTF8: PRawUTF8; ValueInts: PIntegerDynArray;
   LastInsertedID: PInt64): boolean;
 var Req: PSQLRequest;
@@ -915,7 +911,7 @@ begin
       {$ifdef WITHLOG}
       DB.Log.Log(sllError,'% for %',[E,aSQL],self);
       {$else}
-      LogToTextFile('TSQLRestServerDB.EngineExecute: '+RawUTF8(E.Message)+#13#10+aSQL);
+      LogToTextFile('TSQLRestServerDB.InternalExecute: '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}
       result := false;
     end;
@@ -923,28 +919,7 @@ begin
     result := false;
 end;
 
-function TSQLRestServerDB.EngineExecuteFmt(SQLFormat: PUTF8Char;
-  const Args: array of const): boolean;
-begin
-  result := EngineExecute(FormatUTF8(SQLFormat,Args));
-end;
-
-function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: Int64): boolean;
-begin
-  result:= EngineExecute(aSQL,@Value);
-end;
-
-function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: RawUTF8): boolean;
-begin
-  result:= EngineExecute(aSQL,nil,@Value);
-end;
-
-function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8; out Value: TIntegerDynArray): boolean;
-begin
-  result:= EngineExecute(aSQL,nil,nil,@Value);
-end;
-
-function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8;
+function TSQLRestServerDB.StoredProcExecute(const aSQL: RawUTF8;
   StoredProc: TOnSQLStoredProc): boolean;
 var R: TSQLRequest; // we don't use fStatementCache[] here
     Res: integer;
@@ -974,29 +949,16 @@ begin
       {$ifdef WITHLOG}
       DB.Log.Log(sllError,'% for %',[E,aSQL],self);
       {$else}
-      LogToTextFile('TSQLRestServerDB.EngineExecute Error: '+RawUTF8(E.Message)+#13#10+aSQL);
+      LogToTextFile(ClassName+'.StoredProcExecute Error: '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}
       result := false;
     end;
   end;
 end;
 
-function TSQLRestServerDB.EngineExecuteAll(const aSQL: RawUTF8): boolean;
+function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
-  try
-    result := true;
-    if PrepareVacuum(aSQL) then // no-op if there are any static virtual tables
-      DB.ExecuteAll(aSQL); // Execute all statements (don't use fStatementCache[])
-  except
-    on E: ESQLite3Exception do begin
-      {$ifdef WITHLOG}
-      DB.Log.Log(sllError,'% for %',[E,aSQL],self);
-      {$else}
-      LogToTextFile('TSQLRestServerDB.EngineExecuteAll Error: '+RawUTF8(E.Message)+#13#10+aSQL);
-      {$endif}
-      result := false;
-    end;
-  end;
+  result := InternalExecute(aSQL);
 end;
 
 function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
@@ -1142,7 +1104,7 @@ begin
   if SentData='' then // update with no simple field -> valid no-op
     result := true else begin
     // this SQL statement use :(inlined params): for all values
-    result := EngineExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
+    result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
       [Model.TableProps[TableModelIndex].Props.SQLTableName,
        GetJSONObjectAsSQL(SentData,true,true),ID]);
     InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
@@ -1204,8 +1166,8 @@ begin
         SetLength(ID,1);
         ID[0] := WhereID;
       end else
-        if not EngineExecute(FormatUTF8('select RowID from % where %=:(%):',
-           [SQLTableName,WhereFieldName,WhereValue]),ID) then
+        if not InternalExecute(FormatUTF8('select RowID from % where %=:(%):',
+           [SQLTableName,WhereFieldName,WhereValue]),nil,nil,@ID) then
           exit else
           if ID=nil then begin
             result := true; // nothing to update, but return success
@@ -1215,9 +1177,9 @@ begin
         if not RecordCanBeUpdated(Table,ID[i],seUpdate) then
           exit;
       if Length(ID)=1 then
-        result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
+        result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
           [SQLTableName,SetFieldName,SetValue,ID[0]]) else
-        result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
+        result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
           [SQLTableName,SetFieldName,SetValue,IntegerDynArrayToCSV(ID,length(ID))]);
       if not result then
         exit;
@@ -1230,7 +1192,7 @@ begin
         if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
           exit; // limitation: will only check for update from RowID
       end;
-      result := EngineExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
+      result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
         [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
     end;
   end;

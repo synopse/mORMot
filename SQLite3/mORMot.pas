@@ -703,6 +703,9 @@ unit mORMot;
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
       IsSimpleField AppendName GetCaption GetSQLFromFieldValue SetFieldAddr
+    - following the Liskov substitution principle, Execute/ExecuteFmt and
+      protected EngineExecute() are defined for TSQLRest, replacing ExecuteAll()
+    - TSQLRestServerRemoteDB will now redirect into any TSQLRest instance
     - you can now define any custom property and store it as JSON, e.g. TGUID,
       by using overriding InternalRegisterCustomProperties(), or directly as
       record published properties (since Delphi XE5) - see ticket [b653e5f4ca]
@@ -829,7 +832,7 @@ unit mORMot;
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
       'Warning' text as a sllWarning item (will enhance JSONToObject() process)
-    - fix and enhance boolean values parsing from JSON content ("Yes"=true) 
+    - fix and enhance boolean values parsing from JSON content ("Yes"=true)
     - implement woHumanReadableFullSetsAsStar and woHumanReadableEnumSetAsComment
       option for JSON serialization and TEnumType.GetEnumNameTrimedAll()
     - fixed potential buffer overflow in TJSONObjectDecoder.EncodeAsSQLPrepared()
@@ -837,7 +840,7 @@ unit mORMot;
       some *: cardinal properties are renamed *64: Int64 for consistency
     - added ClassInstanceCreate() function calling any known virtual constructor
     - added GetInterfaceFromEntry() function to speed up interface execution,
-      e.g. for TServiceFactoryServer (avoid the RTTI lookup of GetInterface) 
+      e.g. for TServiceFactoryServer (avoid the RTTI lookup of GetInterface)
     - added TPropInfo.ClassFromJSON() to properly unserialize TObject properties
     - added TSQLPropInfo.SQLFieldTypeName property
     - fixed [f96cf0fc5d] and [221ee9c767] about TSQLRecordMany JSON serialization
@@ -8797,7 +8800,7 @@ type
     // - InternalBatchStart/Stop may safely use a lock for multithreading:
     // implementation in TSQLRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
- protected // these abstract methods must be inherited by real database engine
+ protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
@@ -8811,6 +8814,13 @@ type
     // - this method must be implemented in a thread-safe manner
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false;
       ReturnedRowCount: PPtrInt=nil): RawUTF8; virtual; abstract;
+    /// Execute directly a SQL statement, without any result
+    // - implements POST SQL on ModelRoot URI
+    // - return true on success
+    // - override this method for proper calling the database engine
+    // - don't call this method in normal cases
+    // - this method must be implemented to be thread-safe
+    function EngineExecute(const aSQL: RawUTF8): boolean; virtual; abstract;
     /// get a member from its ID
     // - implements REST GET member
     // - returns the data of this object as JSON
@@ -9188,6 +9198,22 @@ type
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
     function ExecuteList(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): TSQLTableJSON; virtual;
+    /// Execute directly a SQL statement, without any expected result
+    // - implements POST SQL on ModelRoot URI
+    // - return true on success
+    // - will call EngineExecute() abstract method to run the SQL statement
+    function Execute(const aSQL: RawUTF8): boolean; virtual;
+    /// Execute directly a SQL statement with supplied parameters, with no result
+    // - expect the same format as FormatUTF8() function, replacing all '%' chars
+    // with Args[] values
+    // - return true on success
+    function ExecuteFmt(SQLFormat: PUTF8Char; const Args: array of const): boolean; overload;
+    /// Execute directly a SQL statement with supplied parameters, with no result
+    // - expect the same format as FormatUTF8() function, replacing all '%' chars
+    // with Args[] values, and all '?' chars with Bounds[] (inlining them
+    // with :(...): and auto-quoting strings)
+    // - return true on success
+    function ExecuteFmt(SQLFormat: PUTF8Char; const Args, Bounds: array of const): boolean; overload;
     /// unlock the corresponding record
     // - record should have been locked previously e.g. with Retrieve() and
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
@@ -10825,12 +10851,6 @@ type
      - implements REST END collection
      - write all pending TSQLVirtualTableJSON data to the disk }
     procedure Commit(SessionID: cardinal); override;
-    /// Execute directly all SQL statement (POST SQL on ModelRoot URI)
-    // - return true on success
-    // - override this method for proper calling the database engine
-    // - don't call this method in normal cases
-    // - this method must be implemented to be thread-safe
-    function EngineExecuteAll(const aSQL: RawUTF8): boolean; virtual; abstract;
 
 {$ifdef MSWINDOWS}
     /// declare the server on the local machine as a Named Pipe: allows
@@ -11629,6 +11649,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    // method not implemented: always return false
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
   public
     /// initialize a REST server with a database file
     // - all classes of the model will be created as TSQLRestStorageInMemory
@@ -11658,9 +11680,6 @@ type
     procedure UpdateToFile; virtual;
     /// clear all internal TObjectList content
     procedure DropDatabase; virtual;
-    /// overridden method for direct in-memory database engine call
-    // - not implemented: always return false
-    function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     /// the file name used for data persistence
     property FileName: TFileName read fFileName write fFileName;
     /// direct access to the storage TObjectList storage instances
@@ -11684,18 +11703,19 @@ type
     procedure Flush(Ctxt: TSQLRestServerURIContext);
   end;
 
-  /// a REST server using a TSQLRestClient for all its ORM process
-  // - this server will use an internal TSQLRestClient instance to handle
-  // all ORM operations (i.e. access to objects)
+  /// a REST server using another TSQLRest instance for all its ORM process
+  // - this server will use an internal TSQLRest instance to handle all ORM
+  // operations (i.e. access to objects) - e.g. TSQLRestClient for remote access
   // - it can be used e.g. to host some services on a stand-alone server, with
   // all ORM and data access retrieved from another server: it will allow to
   // easily implement a proxy architecture (for instance, as a DMZ for
   // publishing services, but letting ORM process stay out of scope)
   TSQLRestServerRemoteDB = class(TSQLRestServer)
   protected
-    fClient: TSQLRestClient;
+    fRemoteRest: TSQLRest;
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
     function EngineDelete(TableModelIndex, ID: integer): boolean; override;
@@ -11708,18 +11728,14 @@ type
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
   public
-    /// initialize a REST server associated to a given TSQLRestClient instance
-    // - the specified TSQLRestClient will be used for all ORM and data process
-    // - the supplied TSQLRestClient.Model will be used for TSQLRestServerRemoteDB
-    // - note that the TSQLRestClient instance won't be freed - caller shall
+    /// initialize a REST server associated to a given TSQLRest instance
+    // - the specified TSQLRest will be used for all ORM and data process
+    // - you could use a TSQLRestClient or a TSQLRestServer instance
+    // - the supplied TSQLRest.Model will be used for TSQLRestServerRemoteDB
+    // - note that the TSQLRest instance won't be freed - caller shall
     // manage its life time
-    constructor Create(aRemoteClient: TSQLRestClient;
+    constructor Create(aRemoteRest: TSQLRest;
       aHandleUserAuthentication: boolean=false); reintroduce; virtual;
-    /// implement Server-Side TSQLRest deletion
-    /// overridden method for remote database engine call
-    // - will return false - i.e. not implemented - since it is a server side
-    // operation
-    function EngineExecuteAll(const aSQL: RawUTF8): boolean; override;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -11729,8 +11745,9 @@ type
     // - this overridden method will just return TRUE: in this remote access,
     // true coherency will be performed on the ORM server side
     function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; override;
-    /// the remote ORM client used for data persistence
-    property Client: TSQLRestClient read fClient;
+    /// the remote ORM instance used for data persistence
+    // - may be a TSQLRestClient or a TSQLRestServer instance
+    property RemoteRest: TSQLRest read fRemoteRest;
   end;
 
 
@@ -11757,7 +11774,7 @@ type
     procedure SetForceBlobTransfert(Value: boolean);
     function GetForceBlobTransfertTable(aTable: TSQLRecordClass): Boolean;
     procedure SetForceBlobTransfertTable(aTable: TSQLRecordClass; aValue: Boolean);
-    /// get a member from its ID 
+    /// get a member from its ID
     // - implements REST GET collection
     // - returns the data of this object as JSON
     // - override this method for proper data retrieval from the database engine
@@ -11840,20 +11857,6 @@ type
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
       SQLWhereFormat: PUTF8Char; const Args, Bounds: array of const): TSQLTableJSON; overload;
-    /// Execute directly a SQL statement
-    // - return true on success
-    function EngineExecute(const SQL: RawUTF8): boolean; overload; virtual; abstract;
-    /// Execute directly a SQL statement with supplied parameters
-    // - expect the same format as FormatUTF8() function, replacing all '%' chars
-    // with Args[] values
-    // - return true on success
-    function EngineExecuteFmt(SQLFormat: PUTF8Char; const Args: array of const): boolean; overload;
-    /// Execute directly a SQL statement with supplied parameters
-    // - expect the same format as FormatUTF8() function, replacing all '%' chars
-    // with Args[] values, and all '?' chars with Bounds[] (inlining them
-    // with :(...): and auto-quoting strings)
-    // - return true on success
-    function EngineExecuteFmt(SQLFormat: PUTF8Char; const Args, Bounds: array of const): boolean; overload;
     /// dedicated method used to retrieve matching IDs using a fast R-Tree index
     // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
     // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
@@ -11978,6 +11981,7 @@ type
     function ClientRetrieve(TableModelIndex, ID: integer; ForUpdate: boolean;
       var InternalState: cardinal; var Resp: RawUTF8): boolean; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
+    function EngineExecute(const SQL: RawUTF8): boolean; override;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
     function EngineDelete(TableModelIndex, ID: integer): boolean; override;
@@ -12047,10 +12051,6 @@ type
     // - URI is 'ModelRoot/TableName/TableID' with UNLOCK method
     // - returns true on success
     function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
-    /// Execute directly a SQL statement
-    // - URI is 'ModelRoot' with POST method, and SQL statement sent as UTF-8
-    // - server must return Status 200/HTML_SUCCESS OK on success
-    function EngineExecute(const SQL: RawUTF8): boolean; override;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - URI is 'ModelRoot' with GET method, and SQL statement sent as UTF-8
     // - return a result table on success, nil on failure
@@ -23963,6 +23963,23 @@ begin
     result := nil;
 end;
 
+function TSQLRest.Execute(const aSQL: RawUTF8): boolean;
+begin
+  result := EngineExecute(aSQL);
+end;
+
+function TSQLRest.ExecuteFmt(SQLFormat: PUTF8Char;
+  const Args: array of const): boolean;
+begin
+  result := EngineExecute(FormatUTF8(SQLFormat,Args));
+end;
+
+function TSQLRest.ExecuteFmt(SQLFormat: PUTF8Char;
+  const Args, Bounds: array of const): boolean;
+begin
+  result := EngineExecute(FormatUTF8(SQLFormat,Args,Bounds));
+end;
+
 function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: Integer;
    ReturnFirstIfNoUnique: boolean=false): RawUTF8;
 begin
@@ -25987,7 +26004,7 @@ begin
     IndexName := RawUTF8ArrayToCSV(FieldNames,'');
   SQL := FormatUTF8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
     [SQL,Props.SQLTableName,IndexName,Props.SQLTableName,RawUTF8ArrayToCSV(FieldNames,',')]);
-  result := EngineExecuteAll(SQL);
+  result := EngineExecute(SQL);
 end;
 
 function TSQLRestServer.CreateSQLIndex(Table: TSQLRecordClass; const FieldName: RawUTF8;
@@ -26672,9 +26689,9 @@ begin
   mPOST: begin       // POST=ADD=INSERT
     if Table=nil then begin
       // ModelRoot with free SQL statement sent as UTF-8 (only for Admin group)
-      // security note: multiple SQL statements can be run in EngineExecuteAll()
+      // security note: multiple SQL statements can be run in EngineExecute()
       if (reSQL in Call.RestAccessRights^.AllowRemoteExecute) and
-         Server.EngineExecuteAll(Call.InBody) then begin
+         Server.EngineExecute(Call.InBody) then begin
         Call.OutStatus := HTML_SUCCESS; // 200 OK
         inc(Server.fStats.fModified);
       end;
@@ -30517,7 +30534,7 @@ begin
   {$endif}
 end;
 
-function TSQLRestServerFullMemory.EngineExecuteAll(const aSQL: RawUTF8): boolean;
+function TSQLRestServerFullMemory.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   result := false; // not implemented in this basic REST server class
 end;
@@ -30646,52 +30663,52 @@ end;
 
 { TSQLRestServerRemoteDB }
 
-constructor TSQLRestServerRemoteDB.Create(aRemoteClient: TSQLRestClient;
+constructor TSQLRestServerRemoteDB.Create(aRemoteRest: TSQLRest;
   aHandleUserAuthentication: boolean);
 begin
-  if aRemoteClient=nil then
+  if aRemoteRest=nil then
     raise EORMException.CreateFmt('%s creation with no remote client',[ClassName]);
-  inherited Create(aRemoteClient.Model,aHandleUserAuthentication);
-  fClient := aRemoteClient;
+  inherited Create(aRemoteRest.Model,aHandleUserAuthentication);
+  fRemoteRest := aRemoteRest;
 end;
 
 function TSQLRestServerRemoteDB.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): integer;
 begin
-  result := fClient.EngineAdd(TableModelIndex,SentData);
+  result := fRemoteRest.EngineAdd(TableModelIndex,SentData);
 end;
 
 function TSQLRestServerRemoteDB.EngineDelete(TableModelIndex, ID: integer): boolean;
 begin
-  result := fClient.EngineDelete(TableModelIndex,ID);
+  result := fRemoteRest.EngineDelete(TableModelIndex,ID);
 end;
 
 function TSQLRestServerRemoteDB.EngineDeleteWhere(TableModelIndex: Integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 begin
-  result := fClient.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+  result := fRemoteRest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
 end;
 
-function TSQLRestServerRemoteDB.EngineExecuteAll(const aSQL: RawUTF8): boolean;
+function TSQLRestServerRemoteDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
-  result := fClient.EngineExecute(aSQL);
+  result := fRemoteRest.EngineExecute(aSQL);
 end;
 
 function TSQLRestServerRemoteDB.ExecuteList(const Tables: array of TSQLRecordClass;
   const SQL: RawUTF8): TSQLTableJSON;
 begin
-  result := fClient.ExecuteList(Tables,SQL);
+  result := fRemoteRest.ExecuteList(Tables,SQL);
 end;
 
 function TSQLRestServerRemoteDB.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 begin
-  result := fClient.EngineList(SQL,ForceAJAX,ReturnedRowCount);
+  result := fRemoteRest.EngineList(SQL,ForceAJAX,ReturnedRowCount);
 end;
 
 function TSQLRestServerRemoteDB.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 begin
-  result := fClient.EngineRetrieve(TableModelIndex,ID);
+  result := fRemoteRest.EngineRetrieve(TableModelIndex,ID);
 end;
 
 function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex, aID: integer;
@@ -30699,13 +30716,13 @@ function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex, aID: integer
 begin
   if (self=nil) or (BlobField=nil) then
     result := false else
-    result := fClient.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := fRemoteRest.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdate(TableModelIndex,
   ID: integer; const SentData: RawUTF8): boolean;
 begin
-  result := fClient.EngineUpdate(TableModelIndex,ID,SentData);
+  result := fRemoteRest.EngineUpdate(TableModelIndex,ID,SentData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex, aID: integer;
@@ -30713,13 +30730,13 @@ function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex, aID: integer;
 begin
   if (self=nil) or (BlobField=nil) then
     result := false else
-    result := fClient.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := fRemoteRest.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 begin
-  result := fClient.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
+  result := fRemoteRest.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
 end;
 
 function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(Table: TSQLRecordClass;
@@ -30874,18 +30891,6 @@ end;
 procedure TSQLRestClient.RollBack(SessionID: cardinal);
 begin
   inherited;
-end;
-
-function TSQLRestClient.EngineExecuteFmt(SQLFormat: PUTF8Char;
-  const Args: array of const): boolean;
-begin
-  result := EngineExecute(FormatUTF8(SQLFormat,Args));
-end;
-
-function TSQLRestClient.EngineExecuteFmt(SQLFormat: PUTF8Char;
-  const Args, Bounds: array of const): boolean;
-begin
-  result := EngineExecute(FormatUTF8(SQLFormat,Args,Bounds));
 end;
 
 function TSQLRestClient.ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
@@ -32538,8 +32543,8 @@ begin
   if (self=nil) or (Server=nil) then
     Result:= false else
     with RecordProps do
-      Result := Server.EngineExecuteAll(FormatUTF8(
-        'INSERT INTO %(%) VALUES(''optimize'');',[SQLTableName,SQLTableName]));
+      Result := Server.ExecuteFmt('INSERT INTO %(%) VALUES(''optimize'');',
+        [SQLTableName,SQLTableName]);
 end;
 
 

@@ -8871,7 +8871,7 @@ var n, i, ndx: integer;
     Static: TSQLRest;
 begin
   Client.Server.StaticVirtualTableDirect := DirectSQL;
-  Check(Client.Server.EngineExecuteAll(FormatUTF8('DROP TABLE %',[aClass.SQLTableName])));
+  Check(Client.Server.ExecuteFmt('DROP TABLE %',[aClass.SQLTableName]));
   Client.Server.CreateMissingTables(0);
   VD := aClass.Create as TSQLRecordDali1;
   try
@@ -9089,8 +9089,8 @@ begin
       Check(Client.UnLock(V),'unlock');
       checks(true,Client,'check UPDATE/POST');
       if Client.SessionUser=nil then // only if has the right for EngineExecute
-        Check(Client.EngineExecute('VACUUM;'),'check direct EngineExecute') else
-        Check(Client.Server.EngineExecuteAll('VACUUM;'));
+        Check(Client.Execute('VACUUM;'),'check direct Execute()') else
+        Check(Client.Server.Execute('VACUUM;'));
       Check(V2.FirstName='Leonardo1');
       Check(not V2.SameValues(V),'V and V2 must differ');
       Check(Client.UpdateFromServer([V2],Refreshed));

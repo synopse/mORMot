@@ -197,6 +197,7 @@ type
        var Params: TSQLVarDynArray; LastIntegerParam: integer; ParamsMatchCopiableFields: boolean): boolean;
     // overridden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
     function EngineLockedNextID: Integer; virtual;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
@@ -1128,7 +1129,7 @@ begin
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
-      if result and (Owner<>nil) then 
+      if result and (Owner<>nil) then
         Owner.FlushInternalDBCache;
     end;
 end;
@@ -1205,6 +1206,14 @@ begin // TableModelIndex is not useful here
       // list '[{...}]'#10 -> object '{...}'
       result := copy(result,2,length(result)-3);
   end;
+end;
+
+function TSQLRestStorageExternal.EngineExecute(
+  const aSQL: RawUTF8): boolean;
+begin
+  if aSQL='' then
+    result := false else
+    result := ExecuteInlined(aSQL,false)<>nil;
 end;
 
 function TSQLRestStorageExternal.TableHasRows(Table: TSQLRecordClass): boolean;
