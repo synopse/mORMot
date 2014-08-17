@@ -5,7 +5,7 @@ interface
 uses
   SynCommons,
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls;
+  Dialogs, StdCtrls, Clipbrd;
 
 type
   TMainForm = class(TForm)
@@ -20,6 +20,7 @@ type
     btnGitShell: TButton;
     btnFossilShell: TButton;
     btnTests: TButton;
+    btnCopyLink: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -28,6 +29,7 @@ type
     procedure btnGitShellClick(Sender: TObject);
     procedure btnFossilShellClick(Sender: TObject);
     procedure btnTestsClick(Sender: TObject);
+    procedure btnCopyLinkClick(Sender: TObject);
   private
     fBatPath: TFileName;
     fFossilRepository: TFileName;
@@ -179,6 +181,19 @@ end;
 procedure TMainForm.btnTestsClick(Sender: TObject);
 begin
   WinExecAndWait32('d:\dev\lib\compilpil.bat','d:\dev\lib',SW_SHOWNORMAL,INFINITE);
+end;
+
+procedure TMainForm.btnCopyLinkClick(Sender: TObject);
+var i: integer;
+    status: string;
+begin
+  status := mmoStatus.Lines.Text;
+  i := pos('checkout:',status);
+  if i<0 then
+    exit;
+  inc(i,10);
+  while (i<length(status)) and (status[i]<=' ') do inc(i);
+  Clipboard.AsText := 'http://synopse.info/fossil/info/'+copy(status,i,10);
 end;
 
 end.

@@ -104,8 +104,8 @@ object MainForm: TMainForm
   object btnRefreshStatus: TButton
     Left = 520
     Top = 5
-    Width = 67
-    Height = 17
+    Width = 75
+    Height = 18
     Anchors = [akTop, akRight]
     Caption = 'Refresh'
     TabOrder = 5
@@ -141,5 +141,14 @@ object MainForm: TMainForm
     TabOrder = 8
     WordWrap = True
     OnClick = btnTestsClick
+  end
+  object btnCopyLink: TButton
+    Left = 512
+    Top = 222
+    Width = 75
+    Height = 18
+    Caption = 'Copy Link'
+    TabOrder = 9
+    OnClick = btnCopyLinkClick
   end
 end
