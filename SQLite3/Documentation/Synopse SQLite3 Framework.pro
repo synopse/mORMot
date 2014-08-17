@@ -1697,7 +1697,7 @@ In all cases, be aware that, like any {\f1\fs20 class} type, the {\f1\fs20 const
 :   Integration with other mORMot units
 In fact, whenever a dynamic {\i schema-less} storage structure is needed, you may use a {\f1\fs20 TDocVariant} instance instead of {\f1\fs20 class} or {\f1\fs20 record} strong-typed types:
 - Client-Server ORM - see @3@ - will support {\f1\fs20 TDocVariant} in any of the {\f1\fs20 TSQLRecord variant} published properties (and store them as @*JSON@ in a text column);
-- Interface-based services - see  @63@ - will support {\f1\fs20 TDocVariant} as {\f1\fs20 variant} parameters of any method, which make them as perfect {\i DTO};
+- Interface-based services - see @63@ - will support {\f1\fs20 TDocVariant} as {\f1\fs20 variant} parameters of any method, which make them as perfect {\i DTO};
 - Since JSON support is implemented with any {\f1\fs20 TDocVariant} value from the ground up, it makes a perfect fit for working with AJAX clients, in a script-like approach;
 - If you use our {\f1\fs20 SynMongoDB.pas mORMotMongoDB.pas} units to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access nested @*BSON@ arrays or objects documents - that is, it will allow proper @*ODM@ storage;
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
@@ -2260,7 +2260,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
 For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
-Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.EngineExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
+Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 :  Introducing TSQLTableJSON
 As we stated above, {\f1\fs20 [CreateAnd]FillPrepare} / {\f1\fs20 FillOne} methods are implemented via an internal {\f1\fs20 @**TSQLTableJSON@} instance.
 In short, {\f1\fs20 TSQLTableJSON} will expect some {\i @*JSON@} content as input, will parse it in rows and columns, associate it with one or more optional {\f1\fs20 @*TSQLRecord@} class types, then will let you access the data via its {\f1\fs20 Get*} methods.
@@ -2657,7 +2657,7 @@ Those functions allow direct access to the BLOB content like this:
 In the above code, the WHERE clause of the {\f1\fs20 OneFieldValues} method will use the dedicated {\f1\fs20 IntegerDynArrayContains} @*SQL function@ to retrieve all records containing the specified {\f1\fs20 integer} value {\f1\fs20 k} in its {\f1\fs20 Ints} BLOB column. With such a function, all the process is performed Server-side, with no slow data transmission nor JSON/@*Base64@ @*serialization@.
 For instance, using such a SQL function, you are able to store multiple {\f1\fs20 @*TSQLRecord@. ID} field values into one {\f1\fs20 TIntegerDynArray} property column, and have direct search ability inside the SQL statement. This could be a very handy way of implementing "one to many" or "many to many" relationship, without the need of a pivot table.
 Those functions were implemented to be very efficient for speed. They won't create any temporary dynamic array during the search, but will access directly to the BLOB raw memory content, as returned by the {\i SQlite} engine. The {\f1\fs20 RawUTF8DynArrayContainsCase / RawUTF8DynArrayContainsNoCase} functions also will search directly inside the BLOB. With huge number of requests, this could be slower than using a {\f1\fs20 @*TSQLRecordMany@} pivot table, since the search won't use any index, and will have to read all BLOB field during the request. But, in practice, those functions behave nicely with a relative small amount of data (up to about 50,000 rows). Don't forget that BLOB column access are very optimized in {\i @*SQlite3@}.
-For more complex dynamic array content handling, you'll have either to create your own @*SQL function@ using the {\f1\fs20 TSQLDataBase. RegisterSQLFunction} method and an associated {\f1\fs20 TSQLDataBaseSQLFunction} class, or via a dedicated @*Service@ or a @*stored procedure@ - see @22@ on how to implement it.
+For more complex dynamic array content handling, you'll have either to create your own @*SQL function@ using the {\f1\fs20 TSQLDataBase. RegisterSQLFunction} method and an associated {\f1\fs20 TSQLDataBaseSQLFunction} class, or via a dedicated @*Service@ or a @*stored procedure@ - see @23@ on how to implement it.
 :     TPersistent/TCollection fields
 For instance, here is the way regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\f1\fs20 @**TPersistent@}, {\f1\fs20 @**TCollection@} or {\f1\fs20 @*TRawUTF8List@} fields ({\f1\fs20 TRawUTF8List} is just a {\f1\fs20 TStringList}-like component, dedicated to handle {\f1\fs20 @*RawUTF8@} kind of {\f1\fs20 string}):
 !  TSQLRecordPeopleObject = class(TSQLRecordPeople)
@@ -2983,7 +2983,7 @@ This should not be done on the Server side. In fact, the framework expects the t
 !  if (self=nil) or (Table=nil) or (ID<=0) then
 !    result := false else begin
 !    // this SQL statement use :(inlined params): for all values
-!    result := EngineExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
+!    result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
 !!      [Table.RecordProps.SQLTableName,GetJSONObjectAsSQL(SentData,true,true),ID]);
 !    if Assigned(OnUpdateEvent) then
 !       OnUpdateEvent(self,seUpdate,Table,ID);
@@ -4083,12 +4083,12 @@ and the integer value 10 will be bounded to the prepared statement before execut
 Example of possible inlined values are (note double " @*quotes@ are allowed for the text parameters, whereas SQL statement should only use single ' quotes):
 $:(1234): :(12.34): :(12E-34): :("text"): :('It''s great'):
 All internal SQL statement generated by the @*ORM@ are now using this new parameter syntax.
-For instance, here is how an object deletion is implemented:
+For instance, here is how an object deletion is implemented for the {\i SQlite3} engine:
 !function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: integer): boolean;
 !begin
 !  if Assigned(OnUpdateEvent) then
 !    OnUpdateEvent(self,seDelete,Table,ID); // notify BEFORE deletion
-!  result := EngineExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',[Table.SQLTableName,ID]);
+!  result := ExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',[Table.SQLTableName,ID]);
 !end;
 Using {\f1\fs20 :(%):} will let the {\f1\fs20 DELETE FROM table_name WHERE RowID=?} statement be prepared and reused between calls.
 In your code, you should better use, for instance:
@@ -4099,7 +4099,7 @@ In your code, you should better use, for instance:
 ! aName := OneFieldValue(TSQLMyRecord,'Name','ID=%',[aID]);
  or instead of a plain
 ! aName := OneFieldValue(TSQLMyRecord,'Name','ID='+Int32ToUtf8(aID));
-In fact, from your client code, you may not use directly the {\f1\fs20 :(...):} expression in your request, but would rather use the overloaded {\f1\fs20 TSQLRecord.Create, TSQLRecord.FillPrepare, TSQLRecord.CreateAndFillPrepare, TSQLRest.OneFieldValue, TSQLRest.MultiFieldValues, TQLRestClient.EngineExecuteFmt} and {\f1\fs20 TSQLRestClient.ListFmt} methods, available since revision 1.15 of the framework, which will accept both '%' and '?' characters in the SQL WHERE format text, in-lining '?' parameters with proper {\f1\fs20 :(...):} encoding and quoting the {\f1\fs20 @*RawUTF8@} / strings parameters on purpose.
+In fact, from your client code, you may not use directly the {\f1\fs20 :(...):} expression in your request, but would rather use the overloaded {\f1\fs20 TSQLRecord.Create, TSQLRecord.FillPrepare, TSQLRecord.CreateAndFillPrepare, TSQLRest.OneFieldValue, TSQLRest.MultiFieldValues, TQLRestClient.ExecuteFmt} and {\f1\fs20 TSQLRestClient.ListFmt} methods, available since revision 1.15 of the framework, which will accept both '%' and '?' characters in the SQL WHERE format text, in-lining '?' parameters with proper {\f1\fs20 :(...):} encoding and quoting the {\f1\fs20 @*RawUTF8@} / strings parameters on purpose.
 I found out that this SQL format enhancement is much easier to use (and faster) in the {\i Delphi} code than using parameters by name or by index, like in this classic VCL code:
 $SQL.Text := 'SELECT Name FROM Table WHERE ID=:Index';
 $SQL.ParamByName('Index').AsInteger := aID;
@@ -7186,7 +7186,7 @@ Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBSta
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
 The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
-:  Optimized SQL for bulk insert
+:93  Optimized SQL for bulk insert
 Sadly, array binding is not available for all databases or libraries. In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once.
 It induces a noticeable speed increase when saving several objects into an external database.
 This feature is available for {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*MySQL@} and {\i @*NexusDB@}.
@@ -7263,8 +7263,9 @@ The main rules may be simply:
 - {\i Not to cache unless you need to} (see Knuth's wisdom);
 - {\i Ensure that caching is worth it} (if a value is likely to be overridden often, it could be even slower to cache it);
 - Test once, test twice, always test and do not forget to test even more.
+In practice, caching issues could be difficult to track. So in case of doubt (why was this data not accurate? it sounds like an old revision?), you may immediately disable caching, then ensure that you were not too optimistic about your cache policy.
 :  What to cache
-Typical content of these two tuned caches can be any global configuration settings, or any other kind of unchanging data which is not likely to vary often, and is accessed simultaneously by multiple clients, such as catalog information for an online retailer.
+Typical content of these two tuned caches can be any global configuration settings, or any other kind of unchanging data which is not likely to vary often, and is accessed simultaneously by multiple clients, such as catalog information for an on-line retailer.
 Another good use of caching is to store data that changes but is accessed by only one client at a time. By setting a cache at the client level for such content, the server won't be called often to retrieve the client-specific data. In such case, the problem of handling concurrent access to the cached data doesn't arise.
 Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @16@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
 But most of the time, an human guess at the business logic level is enough to set which data is to be cached on each side, and ensure content coherency.
@@ -7288,26 +7289,82 @@ It's worth warning once again that it's up to the code responsibility to ensure 
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
 %cartoon02.png
-The framework is able to handle a custom type of "@**stored procedure@" at SQL level in pure {\i Delphi} code, like any powerful @*Client-Server@ RDBMS solution.
-In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the server side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature will be much faster than a pure client-sided solution.
-The Server-Side services - see @49@ and @63@ - appear to be the more @*REST@ful compatible way of implementing a stored procedure mechanism in our framework. But custom SQL WHERE statements may improve the client code, and therefore ORM CRUD requests could be optimized via some server-side process.
+In your developer background and history, you may have been used to write your business code as {\i @**stored procedure@s}, to be executed on the server side.\line In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the database side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature is usually much faster than a pure client-sided solution.
+Since {\i mORMot} is {\i Client/Server} from the ground up, it features some unique ways of improving data-intensive process on the client or server sides, without necessary relying on proprietary {\i stored procedures}.
+This chapter is worth reading, if you start a new {\i mORMot} project, and wonder about the architecture of your upcoming applications, or if you are integrating a {\i mORMot} server in an existing application... in which you or your predecessors may have (ab)used of stored procedures.\line It is time to sit down first, and take counsel how your project may be optimized enough to scale and profit.
+\page
+: Optimize for performance
+So, let's do it the {\i mORMot}'s way.
+As we discussed, the main point about {\i stored procedures} is performance. But they are not magic bullet either: we all have seen slow and endless process in {\i stored procedures}, almost killing a database server in production. Just as with regular client-side process.
+And don't be fooled by performance: {\i make it right, then make it fast}.\line We could make ourself a motto of this Martin Fowler's remark:
+{\i One of the first questions people consider with this kind of thing is performance. Personally I don't think performance should be the first question. My philosophy is that most of the time you should focus on writing maintainable code. Then use a profiler to identify hot spots and then replace only those hot spots with faster but less clear code. The main reason I do this is because in most systems only a very small proportion of the code is actually performance critical, and it's much easier to improve the performance of well factored maintainable code.}
+See @http://www.martinfowler.com/articles/dblogic.html - nice link by the way, if you want to identify some best practice about implementing a persistence layer for our business code.
+If you are using a {\i mORMot} server for the first time, you may be amazed by how most common process would sound just immediate. You can capitalize on the framework optimizations, which are able to unleash the computing power of your hardware, then refine your code only when performance matters.
+In order to speed up our data processing, we first have to consider the classic architecture of a {\i mORMot} application - see @%%mORMotDesign3@.\line A {\i mORMot} client would have two means of accessing its data:
+- Either from CRUD / ORM methods;
+- Or via services, most probably {\i interface-based services} - see @63@.
+Our optimization goals would therefore be leaded into those two directions.
+:  Profiling your application
+If you worry about performance, first reflex may be to enable the framework logging, even on customer sites.
+The profiling abilities of the {\f1\fs20 TSynLog} class, used everywhere in our framework, will allow you to identify the potential bottlenecks of your client applications. See @73@ about this feature.\line From our experiment, we can assure you that the first time you may run logging on a real {\i mORMot} application, you may find issues you would never have think off by yourself.
+Fight against any duplicated queries, unnecessary returned information (do not forget to specify the fields to be retrieved to your {\f1\fs20 CreateAndFillPrepare()} request), unattended requests triggered by the User Interface (typically a {\f1\fs20 TEdit}'s {\f1\fs20 OnChange} event may benefit of using a {\f1\fs20 TTimer} before asking for auto-completion)...
+Once you have done this cleaning, you may be proud of you, and it may be enough for your customers to enjoy your application. You deserve a coffee or a drink.
+:  Client-side caching
+You may have written most of your business logic on the client side, and use CRUD / ORM methods to retrieve the information from your {\i mORMot} server.\line This is perfectly valid, but may be slow, especially if a lot of individual requests are performed over the network, which may be with high latency (e.g. over the Internet).
+A new step of optimization, once you did identify your application bottlenecks via profiling, may be to tune your ORM client cache. In fact, there are several layers of caching available in a {\i mORMot} application. See @39@ for details about these features.\line Marking some tables as potentially cached on the client side may induce a noticeable performance boost, with no need of changing your client code.
+:  Write business logic as Services
+A further step of optimization may be to let the business logic be processed on the server side, within a @*service@.\line In fact, you would then switch your mind from a classic @7@ to a @17@.
+As a result, your process may take much less time, and you may also be able to benefit from some other optimization tricks, like dedicated caching in your service.\line For instance, consider writing your service in {\f1\fs20 sicShared} mode instead of the default {\f1\fs20 sicSingle} mode - see @92@ - and let some intangible objects be stored as implementation class fields: the next request from a client would not need to load this data from the database, but instead retrieve the information directly from memory, with no latency. You may also consider using {\f1\fs20 sicClientDriven} mode, and cache some client-specific information as implementation class fields.
+Beside optimization, your code would probably become easier to maintain and scale, when running as services. SOA is indeed a very convenient pattern, and will induce nice side effects, like the ability to switch to multi-platform clients, including mobile or AJAX, since your business logic would stay on the application server.
+:  Using ORM full power
+On the server side, your business code, written using CRUD / ORM methods, could be optimized.
+First of all, ORM caching may also be used. Any unneeded round-trip to the database - even more with @27@ - could impact your application responsiveness. Then your business logic, written as services, would benefit from it.
+Then you may regroup all your database modifications using @28@.\line This would offer several benefits:
+- Transaction support (nothing is written to the database until {\f1\fs20 BatchSend} method is executed) similar to the {\i @*Unit Of Work@} pattern;
+- Faster insertion, update or deletion - via @78@ and @93@;
+- Perfect integration with the ORM.
+In fact, we found out that {\i Array DML} or {\i optimized INSERT} could be much faster than a regular {\i stored procedure}, with individual SQL statements run in a loop.
+: Stored procedures
+:  Why to avoid stored procedures
+In practice, {\i stored procedures} have some huge drawbacks:
+- Your business logic is tied to the data layout used for storage - and the {\i Relational Model} is far away from natural language - see @91@;
+- Debugging is somewhat difficult, since stored procedures will be executed on the database server, far away from your application;
+- Each developer would probably need its own database instance to be able to debug its own set of {\i stored procedures};
+- Project deployment becomes complex, since you have to synchronize your application and database server;
+- Cursors and temporary tables, as commonly used in {\i stored procedures}, may hurt performance;
+- They couple you with a particular database engine: you are tied to use {\i Java}, {\i C#} or a P/SQL variant to write your business code, then switching from {\i @*Oracle@} to {\i @*PostgreSQL@} or {\i @*MS SQL@} would be error prone, if not impossible;
+- They may consume some precious hardware resources on your database server, which may be limited (e.g. proprietary engines like {\i Oracle} or {\i MS SQL} would force you to use only one CPU or a limited amount of RAM, unless you need to spend a lot of money to increase your license abilities);
+- You will probably have limitations in the virtual environment running in your database engine: deprecated VM or libraries, restricted access to files or network due to security requirements, missing libraries;
+- Inefficiency of parameters passing, especially when compared with class OOP programming - you are back to the procedural mode of the 80s;
+- Parameters passing would probably result in sub-optimal SQL statements, handling all passed values even if not used;
+- Flat design of stored procedures interfaces, far away from the interface segregation principle - see @47@;
+- Let several versions of your business logic coexist on the same server is a nightmare to maintain;
+- Unit testing is made difficult, since you won't be able to mock or stub - see @62@ - your {\i stored procedures} or your data;
+- No popular SQL engine does allow {\i stored procedures} to be written in Delphi, so you won't be able to share code with your other projects;
+- If you use an ORM in your main application, you need to manually maintain the table schema used in your stored procedures in synch with your object model - so you are loosing most of ORM benefits;
+- What if you want to switch to {\i @*NoSQL@} storage, or a simple stand-alone version of your application?
+We do not want to say, dogmatically, that {\i stored procedures} are absolute evil. Of course, you are free to use them, even with {\i mORMot}.\line All we wanted to point out is the fact that they are perhaps not the best fit with the design we would like to follow.
+:  Stored procedures, anyway
+There may be some cases where this ORM point of view, may be not enough for your project.\line Do not worry, as usual {\i mORMot} will allow you to do what you need.
+The Server-Side services - see @49@ and @63@ - appear to be the more @*REST@ful compatible way of implementing a {\i @*stored procedure@} mechanism in our framework, then consume them from a {\i mORMot} client.
 According to the current state of our framework, there are several ways of handling such a server-side SQL/ORM process:
 - Write your own @*SQL function@ to be used in {\i @*SQLite3@} WHERE statements;
 - Low-level dedicated {\i Delphi} stored procedures;
 - External databases stored procedures.
+We will discuss those options.\line The first two will in fact implement two types of "@*stored procedure@" at SQL level in pure {\i Delphi} code, making our {\i SQlite3} kernel as powerful as other @*Client-Server@ RDBMS solutions. The latest option may be considered, especially when moving from legacy applications, still relying on stored procedures for their business logic.
 \page
-:22 Custom SQL functions
+:22   Custom SQL functions
 The {\i @*SQLite3@} engine defines some standard @**SQL function@s, like {\f1\fs20 abs() min() max()} or {\f1\fs20 upper()}. A complete list is available at @http://www.sqlite.org/lang_corefunc.html
 One of the greatest {\i SQLite3} feature is the ability to define custom SQL functions in high-level language. In fact, its C API allows implementing new functions which may be called within a SQL query. In other database engine, such functions are usually named UDF (for {\i User Defined Functions}).
-Some custom already defined SQL functions are defined by the framework. You may have to use, on the Server-side:
+Some custom already defined SQL functions are defined by the framework.\line You may have to use, on the Server-side:
 - {\f1\fs20 Rank} used for page ranking in @24@;
 - {\f1\fs20 Concat} to process fast string concatenation;
 - {\f1\fs20 Soundex SoundexFR SoundexES} for computing the English / French / Spanish soundex value of any text;
-- {\f1\fs20 @*IntegerDynArrayContains@, ByteDynArrayContains, WordDynArrayContains, CardinalDynArrayContains, Int64DynArrayContains, CurrencyDynArrayContains, RawUTF8DynArrayContainsCase, RawDynArrayContainsNoCase, } for direct search inside a BLOB column containing some @*dynamic array@ binary content (expecting either an INTEGER or a TEXT search value as 2nd parameter).
+- {\f1\fs20 @*IntegerDynArrayContains@, ByteDynArrayContains, WordDynArrayContains, CardinalDynArrayContains, Int64DynArrayContains, CurrencyDynArrayContains, RawUTF8DynArrayContainsCase, RawDynArrayContainsNoCase} for direct search inside a BLOB column containing some @*dynamic array@ binary content (expecting either an INTEGER or a TEXT search value as 2nd parameter).
 Those functions are no part of the {\i SQlite3} engine, but are available inside our ORM to handle BLOB containing @*dynamic array@ properties, as stated in @21@.
 Since you may use such SQL functions in an {\f1\fs20 UPDATE} or {\f1\fs20 INSERT} SQL statement, you may have an easy way of implementing server-side process of complex data, as such:
 $ UPDATE MyTable SET SomeField=0 WHERE IntegerDynArrayContains(IntArrayField,:(10):)
-: Implementing a function
+:    Implementing a function
 Let us implement a {\f1\fs20 CharIndex()} SQL function, defined as such:
 ! CharIndex ( SubText, Text [ , StartPos ] )
 In here, {\f1\fs20 SubText} is the string of characters to look for in {\f1\fs20 Text}. {\f1\fs20 StartPos} indicates the starting index where {\f1\fs20 charindex()} should start looking for {\f1\fs20 SubText} in {\f1\fs20 Text}. Function shall return the position where the match occurred, 0 when no match occurs. Characters are counted from 1, just like in {\f1\fs20 PosEx()} {\i Delphi} function.
@@ -7341,15 +7398,15 @@ Here is typical implementation code of the {\f1\fs20 CharIndex()} SQL function, 
 This code just get the parameters values using {\f1\fs20 sqlite3.value_*()} functions, then call the {\f1\fs20 PosEx()} function to return the position of the supplied text, as an INTEGER, using {\f1\fs20 sqlite3.result_int64()}.
 The local {\f1\fs20 StartPos} variable is used to check for an optional third parameter to the SQL function, to specify the character index to start searching from.
 The special case of a {\f1\fs20 NULL} parameter is handled by checking the incoming argument type, calling {\f1\fs20 sqlite3.value_type(argv[])}.
-: Registering a function
-:  Direct low-level SQLite3 registration
+:    Registering a function
+:     Direct low-level SQLite3 registration
 Since we have a {\f1\fs20 InternalSQLFunctionCharIndex()} function defined, we may register it with direct {\i SQLite3} API calls, as such:
 !  sqlite3.create_function_v2(Demo.DB,
 !    'CharIndex',2,SQLITE_ANY,nil,InternalSQLFunctionCharIndex,nil,nil,nil);
 !  sqlite3.create_function_v2(Demo.DB,
 !    'CharIndex',3,SQLITE_ANY,nil,InternalSQLFunctionCharIndex,nil,nil,nil);
 The function is registered twice, one time with 2 parameters, then with 3 parameters, to add an overloaded version with the optional {\f1\fs20 StartPos} parameter.
-:  Class-driven registration
+:     Class-driven registration
 It is possible to add some custom SQL functions to the {\i SQlite3} engine itself, by creating a {\f1\fs20 TSQLDataBaseSQLFunction} custom class and calling the {\f1\fs20 TSQLDataBase.RegisterSQLFunction} method.
 The standard way of using this is to override the {\f1\fs20 @*TSQLRestServerDB@.InitializeEngine virtual} method, calling {\f1\fs20 DB.RegisterSQLFunction()} with an defined {\f1\fs20 TSQLDataBaseSQLFunction} custom class.
 So instead of calling low-level {\f1\fs20 sqlite3.create_function_v2()} API, you can declare the {\f1\fs20 CharIndex} SQL function as such:
@@ -7359,7 +7416,7 @@ The two lines above will indeed wrap the following code:
 !  Demo.RegisterSQLFunction(TSQLDataBaseSQLFunction.Create(InternalSQLFunctionCharIndex,2,'CharIndex'));
 !  Demo.RegisterSQLFunction(TSQLDataBaseSQLFunction.Create(InternalSQLFunctionCharIndex,3,'CharIndex'));
 The {\f1\fs20 RegisterSQLFunction()} method is called twice, one time with 2 parameters, then with 3 parameters, to add an overloaded version with the optional {\f1\fs20 StartPos} parameter, as expected.
-:  Custom class definition
+:     Custom class definition
 The generic function definition may be completed, in our framework, with a custom class definition, which is handy to have some specific context, not only relative to the current SQL function context, but global and static to the whole application process.
 \graph HierTSQLDataBaseSQLFunctionDynArray TSQLDataBaseSQLFunction classes hierarchy
 \TSQLDataBaseSQLFunction\TObject
@@ -7430,14 +7487,14 @@ Note that we did not use here the overloaded {\f1\fs20 OneFieldValues} method ex
 !      FormatUTF8('MyIntegerDynArrayContains(Ints,?)',[],
 !        [BinToBase64WithMagic(@k,sizeof(k))]),IDs);
 Since the {\f1\fs20 MyIntegerDynArrayContains} function will create a temporary dynamic array in memory from each row (stored in {\f1\fs20 fDummyDynArrayValue}), the dedicated {\f1\fs20 IntegerDynArrayContains} SQL function is faster.
-: Low-level Delphi stored procedure
-To implement a more complete request, and handle any kind of stored data in a column (for instance, some TEXT format to be parsed), a {\f1\fs20 TOnSQLStoredProc} event handler can be called for every row of a prepared statement, and is able to access directly to the database request. Code inside this event handler should not use the @*ORM@ methods of the framework, but direct low-level {\i SQLite} access. This event handler should be specified to the corresponding overloaded {\f1\fs20 @*TSQLRestServerDB@. EngineExecute} method.
-This will allow direct content modification during the {\f1\fs20 SELECT} statement. Be aware that, up to now, @20@ {\f1\fs20 TSQLVirtualTableCursorJSON} cursors are not safe to be used if the Virtual Table data is modified.
-See the description of the {\f1\fs20 TOnSQLStoredProc} event handler and associated method in the next pages.
-: External stored procedure
+:   Low-level SQLite3 stored procedure in Delphi
+To implement a more complete request, and handle any kind of stored data in a column (for instance, some TEXT format to be parsed), a {\f1\fs20 TOnSQLStoredProc} event handler can be called for every row of a prepared statement, and is able to access directly to the database request.\line This event handler can be specified to the {\f1\fs20 @*TSQLRestServerDB@.StoredProcExecute()} method.\line Be aware that code inside this event handler should not use the @*ORM@ methods of the framework, but direct low-level {\i SQLite3} access (to avoid re-entrance issues).
+This will allow direct content modification during the {\f1\fs20 SELECT} statement. Be aware that, up to now, @20@ {\f1\fs20 TSQLVirtualTableCursorJSON} cursors are not safe to be used if the {\i Virtual Table} data is modified.
+See the description of the {\f1\fs20 TOnSQLStoredProc} event handler and associated {\f1\fs20 StoredProcExecute()} method in the second part of this document.
+:   External stored procedure
 If the application relies on external databases - see @27@ - the external database may be located on a remote computer.
 In such situation, all RESTful Server-sided solutions could produce a lot of network traffic. In fact, custom SQL functions or stored procedures both use the {\i @*SQLite3@} engine as root component.
-In order to speed up the process, you may define some RDMS stored procedures in the external database format (.Net, Java, P/SQL or whatever), then define some @11@ to launch those functions. Note that in this case, you'll loose the database-independence of the framework, and switching to another database engine may cost.
+In order to speed up the process, you may define some RDMS stored procedures in the external database syntax (P/SQL, {\i .Net}, {\i Java} or whatever), then define some @11@ to launch those functions.\line Note that in this case, you'll loose the database independence of the framework, and most of the benefits of using an ORM/ODM - later on, switching to another database engine may become impossible. Such RDBMS stored procedures may be envisaged only during the transition phase of an existing application. @28@ has almost all the speed advantages of stored procedures, with the benefit of a pure object oriented code, easy to debug and maintain.
 :11Server side Services
 %cartoon03.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
@@ -8487,7 +8544,7 @@ In order to have a working service, you'll need to initialize a server-side @*fa
 The {\f1\fs20 Server} instance can be any {\f1\fs20 TSQLRestServer} inherited class, implementing any of the supported protocol of {\i mORMot}'s @35@, embedding a full {\i @*SQLite3@} engine (i.e. a {\f1\fs20 @*TSQLRestServerDB@} class) or a lighter in-memory engine (i.e. a {\f1\fs20 @*TSQLRestServerFullMemory@} class - which is enough for @*hosting@ services with authentication).
 The code line above will register the {\f1\fs20 TServiceCalculator} class to implement the {\f1\fs20 ICalculator} service, with a single shared instance life time (specified via the {\f1\fs20 sicShared} parameter). An optional time out value can be specified, in order to automatically release a deprecated instance after some inactivity.
 Whenever a service is executed, an implementation class is to be available. The life time of this implementation class is defined on both client and server side, by specifying a {\f1\fs20 TServiceInstanceImplementation} value. This setting must be the same on both client and server sides (it will be checked by the framework).
-:  Instances life time implementation
+:92  Instances life time implementation
 The available instance management options are the following:
 |%24%76
 |\b Lifetime|Description\b0
@@ -10785,7 +10842,7 @@ What do we call {\i @**Domain@} here?\line {\i The domain represents a sphere of
 As we already stated above, the domain has to be clearly identified, and your software is expected to solve a set of problems related to this domain.
 DDD is some special case of {\i Model-Driven Design}. Its purpose is to create a {\i model} of a given domain. The code itself will express the model: as a consequence, any code refactoring means changing the model, and vice-versa.
 \page
-: Modeling
+:91 Modeling
 Even the brightest programmer would never be able to convert a real-life domain into its software code. What we can do is to create an {\i abstraction} system that describes selected aspects of a domain.
 @**Model@ing is about {\i filtering} the reality, for a given use context: "All models are wrong, some are useful" {\i G. Box, statistician}.
 :  Several Models to rule them all
