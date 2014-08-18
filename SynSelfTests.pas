@@ -612,6 +612,8 @@ type
   protected
     fExternalModel: TSQLModel;
     fPeopleData: TSQLTable;
+    /// called by ExternalViaREST/ExternalViaVirtualTable and
+    // ExternalViaRESTWithChangeTracking tests method
     procedure Test(StaticVirtualTableDirect, TrackChanges: boolean);
   public
     /// release used instances (e.g. server) and memory
@@ -646,7 +648,7 @@ type
     /// test external DB using the JET engine
     procedure JETDatabase;
     {$endif}
-    {$endif}
+    {$endif}                   
   end;
 
   /// a test case for multi-threading abilities of the framework
@@ -8353,6 +8355,7 @@ begin
     RHist.Free;
   end;
 end;
+var historyDB: TSQLRestServerDB;
 begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
   DeleteFile('extdata.db3');
@@ -8365,13 +8368,27 @@ begin
   Check(VirtualTableExternalRegister(fExternalModel,TSQLASource,fProperties,'SourceExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADest,fProperties,'DestExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADests,fProperties,'DestsExternal'));
-  Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordMyHistory,fProperties,'HistoryExternal'));
   fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
     MapField('ID','Key').
     MapField('YearOfDeath','YOD');
   DeleteFile('testExternal.db3'); // need a file for backup testing
+  if TrackChanges and StaticVirtualTableDirect then begin
+    DeleteFile('history.db3');
+    historyDB := TSQLRestServerDB.Create(
+      TSQLModel.Create([TSQLRecordMyHistory],'history'),
+      'history.db3',false);
+  end else
+    historyDB := nil;
   aExternalClient := TSQLRestClientDB.Create(fExternalModel,nil,'testExternal.db3',TSQLRestServerDB);
   try
+    if historyDB<>nil then begin
+      historyDB.Model.Owner := historyDB;
+      historyDB.DB.Synchronous := smOff;
+      historyDB.DB.LockingMode := lmExclusive;
+      historyDB.CreateMissingTables;
+      Check(aExternalClient.Server.RemoteDataCreate(TSQLRecordMyHistory,historyDB)<>nil,
+        'TSQLRecordMyHistory will be accessed from an external instance');
+    end;
     aExternalClient.Server.DB.Synchronous := smOff;
     aExternalClient.Server.DB.LockingMode := lmExclusive;
     aExternalClient.Server.DB.GetTableNames(Tables);
@@ -8688,6 +8705,7 @@ begin
   finally
     aExternalClient.Free;
     fProperties.Free;
+    historyDB.Free;
   end;
 end;
 

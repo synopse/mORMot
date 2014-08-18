@@ -686,9 +686,9 @@ unit mORMot;
       incoming/outgoing context and parameters, especially via
       the new Input*[] properties, for easy URI parameter retrieval, and
       also allow define specific URI routing by a dedicated class
-    - BREAKING CHANGE; TSQLRestServerStatic* classes are now renamed as
+    - BREAKING CHANGE: TSQLRestServerStatic* classes are now renamed as
       TSQLRestStorage* and do not inherit from TSQLRestServer but plain TSQLRest
-      for a much cleaner design
+      for a much cleaner design, conform to the Liskov substitution principle
     - TSQLRestServer.StaticDataServer[] will now return an abstract TSQLRest
     - URI routing for interface-based service is now specified by the two
       TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC classes (inheriting from
@@ -904,6 +904,8 @@ unit mORMot;
       TSQLRestStorage.AdaptSQLForEngineList(SQL) call
     - new TSQLRestStorage.fOutInternalStateForcedRefresh protected field to
       optionally force the refresh of the content
+    - added TSQLRestStorageRemote class and TSQLRestServer.RemoteDataCreate()
+      method for feature request [3453f314d97d]
     - new TSQLRestServer.OnBlobUpdateEvent: TNotifyFieldSQLEvent event handler
       to implement feature request [4cafc41f67]
     - new protected TSQLRestServer.InternalUpdateEvent virtual method, to allow
@@ -9990,11 +9992,16 @@ type
     procedure FromString(P: PUTF8Char);
   end;
 
-  TSQLRestStorageClass = class of TSQLRestStorage;
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
 
-  /// class of our TObjectList memory-stored table storage 
+  /// class of our abstract table storage
+  // - may be e.g. TSQLRestStorageInMemory, TSQLRestStorageInMemoryExternal,
+  // TSQLRestStorageExternal or TSQLRestStorageMongoDB
+  TSQLRestStorageClass = class of TSQLRestStorage;
+
+  /// class of our TObjectList memory-stored table storage
+  // - may be TSQLRestStorageInMemory or TSQLRestStorageInMemoryExternal
   TSQLRestStorageInMemoryClass = class of TSQLRestStorageInMemory;
 
   {/ table containing the available user access rights for authentication
@@ -10948,11 +10955,26 @@ type
     // the database model
     function StaticDataCreate(aClass: TSQLRecordClass;
       const aFileName: TFileName = ''; aBinaryFile: boolean=false;
-      aServerClass: TSQLRestStorageInMemoryClass=nil): TSQLRest;
+      aServerClass: TSQLRestStorageInMemoryClass=nil): TSQLRestStorage;
     /// register an external static storage for a given table
     // - will be added to StaticDataServer[] internal list
-    // - called e.g. by StaticDataCreate()
+    // - called e.g. by StaticDataCreate() or RemoteDataCreate()
     function StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
+    /// create an external static redirection for a specific class
+    // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
+    // warning: if you don't call this method before CreateMissingTable method
+    // is called, the table will be created as a regular table by the main
+    // database engine, and won't be static
+    // - the specified TSQLRecord will have all its CRUD / ORM methods be
+    // redirected to aRemoteRest, which may be a TSQLRestClient or another
+    // TSQLRestServer instance
+    // - if aRemoteRest is a TSQLRestClient, it should have been authenticated
+    // to the remote TSQLRestServer, so that CRUD / ORM operations would pass
+    // - this would enable easy create of proxies, or local servers, with they
+    // own cache and data model - e.g. a branch office server which may server
+    // its local client over Ethernet, but communicating to a main mORMot
+    // server via Internet, storing the corporate data in the main office server
+    function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorage;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
@@ -11268,12 +11290,6 @@ type
     // - locking is handled at (Owner.)Model level
     // - returns true on success
     function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
-    /// overridden method for direct in-memory database engine call
-    // - made public since a TSQLRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TSQLRestServer
-    // - do nothing method: will return FALSE (aka error)
-    function EngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// create one index for all specific FieldNames at once
     // - do nothing method: will return FALSE (aka error)
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
@@ -11315,7 +11331,7 @@ type
   /// event prototype called by FindWhereEqual() method
   TFindWhereEqualEvent = procedure(aDest: pointer; aRec: TSQLRecord; aIndex: integer) of object;
 
-  /// abstract REST server exposing some internal TSQLRecord-based methods
+  /// abstract REST storage exposing some internal TSQLRecord-based methods
   TSQLRestStorageRecordBased = class(TSQLRestStorage)
   protected
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
@@ -11388,9 +11404,9 @@ type
     property CaseInsensitive: boolean read fCaseInsensitive;
   end;
 
-  /// REST server with direct access to a TObjectList memory-stored table
+  /// REST storage with direct access to a TObjectList memory-stored table
   // - store the associated TSQLRecord values in a TObjectList 
-  // - handle only one TSQLRecord by server (it's NOT a true Rest Server)
+  // - handle one TSQLRecord per TSQLRestStorageInMemory instance 
   // - must be registered individualy in a TSQLRestServer to access data from a
   // common client, by using the TSQLRestServer.StaticDataCreate method:
   // it allows an unique access for both SQLite3 and Static databases
@@ -11450,8 +11466,9 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIntegerDynArray): boolean; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
   public
-    /// initialize the server data, reading it from a file if necessary
+    /// initialize the table storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
@@ -11582,13 +11599,13 @@ type
       write fCommitShouldNotUpdateFile;
   end;
 
-  /// REST server with direct access to a memory database, to be used as
+  /// REST storage with direct access to a memory database, to be used as
   // an external SQLite3 Virtual table
   // - this is the kind of in-memory table expected by TSQLVirtualTableJSON,
   // in order to be consistent with the internal DB cache
   TSQLRestStorageInMemoryExternal = class(TSQLRestStorageInMemory)
   public
-    /// initialize the server data, reading it from a file if necessary
+    /// initialize the table storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
@@ -11603,7 +11620,38 @@ type
     procedure StorageLock(WillModifyContent: boolean); override;
   end;
 
+  /// REST storage with redirection to another REST instance
+  // - allows redirection of all CRUD operations for a table to another
+  // TSQLRest instance, may be a remote TSQLRestClient or a TSQLRestServer
+  TSQLRestStorageRemote = class(TSQLRestStorage)
+  protected
+    fRemoteRest: TSQLRest;
+    fRemoteTableIndex: integer;
+    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
+    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+      const IDs: TIntegerDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateBlob(TableModelIndex, aID: integer;
+      BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+  public
+    /// initialize the table storage redirection 
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
+      aRemoteRest: TSQLRest); reintroduce; virtual;
+    /// the remote ORM instance used for data persistence
+    // - may be a TSQLRestClient or a TSQLRestServer instance
+    property RemoteRest: TSQLRest read fRemoteRest;
+  end;
+
   /// a dynamic array of TSQLRestStorageInMemory instances
+  // - used e.g. by TSQLRestServerFullMemory
   TSQLRestStorageInMemoryDynArray = array of TSQLRestStorageInMemory;
 
   /// a REST server using only in-memory tables
@@ -11711,9 +11759,12 @@ type
   // all ORM and data access retrieved from another server: it will allow to
   // easily implement a proxy architecture (for instance, as a DMZ for
   // publishing services, but letting ORM process stay out of scope)
+  // - for per-table redirection, consider using the TSQLRestStorageRemote class
+  // via a call to the TSQLRestServer.RemoteDataCreate() method
   TSQLRestServerRemoteDB = class(TSQLRestServer)
   protected
     fRemoteRest: TSQLRest;
+    fRemoteTableIndex: TIntegerDynArray;
     function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
@@ -11733,14 +11784,10 @@ type
     // - the specified TSQLRest will be used for all ORM and data process
     // - you could use a TSQLRestClient or a TSQLRestServer instance
     // - the supplied TSQLRest.Model will be used for TSQLRestServerRemoteDB
-    // - note that the TSQLRest instance won't be freed - caller shall
-    // manage its life time
+    // - note that the TSQLRest instance won't be freed - caller shall ensure
+    // that it will stay available at least until TSQLRestServerRemoteDB.Free
     constructor Create(aRemoteRest: TSQLRest;
       aHandleUserAuthentication: boolean=false); reintroduce; virtual;
-    /// Execute directly a SQL statement, expecting a list of results
-    // - return a result table on success, nil on failure
-    // - will call EngineList() abstract method to retrieve its JSON content
-    function ExecuteList(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): TSQLTableJSON; override;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - this overridden method will just return TRUE: in this remote access,
@@ -25695,10 +25742,15 @@ begin
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
+var i: cardinal;
 begin
-  if (self<>nil) and (fStaticData<>nil) then
-   result := fStaticData[Model.GetTableIndexExisting(aClass)] else
-   result := nil;
+  if (self<>nil) and (fStaticData<>nil) then begin
+    i := Model.GetTableIndexExisting(aClass);
+    if i<cardinal(length(fStaticData)) then
+      result := fStaticData[i] else
+      result := nil;
+  end else
+    result := nil;
 end;
 
 function TSQLRestServer.GetStaticDataServerOrVirtualTable(
@@ -25713,7 +25765,7 @@ function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer):
 begin
   result := nil;
   if aTableIndex>=0 then begin
-    if fStaticData<>nil then
+    if cardinal(aTableIndex)<cardinal(length(fStaticData)) then
       result := fStaticData[aTableIndex];
     if result=nil then
       if fVirtualTableDirect and (fStaticVirtualTable<>nil) then
@@ -25727,7 +25779,7 @@ begin
   result := nil;
   Kind := sMainEngine;
   if aTableIndex>=0 then begin
-    if fStaticData<>nil then begin
+    if cardinal(aTableIndex)<cardinal(length(fStaticData)) then begin
       result := fStaticData[aTableIndex];
       if result<>nil then begin
         Kind := sStaticDataTable;
@@ -25754,28 +25806,27 @@ begin
 end;
 
 function TSQLRestServer.StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
-var i: integer;
+var i,n,t: cardinal;
 begin
   result := false;
   if (self=nil) or (aStaticData=nil) then
     exit;
   i := Model.GetTableIndexExisting(aStaticData.StoredClass);
-  if (fStaticData<>nil) and (fStaticData[i]<>aStaticData) then
+  n := length(fStaticData);
+  if (i<n) and (fStaticData[i]<>nil) and (fStaticData[i]<>aStaticData) then
     exit; // TSQLRecord already registered
-  if length(fStaticData)<length(Model.Tables) then
-    SetLength(fStaticData,length(Model.Tables));
+  t := length(Model.Tables);
+  if n<t then
+    SetLength(fStaticData,t);
   fStaticData[i] := aStaticData;
+  result := true;
 end;
 
 function TSQLRestServer.StaticDataCreate(aClass: TSQLRecordClass;
   const aFileName: TFileName; aBinaryFile: boolean;
-  aServerClass: TSQLRestStorageInMemoryClass): TSQLRest;
-var i: integer;
+  aServerClass: TSQLRestStorageInMemoryClass): TSQLRestStorage;
 begin
-  result := nil;
-  i := Model.GetTableIndexExisting(aClass);
-  if fStaticData<>nil then
-    result := fStaticData[i];
+  result := TSQLRestStorage(GetStaticDataServer(aClass));
   if result<>nil then
     // class already registered -> update file name
     (result as aServerClass).fFileName := aFileName else begin
@@ -25783,10 +25834,19 @@ begin
     if aServerClass=nil then
       aServerClass := TSQLRestStorageInMemory; // default in-memory engine
     result := aServerClass.Create(aClass,self,aFileName,aBinaryFile);
-    if length(fStaticData)<length(Model.Tables) then
-      SetLength(fStaticData,length(Model.Tables));
-    fStaticData[i] := result;
+    if not StaticDataAdd(result) then
+      raise EORMException.CreateFmt('Adding StaticDataCreate(%s)',[aClass.ClassName]);
   end;
+end;
+
+function TSQLRestServer.RemoteDataCreate(aClass: TSQLRecordClass;
+  aRemoteRest: TSQLRest): TSQLRestStorage;
+begin
+  if GetStaticDataServer(aClass)<>nil then
+    raise EORMException.CreateFmt('Duplicate RemoteDataCreate(%s)',[aClass.ClassName]);
+  result := TSQLRestStorageRemote.Create(aClass,self,aRemoteRest);
+    if not StaticDataAdd(result) then
+      raise EORMException.CreateFmt('Adding RemoteDataCreate(%s)',[aClass.ClassName]);
 end;
 
 procedure TSQLRestServer.FlushInternalDBCache;
@@ -25821,7 +25881,7 @@ function TSQLRestServer.InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8):
 begin
   result := nil;
   if (self<>nil) and (TableIndex>=0) then begin // SQL refers to this unique table
-    if fStaticData<>nil then
+    if cardinal(TableIndex)<cardinal(length(fStaticData)) then
       // no SQLite3 module available for fStaticData[] -> we need to
       // retrieve manualy any static table from the SQL SELECT statement
       result := fStaticData[TableIndex];
@@ -28072,19 +28132,22 @@ begin
   end;
 end;
 begin
-  if aIsBlobFields<>nil then
-    // BLOB fields update
-    if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
-      result := OnBlobUpdateEvent(self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
-      result := true else begin
-    // simple fields modification
-    if (aTableIndex<length(fTrackChangesHistoryTableIndex)) and
-       (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
-      DoTrackChanges;
-    if Assigned(OnUpdateEvent) then
-      result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
-      result := true; // true on success, false if error (but action continues)
-  end;
+  if aID<=0 then
+    result := false else
+    if aIsBlobFields<>nil then
+      // BLOB fields update
+      if (aEvent=seUpdateBlob) and Assigned(OnBlobUpdateEvent) then
+        result := OnBlobUpdateEvent(
+          self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
+        result := true else begin
+      // simple fields modification
+      if (aTableIndex<length(fTrackChangesHistoryTableIndex)) and
+         (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
+        DoTrackChanges;
+      if Assigned(OnUpdateEvent) then
+        result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
+        result := true; // true on success, false if error (but action continues)
+    end;
 end;
 
 procedure TSQLRestServer.TrackChanges(const aTable: array of TSQLRecordClass;
@@ -29256,6 +29319,11 @@ begin // RecordCanBeUpdated() has already been called
   end;
 end;
 
+function TSQLRestStorageInMemory.EngineExecute(const aSQL: RawUTF8): boolean;
+begin
+  result := false; // there is no SQL engine with this class
+end;
+
 destructor TSQLRestStorageInMemory.Destroy;
 begin
   UpdateFile;
@@ -30252,6 +30320,80 @@ begin
 end;
 
 
+{ TSQLRestStorageRemote }
+
+constructor TSQLRestStorageRemote.Create(aClass: TSQLRecordClass;
+  aServer: TSQLRestServer; aRemoteRest: TSQLRest);
+begin
+  if aRemoteRest=nil then
+    raise EORMException.CreateFmt('%s creation with no remote instance',[ClassName]);
+  inherited Create(aClass,aServer);
+  fRemoteTableIndex := aRemoteRest.Model.GetTableIndexExisting(aClass);
+  fRemoteRest := aRemoteRest;
+end;
+
+function TSQLRestStorageRemote.EngineAdd(TableModelIndex: integer;
+  const SentData: RawUTF8): integer;
+begin
+  result := fRemoteRest.EngineAdd(fRemoteTableIndex,SentData);
+end;
+
+function TSQLRestStorageRemote.EngineDelete(TableModelIndex, ID: integer): boolean;
+begin
+  result := fRemoteRest.EngineDelete(fRemoteTableIndex,ID);
+end;
+
+function TSQLRestStorageRemote.EngineDeleteWhere(TableModelIndex: Integer;
+  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+begin
+  result := fRemoteRest.EngineDeleteWhere(fRemoteTableIndex,SQLWhere,IDs);
+end;
+
+function TSQLRestStorageRemote.EngineExecute(const aSQL: RawUTF8): boolean;
+begin
+  result := fRemoteRest.EngineExecute(aSQL);
+end;
+
+function TSQLRestStorageRemote.EngineList(const SQL: RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+begin
+  result := fRemoteRest.EngineList(SQL,ForceAJAX,ReturnedRowCount);
+end;
+
+function TSQLRestStorageRemote.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+begin
+  result := fRemoteRest.EngineRetrieve(fRemoteTableIndex,ID);
+end;
+
+function TSQLRestStorageRemote.EngineRetrieveBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
+begin
+  if (self=nil) or (BlobField=nil) then
+    result := false else
+    result := fRemoteRest.EngineRetrieveBlob(fRemoteTableIndex,aID,BlobField,BlobData);
+end;
+
+function TSQLRestStorageRemote.EngineUpdate(TableModelIndex,
+  ID: integer; const SentData: RawUTF8): boolean;
+begin
+  result := fRemoteRest.EngineUpdate(fRemoteTableIndex,ID,SentData);
+end;
+
+function TSQLRestStorageRemote.EngineUpdateBlob(TableModelIndex, aID: integer;
+  BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
+begin
+  if (self=nil) or (BlobField=nil) then
+    result := false else
+    result := fRemoteRest.EngineUpdateBlob(fRemoteTableIndex,aID,BlobField,BlobData);
+end;
+
+function TSQLRestStorageRemote.EngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+begin
+  result := fRemoteRest.EngineUpdateField(fRemoteTableIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
+end;
+
+
 { TListFieldHash }
 
 function TListFieldHash.Compare(Item1,Item2: TObject): boolean;
@@ -30333,12 +30475,6 @@ end;
 procedure TSQLRestStorage.EndCurrentThread(Sender: TThread);
 begin
   // nothing to do in this basic REST static class
-end;
-
-function TSQLRestStorage.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-begin
-  result := false; // not implemented in this basic REST static class
 end;
 
 function TSQLRestStorage.CreateSQLMultiIndex(Table: TSQLRecordClass;
@@ -30680,39 +30816,37 @@ end;
 
 constructor TSQLRestServerRemoteDB.Create(aRemoteRest: TSQLRest;
   aHandleUserAuthentication: boolean);
+var i: integer;
 begin
   if aRemoteRest=nil then
-    raise EORMException.CreateFmt('%s creation with no remote client',[ClassName]);
+    raise EORMException.CreateFmt('%s.Create(nil)',[ClassName]);
   inherited Create(aRemoteRest.Model,aHandleUserAuthentication);
+  SetLength(fRemoteTableIndex,Model.TablesMax+1);
+  for i := 0 to Model.TablesMax do
+    fRemoteTableIndex[i] := aRemoteRest.Model.GetTableIndexExisting(Model.Tables[i]);
   fRemoteRest := aRemoteRest;
 end;
 
 function TSQLRestServerRemoteDB.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): integer;
 begin
-  result := fRemoteRest.EngineAdd(TableModelIndex,SentData);
+  result := fRemoteRest.EngineAdd(fRemoteTableIndex[TableModelIndex],SentData);
 end;
 
 function TSQLRestServerRemoteDB.EngineDelete(TableModelIndex, ID: integer): boolean;
 begin
-  result := fRemoteRest.EngineDelete(TableModelIndex,ID);
+  result := fRemoteRest.EngineDelete(fRemoteTableIndex[TableModelIndex],ID);
 end;
 
 function TSQLRestServerRemoteDB.EngineDeleteWhere(TableModelIndex: Integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
 begin
-  result := fRemoteRest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+  result := fRemoteRest.EngineDeleteWhere(fRemoteTableIndex[TableModelIndex],SQLWhere,IDs);
 end;
 
 function TSQLRestServerRemoteDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   result := fRemoteRest.EngineExecute(aSQL);
-end;
-
-function TSQLRestServerRemoteDB.ExecuteList(const Tables: array of TSQLRecordClass;
-  const SQL: RawUTF8): TSQLTableJSON;
-begin
-  result := fRemoteRest.ExecuteList(Tables,SQL);
 end;
 
 function TSQLRestServerRemoteDB.EngineList(const SQL: RawUTF8;
@@ -30723,7 +30857,7 @@ end;
 
 function TSQLRestServerRemoteDB.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
 begin
-  result := fRemoteRest.EngineRetrieve(TableModelIndex,ID);
+  result := fRemoteRest.EngineRetrieve(fRemoteTableIndex[TableModelIndex],ID);
 end;
 
 function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex, aID: integer;
@@ -30731,13 +30865,13 @@ function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex, aID: integer
 begin
   if (self=nil) or (BlobField=nil) then
     result := false else
-    result := fRemoteRest.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := fRemoteRest.EngineRetrieveBlob(fRemoteTableIndex[TableModelIndex],aID,BlobField,BlobData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdate(TableModelIndex,
   ID: integer; const SentData: RawUTF8): boolean;
 begin
-  result := fRemoteRest.EngineUpdate(TableModelIndex,ID,SentData);
+  result := fRemoteRest.EngineUpdate(fRemoteTableIndex[TableModelIndex],ID,SentData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex, aID: integer;
@@ -30745,13 +30879,13 @@ function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex, aID: integer;
 begin
   if (self=nil) or (BlobField=nil) then
     result := false else
-    result := fRemoteRest.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := fRemoteRest.EngineUpdateBlob(fRemoteTableIndex[TableModelIndex],aID,BlobField,BlobData);
 end;
 
 function TSQLRestServerRemoteDB.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 begin
-  result := fRemoteRest.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
+  result := fRemoteRest.EngineUpdateField(fRemoteTableIndex[TableModelIndex],SetFieldName,SetValue,WhereFieldName,WhereValue);
 end;
 
 function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(Table: TSQLRecordClass;
