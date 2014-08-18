@@ -135,11 +135,10 @@ type
     procedure InternalBatchStop; override;
   public
     /// initialize the direct access to the MongoDB collection
-    // - all filename/binary parameters are ignored here
+    // - you should not use this, but rather call StaticMongoDBRegister()
     // - in practice, just call the other reintroduced constructor, supplying
     // a TMongoDatabase instance
-    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-      const aFileName: TFileName = ''; aBinaryFile: boolean=false); overload; override;
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); override;
     /// release used memory
     destructor Destroy; override;
 
@@ -212,16 +211,14 @@ begin
   Props.ExternalDB.Init(Props,aMongoCollectionName,
     aMongoDatabase.CollectionOrCreate[aMongoCollectionName]);
   Props.ExternalDB.MapField('ID','_id');
-  result := (aServer.StaticDataCreate(aClass,'',false,TSQLRestStorageMongoDB)
-    as TSQLRestStorageMongoDB);
+  result := TSQLRestStorageMongoDB.Create(aClass,aServer);
+  aServer.StaticDataAdd(result);
 end;
 
 
 { TSQLRestStorageMongoDB }
 
-constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass;
-  aServer: TSQLRestServer; const aFileName: TFileName;
-  aBinaryFile: boolean);
+constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer);
 begin
   inherited;
   if fStoredClassProps=nil then

@@ -9994,6 +9994,8 @@ type
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
 
+  /// class of our TObjectList memory-stored table storage 
+  TSQLRestStorageInMemoryClass = class of TSQLRestStorageInMemory;
 
   {/ table containing the available user access rights for authentication
     - this class should be added to the TSQLModel, together with TSQLAuthUser,
@@ -10946,7 +10948,11 @@ type
     // the database model
     function StaticDataCreate(aClass: TSQLRecordClass;
       const aFileName: TFileName = ''; aBinaryFile: boolean=false;
-      aServerClass: TSQLRestStorageClass=nil): TSQLRest;
+      aServerClass: TSQLRestStorageInMemoryClass=nil): TSQLRest;
+    /// register an external static storage for a given table
+    // - will be added to StaticDataServer[] internal list
+    // - called e.g. by StaticDataCreate()
+    function StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
@@ -11198,16 +11204,15 @@ type
 
   /// REST class with direct access to an external database engine
   // - you can set an alternate per-table database engine by using this class
-  // - this abstract class is to be overridden with a proper implementation (like
-  // our TSQLRestStorageInMemory class or TSQLRestStorageExternal
-  // as defined in mORMotDB unit)
+  // - this abstract class is to be overridden with a proper implementation
+  // (e.g. TSQLRestStorageInMemory in this unit, or TSQLRestStorageExternal
+  // from mORMotDB unit, or TSQLRestStorageMongoDB from mORMotMongoDB unit)
   TSQLRestStorage = class(TSQLRest)
   protected
     fStoredClass: TSQLRecordClass;
     fStoredClassProps: TSQLModelRecordProperties;
     fStoredClassRecordProps: TSQLRecordProperties;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
-    fFileName: TFileName;
     fModified: boolean;
     fOwner: TSQLRestServer;
     fStorageCriticalSection: TRTLCriticalSection;
@@ -11239,13 +11244,8 @@ type
     // static table name only (not needed to check it twice)
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; virtual;
   public
-    /// initialize the storage data, reading it from a file if necessary
-    // - data encoding on file is UTF-8 JSON format by default, or
-    // should be some binary format if aBinaryFile is set to true (this virtual
-    // method will just ignore this parameter, which will be used for overridden
-    // constructor only)
-    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-      const aFileName: TFileName = ''; aBinaryFile: boolean=false); reintroduce; virtual;
+    /// initialize the abstract storage data
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); reintroduce; virtual;
     /// finalize the storage instance
     destructor Destroy; override;
     /// you can call this method in TThread.Execute to ensure that
@@ -11298,10 +11298,6 @@ type
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal=0): boolean; override;
 
-    /// read only access to the file name specified by constructor
-    // - you can call the TSQLRestServer.StaticDataCreate method to
-    // update the file name of an already instancied static table
-    property FileName: TFileName read fFileName write fFileName;
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
     /// read only access to the class defining the record type stored in this
@@ -11392,8 +11388,8 @@ type
     property CaseInsensitive: boolean read fCaseInsensitive;
   end;
 
-  /// REST server with direct access to a memory-stored database
-  // - store the associated TSQLRecord values in memory
+  /// REST server with direct access to a TObjectList memory-stored table
+  // - store the associated TSQLRecord values in a TObjectList 
   // - handle only one TSQLRecord by server (it's NOT a true Rest Server)
   // - must be registered individualy in a TSQLRestServer to access data from a
   // common client, by using the TSQLRestServer.StaticDataCreate method:
@@ -11413,6 +11409,7 @@ type
   TSQLRestStorageInMemory = class(TSQLRestStorageRecordBased)
   protected
     fValue: TObjectList;
+    fFileName: TFileName;
     /// true if IDs are sorted (which is the default behavior of this class),
     // for fastest ID2Index() by using a binary search algorithm
     fIDSorted: boolean;
@@ -11458,7 +11455,7 @@ type
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-      const aFileName: TFileName = ''; aBinaryFile: boolean=false); override;
+      const aFileName: TFileName = ''; aBinaryFile: boolean=false); reintroduce; virtual;
     /// free used memory
     // - especially release all fValue[] instances
     destructor Destroy; override;
@@ -11564,6 +11561,10 @@ type
     property Items[Index: integer]: TSQLRecord read GetItem; default;
     /// read-only access to the ID of a TSQLRecord values
     property ID[Index: integer]: integer read GetID;
+    /// read only access to the file name specified by constructor
+    // - you can call the TSQLRestServer.StaticDataCreate method to
+    // update the file name of an already instanciated static table
+    property FileName: TFileName read fFileName write fFileName;
     /// if set to true, file content on disk will expect binary format
     // - default format on disk is JSON but can be overridden at constructor call
     // - binary format should be more efficient in term of speed and disk usage,
@@ -25752,9 +25753,23 @@ begin
   end;
 end;
 
+function TSQLRestServer.StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
+var i: integer;
+begin
+  result := false;
+  if (self=nil) or (aStaticData=nil) then
+    exit;
+  i := Model.GetTableIndexExisting(aStaticData.StoredClass);
+  if (fStaticData<>nil) and (fStaticData[i]<>aStaticData) then
+    exit; // TSQLRecord already registered
+  if length(fStaticData)<length(Model.Tables) then
+    SetLength(fStaticData,length(Model.Tables));
+  fStaticData[i] := aStaticData;
+end;
+
 function TSQLRestServer.StaticDataCreate(aClass: TSQLRecordClass;
   const aFileName: TFileName; aBinaryFile: boolean;
-  aServerClass: TSQLRestStorageClass): TSQLRest;
+  aServerClass: TSQLRestStorageInMemoryClass): TSQLRest;
 var i: integer;
 begin
   result := nil;
@@ -29084,10 +29099,11 @@ var JSON: RawUTF8;
     Stream: TStream;
     F: integer;
 begin
-  inherited Create(aClass,aServer,aFileName,aBinaryFile);
+  inherited Create(aClass,aServer);
   if (fStoredClassProps<>nil) and (fStoredClassProps.Kind in INSERT_WITH_ID) then
     raise EModelException.CreateFmt('%s: %s virtual table can''t be static',
       [fStoredClassRecordProps.SQLTableName,aClass.ClassName]);
+  fFileName := aFileName;
   fBinaryFile := aBinaryFile;
   fValue := TObjectList.Create;
   fSearchRec := fStoredClass.Create;
@@ -30276,7 +30292,7 @@ end;
 { TSQLRestStorage }
 
 constructor TSQLRestStorage.Create(aClass: TSQLRecordClass;
-  aServer: TSQLRestServer; const aFileName: TFileName; aBinaryFile: boolean);
+  aServer: TSQLRestServer);
 begin
   inherited Create(nil);
   if aClass=nil then
@@ -30296,7 +30312,6 @@ begin
       fStoredClassProps := Properties;
     end;
   fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
-  fFileName := aFileName;
   fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
   fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
   fBasicSQLHasRows[true] := fBasicSQLHasRows[false];
@@ -33797,6 +33812,7 @@ end;
 
 constructor TSQLVirtualTable.Create(aModule: TSQLVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
+var aClass: TSQLRestStorageClass;
 begin
   if (aModule=nil) or (aTableName='') then
     raise EModelException.CreateFmt('Invalid parameters to %s.Create',[ClassName]);
@@ -33810,8 +33826,12 @@ begin
       fStaticTableIndex := Model.GetTableIndex(aTableName);
       if fStaticTableIndex>=0 then begin
         fStaticTable := Model.Tables[fStaticTableIndex];
-        fStatic := fModule.fFeatures.StaticClass.Create(fStaticTable,fModule.Server,
-          fModule.FileName(aTableName),self.InheritsFrom(TSQLVirtualTableBinary));
+        aClass := fModule.fFeatures.StaticClass;
+        if aClass.InheritsFrom(TSQLRestStorageInMemory) then
+          fStatic := TSQLRestStorageInMemoryClass(aClass).Create(fStaticTable,
+            fModule.Server,fModule.FileName(aTableName),
+            self.InheritsFrom(TSQLVirtualTableBinary)) else
+          fStatic := aClass.Create(fStaticTable,fModule.Server);
         if length(fStaticVirtualTable)<>length(Model.Tables) then
           SetLength(fStaticVirtualTable,length(Model.Tables));
         fStaticVirtualTable[fStaticTableIndex] := fStatic;

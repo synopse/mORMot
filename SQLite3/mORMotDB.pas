@@ -242,14 +242,11 @@ type
       Occasion: TSQLOccasion): RawUTF8;     
   public
     /// initialize the remote database connection
-    // - all filename/binary parameters are ignored here, since it will rely
-    // on the RecordProps.ExternalDatabase property to create the connection -
-    // in practice, just call the global VirtualTableExternalRegister() procedure
+    // - you should not use this, but rather call VirtualTableExternalRegister() 
     // - RecordProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
     // - RecordProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any database schema prefix
-    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-      const aFileName: TFileName = ''; aBinaryFile: boolean=false); override;
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); override;
     /// delete a row, calling the external engine with SQL
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
@@ -510,7 +507,7 @@ begin
 end;
 
 constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
-  aServer: TSQLRestServer; const aFileName: TFileName; aBinaryFile: boolean);
+  aServer: TSQLRestServer);
 
   procedure FieldsInternalInit;
   var i,n,int: integer;
@@ -582,7 +579,7 @@ var SQL: RawUTF8;
     FieldAdded: Boolean;
     CreateColumns: TSQLDBColumnPropertyDynArray;
 begin
-  inherited Create(aClass,aServer,aFileName,aBinaryFile);
+  inherited Create(aClass,aServer);
   // initialize external DB properties
   if fStoredClassProps=nil then
     raise EBusinessLayerException.CreateFmt(
