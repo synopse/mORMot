@@ -225,7 +225,8 @@ begin
         if nfo.FieldWidth>0 then
           field.width := nfo.FieldWidth;
         if f<nfoList.Count-1 then
-          field.comma := RawUTF8(',');
+          field.comma := RawUTF8(',') else
+          field.comma := null; // may conflict with rec.comma otherwise
         case nfo.SQLFieldType of // handle some special complex types
         sftEnumerate: begin
           field.isEnum := true;
