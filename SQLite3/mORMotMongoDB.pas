@@ -111,15 +111,10 @@ type
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
     function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: Integer;const SQLWhere: RawUTF8;
       const IDs: TIntegerDynArray): boolean; override;
-    /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
-    // - overridden method to handle most potential simple queries, e.g. like
-    // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
-    // - ORM field names into mapped MongoDB external field names
-    // - handle statements to avoid slow virtual table loop over all rows, like
-    // $ SELECT count(*) FROM table
-    function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(TableModelIndex, aID: integer;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
@@ -127,6 +122,13 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
+    // - overridden method to handle most potential simple queries, e.g. like
+    // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
+    // - ORM field names into mapped MongoDB external field names
+    // - handle statements to avoid slow virtual table loop over all rows, like
+    // $ SELECT count(*) FROM table
+    function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
@@ -469,6 +471,38 @@ begin
     end;
 end;
 
+function TSQLRestStorageMongoDB.EngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+var JSON: RawUTF8;
+    query,update: variant; // use explicit TBSONVariant for type safety
+    id: TBSONIterator;
+begin
+  if (fCollection=nil) or (TableModelIndex<0) or
+     (fModel.Tables[TableModelIndex]<>fStoredClass) or
+     (SetFieldName='') or (SetValue='') or (WhereFieldName='') or (WhereValue='') then
+    result := false else
+    try
+      query := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
+        InternalToExternal(WhereFieldName),WhereValue],[]);
+      update := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
+        InternalToExternal(SetFieldName),SetValue],[]);
+      fCollection.Update(query,update);
+      if Owner<>nil then begin
+        if Owner.InternalUpdateEventNeeded(TableModelIndex) and
+           id.Init(fCollection.FindBSON(query,BSONVariant(['_id',1]))) then begin
+          JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+          while id.Next do
+            Owner.InternalUpdateEvent(seUpdate,TableModelIndex,
+              id.Item.DocItemToInteger('_id'),JSON,nil);
+        end;
+        Owner.FlushInternalDBCache;
+      end;
+      result := true;
+    except
+      result := false;
+    end;
+end;
+
 function TSQLRestStorageMongoDB.EngineUpdateBlob(TableModelIndex, aID: integer;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var query,update,blob: variant; // use explicit TBSONVariant for type safety
@@ -680,8 +714,7 @@ end;
 function TSQLRestStorageMongoDB.GetJSONValues(const Res: TBSONDocument;
   const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
 var col, colCount, colFound: integer;
-    bson: PByte;
-    row: TBSONElement;
+    row: TBSONIterator;
     item: array of TBSONElement;
 function itemFind(const aName: RawUTF8): integer;
 begin
@@ -694,22 +727,20 @@ begin
 end;
 begin
   result := 0; // number of data rows in JSON output
-  bson := pointer(Res);
   if W.Expand then
     W.Add('[');
-  if Res<>'' then begin
-    BSONParseLength(bson,length(Res));
+  if row.Init(Res) then begin
     colCount := length(extFieldNames);
     if colCount<>length(W.ColNames) then
       raise EORMMongoDBException.Create('Invalid GetJSONValues() call');
     SetLength(item,colCount);
-    while row.FromNext(bson) do begin
+    while row.Next do begin
       // retrieve all values of this BSON document into item[]
-      if row.Kind<>betDoc then
-        raise EORMMongoDBException.CreateFmt('Invalid row %d',[ord(row.Kind)]);
+      if row.Item.Kind<>betDoc then
+        raise EORMMongoDBException.CreateFmt('Invalid row %d',[ord(row.Item.Kind)]);
       col := 0;
-      while (row.Data.DocList^<>byte(betEof)) and (col<colCount) and
-            item[col].FromNext(row.Data.DocList) do
+      while (row.Item.Data.DocList^<>byte(betEof)) and (col<colCount) and
+            item[col].FromNext(row.Item.Data.DocList) do 
         inc(col);
       if col<>colCount then
         raise EORMMongoDBException.CreateFmt('Invalid field count %d',[col]);
@@ -908,5 +939,6 @@ begin
     StorageUnLock;
   end;
 end;
+
 
 end.

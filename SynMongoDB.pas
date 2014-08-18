@@ -365,7 +365,16 @@ type
     // - aName here is just for conveniency, and could be left void
     // - supplied aTemp variable will be used for temporary storage, private to
     // this initialized TBSONElement
-    procedure FromVariant(const aName: RawUTF8; const aValue: Variant; var aTemp: RawByteString);
+    procedure FromVariant(const aName: RawUTF8; const aValue: Variant;
+      var aTemp: RawByteString);
+    /// fill a BSON Element structure from a BSON document
+    // - will check the document length then set Kind := betDoc and Data.DocList
+    // - will return TRUE if the supplied doc has a valid length, FALSE otherwise
+    // - you can later on use DocItemToVariant, DocItemToRawUTF8 or
+    // DocItemToInteger methods
+    // - the supplied "doc" variable should remain available until you are done
+    // with this TBSONElement wrapper
+    function FromDocument(const doc: TBSONDocument): boolean;
     /// fill a BSON Element structure from a BSON encoded binary buffer list
     // - parse the next BSON element: BSON parameter should point to the
     // "e_list" of the "int32 e_list #0" BSON document
@@ -381,13 +390,16 @@ type
     // ! while item.FromNext(bson) do
     // !   writeln(item.Name);
     // - will raise an EBSONException if BSON content is not correct
+    // - as an alternative, consider using TBSONIterator, which wrap both a
+    // PByte and a TBSONElement into one convenient item
     function FromNext(var BSON: PByte): boolean;
     /// search for a given name in a BSON encoded binary buffer list
     // - BSON parameter should point to the first "e_list" item of the
     // "int32 e_list #0" BSON document
-    // - returns nil if the item was not found (with case-insensitive search)
-    // - otherwise, has decoded the matching element structure otherwise
-    function FromSearch(BSON: PByte; const aName: RawUTF8): PByte;
+    // - returns false if the item was not found (with case-insensitive search)
+    // - otherwise returns TRUE and the matching element content has been
+    // decoded within this TBSONElement structure 
+    function FromSearch(BSON: PByte; const aName: RawUTF8): boolean;
     /// convert a BSON element, as retrieved by TBSONElement.FromNext(),
     // into a variant
     // - it will return either standard variant values, or TBSONVariant custom type
@@ -412,12 +424,55 @@ type
     // - will work only for betBoolean/betInt32/betInt64 types
     // - any other kind of values will return the supplied default value
     function ToInteger(const default: Int64=0): Int64;
+    /// search a variant property value within the BSON element as document
+    // - returns true if aName has been found as property in the BSON element,
+    // and fills aValue with the corresponding value
+    // - returns false if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToVariant(const aName: RawUTF8; var aValue: variant;
+      DocArrayConversion: TBSONDocArrayConversion=asBSONVariant): boolean;
+    /// search an UTF-8 property value within the BSON element as document
+    // - returns the value if aName has been found as property in the BSON element
+    // - returns '' if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToRawUTF8(const aName: RawUTF8): RawUTF8;
+    /// search an integer property value within the BSON element as document
+    // - returns the value if aName has been found as property in the BSON element
+    // - returns default if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToInteger(const aName: RawUTF8; const default: Int64=0): Int64;
     /// convert a BSON element, as retrieved by TBSONElement.FromNext(), into
     // its JSON representation
     // - this method will use by default the MongoDB Extended JSON syntax for
     // specific MongoDB objects but you may use modMongoShell if needed
     // - will raise an EBSONException if element is not correct
     procedure AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode=modMongoStrict); overload;
+  end;
+
+  /// data structure used for iterating over a BSON binary buffer
+  // - is just a wrapper around a PByte value, to be used with a TBSONDocument
+  {$ifndef UNICODE}
+  TBSONIterator = object
+  protected
+  {$else}
+  TBSONIterator = record
+  private
+  {$endif}
+    fBson: PByte;
+  public
+    /// map the current item, after the Next method did return TRUE
+    // - map the global document, after Init() but before the first Next call
+    Item: TBSONElement;
+    /// initialize the iteration on the supplied BSON document
+    // - will check the document length and returns TRUE if it is correct
+    // - only accepted kind are betDoc and betArray (but not used later)
+    // - you can then use the Next method to iterate over the Item elements
+    // - after this call, the Item property map to the global BSON document
+    // (note that after any call to the Next method, Item will map the current
+    // iterated value, and not the global BSON document any more)
+    function Init(const doc: TBSONDocument; kind: TBSONElementType=betArray): boolean;
+    /// will iterate on the BSON document
+    // - returns TRUE if the item has been retrieved into the Item property
+    // - returns FALSE if we reached the end of the supplied BSON buffer
+    function Next: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used to write the BSON context
@@ -774,6 +829,8 @@ function BSONVariantFromIntegers(const Integers: array of integer): variant;
 // - if ExpectedBSONLen is set, this function will check that the supplied
 // BSON content "int32" length matches the supplied value, and raise an
 // EBSONException if this comparison fails
+// - as an alternative, consider using TBSONIterator, which wrap both a PByte
+// and a TBSONElement into one convenient item
 function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 
 /// parse the next element in supplied BSON encoded binary buffer list
@@ -795,20 +852,16 @@ function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 // - if you want to parse a BSON list as fast as possible, you should better use
 // TBSONElement.FromNext() which avoid any memory allocation (the SAX way) - in
 // fact, this function is just a wrapper around TBSONElement.FromNext + ToVariant
+// - as an alternative, consider using TBSONIterator, which wrap both a PByte
+// and a TBSONElement into one convenient item
 function BSONParseNextElement(var BSON: PByte; var name: RawUTF8; var element: variant;
   DocArrayConversion: TBSONDocArrayConversion=asBSONVariant): boolean;
-
-/// search for a given property in a a supplied BSON encoded binary buffer
-// - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
-// - returns FALSE if not item in the list matches the expected name
-// - returns TRUE if the name is found in the list, then item points to the data
-function BSONSearchElement(BSON: PByte; const name: RawUTF8; var item: TBSONElement): PByte;
 
 /// search for a property by number in a a supplied BSON encoded binary buffer
 // - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
 // - returns FALSE if the list has too few elements (starting at index 0)
 // - otherwise, returns TRUE then let item point to the corresponding element
-function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): PByte;
+function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): boolean;
 
 /// convert a BSON document into a TDocVariant variant instance
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -816,15 +869,15 @@ function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement
 // BSON content "int32" length matches the supplied value
 // - by definition, asBSONVariant is not allowed as Option value
 procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer=0;
-  Option: TBSONDocArrayConversion=asDocVariantPerReference); overload;
+  Option: TBSONDocArrayConversion=asDocVariantPerReference);
 
-/// convert a BSON document into a TDocVariant variant instance
-// - BSON should point to a "int32 e_list #0" BSON document
-// - if ExpectedBSONLen is set, this function will check that the supplied
-// BSON content "int32" length matches the supplied value
+/// convert a TBSONDocument into a TDocVariant variant instance
+// - BSON should be valid BSON document (length will be checked against expected
+// "int32 e_list #0" binary layout)
 // - by definition, asBSONVariant is not allowed as Option value
-function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
-  Option: TBSONDocArrayConversion=asDocVariantPerReference): variant; overload;
+function BSONDocumentToDoc(const BSON: TBSONDocument;
+  Option: TBSONDocArrayConversion=asDocVariantPerReference): variant;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a BSON document into its JSON representation
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -834,16 +887,15 @@ function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType;
-   ExpectedBSONLen: integer=0; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+   ExpectedBSONLen: integer=0; Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 
-/// convert a BSON document into its JSON representation
-// - BSON should point to a "int32 e_list #0" BSON document
-// - if ExpectedBSONLen is set, this function will check that the supplied
-// BSON content "int32" length matches the supplied value
+/// convert a TBSONDocument into its JSON representation
+// - BSON should be valid BSON document (length will be checked against expected
+// "int32 e_list #0" binary layout)
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
-  Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+function BSONDocumentToJSON(const BSON: TBSONDocument;
+  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a BSON list of elements into its JSON representation
@@ -851,8 +903,8 @@ function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
 // i.e. the item data as expected by TBSONElement.FromNext()
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-procedure BSONToJSON(BSONList: PByte; Kind: TBSONElementType; W: TTextWriter;
-  Mode: TMongoJSONMode=modMongoStrict); overload;
+procedure BSONListToJSON(BSONList: PByte; Kind: TBSONElementType; W: TTextWriter;
+  Mode: TMongoJSONMode=modMongoStrict);
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
 // - this function will use by default the MongoDB Extended JSON syntax for
@@ -2369,6 +2421,33 @@ begin
   end;
 end;
 
+function TBSONElement.DocItemToVariant(const aName: RawUTF8; var aValue: variant;
+  DocArrayConversion: TBSONDocArrayConversion): boolean;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then begin
+    item.ToVariant(aValue,DocArrayConversion);
+    result := true;
+  end else
+    result := false;
+end;
+
+function TBSONElement.DocItemToRawUTF8(const aName: RawUTF8): RawUTF8;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then 
+    result := item.ToRawUTF8 else
+    result := '';
+end;
+
+function TBSONElement.DocItemToInteger(const aName: RawUTF8; const default: Int64): Int64;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then
+    result := item.ToInteger(default) else
+    result := default;
+end;
+
 procedure TBSONElement.AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode);
 label bin,regex;
 begin
@@ -2381,7 +2460,7 @@ begin
     W.Add('"');
   end;
   betDoc, betArray:
-    BSONToJSON(Data.DocList,Kind,W,Mode);
+    BSONListToJSON(Data.DocList,Kind,W,Mode);
   betObjectID: begin
     W.AddShort(BSON_JSON_OBJECTID[false,Mode]);
     W.AddBinToHex(Element,SizeOf(TBSONObjectID));
@@ -2539,6 +2618,19 @@ str:Kind := betString;
   end;
 end;
 
+function TBSONElement.FromDocument(const doc: TBSONDocument): boolean;
+var n: Integer;
+begin
+  FillChar(self,sizeof(self),0);
+  n := length(doc);
+  if (n>=4) and (PInteger(doc)^=n) then begin
+    Kind := betDoc;
+    FromBSON(pointer(doc));
+    result := true;
+  end else
+    result := false;
+end;
+
 const
   NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
   FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
@@ -2600,11 +2692,11 @@ begin
     exit;
   end;
   Kind := TBSONElementType(BSON^);
-  inc(BSON);
   case ord(Kind) of
   ord(betEOF):
     result := false;
   ord(betFloat)..ord(betInt64),ord(betMinKey),ord(betMaxKey): begin
+    inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
     inc(BSON,NameLen+1);
@@ -2619,14 +2711,37 @@ begin
   end;
 end;
 
-function TBSONElement.FromSearch(BSON: PByte; const aName: RawUTF8): PByte;
+function TBSONElement.FromSearch(BSON: PByte; const aName: RawUTF8): boolean;
 begin
-  result := BSON;
-  while FromNext(result) do
+  result := true;
+  while FromNext(BSON) do
     if IdemPropNameU(aName,Name,NameLen) then
       exit;
-  result := nil;
+  result := false;
 end;
+
+
+{ TBSONIterator }
+
+function TBSONIterator.Init(const doc: TBSONDocument; kind: TBSONElementType): boolean;
+var n: integer;
+begin
+  FillChar(self,sizeof(self),0);
+  n := length(doc);
+  if (kind in [betDoc,betArray]) and (n>=4) and (PInteger(doc)^=n) then begin
+    Item.Kind := kind;
+    Item.FromBSON(pointer(doc));
+    fBson := Item.Data.DocList;
+    result := true;
+  end else
+    result := false;
+end;
+
+function TBSONIterator.Next: boolean;
+begin
+  result := Item.FromNext(fBson);
+end;
+
 
 function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 begin
@@ -2643,27 +2758,20 @@ var item: TBSONElement;
 begin
   result := item.FromNext(BSON);
   if result then begin
-    name := item.Name;
+    SetString(name,PAnsiChar(item.Name),item.NameLen);
     item.ToVariant(element,DocArrayConversion);
   end;
 end;
 
-function BSONSearchElement(BSON: PByte; const name: RawUTF8; var item: TBSONElement): PByte;
+function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): boolean;
 begin
-  if (BSON<>nil) and (BSONParseLength(BSON)<>0) then
-    result := item.FromSearch(item.Data.DocList,name) else
-    result := nil;
-end;
-
-function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): PByte;
-begin
-  result := BSON;
-  if (index>=0) and (result<>nil) and (BSONParseLength(result)<>0) then
-    while item.FromNext(result) do
+  result := true;
+  if (index>=0) and (BSON<>nil) and (BSONParseLength(BSON)<>0) then
+    while item.FromNext(BSON) do
       if index=0 then
         exit else
         dec(index);
-  result := nil;
+  result := false;
 end;
   
 procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
@@ -2677,13 +2785,12 @@ begin
   BSONItemsToDocVariant(betDoc,BSON,TDocVariantData(Result),Option);
 end;
 
-function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer;
-  Option: TBSONDocArrayConversion): variant;
+function BSONDocumentToDoc(const BSON: TBSONDocument; Option: TBSONDocArrayConversion): variant;
 begin
-  BSONToDoc(pointer(BSON),result,ExpectedBSONLen);
+  BSONToDoc(pointer(BSON),result,length(BSON));
 end;  
 
-procedure BSONToJSON(BSONList: PByte; Kind: TBSONElementType;
+procedure BSONListToJSON(BSONList: PByte; Kind: TBSONElementType;
   W: TTextWriter; Mode: TMongoJSONMode);
 var item: TBSONElement;
 begin
@@ -2717,10 +2824,10 @@ begin
   end;
 end;
 
-function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
+function BSONDocumentToJSON(const BSON: TBSONDocument;
   Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 begin
-  result := BSONToJSON(pointer(BSON),betDoc,ExpectedBSONLen,Mode);
+  result := BSONToJSON(pointer(BSON),betDoc,length(BSON),Mode);
 end;  
 
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
@@ -2730,7 +2837,7 @@ begin
   BSONParseLength(BSON,ExpectedBSONLen);
   W := TTextWriter.CreateOwnedStream;
   try
-    BSONToJSON(BSON,Kind,W,Mode);
+    BSONListToJSON(BSON,Kind,W,Mode);
     W.SetText(result);
   finally
     W.Free;
@@ -4356,7 +4463,7 @@ begin
   Rewind;
   while Next(b) do begin
     inc(b,sizeof(integer)); // points to the "e_list" of "int32 e_list #0"
-    BSONToJSON(b,betDoc,W,Mode);
+    BSONListToJSON(b,betDoc,W,Mode);
     W.Add(',');
     if (MaxSize>0) and (W.TextLength>MaxSize) then begin
       W.AddShort('...');
@@ -4690,17 +4797,14 @@ end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
   const command: variant; var returnedValue: TBSONDocument): boolean;
-var res: PByte;
-    item: TBSONElement;
+var item: TBSONElement;
 begin
   returnedValue := GetBSONAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1));
   result := true;
-  res := pointer(returnedValue);
-  if BSONParseLength(res)>0 then
-    if item.FromSearch(res,'ok')<>nil then
-      if item.ToInteger(1)=0 then
-        result := false;
+  item.FromDocument(returnedValue);
+  if item.DocItemToInteger('ok',1)=0 then
+    result := false;
 end;
 
 procedure TMongoConnection.Lock;
@@ -4845,6 +4949,7 @@ begin
   result := false; // log stack trace
 end;
 {$endif}
+
 
 { TMongoClient }
 
@@ -5006,32 +5111,29 @@ begin
 end;
 
 
-
-
 { TMongoDatabase }
 
 constructor TMongoDatabase.Create(aClient: TMongoClient;
   const aDatabaseName: RawUTF8);
-var colls: PByte;
-    item: TBSONElement;
+var colls: TBSONIterator;
     full,db,coll: RawUTF8;
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  colls := pointer(Client.Connections[0].GetBSONAndFree(
-    TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt)));
-  // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
   fCollections := TRawUTF8ListHashed.Create(true);
-  if BSONParseLength(colls)>0 then
-    while item.FromNext(colls) do
-    if item.FromSearch(item.Data.DocList,'name')<>nil then begin
-      full := item.ToRawUTF8;
-      split(full,'.',db,coll);
-      if db<>aDatabaseName then
-        raise EMongoConnectionException.CreateFmt(
-          'Invalid "%s" collection name for DB "%s"',
-          [full,aDatabaseName],Client.Connections[0]);
-      fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+  if colls.Init(Client.Connections[0].GetBSONAndFree(
+     TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
+    // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
+    while colls.Next do begin
+      full := colls.item.DocItemToRawUTF8('name');
+      if full<>'' then begin
+        split(full,'.',db,coll);
+        if db<>aDatabaseName then
+          raise EMongoConnectionException.CreateFmt(
+            'Invalid "%s" collection name for DB "%s"',
+            [full,aDatabaseName],Client.Connections[0]);
+        fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+      end;
     end;
 end;
 
