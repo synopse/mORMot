@@ -641,7 +641,8 @@ begin
               P.AsBlob := VArray[aArrayIndex] else
             P.AsBlob := VData;
         else
-          raise ESQLDBFireDAC.CreateFmt('Invalid type on bound parameter #%d',[aParamIndex+1]);
+          raise ESQLDBFireDAC.CreateFmt(
+            'Invalid type on bound parameter #%d',[aParamIndex+1]);
         end;
   end;
 end;

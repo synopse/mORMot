@@ -256,12 +256,11 @@ begin
       Test(TSQLDBBDEConnectionProperties,TSQLDBOracleConnectionProperties.ExtractTnsName(T),
         '',U,P,' Oracle',false);
       {$endif}
-      (* current ZDBC trunk or 7.2 is broken for Oracle statements reset 
+      // current ZDBC 7.2 handles array binding!
       {$ifdef USEZEOS}
       Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(dOracle,''
         {$ifdef CPU64},'oci64\oci.dll'{$endif}),T,U,P,' Oracle',false);
       {$endif}
-      *)
       //(*
       {$ifdef USEFIREDAC}
       {$ifdef CPU64}
@@ -343,7 +342,7 @@ begin
       'c:\Program Files\PostgreSQL\9.2\bin\libpq.dll';
     {$endif}
     // direct FireDAC driver needs only libpq.dll and libintl.dll
-    Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5432',
+      Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5432',
       'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     {$ifdef USEUNIDAC}

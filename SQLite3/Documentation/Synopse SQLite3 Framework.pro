@@ -3834,6 +3834,7 @@ Here are some insertion speed values, in objects/second:
 |{\b Jet}|4235|4424|4954|5094
 |{\b NexusDB}|5998|15494|7687|18619
 |{\b Oracle}|226|56112|1133|52367
+|{\b ZEOS Oracle}|210|32725|1027|31982
 |{\b ODBC Oracle}|236|1664|1515|7709
 |{\b FireDAC Oracle}|118|48575|1519|12566
 |{\b UniDAC Oracle}|164|5701|1215|2884
@@ -3855,12 +3856,12 @@ Here are some insertion speed values, in objects/second:
 |%
 Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
 So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows.
-For both our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit and {\i FireDAC} library , BATCH process benefits of the @*array bind@ing feature a lot (known as {\i Array DML} in {\i FireDAC/AnyDAC}).
+For both our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, the {\i Zeos} (for {\i Oracle} only yet) or {\i FireDAC} library, BATCH process benefits of the @*array bind@ing feature a lot (known as {\i Array DML} in {\i FireDAC/AnyDAC}).
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
 - {\i SQlite3, @*MySQL@, @*PostgreSQL@, MSSQL 2008, @*DB2@, @*MySQL@} or {\i @*NexusDB@} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 INSERT INTO .. VALUES (..),(..),(..)..};
 - {\i Oracle} handles {\f1\fs20 INSERT INTO .. INTO .. SELECT 1 FROM DUAL} (weird syntax, isn't it?);
 - {\i @*Firebird@} implements {\f1\fs20 EXECUTE BLOCK}.
-As a result, some engines show a nice speed boost when {\f1\fs20 BatchAdd()} is used. Even {\i SQLite3} is faster when used as external engine, in respect to direct execution! This feature is at ORM/SQL level, so it benefits to any external database library. Of course, if a given library has a better implementation pattern (e.g. our direct {\i Oracle} or {\i FireDAC} with native array binding), it is used instead.
+As a result, some engines show a nice speed boost when {\f1\fs20 BatchAdd()} is used. Even {\i SQLite3} is faster when used as external engine, in respect to direct execution! This feature is at ORM/SQL level, so it benefits to any external database library. Of course, if a given library has a better implementation pattern (e.g. our direct {\i Oracle}, {\i Zeos} or {\i FireDAC} with native array binding), it is used instead.
 {\i @*MongoDB@} bulk insertion has been implemented, which shows an amazing speed increase in Batch mode. Depending on the {\i MongoDB} {\i write concern} mode, insertion speed can be very high: by default, every write process will be acknowledge by the server, but you can by-pass this request if you set the {\f1\fs20 wcUnacknowledged} mode - note that in this case, any error (e.g. an unique field duplicated value) will never be notified, so it should not be used in production, unless you need this feature to quickly populate a database, or consolidate some data as fast as possible.
 :   Reading speed
 Now the same data is retrieved via the ORM layer:
@@ -3892,6 +3893,7 @@ Here are some reading speed values, in objects/second:
 |{\b Jet}|2640|166112|258277
 |{\b NexusDB}|1413|120845|208246
 |{\b Oracle}|1558|120977|159861
+|{\b ZEOS Oracle}|1420|110367|137982
 |{\b ODBC Oracle}|1620|43441|45764
 |{\b FireDAC Oracle}|1231|42149|54795
 |{\b UniDAC Oracle}|688|27083|30093
@@ -4636,7 +4638,9 @@ Each branch office may have its own {\f1\fs20 TSQLRecord} dedicated table, with 
 !  end;
 !  TSQLRecordCustomerA = class(TSQLRecordCustomerAbstract); // for office A
 !  TSQLRecordCustomerB = class(TSQLRecordCustomerAbstract); // for office B
-Here, {\f1\fs20 TSQLRecordCustomerA} may be part only of the Office A server's {\f1\fs20 TSQLModel}, and {\f1\fs20 TSQLRecordCustomerB} only of the Office B server's {\f1\fs20 TSQLModel}. It will increase security, and, in the main headequarters server, both {\f1\fs20 TSQLRecordCustomerA} and {\f1\fs20 TSQLRecordCustomerB} classes will be part of the {\f1\fs20 TSQLModel}, and dedicated interface-based services would be able to publish some high-level data and statistics about all stored tables.
+!
+!  TSQLRecordCustomerClass = class of TSQLRecordCustomerAbstract;
+Here, {\f1\fs20 TSQLRecordCustomerA} may be part only of the Office A server's {\f1\fs20 TSQLModel}, and {\f1\fs20 TSQLRecordCustomerB} only of the Office B server's {\f1\fs20 TSQLModel}. It will increase security, and, in the main headequarters server, both {\f1\fs20 TSQLRecordCustomerA} and {\f1\fs20 TSQLRecordCustomerB} classes will be part of the {\f1\fs20 TSQLModel}, and dedicated interface-based services would be able to publish some high-level data and statistics about all stored tables.\line Then you can use a {\f1\fs20 TSQLRecordCustomerClass} variable in your client code, which will contain either {\f1\fs20 TSQLRecordCustomerA} or {\f1\fs20 TSQLRecordCustomerB}, depending on the place it runs on, and the server it is connected to.\line On the main server, each office will have its own storage table in the (external) database, named {\f1\fs20 CustomerA} or {\f1\fs20 CustomerB}.
 You will benefit of the caching abilities - see @39@ - of each {\f1\fs20 TSQLRest} instance. You may have some cache tuned at a local site, whereas the cache in the main database would remain less aggressive, but safer.
 Furthermore, even on a single-siter server, a {\f1\fs20 TSQLRecordHistory} table, or more generaly any aggregation data may benefit to be hosted locally or on cheap storage, whereas the main database would stay on SSD or SAS. Thanks to this redirection feature, you can tune your hosting as expected.
 Finally, if your purpose is to redirect all tables of a given {\f1\fs20 TSQLRestServer} to another remote {\f1\fs20 TSQLRestServer} (for security or hosting purpose), you may consider using {\f1\fs20 TSQLRestServerRemoteDB} instead. This class will redirect all tables to one external instance.
@@ -5035,9 +5039,10 @@ Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS
 By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/AnyDAC component sets.
 Most {\i OleDB / ODBC} providers are free (even maintained by the database owner), others would need a paid license.
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i OleDB} or {\i ODBC} remote access expects only the database instance to be reachable on the Server side. Clients could communicate via standard HTTP, so won't need any specific port forwarding or other IT configuration to work as expected.
-:  ZEOS via direct ZDBC
-{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i@*FreePascal@}. It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API.
-Since revision 1.18 of the framework, we included direct integration of {\i ZeosLib} into {\i mORMot} persistence layer, with direct acces to the {\i ZDBC} layer. That is, it does not references {\f1\fs20 DB.pas} unit, and does not need to marshall all incoming data into a {\f1\fs20 TDataSet} compatible layout.
+:94  ZEOS via direct ZDBC
+:   The mORMot's best friend
+{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i@*FreePascal@}.\line It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API. The latest 7.x branch was deeply re-factored, and new methods and performance optimization were introduced.
+Since revision 1.18 of the framework, we included direct integration of {\i ZeosLib} into {\i mORMot} persistence layer, with direct access to the {\i ZDBC} layer. That is, our {\f1\fs20 SynDBZeos} unit does not reference {\f1\fs20 DB.pas}, but access directly to the {\i ZDBC} interfaces.
 \graph SynDBZeos SynDB and Zeos / ZDBC
 \SynDB\ZDBC
 \ZDBC\Oracle
@@ -5049,16 +5054,39 @@ Since revision 1.18 of the framework, we included direct integration of {\i Zeos
 \ZDBC\Sybase
 \ZDBC\SQLite3
 \
-Such direct access, by-passing the VCL DB additional layer, is very close to our {\f1\fs20 SynDB} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}.
+Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20 TDataSet} bottleneck, is very close to our {\f1\fs20 SynDB} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}. The {\f1\fs20 SynDBZeos} unit is intended to be a privileged access point to external SQL databases.
+:   Recommended version
+We recommend that you download the 7.2 branch of {\i Zeos}/ZDBC, which is the current {\i trunk}, at the time of this writing.
+A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
+At writing, {\i @*array bind@ing} suport (only for the {\i Oracle} provider yet) has been added, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true}.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library.
+If you need to stick to a version prior to 7.2, and want to work as expected with a {\i @*SQlite3@} back-end (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}?), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
+:   Connection samples
 If you want e.g. to connect to @*MySQL@ via Zeos/ZDBC, follow those steps:
 - Download "{\i Windows (x86, 32-bit), ZIP Archive}" from @http://dev.mysql.com/downloads/connector/c - then extract the archive: only {\f1\fs20 libmysql.dll} is needed and should be placed either in the executable folder, either in the system PATH;
 - Connect as usual e.g. via
 ! fConnection := TSQLDBZEOSConnectionProperties.Create(
-!   'zdbc:mysql://192.168.2.60:3306/world?username=root;password=dev', '', '', '').
-We recommend that you download the 7.2 branch of Zeos/ZDBC, which is the current {\i trunk}, at the time of this writing. A deep code refactoring has been made by the Zeos/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing. In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database backend and use case!
-If you need to stick to a previous version, and want to work as expected with a {\i @*SQlite3@} backend (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
+!   'zdbc:mysql://192.168.2.60:3306/world?username=root;password=dev', '', '', '');
+- Or using the {\f1\fs20 URI()} method:
+! fConnection := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),'root','dev');
+For {\i @*PostgreSQL@}, the {\i Zeos} driver needs only {\f1\fs20 libpq.dll} and {\f1\fs20 libintl.dll} e.g. from @http://www.enterprisedb.com/products-services-training/pgbindownload
+! PropsPostgreSQL := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dPostgreSQL,'localhost:5432'),
+!   'dbname','username','password');
+You may therefore use the {\f1\fs20 TSQLDBZEOSConnectionProperties.URI()} method to compute the expected ZDBC connection string:
+! PropsOracle := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
+!   'tnsname','user','pass');
+! PropsFirebirdEmbedded := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dFirebird,'','Firebird\fbembed.dll')
+!   'databasefilename','',');
+! PropsFirebirdRemote := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dFirebird,'192.168.1.10:3055',
+!     'c:\Firebird_2_5\bin\fbclient.dll',false),
+!  '3camadas', 'sysdba', 'masterkey');
+See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further information about the expected syntax, and available abilities of this great open source library.
 :  Oracle via OCI
-For our framework, and in completion to our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows direct access to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
+For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
 {\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
 Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection. We noted also that our implementation is 10 times faster than the one provided with ZEOS/ZDBC, which is far from optimized (it retrieves the rows one by one from OCI, for instance).
@@ -7237,7 +7265,7 @@ Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method
 !    end;
 !  (...)
 :78  Array binding
-When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} implementation implements the feature (only {\f1\fs20 SynDBOracle} and {\f1\fs20 SynDBFireDAC} units implement it by now).
+When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} implementation implements the feature (only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it by now).
 In fact, when using a remote database on a physical network, you won't be able to achieve more than 500-600 requests per second when performing {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements: the same {\f1\fs20 round-trip} occurs, this time between the ORM server side and the external Database engine.
 \graph BATCHRoundTrip2 BATCH mode latency issue on external DB
 \ORM CRUD operation\ORM HTTP Client\In-process¤no latency
@@ -7252,7 +7280,8 @@ In fact, when using a remote database on a physical network, you won't be able t
 Of course, this 1 ms latency due to the external database additional round-trip may sounds negligible, but in @17@ when most process is done on the server side, it may introduce a huge performance difference. Your customers would not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for.
 Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing {\i array binding} for faster database batch modifications. It is working in conjunction with our BATCH methods, so CRUD modification actions are grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
-The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
+Our beloved @94@ Open Source library just introduced {\i array binding} to its 7.2 branch. It is handled by our framework, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} provider supports this feature, and our own implementation in {\f1\fs20 SynDBOracle} still gives better performance results.
+The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} commercial libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
 :93  Optimized SQL for bulk insert
 Sadly, array binding is not available for all databases or libraries. In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once.

@@ -1461,6 +1461,7 @@ type
     fTotalRowsRetrieved: Integer;
     fCurrentRow: Integer;
     fStatementClassName: string;
+    fSQLWithInlinedParams: RawUTF8;
     function GetSQLWithInlinedParams: RawUTF8;
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
@@ -5799,10 +5800,14 @@ function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
 var P,B: PUTF8Char;
     num: integer;
     W: TTextWriter;
-begin 
-  P := pointer(fSQL); 
+begin
+  P := pointer(fSQL);
   if P=nil then begin
     result := '';
+    exit;
+  end;
+  if fSQLWithInlinedParams<>'' then begin
+    result := fSQLWithInlinedParams; // already computed
     exit;
   end;
   num := 1;
@@ -5833,6 +5838,7 @@ begin
       inc(num);
     until P^=#0;
     result := W.Text;
+    fSQLWithInlinedParams := result;
   finally
     W.Free;
   end;
@@ -5961,6 +5967,7 @@ end;
 
 procedure TSQLDBStatement.Reset;
 begin
+  fSQLWithInlinedParams := '';
   // a do-nothing default method (used e.g. for OCI)
 end;
 
@@ -6338,6 +6345,7 @@ end;
 
 procedure TSQLDBStatementWithParams.Reset;
 begin
+  inherited Reset;
   fParam.Clear;
 end;
 

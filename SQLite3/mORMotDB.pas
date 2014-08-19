@@ -911,7 +911,7 @@ begin
     StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if fBatchMethod<>mNone then
-        raise EORMException.Create('InternalBatchStop should have been called');
+        raise EORMException.Create('Missing previous InternalBatchStop');
       if Method=mPOST then
         fBatchAddedID := EngineLockedNextID else
         fBatchAddedID := 0;

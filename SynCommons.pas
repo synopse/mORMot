@@ -913,6 +913,10 @@ type
   TDateTimeDynArray = array of TDateTime;
   PDateTimeDynArray = ^TDateTimeDynArray;
 
+  /// a dynamic array of interface values
+  TInterfaceDynArray = array of IInterface;
+  PInterfaceDynArray = ^TInterfaceDynArray;
+
   /// a dynamic array of WideString values
   TWideStringDynArray = array of WideString;
   PWideStringDynArray = ^TWideStringDynArray;
