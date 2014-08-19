@@ -3259,6 +3259,7 @@ type
   TSQLAuthUser = class;
   TSQLRestServer = class;  // published methods = RESTful callbacks handlers
   TSQLRestStorage = class;
+  TSQLRestStorageRemote = class;
   TSQLRestClientURI = class;
 {$M-}
 
@@ -10958,7 +10959,8 @@ type
       aServerClass: TSQLRestStorageInMemoryClass=nil): TSQLRestStorage;
     /// register an external static storage for a given table
     // - will be added to StaticDataServer[] internal list
-    // - called e.g. by StaticDataCreate() or RemoteDataCreate()
+    // - called e.g. by StaticDataCreate(), RemoteDataCreate() or
+    // StaticMongoDBRegister()
     function StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
     /// create an external static redirection for a specific class
     // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
@@ -10974,7 +10976,7 @@ type
     // own cache and data model - e.g. a branch office server which may server
     // its local client over Ethernet, but communicating to a main mORMot
     // server via Internet, storing the corporate data in the main office server
-    function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorage;
+    function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorageRemote;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
@@ -11623,6 +11625,7 @@ type
   /// REST storage with redirection to another REST instance
   // - allows redirection of all CRUD operations for a table to another
   // TSQLRest instance, may be a remote TSQLRestClient or a TSQLRestServer
+  // - will be used by TSQLRestServer.RemoteDataCreate() method
   TSQLRestStorageRemote = class(TSQLRestStorage)
   protected
     fRemoteRest: TSQLRest;
@@ -11642,7 +11645,10 @@ type
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
   public
-    /// initialize the table storage redirection 
+    /// initialize the table storage redirection
+    // - you should not have to use this constructor, but rather the
+    // TSQLRestServer.RemoteDataCreate() method which will create and register
+    // one TSQLRestStorageRemote instance
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aRemoteRest: TSQLRest); reintroduce; virtual;
     /// the remote ORM instance used for data persistence
@@ -25840,13 +25846,13 @@ begin
 end;
 
 function TSQLRestServer.RemoteDataCreate(aClass: TSQLRecordClass;
-  aRemoteRest: TSQLRest): TSQLRestStorage;
+  aRemoteRest: TSQLRest): TSQLRestStorageRemote;
 begin
   if GetStaticDataServer(aClass)<>nil then
     raise EORMException.CreateFmt('Duplicate RemoteDataCreate(%s)',[aClass.ClassName]);
   result := TSQLRestStorageRemote.Create(aClass,self,aRemoteRest);
-    if not StaticDataAdd(result) then
-      raise EORMException.CreateFmt('Adding RemoteDataCreate(%s)',[aClass.ClassName]);
+  if not StaticDataAdd(result) then
+    raise EORMException.CreateFmt('Adding RemoteDataCreate(%s)',[aClass.ClassName]);
 end;
 
 procedure TSQLRestServer.FlushInternalDBCache;

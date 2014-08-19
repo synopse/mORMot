@@ -741,20 +741,25 @@ label="              Server";
 \ORM\in-memory tables¤JSON or binary files
 \ORM\external tables
 \ORM\NoSQL¤engine
+\ORM\Redirected¤TSQLRestServer¤ORM
+\ORM\Redirected¤TSQLRestClient
 }
 \external tables\External¤Database 1\SQL
 \external tables\External¤Database 2
-\NoSQL¤engine\MongoDB\direct¤access
+\NoSQL¤engine\MongoDB
 subgraph cluster_2 {
 "External\nDatabase 1";
 }
 subgraph cluster_3 {
 "External\nDatabase 2";
 }
-subgraph cluster_ {
+subgraph cluster_4 {
 "MongoDB";
 }
 subgraph cluster_5 {
+\Redirected¤TSQLRestClient\Remote¤mORMot¤Server\REST¤JSON
+}
+subgraph cluster_6 {
 label="Cross-Cutting features";
 "File process\nCompression";
 "Security\nCryptography";
@@ -773,7 +778,7 @@ In the previous diagram, you can already identify some key concepts of {\i mORMo
 - Process can be defined via a set of Services;
 - Business rules and data model are shared on both Client and Server sides;
 - Data is mapped by objects (ORM);
-- Databases can be one or several standard RDBMS (with auto-generated SQL), or fast in-memory objects lists;
+- Databases can be an embedded {\i SQLite3}, one or several standard RDBMS (with auto-generated SQL), a {\i MongoDB} NoSQL engine, fast in-memory objects lists, or another {\i mORMot} server;
 - Security (authentication and authorization) is integrated to all layers;
 - User interface and reporting classes are available;
 - A consistent testing and debugging API is integrated;
@@ -3704,6 +3709,7 @@ As stated below, you can use any other database access layer, if you wish:
 - A fast in-memory engine is included, which outperforms any SQL-based solution in terms of speed - but to the price of a non ACID behavior on disk (but ACID in RAM);
 - An integrated {\i SQLite3} engine, which is the best candidate for an embedded solution, even on server side;
 - Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects;
+- Any other {\f1\fs20 TSQLRest} instance (either another {\f1\fs20 TSQLRestServer}, or a remote {\f1\fs20 TSQLRestClientHTTP}) - see @93@;
 - Direct access to a {\i @*MongoDB@} database, which implements a true @82@ design.
 \graph mORMotDBDesign mORMot Persistence Layer Architecture
 \ORM\SQLite3\direct
@@ -3714,8 +3720,9 @@ As stated below, you can use any other database access layer, if you wish:
 \External DB\Oracle SQLite3 ODBC¤OleDB ZDBC\direct
 \External DB\FireDAC AnyDAC UniDAC¤BDE DBExpress NexusDB\DB.pas¤TDataSet
 \ORM\MongoDB\direct
+\ORM\TSQLRest¤redirection\direct
 =ORM=mORMot¤ORM
-\TObjectList=External DB=MongoDB
+\TObjectList=External DB=MongoDB=TSQLRest¤redirection
 \
 {\i SQlite3} will be used as the main SQL engine, able to @*JOIN@ all those tables, thanks to its {\i @*Virtual Table@} unique feature. You can in fact {\i mix} internal and external engines, in the same database model, and access all data in one unique SQL statement.
 :  SQLite3 as core
@@ -4577,6 +4584,63 @@ The exact process of these in-memory tables is that each time you write some new
 - ROLLBACK process won't do anything, so won't be ACID - but since your code may later use a real RDBMS, it is a good habit to always write the command, like in the sample code above, as {\f1\fs20 except aClient.RollBack}.
 When you write the data to file, the whole file is rewritten: it seems not feasible to write the data to disk at every write - in this case, SQLite3 in exclusive mode will be faster, since it will write only the new data, not the whole table content.
 This may sound like a limitation, but on our eyes, it could be seen more like a feature. For a particular table, we do not need nor want to have a whole RDBMS/SQL engine, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestStorageInMemory} storage is too limited for your process.
+:93  Redirect to an external TSQLRest
+Sometimes, having all database process hosted in a single process may not be enough. You can use the {\f1\fs20 TSQLRestServer.RemoteDataCreate()} method to instantiate a {\f1\fs20 TSQLRestStorageRemote} class which will redirect all ORM operation to a specified {\f1\fs20 TSQLRest} instance, may be remote (via {\f1\fs20 TSQLRestClientHttp}) or in-process ({\f1\fs20 TSQLRestServer}).
+For instance, in {\f1\fs20 TTestExternalDatabase} regression tests, you would find the following code:
+!  aExternalClient := TSQLRestClientDB.Create(fExternalModel,nil,'testExternal.db3',TSQLRestServerDB);
+!!  historyDB := TSQLRestServerDB.Create(
+!!    TSQLModel.Create([TSQLRecordMyHistory],'history'),
+!!    'history.db3',false);
+!historyDB.Model.Owner := historyDB;
+!  historyDB.DB.Synchronous := smOff;
+!  historyDB.DB.LockingMode := lmExclusive;
+!  historyDB.CreateMissingTables;
+!    'history.db3',false);
+!!  aExternalClient.Server.RemoteDataCreate(TSQLRecordMyHistory,historyDB);
+!  aExternalClient.Server.DB.Synchronous := smOff;
+!  aExternalClient.Server.DB.LockingMode := lmExclusive;
+!  aExternalClient.Server.CreateMissingTables;
+!...
+It will create two {\f1\fs20 SQLite3} databases, one main "{\f1\fs20 testExternal.db3}", and a separated "{\f1\fs20 history.db3}" database. Both will use {\i synch off} and {\i lock exclusive} access mode - see @60@ just above.
+In the "{\f1\fs20 history.db3}" file, there will be the {\f1\fs20 MyHistory} table, whereas in {\f1\fs20 testExternal.db3}", there won't be any {\f1\fs20 MyHistory} table. All {\f1\fs20 TSQLRecordMyHistory} CRUD process will be transparently redirected to {\f1\fs20 historyDB}.
+Then any ORM access from the main {\f1\fs20 aExternalClient} to the {\f1\fs20 TSQLRecordMyHistory} table via will be redirected, via an hidden {\f1\fs20 TSQLRestStorageRemote} instance, to {\f1\fs20 historyDB}. There won't be any noticeable performance penalty - on the contrary a separated database would be much better.
+An alternative would have been to use the {\f1\fs20 ATTACH TABLE} statement at {\i SQLite3} level, but it would have been only locally, and you would not be able to switch to another database engine. Whereas the {\f1\fs20 RemoteDataCreate()} method is generic, and will work with external databases - see @27@, even {\i @*NoSQL@} databases - see @84@, or remote {\i mORMot} servers, accessible via a {\f1\fs20 TSQLRestClientHTTP} instance. The only prerequirement is that all {\f1\fs20 TSQLRecord} classes in the main model do exist in the redirected database model.
+Note that the redirected {\f1\fs20 TSQLRest} instance can have its own model, its own authentication and authorization scheme, its own caching policy. It would be of great interrest when tuning your application.\line Be aware that if you use {\f1\fs20 TRecordReference} published fields, the model should better be shared among the local and redirected {\f1\fs20 TSQLRest} instances, or at least the {\f1\fs20 TSQLRecord} classes should have the same order - otherwise the {\f1\fs20 TRecordReference} values would point to the wrong table, depending on the side the query is run.
+See @%%mORMotDesign3@ and  @%%ArchServerFull@ for some explanation about how this redirection feature would interact with other abilities of the framework.
+One practical application of this redirection pattern may be with a typical corporate business.\line There may be a main {\i mORMot} server, at corporation headquarters, then local {\i mORMot} servers at each branch office, hosting applications for end users on the local network:
+\graph HostingRedirection Corporate Servers Redirection
+subgraph cluster_0 {
+label="Main Office";
+\Main¤Server\External DB
+}
+subgraph cluster_1 {
+label="           Office A";
+\Main¤Server\Local¤Server A\HTTP
+\Local¤Server A\Client 1
+\Local¤Server A\Client 2
+\Local¤Server A\Client 3\local¤network
+}
+subgraph cluster_2 {
+label="          Office B";
+\Main¤Server\Local¤Server B\HTTP
+\Local¤Server B\Client  1
+\Local¤Server B\Client  2
+\Local¤Server B\Client  3
+\Local¤Server B\Client  4\local¤network
+}
+\
+Each branch office may have its own {\f1\fs20 TSQLRecord} dedicated table, with all its data. Some other tables would be shared among local offices, like global configuration.\line Creating a dedicated table can be done in Delphi code by creating your own class type:
+!type
+!  TSQLRecordCustomerAbstract = class // never declared in Model
+!  .... // here the fields used for Customer business
+!  end;
+!  TSQLRecordCustomerA = class(TSQLRecordCustomerAbstract); // for office A
+!  TSQLRecordCustomerB = class(TSQLRecordCustomerAbstract); // for office B
+Here, {\f1\fs20 TSQLRecordCustomerA} may be part only of the Office A server's {\f1\fs20 TSQLModel}, and {\f1\fs20 TSQLRecordCustomerB} only of the Office B server's {\f1\fs20 TSQLModel}. It will increase security, and, in the main headequarters server, both {\f1\fs20 TSQLRecordCustomerA} and {\f1\fs20 TSQLRecordCustomerB} classes will be part of the {\f1\fs20 TSQLModel}, and dedicated interface-based services would be able to publish some high-level data and statistics about all stored tables.
+You will benefit of the caching abilities - see @39@ - of each {\f1\fs20 TSQLRest} instance. You may have some cache tuned at a local site, whereas the cache in the main database would remain less aggressive, but safer.
+Furthermore, even on a single-siter server, a {\f1\fs20 TSQLRecordHistory} table, or more generaly any aggregation data may benefit to be hosted locally or on cheap storage, whereas the main database would stay on SSD or SAS. Thanks to this redirection feature, you can tune your hosting as expected.
+Finally, if your purpose is to redirect all tables of a given {\f1\fs20 TSQLRestServer} to another remote {\f1\fs20 TSQLRestServer} (for security or hosting purpose), you may consider using {\f1\fs20 TSQLRestServerRemoteDB} instead. This class will redirect all tables to one external instance.
+Note that both {\f1\fs20 TSQLRestStorageRemote} and {\f1\fs20 TSQLRestServerRemoteDB} classes do not support yet the {\i Virtual Tables} mechanism of {\i SQlite3}. So if you use those features, you may not be able to run JOINed queries from the redirected instance: in fact, the main SQlite3 engine will complain about a missing {\f1\fs20 MyHistory} table in "{\f1\fs20 testExternal.db3}". We will eventually define the needed {\f1\fs20 TSQLVirtualTableRemote} and {\f1\fs20 TSQLVirtualTableCursorRemote} classes to implement this feature.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
 The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
@@ -6496,17 +6560,19 @@ The {\f1\fs20 TSQLRestServerDB} class is the main kingn of Server of the framewo
 If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
 If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
 :  Storage classes
-In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 TSQLRestStorage}:
+In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 @*TSQLRestStorage@}:
 \graph StorageRESTClasses RESTful storage classes
 \TSQLRestStorageExternal\TSQLRestStorage
 \TSQLRestStorageMongoDB\TSQLRestStorage
 \TSQLRestStorageRecordBased\TSQLRestStorage
 \TSQLRestStorageInMemory\TSQLRestStorageRecordBased
 \TSQLRestStorageInMemoryExternal\TSQLRestStorageInMemory
+\TSQLRestStorageRemote\TSQLRestStorage
 \
 In the above class hierarchy, the {\f1\fs20 TSQLRestStorage[InMemory][External]} classes are in fact used to store some {\f1\fs20 TSQLRecord} tables in any non-SQL backend:
 - {\f1\fs20 TSQLRestStorageExternal} maps tables stored in an external database - see @27@;
 - {\f1\fs20 TSQLRestStorageInMemory} stores the data in a {\f1\fs20 TObjectList} - see @57@;
+- {\f1\fs20 TSQLRestStorageRemote} will redirect the CRUD operations of a given table to an external {\f1\fs20 TSQLRest} instance (client or server) - see @93@;
 - {\f1\fs20 TSQLRestStorageMongoDB} will connect to a remote {\i @*MongoDB@} server to store the tables as a @*NoSQL@ collection of documents - see @83@.
 Those classes are used within a main {\f1\fs20 TSQLRestServer} to host some given {\f1\fs20 TSQLRecord} classes, either in-memory, or on external databases. They do not enter in account in our Client-Server presentation, but are implementation details, on the server side.
 :  Client classes
@@ -6972,7 +7038,9 @@ subgraph cluster {
 \TSQLRestStorage.¤Engine*\TSQLRestStorageExternal.¤Engine*\Is an external¤Virtual Table?
 \TSQLRestStorage.¤Engine*\TSQLRestStorageInMemory.¤Engine*\Is an in-memory table?¤(Virtual or static)
 \TSQLRestStorage.¤Engine*\TSQLRestStorageMongoDB.¤Engine*\Is a MongoDB table?
+\TSQLRestStorage.¤Engine*\TSQLRestStorageRemote.¤Engine*\Is a redirected table?
 \TSQLRestStorageExternal.¤Engine*\TSQLDBConnectionProperties¤TSQLDBStatement\compute SQL
+\TSQLRestStorageRemote.¤Engine*\Remote TSQLRestClientHTTP¤Local TSQLRestServerDB
 \TSQLDBConnectionProperties¤TSQLDBStatement\OleDB/ODBC¤or other\execute SQL
 \OleDB/ODBC¤or other\TSQLRestServer.URI
 \OleDB/ODBC¤or other\Database¤Client\handle data
@@ -10161,6 +10229,7 @@ But you may find out some (good?) reasons which main induce another design:
 - Your main data would be hosted on high performance SSD / NAS drives with safe RAID, but some data should better be hosted on cheaper storage (e.g. @85@);
 - You are selling one product, to be run on several environments (debugging / production, starter / corporate editions, centralized / P2P design...), depending on your clients demand;
 - Whatever your IT people or managers want {\i mORMot} to.
+Also consider per-table redirection - see @93@ - for even more advanced hosting abilities. See for instance @%%HostingRedirection@ diagram.
 The possibilities are endless, so we would here below only present some typical use-cases.
 :  Shared server
 This is the easiest configuration: one HTTP server instance, which serves both ORM and Services. On practice, this is perfectly working and scalable.
