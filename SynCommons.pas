@@ -913,9 +913,11 @@ type
   TDateTimeDynArray = array of TDateTime;
   PDateTimeDynArray = ^TDateTimeDynArray;
 
+  {$ifndef DELPHI5OROLDER}
   /// a dynamic array of interface values
   TInterfaceDynArray = array of IInterface;
   PInterfaceDynArray = ^TInterfaceDynArray;
+  {$endif}
 
   /// a dynamic array of WideString values
   TWideStringDynArray = array of WideString;
