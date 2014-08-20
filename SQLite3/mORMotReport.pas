@@ -1658,9 +1658,12 @@ var i,len,NumCharWhichFit: integer;
   end;
 begin
   len := length(ls);
-  if len = 0 then exit;
+  if len = 0 then
+    exit;
 
   // get the number of characters which will fit within LineWidth...
+  if len>1024 then
+    len := 1024; // speed up the API call: we expect only one line of text
   if not Fits then // fix API error (too big text) by rough binary approximation
     repeat
       len := len shr 1;
@@ -1679,7 +1682,7 @@ begin
   // ignore trailing blanks in LS...
   while (ls[NumCharWhichFit] <= ' ') do dec(NumCharWhichFit);
   // ignore beginning blanks in RS...
-  len := length(ls); // may have been reduced on Fits API error
+  len := length(ls); // may have been reduced if len>1024 or on API error
   while (i < len) and (ls[i] <= ' ') do inc(i);
   rs := copy(ls,i,len);
   ls := copy(ls,1,NumCharWhichFit);        //nb: assign ls AFTER rs here
