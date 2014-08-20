@@ -415,12 +415,16 @@ function VarRecToValue(const V: TVarRec; out wasString: boolean): string;
 /// convert the supplied text as "text", as expected by SQL standard
 procedure DoubleQuoteStr(var text: string);
 
-/// decode a Base64-encoded string, including our JSON_BASE64_MAGIC marker
+/// decode a Base64-encoded string
+// - default withBase64Magic=TRUE will expect the string to start with our
+// JSON_BASE64_MAGIC marker
 function Base64JSONStringToBytes(const JSONString: string;
-  var Bytes: TByteDynArray): boolean;
+  var Bytes: TByteDynArray; withBase64Magic: boolean=true): boolean;
 
-/// Base-64 encode a BLOB into string, including our JSON_BASE64_MAGIC marker
-function BytesToBase64JSONString(const Bytes: TByteDynArray): string;
+/// Base-64 encode a BLOB into string
+// - default withBase64Magic=TRUE will include our JSON_BASE64_MAGIC marker
+function BytesToBase64JSONString(const Bytes: TByteDynArray;
+  withBase64Magic: boolean=true): string;
 
 const
   /// special code to mark Base64 binary content in JSON string
@@ -432,6 +436,12 @@ const
   {$else}
   JSON_BASE64_MAGIC: array[0..2] of byte = ($ef,$bf,$b0);
   {$endif}
+
+  /// size, in platform chars, of our special code to mark Base64 binary
+  // content in JSON string
+  // - equals 1 since Delphi 2009 (UTF-16 encoded), or 3 for older versions
+  // (UTF-8encoded) of the compiler compiler
+  JSON_BASE64_MAGIC_LEN = sizeof(JSON_BASE64_MAGIC) div sizeof(char);
 
 {$ifndef ISSMS}
 /// read an UTF-8 (JSON) file into a native string
@@ -1099,19 +1109,23 @@ const
 var
   BASE64DECODE: array of ShortInt;
 
-function BytesToBase64JSONString(const Bytes: TByteDynArray): string;
+function BytesToBase64JSONString(const Bytes: TByteDynArray;
+  withBase64Magic: boolean): string;
 var i,len,x,c,j: cardinal;
     P: PChar;
 begin
-  x := sizeof(JSON_BASE64_MAGIC) div sizeof(char);
   len := length(Bytes);
   if len=0 then begin
     result := '';
     exit;
   end;
+  if withBase64Magic then
+    x := JSON_BASE64_MAGIC_LEN else
+    x := 0;
   SetLength(result,((len+2)div 3)*4+x);
   P := pointer(result);
-  move(JSON_BASE64_MAGIC,P^,sizeof(JSON_BASE64_MAGIC));
+  if withBase64Magic then
+    move(JSON_BASE64_MAGIC,P^,sizeof(JSON_BASE64_MAGIC));
   j := 0;
   for i := 1 to len div 3 do begin
     c := Bytes[j] shl 16 or Bytes[j+1] shl 8 or Bytes[j+2];
@@ -1153,19 +1167,21 @@ begin
 end;
 
 function Base64JSONStringToBytes(const JSONString: string;
-  var Bytes: TByteDynArray): boolean;
+  var Bytes: TByteDynArray; withBase64Magic: boolean): boolean;
 var i,bits,value,x,magiclen,len: cardinal;
 begin
   result := JSONString='';
   if result then
     exit;
-  if comparemem(pointer(JSONString),@JSON_BASE64_MAGIC,sizeof(JSON_BASE64_MAGIC)) then
-    magiclen := sizeof(JSON_BASE64_MAGIC) div sizeof(char) else
-    {$ifndef UNICODE}
-    if JSONString[1]='?' then // handle UTF-8 decoding error
-      magiclen := 1 else
-    {$endif}
-    exit;
+  if withBase64Magic then
+    if comparemem(pointer(JSONString),@JSON_BASE64_MAGIC,sizeof(JSON_BASE64_MAGIC)) then
+      magiclen := JSON_BASE64_MAGIC_LEN else
+      {$ifndef UNICODE}
+      if JSONString[1]='?' then // handle UTF-8 decoding error
+        magiclen := 1 else
+      {$endif}
+      exit else
+    magiclen := 0; // withBase64Magic=false
   x := length(JSONString);
   len := x-magiclen;
   if len and 3<>0 then

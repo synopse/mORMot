@@ -166,7 +166,8 @@ begin
   end;
   if DB.TableRowCount(TSQLRecordPeople)=0 then
     // we expect at least one record
-    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}]);
+    if DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}])=0 then
+      writeln('TSQLRecordPeople Error');
     // in all cases, client will call DropTable method-based service
   AddToServerWrapperMethod(DB,['..\..\..\CrossPlatform\templates',
                                 '..\..\..\..\CrossPlatform\templates']);
