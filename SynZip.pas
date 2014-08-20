@@ -132,6 +132,7 @@ unit SynZip;
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
    - added DestDirIsFileName optional parameter to TZipRead.UnZip() methods
+   - added TZipRead.UnZipAll() method
    - fixed CompressDeflate() function, which was in fact creating zlib content
    - fixed TZipWrite.AddDeflated() to handle data > 200 MB - thanks jpdk!
    - fixed unexpected error when adding files e.g. via TZipWrite.CreateForm()
@@ -608,6 +609,10 @@ type
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(const aName, DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
+    /// uncompress all fields stored inside the .zip archive into the supplied
+    // destination directory
+    // - returns -1 on success, or the index in Entry[] of the failing file
+    function UnZipAll(DestDir: TFileName): integer;
     /// retrieve information about a file
     // - in some cases (e.g. for a .zip created by latest Java JRE), 
     // infoLocal^.zzipSize/zfullSize/zcrc32 may equal 0: this method is able
@@ -996,8 +1001,6 @@ begin
         raise ESynZipException.Create('ZIP extended format');
       // UnZip() will call RetrieveFileInfo()
     end else
-      if (zzipSize=0) or (zfullSize=0) then
-        raise ESynZipException.Create('ZIP format size=0') else
       if (zzipSize=cardinal(-1)) or (zfullSize=cardinal(-1)) then
         raise ESynZipException.Create('ZIP64 format not supported');
     with Entry[Count] do begin
@@ -1021,9 +1024,15 @@ begin
         OemToChar(Pointer(tmp),Pointer(zipName)); // OemToCharW/OemToCharA
       end;
       inc(PByte(H),sizeof(H^)+infoLocal^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
-      if (infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) and
-        (zipName<>'') and (zipName[length(zipName)]<>'\') then // ignore folder
-        inc(Count); // known methods: stored + deflate
+      if not(infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) then
+        raise ESynZipException.CreateFmt(
+          'Unsupported compression method %d for %s',[infoLocal^.zZipMethod,zipName]);
+      if (zipName='') or (zipName[length(zipName)]='\') then
+        continue; // ignore folder
+      if infoLocal^.flags and (1 shl 3)=0 then
+        if (infoLocal^.zzipSize=0) or (infoLocal^.zfullSize=0) then
+          raise ESynZipException.CreateFmt('"%s" size=0 in ZIP',[zipName]);
+      inc(Count); // add file to Entry[]
     end;
   end;
 end;
@@ -1105,7 +1114,7 @@ type
     zipSize: dword;
     fullSize: dword;
   end;
-  
+
 function TZipRead.RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
 var P: ^TDataDescriptor;
     PDataStart: NativeUInt;
@@ -1114,12 +1123,13 @@ begin
     result := false;
     exit;
   end;
-  Info := Entry[Index].infoLocal^; // copy information from "local file header"
-  if Info.flags and (1 shl 3)=0 then begin  
-    result := true; // information is correct
+  // copy information from "local file header"
+  Info := Entry[Index].infoLocal^;
+  if Info.flags and (1 shl 3)=0 then begin
+    result := true; // local information is correct
     exit;
   end;
-  // try to get info from ending "central directory"
+  // get info from ending "central directory" (faster than "data descriptor")
   with Entry[Index].infoDirectory^.fileInfo do
     if (zzipSize<>0) and (zfullSize<>0) and
        (zzipSize<>dword(-1)) and (zfullSize<>dword(-1)) then begin
@@ -1253,6 +1263,20 @@ begin
   finally
     FS.Free;
   end;
+end;
+
+function TZipRead.UnZipAll(DestDir: TFileName): integer;
+begin
+  if DestDir<>'' then
+    {$ifdef CONDITIONALEXPRESSIONS}
+    DestDir := IncludeTrailingPathDelimiter(DestDir);
+    {$else}
+    DestDir := IncludeTrailingBackslash(DestDir);
+    {$endif}
+  for result := 0 to Count-1 do
+    if not UnZip(result,DestDir) then
+      exit;
+  result := -1;
 end;
 
 function TZipRead.UnZip(const aName, DestDir: TFileName;
