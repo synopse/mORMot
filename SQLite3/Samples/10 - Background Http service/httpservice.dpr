@@ -14,10 +14,6 @@ uses
   mORMotHTTPServer,
   SampleData in '..\01 - In Memory ORM\SampleData.pas';
 
-// define this conditional if you want the Windows Messages to be accessible
-// from the background service
-{.$define USEMESSAGES}
-
 
 /// if we will run the service with administrator rights
 // - otherwise, ensure you registered the URI /root:8080
@@ -120,7 +116,7 @@ begin
       TextColor(ccLightGray);
       writeln(#10'Background server is running.'#10);
       writeln('Press [Enter] to close the server.'#10);
-      ConsoleWaitForEnterKey;
+      ConsoleWaitForEnterKey; // ReadLn if you do not use main thread execution
       exit;
     finally
       Free;
