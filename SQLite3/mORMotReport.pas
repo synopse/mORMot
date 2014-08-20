@@ -189,6 +189,7 @@ unit mORMotReport;
     algorithm: we were able to generate reports with more than 20,000 pages! 
   - speed up and memory resource decrease for pdf export of huge reports
   - fixed issue about disabled Zoom menu entry if no Outline is defined
+  - fixed unexpected exception with TGDIPages.DrawText() and huge string
   - proper function TGDIPages.GetLineHeight() computation - from kln feedback
   - added ExportPDFBackground and ExportPDFGeneratePDF15File properties
   - added ExportPDFEncryptionLevel/User/OwnerPassword/Permissions properties to
@@ -1638,40 +1639,48 @@ begin
 end;
 
 
-//This declaration modifies Delphi's declaration of GetTextExtentExPoint
-//so that the variable to receive partial string extents (p6) is ignored ...
+// This declaration modifies Delphi's declaration of GetTextExtentExPoint
+// so that the variable to receive partial string extents (p6) is ignored ...
 function GetTextExtentExPointNoPartialsW(DC: HDC; p2: PChar; p3, p4: Integer;
   var p5: Integer; const p6: integer; var p7: TSize): BOOL; stdcall;
     external gdi32 name 'GetTextExtentExPointW';
 
-//TrimLine: Splits off from LS any characters beyond the allowed width
-//breaking at the end of a word if possible. Leftover chars -> RS.
+// TrimLine: Splits off from LS any characters beyond the allowed width
+// breaking at the end of a word if possible. Leftover chars -> RS.
 procedure TrimLine(Canvas: TCanvas; var ls: SynUnicode; out rs: SynUnicode;
                            LineWidthInPxls: integer);
 var i,len,NumCharWhichFit: integer;
     dummy: TSize;
+  function Fits: boolean;
+  begin
+    result := GetTextExtentExPointNoPartialsW(Canvas.Handle,
+      pointer(ls),len,LineWidthInPxls,NumCharWhichFit,0,dummy);
+  end;
 begin
   len := length(ls);
   if len = 0 then exit;
 
   // get the number of characters which will fit within LineWidth...
-  if not GetTextExtentExPointNoPartialsW(Canvas.Handle,
-    pointer(ls),len,LineWidthInPxls,NumCharWhichFit,0,dummy) then
-      raise Exception.create('GetTextExtentExPoint WinApi error in TGDIPages');
+  if not Fits then // fix API error (too big text) by rough binary approximation
+    repeat
+      len := len shr 1;
+    until (len=0) or Fits;
 
-  if NumCharWhichFit = len then exit; //if everything fits then stop here
+  if NumCharWhichFit = length(ls) then
+    exit; // if everything fits then stop here
 
+  // find the end of the last whole word which will fit...
   i := NumCharWhichFit;
-  //find the end of the last whole word which will fit...
   while (NumCharWhichFit > 0) and (ls[NumCharWhichFit] > ' ') do
     dec(NumCharWhichFit);
   if (NumCharWhichFit = 0) then NumCharWhichFit := i;
-  
+
   i := NumCharWhichFit+1;
-  //ignore trailing blanks in LS...
-  while (ls[NumCharWhichFit] = ' ') do dec(NumCharWhichFit);
-  //ignore beginning blanks in RS...
-  while (i < len) and (ls[i] = ' ') do inc(i);
+  // ignore trailing blanks in LS...
+  while (ls[NumCharWhichFit] <= ' ') do dec(NumCharWhichFit);
+  // ignore beginning blanks in RS...
+  len := length(ls); // may have been reduced on Fits API error
+  while (i < len) and (ls[i] <= ' ') do inc(i);
   rs := copy(ls,i,len);
   ls := copy(ls,1,NumCharWhichFit);        //nb: assign ls AFTER rs here
 end;
@@ -1707,9 +1716,9 @@ begin
 end;
 
 
-//This DrawArrow() function is based on code downloaded from
-//http://www.efg2.com/Lab/Library/Delphi/Graphics/Algorithms.htm
-//(The original author is unknown)
+// This DrawArrow() function is based on code downloaded from
+// http://www.efg2.com/Lab/Library/Delphi/Graphics/Algorithms.htm
+// (The original author is unknown)
 procedure DrawArrowInternal(Canvas: TCanvas;
   FromPoint, ToPoint: TPoint; HeadSize: integer; SolidArrowHead: boolean);
 var
@@ -1734,7 +1743,7 @@ begin
   xLineUnitDelta := xLineDelta / SQRT( SQR(xLineDelta) + SQR(yLineDelta) );
   yLineUnitDelta := yLineDelta / SQRt( SQR(xLineDelta) + SQR(yLineDelta) );
 
-  //(xBase,yBase) is where arrow line is perpendicular to base of triangle.
+  // (xBase,yBase) is where arrow line is perpendicular to base of triangle
   xBase := ToPoint.X - ROUND(HeadSize * xLineUnitDelta);
   yBase := ToPoint.Y - ROUND(HeadSize * yLineUnitDelta);
 
