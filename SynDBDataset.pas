@@ -163,7 +163,8 @@ type
     {{ Execute a prepared SQL statement
       - parameters marked as ? should have been already bound with Bind*() functions
       - this implementation will also loop through all internal bound array
-      of values (if any), to implement BATCH mode
+      of values (if any), to implement BATCH mode even if the database library
+      does not support array binding (only SynDBFireDAC does support it yet)
       - this overridden method will log the SQL statement if sllSQL has been
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBDataset on any error }
@@ -463,10 +464,10 @@ begin
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
     raise ESQLDBDataset.CreateFmt('ExecutePrepared expected %d bound parameters, got %d',[fPreparedParamsCount,fParamCount]);
-  lArrayIndex := -1;
+  lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support 
   repeat
     if (not fDatasetSupportBatchBinding) and (fParamsArrayCount>0) then
-      inc(lArrayIndex);
+      inc(lArrayIndex); // enable BindArray() emulation
     for p := 0 to fParamCount-1 do
       DatasetBindSQLParam(lArrayIndex,p,fParams[p]);
     // 2. Execute query (within a loop for BATCH mode)

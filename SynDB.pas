@@ -5242,7 +5242,8 @@ begin
   BindArray(Param,ftDouble,nil,0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayCurrency(Param: Integer; const Values: array of currency);
+procedure TSQLDBStatement.BindArrayCurrency(Param: Integer;
+  const Values: array of currency);
 begin
   BindArray(Param,ftCurrency,nil,0); // will raise an exception (Values=nil)
 end;
@@ -6211,7 +6212,8 @@ begin
     end;
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer; const Values: array of double);
+procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+  const Values: array of double);
 var i: integer;
 begin
   with CheckParam(Param,ftDouble,paramIn,length(Values))^ do
@@ -6219,7 +6221,8 @@ begin
       VArray[i] := DoubleToStr(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer; const Values: array of Int64);
+procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+  const Values: array of Int64);
 var i: integer;
 begin
   with CheckParam(Param,ftInt64,paramIn,length(Values))^ do
@@ -6232,13 +6235,14 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
 begin
   inherited; // raise an exception in case of invalid parameter
   with CheckParam(Param,ParamType,paramIn)^ do begin
-    VArray := Values;
+    VArray := Values; // immediate COW reference-counted assignment
     VInt64 := ValuesCount;
   end;
   fParamsArrayCount := ValuesCount;
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer; const Values: array of RawUTF8);
+procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+  const Values: array of RawUTF8);
 var i: integer;
     StoreVoidStringAsNull: boolean;
 begin

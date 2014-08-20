@@ -242,6 +242,9 @@ type
     // - i.e. will be used by IZConnection.PrepareStatementWithParams()
     // - default values (set in Create method) try to achieve best permormance
     property ZeosStatementParams: TStrings read fStatementParams;
+    /// if the associated ZDBC provider supports parameters array binding
+    // - you should use the BindArray() methods only if this property is TRUE
+    property SupportsArrayBindings: boolean read fSupportsArrayBindings;
   end;
 
 
@@ -289,8 +292,8 @@ type
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
     {{ Execute a prepared SQL statement
       - parameters marked as ? should have been already bound with Bind*() functions
-      - this implementation will also loop through all internal bound array
-      of values (if any), to implement BATCH mode
+      - this implementation will also handle bound array of values (if any),
+        if IZDatabaseInfo.SupportsArrayBindings is true for this provider
       - this overridden method will log the SQL statement if sllSQL has been
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBZeos on any error }
@@ -820,12 +823,18 @@ begin
     raise ESQLDBZEOS.CreateFmt('%s.ExecutePrepared() miss a Reset',[fStatementClassName]);
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
-  if (fParamsArrayCount>0) and
-     (fConnection.Properties as TSQLDBZEOSConnectionProperties).fSupportsArrayBindings then
-    arrayBinding := TZeosArrayBinding.Create(self) else
+  if fParamsArrayCount>0 then
+    with (fConnection.Properties as TSQLDBZEOSConnectionProperties) do
+    if fSupportsArrayBindings then
+      arrayBinding := TZeosArrayBinding.Create(self) else
+      raise ESQLDBZEOS.CreateFmt('%s.BindArray() not supported by %s provider',
+        [fStatementClassName,DBMSName]) else
     arrayBinding := nil;
   try
     if arrayBinding=nil then
+  {$else}
+  if fParamsArrayCount>0 then
+    raise ESQLDBZEOS.CreateFmt('%s.BindArray() not supported',[fStatementClassName]) else
   {$endif}
     for i := 1 to fParamCount do
       with fParams[i-1] do

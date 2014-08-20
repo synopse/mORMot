@@ -1462,6 +1462,8 @@ begin
         LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
   try
     // 1. bind parameters
+    if fParamsArrayCount>0 then
+      raise EODBCException.CreateFmt('%s.BindArray() not supported',[fStatementClassName]);
     if fParamCount>0 then begin
       SetLength(StrLen_or_Ind,fParamCount);
       for p := 0 to fParamCount-1 do
