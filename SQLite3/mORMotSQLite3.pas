@@ -1275,7 +1275,7 @@ begin
 end;
 
 function TSQLRestServerDB.Backup(Dest: TStream): boolean;
-{$ifdef CPU64} // currently not working on Win64 - never mind
+{$ifdef CPU64} // issues on Win64 - use DB.BackupBackground() instead  
 begin
   result := false;
 end;
@@ -1331,7 +1331,9 @@ begin
     try
       Z := TSynZipCompressor.Create(D,CompressionLevel,szcfGZ);
       try
+        {$WARN SYMBOL_DEPRECATED OFF} // BackupGZ() itself is marked deprecated
         result := Backup(Z);
+        {$WARN SYMBOL_DEPRECATED ON}
       finally
         Z.Free;
       end;
@@ -1348,7 +1350,9 @@ begin
   try
     with TSynMemoryStreamMapped.Create(BackupFileName) do
     try
+      {$WARN SYMBOL_DEPRECATED OFF} // RestoreGZ() itself is marked deprecated
       result := Restore(GZRead(Memory,Size));
+      {$WARN SYMBOL_DEPRECATED ON}
     finally
       Free;
     end;
