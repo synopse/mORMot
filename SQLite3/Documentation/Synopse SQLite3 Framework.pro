@@ -6530,7 +6530,7 @@ $ [{"ID":1},{"ID":2},{"ID":3},{"ID":4},{"ID":5},{"ID":6},{"ID":7}]
 will be transfered as shorter:
 $ {"fieldCount":1,"values":["ID",1,2,3,4,5,6,7]}
 :37  JSON global cache
-A global @*cache@ is used to enhance the framework scaling, and will use @*JSON@ for its result encoding.
+A global @*cache@, at {\i SQlite3} level, is used to enhance the framework scaling, featuring @*JSON@ storage for its result encoding.
 In order to speed-up the server response time, especially in a concurrent client access, the internal database engine is not to be called on every request. In fact, a global cache has been introduced to store in memory the latest @*SQL@ {\f1\fs20 SELECT} statements results, directly in JSON.
 The {\i @*SQLite3@} engine access is protected at SQL/JSON cache level, via {\f1\fs20 DB.LockJSON()} calls in most {\f1\fs20 @*TSQLRestServerDB@} methods.
 A {\f1\fs20 TSynCache} instance is instantiated within the {\f1\fs20 TSQLDataBase} internal global instance, with the following line:
@@ -7311,8 +7311,9 @@ Even {\i SQLite3} is faster when used as external engine, in respect to direct e
 If you want to use a {\i @*map/reduce@} algorithm in your application, or the @13@ {\i @*Unit Of Work@} pattern, in addition to ORM data access, all those enhancements may speed up a lot your process. Reading and writing huge amount of data has never been so fast and easy: you may even be tempted to replace stored-procedure process by high-level code implemented in your Domain service. N-tier separation would benefit from it.
 :39 CRUD level cache
 :  Where to cache
-Starting with revision 1.16 of the framework, tuned record cache has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides. See @38@ for the other cache patterns available in the framework.
+Starting with revision 1.16 of the framework, tuned record @*cache@ has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides. See @38@ for the other cache patterns available in the framework, mainly @37@ at {\i SQlite3} level, on the server side.
 In fact, a unique caching mechanism is shared at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
+By default, there is no caching at REST level. Then you can use the {\f1\fs20 TSQLRest.Cache} property to tune your cache policy for each {\f1\fs20 TSQLRest} instance.
 \graph mORMotCaching CRUD caching in mORMot
 \Internet (VPN)\Local Network
 node [shape=box];
@@ -7367,21 +7368,22 @@ Another good use of caching is to store data that changes but is accessed by onl
 Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @16@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
 But most of the time, an human guess at the business logic level is enough to set which data is to be cached on each side, and ensure content coherency.
 :  How to cache
-A dedicated {\f1\fs20 TSQLRestCache} instance can be created, and will maintain such a tuned caching mechanism, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes.
-A call to {\f1\fs20 TSQLRest.Cache}'s {\f1\fs20 SetCache()} and {\f1\fs20 SetTimeOut()} methods is enough to specify which table(s) or record(s) are to be cached, either at the client or the server level.
+A tuned caching mechanism can be defined, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes, at ID level.
+By default, REST level cache is disabled, until you call {\f1\fs20 TSQLRest.Cache}'s {\f1\fs20 SetCache()} and {\f1\fs20 SetTimeOut()} methods. Those methods will define the caching policy, able to specify which table(s) or record(s) are to be cached, either at the client or the server level.
+Once enabled for a table and a set of IDs on a given table, any further call to {\f1\fs20 TSQLRest.Retrieve(aClass,aID)} or {\f1\fs20 TSQLRecord.Create(aRest,aID)} will first attempt to retrieve the {\f1\fs20 TSQLRecord} of the given {\f1\fs20 aID} from the internal {\f1\fs20 TSQLRestCache} instance's in-memory cache, if available.\line Note that more complex requests, like queries on other fields than the ID primary key, or JOINed queries, won't be cached at REST level. But such requests may benefit of the @37@, at {\i SQLite3} level, on the server side.
 For instance, here is how the Client-side caching is tested about one individual record:
 !    (...)
 !!    Client.Cache.SetCache(TSQLRecordPeople); // cache whole table
 !    TestOne;
-!    Client.Cache.Clear; // reset cache settings
+!!    Client.Cache.Clear; // reset cache settings
 !!    Client.Cache.SetCache(Rec); // cache one record
 !    // same as Client.Cache.SetCache(TSQLRecordPeople,Rec.ID);
 !    TestOne;
 !    (...)
 !!    Database.Cache.SetCache(TSQLRecordPeople); // server-side
 !    (...)
-Note that in the above code, {\f1\fs20 Client.Cache.Clear} is used to reset all cache settings (i.e. not only flush the cache content, but delete all settings previously made with {\f1\fs20 Cache.SetCache()} or {\f1\fs20 Cache.SetTimeOut()} calls. So in the above code, a global cache is first enabled for the whole {\f1\fs20 TSQLRecordPeople} table, then the cache settings are reset, then cache is enabled for only the particular {\f1\fs20 Rec} record.
-It's worth warning once again that it's up to the code responsibility to ensure that these caches are consistent over the network. Server side and client side have their own coherency profile to be ensured.
+In the above code, {\f1\fs20 Client.Cache.Clear} is used to reset all cache settings (i.e. not only flush the cache content, but delete all settings previously made with {\f1\fs20 Cache.SetCache()} or {\f1\fs20 Cache.SetTimeOut()} calls. So in the above code, a global cache is first enabled for the whole {\f1\fs20 TSQLRecordPeople} table, then the cache settings are reset, then cache is enabled for only the particular {\f1\fs20 Rec} record.\line To reset the cache content (e.g. if you consider some values may be deprecated), just call the {\f1\fs20 Cache.Flush} methods (able to flush the in-memory cache for all tables, a given table, or a given record).
+It's worth warning once again that it's up to the code responsibility to ensure that these caches are consistent over the network. Server side and client side have their own coherency profile to be ensured. The caching policy has to match your data model, and application use cases.
 {\i On the Client side}, only local CRUD operations are tracked. According to the stateless design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process

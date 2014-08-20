@@ -8611,10 +8611,20 @@ type
     Value: TDynArray;
     /// used to lock the table cache for multi thread safety
     Mutex: TRTLCriticalSection;
+    /// initialize this table cache
+    // - will set Value wrapper and Mutex handle - other fields should have
+    // been cleared by caller (is the case for a TSQLRestCacheEntryDynArray)
+    procedure Init;
+    /// reset all settings corresponding to this table cache
+    procedure Clear;
+    /// finalize this table cache entry
+    procedure Done;
     /// flush cache for a given Value[] index
     procedure FlushCacheEntry(Index: Integer);
     /// flush cache for all Value[]
     procedure FlushCacheAllEntries;
+    /// add the supplied ID to the Value[] array
+    procedure SetCache(aID: integer);
     /// update/refresh the cached JSON serialization of a given ID 
     procedure SetJSON(aID: integer; const aJSON: RawUTF8); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
@@ -8625,7 +8635,12 @@ type
     function RetrieveJSON(aID: integer; aValue: TSQLRecord): boolean; overload;
   end;
 
-  {/ implement a fast cache content at the TSQLRest level
+  /// for TSQLRestCache, stores all table settings and values
+  // - this dynamic array will follow TSQLRest.Model.Tables[] layout, i.e. one
+  // entry per TSQLRecord class in the data model
+  TSQLRestCacheEntryDynArray = array of TSQLRestCacheEntry;
+
+  {/ implement a fast TSQLRecord cache, per ID, at the TSQLRest level
    - purpose of this caching mechanism is to speed up retrieval of some common
      values at either Client or Server level (like configuration settings)
    - only caching synchronization is about the following RESTful basic commands:
@@ -8639,8 +8654,8 @@ type
   TSQLRestCache = class(TObject)
   protected
     fRest: TSQLRest;
-    /// fCache[] follows fModel.Tables[] array
-    fCache: array of TSQLRestCacheEntry;
+    /// fCache[] follows fRest.Model.Tables[] array: one entry per TSQLRecord
+    fCache: TSQLRestCacheEntryDynArray;
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
     function Retrieve(aTableIndex, aID: integer): RawUTF8; overload;
@@ -8667,6 +8682,10 @@ type
     // - this will flush the stored JSON content for this record (and table
     // settings will be kept)
     procedure Flush(aTable: TSQLRecordClass; aID: integer); overload;
+    /// flush the cache for a set of specified records
+    // - this will flush the stored JSON content for these record (and table
+    // settings will be kept)
+    procedure Flush(aTable: TSQLRecordClass; const aIDs: array of integer); overload;
     /// flush the cache, and destroy all settings
     // - this will flush all stored JSON content, AND destroy the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
@@ -8679,6 +8698,10 @@ type
      - if this item is already cached, do nothing
      - return true on success }
     function SetCache(aTable: TSQLRecordClass; aID: Integer): boolean; overload;
+     {/ activate the internal caching for a set of specified TSQLRecord
+     - if these items are already cached, do nothing
+     - return true on success }
+    function SetCache(aTable: TSQLRecordClass; const aIDs: array of Integer): boolean; overload;
      {/ activate the internal caching for a given TSQLRecord
      - will cache the specified aRecord.ID item
      - if this item is already cached, do nothing
@@ -9363,15 +9386,18 @@ type
     /// access the internal caching parameters for a given TSQLRecord
     // - purpose of this caching mechanism is to speed up retrieval of some
     // common values at either Client or Server level (like configuration settings)
+    // - by default, this CRUD level per-ID cache is disabled
+    // - use Cache.SetCache() and Cache.SetTimeOut() methods to set the appropriate
+    // configuration for this particular TSQLRest instance
     // - only caching synchronization is about the direct RESTful/CRUD commands:
     // RETRIEVE, ADD, UPDATE and DELETE (that is, a complex direct SQL UPDATE or
     // via TSQLRecordMany pattern won't be taken in account - only exception is
     // TSQLRestStorage tables accessed as SQLite3 virtual table)
     // - this caching will be located at the TSQLRest level, that is no automated
-    // synchronization is implemented between TSQLRestClient and TSQLRestServer:
-    // you shall ensure that your code won't fail due to this restriction
-    // - use Cache.SetCache() and Cache.SetTimeOut() methods to set the appropriate
-    // configuration for this particular TSQLRest instance 
+    // synchronization is implemented between TSQLRestClient and TSQLRestServer -
+    // you shall ensure that your business logic is safe, calling Cache.Flush()
+    // overloaded methods on purpose: better no cache than unproper cache -
+    // "premature optimization is the root of all evil"
     property Cache: TSQLRestCache read GetCache;
 
     /// get a blob field content from its record ID and supplied blob field name
@@ -24390,6 +24416,31 @@ end;
 
 { TSQLRestCacheEntry }
 
+procedure TSQLRestCacheEntry.Init;
+begin
+  Value.InitSpecific(TypeInfo(TSQLRestCacheEntryValueDynArray),
+    Values,djInteger,@Count); // will search/sort by first djInteger ID field
+  InitializeCriticalSection(Mutex);
+end;
+
+procedure TSQLRestCacheEntry.Done;
+begin
+  DeleteCriticalSection(Mutex);
+end;
+
+procedure TSQLRestCacheEntry.Clear;
+begin
+  EnterCriticalSection(Mutex);
+  try
+    Value.Clear;
+    CacheAll := false;
+    CacheEnable := false;
+    TimeOutMS := 0;
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
 procedure TSQLRestCacheEntry.FlushCacheEntry(Index: Integer);
 begin
   if cardinal(Index)<cardinal(Count) then
@@ -24420,6 +24471,27 @@ begin
   end;
 end;
 
+procedure TSQLRestCacheEntry.SetCache(aID: integer);
+var Rec: TSQLRestCacheEntryValue;
+    i: integer;
+begin
+  EnterCriticalSection(Mutex);
+  try
+    CacheEnable := true;
+    if not CacheAll then begin
+      i := Value.Find(aID); // search by first ID field
+      if i<0 then begin
+        Rec.ID := aID;
+        Rec.TimeStamp64 := 0; // indicates no value cache
+        Value.Add(Rec);
+        Value.Sort; // will sort by ID for faster retrieval
+      end; // do nothing if aID is already in Values[]
+    end;
+  finally
+    LeaveCriticalSection(Mutex);
+  end;
+end;
+
 procedure TSQLRestCacheEntry.SetJSON(aID: integer; const aJSON: RawUTF8);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
@@ -24429,7 +24501,7 @@ begin
     Rec.ID := aID;
     Rec.TimeStamp64 := GetTickCount64;
     Rec.JSON := aJSON;
-    i := Value.Find(Rec);
+    i := Value.Find(Rec); // search by first ID field
     if i>=0 then
       Values[i] := Rec else
       if CacheAll then begin
@@ -24452,7 +24524,7 @@ begin
   EnterCriticalSection(Mutex);
   try
     result := false;
-    i := Value.Find(aID);
+    i := Value.Find(aID); // search by first ID field
     if i>=0 then
       with Values[i] do
       if TimeStamp64<>0 then // 0 when there is no JSON value cached
@@ -24548,32 +24620,30 @@ end;
 
 function TSQLRestCache.SetCache(aTable: TSQLRecordClass; aID: Integer): boolean;
 var i: integer;
-    Rec: TSQLRestCacheEntryValue;
 begin
   result := false;
   if (self=nil) or (aTable=nil) or (aID<=0) then
     exit;
-  i := Rest.Model.GetTableIndexExisting(aTable);
-  if Cardinal(i)>=Cardinal(Length(fCache)) then
+  i := Rest.Model.GetTableIndex(aTable);
+  if i>=Length(fCache) then
     exit;
   if Rest.CacheWorthItForTable(i) then
-    with fCache[i] do begin
-      EnterCriticalSection(Mutex);
-      try
-        CacheEnable := true;
-        if not CacheAll then begin
-          i := Value.Find(aID);
-          if i<0 then begin
-            Rec.ID := aID;
-            Rec.TimeStamp64 := 0;
-            Value.Add(Rec);
-            Value.Sort; // will sort by ID for faster retrieval
-          end;
-        end;
-      finally
-        LeaveCriticalSection(Mutex);
-      end;
-    end;
+    fCache[i].SetCache(aID);
+  result := True;
+end;
+
+function TSQLRestCache.SetCache(aTable: TSQLRecordClass; const aIDs: array of Integer): boolean;
+var i,j: integer;
+begin
+  result := false;
+  if (self=nil) or (aTable=nil) or (length(aIDs)=0) then
+    exit;
+  i := Rest.Model.GetTableIndex(aTable);
+  if i>=Length(fCache) then
+    exit;
+  if Rest.CacheWorthItForTable(i) then
+    for j := 0 to high(aIDs) do
+      fCache[i].SetCache(aIDs[j]);
   result := True;
 end;
 
@@ -24592,17 +24662,14 @@ begin
   fRest := aRest;
   SetLength(fCache,length(fRest.Model.Tables));
   for i := 0 to high(fCache) do
-    with fCache[i] do begin // will search/sort by ID
-      Value.InitSpecific(TypeInfo(TSQLRestCacheEntryValueDynArray),Values,djInteger,@Count);
-      InitializeCriticalSection(Mutex);
-    end;
+    fCache[i].Init;
 end;
 
 destructor TSQLRestCache.Destroy;
 var i: integer;
 begin
   for i := 0 to high(fCache) do
-    DeleteCriticalSection(fCache[i].Mutex);
+    fCache[i].Done;
   inherited;
 end;
 
@@ -24611,17 +24678,7 @@ var i: integer;
 begin
   if self<>nil then
   for i := 0 to high(fCache) do
-  with fCache[i] do begin
-    EnterCriticalSection(Mutex);
-    try
-      Value.Clear;
-      CacheAll := false;
-      CacheEnable := false;
-      TimeOutMS := 0;
-    finally
-      LeaveCriticalSection(Mutex);
-    end;
-  end;
+    fCache[i].Clear;
 end;
 
 procedure TSQLRestCache.Flush;
@@ -24651,6 +24708,23 @@ begin
       end;
     end;
 end;
+
+procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of integer);
+var i: integer;
+begin
+  if (self<>nil) and (length(aIDs)>0) then
+    with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
+    if CacheEnable then begin
+      EnterCriticalSection(Mutex);
+      try
+        for i := 0 to high(aIDs) do
+          FlushCacheEntry(Value.Find(aIDs[i]));
+      finally
+        LeaveCriticalSection(Mutex);
+      end;
+    end;
+end;
+
 
 procedure TSQLRestCache.Notify(aTable: TSQLRecordClass; aID: integer;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
@@ -24709,8 +24783,8 @@ begin
   result := false;
   if (self=nil) or (aValue=nil) or (aID<=0) then
     exit;
-  TableIndex := fRest.Model.GetTableIndex(PSQLRecordClass(aValue)^);
-  if TableIndex<Cardinal(Length(fCache)) then
+  TableIndex := fRest.Model.GetTableIndexExisting(PSQLRecordClass(aValue)^);
+  if TableIndex<cardinal(Length(fCache)) then
     with fCache[TableIndex] do
     if CacheEnable and RetrieveJSON(aID,aValue) then
       result := true;
