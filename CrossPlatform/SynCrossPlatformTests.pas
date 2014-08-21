@@ -792,7 +792,7 @@ begin
     for j := 0 to high(Rec.G) do
       check(Rec.G[j]=IntToStr(j+1));
     check(Rec.H.H1=i);
-    check(length(Rec.J)=i);
+    check(length(Rec.J)=i-1);
     for j := 0 to high(Rec.J) do begin
       Check(Rec.J[j].J1=j);
       Check(Rec.J[j].J2.D2=j);

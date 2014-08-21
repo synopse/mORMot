@@ -126,6 +126,8 @@ begin
   SetLength(Rec.G,n+1);
   Rec.G[n] := UInt32ToUtf8(n+1);
   inc(Rec.H.H1);
+  if n=0 then
+    exit; // first return J[] with nothing
   n := length(Rec.J);
   SetLength(Rec.J,n+1);
   Rec.J[n].J1 := n;

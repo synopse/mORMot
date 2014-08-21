@@ -889,6 +889,7 @@ type
     procedure Init(const aJSON: string; aIndex: integer);
     function GetNextChar: char;                {$ifdef HASINLINE}inline;{$endif}
     function GetNextNonWhiteChar: char;        {$ifdef HASINLINE}inline;{$endif}
+    function CheckNextNonWhiteChar(aChar: char): boolean; {$ifdef HASINLINE}inline;{$endif}
     function GetNextString(out str: string): boolean; overload;
     function GetNextString: string; overload;  {$ifdef HASINLINE}inline;{$endif}
     function GetNextJSON(out Value: variant): TJSONParserKind;
@@ -926,6 +927,21 @@ begin
       inc(Index);
     until Index>JSONLength;
   result := #0;
+end;
+
+function TJSONParser.CheckNextNonWhiteChar(aChar: char): boolean;
+begin
+  if Index<=JSONLength then
+    repeat
+      if JSON[Index]>' ' then begin
+        result := JSON[Index]=aChar;
+        if result then
+          inc(Index);
+        exit;
+      end;
+      inc(Index);
+    until Index>JSONLength;
+  result := false;
 end;
 
 procedure TJSONParser.GetNextStringUnEscape(var str: string);
@@ -1059,16 +1075,17 @@ var item: variant;
 begin
   result := false;
   Data.Init;
-  repeat
-    if GetNextJSON(item)=kNone then
-      exit;
-    Data.AddValue(item);
-    case GetNextNonWhiteChar of
-    ',': continue;
-    ']': break;
-    else exit;
-    end;
-  until false;
+  if not CheckNextNonWhiteChar(']') then // '[]' -> void array
+    repeat
+      if GetNextJSON(item)=kNone then
+        exit;
+      Data.AddValue(item);
+      case GetNextNonWhiteChar of
+      ',': continue;
+      ']': break;
+      else exit;
+      end;
+    until false;
   SetLength(Data.Values,Data.VCount);
   Data.VKind := jvArray;
   result := true;
@@ -1080,20 +1097,21 @@ var key: string;
 begin
   result := false;
   Data.Init;
-  repeat
-    if (GetNextNonWhiteChar<>'"') or
-       not GetNextString(key) then
-      exit;
-    if (GetNextNonWhiteChar<>':') or
-       (GetNextJSON(val)=kNone) then
-      exit; // writeln(Copy(JSON,Index-10,30));
-    Data.AddNameValue(key,val);
-    case GetNextNonWhiteChar of
-    ',': continue;
-    '}': break;
-    else exit;
-    end;
-  until false;
+  if not CheckNextNonWhiteChar('}') then // '{}' -> void object
+    repeat
+      if (GetNextNonWhiteChar<>'"') or
+         not GetNextString(key) then
+        exit;
+      if (GetNextNonWhiteChar<>':') or
+         (GetNextJSON(val)=kNone) then
+        exit; // writeln(Copy(JSON,Index-10,30));
+      Data.AddNameValue(key,val);
+      case GetNextNonWhiteChar of
+      ',': continue;
+      '}': break;
+      else exit;
+      end;
+    until false;
   SetLength(Data.Names,Data.VCount);
   SetLength(Data.Values,Data.VCount);
   Data.VKind := jvObject;
