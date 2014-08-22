@@ -634,6 +634,8 @@ type
 
     /// Begin a Report document
     // - Every report must start with BeginDoc and end with EndDoc
+    // - note that Printers.SetPrinter() should be set BEFORE calling BeginDoc,
+    // otherwise you may have a "canvas does not allow drawing" error
     procedure BeginDoc;
     /// Clear the current Report document
     procedure Clear; virtual;
@@ -937,6 +939,8 @@ type
     /// get current line height (mm)
     property LineHeight: integer read GetLineHeightMm;
     /// the name of the current selected printer
+    // - note that Printers.SetPrinter() should be set BEFORE calling BeginDoc,
+    // otherwise you may have a "canvas does not allow drawing" error
     property PrinterName: string read fCurrentPrinter;
     /// the index of the previewed page
     // - please note that the first page is 1 (not 0)
@@ -1475,8 +1479,8 @@ function PrinterDriverExists: boolean;
 var Flags, Count, NumInfo: dword;
     Level: Byte;
 begin
-  //avoid using fPrinter.printers.Count as this will raise an
-  //exception if no printer driver is installed...
+  // avoid using fPrinter.printers.Count as this will raise an
+  // exception if no printer driver is installed...
   Count := 0;
   try
     if Win32Platform = VER_PLATFORM_WIN32_NT then begin
@@ -3177,7 +3181,7 @@ begin
   fExportPDFEncryptionPermissions := PDF_PERMISSION_ALL;
   fExportPDFEncryptionOwnerPassword := 'SynopsePDFEngine'+SYNOPSE_FRAMEWORK_VERSION;
 {$endif}
-  GetPrinterParams; // necessary, but will also be updated in BeginDoc().
+  GetPrinterParams; // necessary, but will also be updated in BeginDoc()
   fCanvas := nil;
   fPreviewSurface := TPagePaintbox.Create(Self);
   fPreviewSurface.parent := Self;
@@ -3773,7 +3777,7 @@ begin
   // if they want a report sent to a different printer then use StretchDraw ...
   CheckCurrentPtr := CurrentPrinterName;
   if CheckCurrentPtr <> fCurrentPrinter then begin
-    GetPrinterParams; //also updates fCurrentPrinter
+    GetPrinterParams; // also updates fCurrentPrinter
     UseStretchDraw := true;
   end else
     UseStretchDraw := false;
