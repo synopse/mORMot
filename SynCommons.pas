@@ -627,6 +627,9 @@ unit SynCommons;
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
   - added TTextWriter.Add(const Values: array of const) method
   - added JSONToXML() JSONBufferToXML() and TTextWriter.JSONBufferToXML()
+    for direct and fast conversion of any JSON into the corresponding <XML>
+  - added JSONReformat() JSONBufferReformat() and TTextWriter.AddJSONReformat()
+    for fast conversion into more readable, compact or extended layout 
   - fixed potential GPF issue in TMemoryMapText.LoadFromMap()
   - allow file size of 0 byte in TMemoryMap.Map()
   - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
@@ -4980,6 +4983,19 @@ type
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
 
+  /// the available JSON format, for TTextWriter.AddJSONReformat() and its
+  // JSONBufferReformat() and JSONReformat() wrappers
+  // - jsonCompact is the default machine-friendly single-line layout
+  // - jsonHumanReadable will add line feeds and indentation, for a more
+  // human-friendly result
+  // - jsonUnquotedPropName will emit the jsonHumanReadable layout, but
+  // with all property names being quoted only if necessary: this format
+  // could be used e.g. for configuration files - this format, similar to the
+  // one used in the MongoDB extended syntax, is not JSON compatible: do not
+  // use it e.g. with AJAX clients, but is would be handled as expected by all
+  // our units as valid JSON input, without previous correction
+  TTextWriterJSONFormat = (jsonCompact, jsonHumanReadable, jsonUnquotedPropName);
+
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
   // - some dedicated methods is able to encode any data with JSON escape
@@ -5327,6 +5343,16 @@ type
     // supplied content was not correct JSON
     function AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
       EndOfObject: PUTF8Char=nil): PUTF8Char;
+    /// append a JSON value, array or document, in a specified format
+    // - will parse the JSON buffer and write its content with proper line
+    // feeds and indentation, according to the supplied TTextWriterJSONFormat
+    // - see also JSONReformat() and JSONBufferReformat() wrappers
+    // - this method is called recursively to handle all kind of JSON values
+    // - WARNING: the JSON buffer is decoded in-place, so will be changed
+    // - returns the end of the current JSON converted level, or nil if the
+    // supplied content was not valid JSON
+    function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
+       EndOfObject: PUTF8Char): PUTF8Char;
 
     /// define a custom serialization for a given dynamic array or record
     // - expects TypeInfo() from a dynamic array or a record (will raise an
@@ -6478,15 +6504,30 @@ const
   XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
 
 /// convert a JSON array or document into a simple XML content
-// - just a wrapper around TTextWriter.AddJSONToXML
-// - WARNING: the JSON buffer is decoded in-place, so will be changed
+// - just a wrapper around TTextWriter.AddJSONToXML, with an optional
+// header before the XML converted data (e.g. XMLUTF8_HEADER)
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
 procedure JSONBufferToXML(P: PUTF8Char; const Header: RawUTF8; out result: RawUTF8);
 
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
-// of the supplied JSON buffer (so that it would stay constant)
+// of the supplied JSON buffer (so that JSON content  would stay untouched)
 // - the optional header is added at the beginning of the resulting string
 function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8=XMLUTF8_HEADER): RawUTF8;
+
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TTextWriter.AddJSONReformat() method
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
+  Format: TTextWriterJSONFormat=jsonHumanReadable);
+
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TTextWriter.AddJSONReformat, making a private
+// of the supplied JSON buffer (so that JSON content  would stay untouched)
+function JSONReformat(const JSON: RawUTF8;
+  Format: TTextWriterJSONFormat=jsonHumanReadable): RawUTF8;
+
+
 
 const
   /// map a PtrInt type to the TJSONCustomParserRTTIType set
@@ -6495,8 +6536,6 @@ const
   ptPtrUInt = {$ifdef CPU64}ptInt64{$else}ptCardinal{$endif};
   /// which TJSONCustomParserRTTIType types are not simple types
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom];
-
-
 
 { ************ filtering and validation classes and functions }
 
@@ -26761,19 +26800,23 @@ const
   /// textual representation of simple types, for lngDelphi,lngPascal,lngCS,lngJava:
   SIMPLE_TYPES_LANG: array[TJSONCustomParserRTTILanguage,TJSONCustomParserRTTIType] of RawUTF8 = (
     ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob','RawJSON','RawUTF8','**record**','single','string','SynUnicode',
+     'TSQLRawBlob','RawJSON',
+     'RawUTF8','**record**','single','string','SynUnicode',
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'WideString','word','**custom**'),
     ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob','string','string','**record**','single','string','string',
+     'TSQLRawBlob',{$ifdef NOVARIANTS}'string'{$else}'dynamic'{$endif},
+     'string','**record**','single','string','string',
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'string','word','**custom**'),
     ('**array**','bool','byte','uint','decimal','double','int64','integer',
-     'byte[]','string','string','**record**','single','string','string',
+     'byte[]',{$ifdef NOVARIANTS}'string'{$else}'dynamic'{$endif},
+     'string','**record**','single','string','string',
      'double','Guid','long',{$ifndef NOVARIANTS}'dynamic',{$endif}
      'string','word','**custom**'),
     ('**array**','boolean','byte','long','BigDecimal','double','long','int',
-     'byte[]','String','String','**record**','single','String','String',
+     'byte[]',{$ifdef NOVARIANTS}'String'{$else}'Object'{$endif},
+     'String','**record**','single','String','String',
      'double','String','long',{$ifndef NOVARIANTS}'Object',{$endif}
      'String','int','**custom**'));
 
@@ -31719,14 +31762,18 @@ begin
 end;
 
 procedure TTextWriter.AddCRAndIndent;
+var nspaces: cardinal;
 begin
-  if cardinal(fHumanReadableLevel)>=cardinal(fTempBufSize) then
+  if (B^=' ') and (B>fTempBuf) and (B[-1]=' ') then
+    exit; // we most probably just added an indentation level
+  nspaces := fHumanReadableLevel*2;
+  if nspaces>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
-  if B+fHumanReadableLevel+1>=BEnd then
+  if B+nspaces+1>=BEnd then
     Flush;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
-  fillchar(B[3],fHumanReadableLevel,9); // indentation
-  inc(B,fHumanReadableLevel+2);
+  fillchar(B[3],nspaces,32); // indentation
+  inc(B,nspaces+2);
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: integer);
@@ -32145,6 +32192,105 @@ begin
   end;
 end;
 
+function TTextWriter.AddJSONReformat(JSON: PUTF8Char;
+  Format: TTextWriterJSONFormat; EndOfObject: PUTF8Char): PUTF8Char;
+var objEnd: AnsiChar;
+    Name,Value: PUTF8Char;
+    ValueLen: integer;
+begin
+  result := nil;
+  if JSON=nil then
+    exit;
+  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  case JSON^ of
+  '[': begin // array
+    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    if JSON^=']' then begin
+      Add('[');
+      inc(JSON);
+    end else begin
+      if Format<>jsonCompact then
+        AddCRAndIndent;
+      inc(fHumanReadableLevel);
+      Add('[');
+      repeat
+        if JSON=nil then
+          exit;
+        if Format<>jsonCompact then
+          AddCRAndIndent;
+        JSON := AddJSONReformat(JSON,Format,@objEnd);
+        if objEnd=']' then
+          break;
+        Add(objEnd);
+      until false;
+      dec(fHumanReadableLevel);
+      if Format<>jsonCompact then
+        AddCRAndIndent;
+    end;
+    Add(']');
+  end;
+  '{': begin // object
+    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    Add('{');
+    inc(fHumanReadableLevel);
+    if Format<>jsonCompact then
+      AddCRAndIndent;
+    repeat
+      Name := GetJSONPropName(JSON);
+      if Name=nil then
+        exit;
+      if (Format=jsonUnquotedPropName) and PropNameValid(Name) then
+        AddNoJSONEscape(Name) else begin
+        Add('"');
+        AddJSONEscape(Name);
+        Add('"');
+      end;
+      if Format=jsonCompact then
+        Add(':') else
+        Add(':',' ');
+      if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+      JSON := AddJSONReformat(JSON,Format,@objEnd);
+      if objEnd='}' then
+        break;
+      Add(objEnd);
+      if Format<>jsonCompact then
+        AddCRAndIndent;
+    until false;
+    dec(fHumanReadableLevel);
+    if Format<>jsonCompact then
+      AddCRAndIndent;
+    Add('}');
+  end;
+  '"': begin // string
+    Value := JSON;
+    JSON := GotoEndOfJSONString(JSON);
+    if JSON^<>'"' then
+      exit;
+    inc(JSON);
+    AddNoJSONEscape(Value,JSON-Value);
+  end;
+  else begin // numeric or true/false/null
+    Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
+    if Value=nil then
+      AddShort('null') else begin
+      ValueLen := StrLen(Value);
+      while (ValueLen>0) and (Value[ValueLen-1]<=' ') do dec(ValueLen); 
+      AddNoJSONEscape(Value,ValueLen);
+    end;
+    exit;
+  end;
+  end;
+  if JSON<>nil then begin
+    if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    if EndOfObject<>nil then
+      EndOfObject^ := JSON^;
+    if JSON^<>#0 then
+      repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  end;
+  result := JSON;
+end;
+
+
 function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 var objEnd: AnsiChar;
@@ -32202,7 +32348,7 @@ begin
     Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
     if Value=nil then
       AddShort('null') else
-      AddXmlEscape(Value); 
+      AddXmlEscape(Value);
     exit;
   end;
   end;
@@ -34063,6 +34209,32 @@ var tmp: RawUTF8;
 begin
   SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
   JSONBufferToXML(pointer(tmp),Header,result);
+end;
+
+procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
+  Format: TTextWriterJSONFormat);
+begin
+  if P<>nil then
+    with TTextWriter.CreateOwnedStream do
+    try
+      AddJSONReformat(P,Format,nil);
+      SetText(result);
+    finally
+      Free
+    end;
+end;
+
+function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
+  with TTextWriter.CreateOwnedStream(Length(tmp)) do // pre-allocate buffer size
+  try
+    AddJSONReformat(pointer(tmp),Format,nil);
+    SetText(result);
+  finally
+    Free
+  end;
 end;
 
 

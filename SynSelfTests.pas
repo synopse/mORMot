@@ -4645,7 +4645,7 @@ begin
     J := ObjectToJSON(O,[woStoreClassName]);
     Check(J='{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woHumanReadable]);
-    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "Idle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+    Check(J='{'#$D#$A'  "Name": "",'#$D#$A'  "Enum": "Idle",'#$D#$A'  "Sets": []'#$D#$A'}');
     with PTypeInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
     for E := low(E) to high(E) do begin
       O.fName := Int32ToUTF8(ord(E));
@@ -4660,7 +4660,7 @@ begin
       Check(O.Sets=O2.Sets);
       J := ObjectToJSON(O,[woHumanReadable]);
       U := FormatUTF8(
-        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["IDLE"',
+        '{'#$D#$A'  "NAME": "%",'#$D#$A'  "ENUM": "%",'#$D#$A'  "SETS": ["IDLE"',
         [ord(E),UpperCaseU(GetEnumNameTrimed(E))]);
       Check(IdemPChar(pointer(J),pointer(U)));
       JSONToObject(O2,pointer(J),valid);
@@ -4670,10 +4670,10 @@ begin
       Check(O.Sets=O2.Sets);
     end;
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+    Check(J='{'#$D#$A'  "Name": "3",'#$D#$A'  "Enum": "Destroying",'#$D#$A'  "Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // Idle,Started,Finished,Destroying'+
-      #$D#$A#9'"Sets": ["*"] // Idle,Started,Finished,Destroying'#$D#$A'}');
+    Check(J='{'#$D#$A'  "Name": "3",'#$D#$A'  "Enum": "Destroying", // Idle,Started,Finished,Destroying'+
+      #$D#$A'  "Sets": ["*"] // Idle,Started,Finished,Destroying'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -4712,8 +4712,9 @@ begin
      Check(C2.Coll.Count=2);
      U := ObjectToJSON(C2);
      Check(Hash32(U)=$36B02F0E);
-     U := ObjectToJSON(Coll,[woHumanReadable]);
-     Check(Hash32(U)=$9FAFF11F);
+     J := ObjectToJSON(Coll,[woHumanReadable]);
+     Check(Hash32(J)=$A7204D8A);
+     Check(JSONReformat(J,jsonCompact)=U);
      U := ObjectToJSON(Coll,[woStoreClassName]);
      Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
        '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+
@@ -4789,8 +4790,8 @@ begin
      Coll.Str.EndUpdate;
      U := ObjectToJSON(Coll);
      Check(Hash32(U)=$85926050);
-     U := ObjectToJSON(Coll,[woHumanReadable]);
-     Check(Hash32(U)=$1B760E4E);
+     J := ObjectToJSON(Coll,[woHumanReadable]);
+     Check(JSONReformat(J,jsonCompact)=U);
      C2.Str := TStringList.Create;
      Check(JSONToObject(C2,pointer(U),Valid)=nil);
      Check(Valid);
@@ -5017,7 +5018,7 @@ begin
     __TTestCustomJSON2).Options := [soWriteHumanReadable];
   fillchar(Trans,sizeof(Trans),0);
   U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
-  Check(U='{'#$D#$A#9'"Transactions": []'#$D#$A'}');
+  Check(U='{'#$D#$A'  "Transactions": []'#$D#$A'}');
   for i := 1 to 10 do begin
     U := '{"transactions":[{"TRTYPE":"INCOME","TRDATE":"2013-12-09 02:30:04","TRAA":"1.23",'+
      '"TRCAT1":{"TITYPE":"C1","TIID":"1","TICID":"","TIDSC30":"description1","TIORDER":"0","TIDEL":"false"},'+
@@ -5031,9 +5032,9 @@ begin
     Check(Trans.Transactions[0].TRACID.TIDEL='false');
     Check(Trans.Transactions[0].TRRMK='Remark');
     U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
-    FileFromString(U,'transactions.json');
-    Check(Hash32(U)=$CC7167FC);
+    Check(Hash32(U)=$14BD461A);
   end;
+  FileFromString(U,'transactions.json');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2Title),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2),'');
 
@@ -5046,6 +5047,10 @@ begin
   Check(sizeof(Disco)=sizeof(Pointer)+3*sizeof(integer));
   U := RecordSaveJSON(Disco,TypeInfo(TTestCustomDiscogs));
   Check(U='{"pagination":{"per_page":0,"items":0,"page":0},"releases":[]}');
+  U := JSONReformat(discogsJson,jsonCompact);
+  Check(JSONReformat(JSONReformat(discogsJson,jsonHumanReadable),jsonCompact)=U);
+  Check(JSONReformat(JSONReformat(discogsJson,jsonUnquotedPropName),jsonCompact)=U);
+  Check(JSONReformat(JSONReformat(U,jsonUnquotedPropName),jsonCompact)=U);
   RecordLoadJSON(Disco,pointer(discogsJson),TypeInfo(TTestCustomDiscogs));
   Check(length(Disco.releases)<=Disco.pagination.items);
   for i := 0 to high(Disco.Releases) do

@@ -220,6 +220,7 @@ type
     function GeoJSONCoordReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   published
     procedure DownloadFilesIfNecessary; override;
+    procedure SynopseBeautifuller;
     procedure SynopseReadRecord;
     procedure SynopseReadVariant;
     procedure SynopseCrossPlatform;
@@ -995,6 +996,17 @@ begin // '[ [ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ] ]'
   end;
   aWriter.CancelLastComma;
   aWriter.Add(']',']');
+end;
+
+procedure TTestHugeContent.SynopseBeautifuller;
+var json,new: RawUTF8;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  new := JSONReformat(json,jsonHumanReadable);
+  check(length(new)>length(json));
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
 end;
 
 procedure TTestHugeContent.SynopseReadRecord;
