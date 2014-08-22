@@ -27591,6 +27591,9 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
+    if (DestVar.VType=DocVariantType.VarType) and
+       (TDocVariantData(DestVar).VCount=0) then
+      DestVar.VType := varNull; // recognize void DocVariant as null
     if FullName=nil then begin // found full name scope
       Dest := DestVar;
       exit;
@@ -28429,7 +28432,7 @@ function TDocVariantData.GetVarData(const aName: RawUTF8;
 var found: PVarData;
 begin
   found := GetVarData(aName);
-  if found =nil then
+  if found=nil then
     result := false else begin
     aValue := found^;
     result := true;
@@ -28482,7 +28485,9 @@ begin
       found := found^.VPointer;
     // if we reached here, we should try for the next scope within Dest
     if found^.VType=VarType then
-      continue;
+      if PDocVariantData(found)^.VCount<>0 then
+        continue else
+        found^.VType := varNull; // return void TDocVariant as null
     break; // this version only handle nested TDocVariant values
   until false;
   result := PVariant(found)^; // copy
