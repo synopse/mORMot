@@ -327,7 +327,8 @@ end;
 
 
 procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName);
-var root, templateName, templateExt, unitName, template, result, host, uri, head: RawUTF8;
+var root, templateName, templateExt, unitName, template,
+    result, host, uri, head: RawUTF8;
     context: variant;
     SR: TSearchRec;
     i, templateFound, port: integer;
@@ -355,7 +356,8 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     port := 80;
   context.port := port;
   if IdemPropNameU(Ctxt.URIBlobFieldName,'context') then begin
-    Ctxt.Returns(VariantToUTF8(context));
+    Ctxt.Returns(JSONReformat(VariantToUTF8(context),jsonUnquotedPropName),200,
+      TEXT_CONTENT_TYPE_HEADER);
     exit;
   end;
   root := Ctxt.Server.Model.Root;
