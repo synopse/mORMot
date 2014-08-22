@@ -76,7 +76,6 @@ type
 
   /// this type is used to store BLOB content
   TByteDynArray = array of byte;
-
   PByteDynArray = ^TByteDynArray;
 
   {$ifndef UNICODE}
@@ -1195,7 +1194,7 @@ begin
     if comparemem(pointer(JSONString),@JSON_BASE64_MAGIC,sizeof(JSON_BASE64_MAGIC)) then
       magiclen := JSON_BASE64_MAGIC_LEN else
       {$ifndef UNICODE}
-      if JSONString[1]='?' then // handle UTF-8 decoding error
+      if JSONString[1]='?' then // handle UTF-8 decoding error on ANSI Delphi
         magiclen := 1 else
       {$endif}
       exit else
@@ -1224,13 +1223,16 @@ begin
     value := 0;
     len := 0;
     for i := magiclen+1 to Length(JSONString) do begin
-      x := Base64One(JSONString[i]);
+      x := ord(JSONString[i]); // inlined Base64One(JSONString[i])
+      if x>127 then
+        break;
+      x := BASE64DECODE[x];
       if integer(x)<0 then
         break;
-      value := value * 64 + x;
-      bits := bits + 6;
-      if bits >= 8 then begin
-        bits := bits - 8;
+      value := value*64+x;
+      bits := bits+6;
+      if bits>=8 then begin
+        bits := bits-8;
         x := value shr bits;
         value := value and ((1 shl bits)-1);
         Bytes[len] := x;
@@ -1240,75 +1242,6 @@ begin
   end;
   result := len=cardinal(length(Bytes));
 end;
-
-{$ifndef UNICODE} // missing functions in older TypInfo.pas
-
-{$ifdef FPC}
-
-function GetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): pointer;
-begin
-  if (PropInfo^.PropProcs) and 3<>0 then
-    result := nil else // we only allow setting if we know the field address
-    result := PPointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF)^;
-end;
-
-function fpc_Copy_internal(Src, Dest, TypeInfo : Pointer) : SizeInt;
-  [external name 'FPC_COPY'];
-
-procedure SetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo;
-  Value: Pointer);
-var Addr: NativeUInt;
-begin 
-  if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
-    if (PropInfo^.PropProcs) and 3<>0 then
-      exit else // we only allow setting if we know the field address
-      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF else
-    if (PropInfo^.PropProcs shr 2) and 3=0 then
-      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.SetProc) and $00FFFFFF else
-      exit;
-  fpc_Copy_internal(@Value,pointer(Addr),PropInfo^.PropType);
-end;
-
-{$else}
-
-type
-  // used to map a TPropInfo.GetProc/SetProc and retrieve its kind
-  PropWrap = packed record
-    FillBytes: array [0..SizeOf(Pointer)-2] of byte;
-    /// = $ff for a field address, or =$fe for a virtual method
-    Kind: byte;
-  end;
-
-function GetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): pointer;
-begin
-  if PropWrap(PropInfo^.GetProc).Kind<>$FF then
-    result := nil else // we only allow setting if we know the field address
-    result := PPointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF)^;
-end;
-
-procedure CopyDynArray(dest, source, typeInfo: Pointer);
-asm
-  mov ecx,[ecx]
-  push 1
-  call System.@CopyArray
-end;
-
-procedure SetDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo;
-  Value: Pointer);
-var Addr: NativeUInt;
-begin
-  if PropInfo^.SetProc=nil then  // no write attribute -> use read offset
-    if PropWrap(PropInfo^.GetProc).Kind<>$FF then
-      exit else // we only allow setting if we know the field address
-      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF else
-    if PropWrap(PropInfo^.SetProc).Kind=$FF then
-      Addr := NativeUInt(Instance)+NativeUInt(PropInfo^.SetProc) and $00FFFFFF else
-      exit;
-  CopyDynArray(pointer(Addr),@Value,PropInfo^.PropType);
-end;
-
-{$endif FPC}
-{$endif UNICODE}
 
 function RTTIPropInfoTypeName(PropInfo: TRTTIPropInfo): string;
 begin
@@ -1336,10 +1269,30 @@ begin
   result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime);
 end;
 
+type
+  // used to map a TPropInfo.GetProc/SetProc and retrieve its kind
+  PropWrap = packed record
+    FillBytes: array [0..SizeOf(Pointer)-2] of byte;
+    /// = $ff for a field address, or =$fe for a virtual method
+    Kind: byte;
+  end;
+
 function IsBlob(PropInfo: TRTTIPropInfo): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+begin // we only handle plain TByteDynArray properties without getter/setter
+{$ifdef FPC}
+  result := (PropInfo^.PropType=TypeInfo(TByteDynArray)) and
+            ((PropInfo^.PropProcs) and 3=0);
+{$else}
+  result := (PropInfo^.PropType^=TypeInfo(TByteDynArray)) and
+            (PropWrap(PropInfo^.GetProc).Kind=$FF);
+{$endif}
+end;
+
+function GetTByteDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): PByteDynArray;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := PropInfo^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TByteDynArray);
+  result := Pointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF);
 end;
 
 function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
@@ -1380,13 +1333,13 @@ begin
   end;
   tkDynArray:
     if IsBlob(PropInfo) then
-      result := BytesToBase64JSONString(GetDynArrayProp(Instance,PropInfo));
+      result := BytesToBase64JSONString(GetTByteDynArrayProp(Instance,PropInfo)^);
   end;
 end;
 
 procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
   const Value: variant);
-var blob: pointer;
+var blob: PByteDynArray;
     obj: TObject;
 begin
   if (PropInfo<>nil) and (Instance<>nil) then
@@ -1426,14 +1379,14 @@ begin
     SetVariantProp(Instance,PropInfo,Value);
   tkDynArray:
     if IsBlob(PropInfo) then begin
-      blob := nil;
-      if TVarData(Value).VType>varNull then
-        Base64JSONStringToBytes(Value,TByteDynArray(blob));
-      SetDynArrayProp(Instance,PropInfo,blob);
+      blob := GetTByteDynArrayProp(Instance,PropInfo);
+      if (TVarData(Value).VType<=varNull) or
+        not Base64JSONStringToBytes(Value,blob^) then
+        Finalize(blob^);
     end;
   tkClass: begin
     obj := pointer(GetOrdProp(Instance,PropInfo));
-    if TVarData(Value).VType>varNull then 
+    if TVarData(Value).VType>varNull then
       if obj=nil then begin
         obj := JSONVariantData(Value).ToNewObject;
         if obj<>nil then
@@ -2149,5 +2102,4 @@ initialization
   {$endif}
   {$endif}
   {$endif}
-
 end.

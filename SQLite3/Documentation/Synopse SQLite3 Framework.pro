@@ -9512,7 +9512,7 @@ Note that since there is only one BLOB content returned, no {\f1\fs20 var} nor {
 You may also be able to use this feature to implement custom UTF-8 HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
 \page
 :65 Comparison with WCF
-Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications - see @http://msdn.microsoft.com/en-us/library/dd456779
+Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications.\line See @http://msdn.microsoft.com/en-us/library/dd456779
 Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and implementation of the @*REST@ful pattern.
 |%30%35%35
 |\b Feature|WCF|mORMot\b0
@@ -10247,7 +10247,7 @@ As a consequence, the potential implementation schemes could be hosted as such:
 - Windows stand-alone application, without any explicit server;
 - Self-hosted Windows service running on the corporate file server, or on a small dedicated VM or recycled computer (for best performance, just put your data on a new SSD on the old hardware PC);
 - Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients.
-If you want to minimize RAM use, take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
+In the cloud, since every resource used is monitored and billed, you would like to minimize RAM use: you should better take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
 About the edition of {\i Windows} to be used, of course IT people will ensure you that {\i Windows Server} is mandatory. But from our tests, you will obtain pretty good results, even with a regular Windows 7 or 8 version of the operating system. On the other side, it is not serious to envisage hosting a server on Windows XP, which is not supported any more by Microsoft - even if technically a {\i mORMot} server will work very well on this deprecated platform.
 Of course, if you use @27@, the hardware and hosting expectations may vary. It will depend on the database back-end used, and will necessarily be much more demanding than our internal {\i SQLite3} database engine. In practice, a {\i mORMot} server using a {\i SQLite3} engine running on a SSD hardware, in {\f1\fs20 lmExclusive} mode - see @60@ - runs faster than most @*SQL@ or @*NoSQL@ engines available, since it will be hosted within the {\i mORMot} server process itself - see @4@.
 : Deployment Architecture
