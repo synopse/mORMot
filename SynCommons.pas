@@ -23670,6 +23670,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     $9AC6CDD7: Result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
     $474E5089: Result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
     $38464947: Result := 'image/gif'; // 47 49 46 38
+    $46464F77: Result := 'application/font-woff'; // wOFF in BigEndian
     $002A4949, $2A004D4D, $2B004D4D:
       Result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
     $E011CFD0: // Microsoft Office applications D0 CF 11 E0 = DOCFILE
@@ -23697,8 +23698,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   if (Result='') and (FileName<>'') then begin
     Result := LowerCase(StringToAnsi7(ExtractFileExt(FileName)));
     case PosEx(copy(Result,2,3),
-        'png,gif,tif,jpg,jpe,bmp,doc,htm,css,js,ico') of
-      // 1   5   9   13  17  21  25  29  33  37 40
+        'png,gif,tif,jpg,jpe,bmp,doc,htm,css,js,ico,wof,txt') of
+      // 1   5   9   13  17  21  25  29  33  37 40  44  48
       1:  Result := 'image/png';
       5:  Result := 'image/gif';
       9:  Result := 'image/tiff';
@@ -23709,6 +23710,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       33: Result := 'text/css';
       37: Result := 'application/x-javascript';
       40: Result := 'image/x-icon';
+      44: Result := 'application/font-woff';
+      48: Result := 'text/plain';
       else
         if Result<>'' then
           Result := 'application/'+copy(result,2,10);
@@ -23722,21 +23725,22 @@ function IsContentCompressed(Content: Pointer; Len: integer): boolean;
 begin
   if (Content<>nil) and (Len>4) then
     case PCardinal(Content)^ of
-    $04034B50, // 'application/zip'; // 50 4B 03 04
-    $21726152, // 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
-    $AFBC7A37, // 'application/x-7z-compressed'; // 37 7A BC AF 27 1C
-    $75B22630, // 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
-    $9AC6CDD7, // 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
-    $474E5089, // 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
-    $38464947, // 'image/gif'; // 47 49 46 38
-    $002A4949, $2A004D4D, $2B004D4D: // 'image/tiff';
+    $04034B50, // 'application/zip' = 50 4B 03 04
+    $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+    $AFBC7A37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+    $75B22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+    $9AC6CDD7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+    $474E5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+    $38464947, // 'image/gif' = 47 49 46 38
+    $46464F77, // 'application/font-woff' = wOFF in BigEndian
+    $002A4949, $2A004D4D, $2B004D4D: // 'image/tiff'
       result := true;
     else
       case PCardinal(Content)^ and $00ffffff of
-        $685A42, // 'application/bzip2'; // 42 5A 68
-        $088B1F, // 'application/gzip'; // 1F 8B 08
-        $492049, // 'image/tiff'; // 49 20 49
-        $FFD8FF: // 'image/jpeg'; // FF D8 FF DB/E0/E1/E2/E3/E8
+        $685A42, // 'application/bzip2' = 42 5A 68
+        $088B1F, // 'application/gzip' = 1F 8B 08
+        $492049, // 'image/tiff' = 49 20 49
+        $FFD8FF: // 'image/jpeg' = FF D8 FF DB/E0/E1/E2/E3/E8
           result := true;
         else result := false;
       end;
@@ -27593,7 +27597,7 @@ begin
       DestVar := PVarData(DestVar.VPointer)^;
     if (DestVar.VType=DocVariantType.VarType) and
        (TDocVariantData(DestVar).VCount=0) then
-      DestVar.VType := varNull; // recognize void DocVariant as null
+      DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
       Dest := DestVar;
       exit;
@@ -28465,7 +28469,7 @@ begin
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
-var found: PVarData;
+var found,res: PVarData;
     P: integer;
 begin
   VarClear(result);
@@ -28481,16 +28485,21 @@ begin
     if P=high(aDocVariantPath) then
       break; // we found the item!
     inc(P);
+    // if we reached here, we should try for the next scope within Dest
     while found^.VType=varByRef or varVariant do
       found := found^.VPointer;
-    // if we reached here, we should try for the next scope within Dest
-    if found^.VType=VarType then
-      if PDocVariantData(found)^.VCount<>0 then
-        continue else
-        found^.VType := varNull; // return void TDocVariant as null
-    break; // this version only handle nested TDocVariant values
+    if found^.VType=VType then
+      continue;
+    exit;
   until false;
-  result := PVariant(found)^; // copy
+  res := found;
+  while res^.VType=varByRef or varVariant do
+    res := res^.VPointer;
+  if (res^.VType=VType) and (PDocVariantData(res)^.VCount=0) then
+    // return void TDocVariant as null
+    TVarData(result).VType := varNull else
+    // copy found value
+    result := PVariant(found)^;
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
