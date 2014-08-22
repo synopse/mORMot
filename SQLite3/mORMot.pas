@@ -2195,7 +2195,7 @@ type
   end;
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
-  {/ a wrapper around an individual method parameter definition }
+  /// a wrapper around an individual method parameter definition
   TParamInfo = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// the kind of parameter
     Flags: TParamFlags;
@@ -2229,7 +2229,7 @@ type
     /// method name
     Name: ShortString;
     {$endif}
-    /// retrieve the associated return information
+    /// retrieve the associated parameters information
     function ReturnInfo: PReturnInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrapper returning nil and avoiding a GPF if @self=nil
@@ -3257,7 +3257,9 @@ type
   TSQLRecord = class;      // published properties = ORM fields/columns
   TSQLRecordMany = class;
   TSQLAuthUser = class;
-  TSQLRestServer = class;  // published methods = RESTful callbacks handlers
+  {.$METHODINFO ON} // this would include public methods as RESTful callbacks :(
+  TSQLRestServer = class;
+  {.$METHODINFO OFF}
   TSQLRestStorage = class;
   TSQLRestStorageRemote = class;
   TSQLRestClientURI = class;
@@ -14105,53 +14107,18 @@ begin
 end;
 
 function TMethodInfo.ReturnInfo: PReturnInfo;
-begin
+begin // see http://hallvards.blogspot.fr/2006/09/extended-class-rtti.html
   if @self<>nil then begin
     {$ifdef FPC}
     result := pointer(PtrUInt(@self)+sizeof(TMethodInfo));
     {$else}
     result := @Name[ord(Name[0])+1];
     if PtrUInt(result)-PtrUInt(@self)=Len then
-      result := nil;
+      result := nil; // no method details available
     {$endif}
   end else
       result := @self;
 end;
-
-(*
-function TMethodInfo.RetrieveValidTSQLRestServerCallBack: pointer;
-{$ifndef DELPHI6OROLDER}
-var RI: PReturnInfo;
-{$endif}
-begin
-  {$ifdef DELPHI6OROLDER} // not enough RTTI (e.g. Delphi 6) -> assume OK :(
-  if @Self<>nil then
-    result := Addr else
-  {$else}
-  RI := ReturnInfo;
-   if (RI=nil) and (@Self<>nil) then begin
-    result := Addr; // returns method address (OK) if not enough RTTI
-    exit;
-  end;
-  if (RI^.ParamCount=6) and (RI^.CallingConvention=ccRegister) and
-     (RI^.ReturnType<>nil) and (RI^.ReturnType^.Kind=tkInteger) then
-  with RI^.Param^ do // expects "aSession: cardinal"
-    if ParamType^.Kind=tkInteger then
-    with Next^ do
-    if (ParamType^.Kind=tkClass) and ParamType^.InheritsFrom(TSQLRecord) then
-      with Next^ {ignore PUTF8Char} .Next^ do // expects "const aSentData: RawUTF8"
-      if (ParamType^.Kind=tkLString) and (pfConst in Flags) then
-        with Next^ do // expects "out aResp: RawUTF8"
-        if (ParamType^.Kind=tkLString) and (pfOut in Flags) then
-          with Next^ do // expects "out aHead: RawUTF8"
-          if (ParamType^.Kind=tkLString) and (pfOut in Flags) then begin
-            result := Addr; // returns method address on matching signature
-            exit;
-          end;
-  {$endif}
-  result := nil; // method unknown or with wrong signature
-end;
-*)
 
 function TReturnInfo.Param: PParamInfo;
 begin
@@ -14161,6 +14128,9 @@ end;
 function TParamInfo.Next: PParamInfo;
 begin
   result := {$ifdef FPC}aligntoptr{$endif}(@Name[ord(Name[0])+1]);
+  {$ifdef ISDELPHI2010}
+  Inc(PByte(result),PWord(result)^); // attributes
+  {$endif}
 end;
 
 {$ifdef FPC}
@@ -25677,12 +25647,24 @@ var i,n: integer;
     C: PtrInt;
     M: PMethodInfo;
     MethodName: RawUTF8;
-//    RI: PReturnInfo; // such RTTI info not available at least in Delphi 7
+    ServerClassName: string;
+{$ifndef FPC}
+    RI: PReturnInfo; // such RTTI info not available at least in Delphi 7
+    Param: PParamInfo;
+{$endif}
+procedure SignatureError;
+begin
+  raise EServiceException.CreateFmt(
+    'Expected "procedure %s.%s(Ctxt: TSQLRestServerURIContext)" signature',
+     [ServerClassName,MethodName]);
+end;
 begin
   if aInstance=nil then
     exit;
+  ServerClassName := string(ClassName);
   if PosEx('/',aPrefix)>0 then
-    raise EServiceException.CreateFmt('"%s" method name prefix should not contain "/"',[aPrefix]);  
+    raise EServiceException.CreateFmt(
+      '"%s" prefix for %s methods should not contain "/"',[aPrefix,ServerClassName]);
   C := PtrInt(aInstance.ClassType);
   while C<>0 do begin
     M := PPointer(C+vmtMethodTable)^;
@@ -25695,18 +25677,35 @@ begin
       inc(PWord(M));
       {$endif}
       for i := 1 to n do begin
-{        RI := M^.ReturnInfo;
-        if (RI=nil) or
-           ((RI<>nil) and (RI^.ParamCount=1) and (RI^.CallingConvention=ccRegister) and
-            (RI^.ReturnType<>nil) and (RI^.ReturnType^.Kind=tkInteger) and
-            (RI^.Param^.ParamType^=TypeInfo(TSQLRestServerURIContext)) and
-            not(pfVar in RI^.Param^.Flags)) then }
-        MethodName := aPrefix+RawUTF8(M^.Name{$ifdef FPC}^{$endif});
+        {$ifdef FPC}
+        MethodName := aPrefix+RawUTF8(M^.Name^);
+        {$else}
+        MethodName := aPrefix+RawUTF8(M^.Name);
+        RI := M^.ReturnInfo;
+        if (RI<>nil) then
+          // $METHODINFO would also include public methods -> check signature
+          if (RI^.CallingConvention<>ccRegister) or (RI^.ReturnType<>nil) then
+             SignatureError else
+          case RI^.Version of
+          1: ; // older Delphi revision do not have much information
+          2,3: if RI^.ParamCount<>2 then // self+Ctxt
+                 SignatureError else begin
+                 Param := RI^.Param;
+                 if not IdemPropName(Param^.Name,'self') then
+                   SignatureError;
+                 Param := Param^.Next;
+                 if Param^.ParamType^<>TypeInfo(TSQLRestServerURIContext) then
+                   SignatureError;
+               end;
+          else
+          end;
+        {$endif}
         if Model.GetTableIndex(MethodName)>=0 then
           raise EServiceException.CreateFmt(
-            'Published method name "%s" conflicts with a Table in Model!',[MethodName]);
+            'Published method name %s.%s conflicts with a Table in the Model!',
+             [ServerClassName,MethodName]);
         with TMethod(PSQLRestServerMethod(fPublishedMethods.AddUniqueName(MethodName,
-            'Duplicated published method name "%s"',[MethodName]))^.CallBack) do begin
+            'Duplicated published method name %s.%s',[ServerClassName,MethodName]))^.CallBack) do begin
           Data := aInstance;
           Code := M^.Addr;
         end;
