@@ -10391,7 +10391,7 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.ServiceInitialization;
-  function Ask(Method, Params,ParamsURI: RawUTF8; ExpectedResult: cardinal): RawUTF8;
+  function Ask(Method, Params,ParamsURI,ParamsObj: RawUTF8; ExpectedResult: cardinal): RawUTF8;
   var resp,data,uriencoded,head: RawUTF8;
   begin
     Params := ' [ '+Params+' ]'; // add some ' ' to test real-world values
@@ -10414,6 +10414,9 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
         Check(data=resp,'alternative URI-encoded-inlined parameters use');
         Check(fClient.URI('root/Calculator/'+Method+'?'+ParamsURI,'GET',@data).Lo=ExpectedResult);
         Check(data=resp,'alternative "param1=value1&param2=value2" URI-encoded scheme');
+        SetString(data,PAnsiChar(pointer(ParamsObj)),length(ParamsObj)); // =UniqueString
+        Check(fClient.URI('root/calculator/'+Method,'POST',@data,nil,@data).Lo=ExpectedResult);
+        Check(data=resp,'alternative object-encoded-as-body parameters use');
         head := 'accept: application/xml';
         Check(fClient.URI('root/Calculator/'+Method+'?'+ParamsURI,'GET',@data,@head).Lo=ExpectedResult);
         Check(data<>resp,'returned as XML');
@@ -10530,13 +10533,13 @@ begin
     if rout=0 then
       (fClient.Server.Services['Calculator'] as TServiceFactoryServer).
         ResultAsXMLObjectIfAcceptOnlyXML := true;
-    Check(Ask('None','1,2','one=1&two=2',400)='');
-    Check(Ask('Add','1,2','n1=1&n2=2',200)='3');
-    Check(Ask('Add','1,0','n2=1',200)='1');
-    Check(Ask('Multiply','2,3','n1=2&n2=3',200)='6');
-    Check(Ask('Subtract','23,20','n2=20&n1=23',200)='3');
-    Check(Ask('ToText','777,"abc"','result=abc&value=777',200)='777');
-    Check(Ask('ToTextFunc','777','value=777',200)='777');
+    Check(Ask('None','1,2','one=1&two=2','{one:1,two=2}',400)='');
+    Check(Ask('Add','1,2','n1=1&n2=2','{n1:1,n2:2}',200)='3');
+    Check(Ask('Add','1,0','n2=1','{n2:1}',200)='1');
+    Check(Ask('Multiply','2,3','n1=2&n2=3','{n0:"abc",n2:3,m:null,n1:2}',200)='6');
+    Check(Ask('Subtract','23,20','n2=20&n1=23','{n0:"abc",n2:20,n1:23}',200)='3');
+    Check(Ask('ToText','777,"abc"','result=abc&value=777','{result:"abc",value=777}',200)='777');
+    Check(Ask('ToTextFunc','777','value=777','{result:"abc",value=777}',200)='777');
     if rout=0 then
       Check(fClient.URI('root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe',
         'POST',@resp,nil,nil).Lo=400,'incorrect input');

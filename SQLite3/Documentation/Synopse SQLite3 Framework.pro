@@ -7723,6 +7723,7 @@ The corresponding client method may be defined as such:
 !  if CallBackGet('GetFile',['filename',aFileName],RawUTF8(result))<>HTML_SUCCESS then
 !    raise Exception.CreateFmt('Impossible to get file: %s',[result]);
 !end;
+Note that the {\f1\fs20 Ctxt.ReturnFile()} method - see @95@ - is preferred than manual file retrieval as implemented in this {\f1\fs20 TSQLRestServer.GetFile()} method. It is shown here for demonstration purposes only.
 If you use HTTP as communication protocol, you can consume these services, implemented Server-Side in fast {\i Delphi} code, with any @*AJAX@ application on the client side.
 Using {\f1\fs20 GetMimeContentType()} when sending non JSON content (e.g. picture, pdf file, binary...) will be interpreted as expected by any standard Internet browser: it could be used to serve some good old HTML content within a page, not necessary consume the service via {\i JavaScript} .
 \page
@@ -7749,12 +7750,13 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 ! aRemoteIP := FindIniNameValue(pointer(Ctxt.Call.InHead),'REMOTEIP: ');
 ! aUserAgent := FindIniNameValue(pointer(Ctxt.Call.InHead),'USER-AGENT: ');
 \page
-: Browser speed-up for unmodified requests
+:96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
 In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
-: Returning file content
+This stateless @9@ model, would enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
+:95 Returning file content
 Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
 Note that this is the preferred way of returning some static file content within {\i mORMot}.
@@ -9219,9 +9221,11 @@ The corresponding description may be:
 |Default|Yes|No
 |URI scheme|{\f1\fs20 /Model/Interface.Method[/ClientDrivenID]}\line or {\f1\fs20 /Model/Interface/Method[/ClientDrivenID]}\line + optional URI-encoded params|{\f1\fs20 /Model/Interface}
 |Body content|JSON array of parameters\line or void if parameters were encoded at URI|{\f1\fs20 \{"method":"{\i MethodName}",\line  "params":[...]\line [,"id":{\i ClientDrivenID}]\}}
+|Body content\line (alternative)|JSON object of parameters\line or void if parameters were encoded at URI|{\f1\fs20 \{"method":"{\i MethodName}",\line  "params":{...}\line [,"id":{\i ClientDrivenID}]\}}
 |Security|RESTful @*authentication@ for each method\line or for the whole service (interface)|RESTful authentication for the whole service (interface)
 |Speed|10% faster|10% slower
 |%
+Most of the time, the input parameters will be transmitted as a JSON array of values, following the exact order of {\f1\fs20 const} / {\f1\fs20 var} method parameters.\line As an alternative, a JSON object storing the input parameters by name will be accepted. This would be slightly slower than a JSON array of parameters, but could be handy, depending on the client side.\line Last but not least, {\f1\fs20 TSQLRestRoutingREST} is able to decode parameters encoded at URI level, as most regular historic HTTP requests.
 The routing to be used is defined globally in the {\f1\fs20 TSQLRest.ServiceRouting} property, and should match on both client and server side, of course. By design, you should {\i never} assign the abstract {\f1\fs20 TSQLRestServerURIContext} to this property.
 The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following methods, which will be overridden by inherited implementations to reflect the expected behavior on all aspects of the RESTful routing and transmission:
 !  TSQLRestServerURIContext = class
@@ -9246,6 +9250,7 @@ The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following met
 ! ...
 Most of the time, the supplied {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes will meet your requirements.
 :    REST mode
+:     Parameters transmitted as JSON array
 In the default {\f1\fs20 TSQLRestRoutingREST} mode, both service and operation (i.e. interface and method) are identified within the URI. And the message body is a standard JSON array of the supplied parameters (i.e. all {\f1\fs20 const} and {\f1\fs20 var} parameters).
 Here is typical request for {\f1\fs20 ICalculator.Add}:
 $ POST /root/Calculator.Add
@@ -9257,6 +9262,30 @@ $ POST /root/ComplexNumber.Add/1234
 $ (...)
 $ [20,30]
 Here, {\f1\fs20 1234} is the identifier of the server-side instance ID, which is used to track the instance life-time, in {\f1\fs20 sicClientDriven} mode.  One benefit of transmitting the Client Session ID within the URI is that it will be more secure in our RESTful authentication scheme - see @18@: each method (and even any client driven session ID) will be signed properly.
+:     Parameters transmitted as JSON object
+The {\i mORMot} server will also accept the incoming parameters to be encoded as a JSON object of named values, instead of a JSON array:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n1":1,"n2":2}
+Of course, order of the values is not mandatory in a JSON object, since parameters will be lookup by name. As a result, the following request will be the same as the previous one:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n2":2,"n1":1}
+For a {\f1\fs20 sicClientDriven} mode service, the needed instance ID is appended to the URI:
+$ POST /root/ComplexNumber.Add/1234
+$ (...)
+$ {"aReal":20,"aImaginary":30}
+In some cases, naming the parameters could be useful, on the client side. But this should not be the default, since it will be slightly slower (for parsing and checking the names), and use more bandwidth at transmission.
+Any missing parameter in the incoming JSON object will be replaced by its default value. For instance, the following will run {\f1\fs20 IComplexNumber(0,2)}:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n2":2}
+Any unknown parameter in the incoming JSON object will just be ignored. It could be handy, if you want to transmit some generic execution context (e.g. a global "data scope" in a MVC model), and let the service use only the values it needs.
+$ POST /root/ComplexNumber.Add/1234
+$ (...)
+$ {"Session":"1234","aImaginary":30,"aReal":20,"UserLogged":"Nikita"}
+Of course, the extra values would consume some bandwidth for nothing, but the process cost on the server side will be negligible, since our implementation will just ignore those unexpected properties, without allocating any memory for them.
+:     Parameters encoded at URI level
 In this {\f1\fs20 TSQLRestRoutingREST} mode, the server is also able to retrieve the parameters from the URI, if the message body is left void. This is not used from a {\i Delphi} client (since it will be more complex and therefore slower), but it can be used for a client, if needed:
 $ POST root/Calculator.Add?+%5B+1%2C2+%5D
 $ GET root/Calculator.Add?+%5B+1%2C2+%5D
@@ -9264,7 +9293,7 @@ In the above line, {\f1\fs20 +%5B+1%2C2+%5D} will be decoded as {\f1\fs20 [1,2]}
 As an alternative, you can encode and name the parameters at URI level, in a regular HTML fashion:
 $ GET root/Calculator.Add?n1=1&n2=2
 Since parameters are named, they can be in any order. And if any parameter is missing, it will be replaced by its default value (e.g. {\f1\fs20 0} for a number or {\f1\fs20 ''} for a {\f1\fs20 string}).
-This may be pretty convenient for simple services, consummed from any kind of client.
+This may be pretty convenient for simple services, consumed from any kind of client.
 Note that there is a known size limitation when passing some data with the URI over HTTP. Official RFC 2616 standard advices to limit the URI size to 255 characters, whereas in practice, it sounds safe to transmit up to 2048 characters within the URI. If you want to get rid of this limitation, just use the default transmission of a JSON array as request body.
 As an alternative, the URI can be written as {\f1\fs20 /RootName/InterfaceName/MethodName}. It may be more RESTful-compliant, depending on your client policies. The following URIs will therefore be equivalent to the previous requests:
 $ POST /root/Calculator/Add
@@ -9274,6 +9303,7 @@ $ GET root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?n1=1&n2=2
 From a {\i Delphi} client, the {\f1\fs20 /RootName/InterfaceName.MethodName} scheme will always be used.
 :    JSON-RPC
+:     Parameters transmitted as JSON array
 If {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is used, the URI will define the interface, and then the method name will be inlined with parameters, e.g.
 $ POST /root/Calculator
 $ (...)
@@ -9283,8 +9313,20 @@ For a {\f1\fs20 sicClientDriven} mode service:
 $ POST /root/ComplexNumber
 $ (...)
 $ {"method":"Add","params":[20,30],"id":1234}
-This mode will be a little bit slower, but will probably be more AJAX ready.
-It's up to you to select the right routing scheme to be used.
+:     Parameters transmitted as JSON object
+As an alternative, you may let the values be transmitted as a JSON object containing the named parameters values, instead of a JSON array:
+$ POST /root/Calculator
+$ (...)
+$ {"method":"Add","params":{"n1":1,"n2":2},"id":0}
+Here, the same rules applies than in {\f1\fs20 TSQLRestRoutingREST} mode:
+- Any missing parameter will be replaced by its default value;
+- Properties order is not sensitive any more;
+- Unexpected parameters will just be ignored.
+Note that by definition, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is not able to handle URI-encoded parameters. In fact, the JSON-RPC mode expects the URI to be used only for identifying the service, and have the whole execution context transmitted as body.
+:    RESTful model or JSON-RPC?
+For a standard {\i mORMot} Delphi client, or any supported @86@, {\f1\fs20 TSQLRestRoutingREST} is preferred.\line Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
+In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. It may be preferred, depending on the client expectations, and its technology involved.
+It's up to you to select the right routing scheme to be used, depending on your needs.
 :   Response format
 :    Standard answer as JSON object
 :     JSON answers
@@ -10237,7 +10279,8 @@ Thanks to the {\i SmartPascal} strong typing, any breaking change of the server 
 We could identify several implementation patterns of a {\i mORMot} server and its clients:
 - Stand-alone application, either in the same process or locally on the same computer;
 - Private self-hosting, e.g. in a corporate network, with a {\i mORMot} executable or service publishing some content to clients locally or over the Internet (directly from a DMZ or via a VPN);
-- Cloud hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization.
+- Cloud hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization;
+- Mixed hosting, using @*CDN@ network services to cache most of the requests of your {\i mORMot} server.
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
 : Windows hosted
@@ -10359,6 +10402,12 @@ label="PC Server";
 \
 Of course, you can make any combination of the protocols and servers, to tune hosting for a particular purpose. You can even create several ORM servers or Services servers (grouped per features family or per product), which will cooperate for better scaling and performance.
 If you consider implementing a @*stand-alone@ application for hosting your services, and has therefore basic ORM needs (e.g. you may need only CRUD statements for handling authentication), you may use the lighter {\f1\fs20 TSQLRestServerFullMemory} kind of server instead of a full {\f1\fs20 TSQLRestServerDB}, which will embed a {\i @*SQLite3@} database engine, perhaps not worth it in this case.
+:97  Scaling via CDN
+Our beloved stateless @9@ model, in conjunction with @96@ would enable several levels of caching, from a local proxy cache - see e.g. @http://www.squid-cache.org or @http://www.varnish-cache.org - or an external {\i Content Delivery Network} (@**CDN@) service - e.g. @http://www.cloudflare.com
+Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your web application to scale to thousands of visitors.
+In practice, static content - see @95@ - or some simple JSON requests - returned via {\f1\fs20 Ctxt.Results()} or an interface-based service - would benefit of using such a CDN.
+Just ensure that you disabled the authentication for those set of services - using {\f1\fs20 TSQLRestServer. ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer. ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
+If your project starts to have success, it is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
 :43Security
 %cartoon01.png
 The framework tries to implement @**security@ via:
@@ -10671,8 +10720,9 @@ You can change the default safe policy by including {\f1\fs20 reSQL}, {\f1\fs20 
 :   Service execution
 The {\f1\fs20 reService} option can be used to enable or unable the @63@ feature of {\i mORMot}.
 In addition to this global parameter, you can set per-service and per-method @77@.
-For @49@, if authentication is enabled, any method execution will be processed only for signed URI.
-You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
+For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
+For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
+Do not forget to remove authentication for the services for which you want to enable @97@. In fact, such world-wide @*CDN@ caching services expect the URI to be generic, and not tied to a particular client session.
 :79Scripting Engine
 %cartoon02.png
 : Scripting abilities

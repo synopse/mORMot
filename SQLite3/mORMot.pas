@@ -713,6 +713,8 @@ unit mORMot;
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
       valid alternative to default /root/Calculator.Add, if needed
+    - TServiceMethod.InternalExecute() allows incoming parameters to be encoded
+      as a JSON object, alternatively to a JSON array - see request [48e30e0e05]
     - added optional CustomFields parameter to TSQLRest.Update() - and in case
       of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
@@ -7134,6 +7136,12 @@ type
     ArgsUsed: TServiceMethodValueTypes;
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TServiceMethodValueVar] of integer;
+    /// the index of the first argument expecting manual stack initialization
+    // - set if there is any smvObject,smvDynArray,smvRecord and smvVariant
+    ArgsManagedFirst: integer;
+    /// the index of the last argument expecting manual stack initialization
+    // - set if there is any smvObject,smvDynArray,smvRecord and smvVariant
+    ArgsManagedLast: integer;
     /// method index in the original (non emulated) interface
     // - our custom methods start at index 3 (RESERVED_VTABLE_SLOTS), since
     // QueryInterface, _AddRef, and _Release are always defined by default
@@ -27313,7 +27321,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
               with Args[a] do
               if ValueDirection<>smdOut then begin
                 argDone := false;
-                for i := iLow to high(fInput)shr 1 do // search argument in URI 
+                for i := iLow to high(fInput)shr 1 do // search argument in URI
                   if IdemPropName(ParamName^,pointer(fInput[i*2]),length(fInput[i*2])) then begin
                     AddValueJSON(WR,fInput[i*2+1]); // will add "" if needed
                     if i=iLow then
@@ -27322,7 +27330,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
                     break;
                   end;
                 if not argDone then
-                  AddDefaultJSON(WR); // allow missing argument
+                  AddDefaultJSON(WR); // allow missing argument (and add ',')
               end;
             end;
             WR.CancelLastComma;
@@ -35659,8 +35667,10 @@ end;
 
 procedure IgnoreComma(var P: PUTF8Char);
 begin
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  if P^=',' then inc(P);
+  if P<>nil then begin
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    if P^=',' then inc(P);
+  end;
 end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
@@ -36193,7 +36203,7 @@ var P: Pointer absolute aInterface;
     Ancestor: PTypeInfo;
     Kind: TMethodKind;
     f: TParamFlags;
-    i,j: integer;
+    m,a: integer;
     n: cardinal;
     aURI: RawUTF8;
     ErrorMsg: string;
@@ -36212,12 +36222,12 @@ begin
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   inc(PW);
-  for i := fMethodsCount to fMethodsCount+n-1 do begin
+  for m := fMethodsCount to fMethodsCount+n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%s.%s method: duplicated name',[fInterfaceTypeInfo^.Name,aURI]))^ do begin
-      ExecutionMethodIndex := i+RESERVED_VTABLE_SLOTS;
+      ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
       PS := @PS^[ord(PS^[0])+1];
       Kind := PME^.Kind;
       if PME^.CC<>ccRegister then
@@ -36239,22 +36249,18 @@ begin
       ArgsOutFirst := -1;
       ArgsOutLast := -2;
       ArgsOutNotResultLast := -2;
-      for j := 0 to n-1 do
-      with Args[j] do begin
+      ArgsManagedFirst := -1;
+      ArgsManagedLast := -2;
+      for a := 0 to n-1 do
+      with Args[a] do begin
         f := PF^;
         inc(PF);
         if pfVar in f then
           ValueDirection := smdVar else
         if pfOut in f then
           ValueDirection := smdOut;
-        if ValueDirection<>smdConst then begin
-          if ArgsOutFirst<0 then
-            ArgsOutFirst := j;
-          ArgsOutLast := j;
-          inc(ArgsOutputValuesCount);
-          if ValueDirection<>smdResult then
-            ArgsOutNotResultLast := j;
-        end;
+        if ValueDirection<>smdConst then
+          ArgsOutNotResultLast := a;
         ParamName := PS;
         PS := @PS^[ord(PS^[0])+1];
         TypeName := PS;
@@ -36268,13 +36274,13 @@ begin
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
-        if j=0 then
+        if a=0 then
           ValueType := smvSelf else begin
           if ValueDirection<>smdOut then begin
             inc(ArgsInputValuesCount);
             if ArgsInFirst<0 then
-              ArgsInFirst := j;
-            ArgsInLast := j;
+              ArgsInFirst := a;
+            ArgsInLast := a;
           end;
           ValueType := TypeInfoToMethodValueType(TypeInfo);
           case ValueType of
@@ -36308,21 +36314,33 @@ begin
       end;
       // add a pseudo argument after all arguments for functions
       if Kind=mkFunction then
-      with Args[n] do begin
-        ParamName := @CONST_PSEUDO_RESULT_NAME;
-        ArgsResultIndex := n;
-        if ArgsOutFirst<0 then
-          ArgsOutFirst := n;
-        ArgsOutLast := n;
-        ValueDirection := smdResult;
-        inc(ArgsOutputValuesCount);
-        TypeName := PS;
-        PS := @PS^[ord(PS^[0])+1];
-        TypeInfo := PP^^;
-        inc(PP);
-        ValueType := TypeInfoToMethodValueType(TypeInfo);
-      end else
-        ArgsResultIndex := -1;
+        with Args[n] do begin
+          ParamName := @CONST_PSEUDO_RESULT_NAME;
+          ArgsResultIndex := n;
+          ValueDirection := smdResult;
+          TypeName := PS;
+          PS := @PS^[ord(PS^[0])+1];
+          TypeInfo := PP^^;
+          inc(PP);
+          ValueType := TypeInfoToMethodValueType(TypeInfo);
+        end else
+          ArgsResultIndex := -1;
+      // compute ArgsOut* and ArgsManaged* indexes
+      for a := 1 to high(Args) do
+      with Args[a] do begin
+        if ValueDirection<>smdConst then begin
+          if ArgsOutFirst<0 then
+            ArgsOutFirst := a;
+          ArgsOutLast := a;
+          inc(ArgsOutputValuesCount);
+        end;
+        if ValueType in [smvObject,smvDynArray,smvRecord
+            {$ifndef NOVARIANTS},smvVariant{$endif}] then begin
+          if ArgsManagedFirst<0 then
+            ArgsManagedFirst := a;
+          ArgsManagedLast := a;
+        end;
+      end;
       // go to next method
       {$ifdef ISDELPHIXE}
       inc(PB,PW^); // skip custom attributes
@@ -38285,7 +38303,7 @@ var RawUTF8s: TRawUTF8DynArray;
     WideStrings: TWideStringDynArray;
     Records: array of TBytes;
     Value: pointer;
-    i,a: integer;
+    i,a,a1: integer;
     wasString, valid: boolean;
     Val: PUTF8Char;
     call: TCallMethodArgs;
@@ -38293,6 +38311,10 @@ var RawUTF8s: TRawUTF8DynArray;
     SyncMethod: TMethod;
     {$endif}
     Synch: TCallMethodSynchro;
+    Name: PUTF8Char;
+    NameLen,ValuesCount: integer;
+    EndOfObject: AnsiChar;
+    ParObjValues: TPUTF8CharDynArray;
     Stack: array[0..MAX_EXECSTACK-1] of byte;
     Int64s: array[0..MAX_METHOD_ARGS-1] of Int64;
     Objects: array[0..MAX_METHOD_ARGS-1] of TObject;
@@ -38314,88 +38336,121 @@ begin
     fillchar(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0); // for finally
   if ArgsUsedCount[smvvDynArray]>0 then
     fillchar(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
-  try       
-    // 1. read the parameters
+  try
+    // 1. validate input parameters
     if ArgsInputValuesCount<>0 then begin // ignore if there is no in parameter
       if Par^ in [#1..' '] then repeat inc(Par) until not(Par^ in [#1..' ']);
-      if Par^<>'[' then
-        exit; // input arguments shall be as a JSON array , e.g. '[1,2,"three"]'
-      inc(Par);
-    end;
-    for a:= 0 to high(Args) do
-    with Args[a] do begin
-      case ValueType of
-      smvSelf:
-        continue; // self parameter is never transmitted
-      smvObject: begin
-        Objects[IndexVar] := TypeInfo^.ClassCreate; 
-        if ValueDirection in [smdConst,smdVar] then begin
-          Par := JSONToObject(Objects[IndexVar],Par,valid);
-          if not valid then
-            exit;
-          IgnoreComma(Par);
-        end;
-      end;
-      smvRawJSON:
-        if ValueDirection in [smdConst,smdVar] then begin
+      case Par^ of
+      '[': // input arguments as a JSON array , e.g. '[1,2,"three"]' (default)
+        inc(Par);
+      '{': begin // retrieve parameters values from JSON object
+        inc(Par);
+        SetLength(ParObjValues,ArgsInLast+1); // nil will set default value   
+        fillchar(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0); // set default 
+        a1 := ArgsInFirst;
+        repeat
+          Name := GetJSONPropName(Par);
+          if Name=nil then
+            exit; // invalid JSON object in input
+          NameLen := StrLen(Name);
           Val := Par;
-          Par := GotoNextJSONItem(Par);
-          if Par<=Val then
-            exit;
-          SetString(RawUTF8s[IndexVar],PAnsiChar(Val),Par-Val);
-        end;
+          Par := GotoNextJSONItem(Par,1,@EndOfObject); 
+          for a := a1 to ArgsInLast do
+          with Args[a] do
+          if ValueDirection<>smdOut then
+            if IdemPropName(ParamName^,Name,NameLen) then begin
+              ParObjValues[a] := Val; // fast redirection, without allocation
+              if a=a1 then
+                inc(a1); // enable optimistic O(1) search for in-order input
+              break;
+            end;
+        until (Par=nil) or (EndOfObject='}');
+        Par := nil;
+      end;
+      else exit; // only support JSON array or JSON object as input
+      end;
+    end;
+    // 2. instantiate temporary managed objects
+    for a := ArgsManagedFirst to ArgsManagedLast do
+    with Args[a] do
+      case ValueType of
+      smvObject:
+        Objects[IndexVar] := TypeInfo^.ClassCreate;
       smvDynArray:
-        with DynArrays[IndexVar] do begin
+        with DynArrays[IndexVar] do
           Wrapper.Init(TypeInfo,Value);
-          if ValueDirection in [smdConst,smdVar] then begin
-            Par := Wrapper.LoadFromJSON(Par);
-            if Par=nil then
-              exit;
-            IgnoreComma(Par);
-          end;
-        end;
-      smvRecord: begin
+      smvRecord:
         SetLength(Records[IndexVar],TypeInfo^.RecordType^.Size);
-        if ValueDirection in [smdConst,smdVar] then begin
-          Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
-          if Par=nil then
-            exit;
-        end;
-      end;
       {$ifndef NOVARIANTS}
-      smvVariant: begin
+      smvVariant:
         SetLength(Records[IndexVar],sizeof(Variant));
-        if ValueDirection in [smdConst,smdVar] then begin
-          Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
-            @JSON_OPTIONS[optVariantCopiedByReference in Options]);
-          if Par=nil then
-            exit;
-        end;
-      end;
       {$endif}
-      smvBoolean..smvWideString:
-      if ValueDirection in [smdConst,smdVar] then begin
+      end;
+    // 3. decode input parameters (if any)
+    for a := ArgsInFirst to ArgsInLast do
+    with Args[a] do
+    if ValueDirection<>smdOut then begin
+      if ParObjValues<>nil then
+        if ParObjValues[a]=nil then // ignore missing parameter in input JSON
+          continue else
+          Par := ParObjValues[a]; // value is to be retrieved from JSON object
+      case ValueType of
+      smvObject: begin
+        Par := JSONToObject(Objects[IndexVar],Par,valid);
+        if not valid then
+          exit;
+        IgnoreComma(Par);
+      end;
+      smvRawJSON: begin
+        Val := Par;
+        Par := GotoNextJSONItem(Par);
+        if Par<=Val then
+          exit;
+        SetString(RawUTF8s[IndexVar],PAnsiChar(Val),Par-Val);
+      end;
+      smvDynArray: begin
+        Par := DynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
+        IgnoreComma(Par);
+      end;
+      smvRecord:
+        Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
+      {$ifndef NOVARIANTS}
+      smvVariant:
+        Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
+          @JSON_OPTIONS[optVariantCopiedByReference in Options]);
+      {$endif}
+      smvBoolean..smvWideString: begin
         Val := GetJSONField(Par,Par,@wasString);
         if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
           exit;
         case ValueType of
-        smvBoolean: Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
-        smvEnum..smvInt64:     SetInt64(Val,Int64s[IndexVar]);
-        smvDouble,smvDateTime: PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
-        smvCurrency:   Int64s[IndexVar] := StrToCurr64(Val);
-        smvRawUTF8:    RawUTF8s[IndexVar] := Val;
-        smvString:     UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
-        smvWideString: UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
+        smvBoolean:
+          Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
+        smvEnum..smvInt64:
+          SetInt64(Val,Int64s[IndexVar]);
+        smvDouble,smvDateTime:
+          PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
+        smvCurrency:
+          Int64s[IndexVar] := StrToCurr64(Val);
+        smvRawUTF8:
+          RawUTF8s[IndexVar] := Val;
+        smvString:
+          UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
+        smvWideString:
+          UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
         else exit; // should not happen
         end;
+        continue; // here Par=nil is correct
       end;
-      else exit; // unhandled type
+      else continue;
       end;
+      if Par=nil then
+        exit;
     end;
-    // 2. create the stack content
+    // 4. create the stack content
     call.StackAddr := PtrInt(@Stack);
     call.StackSize := ArgsSizeInStack;
-    for a:= 0 to high(Args) do
+    for a := 1 to high(Args) do
     with Args[a] do begin
       case ValueVar of
       smvvSelf:       continue; // call.Regs[REG_FIRST] := Instance[i] below
@@ -38421,9 +38476,9 @@ begin
           move(Value^,Stack[InStackOffset],SizeInStack) else
           call.Regs[RegisterIdent] := PPtrInt(Value)^;
     end;
-    // 3. execute the method
+    // 5. execute the method
     for i := 0 to high(Instances) do begin
-      // 3.1 prepare the low-level call context for the asm stub
+      // 5.1 prepare the low-level call context for the asm stub
       call.Regs[REG_FIRST] := PtrInt(Instances[i]);
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
       if ArgsResultIndex>=0 then
@@ -38433,7 +38488,7 @@ begin
           Values[ArgsResultIndex] := @call.res64;
       end else
         call.resKind := smvNone;
-      // 3.2 launch the asm stub in the expected execution context
+      // 5.2 launch the asm stub in the expected execution context
       {$ifndef LVCL}
       if (optExecInMainThread in Options) and
          (GetCurrentThreadID<>MainThreadID) then begin
@@ -38456,9 +38511,9 @@ begin
       end else
         CallMethod(call);
     end;
-    // 4. send back any result
+    // 6. send back any result
     if Res<>nil then begin
-      // 4.1 handle custom content (not JSON array/object answer)
+      // 6.1 handle custom content (not JSON array/object answer)
       if (call.resKind=smvRecord) and ArgsResultIsServiceCustomAnswer then
         with PServiceCustomAnswer(Values[ArgsResultIndex])^ do
         if Header<>'' then begin
@@ -38470,7 +38525,7 @@ begin
           Result := true;
           exit;
         end;
-      // 4.2 write the '{"result":[...' array or object
+      // 6.2 write the '{"result":[...' array or object
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
@@ -38481,29 +38536,32 @@ begin
       Res.CancelLastComma;
     end;
     Result := true;
-  finally // manual release memory for Records[], Objects[] and DynArrays[]
-    for i := 0 to ArgsUsedCount[smvvObject]-1 do
-      Objects[i].Free;
-    for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
-      DynArrays[i].Wrapper.Clear;
-    if Records<>nil then begin
-      i := 0;
-      for a := 0 to high(Args) do
-        if Records[i]=nil then // avoid GPF in case of incorrect input
-          break else
-        with Args[a] do
-        case ValueType of
-        smvRecord: begin
-          RecordClear(Records[i][0],TypeInfo);
-          inc(i);
-        end;
-        {$ifndef NOVARIANTS}
-        smvVariant: begin
-          VarClear(PVariant(Records[i])^); // fast, even for simple types
-          inc(i);
-        end;
-        {$endif}
-        end;
+  finally
+    // 7. release any Records[], Objects[] and DynArrays[] (emulated) instance
+    if ArgsManagedFirst>=0 then begin
+      for i := 0 to ArgsUsedCount[smvvObject]-1 do
+        Objects[i].Free;
+      for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
+        DynArrays[i].Wrapper.Clear;
+      if Records<>nil then begin
+        i := 0;
+        for a := ArgsManagedFirst to ArgsManagedLast do
+          if Records[i]=nil then // avoid GPF in case of incorrect input
+            break else
+          with Args[a] do
+          case ValueType of
+          smvRecord: begin
+            RecordClear(Records[i][0],TypeInfo);
+            inc(i);
+          end;
+          {$ifndef NOVARIANTS}
+          smvVariant: begin
+            VarClear(PVariant(Records[i])^); // fast, even for simple types
+            inc(i);
+          end;
+          {$endif}
+          end;
+      end;
     end;
   end;
 end;
