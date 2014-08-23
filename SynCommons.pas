@@ -888,7 +888,7 @@ type
   PPAnsiCharArray = ^TPAnsiCharArray;
 
   /// a dynamic array of PUTF8Char pointers
-  TPUtf8CharDynArray = array of PUTF8Char;
+  TPUTF8CharDynArray = array of PUTF8Char;
 
   /// a pointer to a RawUTF8 array
   TRawUTF8Array = array[0..MaxInt div SizeOf(RawUTF8)-1] of RawUTF8;
@@ -5146,11 +5146,14 @@ type
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)
     procedure AddTrimLeftLowerCase(Text: PShortString);
     /// append a ShortString property name, as '"PropName":'
+    // - PropName content should not need to be JSON escaped (e.g. no " within)
     procedure AddPropName(const PropName: ShortString);
     /// append a RawUTF8 property name, as '"FieldName":'
+    // - FieldName content should not need to be JSON escaped (e.g. no " within)
     procedure AddFieldName(const FieldName: RawUTF8); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a UTF8-encoded property name, as '"FieldName":'
+    // - FieldName content should not need to be JSON escaped (e.g. no " within)
     procedure AddFieldName(FieldName: PUTF8Char; FieldNameLen: integer); overload;
     /// append the class name of an Object instance as text
     // - aClass must be not nil
@@ -6402,14 +6405,14 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 
 /// decode a JSON field in an UTF-8 encoded buffer (used in TSQLTableJSON.Create)
 // - this function decodes in the P^ buffer memory itself (no memory allocation
-// or copy), for faster process - so take care that it is an unique string
+// or copy), for faster process - so take care that P^ is not shared
 // - PDest points to the next field to be decoded, or nil on any unexpected end
-// - null is decoded as nil
-// - '"strings"' are decoded as 'strings'
-// - strings are JSON unescaped (and \u0123 is converted to UTF-8 chars)
-// - any integer value is left as its ascii representation
-// - true/false boolean values are returned as ascii, with wasString=false
-// - wasString is set to true if the JSON value was a "string"
+// - optional wasString is set to true if the JSON value was a JSON "string"
+// - null is decoded as nil, with wasString=false
+// - true/false boolean values are returned as 'true'/'false', with wasString=false
+// - '"strings"' are decoded as 'strings', with wasString=true, properly JSON
+// unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
+// - any integer value is left as its ascii representation, with wasString=true
 // - works for both field names or values (e.g. '"FieldName":' or 'Value,')
 // - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
@@ -6417,7 +6420,7 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
 
 /// decode a JSON field name in an UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
-// or copy), for faster process - so take care that it is an unique string
+// or copy), for faster process - so take care that P^ is not shared
 // - it will return the property name (with an ending #0) or nil on error
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
@@ -33769,21 +33772,21 @@ label slash;
 begin
   if wasString<>nil then
     wasString^ := false; // default is 'no string'
-  PDest := nil; // mark error or unexpected end (#0)
+  PDest := nil; // PDest=nil indicates error or unexpected end (#0)
   result := nil;
   if P=nil then exit;
   if P^<=' ' then repeat inc(P); if P^=#0 then exit; until P^>' ';
   c4 := PInteger(P)^;
   if (c4=NULL_LOW) and (P[4] in EndOfJSONValueField)  then begin
-    result := nil; // null value (could occur for "") -> return nil = ''
+    result := nil; // null -> returns nil and wasString=false
     inc(P,3);
   end else
   if (c4=FALSE_LOW) and (P[4]='e') and (P[5] in EndOfJSONValueField) then begin
-    result := P; // false -> return 'false'
+    result := P; // false -> returns 'false' and wasString=false
     inc(P,4);
   end else
   if (c4=TRUE_LOW) and (P[4] in EndOfJSONValueField)  then begin
-    result := P; // true -> return 'true'
+    result := P; // true -> returns 'true' and wasString=false
     inc(P,3);
   end else
   if P^='"' then begin
@@ -34200,7 +34203,7 @@ begin
       AddJSONToXML(P);
       SetText(result);
     finally
-      Free
+      Free;
     end;
 end;
 
@@ -34220,20 +34223,24 @@ begin
       AddJSONReformat(P,Format,nil);
       SetText(result);
     finally
-      Free
+      Free;
     end;
 end;
 
 function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
 var tmp: RawUTF8;
+    n: Integer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  with TTextWriter.CreateOwnedStream(Length(tmp)) do // pre-allocate buffer size
+  n := length(JSON);
+  SetString(tmp,PAnsiChar(pointer(JSON)),n); // make local copy
+  if n<4096 then
+    n := 4096; // minimal rough estimation of the output buffer size
+  with TTextWriter.CreateOwnedStream(n) do
   try
     AddJSONReformat(pointer(tmp),Format,nil);
     SetText(result);
   finally
-    Free
+    Free;
   end;
 end;
 
