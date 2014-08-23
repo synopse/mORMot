@@ -9276,7 +9276,7 @@ $ POST /root/ComplexNumber.Add/1234
 $ (...)
 $ {"aReal":20,"aImaginary":30}
 In some cases, naming the parameters could be useful, on the client side. But this should not be the default, since it will be slightly slower (for parsing and checking the names), and use more bandwidth at transmission.
-Any missing parameter in the incoming JSON object will be replaced by its default value. For instance, the following will run {\f1\fs20 IComplexNumber(0,2)}:
+Any missing parameter in the incoming JSON object will be replaced by its default value. For instance, the following will run {\f1\fs20 IComplexNumber.Add(0,2)}:
 $ POST /root/Calculator.Add
 $ (...)
 $ {"n2":2}
@@ -9320,13 +9320,12 @@ $ (...)
 $ {"method":"Add","params":{"n1":1,"n2":2},"id":0}
 Here, the same rules applies than in {\f1\fs20 TSQLRestRoutingREST} mode:
 - Any missing parameter will be replaced by its default value;
-- Properties order is not sensitive any more;
+- Properties order is not sensitive anymore;
 - Unexpected parameters will just be ignored.
 Note that by definition, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is not able to handle URI-encoded parameters. In fact, the JSON-RPC mode expects the URI to be used only for identifying the service, and have the whole execution context transmitted as body.
-:    RESTful model or JSON-RPC?
-For a standard {\i mORMot} Delphi client, or any supported @86@, {\f1\fs20 TSQLRestRoutingREST} is preferred.\line Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
-In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. It may be preferred, depending on the client expectations, and its technology involved.
-It's up to you to select the right routing scheme to be used, depending on your needs.
+:    REST mode or JSON-RPC mode?
+For a standard {\i mORMot} Delphi client, or any supported {\i Cross-Platform} client - see @86@ - {\f1\fs20 TSQLRestRoutingREST} is preferred. The supplied libraries, even for {\i SmartMobileStudio}, fully implement this routing scheme. It is the faster, safer and most modular mode available.\line In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. Since the method name will be part of the URI, the signature will have a bigger extent than in JSON-RPC mode, so it will be more secure. Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
+Of course, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode may be used as an alternative, depending on the client expectations, and technology limitations, e.g. if your client expect a JSON-RPC compatible communication.\line It's up to you to select the right routing scheme to be used, depending on your needs.
 :   Response format
 :    Standard answer as JSON object
 :     JSON answers
