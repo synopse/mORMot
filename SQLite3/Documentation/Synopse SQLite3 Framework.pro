@@ -566,12 +566,54 @@ TitleOffset=0
 DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
-{\i Synopse mORMot} is a @*Client-Server@ @*ORM@ and Service Oriented Architecture framework (@*SOA@) for {\i Delphi} 6 up to XE6, targeting {\i Win32} and {\i Win64} platforms on the server, and any platform for clients (including mobile or AJAX).
-%IamLost.png
+{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ and @*SOA@ framework for {\i Delphi} 6 up to XE6, targeting {\i Win32}/{\i Win64} for the server, and any platform for clients (including mobile or AJAX).
 The main two features of {\i mORMot} are therefore:
-- Client-Server {\i ORM/ODM}: objects persistence and remote access;
-- Client-Server {\i Services}: remote call of high-level data process.
-It provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
+- {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
+- {\i SOA}: organize your high-level data process into services.
+Both are available in local or remote access, via an auto-configuring Client-Server @*REST@ design.
+\graph mORMotDesign0 General mORMot architecture
+subgraph cluster_0 {
+"SQLDB";
+label="SQL Databases";
+}
+subgraph cluster_1 {
+"NoSQLDB";
+label="NoSQL Databases";
+}
+subgraph cluster_2 {
+"Services";
+label="Services";
+}
+subgraph cluster_3 {
+\SQLDB\ORM
+\NoSQLDB\ODM
+\ORM\REST Server
+\ODM\REST Server
+\Services\SOA
+\SOA\REST Server
+label="         Core";
+}
+\REST Server\Stand Alone¤Application
+subgraph cluster_4 {
+label="REST   Clients";
+\REST Server\... any
+\REST Server\AJAX
+\REST Server\Mobile
+\REST Server\Delphi
+}
+subgraph cluster_5 {
+label="         Featuring";
+\REST Server\Featured
+}
+=SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle
+=NoSQLDB=MongoDB\nIn-Memory\nFiles
+=Services=Method-based Services\nInterface-based Services\nRemote (Saas) Services
+=Featured=User Management - Security & Rights¤Sessions - Logging - Performance - Profiling¤http.sys - MultiCore - Unit Testing - Mocks/Stubs¤Templates (MVC) - JavaScript Engine - JSON¤Reporting - PDF - Automated UI
+\
+{\i mORMot} offers you all features needed for building any business application, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i convention over configuration} solutions, and implemented for speed and efficiency.\line For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, marshaling, table creation, SQL generation, validation. For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. You need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, or a HTML web site - just one class to instantiate. If you need a tool or feature, it is probably already there, waiting for you to use it. The table content of this document makes it clear: this is no ordinary piece of software.
+\page
+%IamLost.png
+The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
@@ -3828,7 +3870,7 @@ Here are some insertion speed values, in objects/second:
 |{\b FireDAC SQlite3}|26369|50306|49755|155115
 |{\b UniDAC SQlite3}|477|8725|26552|38756
 |{\b ODBC Firebird}|1495|18056|13485|17731
-|{\b ZEOS Firebird}|9733|13429|26348|30616
+|{\b ZEOS Firebird}|9733|52214|26348|52616
 |{\b FireDAC Firebird}|24233|52021|24791|52111
 |{\b UniDAC Firebird}|5986|14809|6522|14948
 |{\b Jet}|4235|4424|4954|5094
@@ -3856,7 +3898,7 @@ Here are some insertion speed values, in objects/second:
 |%
 Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
 So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows.
-For both our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, the {\i Zeos} (for {\i Oracle} only yet) or {\i FireDAC} library, BATCH process benefits of the @*array bind@ing feature a lot (known as {\i Array DML} in {\i FireDAC/AnyDAC}).
+For our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, and for {\f1\s20 SynDBZeos.pas} or {\f1\fs20 SynDBFireDAC.pas} (known as {\i Array DML} in {\i FireDAC/AnyDAC}) libraries, BATCH process benefits of the @*array bind@ing feature a lot.
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
 - {\i SQlite3, @*MySQL@, @*PostgreSQL@, MSSQL 2008, @*DB2@, @*MySQL@} or {\i @*NexusDB@} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 INSERT INTO .. VALUES (..),(..),(..)..};
 - {\i Oracle} handles {\f1\fs20 INSERT INTO .. INTO .. SELECT 1 FROM DUAL} (weird syntax, isn't it?);
@@ -3887,7 +3929,7 @@ Here are some reading speed values, in objects/second:
 |{\b FireDAC SQlite3}|7683|83532|112470
 |{\b UniDAC SQlite3}|2522|74030|96420
 |{\b ODBC Firebird}|3446|69607|97585
-|{\b ZEOS Firebird}|20296|91974|107229
+|{\b ZEOS Firebird}|20296|114676|17210
 |{\b FireDAC Firebird}|2376|46276|56269
 |{\b UniDAC Firebird}|2189|66886|88102
 |{\b Jet}|2640|166112|258277
@@ -5058,7 +5100,7 @@ Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20
 :   Recommended version
 We recommend that you download the 7.2 branch of {\i Zeos}/ZDBC, which is the current {\i trunk}, at the time of this writing.
 A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
-At writing, {\i @*array bind@ing} suport (only for the {\i Oracle} provider yet) has been added, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true}.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library.
+At writing, {\i @*Array bind@ing} suport has been added to the 7.2 branch, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true} - which will be the case for {\i @*Oracle@} and {\i @FireBird@} providers, at time of this writing.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library, in case of single record retrieval.
 If you need to stick to a version prior to 7.2, and want to work as expected with a {\i @*SQlite3@} back-end (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}?), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
 :   Connection samples
 If you want e.g. to connect to @*MySQL@ via Zeos/ZDBC, follow those steps:
@@ -7265,7 +7307,7 @@ Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method
 !    end;
 !  (...)
 :78  Array binding
-When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} implementation implements the feature (only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it by now).
+When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature - by now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
 In fact, when using a remote database on a physical network, you won't be able to achieve more than 500-600 requests per second when performing {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements: the same {\f1\fs20 round-trip} occurs, this time between the ORM server side and the external Database engine.
 \graph BATCHRoundTrip2 BATCH mode latency issue on external DB
 \ORM CRUD operation\ORM HTTP Client\In-process¤no latency
@@ -7280,7 +7322,7 @@ In fact, when using a remote database on a physical network, you won't be able t
 Of course, this 1 ms latency due to the external database additional round-trip may sounds negligible, but in @17@ when most process is done on the server side, it may introduce a huge performance difference. Your customers would not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for.
 Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing {\i array binding} for faster database batch modifications. It is working in conjunction with our BATCH methods, so CRUD modification actions are grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
-Our beloved @94@ Open Source library just introduced {\i array binding} to its 7.2 branch. It is handled by our framework, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} provider supports this feature, and our own implementation in {\f1\fs20 SynDBOracle} still gives better performance results.
+Our beloved @94@ Open Source library just introduced {\i array binding} to its 7.2 branch. It is handled by our framework, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature, and our own implementation in {\f1\fs20 SynDBOracle} still gives better performance results.
 The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} commercial libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
 :93  Optimized SQL for bulk insert
@@ -10403,10 +10445,50 @@ Of course, you can make any combination of the protocols and servers, to tune ho
 If you consider implementing a @*stand-alone@ application for hosting your services, and has therefore basic ORM needs (e.g. you may need only CRUD statements for handling authentication), you may use the lighter {\f1\fs20 TSQLRestServerFullMemory} kind of server instead of a full {\f1\fs20 TSQLRestServerDB}, which will embed a {\i @*SQLite3@} database engine, perhaps not worth it in this case.
 :97  Scaling via CDN
 Our beloved stateless @9@ model, in conjunction with @96@ would enable several levels of caching, from a local proxy cache - see e.g. @http://www.squid-cache.org or @http://www.varnish-cache.org - or an external {\i Content Delivery Network} (@**CDN@) service - e.g. @http://www.cloudflare.com
-Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your web application to scale to thousands of visitors.
+Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, and then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your web application to scale to thousands of visitors.
+\graph mORMotServices4 Service Hosting on mORMot - Content Delivery Network (CDB)
+\Local Network A\Internet
+\Local Network B\Internet
+\3G/4G Network\Internet
+node [shape=box];
+subgraph cluster_0 {
+\Client A1¤(Delphi)\Local Network A
+\Client A2¤(Delphi)\Local Network A
+\Client A3¤(AJAX)\Local Network A
+label="Office A";
+}
+subgraph cluster_1 {
+\Client B1¤(Delphi)\Local Network B
+\Client B2¤(Delphi)\Local Network B
+label="Office B";
+}
+subgraph cluster_2 {
+\Client C¤(Mobile AJAX)\3G/4G Network
+label="Mobile";
+}
+\Internet\CDN US
+\Internet\CDN UK
+subgraph cluster_3 {
+\CDN US\Cache
+label="  US";
+}
+subgraph cluster_4 {
+\CDN UK\ Cache
+label="       UK";
+}
+subgraph cluster_5 {
+\CDN UK\mORMot¤Server
+\CDN US\mORMot¤Server
+\mORMot¤Server\Database
+label=" Data Center";
+}
+\Internet\mORMot¤Server
+\
 In practice, static content - see @95@ - or some simple JSON requests - returned via {\f1\fs20 Ctxt.Results()} or an interface-based service - would benefit of using such a CDN.
-Just ensure that you disabled the authentication for those set of services - using {\f1\fs20 TSQLRestServer. ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer. ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
-If your project starts to have success, it is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
+When any client requests the {\i mORMot} server URI, it would be in fact redirected to the closest CDN node available. For instance, some client in Canada would be redirected to the "CDN US" server, or one mobile client in France would be redirected to the "CDN UK" server.
+Then each CDN will check if the requested URI is already in its cache, according to its settings, and the expiration parameters which may be set within the HTTP headers of the cache header. If the resource is in local cache, it will be returned to the client immediately. If the resource is not in its cache, the CDN node will ask the {\i mORMot} server, cache the returned content, then return this content to the client. Any further attempt to this URI, compatible with the expiration parameters, won't trigger any request to the {\i mORMot} server.
+Of course, you can define some URI patterns to never be cached, and point directly to the {\i mORMot} server. All authenticated services, for instance would need direct access to the {\i mORMot} server, since the @98@ will append a session-private signature to each URI. Just ensure that you disabled authentication - using {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
+If your project starts to have success, using a CDN is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
 :43Security
 %cartoon01.png
 The framework tries to implement @**security@ via:
@@ -10575,7 +10657,7 @@ If you set the {\f1\fs20 aHandleUserAuthentication} parameter to {\f1\fs20 true}
 !!      TSQLRestServerAuthenticationDefault,TSQLRestServerAuthenticationSSPI]);
 !  (...)
 In order to define one or several authentication scheme, you can call the {\f1\fs20 AuthenticationRegister()} and {\f1\fs20 AuthenticationUnregister()} methods of {\f1\fs20 TSQLRestServer}.
-:   mORMot secure RESTful authentication
+:98   mORMot secure RESTful authentication
 The {\f1\fs20 TSQLRestServerAuthenticationDefault} class implements a proprietary but secure RESTful @18@.
 As stated in @74@, typical client-side authentication is performed using the following command:
 ! MyClient.SetUser('User','synopse'); // default user for Security tests
