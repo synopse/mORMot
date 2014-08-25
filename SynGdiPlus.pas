@@ -106,6 +106,7 @@ unit SynGdiPlus;
      to specify the destination image DPI
 
    Version 1.18
+   - ensure all created TBitmap are DIB (device-independent bitmap)
    - fixed ticket [ebbce6be8b] about Win64 initialization
    - fixed ticket [84dae0a2da] about EMR_BITBLT, thanks to Pierre le Riche
    - implemented clipping - ticket [ba90f15370] - thanks to Pierre le Riche
@@ -324,6 +325,7 @@ type
     // - use a TGDIPlusFull instance for true GDI+ AntiAliaised drawing
     // - you can specify a zoom factor by the ScaleX and ScaleY parameters in
     // percent: e.g. 100 means 100%, i.e. no scaling
+    // - returned image is a DIB (device-independent bitmap)
     function DrawAntiAliased(Source: TMetafile; ScaleX: integer=100; ScaleY: integer=100;
       aSmoothing: TSmoothingMode=smAntiAlias;
       aTextRendering: TTextRenderingHint=trhClearTypeGridFit): TBitmap; overload;
@@ -413,6 +415,7 @@ type
     function SaveAs(Stream: TStream; Format: TGDIPPictureType;
       CompressionQuality: integer=80; IfBitmapSetResolution: single=0): TGdipStatus;
     /// create a bitmap from the corresponding picture
+    // - kind of returned image is DIB (device-independent bitmap)
     function ToBitmap: TBitmap;
     /// guess the picture type from its internal format
     // - return gptBMP if no format is found
@@ -1030,6 +1033,7 @@ begin
   R.Top := 0;
   R.Bottom := (Source.Height*ScaleY)div 100;
   result := TBitmap.Create;
+  result.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
   result.Width := R.Right;
   result.Height := R.Bottom;
   if Self=nil then begin // no GDI+ available -> use GDI drawing
@@ -1467,6 +1471,7 @@ begin
   if not fHasContent then
     result := nil else begin
     result := TBitmap.Create;
+    result.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
     result.Width := Width;
     result.Height := Height;
     result.Canvas.Draw(0,0,self);
@@ -1555,6 +1560,7 @@ begin
       // resize to the maximum side specified parameter
       Bmp := TBitmap.Create;
       try
+        Bmp.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
         R := Pic.RectNotBiggerThan(MaxPixelsForBiggestSide);
         Bmp.Width := R.Right;
         Bmp.Height := R.Bottom;
