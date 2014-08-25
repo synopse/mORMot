@@ -571,7 +571,7 @@ The main two features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
 - {\i SOA}: organize your high-level data process into services.
 Both are available in local or remote access, via an auto-configuring Client-Server @*REST@ design.
-\graph mORMotDesign0 General mORMot architecture
+\graph mORMotDesignORMSOA General mORMot architecture
 subgraph cluster_0 {
 "SQLDB";
 label="SQL Databases";
@@ -591,7 +591,7 @@ subgraph cluster_3 {
 \ODM\REST Server
 \Services\SOA
 \SOA\REST Server
-label="         Core";
+label=" mORMot";
 }
 \REST Server\Stand Alone¤Application
 subgraph cluster_4 {
@@ -610,7 +610,7 @@ label="         Featuring";
 =Services=Method-based Services\nInterface-based Services\nRemote (Saas) Services
 =Featured=User Management - Security & Rights¤Sessions - Logging - Performance - Profiling¤http.sys - MultiCore - Unit Testing - Mocks/Stubs¤Templates (MVC) - JavaScript Engine - JSON¤Reporting - PDF - Automated UI
 \
-{\i mORMot} offers you all features needed for building any business application, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i convention over configuration} solutions, and implemented for speed and efficiency.\line For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, marshaling, table creation, SQL generation, validation. For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. You need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, or a HTML web site - just one class to instantiate. If you need a tool or feature, it is probably already there, waiting for you to use it. The table content of this document makes it clear: this is no ordinary piece of software.
+{\i mORMot} offers all features needed for building any kind of modern project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.\line For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation. For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere! If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.\line The table content of this document makes it clear: this is no ordinary piece of software.
 \page
 %IamLost.png
 The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
@@ -696,9 +696,10 @@ At first, some points can be highlighted, which make this framework distinct to 
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
+%IamLost.png
 Of course, like many developers, you may suffer from the well-known NIH ("Not Invented Here") syndrome. On the other side, it is a commonly accepted fact that the use of standard and proven code libraries and components can save development time, minimize costs, reduce the use of precious test resources, and decrease the overall maintenance effort.
 Benefits of {\i mORMot} are therefore:
-- KISS design: you have all needed features at hand, but with only one way of doing it - less configuration and less confusion for the developer and its customers;
+- @*KISS@ {\i convention over configuration} design: you have all needed features at hand, but with only one way of doing it - less configuration and less confusion for the developer and its customers;
 - Pascal oriented: implementation is not following existing Java or C# patterns (with generics (ab)use, variable syntaxes and black-box approach), but try to unleash the object pascal genius;
 - Integrated: all crosscutting scenarios are coupled, so you benefit of consisting APIs and documentation, a lot of code-reuse, JSON/RESTful orientation from the ground up;
 - Tested: most of the framework is test-driven, and all regression tests are provided, including system-wide integration tests;
@@ -733,7 +734,7 @@ Feel free to give your feedback in the very same forum, asking new questions or 
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database and linked to VCL components, you would find in the {\f1\fs20 mORMotVCL.pas} unit a way to map JSON results, as returned by a {\i mORMot} server, to a {\f1\fs20 TDataSet} fast in-memory instance. See also sample "{\i 17 - TClientDataset use}".
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server} - and integrated {\i @*Mustache@} logic-less templates rendering - see @81@.
-{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a KISS approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
+{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 :40Architecture principles
@@ -1281,10 +1282,10 @@ Then detailed information will be available in the second part of this document 
 First of all, let us introduce some cross-cutting features, used everywhere in the {\i Synopse} source code. Even if you do not need to go deeply into the implementation details, it will help you not be disturbed with some classes and types you may encounter in the framework source, and its documentation.
 It was a design choice to use some custom low-level types, classes and functions instead of calling the official {\i Delphi} RTL.\line Benefits could be:
 - Cross-platform and cross-compiler support (e.g. leverage specificities, about memory model or RTTI);
-- Unicode support for all version of {\i Delphi}, even before {\i Delphi} 2009, or with @*FPC@;
+- Unicode support for all versions of {\i Delphi}, even before {\i Delphi} 2009, or with @*FPC@;
 - Optimized for process speed, multi-thread friendliness and re-usability;
 - Sharing of most common features (e.g. for text/data processing);
-- KISS design.
+- @*KISS@ and consistent design.
 In order to use {\i Synopse mORMot framework}, you should better be familiar with some of those definitions.
 First of all, a {\f1\fs20 @*Synopse.inc@} include file is provided, and appears in most of the framework units:
 !{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
@@ -3281,7 +3282,7 @@ For the very same reasons, the column definitions (uniqueness, indexes, required
 - At {\i Model level} for {\i Business related stuff} (like uniqueness, validators and filters).
 When you take a look at the supplied validators and filters - see @56@ - you'll find out that this is much powerful than the attributes available in "classic" ORMs: how could you validate an entry to be an email, or to match a pattern, or to ensure that it will be stored in uppercase within the DB?
 Other question worth asking is about the security. If you access the data remotely, a global access to the DB is certainly not enough. Our framework handle per-table @*CRUD@ level access for its ORM, above the DB layer (and has also complete security attributes for services) - see @43@. It works however the underneath DB grants are defined (even an DB with no user rights - like in-memory or {\i SQLite3} is able to do it).
-The {\i mORMot} point of view (which is not the only one), is to let the DB persist the data, as safe and efficient as possible, but rely on higher levels layers to implement the business logic. The framework favors {\i convention over configuration}, which is known to save a lot of time (if you use WCF on a daily basis, as I do, you and your support team know about the {\f1\fs20 .config} syndrome). It will make it pretty database-agnostic (you can even not use a SQL database at all), and will make the framework code easier to debug and maintain, since we don't have to deal with all the DB engine particularities. In short, this is the @*REST@ point of view, and main cause of success: @*CRUD@ is enough in our KISS-friendly design.
+The {\i mORMot} point of view (which is not the only one), is to let the DB persist the data, as safe and efficient as possible, but rely on higher levels layers to implement the business logic. The framework favors {\i @*convention over configuration@}, which is known to save a lot of time (if you use WCF on a daily basis, as I do, you and your support team know about the {\f1\fs20 .config} syndrome). It will make it pretty database-agnostic (you can even not use a SQL database at all), and will make the framework code easier to debug and maintain, since we don't have to deal with all the DB engine particularities. In short, this is the @*REST@ point of view, and main cause of success: @*CRUD@ is enough in any @*KISS@-friendly design.
 :  Persist TSQLRecord, not any class
 About the fact that you need to inherit from {\f1\fs20 @*TSQLRecord@}, and can't persist anything, our purpose was in fact very similar to the "@**Layer Supertype@" pattern of @*Domain-Driven@-Design, as explained by Martin Fowler:\line {\i It is not uncommon for all the objects in a layer to have methods you don't want to have duplicated throughout the system. You can move all of this behavior into a common Layer Supertype.}
 In fact, for {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} / @*ORM@ remote access, you have already all @*Client-Server@ @*CRUD@ operations available. Those classes are abstract common Supertypes, ready to be used in your projects. It has been optimized a lot (e.g. with a cache and other nice features), so I do not think reinventing a CRUD / database service is worth the prize. You have secure access to the ORM classes, with user/group attributes. Almost everything is created by code, just from the {\f1\fs20 TSQLRecord} class definition, via @*RTTI@. So it may be faster (and safer) to rely on it, than defining all your class hierarchy by hand.
@@ -6834,7 +6835,7 @@ Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. 
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
 As a result, on the Server side, our framework was designed to be @**thread-safe@.
-On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This KISS design ensure better test coverage.
+On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This @*KISS@ design ensure better test coverage.
 On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex (critical section), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
 :  By design
 We will now focus on the server side, which is the main strategic point (and potential bottleneck or point of failure) of any {\i Client-Server} architecture.
@@ -7643,7 +7644,7 @@ In order to follow a @17@ design, your application's business logic can be imple
 - Defining some RESTful {\i service @*contract@s} as standard {\i Delphi} {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
 The first is similar to {\i RemObject's DataAbstract} product, which allows remote access to database, over several protocols. There are some similarities with {\i mORMot} (like on-the-fly SQL translation for external databases), but also a whole diverse use case (RAD/components and wizards versus ORM/MVC) and implementation ({\i mORMot} takes advantages of the {\i @*SQLite3@} SQL core and is much more optimized for speed and scaling).
 If you paid for a {\i Delphi Architect} edition, the first two items can be compared to the {\i DataSnap} Client-Server features. Since {\i Delphi} 2010, you can in fact define @*JSON@-based RESTful services, in addition to the original {\i DCOM/DBExpress} remote data broker. It makes uses of the new RTTI available since {\i Delphi} 2010, but it has some known stability and performance issues, and lack of strong security. It is also RAD/Wizard based, whereas {\i mORMot} uses a code approach.
-The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a KISS manner.
+The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a @*KISS@ {\i @*convention over configuration@} manner.
 So {\i mORMot} is quite unique, in the fact that it features, in an unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a Domain-Driven Design, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
 %cartoon04.png
@@ -9614,7 +9615,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Sequence|attributes on methods|{\f1\fs20 interface} life time
 |Transactional|fully transactional|on implementation side
 |Instance life time|per call, per session, single|per call, per session, per user, per group, per thread, single, client-driven
-|Configuration|{\f1\fs20 .config} file or code|code or any custom file
+|Configuration|{\f1\fs20 .config} file or code|{\i @*convention over configuration@}\line optionally tuned by code
 |Client acccess|Layer source should be generated|No layer, but direct registration
 |End points|One end-point per contract|Unique or shared end-point
 |Operation|synchronous/asynchronous|synchronous (REST)
@@ -9630,7 +9631,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Weight|middle (GC, JIT, .dll)|low
 |Speed|good|high
 |Extensibility|verbose but complete|customizable
-|Standard|de facto|KISS design (e.g. JSON, HTTP)
+|Standard|de facto|@*KISS@ design (e.g. JSON, HTTP)
 |Source code|closed|published
 |License|proprietary|Open
 |Price|depends|Free
@@ -11227,7 +11228,7 @@ DDD's {\i @**Aggregates@} may either benefit of using {\i mORMot}'s {\i @3@}, or
 - Otherwise, you should define a dedicated persistence service, then use plain @*DTO@ - like {\i Delphi} {\f1\fs20 record} or our @80@ - or even publish the {\f1\fs20 TSQLRecord} types, and benefit of their automated JSON serialization.
 In all cases, when defining domain objects, we should always make the implicit {\i explicit}, i.e. defining one type (either {\f1\fs20 record/object} or {\f1\fs20 class}) per reality in the model. Thanks to {\i Delphi}'s strong typing, it will ensure that the Domain {\i Ubiquitous language} will appear in the code.
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
-DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a KISS implementation.
+DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a @*KISS@ implementation.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
 @28@ is a convenient implementation of the {\i @*Unit of Work@} pattern (i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods). Note that the current implementation of {\f1\fs20 Batch*} methods in {\i mORMot}, which focuses on Client side, should be enhanced to be more convenient and available on the server side, i.e. in the {\i Application Layer}.
 :  Defining services
