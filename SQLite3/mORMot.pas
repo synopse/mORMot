@@ -761,7 +761,8 @@ unit mORMot;
     - added TSQLRestServerURIContext.ReturnFile() method, for direct fast
       transmission to a HTTP client, handling "304 Not Modified" and mime type
     - added TSQLRestServerURIContext.Input*OrVoid[] properties
-    - added TSQLRestServerURIContext.RemoteIP and ConnectionID properties
+    - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID and
+      SessionUserName properties
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be available also within
@@ -3915,18 +3916,21 @@ type
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
     // is not enabled - i.e. if TSQLRestServer.HandleAuthentication = FALSE
     Session: cardinal;
-    /// the corresponding TAuthSession.User.ID value
-    // - is undefined if Session is 0 or 1 (no authentication running)
-    SessionUser: integer;
     /// the corresponding TAuthSession.User.GroupRights.ID value
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionGroup: integer;
+    /// the corresponding TAuthSession.User.ID value
+    // - is undefined if Session is 0 or 1 (no authentication running)
+    SessionUser: integer;
+    /// the corresponding TAuthSession.User.LogonName value
+    // - is undefined if Session is 0 or 1 (no authentication running)
+    SessionUserName: RawUTF8;
     /// the remote IP, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
-    RemoteIP: RawUTF8;
+    SessionRemoteIP: RawUTF8;
     /// a remote connection identifier, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
-    ConnectionID: RawUTF8;
+    SessionConnectionID: RawUTF8;
     /// the static instance corresponding to the associated Table (if any)
     {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
     /// the kind of static instance corresponding to the associated Table (if any)
@@ -27690,8 +27694,9 @@ begin // caller shall be locked via fSessionCriticalSection
         result.fLastAccess64 := Tix64; // refresh session access timestamp
         Ctxt.SessionUser := result.User.fID;
         Ctxt.SessionGroup := result.User.GroupRights.fID;
-        Ctxt.RemoteIP := result.RemoteIP;
-        Ctxt.ConnectionID := result.ConnectionID;
+        Ctxt.SessionUserName := result.User.LogonName;
+        Ctxt.SessionRemoteIP := result.RemoteIP;
+        Ctxt.SessionConnectionID := result.ConnectionID;
         exit;
       end;
     end;
