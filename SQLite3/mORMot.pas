@@ -2386,6 +2386,8 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); virtual;
     /// returns an untyped pointer to the field property memory in a given instance
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
+    /// the corresponding column type, as managed for abstract database access
+    function SQLDBFieldType: TSQLDBFieldType;
   end;
 
   /// type of a TSQLPropInfo class
@@ -14407,6 +14409,12 @@ const
      ftInt64,     // sftModTime
      ftInt64);    // sftCreateTime
 
+
+function TSQLPropInfo.SQLDBFieldType: TSQLDBFieldType;
+begin
+  result := SQLFieldTypeToDB[fSQLFieldType];
+end;
+
 procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
@@ -18919,11 +18927,15 @@ var EndOfObject: AnsiChar;
       case res^ of // handle JSON {object} or [array] in P
       '{': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaObject;
-        FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
+        if params=pNonQuoted then
+          FieldValues[ndx] := res else
+          FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
       end;
       '[': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaArray;
-        FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
+        if params=pNonQuoted then
+          FieldValues[ndx] := res else
+          FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
       end;
       else begin
         // handle JSON string, number or false/true in P
@@ -28417,11 +28429,11 @@ var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
     URIMethod, RunningBatchURIMethod: TSQLURIMethod;
-    RunningBatchStatic: TSQLRest; { TODO: allow nested batch between tables? }
+    RunningBatchRest: TSQLRest; { TODO: allow nested batch between tables? }
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     ID, Count: integer;
-    RunTable, PrevRunTable: TSQLRecordClass;
+    RunTable, PrevRunTable, RunningBatchTable: TSQLRecordClass;
     RunTableIndex: integer;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
@@ -28455,7 +28467,8 @@ begin
     AutomaticTransactionPerRow := 0;
   RowCountForCurrentTransaction := 0;
   PrevRunTable := nil;
-  RunningBatchStatic := nil;
+  RunningBatchRest := nil;
+  RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
   Count := 0;
   try // to protect automatic transactions
@@ -28489,14 +28502,22 @@ begin
         URIMethod := mPUT else
         URIMethod := mNone;
       // handle batch pending request sending (if table or method changed)
-      if (RunningBatchStatic<>nil) and
-         ((RunStatic<>RunningBatchStatic) or (RunningBatchURIMethod<>URIMethod)) then begin
-        RunningBatchStatic.InternalBatchStop; // send pending statements
-        RunningBatchStatic := nil;
+      if (RunningBatchRest<>nil) and
+         ((RunTable<>RunningBatchTable) or (RunningBatchURIMethod<>URIMethod)) then begin
+        RunningBatchRest.InternalBatchStop; // send pending statements
+        RunningBatchRest := nil;
+        RunningBatchTable := nil;
       end;
-      if (RunStatic<>nil) and (RunStatic<>RunningBatchStatic) and
+      if (RunStatic<>nil) and (RunStatic<>RunningBatchRest) and
          RunStatic.InternalBatchStart(URIMethod) then begin
-        RunningBatchStatic := RunStatic;
+        RunningBatchRest := RunStatic;
+        RunningBatchTable := RunTable;
+        RunningBatchURIMethod := URIMethod;
+      end else
+      if (RunningBatchRest=nil) and (RunStatic=nil) and
+         InternalBatchStart(URIMethod) then begin
+        RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
+        RunningBatchTable := RunTable;
         RunningBatchURIMethod := URIMethod;
       end;
       // handle auto-committed transaction process
@@ -28532,7 +28553,7 @@ begin
         OK := EngineDelete(RunTableIndex,ID);
         if OK then begin
           fCache.NotifyDeletion(RunTable,ID);
-          if (RunningBatchStatic<>nil) or
+          if (RunningBatchRest<>nil) or
              AfterDeleteForceCoherency(RunTable,ID) then
             Results[Count] := HTML_SUCCESS; // 200 OK
         end;
@@ -28567,8 +28588,8 @@ begin
     if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
       Commit(CONST_AUTHENTICATION_NOT_USED);
   finally
-    if RunningBatchStatic<>nil then
-      RunningBatchStatic.InternalBatchStop; // send pending statements
+    if RunningBatchRest<>nil then
+      RunningBatchRest.InternalBatchStop; // send pending statements
   end;
   except
     on Exception do begin

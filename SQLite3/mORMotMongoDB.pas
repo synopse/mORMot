@@ -129,7 +129,7 @@ type
     // - handle statements to avoid slow virtual table loop over all rows, like
     // $ SELECT count(*) FROM table
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
-    // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
+    // overridden method returning TRUE for next calls to EngineAdd/Delete
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast
@@ -898,7 +898,7 @@ function TSQLRestStorageMongoDB.InternalBatchStart(
   Method: TSQLURIMethod): boolean;
 begin
   result := false; // means BATCH mode not supported
-  if (self<>nil) and (method in [mPOST,mDELETE]) then begin
+  if method in [mPOST,mDELETE] then begin
     StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
@@ -912,7 +912,7 @@ begin
       end;
       result := true; // means BATCH mode is supported
     finally
-      if not result then
+      if not result then // release lock on error
         StorageUnLock;
     end;
   end;

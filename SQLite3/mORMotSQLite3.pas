@@ -204,6 +204,9 @@ unit mORMotSQLite3;
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
     - updated SQLite3 engine to latest version 3.8.6
+    - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
+      statements: performance boost is from 2x (mem with transaction) to 60x
+      (full w/out transaction) - faster than SQlite3 as external DB  
     - fixed potential GPF issue in TSQLRestServerDB.Destroy when registered
       TSQLVVirtualtableModuleDBs are already destroyed
     - fixed ticket [64c90ade80] in TSQLRestClientDB.Destroy when associated
@@ -327,6 +330,11 @@ type
     // in this case, VACUUM will be a no-op
     function PrepareVacuum(const aSQL: RawUTF8): boolean;
   protected
+    fBatchMethod: TSQLURIMethod;
+    fBatchTableIndex: integer;
+    fBatchFirstID: integer;
+    fBatchValues: TRawUTF8DynArray;
+    fBatchValuesCount: integer;
     /// retrieve a TSQLRequest instance, corresponding to any previous
     // prepared statement using :(%): internal parameters
     // - will return @fStaticStatement if no :(%): internal parameters appear:
@@ -359,6 +367,12 @@ type
     // retrieve the proper ID when aSQL is an INSERT statement (thread safe)
     function InternalExecute(const aSQL: RawUTF8; ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil;
       ValueInts: PIntegerDynArray=nil; LastInsertedID: PInt64=nil): boolean;
+    // overridden method returning TRUE for next calls to EngineAdd
+    // will properly handle operations until InternalBatchStop is called
+    function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
+    // internal method called by TSQLRestServer.RunBatch() to process fast
+    // multi-INSERT statements to the SQLite3 engine
+    procedure InternalBatchStop; override;
   public
     {{ begin a transaction (implements REST BEGIN Member)
      - to be used to speed up some SQL statements like Insert/Update/Delete
@@ -656,7 +670,32 @@ begin
   result := 0;
   if TableModelIndex<0 then
     exit;
-  SQL := 'INSERT INTO '+fModel.TableProps[TableModelIndex].Props.SQLTableName;
+  SQL := fModel.TableProps[TableModelIndex].Props.SQLTableName;
+  if fBatchMethod<>mNone then begin
+    result := 0; // indicates error
+    if SentData='' then begin
+      {$ifdef WITHLOG}
+      DB.Log.Log(sllError,'BATCH with MainEngineAdd(%,SentData="") -> '+
+        'DEFAULT VALUES not implemented',[SQL],self);
+      {$endif}
+    end else
+    if (fBatchMethod=mPOST) and (fBatchFirstID>=0) and
+       ((fBatchTableIndex<0) or (fBatchTableIndex=TableModelIndex)) then begin
+      fBatchTableIndex := TableModelIndex;
+      if fBatchFirstID=0 then begin
+        SQL := 'select max(rowid) from '+SQL;
+        if InternalExecute(SQL,nil,nil,nil,@LastID) then
+          fBatchFirstID := LastID+1 else begin
+          fBatchFirstID := -1; // will force error for whole BATCH block
+          exit;
+        end;
+      end;
+      result := fBatchFirstID+fBatchValuesCount;
+      AddRawUTF8(fBatchValues,fBatchValuesCount,SentData);
+    end;
+    exit;
+  end;
+  SQL := 'INSERT INTO '+SQL;
   if trim(SentData)='' then
     SQL := SQL+' DEFAULT VALUES;' else
     SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
@@ -1418,6 +1457,135 @@ begin
     DB.CacheFlush;
 end;
 
+function TSQLRestServerDB.InternalBatchStart(
+  Method: TSQLURIMethod): boolean;
+begin
+  result := false; // means BATCH mode not supported
+  if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
+    EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    try
+      if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) then
+        raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
+      fBatchMethod := method;
+      fBatchTableIndex := -1;
+      fBatchFirstID := 0; // MainEngineAdd() will search for max(id)
+      result := true; // means BATCH mode is supported
+    finally
+      if not result then
+        LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    end;
+  end;
+end;
+
+procedure TSQLRestServerDB.InternalBatchStop;
+const MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
+var ndx,f,prop,fieldCount,valuesCount: integer;
+    P: PUTF8Char;
+    DecodeSaved: boolean;
+    Fields, Values: TRawUTF8DynArray;
+    ValuesNull: TByteDynArray;
+    Types: TSQLDBFieldTypeDynArray;
+    SQL, privateCopy: RawUTF8;
+    Props: TSQLRecordProperties;
+    Statement: PSQLRequest;
+    Decode: TJSONObjectDecoder;
+begin
+  if fBatchMethod<>mPOST then
+    raise EORMException.CreateUTF8('%.InternalBatchStop: wrong BatchMethod',[self]);
+  try
+    if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
+      exit; // nothing to add
+    Props := fModel.Tables[fBatchTableIndex].RecordProps;
+    DecodeSaved := true;
+    valuesCount := 0;
+    SetLength(ValuesNull,(MAX_PARAMS shr 3)+1);
+    SetLength(Values,MAX_PARAMS);
+    Fields := nil; // makes compiler happy
+    fieldCount := 0;
+    ndx := 0;
+    repeat
+      repeat
+        // decode a row
+        if DecodeSaved then begin
+          privateCopy := fBatchValues[ndx];
+          if privateCopy='' then
+            raise EORMException.CreateUTF8('%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
+          P := @privateCopy[1]; // make copy before in-place decoding
+          while P^ in [#1..' ','{','['] do inc(P);
+          Decode.Decode(P,nil,pNonQuoted,fBatchFirstID+ndx,false);
+          inc(ndx);
+          DecodeSaved := false;
+        end;
+        if Fields=nil then begin
+          Decode.AssignFieldNamesTo(Fields);
+          fieldCount := Decode.FieldCount;
+          SQL := Decode.EncodeAsSQLPrepared(Props.SQLTableName,soInsert,'');
+          SetLength(Types,fieldCount);
+          for f := 0 to fieldCount-1 do begin
+            prop := Props.Fields.IndexByNameOrExcept(Decode.FieldNames[f]);
+            if prop<0 then // RowID
+              Types[f] := ftInt64 else
+              Types[f] := Props.Fields.List[prop].SQLDBFieldType;
+          end;
+        end else
+          if not Decode.SameFieldNames(Fields) then
+            break else // this item would break the SQL statement
+          if valuesCount+fieldCount>MAX_PARAMS then
+            break; // this item would bound too many params
+        // if we reached here, we can add this row to Values[]
+        for f := 0 to fieldCount-1 do
+          if Decode.FieldTypeApproximation[f]=ftaNull then
+            SetBit(ValuesNull[0],valuesCount) else
+            Values[valuesCount+f] := Decode.FieldValues[f];
+        inc(ValuesCount,fieldCount);
+        DecodeSaved := true;
+      until ndx=fBatchValuesCount;
+      // INSERT Values[] into the DB
+      SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',
+        (valuesCount div fieldCount)-1);
+      DB.LockAndFlushCache;
+      try
+        if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
+          Statement := fStatementCache.Prepare(SQL) else begin
+          Statement := @fStaticStatement;
+          Statement^.Prepare(DB.DB,SQL)
+        end;
+        prop := 0;
+        for f := 0 to valuesCount-1 do begin
+          if GetBit(ValuesNull[0],f) then
+            Statement^.BindNull(f+1) else
+            case Types[prop] of
+            ftInt64:
+              Statement^.Bind(f+1,GetInt64(pointer(Values[f])));
+            ftDouble, ftCurrency:
+              Statement^.Bind(f+1,GetExtended(pointer(Values[f])));
+            ftDate, ftUTF8:
+              Statement^.Bind(f+1,Values[f]);
+            ftBlob:
+              Statement^.Bind(f+1,pointer(Values[f]),length(Values[f]));
+            end;
+          inc(prop);
+          if prop=fieldCount then
+            prop := 0;
+        end;
+        repeat
+        until Statement^.Step<>SQLITE_ROW;
+      finally
+        if Statement=@fStaticStatement then
+          fStaticStatement.Close;
+        DB.UnLock;
+      end;
+      ValuesCount := 0;
+      fillchar(ValuesNull[0],length(ValuesNull),0);
+      Fields := nil; // force new sending block
+    until DecodeSaved and (ndx=fBatchValuesCount);
+  finally
+    fBatchMethod := mNone;
+    fBatchValuesCount := 0;
+    fBatchValues := nil;
+    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+  end;
+end;
 
 { TSQLRestClientDB }
 

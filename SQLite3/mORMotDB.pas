@@ -941,115 +941,115 @@ begin
     raise EORMException.CreateUTF8('%.InternalBatchStop(%).BatchMethod=mNone',
       [self,StoredClass]);
   try
-    if fBatchCount>0 then begin
-      if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion
-        for i := 0 to fBatchCount-1 do
-          Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,fBatchIDs[i],'',nil);
-      with fProperties do
-        if BatchMaxSentAtOnce>0 then
-          max := BatchMaxSentAtOnce else
-          max := 1000;
-      BatchBegin := 0;
-      BatchEnd := fBatchCount-1;
-      repeat
-        case fBatchMethod of
-        mPost, mPut: begin
-          assert(fBatchIDs<>nil);
-          BatchEnd := fBatchCount-1;
-          for i := BatchBegin to BatchEnd do begin
-            privateCopy := fBatchValues[i];
-            P := @privateCopy[1]; // make copy before in-place decoding
-            while P^ in [#1..' ','{','['] do inc(P);
-            if fBatchMethod=mPost then
-              Occasion := soInsert else
-              Occasion := soUpdate;
-            case Occasion of
-            soInsert: // mPost=INSERT with the supplied fields and computed ID
-              Decode.Decode(P,nil,pQuoted,fBatchIDs[i],true);
-            soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
-              Decode.Decode(P,nil,pQuoted,0,true);
-            end;
-            if Fields=nil then begin
-              Decode.AssignFieldNamesTo(Fields);
-              SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion);
-              SetLength(Values,Decode.FieldCount);
-              ValuesMax := fBatchCount-BatchBegin;
-              if ValuesMax>max then
-                ValuesMax := max;
-              for j := 0 to Decode.FieldCount-1 do
-                SetLength(Values[j],ValuesMax);
-            end else
-              if not Decode.SameFieldNames(Fields) then
-                break; // this item would break the SQL statement
-            n := i-BatchBegin;
-            for j := 0 to high(Fields) do
-              Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
-            if Occasion=soUpdate then // ?=ID parameter
-              Values[length(Fields),n] := Int32ToUtf8(fBatchIDs[i]);
-            BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
-            if n+1>=max then
-              break; // do not send too much items at once, for better speed
-          end;
-        end;
-        mDelete: begin
-          SQL := FormatUTF8('delete from % where %=?',
-            [fTableName,fStoredClassProps.ExternalDB.RowIDFieldName]);
-          n := BatchEnd-BatchBegin+1;
-          if n+1>=max then begin
-            n := max; // do not send too much items at once, for better speed
-            BatchEnd := BatchBegin+max-1;
-          end;
-          SetLength(Values,1);
-          SetLength(Values[0],n);
-          for i := 0 to n-1 do
-            Values[0,i] := Int32ToUTF8(fBatchIDs[BatchBegin+i]);
-        end;
-        end;
-        n := BatchEnd-BatchBegin+1;
-        if n<=0 then
-          break;
-        if (fBatchMethod=mPost) and Assigned(fProperties.OnBatchInsert) then
-          // use multiple insert dedicated function if available
-          fProperties.OnBatchInsert(
-            fProperties,fTableName,ExternalFields,Types,n,Values) else begin
-          // use array binding
-          Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
-          try
-            case fBatchMethod of
-            mPost, mPut:
-              for i := 0 to high(Values) do
-                Query.BindArray(i+1,Types[i],Values[i],n);
-            mDelete:
-              Query.BindArray(1,ftInt64,Values[0],n);
-            end;
-            Query.ExecutePrepared;
-          finally
-            Query := nil;
-          end;
-        end;
-        if Owner<>nil then begin
-          // add/update/delete should flush DB cache
-          Owner.FlushInternalDBCache;
-          // force deletion coherency
-          if fBatchMethod=mDelete then
-            for i := 0 to high(Values) do
-              Owner.AfterDeleteForceCoherency(
-                fStoredClass,GetInteger(pointer(Values[i])));
-        end;
-        Fields := nil; // force new sending block
-        BatchBegin := BatchEnd+1;
-      until BatchBegin>=fBatchCount;
-      if Owner<>nil then begin
-        if fBatchMethod in [mPost,mPut] then begin
+    if fBatchCount=0 then
+      exit; // nothing to do
+    if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion
+      for i := 0 to fBatchCount-1 do
+        Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,fBatchIDs[i],'',nil);
+    with fProperties do
+      if BatchMaxSentAtOnce>0 then
+        max := BatchMaxSentAtOnce else
+        max := 1000;
+    BatchBegin := 0;
+    BatchEnd := fBatchCount-1;
+    repeat
+      case fBatchMethod of
+      mPost, mPut: begin
+        assert(fBatchIDs<>nil);
+        BatchEnd := fBatchCount-1;
+        for i := BatchBegin to BatchEnd do begin
+          privateCopy := fBatchValues[i];
+          P := @privateCopy[1]; // make copy before in-place decoding
+          while P^ in [#1..' ','{','['] do inc(P);
           if fBatchMethod=mPost then
-            NotifySQLEvent := seAdd else
-            NotifySQLEvent := seUpdate;
-          for i := 0 to fBatchCount-1 do
-            Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClassProps.TableIndex,
-              fBatchIDs[i],fBatchValues[i],nil);
+            Occasion := soInsert else
+            Occasion := soUpdate;
+          case Occasion of
+          soInsert: // mPost=INSERT with the supplied fields and computed ID
+            Decode.Decode(P,nil,pQuoted,fBatchIDs[i],true);
+          soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
+            Decode.Decode(P,nil,pQuoted,0,true);
+          end;
+          if Fields=nil then begin
+            Decode.AssignFieldNamesTo(Fields);
+            SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion);
+            SetLength(Values,Decode.FieldCount);
+            ValuesMax := fBatchCount-BatchBegin;
+            if ValuesMax>max then
+              ValuesMax := max;
+            for j := 0 to Decode.FieldCount-1 do
+              SetLength(Values[j],ValuesMax);
+          end else
+            if not Decode.SameFieldNames(Fields) then
+              break; // this item would break the SQL statement
+          n := i-BatchBegin;
+          for j := 0 to high(Fields) do
+            Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
+          if Occasion=soUpdate then // ?=ID parameter
+            Values[length(Fields),n] := Int32ToUtf8(fBatchIDs[i]);
+          BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
+          if n+1>=max then
+            break; // do not send too much items at once, for better speed
         end;
-        Owner.FlushInternalDBCache;
       end;
+      mDelete: begin
+        SQL := FormatUTF8('delete from % where %=?',
+          [fTableName,fStoredClassProps.ExternalDB.RowIDFieldName]);
+        n := BatchEnd-BatchBegin+1;
+        if n+1>=max then begin
+          n := max; // do not send too much items at once, for better speed
+          BatchEnd := BatchBegin+max-1;
+        end;
+        SetLength(Values,1);
+        SetLength(Values[0],n);
+        for i := 0 to n-1 do
+          Values[0,i] := Int32ToUTF8(fBatchIDs[BatchBegin+i]);
+      end;
+      end;
+      n := BatchEnd-BatchBegin+1;
+      if n<=0 then
+        break;
+      if (fBatchMethod=mPost) and Assigned(fProperties.OnBatchInsert) then
+        // use multiple insert dedicated function if available
+        fProperties.OnBatchInsert(
+          fProperties,fTableName,ExternalFields,Types,n,Values) else begin
+        // use array binding
+        Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
+        try
+          case fBatchMethod of
+          mPost, mPut:
+            for i := 0 to high(Values) do
+              Query.BindArray(i+1,Types[i],Values[i],n);
+          mDelete:
+            Query.BindArray(1,ftInt64,Values[0],n);
+          end;
+          Query.ExecutePrepared;
+        finally
+          Query := nil;
+        end;
+      end;
+      if Owner<>nil then begin
+        // add/update/delete should flush DB cache
+        Owner.FlushInternalDBCache;
+        // force deletion coherency
+        if fBatchMethod=mDelete then
+          for i := 0 to high(Values) do
+            Owner.AfterDeleteForceCoherency(
+              fStoredClass,GetInteger(pointer(Values[i])));
+      end;
+      Fields := nil; // force new sending block
+      BatchBegin := BatchEnd+1;
+    until BatchBegin>=fBatchCount;
+    if Owner<>nil then begin
+      if fBatchMethod in [mPost,mPut] then begin
+        if fBatchMethod=mPost then
+          NotifySQLEvent := seAdd else
+          NotifySQLEvent := seUpdate;
+        for i := 0 to fBatchCount-1 do
+          Owner.InternalUpdateEvent(NotifySQLEvent,fStoredClassProps.TableIndex,
+            fBatchIDs[i],fBatchValues[i],nil);
+      end;
+      Owner.FlushInternalDBCache;
     end;
   finally
     if fBatchMethod=mPost then

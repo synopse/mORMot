@@ -2636,7 +2636,11 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
-  NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
+  NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean; overload;
+
+/// add the Value to Values[], with an external count variable, for performance
+procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
+  const Value: RawUTF8); overload;
 
 type
   /// simple stack-allocated type for handling a type names list
@@ -15719,7 +15723,7 @@ begin
     P := SQLBegin(P);
     result :=
       ((IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
-       (P[6] in [#0..' ',';'])) or // avoid VACUUMStoredProcUnsecure security issue
+       (P[6] in [#0..' ',';'])) or 
       (((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';'])) and
         not (ContainsUTF8(P,'INSERT') or ContainsUTF8(P,'UPDATE') or
              ContainsUTF8(P,'DELETE')));
@@ -18361,6 +18365,19 @@ begin
   SetLength(Values,i+1);
   Values[i] := Value;
   result := true;
+end;
+
+procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
+  const Value: RawUTF8);
+var n: integer;
+begin
+  n := Length(Values);
+  if ValuesCount=n then begin
+    inc(n,64+n shr 3);
+    SetLength(Values,n);
+  end;
+  Values[ValuesCount] := Value;
+  inc(ValuesCount);
 end;
 
 function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray): boolean;
