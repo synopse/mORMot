@@ -5467,14 +5467,20 @@ type
     // - by default, column types and sizes will be retrieved from JSON content
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
+    // - aEnumTypeInfo can be specified for sets or enumerations, as such:
+    // ! aTable.SetFieldType(0,sftEnumerate,TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType(1,sftSet,TypeInfo(TSetSamples));
     procedure SetFieldType(Field: integer; FieldType: TSQLFieldType;
-       aEnumTypeinfo: pointer=nil; FieldSize: integer=-1); overload;
+       aEnumTypeInfo: pointer=nil; FieldSize: integer=-1); overload;
     /// set the exact type of a given field
     // - by default, column types and sizes will be retrieved from JSON content
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
+    // - aEnumTypeInfo can be specified for sets or enumerations, as such:
+    // ! aTable.SetFieldType('Sample',sftEnumerate,TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType('Samples',sftSet,TypeInfo(TSetSamples));
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
-       aEnumTypeinfo: pointer=nil; FieldSize: integer=-1); overload;
+       aEnumTypeInfo: pointer=nil; FieldSize: integer=-1); overload;
     /// increase a particular Field Length Mean value
     // - to be used to customize the field appareance (e.g. for adding of left
     // checkbox for Marked[] fields)
@@ -17000,7 +17006,16 @@ begin
     TableIndex := -1;
     ContentType := FieldType;
     ContentSize := FieldSize;
-    EnumTypeInfo := aEnumTypeInfo;
+    EnumTypeInfo := nil;
+    if aEnumTypeInfo<>nil then
+      case FieldType of
+      sftEnumerate:
+        if (PTypeInfo(aEnumTypeInfo)^.Kind=tkEnumeration) then
+          EnumTypeInfo := PTypeInfo(aEnumTypeInfo)^.EnumBaseType;
+      sftSet:
+        if (PTypeInfo(aEnumTypeInfo)^.Kind=tkSet) then
+          EnumTypeInfo := PTypeInfo(aEnumTypeInfo)^.SetEnumType;
+      end;
   end;
 end;
 
