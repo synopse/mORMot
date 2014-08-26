@@ -153,7 +153,7 @@ uses
 
 type
   /// execption type associated to the native Oracle Client Interface (OCI)
-  ESQLDBOracle = class(Exception);
+  ESQLDBOracle = class(ESynException);
 
   POracleDate = ^TOracleDate;
   {$A-}
@@ -1344,7 +1344,7 @@ begin
   end;
   if LogLevelNoRaise<>sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise,msg) else
-    raise ESQLDBOracle.Create(UTF8ToString(msg));
+    raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]);
 end;
 
 procedure TSQLDBOracleLib.Check(Status: Integer; ErrorHandle: POCIError;
@@ -1592,7 +1592,7 @@ procedure TSQLDBOracleConnection.Commit;
 begin
   inherited;
   if fTrans=nil then
-    raise ESQLDBOracle.Create('Invalid Commit call');
+    raise ESQLDBOracle.CreateUTF8('Invalid %.Commit call',[self]);
   OCI.Check(OCI.TransCommit(fContext,fError,OCI_DEFAULT),fError);
 end;
 
@@ -1686,7 +1686,7 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self);
   if not aProperties.InheritsFrom(TSQLDBOracleConnectionProperties) then
-    raise ESQLDBOracle.CreateFmt('Invalid %s.Create',[ClassName]);
+    raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   OCI.RetrieveVersion;
   inherited;
 end;
@@ -1778,17 +1778,18 @@ procedure TSQLDBOracleConnection.Rollback;
 begin
   inherited;
   if fTrans=nil then
-    raise ESQLDBOracle.Create('Invalid RollBack call');
+    raise ESQLDBOracle.CreateUTF8('Invalid %.RollBack call',[self]);
   OCI.Check(OCI.TransRollback(fContext,fError,OCI_DEFAULT),fError);
 end;
 
 procedure TSQLDBOracleConnection.StartTransaction;
 begin
   if TransactionCount>0 then
-    raise ESQLDBOracle.Create('Oracle do not provide nested transactions');
+    raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
+      'transactions are supported by the Oracle driver',[self]);
   inherited StartTransaction;               
   if fTrans=nil then
-    raise ESQLDBOracle.Create('Invalid StartTransaction call');
+    raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction call',[self]);
   // Oracle creates implicit transactions, and we'll handle AutoCommit in
   // TSQLDBOracleStatement.ExecutePrepared if TransactionCount=0
   OCI.Check(OCI.TransStart(fContext,fError,0,OCI_DEFAULT),fError);
@@ -1938,7 +1939,7 @@ var V: pointer;
     U: RawUTF8;
 begin // dedicated version to avoid as much memory allocation than possible
   if not Assigned(fStatement) or (CurrentRow<=0) then
-    raise ESQLDBOracle.CreateFmt('%s.ColumnsToJSON() with no prior Step',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('%.ColumnsToJSON() with no prior Step',[self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do // fast direct conversion from OleDB buffer
@@ -2042,8 +2043,8 @@ begin // dedicated version to avoid as much memory allocation than possible
       Value.VBlob := pointer(Temp);
       Value.VBlobLen := length(Temp);
     end;
-    else raise ESQLDBOracle.CreateFmt('%s.ColumnToVarData: Unexpected %d type',
-      [fStatementClassName,ord(Value.VType)]);
+    else raise ESQLDBOracle.CreateUTF8('%.ColumnToSQLVar: unexpected VType=%',
+      [self,ord(Value.VType)]);
   end;
 end;
 
@@ -2110,8 +2111,8 @@ begin // dedicated version to avoid as much memory allocation than possible
           with TSQLDBOracleConnection(Connection) do
             OCI.BlobFromDescriptor(fContext,fError,PPOCIDescriptor(V)^,RawByteString(VAny));
       end;
-      else raise ESQLDBOracle.CreateFmt('%s.ColumnToVariant: Unexpected %d type',
-        [fStatementClassName,ord(result)]);
+      else raise ESQLDBOracle.CreateUTF8('%.ColumnToVariant: unexpected % type',
+        [self,ord(result)]);
     end;
   end;
 end;
@@ -2159,8 +2160,8 @@ begin
   dec(Param);
   if (cardinal(Param)>=cardinal(length(fBoundCursor))) or
      (fBoundCursor[Param]=nil) then
-    raise ESQLDBOracle.CreateFmt('%s.BoundCursor: no BindCursor() on Param #%d',
-      [fStatementClassName,Param+1]);
+    raise ESQLDBOracle.CreateUTF8(
+      '%.BoundCursor: no BindCursor() on Param #%',[self,Param+1]);
   result := TSQLDBOracleStatement.CreateFromExistingStatement(Connection,fBoundCursor[Param]);
   fBoundCursor[Param] := nil;
 end;
@@ -2168,7 +2169,7 @@ end;
 constructor TSQLDBOracleStatement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TSQLDBOracleConnection) then
-    raise ESQLDBOracle.CreateFmt('%s.Create expects a TSQLDBOracleConnection',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%) call',[self,aConnection]);
   inherited Create(aConnection);
   fInternalBufferSize := TSQLDBOracleConnectionProperties(aConnection.Properties).InternalBufferSize;
   if fInternalBufferSize<16384 then // default is 128 KB
@@ -2321,7 +2322,7 @@ var i,j: integer;
 label txt;
 begin
   if (fStatement=nil) then
-    raise ESQLDBOracle.CreateFmt('%s.ExecutePrepared called without previous Prepare',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
   with SynDBLog.Add do
     if sllSQL in Family.Level then
       LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
@@ -2334,8 +2335,8 @@ begin
     fRowFetchedEnded := false;
     // 1. bind parameters
     if fPreparedParamsCount<>fParamCount then
-      raise ESQLDBOracle.CreateFmt('%s.ExecutePrepared expected %d bound parameters, got %d',
-        [fStatementClassName,fPreparedParamsCount,fParamCount]);
+      raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared expected % bound parameters, got %',
+        [self,fPreparedParamsCount,fParamCount]);
     if not fExpectResults then
       fRowCount := 1; // to avoid ORA-24333 error
     if fParamCount>0 then
@@ -2345,11 +2346,12 @@ begin
       for i := 0 to fParamCount-1 do
       with fParams[i] do begin
         if VArray=nil then
-          raise ESQLDBOracle.CreateFmt('%s.ExecutePrepared: Parameter %d should be an array',
-            [fStatementClassName,i]);
+          raise ESQLDBOracle.CreateUTF8(
+            '%.ExecutePrepared: Parameter #% should be an array',[self,i]);
         if VInt64<>fParamsArrayCount then
-          raise ESQLDBOracle.CreateFmt('%s.ExecutePrepared: %d parameter expected array count %d, got %d',
-            [fStatementClassName,i,fParamsArrayCount,VInt64]);
+          raise ESQLDBOracle.CreateUTF8(
+            '%.ExecutePrepared: Parameter #% expected array count %, got %',
+            [self,i,fParamsArrayCount,VInt64]);
         SetLength(aIndicator[i],fParamsArrayCount);
         VDBType := SQLT_STR;
         oLength := 23; // max size for ftInt64/ftDouble/ftCurrency
@@ -2389,13 +2391,15 @@ begin
                   oDataDAT^[j].From(PUTF8Char(pointer(VArray[j]))+1,L) else
                 if L>oLength then
                   if L*fParamsArrayCount>MAX_INLINED_PARAM_SIZE then
-                    raise ESQLDBOracle.CreateFmt('Array parameter #%d STR too big',[i+1]) else
+                    raise ESQLDBOracle.CreateUTF8(
+                      '%.ExecutePrepared: Array parameter #% STR too big',[self,i+1]) else
                     oLength := L;
             end;
             ftBlob: begin
               L := length(VArray[j])+sizeof(integer);
               if L*fParamsArrayCount>MAX_INLINED_PARAM_SIZE then
-                raise ESQLDBOracle.CreateFmt('Array parameter #%d BLOB too big',[i+1]) else
+                raise ESQLDBOracle.CreateUTF8(
+                  '%.ExecutePrepared: Array parameter #% BLOB too big',[self,i+1]) else
               if L>oLength then
                 oLength := L;
             end;
@@ -2445,7 +2449,8 @@ begin
           case VType of
           ftUnknown: begin
             if VInOut=paramIn then
-              raise ESQLDBOracle.CreateFmt('Unexpected IN cursor parameter #%d',[i+1]); 
+              raise ESQLDBOracle.CreateUTF8(
+                '%.ExecutePrepared: Unexpected IN cursor parameter #%',[self,i+1]); 
             VDBType := SQLT_RSET;
             with OCI do
               Check(HandleAlloc(Env,PPointer(oData)^,OCI_HTYPE_STMT,0,nil),fError);
@@ -2501,7 +2506,8 @@ begin
           end;
           ftBlob:
             if VInOut<>paramIn then
-              raise ESQLDBOracle.CreateFmt('Unexpected OUT blob parameter #%d',[i+1]) else begin
+              raise ESQLDBOracle.CreateUTF8(
+                '%.ExecutePrepared: Unexpected OUT blob parameter #%',[self,i+1]) else begin
             oLength := Length(VData);
             if oLength<2000 then begin
               VDBTYPE := SQLT_BIN;
@@ -2513,7 +2519,8 @@ begin
             end;
           end;
           else
-            raise ESQLDBOracle.CreateFmt('Invalid bound parameter #%d',[i+1]);
+            raise ESQLDBOracle.CreateUTF8(
+              '%.ExecutePrepared: Invalid parameter #% type=%',[self,i+1,ord(VType)]);
           end;
         end;
         oBind := nil;
@@ -2619,8 +2626,9 @@ begin
             SQLT_RSET:
               if OCI.HandleFree(P^,OCI_HTYPE_STMT)<>OCI_SUCCESS then
                 SynDBLog.Add.Log(sllError,'Invalid Cursor Release');
-            else raise ESQLDBOracle.CreateFmt('Wrong %d type for inlined column %s',
-              [ColumnValueDBType,ColumnName]);
+            else raise ESQLDBOracle.CreateUTF8(
+              '%.FreeHandles: Wrong % type for inlined column %',
+              [self,ColumnValueDBType,ColumnName]);
             end;
             P^ := nil;
           end;
@@ -2654,9 +2662,9 @@ function TSQLDBOracleStatement.GetCol(Col: Integer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount
   if not Assigned(fStatement) or (fColumnCount=0) or (fRowCount=0) or (fRowBuffer=nil) then
-    raise ESQLDBOracle.CreateFmt('%s.Column*() with no prior Execute',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Execute',[self]);
   if CurrentRow<=0 then
-    raise ESQLDBOracle.CreateFmt('%s.Column*() with no prior Step',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Step',[self]);
   Column := @fColumns[Col];
   result := @fRowBuffer[Column^.ColumnAttr+fRowFetchedCurrent*Column^.ColumnValueDBSize];
   case PSmallIntArray(fRowBuffer)[cardinal(Col)*fRowCount+fRowFetchedCurrent] of
@@ -2700,8 +2708,8 @@ begin
       HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
     AttrGet(fStatement,OCI_HTYPE_STMT,@StatementType,nil,OCI_ATTR_STMT_TYPE,fError);
     if fExpectResults<>(StatementType=OCI_STMT_SELECT) then
-      raise ESQLDBOracle.CreateFmt('%s: prepare StatementType=%d with ExpectResults=%d',
-        [fStatementClassName,StatementType,ord(fExpectResults)]);
+    raise ESQLDBOracle.CreateUTF8('%: prepare StatementType=% with ExpectResults=%',
+        [self,StatementType,ord(fExpectResults)]);
     if not fExpectResults then begin
       fRowCount := 1; // iters=1 by default
       exit; // no row data expected -> leave fColumnCount=0
@@ -2817,8 +2825,8 @@ begin
           ColumnValueDBSize := sizeof(POCIStmt);
           include(ColumnLongTypes,hasLOB);
         end;
-        else raise ESQLDBOracle.CreateFmt('%s - Column "%s": unknown type %d',
-          [fStatementClassName,ColumnName,oType]);
+        else raise ESQLDBOracle.CreateUTF8('% - Column "%": unknown type %',
+          [self,ColumnName,oType]);
         end;
         inc(RowSize,ColumnValueDBSize);
         if ColumnType=ftUTF8 then begin
@@ -2887,8 +2895,8 @@ begin
             Check(DescriptorAlloc(Env,PP^,OCI_DTYPE_LOB,0,nil),fError);
           SQLT_RSET:
             Check(HandleAlloc(Env,PP^,OCI_HTYPE_STMT,0,nil),fError);
-          else raise ESQLDBOracle.CreateFmt('%s: Wrong %d type for %s',
-            [fStatementClassName,ColumnValueDBType,ColumnName]);
+          else raise ESQLDBOracle.CreateUTF8('%: Wrong % type for %',
+            [self,ColumnValueDBType,ColumnName]);
           end;
           inc(PP);
         end;
@@ -2926,7 +2934,7 @@ begin
   {$endif}
   try
     if (fStatement<>nil) or (fColumnCount>0) then
-      raise ESQLDBOracle.CreateFmt('%s.Prepare should be called only once',[fStatementClassName]);
+      raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once',[self]);
     // 1. process SQL
     inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
     fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
@@ -2957,7 +2965,7 @@ function TSQLDBOracleStatement.Step(SeekFirst: boolean): boolean;
 var sav, status: integer;
 begin
   if not Assigned(fStatement) then
-    raise ESQLDBOracle.CreateFmt('%s.Execute should be called before Step',[fStatementClassName]);
+    raise ESQLDBOracle.CreateUTF8('%.Execute should be called before Step',[self]);
   result := false;
   if (fCurrentRow<0) or (fRowCount=0) then
     exit; // no data available at all

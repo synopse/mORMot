@@ -4078,8 +4078,8 @@ constructor TMongoRequest.Create(const FullCollectionName: RawUTF8;
   opCode: TMongoOperation; requestID, responseTo: Integer);
 begin
   if not (opCode in CLIENT_OPCODES) then
-    raise EMongoException.CreateFmt('Unexpected %s.Create(opCode=%s)',
-      [ClassName,GetEnumName(TypeInfo(TMongoOperation),ord(opCode))^]);
+    raise EMongoException.CreateUTF8('Unexpected %.Create(opCode=%)',
+      [self,GetEnumName(TypeInfo(TMongoOperation),ord(opCode))^]);
   inherited Create(TRawByteStringStream);
   fFullCollectionName := FullCollectionName;
   Split(fFullCollectionName,'.',fDatabaseName,fCollectionName);
@@ -4110,7 +4110,7 @@ end;
 procedure TMongoRequest.ToBSONDocument(var result: TBSONDocument);
 begin
   if (fRequestID=0) or (fRequestOpCode=opReply) then
-    raise EMongoException.CreateFmt('No previous proper %s.Create() call',[ClassName]);
+    raise EMongoException.CreateUTF8('No previous proper %.Create() call',[self]);
   if fBSONDocument='' then begin
     BSONDocumentEnd(fRequestHeaderStart,false);
     inherited ToBSONDocument(fBSONDocument);
@@ -4280,7 +4280,7 @@ end;
 constructor TMongoRequestKillCursor.Create(const CursorIDs: array of Int64);
 begin
   if high(CursorIDs)<0 then
-    raise EMongoException.CreateFmt('%s.Create([]) call',[ClassName]);
+    raise EMongoException.CreateUTF8('%.Create([]) call',[self]);
   inherited Create(FullCollectionName,opGetMore,0,0); 
   Write4(0); // reserved for future use
   Write4(length(CursorIDs));
@@ -4502,7 +4502,7 @@ constructor TMongoConnection.Create(const aClient: TMongoClient;
   const aServerAddress: RawByteString; aServerPort: integer);
 begin
   if aClient=nil then
-    raise EMongoException.Create('TMongoConnection.Create(nil)');
+    raise EMongoException.CreateUTF8('%.Create(nil)',[self]);
   fClient := aClient;
   fServerAddress := trim(aServerAddress);
   if fServerAddress='' then
@@ -4536,8 +4536,8 @@ begin
       cslTCP,Client.ConnectionTimeOut);
   except
     on E: Exception do
-      raise EMongoException.CreateFmt(
-        'Unable to connect to MongoDB server: %s',[E.Message]);
+      raise EMongoException.CreateUTF8(
+        '%.Open: unable to connect to MongoDB server: %',[self,E.Message]);
   end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice
@@ -4720,12 +4720,13 @@ begin
           wcAcknowledged:        cmd := 'getLastError';
           wcJournaled:           cmd := BSONVariant(['getLastError',1,'j',true]);
           wcReplicaAcknowledged: cmd := BSONVariant(['getLastError',1,'w',2]);
-          else raise EMongoRequestException.CreateFmt('SendAndFree WriteConcern=%d',
-            [ord(Client.WriteConcern)],self,Request);
+          else raise EMongoRequestException.CreateFmt(
+            'SendAndFree WriteConcern=%d',[ord(Client.WriteConcern)],self,Request);
         end;
         RunCommand(Request.DatabaseName,cmd,result);
         if not VarIsNull(result.err) then
-          raise EMongoRequestException.Create('SendAndFree',self,Request,TDocVariantData(result));
+          raise EMongoRequestException.Create(
+            'SendAndFree',self,Request,TDocVariantData(result));
       end else // socket error on sending
         if Client.WriteConcern=wcErrorsIgnored then
           exit else
@@ -5055,13 +5056,13 @@ begin
     end;
   end;
   if result=nil then
-    raise EMongoException.CreateFmt('Unknown database "%s"',[DatabaseName]);
+    raise EMongoException.CreateUTF8('%.Open: unknown database "%"',[self,DatabaseName]);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName,
   PassWord: RawUTF8): TMongoDatabase;
 begin
-  raise EMongoException.CreateFmt('OpenAuth(%s) not yet implemented',[DatabaseName]);
+  raise EMongoException.CreateUTF8('%.OpenAuth(%) not implemented yet',[self,DatabaseName]);
 end;
 
 function TMongoClient.GetServerBuildInfo: variant;
@@ -5145,7 +5146,7 @@ end;
 
 procedure TMongoDatabase.AddUser(const User: variant);
 begin
-  raise EMongoException.CreateFmt('No %s.AddUser() yet',[ClassName]);
+  raise EMongoException.CreateUTF8('No %.AddUser() yet',[self]);
 end;
 
 function TMongoDatabase.GetCollection(const Name: RawUTF8): TMongoCollection;

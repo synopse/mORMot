@@ -582,13 +582,13 @@ begin
   inherited Create(aClass,aServer);
   // initialize external DB properties
   if fStoredClassProps=nil then
-    raise EBusinessLayerException.CreateFmt(
-      'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
+    raise EBusinessLayerException.CreateUTF8(
+      '%.Create: StoredClassProps needed for %',[self,StoredClass]);
   fTableName := StoredClassProps.ExternalDB.TableName;
   fProperties := StoredClassProps.ExternalDB.ConnectionProperties as TSQLDBConnectionProperties;
   if fProperties=nil then
-    raise EBusinessLayerException.CreateFmt(
-      'No external DB defined for %s',[StoredClassRecordProps.SQLTableName]);
+    raise EBusinessLayerException.CreateUTF8(
+      '%.Create: No external DB defined for %',[self,StoredClass]);
   if Owner<>nil then
     try
       Owner.ServerTimeStamp := fProperties.ThreadSafeConnection.ServerTimeStamp;
@@ -616,9 +616,8 @@ begin
       if ExecuteDirect(pointer(SQL),[],[],false)<>nil then begin
         fProperties.GetFields(fTableName,fFieldsExternal); // fields from DB after create
         if fFieldsExternal=nil then
-          raise EORMException.CreateFmt(
-            '%s: external table creation %s failed: GetFields() returned nil - SQL="%s"',
-            [fStoredClass.ClassName,fTableName,SQL]);
+          raise EORMException.CreateUTF8('%.Create: external table creation % failed:'+
+            ' GetFields() returned nil - SQL="%"',[self,StoredClass,fTableName,SQL]);
       end;
   end;
   FieldsInternalInit;
@@ -636,9 +635,9 @@ begin
         SQL := fProperties.SQLAddColumn(fTableName,Field);
         if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
           FieldAdded := true else
-          raise EORMException.CreateFmt(
-            '%s: unable to create external missing field %s.%s - SQL="%s"',
-            [fStoredClass.ClassName,fTableName,Fields.List[f].Name,SQL]);
+          raise EORMException.CreateUTF8('%.Create: %: unable to create external '+
+            'missing field %.% - SQL="%"',
+            [self,StoredClass,fTableName,Fields.List[f].Name,SQL]);
       end;
     end;
   if FieldAdded then begin
@@ -911,7 +910,8 @@ begin
     StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if fBatchMethod<>mNone then
-        raise EORMException.Create('Missing previous InternalBatchStop');
+        raise EORMException.CreateUTF8('Missing previous %.InternalBatchStop(%)',
+          [self,StoredClass]);
       if Method=mPOST then
         fBatchAddedID := EngineLockedNextID else
         fBatchAddedID := 0;
@@ -938,7 +938,8 @@ var i,j,n,max,BatchBegin,BatchEnd,ValuesMax: integer;
     Decode: TJSONObjectDecoder;
 begin
   if fBatchMethod=mNone then
-    raise EORMException.CreateFmt('%s.BatchMethod=mNone',[fStoredClassRecordProps.SQLTableName]);
+    raise EORMException.CreateUTF8('%.InternalBatchStop(%).BatchMethod=mNone',
+      [self,StoredClass]);
   try
     if fBatchCount>0 then begin
       if (Owner<>nil) and (fBatchMethod=mDelete) then // notify BEFORE deletion
@@ -1180,7 +1181,8 @@ function TSQLRestStorageExternal.EngineList(const SQL: RawUTF8;
 var Stmt: ISQLDBStatement;
 begin
   if ReturnedRowCount<>nil then
-    raise ESQLDBException.CreateFmt('%s.EngineList(ReturnedRowCount<>nil)',[ClassName]);
+    raise ESQLDBException.CreateUTF8('%.EngineList(ReturnedRowCount<>nil) for %',
+      [self,StoredClass]);
   Stmt := PrepareInlinedForRows(SQL);
   if Stmt=nil then
     result := '' else
@@ -1468,7 +1470,8 @@ begin
     ParamsCount := length(Params);
     if ParamsMatchCopiableFields and
        (ParamsCount<>Length(fStoredClassRecordProps.CopiableFields)) then
-      raise EORMException.Create('ExecuteDirectSQLVar(ParamsMatchCopiableFields=true)');
+      raise EORMException.CreateUTF8('%.ExecuteDirectSQLVar(ParamsMatchCopiableFields) for %',
+       [self,StoredClass]);
     for f := 0 to ParamsCount-1 do
       if ParamsMatchCopiableFields and
          (fStoredClassRecordProps.CopiableFields[f].SQLFieldType=sftDateTime) and
@@ -1642,8 +1645,10 @@ begin
     soUpdate:
       if UpdatedID<>0 then
         InsertedID := 0 else
-        raise ESQLDBException.CreateFmt('ExecuteFromJSON(soUpdate) called with UpdatedID=%d',[UpdatedID]);
-    else raise ESQLDBException.Create('Invalid ExecuteFromJSON occasion');
+        raise ESQLDBException.CreateUTF8('%.ExecuteFromJSON(%,soUpdate,UpdatedID=%)',
+          [self,StoredClass,UpdatedID]);
+    else raise ESQLDBException.CreateUTF8('%.ExecuteFromJSON(%,Occasion=%)?',
+           [self,StoredClass,ord(Occasion)]);
     end;
     // decode fields
     Decoder.Decode(SentData,nil,pNonQuoted,InsertedID,true);
@@ -1699,7 +1704,9 @@ begin
   for f := 0 to Decoder.FieldCount-1 do begin
     k := InternalFieldNameToFieldExternalIndex(Decoder.FieldNames[f]);
     if k<0 then
-      raise ESQLDBException.CreateFmt('Unknown field "%s"',[Decoder.FieldNames[f]]);
+      raise ESQLDBException.CreateUTF8(
+        '%.JSONDecodedPrepareToSQL: Unknown field "%" in %',
+        [self,Decoder.FieldNames[f],StoredClass]);
     ExternalFields[f] := fFieldsExternal[k].ColumnName;
     Types[f] := fFieldsExternal[k].ColumnType;
   end;

@@ -1003,7 +1003,7 @@ begin
   Disconnect; // force fDbc=nil
   if fEnv=nil then
     if (ODBC=nil) or (ODBC.AllocHandle(SQL_HANDLE_ENV,SQL_NULL_HANDLE,fEnv)=SQL_ERROR) then
-      raise EODBCException.CreateFmt('%s: Unable to allocate an environment handle',[ClassName]);
+      raise EODBCException.CreateUTF8('%: Unable to allocate an environment handle',[self]);
   with ODBC do
   try
     // connect
@@ -1036,8 +1036,9 @@ begin
     if fDBMS=dDefault then
       fDBMS := DBMS_TYPES[IdemPCharArray(pointer(fDBMSName),DBMS_NAMES)];
     if fDBMS=dDefault then
-      raise EODBCException.CreateFmt('Unknown DBMSName=%s DriverName=%s DBMSVersion=%s',
-        [DBMSName,DriverName,DBMSVersion]);
+      raise EODBCException.CreateUTF8(
+        '%.Connect: unrecognized provider DBMSName=% DriverName=% DBMSVersion=%',
+        [self,DBMSName,DriverName,DBMSVersion]);
     {$ifndef DELPHI5OROLDER}
     Log.Log(sllDebug,'Connected to % using % % recognized as %',
       [DBMSName,DriverName,DBMSVersion,
@@ -1059,7 +1060,7 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self);
   if not aProperties.InheritsFrom(TODBCConnectionProperties) then
-    raise EODBCException.CreateFmt('Invalid %s.Create',[ClassName]);
+    raise EODBCException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fODBCProperties := TODBCConnectionProperties(aProperties);
   inherited Create(aProperties);
 end;
@@ -1119,7 +1120,7 @@ end;
 procedure TODBCConnection.StartTransaction;
 begin
   if TransactionCount>0 then
-    raise EODBCException.Create('TODBCConnection do not provide nested transactions');
+    raise EODBCException.CreateUTF8('% do not support nested transactions',[self]);
   inherited StartTransaction;
   ODBC.Check(ODBC.SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_OFF,0),
     SQL_HANDLE_DBC,fDBc);
@@ -1132,7 +1133,7 @@ procedure TODBCStatement.AllocStatement;
 var hDbc: SqlHDbc;
 begin
   if fStatement<>nil then
-    raise EODBCException.Create('AllocStatement called twice');
+    raise EODBCException.CreateUTF8('%.AllocStatement called twice',[self]);
   fCurrentRow := 0;
   if not fConnection.Connected then
     fConnection.Connect;
@@ -1184,7 +1185,7 @@ var nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
     Name: array[byte] of WideChar;
 begin
   if (fColumnCount>0) or (fColData<>nil) then
-    raise EODBCException.Create('TODBCStatement.BindColumns twice');
+    raise EODBCException.CreateUTF8('%.BindColumns twice',[self]);
   with ODBC do begin
     Check(NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
@@ -1221,7 +1222,7 @@ var ExpectedDataType: ShortInt;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
   if not Assigned(fStatement) or (fColData=nil) then
-    raise EODBCException.Create('TODBCStatement.Column*() with no prior Execute');
+    raise EODBCException.CreateUTF8('%.Column*() with no prior Execute',[self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount-1 do
   with fColumns[c] do
@@ -1245,9 +1246,11 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
     SQL_NO_TOTAL:
       if ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
         ColumnDataState := colDataFilled else
-        raise EODBCException.CreateFmt('"%s" column: no size',[ColumnName]);
+        raise EODBCException.CreateUTF8('%.GetCol: "%" column has no size',
+          [self,ColumnName]);
     else
-      raise EODBCException.CreateFmt('"%s" column: invalid %d size',[ColumnName,Indicator]);
+      raise EODBCException.CreateUTF8('%.GetCol: "%" column had Indicator=%',
+        [self,ColumnName,Indicator]);
     end;
   end;
   // retrieve information for the specified column
@@ -1359,7 +1362,7 @@ var res: TSQLDBStatementGetCol;
     blob: RawByteString;
 begin
   if not Assigned(fStatement) or (CurrentRow<=0) then
-    raise EODBCException.Create('TODBCStatement.ColumnsToJSON() with no prior Step');
+    raise EODBCException.CreateUTF8('%.ColumnsToJSON() with no prior Step',[self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do // fast direct conversion from OleDB buffer
@@ -1408,7 +1411,7 @@ end;
 constructor TODBCStatement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TODBCConnection) then
-    raise EODBCException.CreateFmt('%s.Create expects a TODBCConnection',[ClassName]);
+    raise EODBCException.CreateUTF8('%.Create(%)',[self,aConnection]);
   inherited Create(aConnection);
 end;
 
@@ -1440,7 +1443,8 @@ begin
    SQL_C_BINARY:         result := SQL_VARBINARY;
    SQL_C_SBIGINT:        result := SQL_BIGINT;
    SQL_C_DOUBLE:         result := SQL_DOUBLE;
-   else raise EODBCException.CreateFmt('Unexpected ODBC C type %d',[CDataType]);
+   else raise EODBCException.CreateUTF8(
+     '%.ExecutePrepared: Unexpected ODBC C type %',[self,CDataType]);
   end;
 end;
 var p: integer;
@@ -1454,7 +1458,7 @@ var p: integer;
 label retry;
 begin
   if fStatement=nil then
-    raise EODBCException.Create('ExecutePrepared called without previous Prepare');
+    raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',[self]);
   DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   if fSQL<>'' then
     with SynDBLog.Enter(Self,nil,true).Instance do
@@ -1463,7 +1467,7 @@ begin
   try
     // 1. bind parameters
     if fParamsArrayCount>0 then
-      raise EODBCException.CreateFmt('%s.BindArray() not supported',[fStatementClassName]);
+      raise EODBCException.CreateUTF8('%.BindArray() not supported',[self]);
     if fParamCount>0 then begin
       SetLength(StrLen_or_Ind,fParamCount);
       for p := 0 to fParamCount-1 do
@@ -1505,7 +1509,8 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
         ftBlob:
           StrLen_or_Ind[p] := length(VData);
         else
-          raise EODBCException.CreateFmt('Invalid bound parameter #%d',[p+1]);
+          raise EODBCException.CreateUTF8(
+            '%.ExecutePrepared: invalid bound parameter #%',[self,p+1]);
         end;
         if ParameterValue=nil then begin
           if pointer(VData)=nil then
@@ -1579,7 +1584,7 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self,nil,true);
   if (fStatement<>nil) or (fColumnCount>0) then
-    raise EODBCException.CreateFmt('%s.Prepare should be called only once',[ClassName]);
+    raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL
   inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
   fSQLW := Utf8DecodeToRawUnicode(fSQL);
@@ -1705,7 +1710,7 @@ begin
   end;
   if LogLevelNoRaise<>sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise,msg) else
-    raise EODBCException.Create(UTF8ToString(msg));
+    raise EODBCException.CreateUTF8('% error: %',[self,msg]);
 end;
 
 

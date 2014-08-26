@@ -3222,33 +3222,6 @@ const
 
   
 type
-  /// exception raised in case of incorrect TSQLTable.Step / Field*() use
-  ESQLTableException = class(ESynException);
-
-  /// generic parent class of all custom Exception types of this unit
-  EORMException = class(ESynException);
-
-  /// exception raised in case of wrong Model definition
-  EModelException = class(EORMException);
-
-  /// exception raised in case of unexpected parsing error
-  EParsingException = class(EORMException);
-
-  /// exception raised in case of a Client-Server communication error
-  ECommunicationException = class(EORMException);
-
-  /// exception raised in case of an error in project implementation logic
-  EBusinessLayerException = class(EORMException);
-
-  /// exception raised in case of any authentication error
-  ESecurityException = class(EORMException);
-
-  /// exception dedicated to interface factory, e.g. services and mock/stubs
-  EInterfaceFactoryException = class(ESynException);
-
-  /// exception dedicated to interface based service implementation
-  EServiceException = class(EORMException);
-
   TSQLModel = class;
   TSQLRest = class;
   TSQLRestClient = class;
@@ -3277,6 +3250,34 @@ type
 
   /// a dynamic array used to store the TSQLRecord classes in a Database Model
   TSQLRecordClassDynArray = array of TSQLRecordClass;
+
+
+  /// exception raised in case of incorrect TSQLTable.Step / Field*() use
+  ESQLTableException = class(ESynException);
+
+  /// generic parent class of all custom Exception types of this unit
+  EORMException = class(ESynException);
+
+  /// exception raised in case of wrong Model definition
+  EModelException = class(EORMException);
+
+  /// exception raised in case of unexpected parsing error
+  EParsingException = class(EORMException);
+
+  /// exception raised in case of a Client-Server communication error
+  ECommunicationException = class(EORMException);
+
+  /// exception raised in case of an error in project implementation logic
+  EBusinessLayerException = class(EORMException);
+
+  /// exception raised in case of any authentication error
+  ESecurityException = class(EORMException);
+
+  /// exception dedicated to interface factory, e.g. services and mock/stubs
+  EInterfaceFactoryException = class(ESynException);
+
+  /// exception dedicated to interface based service implementation
+  EServiceException = class(EORMException);
 
 
   /// information about a TSQLRecord class property
@@ -14337,7 +14338,7 @@ constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldTy
   aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
 begin
   if aName='' then
-    EORMException.CreateFmt('Void name for %s.Create',[ClassName]);
+    EORMException.CreateUTF8('Void name for %.Create',[self]);
   fName := aName;
   fSQLFieldType := aSQLFieldType;
   fAttributes := aAttributes;
@@ -14510,7 +14511,7 @@ begin
     end;
     GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
   end;
-  else raise ESQLTableException.CreateFmt('Unexpected type %d',[ord(FT)]);
+  else raise ESQLTableException.CreateUTF8('Unexpected type %',[ord(FT)]);
   end;
 end;
 
@@ -14554,7 +14555,7 @@ var aSQLFieldType: TSQLFieldType;
     C: TSQLPropInfoRTTIClass;
 begin
   if aPropInfo=nil then
-    raise EORMException.Create('Invalid CreateFrom() call');
+    raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call',[self]);
   aType := aPropInfo^.PropType^;
   aSQLFieldType := aType^.SQLFieldType;
   C := nil;
@@ -14621,8 +14622,8 @@ begin
     end;
   end;
   if C=nil then
-    raise EORMException.CreateFmt('Unhandled %s/%s type for property %s',
-      [GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
+    raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
+      [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
        GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,aPropInfo^.Name]);
   result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
 end;
@@ -15164,8 +15165,7 @@ end;
 procedure TSQLPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
 begin
   if TSQLRecord(Instance).fFill.JoinedFields then
-    raise EORMException.CreateFmt(
-      'TSQLPropInfoRTTIID(%s).SetValue after Create*Joined',[Name]);
+    raise EORMException.CreateUTF8('%(%).SetValue after Create*Joined',[self,Name]);
   inherited SetValue(Instance,Value,wasString);
 end;
 
@@ -16049,8 +16049,8 @@ begin
   fOffset := PtrUInt(aProperty);
   if (Assigned(aData2Text) and not Assigned(aText2Data)) or
      (Assigned(aText2Data) and not Assigned(aData2Text)) then
-    raise EORMException.CreateFmt(
-      'Invalid %s.Create: expecting both Data2Text/Text2Data',[ClassName]);
+    raise EORMException.CreateUTF8(
+      'Invalid %.Create: expecting both Data2Text/Text2Data',[self]);
   fData2Text := aData2Text;
   fText2Data := aText2Data;
 end;
@@ -16091,8 +16091,7 @@ constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PTypeInfo;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if (aRecordInfo=nil) or (aRecordInfo^.Kind<>tkRecord) then
-    raise EORMException.CreateFmt(
-      'TSQLPropInfoRecordRTTI: Invalid type information for %s',[aName]);
+    raise EORMException.CreateUTF8('%.Create: Invalid type information for %',[self,aName]);
   inherited Create(aName,sftBlobCustom,aAttributes,aFieldWidth,aPropertyIndex,
     aPropertyPointer,aData2Text,aText2Data);
   fTypeInfo := aRecordInfo;
@@ -16196,8 +16195,7 @@ constructor TSQLPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
   aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if integer(aRecordSize)<=0 then
-    raise EORMException.CreateFmt(
-      'TSQLPropInfoRecordFixedSize: invalid %d record size',[aRecordSize]);
+    raise EORMException.CreateUTF8('%.Create: invalid % record size',[self,aRecordSize]);
   fRecordSize := aRecordSize;
   inherited Create(aName,sftBlobCustom,aAttributes,aFieldWidth,aPropertyIndex,
     aPropertyPointer,aData2Text,aText2Data);
@@ -16344,8 +16342,8 @@ procedure TSQLPropInfoCustomJSON.SetCustomParser(
   aCustomParser: TJSONCustomParserRTTI);
 begin
   if aCustomParser=nil then
-    raise EORMException.CreateFmt(
-      '%s: Invalid type information for %s',[ClassName,Name]);
+    raise EORMException.CreateUTF8('%.SetCustomParser: Invalid type information for %',
+      [self,Name]);
   fCustomParser := aCustomParser;
 end;
 
@@ -16439,12 +16437,13 @@ var f: integer;
 begin
   // check that this property is not an ID/RowID (handled separately)
   if IsRowID(pointer(aItem.Name)) then
-    raise EModelException.CreateFmt('%s should not include a %s published property',
-      [aTable.ClassName,aItem.Name]);
+    raise EModelException.CreateUTF8('%.Add: % should not include a % published property',
+      [self,aTable,aItem.Name]);
   // check that this property name is not already defined
   for f := 0 to fCount-1 do
     if IdemPropNameU(fList[f].Name,aItem.Name) then
-      raise EModelException.CreateFmt('dup property name %s',[aItem.Name]);
+      raise EModelException.CreateUTF8('%.Add: % has duplicated name %',
+        [self,aTable,aItem.Name]);
   // add to the internal list
   result := fCount;
   if result>=length(fList) then
@@ -16549,7 +16548,8 @@ begin
     result := -1 else begin
     result := IndexByName(pointer(aName));
     if result<0 then
-      raise EORMException.CreateFmt('Unkwnown field name "%s"',[aName]);
+      raise EORMException.CreateUTF8('%.IndexByNameOrExcept(%): unkwnown field',
+        [self,aName]);
   end;
 end;
 
@@ -17017,8 +17017,9 @@ var f,i: integer;
     TableInd: integer;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
-    raise ESQLTableException.CreateFmt('%s.CreateWithColumnTypes() called with %d '+
-      'column types, whereas the result has %d columns',[ClassName,length(fQueryColumnTypes),FieldCount]);
+    raise ESQLTableException.CreateUTF8('%.CreateWithColumnTypes() called with % '+
+      'column types, whereas the result has % columns',
+      [self,length(fQueryColumnTypes),FieldCount]);
   SetLength(fFieldType,FieldCount);
   for f := 0 to FieldCount-1 do begin
     P := nil;
@@ -18279,9 +18280,11 @@ end;
 function TSQLTable.FieldBuffer(FieldIndex: Integer): PUTF8Char;
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(fFieldCount)) then
-    raise ESQLTableException.CreateFmt('FieldBuffer(%d): invalid index',[FieldIndex]);
+    raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): invalid index',
+      [self,FieldIndex]);
   if (fStepRow=0) or (fStepRow>fRowCount) then
-    raise ESQLTableException.Create('FieldBuffer(): no prior valid Step');
+    raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): no previous Step',
+      [self,FieldIndex]);
   result := fResults[fStepRow*FieldCount+FieldIndex];
 end;
 
@@ -18290,9 +18293,11 @@ var i: integer;
 begin
   i := FieldIndex(FieldName);
   if i<0 then
-    raise ESQLTableException.CreateFmt('FieldBuffer(%s): unknown field',[FieldName]);
+    raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): unknown field',
+      [self,FieldName]);
   if (fStepRow=0) or (fStepRow>fRowCount) then
-    raise ESQLTableException.CreateFmt('FieldBuffer(%s): no prior valid Step',[FieldName]);
+    raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): no previous Step',
+      [self,FieldName]);
   result := fResults[fStepRow*FieldCount+i];
 end;
 
@@ -18300,9 +18305,11 @@ end;
 function TSQLTable.Field(FieldIndex: integer): variant;
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(fFieldCount)) then
-    raise ESQLTableException.CreateFmt('FieldBuffer(%d): invalid index',[FieldIndex]);
+    raise ESQLTableException.CreateUTF8('%.Field(%): invalid index',
+      [self,FieldIndex]);
   if (fStepRow=0) or (fStepRow>fRowCount) then
-    raise ESQLTableException.Create('FieldBuffer(): no prior valid Step');
+    raise ESQLTableException.CreateUTF8('%.Field(%): no previous Step',
+      [self,FieldIndex]);
   GetVariant(fStepRow,FieldIndex,nil,result);
 end;
 
@@ -18311,7 +18318,8 @@ var i: integer;
 begin
   i := FieldIndex(FieldName);
   if i<0 then
-    raise ESQLTableException.CreateFmt('Field(%s): unknown field',[FieldName]);
+    raise ESQLTableException.CreateUTF8('%.Field(%): unknown field',
+      [self,FieldName]);
   result := Field(i);
 end;
 {$endif}
@@ -18778,22 +18786,22 @@ procedure TSQLTableRowVariant.IntGet(var Dest: TVarData;
 var r,f: integer;
 begin
   if (TSQLTableRowVariantData(V).VTable=nil) or (Name=nil) then
-    ESQLTableException.CreateFmt('Invalid TSQLTableRowVariant.%s call',[Name]);
+    ESQLTableException.CreateUTF8('Invalid %.% call',[self,Name]);
   r := TSQLTableRowVariantData(V).VRow;
   if r<0 then begin
     r := TSQLTableRowVariantData(V).VTable.fStepRow;
     if (r=0) or (r>TSQLTableRowVariantData(V).VTable.fRowCount) then
-      raise ESQLTableException.CreateFmt('TSQLTableRowVariant.%s: no prior valid Step',[Name]);
+      raise ESQLTableException.CreateUTF8('%.%: no previous Step',[self,Name]);
   end;
   f := TSQLTableRowVariantData(V).VTable.FieldIndex(PUTF8Char(Name));
   if cardinal(f)>=cardinal(TSQLTableRowVariantData(V).VTable.fFieldCount) then
-    raise ESQLTableException.CreateFmt('TSQLTableRowVariant.%s: unknown field',[Name]);
+    raise ESQLTableException.CreateUTF8('%.%: unknown field',[self,Name]);
   TSQLTableRowVariantData(V).VTable.GetVariant(r,f,nil,Variant(Dest));
 end;
 
 procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
 begin
-  ESQLTableException.Create('TSQLTableRowVariant is read-only');
+  ESQLTableException.CreateUTF8('% is read-only',[self]);
 end;
 
 procedure TSQLTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -19337,7 +19345,7 @@ begin
       PC := Beg;
       while PC^<>'"' do
         if PC^=#0 then exit else inc(PC);
-      if IdemPChar(PC,'"ID":') or IdemPChar(PC,'"ROWID":') then begin
+      if IdemPChar(PC+1,'ID":') or IdemPChar(PC+1,'ROWID":') then begin
         ExtractID^ := GetInteger(PosChar(PC,':')+1);
         PC := PosChar(PC,',');
         PC^ := '{';
@@ -20883,7 +20891,7 @@ begin
   Create;
   fID := aID;
   if not SimplePropertiesFill(aSimpleFields) then
-    raise EORMException.CreateFmt('Incorrect %s.Create(aSimpleFields) call',[ClassName]);
+    raise EORMException.CreateUTF8('Incorrect %.Create(aSimpleFields) call',[self]);
 end;
 
 function TSQLRecord.CreateCopy: TSQLRecord;
@@ -21132,7 +21140,8 @@ begin
       fFill.Fill(aRow) else
       if fFill.fTableMapRecordManyInstances=nil then
         fFill.Fill(aRow,aDest) else
-        raise EBusinessLayerException.Create('FillRow() forbidden after FillPrepareMany');
+        raise EBusinessLayerException.CreateUTF8(
+          '%.FillRow() forbidden after FillPrepareMany',[self]);
 end;
 
 function TSQLRecord.FillOne: boolean;
@@ -21381,7 +21390,7 @@ var i: integer;
     Props: TSQLModelRecordProperties;
 begin
   if aModel=nil then
-    raise EModelException.Create('Invalid GetSQLCreate call');
+    raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call',[self]);
   Props := aModel.Props[self];
   with Props.Props do
   if Props.Kind<>rSQLite3 then begin
@@ -21394,10 +21403,10 @@ begin
     rCustomForcedID, rCustomAutoID: begin
       M := aModel.VirtualTableModule(self);
       if M=nil then
-        raise EModelException.CreateFmt('No registered module for %s',[Table.ClassName]);
+        raise EModelException.CreateUTF8('No registered module for %',[self]);
       if Fields.Count=0 then
-        raise EModelException.CreateFmt(
-          'Virtual %s class % should have published properties',[M.ModuleName,ClassName]);
+        raise EModelException.CreateUTF8(
+          'Virtual % class % should have published properties',[M.ModuleName,self]);
       result := result+M.ModuleName+'('+GetVirtualTableSQLCreate(RecordProps);
     end;
     end;
@@ -21406,8 +21415,8 @@ begin
       for i := 0 to Fields.Count-1 do
         with Fields.List[i] do
         if SQLFieldType<>sftUTF8Text then
-          raise EModelException.CreateFmt('%s.%s: FTS3/FTS4 field must be RawUTF8',
-            [SQLTableName,Name]) else
+          raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
+            [self,Name]) else
           result := result+Name+',';
       if InheritsFrom(TSQLRecordFTS3Porter) or
          InheritsFrom(TSQLRecordFTS4Porter) then
@@ -21417,13 +21426,12 @@ begin
     rRTree: begin
       if (Fields.Count<2) or (Fields.Count>RTREE_MAX_DIMENSION*2) or
          (Fields.Count and 2<>0) then
-        raise EModelException.CreateFmt('%d: %s RTREE expects 2,4,6..%d field number',
-          [Fields.Count,SQLTableName,RTREE_MAX_DIMENSION*2]);
+        raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..%',
+          [self,Fields.Count,RTREE_MAX_DIMENSION*2]);
       for i := 0 to Fields.Count-1 do
         with Fields.List[i] do
         if SQLFieldType<>sftFloat then
-          raise EModelException.CreateFmt('%s.%s: RTREE field must be double',
-            [SQLTableName,Name]) else
+          raise EModelException.CreateUTF8('%.%: RTREE field must be double',[self,Name]) else
           result := result+Name+',';
       result[length(result)] := ')';
     end;
@@ -21720,8 +21728,7 @@ begin
   Create;
   props := aClient.Model.Props[PSQLRecordClass(Self)^];
   if props.props.JoinedFields=nil then
-    raise EORMException.CreateFmt('No nested TSQLRecord to JOIN in %s',
-      [props.props.SQLTableName]);
+    raise EORMException.CreateUTF8('No nested TSQLRecord to JOIN in %',[self]);
   SQL := props.SQL.SelectAllJoined;
   if aFormatSQLJoin<>'' then
     SQL := SQL+FormatUTF8(pointer(SQLFromWhere(aFormatSQLJoin)),
@@ -22078,8 +22085,7 @@ begin // private sub function makes the code faster in most case
     // store the TSQLRecordProperties instance into AutoTable unused VMT entry
     PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
     if PPointer(PVMT)^<>nil then
-      raise ESynException.CreateFmt('%s.AutoTable VMT entry already set',
-        [PShortString(PPointer(PtrInt(aTable)+vmtClassName)^)^]);
+      raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true 
     // register to the internal garbage collection (avoid memory leak)
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
@@ -22599,8 +22605,8 @@ begin
           break;
         end;
       if Search<>nil then
-        raise EModelException.CreateFmt('%s must include %s for %s.%s',
-          [ClassName,Search.ClassName,Tables[aIndex].ClassName,List[f].Name]);
+        raise EModelException.CreateUTF8('% must include % for %.%',
+          [self,Search,Tables[aIndex],List[f].Name]);
     end;
     end;
   end;
@@ -22659,7 +22665,7 @@ constructor TSQLModel.Create(CloneFrom: TSQLModel);
 var i: integer;
 begin
   if CloneFrom=nil then
-    raise EModelException.Create('TSQLModel.Create(CloneFrom=nil)');
+    raise EModelException.CreateUTF8('%.Create(CloneFrom=nil)',[self]);
   fTables := CloneFrom.fTables;
   fTablesMax := CloneFrom.fTablesMax;
   fRoot := CloneFrom.fRoot;
@@ -22686,7 +22692,7 @@ var i: integer;
 begin
   if (TabParameters=nil) or (TabParametersCount<=0) or
      (cardinal(TabParametersSize)<sizeof(TSQLRibbonTabParameters)) then
-    raise EModelException.Create('TSQLModel.Create(TabParameters?)');
+    raise EModelException.CreateUTF8('%.Create(TabParameters?)',[self]);
   SetLength(Tables,TabParametersCount+length(NonVisibleTables));
   for i := 0 to TabParametersCount-1 do begin
     Tables[i] := TabParameters^.Table;
@@ -22705,8 +22711,8 @@ var N, i: integer;
 begin
   N := length(Tables);
   if N>sizeof(SUPERVISOR_ACCESS_RIGHTS.Get)*8 then // TSQLAccessRights bits size
-    raise EModelException.CreateFmt('%s has too many Tables: %d>%d',
-      [ClassName,N,sizeof(SUPERVISOR_ACCESS_RIGHTS.Get)*8]); // e.g. N>64
+    raise EModelException.CreateUTF8('% for "%" has too many Tables: %>%',
+      [self,aRoot,N,sizeof(SUPERVISOR_ACCESS_RIGHTS.Get)*8]); // e.g. N>64
   // set the Tables to be associated with this Model, as TSQLRecord classes
   fTablesMax := N-1;
   SetLength(fTables,N);
@@ -22812,8 +22818,7 @@ begin
     raise EModelException.Create('TSQLRecordClass=nil');
   result := GetTableIndex(aTable);
   if result<0 then
-    raise EModelException.CreateFmt('%s should be part of the Model',
-      [PShortString(PPointer(PtrInt(aTable)+vmtClassName)^)^]);
+    raise EModelException.CreateUTF8('% should be part of the %',[aTable,self]);
 end;
 
 function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): integer;
@@ -22895,7 +22900,8 @@ begin
   end;
   // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
   if PtrUInt(high(Tables))>high(aProps) then
-    raise EModelException.Create('SQLFromSelectWhere');
+    raise EModelException.CreateUTF8('%.SQLFromSelectWhere() up to % Tables[]',
+      [self,Length(aProps)]);
   for i := 0 to high(Tables) do
     aProps[i] := Props[Tables[i]]; // raise EModelException if not found
   if SQLSelect='*' then
@@ -22925,9 +22931,8 @@ begin
   if self=nil then
     exit;
   if fCustomCollationForAllRawUTF8<>'' then
-    raise EModelException.CreateFmt(
-      'TSQLModel.SetCustomCollationForAllRawUTF8(%s) shall be called only once',
-      [aCollationName]);
+    raise EModelException.CreateUTF8('%.SetCustomCollationForAllRawUTF8(%)'+
+      ' shall be called only once',[self,aCollationName]);
   fCustomCollationForAllRawUTF8 := aCollationName;
   for i := 0 to high(fTableProps) do
     fTableProps[i].fProps.SetCustomCollationForAllRawUTF8(aCollationName);
@@ -23101,8 +23106,8 @@ begin
     if not (Kind in IS_CUSTOM_VIRTUAL) then
       if Kind=rSQLite3 then
         SetKind(rCustomAutoID) else // SetKind() recompute all SQL
-        raise EModelException.CreateFmt('Invalid VirtualTableRegister(%s) call: '+
-          'impossible to set class as virtual',[aClass.ClassName]);
+        raise EModelException.CreateUTF8('Invalid %.VirtualTableRegister(%) call: '+
+          'impossible to set class as virtual',[self,aClass]);
     ExternalDB.Init(TableProps[i],aExternalTableName,aExternalDataBase);
   end;
   if high(fVirtualTableModule)<>fTablesMax then
@@ -23186,7 +23191,8 @@ begin
   if self<>nil then
     if aServicesRouting<>fRoutingClass then
       if (aServicesRouting=nil) or (aServicesRouting=TSQLRestServerURIContext) then
-         raise EServiceException.Create('Unexpected routing class') else
+         raise EServiceException.CreateUTF8('Unexpected %.SetRoutingClass(%)',
+           [self,aServicesRouting]) else
          fRoutingClass := aServicesRouting;
 end;
 
@@ -24179,7 +24185,7 @@ end;
 
 procedure TSQLRest.InternalBatchStop;
 begin
-  raise EORMException.CreateFmt('Unexpected %s.InternalBatchStop',[ClassName]);
+  raise EORMException.CreateUTF8('Unexpected %.InternalBatchStop',[self]);
 end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
@@ -24399,7 +24405,7 @@ end;
 function TSQLRest.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
   var Results: TIntegerDynArray): integer;
 begin
-  raise EORMException.CreateFmt('%s.BatchStart() not supported yet',[ClassName]);
+  raise EORMException.CreateUTF8('%.BatchStart() not supported yet',[self]);
 end;
 
 
@@ -24647,7 +24653,7 @@ constructor TSQLRestCache.Create(aRest: TSQLRest);
 var i: integer;
 begin
   if aRest=nil then
-    EBusinessLayerException.CreateFmt('%s.Create',[ClassName]);
+    EBusinessLayerException.CreateUTF8('%.Create',[self]);
   fRest := aRest;
   SetLength(fCache,length(fRest.Model.Tables));
   for i := 0 to high(fCache) do
@@ -25666,24 +25672,22 @@ var i,n: integer;
     C: PtrInt;
     M: PMethodInfo;
     MethodName: RawUTF8;
-    ServerClassName: string;
 {$ifndef FPC}
     RI: PReturnInfo; // such RTTI info not available at least in Delphi 7
     Param: PParamInfo;
 {$endif}
 procedure SignatureError;
 begin
-  raise EServiceException.CreateFmt(
-    'Expected "procedure %s.%s(Ctxt: TSQLRestServerURIContext)" signature',
-     [ServerClassName,MethodName]);
+  raise EServiceException.CreateUTF8(
+    'Expected "procedure %.%(Ctxt: TSQLRestServerURIContext)" method signature',
+     [self,MethodName]);
 end;
 begin
   if aInstance=nil then
     exit;
-  ServerClassName := string(ClassName);
   if PosEx('/',aPrefix)>0 then
-    raise EServiceException.CreateFmt(
-      '"%s" prefix for %s methods should not contain "/"',[aPrefix,ServerClassName]);
+    raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
+      '("%"): prefix should not contain "/"',[self,aPrefix]);
   C := PtrInt(aInstance.ClassType);
   while C<>0 do begin
     M := PPointer(C+vmtMethodTable)^;
@@ -25720,11 +25724,10 @@ begin
           end;
         {$endif}
         if Model.GetTableIndex(MethodName)>=0 then
-          raise EServiceException.CreateFmt(
-            'Published method name %s.%s conflicts with a Table in the Model!',
-             [ServerClassName,MethodName]);
+          raise EServiceException.CreateUTF8('Published method name %.% '+
+            'conflicts with a Table in the Model!',[self,MethodName]);
         with TMethod(PSQLRestServerMethod(fPublishedMethods.AddUniqueName(MethodName,
-            'Duplicated published method name %s.%s',[ServerClassName,MethodName]))^.CallBack) do begin
+          'Duplicated published method name %.%',[self,MethodName]))^.CallBack) do begin
           Data := aInstance;
           Code := M^.Addr;
         end;
@@ -25933,7 +25936,7 @@ begin
       aServerClass := TSQLRestStorageInMemory; // default in-memory engine
     result := aServerClass.Create(aClass,self,aFileName,aBinaryFile);
     if not StaticDataAdd(result) then
-      raise EORMException.CreateFmt('Adding StaticDataCreate(%s)',[aClass.ClassName]);
+      raise EORMException.CreateUTF8('Error in %.StaticDataCreate(%)',[self,aClass]);
   end;
 end;
 
@@ -25941,10 +25944,10 @@ function TSQLRestServer.RemoteDataCreate(aClass: TSQLRecordClass;
   aRemoteRest: TSQLRest): TSQLRestStorageRemote;
 begin
   if GetStaticDataServer(aClass)<>nil then
-    raise EORMException.CreateFmt('Duplicate RemoteDataCreate(%s)',[aClass.ClassName]);
+    raise EORMException.CreateUTF8('Duplicate %.RemoteDataCreate(%)',[self,aClass]);
   result := TSQLRestStorageRemote.Create(aClass,self,aRemoteRest);
   if not StaticDataAdd(result) then
-    raise EORMException.CreateFmt('Adding RemoteDataCreate(%s)',[aClass.ClassName]);
+    raise EORMException.CreateUTF8('Error in %.RemoteDataCreate(%)',[self,aClass]);
 end;
 
 procedure TSQLRestServer.FlushInternalDBCache;
@@ -26503,7 +26506,8 @@ begin
           Sleep(1); // retry every 1 ms
         until false;
       end;
-      else raise EORMException.CreateFmt('Unexpected Command=%d',[ord(Command)]);
+      else raise EORMException.CreateUTF8('Unexpected Command=% in %.Execute',
+        [ord(Command),self]);
     end;
     case Mode of
     amUnlocked:
@@ -26849,7 +26853,7 @@ begin
           break;
         end;
   end else
-    raise EORMException.Create('Invalid status');
+    raise EORMException.CreateUTF8('%.ExecuteORMGet(method=%)',[self,ord(Method)]);
   end;
 end;
 
@@ -27032,7 +27036,8 @@ var err: integer;
 begin
   result := GetInt64(pointer(GetInputUTF8(ParamName)),err);
   if err<>0 then
-    raise EParsingException.CreateFmt('Invalid parameter %s as Int64 in URI',[ParamName]);
+    raise EParsingException.CreateUTF8('%.GetInputInt(%): Invalid parameter',
+      [self,ParamName]);
 end;
 
 function TSQLRestServerURIContext.GetInputDouble(const ParamName: RawUTF8): double;
@@ -27040,7 +27045,8 @@ var err: integer;
 begin
   result := GetExtended(pointer(GetInputUTF8(ParamName)),err);
   if err<>0 then
-    raise EParsingException.CreateFmt('Invalid parameter %s as Double in URI',[ParamName]);
+    raise EParsingException.CreateUTF8('%.GetInputDouble(%): Invalid parameter',
+      [self,ParamName]);
 end;
 
 function TSQLRestServerURIContext.GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
@@ -27068,7 +27074,8 @@ var i: integer;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
-    raise EParsingException.CreateFmt('Parameter %s not found in URI',[ParamName]);
+    raise EParsingException.CreateUTF8('%.GetInputUTF8(%): parameter not found',
+      [self,ParamName]);
   result := fInput[i*2+1];
 end;
 
@@ -27130,8 +27137,8 @@ procedure TSQLRestServerURIContext.SetOutSetCookie(aOutSetCookie: RawUTF8);
 begin
   aOutSetCookie := Trim(aOutSetCookie);
   if PosEx('=',aOutSetCookie)<2 then
-    raise EBusinessLayerException.CreateFmt(
-      '"%s" is an incorrect "name=value" cookie',[aOutSetCookie]);
+    raise EBusinessLayerException.CreateUTF8(
+      '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   fOutSetCookie := aOutSetCookie;
 end;
 
@@ -27306,7 +27313,7 @@ var JSON: RawUTF8;
     argDone: boolean;
 begin // here Ctxt.Service and ServiceMethodIndex are set
   if (Server.Services=nil) or (Service=nil) then
-    raise EServiceException.Create('Invalid call');
+    raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
   if Call.InBody<>'' then
     // either parameters were sent as JSON array (the Delphi/AJAX way)
@@ -27392,7 +27399,7 @@ var method, JSON: RawUTF8;
     internal: TServiceInternalMethod;
 begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
   if (Server.Services=nil) or (Service=nil) then
-    raise EServiceException.Create('Invalid call');
+    raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
   JSON := Call.InBody; // in-place parsing -> private copy
   JSONDecode(JSON,['method','params','id'],Values,True);
   if Values[0]=nil then // Method name required
@@ -27741,18 +27748,19 @@ begin
   InterlockedIncrement(fStats.fCurrentThreadCount);
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
-    raise ECommunicationException.Create('BeginCurrentThread(nil)');
+    raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
     [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
   {$endif}
   if Sender.ThreadID<>CurrentThreadId then
-    raise ECommunicationException.CreateFmt(
-      'BeginCurrentThread(Thread.ID=%d) and CurrentThreadID=%d',[Sender.ThreadID,CurrentThreadId]);
+    raise ECommunicationException.CreateUTF8(
+      '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
+      [self,Sender.ThreadID,CurrentThreadId]);
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>Sender then // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>nil then
-        raise ECommunicationException.Create('BeginCurrentThread() twice') else
+        raise ECommunicationException.CreateFmt('%.BeginCurrentThread() twice',[self]) else
         RunningThread := Sender;
   if fStaticVirtualTable<>nil then
     for i := 0 to high(fStaticVirtualTable) do
@@ -27772,14 +27780,15 @@ begin
   InterlockedDecrement(fStats.fCurrentThreadCount);
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
-    raise ECommunicationException.Create('EndCurrentThread(nil)');
+    raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   {$ifdef WITHLOG}
   SQLite3Log.Add.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
     [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
   {$endif}
   if Sender.ThreadID<>CurrentThreadId then
-    raise ECommunicationException.CreateFmt(
-      'EndCurrentThread(Thread.ID=%d) and CurrentThreadID=%d',[Sender.ThreadID,CurrentThreadId]);
+    raise ECommunicationException.CreateUTF8(
+      '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
+      [self,Sender,Sender.ThreadID,CurrentThreadId]);
  if fStaticVirtualTable<>nil then
    for i := 0 to high(fStaticVirtualTable) do
      if (fStaticVirtualTable[i]<>nil) and
@@ -27795,7 +27804,9 @@ begin
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>nil then  // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>Sender then
-        raise ECommunicationException.Create('Unexpected EndCurrentThread()') else
+        raise ECommunicationException.CreateFmt(
+          '%.EndCurrentThread(%) should match RunningThread=%',
+          [self,Sender,RunningThread]) else
         RunningThread := nil;
 end;
 
@@ -27843,7 +27854,8 @@ var Reference: RecordRef;
     HistJson: TSQLRecordHistory;
 begin
   if (aClient=nil) or (aID<=0) then
-    raise EORMException.Create('Invalid CreateHistory() call');
+    raise EORMException.CreateUTF8('Invalid %.CreateHistory(%,%,%) call',
+      [self,aClient,aTable,aID]);
   // read BLOB changes
   Reference.From(aClient.Model,aTable,aID);
   fModifiedRecord := Reference.Value;
@@ -27852,8 +27864,8 @@ begin
   if fID<>0 then
     aClient.RetrieveBlobFields(self); // load former fHistory field
   if not HistoryOpen(aClient.Model) then
-    raise EORMException.CreateFmt('Invalid History for %s.ID=%d',
-      [aTable.RecordProps.SQLTableName,aID]);
+    raise EORMException.CreateUTF8('HistoryOpen in %.CreateHistory(%,%,%)',
+      [self,aClient,aTable,aID]);
   // append JSON changes
   HistJson := RecordClass.CreateAndFillPrepare(aClient,
     'ModifiedRecord=? and Event<>%',[ord(heArchiveBlob)],[fModifiedRecord])
@@ -28113,7 +28125,8 @@ begin
     HistIDCount := 0;
     for i := 0 to high(ModifiedRecord) do begin
       if (ModifiedRecord[i]=0) or (HistID[i]=0) then
-        raise EORMException.CreateFmt('Invalid TSQLRecordHistory.ID=%d',[HistID[i]]);
+        raise EORMException.CreateUTF8('%.TrackChangesFlush: Invalid %.ID=%',
+          [self,aTableHistory,HistID[i]]);
       if ModifiedRecord[i]<>ModifRecord then begin
         if ModifRecordCount>MaxRevisionJSON then
           HistIDCount := n else
@@ -28267,7 +28280,7 @@ begin
   for t := 0 to high(aTable) do begin
     tableIndex := Model.GetTableIndexExisting(aTable[t]);
     if aTable[t].InheritsFrom(TSQLRecordHistory) then
-      raise EORMException.CreateFmt('TrackChanges([%s]) not allowed',[aTable[t].ClassName]);
+      raise EORMException.CreateUTF8('%.TrackChanges([%]) not allowed',[self,aTable[t]]);
     if tableIndex<length(fTrackChangesHistoryTableIndex) then begin
       fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
       if TableHistoryIndex>=0 then
@@ -28399,21 +28412,22 @@ var EndOfObject: AnsiChar;
     RunStaticKind: TSQLRestServerKind;
 begin
   Sent := pointer(Data);
-  if (self=nil) or (Sent=nil) then
-    raise EORMBatchException.Create('No data');
+  if Sent=nil then
+    raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
   if Table<>nil then begin
     // unserialize expected sequence array as '{"Table":["cmd":values,...]}'
     while not (Sent^ in ['{',#0]) do inc(Sent);
     if Sent^<>'{' then
-      raise EORMBatchException.Create('Missing {');
+      raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing {',[self]);
     inc(Sent);
     TableName := GetJSONPropName(Sent);
     if (TableName='') or (Sent=nil) then 
-      raise EORMBatchException.CreateFmt('Wrong "Table":"%s"',[TableName]);
+      raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong "Table":"%"',
+        [self,TableName]);
   end; // or '["cmd@Table":values,...]'
   while not (Sent^ in ['[',#0]) do inc(Sent);
   if Sent^<>'[' then
-    raise EORMBatchException.Create('Missing [');
+    raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing [',[self]);
   inc(Sent);
   if IdemPChar(Sent,AUTOMATICTRANSACTIONPERROW_PATTERN) then begin
     inc(Sent,Length(AUTOMATICTRANSACTIONPERROW_PATTERN));
@@ -28435,7 +28449,7 @@ begin
       // retrieve method name and associated (static) table
       Method := GetJSONPropName(Sent);
       if (Sent=nil) or (Method=nil) then
-        raise EORMBatchException.Create('Missing CMD');
+        raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing CMD',[self]);
       MethodTable := PosChar(Method,'@');
       if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
         RunTableIndex := Model.GetTableIndexExisting(Table);
@@ -28443,7 +28457,8 @@ begin
       end else begin                // e.g. '[...,"POST@Table":{object},...]'
         RunTableIndex := Model.GetTableIndex(MethodTable+1);
         if RunTableIndex<0 then
-          raise EORMBatchException.Create('Unknown @Table');
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown %',
+            [self,MethodTable]);
         RunTable := Model.Tables[RunTableIndex];
       end;
       RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
@@ -28495,9 +28510,10 @@ begin
       mDELETE: begin // '{"Table":[...,"DELETE":ID,...]}' or '[...,"DELETE@Table":ID,...]'
         ID := GetInteger(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
         if (ID<=0) or wasString then
-          raise EORMBatchException.Create('Wrong DELETE');
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
         if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
-          raise EORMBatchException.CreateFmt('DELETE impossible: %s',[ErrMsg]);
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE impossible: "%"',
+            [self,ErrMsg]);
         OK := EngineDelete(RunTableIndex,ID);
         if OK then begin
           fCache.NotifyDeletion(RunTable,ID);
@@ -28509,9 +28525,10 @@ begin
       mPOST: begin // '{"Table":[...,"POST":{object},...]}' or '[...,"POST@Table":{object},...]'
         Value := JSONGetObject(Sent,nil,EndOfObject);
         if Sent=nil then
-          raise EORMBatchException.Create('Wrong POST');
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
         if not RecordCanBeUpdated(RunTable,0,seAdd,@ErrMsg)  then
-          raise EORMBatchException.CreateFmt('POST impossible: %s',[ErrMsg]);
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST impossible: %',
+            [self,ErrMsg]);
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
         fCache.Notify(RunTable,ID,Value,soInsert);
@@ -28519,7 +28536,7 @@ begin
       mPUT: begin // '{"Table":[...,"PUT":{object},...]}' or '[...,"PUT@Table":{object},...]'
         Value := JSONGetObject(Sent,@ID,EndOfObject);
         if (Sent=nil) or (Value='') then
-          raise EORMBatchException.Create('Wrong PUT');
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);
         OK := EngineUpdate(RunTableIndex,ID,Value);
         if OK then begin
           Results[Count] := HTML_SUCCESS; // 200 OK
@@ -28527,7 +28544,8 @@ begin
           // or may be complete -> update won't work as expected -> delete from cache
         end;
       end;
-      else raise EORMBatchException.CreateFmt('Unknown "%s" method',[Method]);
+      else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
+        [self,Method]);
       end;
       inc(Count);
     until EndOfObject=']';
@@ -28548,10 +28566,10 @@ begin
   end;
   if Table<>nil then begin // '{"Table":["cmd":values,...]}' format
     if Sent=nil then
-      raise EORMBatchException.Create('Truncated');
+      raise EORMBatchException.CreateUTF8('%.EngineBatchSend: % Truncated',[self,Table]);
     while not (Sent^ in ['}',#0]) do inc(Sent);
     if Sent^<>'}' then
-      raise EORMBatchException.Create('Missing }');
+      raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%): Missing }',[self,Table]);
   end;
   // if we reach here, process was OK
   SetLength(Results,Count);
@@ -28574,11 +28592,12 @@ var aRequest: TURIMapRequest;
 begin
   aDLL := LoadLibrary(pointer(DllName));
   if aDLL=0 then
-    raise ECommunicationException.Create(DllName);
+    raise ECommunicationException.CreateUTF8('%.Create: LoadLibrary(%)',[self,DllName]);
   aRequest := GetProcAddress(aDLL,'URIRequest');
   if (@aRequest=nil) or (aRequest(nil,nil,nil,nil,nil).Lo<>HTML_NOTFOUND) then begin
     FreeLibrary(aDLL);
-    raise ECommunicationException.CreateFmt('%s doesn''t export a valid URIRequest function',[DllName]);
+    raise ECommunicationException.CreateUTF8(
+      '%.Create: % doesn''t export a valid URIRequest() function',[self,DllName]);
   end;
   Create(aModel,aRequest);
   fLibraryHandle := aDLL;
@@ -29265,8 +29284,8 @@ var JSON: RawUTF8;
 begin
   inherited Create(aClass,aServer);
   if (fStoredClassProps<>nil) and (fStoredClassProps.Kind in INSERT_WITH_ID) then
-    raise EModelException.CreateFmt('%s: %s virtual table can''t be static',
-      [fStoredClassRecordProps.SQLTableName,aClass.ClassName]);
+    raise EModelException.CreateUTF8('%.Create: % virtual table can''t be static',
+      [self,aClass]);
   fFileName := aFileName;
   fBinaryFile := aBinaryFile;
   fValue := TObjectList.Create;
@@ -29311,7 +29330,7 @@ begin
   end;
   if ForceID then
     if Rec.fID=0 then
-      raise EORMException.Create('AddOne called with ForceID=0') else
+      raise EORMException.CreateUTF8('%.AddOne(%.ID=0)',[self,Rec]) else
       result := Rec.fID else begin
     if fValue.Count=0 then
       result := 1 else // default ID for a void table
@@ -29454,7 +29473,7 @@ begin
   if self<>nil then
     with fValue do
       if cardinal(Index)>=cardinal(Count) then
-        raise EORMException.Create('GetItem out of range') else
+        raise EORMException.CreateUTF8('%.GetItem(%) out of range',[self,Index]) else
         result := List[Index] else
     result := nil;
 end;
@@ -30427,7 +30446,7 @@ constructor TSQLRestStorageRemote.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; aRemoteRest: TSQLRest);
 begin
   if aRemoteRest=nil then
-    raise EORMException.CreateFmt('%s creation with no remote instance',[ClassName]);
+    raise EORMException.CreateUTF8('%.Create(nil)',[self]);
   inherited Create(aClass,aServer);
   fRemoteTableIndex := aRemoteRest.Model.GetTableIndexExisting(aClass);
   fRemoteRest := aRemoteRest;
@@ -30539,7 +30558,7 @@ constructor TSQLRestStorage.Create(aClass: TSQLRecordClass;
 begin
   inherited Create(nil);
   if aClass=nil then
-    raise EBusinessLayerException.CreateFmt('%s.Create expect a class',[ClassName]);
+    raise EBusinessLayerException.CreateUTF8('%.Create(nil)',[self]);
   InitializeCriticalSection(fStorageCriticalSection);
   fStoredClass := aClass;
   fStoredClassRecordProps := aClass.RecordProps;
@@ -30635,7 +30654,7 @@ end;
 
 function TSQLRestStorage.BatchStart(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0): boolean;
 begin
-  raise EORMException.CreateFmt('%s.BatchStart() does not make sense',[ClassName]);
+  raise EORMBatchException.CreateUTF8('%.BatchStart() does not make sense',[self]);
 end;
 
 
@@ -30920,7 +30939,7 @@ constructor TSQLRestServerRemoteDB.Create(aRemoteRest: TSQLRest;
 var i: integer;
 begin
   if aRemoteRest=nil then
-    raise EORMException.CreateFmt('%s.Create(nil)',[ClassName]);
+    raise EORMException.CreateUTF8('%.Create(nil)',[self]);
   inherited Create(aRemoteRest.Model,aHandleUserAuthentication);
   SetLength(fRemoteTableIndex,Model.TablesMax+1);
   for i := 0 to Model.TablesMax do
@@ -31855,9 +31874,8 @@ begin // guess constructor to be used (faster than multiple InheritsFrom calls)
       C := JSONSerializerRegisteredCollection.Find(TCollectionClass(aClass));
       if C<>nil then
         result := TCollectionClass(aClass).Create(TCollectionItemClass(C)) else
-        raise EParsingException.CreateFmt('%s shall inherit from '+
-         'TInterfacedCollection or call TJSONSerializer.RegisterCollectionForJSON()',
-         [PShortString(PPointer(PtrInt(aClass)+vmtClassName)^)^]);
+        raise EParsingException.CreateUTF8('% shall inherit from TInterfacedCollection'+
+         ' or call TJSONSerializer.RegisterCollectionForJSON()',[aClass]);
     end else
       result := TInterfacedCollectionClass(aClass).Create else
   {$endif}
@@ -32543,8 +32561,8 @@ var H: HWND;
 begin
   H := CreateInternalWindow(ClientWindowName,self);
   if H=0 then
-    raise ECommunicationException.CreateFmt('Impossible to create "%s" client window',
-      [ClientWindowName]);
+    raise ECommunicationException.CreateUTF8('%.Create(): CreateInternalWindow("%")',
+      [self,ClientWindowName]);
   fClientWindowName := ClientWindowName;
   Create(aModel,ServerWindowName,H,TimeOutMS);
 end;
@@ -33139,15 +33157,15 @@ begin
   assert(ClassProp<>nil);
   nProps := PClassProp(aTable)^.FieldCountWithParents;
   if nProps>MAX_SQLFIELDS_INCLUDINGID then
-    raise EModelException.CreateFmt('%s has too many fields: %d>=%d',
-      [SQLTableName,nProps,MAX_SQLFIELDS]);
+    raise EModelException.CreateUTF8('% has too many fields: %>=%',
+      [Table,nProps,MAX_SQLFIELDS]);
   Fields := TSQLPropInfoList.Create;
   AddParentsFirst(aTable);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count>MAX_SQLFIELDS_INCLUDINGID then
-    raise EModelException.CreateFmt(
-      '%s has too many fields after InternalRegisterCustomProperties: %d>=%d',
-      [SQLTableName,Fields.Count,MAX_SQLFIELDS]);
+    raise EModelException.CreateUTF8(
+      '% has too many fields after InternalRegisterCustomProperties(%): %>=%',
+      [Table,self,Fields.Count,MAX_SQLFIELDS]);
   SetLength(Fields.fList,Fields.Count);
   // generate some internal lookup information
   SQLTableRetrieveAllFields := 'ID';
@@ -33216,8 +33234,8 @@ begin
         if DynArrayIndex>0 then
           for j := 0 to nDynArray-1 do
           if DynArrayFields[j].DynArrayIndex=DynArrayIndex then
-            raise EModelException.CreateFmt('dup index %d for %s.%s and %s properties',
-              [DynArrayIndex,aTable.ClassName,Name,DynArrayFields[j].Name]);
+            raise EModelException.CreateUTF8('dup index % for %.% and %.% properties',
+              [DynArrayIndex,Table,Name,Table,DynArrayFields[j].Name]);
         DynArrayFields[nDynArray] := F as TSQLPropInfoRTTIDynArray;
         inc(nDynArray);
         goto Simple;
@@ -33282,10 +33300,10 @@ Simple: SimpleFields[nSimple] := F;
   if isTSQLRecordMany then begin
     fRecordManySourceProp := Fields.ByRawUTF8Name('Source') as TSQLPropInfoRTTIInstance;
     if fRecordManySourceProp=nil then
-      raise EORMException.CreateFmt('%s=class(TSQLRecordMany) expects a SOURCE field',[ClassName]) else
+      raise EORMException.CreateUTF8('% expects a SOURCE field',[Table]) else
     fRecordManyDestProp := Fields.ByRawUTF8Name('Dest') as TSQLPropInfoRTTIInstance;
     if fRecordManyDestProp=nil then
-      raise EORMException.CreateFmt('%s=class(TSQLRecordMany) expects a DEST field',[ClassName]);
+      raise EORMException.CreateUTF8('% expects a DEST field',[Table]);
   end;
 end;
 
@@ -34050,13 +34068,13 @@ constructor TSQLVirtualTable.Create(aModule: TSQLVirtualTableModule;
 var aClass: TSQLRestStorageClass;
 begin
   if (aModule=nil) or (aTableName='') then
-    raise EModelException.CreateFmt('Invalid parameters to %s.Create',[ClassName]);
+    raise EModelException.CreateUTF8('Invalid %.Create(%,"%")',[self,aModule,aTableName]);
   fModule := aModule;
   fTableName := aTableName;
   if fModule.fFeatures.StaticClass<>nil then
     // create new fStatic instance e.g. for TSQLVirtualTableLog
     if fModule.Server=nil then
-      raise EModelException.CreateFmt('Missing aModule.Server for %s.Create',[ClassName]) else
+      raise EModelException.CreateUTF8('%.Server=nil for %.Create',[Module,self]) else
     with fModule.Server do begin
       fStaticTableIndex := Model.GetTableIndex(aTableName);
       if fStaticTableIndex>=0 then begin
@@ -34538,7 +34556,7 @@ begin
       with aCtxt.Server do begin
         if fSessionCounter>=cardinal(maxInt) then
           fSessionCounter := 10 else
-          if fSessionCounter=76 then // avoid IDCardinal=0 (77) or 1 (76)
+          if fSessionCounter=75 then // avoid IDCardinal=0 (77) or 1 (76)
             fSessionCounter := 78 else
             inc(fSessionCounter);
           fIDCardinal := fSessionCounter xor 77;
@@ -34571,7 +34589,7 @@ begin
     User.GroupRights.Free;
     User.GroupRights := GID;
   end;
-  raise ESecurityException.Create('TAuthSession.Create');
+  raise ESecurityException.CreateUTF8('Invalid %.Create(%,%)',[self,aCtxt,aUser]);
 end;
 
 destructor TAuthSession.Destroy;
@@ -35008,8 +35026,8 @@ begin
   if (aUserName='') or (Sender=nil) then
     exit;
   if aPassworKind<>passClear then
-    raise ESecurityException.CreateFmt('%s.ClientSetUser() expects passClear',
-      [ClassName]);
+    raise ESecurityException.CreateUTF8('%.ClientSetUser(%) expects passClear',
+      [self,Sender]);
   Sender.SessionClose;
   try // inherited ClientSetUser() won't fit with Auth() method below
     ClientSetUserHttpOnly(Sender,aUserName,aPassword);
@@ -35407,14 +35425,14 @@ var i: integer;
 begin
   for i := 0 to high(aInterfaces) do
     if aInterfaces[i]=nil then
-      raise EServiceException.Create('Supplied a nil interface type') else
+      raise EServiceException.CreateUTF8('%: aInterfaces[%]=nil',[self,i]) else
     with aInterfaces[i]^, PInterfaceTypeData(ClassType)^ do
     if Kind<>tkInterface then
-      raise EServiceException.CreateFmt('%s is not an interface',[Name]) else
+      raise EServiceException.CreateUTF8('%: % is not an interface',[self,Name]) else
     if not (ifHasGuid in IntfFlags) then
-      raise EServiceException.CreateFmt('%s interface has no GUID',[Name]) else
+      raise EServiceException.CreateUTF8('%: % interface has no GUID',[self,Name]) else
     if Guid(IntfGuid)<>nil then
-      raise EServiceException.CreateFmt('%s GUID already registered',[Name]);
+      raise EServiceException.CreateUTF8('%: % GUID already registered',[self,Name]);
 end;
 
 procedure TServiceContainer.SetExpectMangledURI(aValue: Boolean);
@@ -35612,9 +35630,9 @@ type
   EInterfaceStub = class(EInterfaceFactoryException)
   public
     constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
-      const Error: string); overload;
+      const Error: RawUTF8); overload;
     constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
-      const Format: string; const Args: array of const); overload;
+      Format: PUTF8Char; const Args: array of const); overload;
   end;
 
 
@@ -35689,10 +35707,10 @@ end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
 var method: ^TServiceMethod;
-procedure RaiseError(const Msg: RawUTF8);
+procedure RaiseError(Format: PUTF8Char; const Args: array of const);
 begin
-  raise EInterfaceFactoryException.CreateFmt('Invalid fake %s.%s interface call: %s',
-    [fFactory.fInterfaceTypeInfo^.Name,method^.URI,Msg]);
+  raise EInterfaceFactoryException.CreateUTF8('Invalid %.FakeCall() for %.%: %',
+    [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,FormatUTF8(Format,Args)]);
 end;
 var resultType: TServiceMethodValueType; // type of value stored into result
 procedure InternalProcess;
@@ -35718,7 +35736,7 @@ begin
       case RegisterIdent of
       {$ifdef CPU64}
       REGRCX: begin
-        RaiseError('unexpected self');
+        RaiseError('unexpected self',[]);
         V := nil; // make compiler happy
       end;
       REGRDX: if ValueType in CONST_STOREDINXMM then
@@ -35731,7 +35749,7 @@ begin
                 V := @aCall.XMM3 else
                 V := @aCall.R9;
       {$else}
-      REGEAX: begin V := nil; RaiseError('unexpected self'); end;
+      REGEAX: begin V := nil; RaiseError('unexpected self',[]); end;
       REGEDX: V := @aCall.EDX;
       REGECX: V := @aCall.ECX;
       {$endif}
@@ -35754,7 +35772,7 @@ begin
       ServiceCustomAnswerPoint := nil;
     if not fInvoke(method^,Params.Text,@ResArray,@Error,@fClientDrivenID,
        ServiceCustomAnswerPoint) then
-      RaiseError(Error);
+      RaiseError('%',[Error]);
   finally
     Params.Free;
   end;
@@ -35766,7 +35784,7 @@ begin
     if R^='{' then   // {"paramname":value,...} JSON object format
       resultAsJSONObject := true else
     if R^<>'[' then
-      RaiseError('JSON array/object result expected');
+      RaiseError('JSON array/object result expected',[]);
     inc(R);
     arg := method^.ArgsOutFirst;
     if arg>0 then
@@ -35779,7 +35797,7 @@ begin
         if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
           arg := method^.ArgResultIndex(Val,ValLen); // only if were not in-order
           if arg<0 then
-            RaiseError(FormatUTF8('unexpected parameter "%"',[Val]));
+            RaiseError('unexpected parameter "%"',[Val]);
         end;
       end;
       with method^.Args[arg] do begin
@@ -35789,29 +35807,29 @@ begin
         smvObject: begin
           R := JSONToObject(V^,R,valid);
           if not valid then
-            RaiseError('returned object');
+            RaiseError('returned object',[]);
           IgnoreComma(R);
         end;
         smvRawJSON: begin
           Val := R;
           R := GotoNextJSONItem(R);
           if R<=Val then
-            RaiseError('returned RawJSON');
+            RaiseError('returned RawJSON',[]);
           SetString(PRawUTF8(V)^,PAnsiChar(Val),R-Val);
         end;
         smvDynArray: begin
           R := DynArrays[IndexVar].LoadFromJSON(R);
           if R=nil then
-            RaiseError('returned array');
+            RaiseError('returned array',[]);
           IgnoreComma(R);
         end;
         smvBoolean..smvWideString: begin
           Val := GetJSONField(R,R,@wasString);
           if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
             if resultAsJSONObject then
-              RaiseError('missing or invalid value') else
+              RaiseError('missing or invalid value',[]) else
               RaiseError('missing or invalid value: '+
-              'parameters shall follow method var/out/result order');
+              'parameters shall follow method var/out/result order',[]);
           if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
             Val := '1';
           case ValueType of
@@ -35828,19 +35846,19 @@ begin
           smvRawUTF8:    PRawUTF8(V)^ := Val;
           smvString:     UTF8DecodeToString(Val,StrLen(Val),PString(V)^);
           smvWideString: UTF8ToWideString(Val,StrLen(Val),PWideString(V)^);
-          else RaiseError('ValueType?');
+          else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
         smvRecord: begin
           R := RecordLoadJSON(V^,R,TypeInfo);
           if R=nil then
-            RaiseError('returned record');
+            RaiseError('returned record',[]);
         end;
         {$ifndef NOVARIANTS}
         smvVariant: begin
           R := VariantLoadJSON(PVariant(V)^,R,nil,@fFactory.DocVariantOptions);
           if R=nil then
-            RaiseError('returned variant');
+            RaiseError('returned variant',[]);
         end;
         {$endif}
         end;
@@ -35868,9 +35886,9 @@ end;
 begin
   self := SelfFromInterface;
   if aCall.MethodIndex>=fFactory.fMethodsCount then
-    RaiseError('out of range method');
+    RaiseError('out of range method: %>=%',[aCall.MethodIndex,fFactory.fMethodsCount]);
   if not Assigned(fInvoke)then
-    RaiseError('missing FakeInterfaceInvoker');
+    RaiseError('fInvoke=nil',[]);
   result := 0;
   resultType := smvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
@@ -36043,7 +36061,8 @@ begin
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,@fMethodsCount,true);
   AddMethodsFromTypeInfo(aInterface);
   if fMethodsCount=0 then
-    raise EInterfaceFactoryException.CreateFmt('%s interface has no RTTI',[aInterface^.Name]);
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.Create(%): interface has no RTTI',[self,aInterface^.Name]);
   SetLength(fMethods,fMethodsCount);
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
@@ -36078,15 +36097,15 @@ begin
         smvSet: begin
           SizeInStorage := TypeInfo^.SetEnumType^.SizeInStorageAsSet;
           if SizeInStorage=0 then
-            raise EInterfaceFactoryException.CreateFmt(
-              '%s set too big in %s.%s method %s parameter',
-              [TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
+            raise EInterfaceFactoryException.CreateUTF8(
+              '%.Create: % set too big in %.% method % parameter',
+              [self,TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
         smvRecord:
           if TypeInfo^.RecordType^.Size<=PTRSIZ then
-            raise EInterfaceFactoryException.CreateFmt(
-              '%s record too small in %s.%s method %s parameter',
-              [TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]) else
+            raise EInterfaceFactoryException.CreateUTF8(
+              '%.Create: % record too small in %.% method % parameter',
+              [self,TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]) else
             SizeInStorage := PTRSIZ; // handle only records when passed by ref
         else
           SizeInStorage := PTRSIZ;
@@ -36119,9 +36138,9 @@ begin
       end;
     end;
     if ArgsSizeInStack>MAX_EXECSTACK then
-        raise EInterfaceFactoryException.CreateFmt(
-          'Stack size %d > %d for %s.%s method',
-          [ArgsSizeInStack,MAX_EXECSTACK,fInterfaceTypeInfo^.Name,URI]);
+        raise EInterfaceFactoryException.CreateUTF8(
+          '%.Create: Stack size % > % for %.% method',
+          [self,ArgsSizeInStack,MAX_EXECSTACK,fInterfaceTypeInfo^.Name,URI]);
     {$ifndef CPU64}
     // pascal/register convention are passed left-to-right -> reverse order
     offs := ArgsSizeInStack;
@@ -36219,9 +36238,14 @@ var P: Pointer absolute aInterface;
     f: TParamFlags;
     m,a: integer;
     n: cardinal;
-    aURI: RawUTF8;
-    ErrorMsg: string;
+    aURI, ErrorMsg: RawUTF8;
     C: TClass;
+procedure RaiseError(Format: PUTF8Char; const Args: array of const);
+begin
+  raise EInterfaceFactoryException.CreateUTF8(
+    '%.AddMethodsFromTypeInfo: %.% %',
+    [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
+end;
 begin
   // handle interface inheritance via recursive calls
   P := aInterface^.ClassType;
@@ -36240,14 +36264,12 @@ begin
     // retrieve method name, and add to the methods list (with hashing)
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
     with PServiceMethod(fMethod.AddUniqueName(aURI,
-      '%s.%s method: duplicated name',[fInterfaceTypeInfo^.Name,aURI]))^ do begin
+      '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
       PS := @PS^[ord(PS^[0])+1];
       Kind := PME^.Kind;
       if PME^.CC<>ccRegister then
-        raise EInterfaceFactoryException.CreateFmt(
-          '%s.%s method shall use register calling convention',
-          [fInterfaceTypeInfo^.Name,URI]);
+        RaiseError('method shall use register calling convention',[]);
       // retrieve method call arguments
       n := PME^.ParamCount;
       inc(PME);
@@ -36255,9 +36277,7 @@ begin
         SetLength(Args,n+1) else
         SetLength(Args,n);
       if length(Args)>MAX_METHOD_ARGS then
-        raise EInterfaceFactoryException.CreateFmt(
-          '%s.%s method has too many parameters: %d>%d',
-          [fInterfaceTypeInfo^.Name,URI,Length(Args),MAX_METHOD_ARGS]);
+        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
       ArgsInFirst := -1;
       ArgsInLast := -2;
       ArgsOutFirst := -1;
@@ -36280,9 +36300,7 @@ begin
         TypeName := PS;
         PS := @PS^[ord(PS^[0])+1];
         if PP^=nil then
-          raise EInterfaceFactoryException.CreateFmt(
-            '%s.%s: %s parameter has no information',
-            [fInterfaceTypeInfo^.Name,URI,ParamName^]);
+          RaiseError('"%" parameter has no information',[ParamName^]);
         TypeInfo := PP^^;
         inc(PP);
         {$ifdef ISDELPHIXE}
@@ -36315,14 +36333,11 @@ begin
             tkInteger: ErrorMsg := ' - use integer/cardinal instead';
             tkFloat:   ErrorMsg := ' - use double/currency instead';
             end;
-            raise EInterfaceFactoryException.CreateFmt(
-              '%s.%s: %s parameter has unexpected type %s%s',
-              [fInterfaceTypeInfo^.Name,URI,ParamName^,TypeInfo^.Name,ErrorMsg]);
+            RaiseError('"%" parameter has unexpected type %%',
+              [ParamName^,TypeInfo^.Name,ErrorMsg]);
           end;
           smvRecord: if f*[pfConst,pfVar,pfOut]=[] then
-            raise EInterfaceFactoryException.CreateFmt(
-              '%s.%s: %s record parameter should be declared as const, var or out',
-              [fInterfaceTypeInfo^.Name,URI,ParamName^]);
+            RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
           end;
         end;
       end;
@@ -36378,8 +36393,8 @@ function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUTF8): integer
 begin
   result := FindMethodIndex(aMethodName);
   if result<0 then
-    raise EInterfaceFactoryException.CreateFmt('%s.%s does not exists',
-      [fInterfaceTypeInfo^.Name,aMethodName]);
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.CheckMethodIndex: %.% not found',[self,fInterfaceTypeInfo^.Name,aMethodName]);
 end;
 
 function TInterfaceFactory.CheckMethodIndex(aMethodName: PUTF8Char): integer;
@@ -36441,8 +36456,7 @@ end;
 class function TFakeStubBuffer.Reserve(size: Cardinal): pointer;
 begin
   if size>STUB_SIZE then
-    raise EServiceException.CreateFmt('TFakeStubBuffer.Reserve(size=%d>%d)',
-      [size,STUB_SIZE]);
+    raise EServiceException.CreateUTF8('%.Reserve(size=%>%)',[self,size,STUB_SIZE]);
   if CurrentFakeStubBuffer=nil then
     GarbageCollectorFreeAndNil(CurrentFakeStubBuffer,TFakeStubBuffer.Create) else
   if CurrentFakeStubBuffer.fStubUsed+size>STUB_SIZE then begin
@@ -36557,16 +36571,16 @@ end;
 { TInterfaceStub }
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
-  const Method: TServiceMethod; const Error: string);
+  const Method: TServiceMethod; const Error: RawUTF8);
 begin
-  inherited CreateFmt('Error in %s for %s.%s - %s',
-    [Sender.ClassName,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,Error]);
+  inherited CreateUTF8('Error in % for %.% - %',
+    [Sender,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,Error]);
 end;
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
-  const Method: TServiceMethod; const Format: string; const Args: array of const);
+  const Method: TServiceMethod; Format: PUTF8Char; const Args: array of const);
 begin
-  Create(Sender,Method,SysUtils.format(Format,Args));
+  Create(Sender,Method,FormatUTF8(Format,Args));
 end;
 
 function TInterfaceStubLog.Results: RawUTF8;
@@ -36648,7 +36662,7 @@ end;
 function TOnInterfaceStubExecuteParamsVariant.GetInput(Index: Integer): variant;
 begin
   if cardinal(Index)>=fMethod^.ArgsInputValuesCount then
-    raise EInterfaceStub.Create(fSender,fMethod^,'Input[%d>=%d]',
+    raise EInterfaceStub.Create(fSender,fMethod^,'Input[%>=%]',
       [Index,fMethod^.ArgsInputValuesCount]) else
     result := fInput[Index];
 end;
@@ -36657,7 +36671,7 @@ procedure TOnInterfaceStubExecuteParamsVariant.SetOutput(Index: Integer;
   const Value: variant);
 begin
   if cardinal(Index)>=fMethod^.ArgsOutputValuesCount then
-    raise EInterfaceStub.Create(fSender,fMethod^,'Output[%d>=%d]',
+    raise EInterfaceStub.Create(fSender,fMethod^,'Output[%>=%]',
       [Index,fMethod^.ArgsOutputValuesCount]) else
     fOutput[Index] := Value;
 end;
@@ -36679,7 +36693,7 @@ begin
         if cardinal(ndx)>=cardinal(fMethod^.ArgsInputValuesCount) then
           break;
       end;
-  raise EInterfaceStub.Create(fSender,fMethod^,'unknown input parameter "%s"',[aParamName]);
+  raise EInterfaceStub.Create(fSender,fMethod^,'unknown input parameter "%"',[aParamName]);
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetOutNamed(const aParamName: RawUTF8;
@@ -36700,7 +36714,7 @@ begin
         if cardinal(ndx)>=cardinal(fMethod^.ArgsOutputValuesCount) then
           break;
       end;
-  raise EInterfaceStub.Create(fSender,fMethod^,'unknown output parameter "%s"',[aParamName]);
+  raise EInterfaceStub.Create(fSender,fMethod^,'unknown output parameter "%"',[aParamName]);
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetResult(var Result: RawUTF8);
@@ -36713,7 +36727,7 @@ begin
       Add('[');
       for i := 0 to fMethod^.ArgsOutputValuesCount-1 do begin
         if TVarData(fOutput[i]).VType=varEmpty then
-          raise EInterfaceStub.Create(fSender,fMethod^,'Output[%d] not set',[i]);
+          raise EInterfaceStub.Create(fSender,fMethod^,'Output[%] not set',[i]);
         AddVariantJSON(fOutput[i],twJSONEscape);
         Add(',');
       end;
@@ -36745,15 +36759,16 @@ function TInterfaceStub.InternalCheck(aValid: boolean; const aErrorMessage: RawU
 begin
   result := aValid;
   if aExpectationFailed and not aValid then
-    raise EInterfaceFactoryException.CreateFmt('%s - Error validating %s.%s',
-      [ClassName,fInterface.fInterfaceTypeInfo^.Name,aErrorMessage]);
+    raise EInterfaceStub.CreateUTF8('%.InternalCheck(%) failed: %',
+      [self,fInterface.fInterfaceTypeInfo^.Name,aErrorMessage]);
 end;
 
 constructor TInterfaceStub.Create(const aInterfaceName: RawUTF8; out aStubbedInterface);
 begin
   fInterface := TInterfaceFactory.Get(aInterfaceName);
   if fInterface=nil then
-    raise EInterfaceStub.CreateFmt('Interface %s non registered',[aInterfaceName]);
+    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
+      [self,aInterfaceName]);
   InternalCreate(aStubbedInterface);
 end;
 
@@ -36761,8 +36776,8 @@ constructor TInterfaceStub.Create(const aGUID: TGUID; out aStubbedInterface);
 begin
   fInterface := TInterfaceFactory.Get(aGUID);
   if fInterface=nil then
-    raise EInterfaceStub.CreateFmt(
-      'Interface %s non registered',[GUIDToString(aGUID)]);
+    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
+      [self,GUIDToRawUTF8(aGUID)]);
   InternalCreate(aStubbedInterface);
 end;
 
@@ -36793,7 +36808,8 @@ begin
   qoLessThanOrEqualTo:    result := A<=B;
   qoGreaterThan:          result := A>B;
   qoGreaterThanOrEqualTo: result := A>=B;
-  else raise EInterfaceStub.CreateFmt('Unexpected %d operator',[Ord(aOperator)]);
+  else raise EInterfaceStub.CreateUTF8('%.IntCheckCount(): Unexpected % operator',
+    [self,Ord(aOperator)]);
   end;
 end;
 begin
@@ -36909,7 +36925,7 @@ begin
     with fRules[ndx] do
       AddRule(self,isUndefined,aParams,'',nil,nil,aOperator,aValue) else
     raise EInterfaceStub.Create(self,fInterface.fMethods[ndx],
-      'incorrect ExpectsCount(aOperator)');
+      'ExpectsCount(aOperator=%)',[ord(aOperator)]);
   include(fHasExpects,eCount);
   result := self;
 end;
@@ -37064,7 +37080,7 @@ begin
           inc(Rules[rule].RulePassCount);
         if imoReturnErrorIfNoRuleDefined in Options then begin
           result := false;
-          Log.CustomResults := FormatUTF8('No stubbing rule defined for %s.%s',
+          Log.CustomResults := FormatUTF8('No stubbing rule defined for %.%',
             [fInterface.fInterfaceTypeInfo^.Name,aMethod.URI]);
         end else
           result := true;
@@ -37318,7 +37334,7 @@ var m,j: integer;
 begin
   // check supplied interface
   if (aRest=nil) or (aInterface=nil) then
-    raise EServiceException.Create('Invalid call');
+    raise EServiceException.CreateUTF8('Invalid %.Create(%,%)',[self,aRest,aInterface]);
   inherited Create;
   fInterface := TInterfaceFactory.Get(aInterface);
   fRest := aRest;
@@ -37328,27 +37344,27 @@ begin
   if fInterfaceURI[1] in ['I','i'] then
     Delete(fInterfaceURI,1,1);
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
-    raise EServiceException.CreateFmt('"%s" interface name is already used by a SQL table name',
-      [fInterfaceURI]);
+    raise EServiceException.CreateUTF8('%.Create: "%" interface name '+
+      'is already used by a SQL table name',[self,fInterfaceURI]);
   for m := 0 to fInterface.fMethodsCount-1 do
   with fInterface.fMethods[m] do begin
     if ArgsResultIndex>=0 then
     with Args[ArgsResultIndex] do
     case ValueType of
     smvNone, smvObject:
-      raise EServiceException.CreateFmt('%s.%s: unexpected result type %s',
-        [fInterface.fInterfaceTypeInfo^.Name,URI,TypeName^]);
+      raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
+        [self,fInterface.fInterfaceTypeInfo^.Name,URI,TypeName^]);
     smvRecord:
       if TypeInfo=System.TypeInfo(TServiceCustomAnswer) then
         if InstanceCreation=sicClientDriven then
-          raise EServiceException.CreateFmt(
-            '%s.%s: sicClientDriven mode not allowed with TServiceCustomAnswer result',
-            [fInterface.fInterfaceTypeInfo^.Name,URI]) else begin
+          raise EServiceException.CreateUTF8('%.Create: %.% '+
+            'sicClientDriven mode not allowed with TServiceCustomAnswer result',
+            [self,fInterface.fInterfaceTypeInfo^.Name,URI]) else begin
         for j := ArgsOutFirst to ArgsOutLast do
           if Args[j].ValueDirection in [smdVar,smdOut] then
-            raise EServiceException.CreateFmt(
-              '%s.%s: var/out parameter "%s" not allowed with TServiceCustomAnswer result',
-              [fInterface.fInterfaceTypeInfo^.Name,URI,Args[j].ParamName^]);
+            raise EServiceException.CreateUTF8('%.Create: %.% '+
+              'var/out parameter "%" not allowed with TServiceCustomAnswer result',
+              [self,fInterface.fInterfaceTypeInfo^.Name,URI,Args[j].ParamName^]);
         ArgsResultIsServiceCustomAnswer := true;
       end;
     end;
@@ -37404,8 +37420,8 @@ begin
   if aSharedImplementation<>nil then
     if (aSharedImplementation.ClassType<>aImplementationClass) or
        (aInstanceCreation<>sicShared) then
-      raise EServiceException.CreateFmt('Invalid %s service registration',
-        [aSharedImplementation.ClassName]);
+      raise EServiceException.CreateUTF8('%.AddImplementation: invalid % class',
+        [self,aSharedImplementation]);
   CheckInterface(aInterfaces);
   SetLength(UID,length(aInterfaces));
   for j := 0 to high(aInterfaces) do
@@ -37426,8 +37442,8 @@ begin
   until C=nil;
   for j := 0 to high(aInterfaces) do
     if UID[j]<>nil then
-      raise EServiceException.CreateFmt('Interface %s not found in %s implementation',
-        [aInterfaces[j]^.Name,aImplementationClass.ClassName]);
+      raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
+        [self,aInterfaces[j]^.Name,aImplementationClass]);
   // create the shared instance (if any)
   if (aInstanceCreation=sicShared) and (aSharedImplementation=nil) then
     if aImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
@@ -37484,16 +37500,16 @@ begin
   // extract RTTI from the interface
   inherited Create(aRestServer,aInterface,aInstanceCreation,aContractExpected);
   if fRest.MethodAddress(ShortString(InterfaceURI))<>nil then
-    raise EServiceException.CreateFmt('I%s is already exposed as %s published method',
-      [InterfaceURI,fRest.ClassName]) else
+    raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
+      [self,InterfaceURI,fRest]) else
   fImplementationClass := aImplementationClass;
   if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
     fImplementationClassWithCustomCreate := true;
   fImplementationClassInterfaceEntry :=
     fImplementationClass.GetInterfaceEntry(fInterface.fInterfaceIID);
   if fImplementationClassInterfaceEntry=nil then
-    raise EServiceException.CreateFmt('%s does not implement I%s',
-      [fImplementationClass.ClassName,fInterfaceURI]) else
+    raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
+      [self,fImplementationClass,fInterfaceURI]) else
   // initialize the shared instance or client driven parameters
   if InstanceCreation<>sicPerThread then
     InitializeCriticalSection(fInstanceLock);
@@ -37503,9 +37519,10 @@ begin
       fSharedInstance := CreateInstance(false) else
       fSharedInstance := aSharedInstance;
     if (fSharedInstance=nil) or
-       not GetInterfaceFromEntry(fSharedInstance,fImplementationClassInterfaceEntry,fSharedInterface) then
-      raise EServiceException.CreateFmt('No implementation available for I%s interface',
-        [fInterfaceURI]);
+       not GetInterfaceFromEntry(
+         fSharedInstance,fImplementationClassInterfaceEntry,fSharedInterface) then
+      raise EServiceException.CreateUTF8('%.Create: no implementation available for I%',
+        [self,fInterfaceURI]);
   end;
   sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
     if (aTimeOutSec=0) and (InstanceCreation<>sicPerThread) then
@@ -37522,8 +37539,8 @@ procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
 begin
   if (self=nil) or not (InstanceCreation in [
      sicClientDriven,sicPerSession,sicPerUser,sicPerGroup,sicPerThread]) then
-    raise EServiceException.CreateFmt('SetTimeSec() with InstanceCreation=%s',
-      [ToText(InstanceCreation)]);
+    raise EServiceException.CreateUTF8('%.SetTimeoutSecInt() with sic%',
+      [self,ToText(InstanceCreation)]);
   fInstanceTimeOut := value*1000;
 end;
 
@@ -37941,22 +37958,19 @@ var m,i: integer;
 begin
   if self<>nil then begin
     if (fInstanceCreation=sicPerThread) and (optExecLockedPerInterface in aOptions) then
-      raise EServiceException.CreateFmt(
-        'optExecLockedPerInterface option not compatible with sicPerThread for I%s interface',
-        [fInterfaceURI]);
+      raise EServiceException.CreateUTF8('%.SetOptions(I%,optExecLockedPerInterface)'+
+        ' not compatible with sicPerThread',[self,fInterfaceURI]);
     if (fInstanceCreation=sicPerThread) and
        ([{$ifndef LVCL}optExecInMainThread,optFreeInMainThread,{$endif}
          optExecInPerInterfaceThread,optFreeInPerInterfaceThread]*aOptions<>[]) then
-      raise EServiceException.CreateFmt(
-        'opt*In*Thread option not compatible with sicPerThread for I%s interface',
-        [fInterfaceURI]);
+      raise EServiceException.CreateUTF8('%.SetOptions(I%,opt*In*Thread) '+
+        'not compatible with sicPerThread',[self,fInterfaceURI]);
     {$ifndef LVCL}
     if (optExecLockedPerInterface in aOptions) and
        ([optExecInMainThread,optFreeInMainThread,
          optExecInPerInterfaceThread,optFreeInPerInterfaceThread]*aOptions<>[]) then
-      raise EServiceException.CreateFmt(
-        'optExecLockedPerInterface with opt*In*Thread options for I%s interface',
-        [fInterfaceURI]);
+      raise EServiceException.CreateUTF8('%.SetOptions(I%,optExecLockedPerInterface)'+
+        ' with opt*In*Thread options',[self,fInterfaceURI]);
     {$endif}
     if high(aMethod)<0 then
       for i := 0 to fInterface.fMethodsCount-1 do
@@ -37968,15 +37982,13 @@ begin
       fAnyOptions := fAnyOptions+fExecution[i].Options;
     if (optFreeInPerInterfaceThread in fAnyOptions) and
        not (optExecInPerInterfaceThread in fAnyOptions) then
-      raise EServiceException.CreateFmt(
-        'optFreeInPerInterfaceThread without optExecInPerInterfaceThread for I%s interface',
-        [fInterfaceURI]);
+      raise EServiceException.CreateUTF8('%.SetOptions(I%,optFreeInPerInterfaceThread)'+
+        ' without optExecInPerInterfaceThread',[self,fInterfaceURI]);
     {$ifndef LVCL}
     if ([optExecInMainThread,optFreeInMainThread]*fAnyOptions<>[]) and
        ([optExecInPerInterfaceThread,optFreeInPerInterfaceThread]*fAnyOptions<>[]) then
-      raise EServiceException.CreateFmt(
-        'Concurrent opt*InMainThread and opt*InPerInterfaceThread for I%s interface',
-        [fInterfaceURI]);
+      raise EServiceException.CreateUTF8('%.SetOptions(I%): concurrent '+
+        'opt*InMainThread and opt*InPerInterfaceThread',[self,fInterfaceURI]);
     {$endif}
   end;
   result := self;
@@ -38326,7 +38338,7 @@ var RawUTF8s: TRawUTF8DynArray;
     {$endif}
     Synch: TCallMethodSynchro;
     Name: PUTF8Char;
-    NameLen,ValuesCount: integer;
+    NameLen: integer;
     EndOfObject: AnsiChar;
     ParObjValues: TPUTF8CharDynArray;
     Stack: array[0..MAX_EXECSTACK-1] of byte;
@@ -38475,8 +38487,8 @@ begin
       smvvObject:     Value := @Objects[IndexVar];
       smvvRecord:     Value := pointer(Records[IndexVar]);
       smvvDynArray:   Value := @DynArrays[IndexVar].Value;
-      else raise EInterfaceFactoryException.CreateFmt(
-        'Invalid argument type %d',[ord(ValueType)]);
+      else raise EInterfaceFactoryException.CreateUTF8(
+        'Invalid % argument type = %',[ParamName^,ord(ValueType)]);
       end;
       Values[a] := Value;
       if (ValueDirection<>smdConst) or
@@ -38720,8 +38732,8 @@ var Error, RemoteContract: RawUTF8;
 begin
   // extract interface RTTI and create fake interface (and any shared instance)
   if not aRest.InheritsFrom(TSQLRestClientURI) then
-    EServiceException.CreateFmt('%s interface needs a Client connection',
-      [aInterface^.Name]);
+    EServiceException.CreateUTF8('%.Create(): % interface needs a Client connection',
+      [self,aInterface^.Name]);
   inherited Create(aRest,aInterface,aInstanceCreation,aContractExpected);
   // initialize a shared instance (if needed)
   if fInstanceCreation in [sicShared,sicPerSession,sicPerUser,sicPerGroup,sicPerThread] then begin
@@ -38731,13 +38743,13 @@ begin
   end;
   // check if this interface is supported on the server
   if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],'',@RemoteContract,@Error) then
-    raise EServiceException.CreateFmt('I%s interface or %s routing not supported by server%s',
-      [fInterfaceURI,fRest.ServicesRouting.ClassName,Error]);
+    raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
+      'supported by server%',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
   if ('['+ContractExpected+']'<>RemoteContract) and
      ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
-    raise EServiceException.CreateFmt(
-      'Server''s I%s contract differs from client''s: expected [%s], received %s',
-      [fInterfaceURI,ContractExpected,RemoteContract]);
+    raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+
+      'differs from client''s: expected [%], received %',
+      [self,fInterfaceURI,ContractExpected,RemoteContract]);
 end;
 
 destructor TServiceFactoryClient.Destroy;
@@ -38745,9 +38757,8 @@ begin
   if fSharedInstance<>nil then
   with TInterfacedObjectFake(fSharedInstance) do
     if fRefCount<>1 then
-      raise EServiceException.CreateFmt(
-        'RefCount=%d: shall release I%s interface (.. := nil) before Client.Free',
-        [fRefCount,fInterfaceURI]) else
+      raise EServiceException.CreateUTF8('%.Destroy with RefCount=%: you must release '+
+        'I% interface (.. := nil) before Client.Free',[self,fRefCount,fInterfaceURI]) else
       _Release; // bonne nuit les petits
   inherited;
 end;
@@ -38888,9 +38899,8 @@ begin
     if PPointer(PVMT^)^=TSQLRecordProperties then
       GarbageCollectorFreeAndNil(  // set to nil at finalization
         TSQLRecordProperties(PVMT^).fWeakZeroClass,self) else
-      raise EORMException.CreateFmt(
-        'SetWeakZero: %s.AutoTable VMT entry already used',
-        [PShortString(PPointer(PtrInt(aClass)+vmtClassName)^)^]);
+      raise EORMException.CreateUTF8(
+        '%.Create: %.AutoTable VMT entry already used',[self,aClass]);
   InitializeCriticalSection(fLock);
   EnterCriticalSection(fLock);
   {$WARN SYMBOL_DEPRECATED OFF}

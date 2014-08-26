@@ -220,8 +220,8 @@ procedure TSQLDBBDEConnection.Connect;
 var Log: ISynLog;
 begin
   if (fSession=nil) or (fDatabase=nil) then
-    raise ESQLDBBDE.CreateFmt('TSQLDBBDEConnection.Connect() on %s failed: Database=nil',
-      [fProperties.ServerName]);
+    raise ESQLDBBDE.CreateUTF8('%.Connect() on % failed: Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to Alias=%',[fDatabase.AliasName])),true);
   try
     fSession.Open;

@@ -73,7 +73,7 @@ uses
 type
 
   /// Exception type associated to generic TDataSet / DB.pas unit Dataset connection
-  ESQLDBDataset = class(Exception);
+  ESQLDBDataset = class(ESynException);
 
   ///	implement properties shared by via the DB.pas TQuery-like connections
   TSQLDBDatasetConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
@@ -443,12 +443,12 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(Self);
   if fPrepared then
-    raise ESQLDBDataset.CreateFmt('%s.Prepare() shall be called once',[ClassName]);
+    raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
   fPrepared := DatasetPrepare(UTF8ToString(oSQL));
   if not fPrepared then
-    raise ESQLDBDataset.CreateFmt('%s.DatasetPrepare set nil',[ClassName]);
+    raise ESQLDBDataset.CreateUTF8('%.DatasetPrepare not prepared',[self]);
 end;
 
 procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
@@ -463,7 +463,9 @@ begin
       LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
-    raise ESQLDBDataset.CreateFmt('ExecutePrepared expected %d bound parameters, got %d',[fPreparedParamsCount,fParamCount]);
+    raise ESQLDBDataset.CreateUTF8(
+      '%.ExecutePrepared expected % bound parameters, got %',
+      [self,fPreparedParamsCount,fParamCount]);
   lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support 
   repeat
     if (not fDatasetSupportBatchBinding) and (fParamsArrayCount>0) then
@@ -622,8 +624,8 @@ begin
           blob := ColumnBlob(col);
           WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
         end;
-      else raise ESQLDBException.CreateFmt(
-        'TSQLDBDatasetStatement: Invalid ColumnType()=%d',[ord(ColumnType)]);
+      else raise ESQLDBException.CreateUTF8('%: Invalid ColumnType()=%',
+            [self,ord(ColumnType)]);
     end;
     WR.Add(',');
   end;
@@ -709,7 +711,9 @@ begin
             P.AsString := VData;
           {$endif}
         else
-          raise ESQLDBDataset.CreateFmt('Invalid type on bound parameter #%d',[aParamIndex+1]);
+          raise ESQLDBDataset.CreateFmt(
+            '%.DataSetBindSQLParam: Invalid type % on bound parameter #%d',
+            [self,ord(VType),aParamIndex+1]);
         end;
   end;
 end;
@@ -749,8 +753,9 @@ procedure TSQLDBDatasetStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBDataset.CreateFmt('Expect %d parameters in request, found %d - [%s]',
-      [fPreparedParamsCount,fQueryParams.Count,aSQL]);
+    raise ESQLDBDataset.CreateUTF8(
+      '%.Prepare expected % parameters in request, found % - [%]',
+      [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 
 end.

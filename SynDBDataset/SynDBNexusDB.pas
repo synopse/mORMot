@@ -351,8 +351,9 @@ begin
   inherited Create(aProperties);
   lProp := aProperties as TSQLDBNexusDBConnectionProperties; // type check to make sure
   if lProp.Protocol=nxpUnknown then
-    raise ESQLDBNexusDB.CreateFmt('Unknown NexusDB protocol in Servername=[%s]',
-      [lProp.ServerName]);
+    raise ESQLDBNexusDB.CreateUTF8(
+      '%.Create: Unknown NexusDB protocol in Servername=[%]',
+      [self,lProp.ServerName]);
   fDatabase := TnxDatabase.Create(nil);
   fSession := TnxSession.Create(nil);
   fSession.UserName := UTF8ToString(lProp.UserID);

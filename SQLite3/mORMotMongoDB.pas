@@ -224,8 +224,7 @@ constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQL
 begin
   inherited;
   if fStoredClassProps=nil then
-    raise EORMMongoDBException.CreateFmt(
-      'StoredClassProps needed for %s',[StoredClassRecordProps.SQLTableName]);
+    raise EORMMongoDBException.CreateUTF8('StoredClassProps needed for %',[aClass]);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
@@ -365,10 +364,10 @@ var i, ndx: integer;
 begin
   doc.InitJSON(JSON,[dvoValueCopiedByReference]);
   if (doc.Kind<>dvObject) and (Occasion<>soInsert) then
-    raise EORMMongoDBException.Create('Invalid JSON context');
+    raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: invalid JSON context',[self]);
   if not (Occasion in [soInsert,soUpdate]) then
-    raise EORMMongoDBException.CreateFmt('DocFromJSON(%s)',[
-      GetEnumName(TypeInfo(TSQLOccasion),ord(Occasion))^]);
+    raise EORMMongoDBException.CreateUTF8('Unexpected %.DocFromJSON(Occasion=%)',
+      [self,GetEnumName(TypeInfo(TSQLOccasion),ord(Occasion))^]);
   MissingID := true;
   for i := doc.Count-1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(doc.Names[i])) then begin
@@ -380,7 +379,8 @@ begin
     end else begin
       ndx := fStoredClassProps.Props.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
-        raise EORMMongoDBException.CreateFmt('Unkwnown field name "%s"',[doc.Names[i]]);
+        raise EORMMongoDBException.CreateUTF8(
+          '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
       doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
       V := @Doc.Values[i];
@@ -419,7 +419,7 @@ begin
     doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
   end;
   if doc.Kind<>dvObject then
-    raise EORMMongoDBException.Create('Invalid JSON context');
+    raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;
 
 function TSQLRestStorageMongoDB.EngineAdd(TableModelIndex: integer; 
@@ -626,8 +626,8 @@ begin
     for i := 0 to doc.Count-1 do begin
       name := fStoredClassProps.ExternalDB.ExternalToInternalOrNull(doc.Names[i]);
       if name='' then
-        raise EORMMongoDBException.CreateFmt('Unknown field name "%s" for table %s',
-          [doc.Names[i],fStoredClassRecordProps.SQLTableName]);
+        raise EORMMongoDBException.CreateUTF8(
+          '%.JSONFromDoc: Unknown field "%" for %',[self,doc.Names[i],fStoredClass]);
       W.AddFieldName(pointer(name),Length(name));
       W.AddVariantJSON(doc.Values[i],twJSONEscape);
       W.Add(',');
@@ -694,8 +694,9 @@ begin
         BSONVariantType.ToBlob(docv^.Values[f],blobRaw) else
       if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f],blob) then
         BSONVariantType.ToBlob(variant(blob),blobRaw) else
-        raise EORMMongoDBException.CreateFmt('Field "%s" not found',
-          [fBSONProjectionBlobFieldsNames[f]]);
+        raise EORMMongoDBException.CreateUTF8(
+          '%.RetrieveBlobFields(%): field "%" not found',
+          [self,Value,fBSONProjectionBlobFieldsNames[f]]);
       (fStoredClassRecordProps.BlobFields[f] as TSQLPropInfoRTTIRawBlob).
         SetBlob(Value,blobRaw);
     end;
@@ -723,7 +724,8 @@ begin
       with item[result] do
         if IdemPropNameU(aName,Name,NameLen) then
           exit;
-  raise EORMMongoDBException.CreateFmt('Missing field "%s" in row',[aName]);
+  raise EORMMongoDBException.CreateUTF8(
+    '%.GetJSONValues(%): field "%" not found in row',[self,StoredClass,aName]);
 end;
 begin
   result := 0; // number of data rows in JSON output
@@ -732,18 +734,23 @@ begin
   if row.Init(Res) then begin
     colCount := length(extFieldNames);
     if colCount<>length(W.ColNames) then
-      raise EORMMongoDBException.Create('Invalid GetJSONValues() call');
+      raise EORMMongoDBException.CreateUTF8(
+        '%.GetJSONValues(%): column count concern %<>%',
+        [self,StoredClass,colCount,length(W.ColNames)]);
     SetLength(item,colCount);
     while row.Next do begin
       // retrieve all values of this BSON document into item[]
       if row.Item.Kind<>betDoc then
-        raise EORMMongoDBException.CreateFmt('Invalid row %d',[ord(row.Item.Kind)]);
+        raise EORMMongoDBException.CreateUTF8('%.GetJSONValues(%): invalid row kind=%',
+          [self,StoredClass,ord(row.Item.Kind)]);
       col := 0;
       while (row.Item.Data.DocList^<>byte(betEof)) and (col<colCount) and
             item[col].FromNext(row.Item.Data.DocList) do 
         inc(col);
       if col<>colCount then
-        raise EORMMongoDBException.CreateFmt('Invalid field count %d',[col]);
+        raise EORMMongoDBException.CreateUTF8(
+          '%.GetJSONValues(%): column count concern in row %<>%',
+          [self,StoredClass,col,colCount]);
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
         W.Add('{');
@@ -895,7 +902,7 @@ begin
     StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
-        raise EORMException.Create('InternalBatchStop should have been called');
+        raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
       fBatchIDsCount := 0;
       fBatchMethod := Method;
       case Method of
@@ -928,8 +935,8 @@ begin
         ['_id',BSONVariant(['$in',BSONVariantFromIntegers(fBatchIDs)])]));
     end;
     else
-      raise EORMException.CreateFmt('%s.BatchMethod=%d',
-        [fStoredClassRecordProps.SQLTableName,ord(fBatchMethod)]);
+      raise EORMException.CreateUTF8('%.InternalBatchStop(%) with BatchMethod=%',
+        [self,StoredClass,ord(fBatchMethod)]);
     end;
   finally
     FreeAndNil(fBatchWriter);

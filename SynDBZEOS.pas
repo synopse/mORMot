@@ -566,9 +566,8 @@ begin
       result := ftUTF8;
     stBytes, stBinaryStream:
       result := ftBlob;
-    else raise ESQLDBZEOS.CreateFmt('Unexpected TZSQLType "%s"',
-      [{$ifdef PUREPASCAl}IntToStr(ord(aNativeType)){$else}
-       GetEnumName(Typeinfo(TZSQLType),ord(aNativeType))^{$endif}]);
+    else raise ESQLDBZEOS.CreateUTF8('%: unexpected TZSQLType "%"',
+      [self,GetEnumName(Typeinfo(TZSQLType),ord(aNativeType))^]);
   end;
 end;
 
@@ -610,8 +609,8 @@ procedure TSQLDBZEOSConnection.Connect;
 var Log: ISynLog;
 begin
   if fDatabase=nil then
-    raise ESQLDBZEOS.CreateFmt('TSQLDBZEOSConnection.Connect() on %s failed: Database=nil',
-      [fProperties.ServerName]);
+    raise ESQLDBZEOS.CreateUTF8('%.Connect() on % failed: Database=nil',
+      [self,fProperties.ServerName]);
   with (fProperties as TSQLDBZEOSConnectionProperties).fURL do
     Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to % % for % at %:%',
       [Protocol,Database,HostName,Port])),true);
@@ -682,7 +681,7 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(Self);
   if (fStatement<>nil) or (fResultSet<>nil) then
-    raise ESQLDBZEOS.CreateFmt('%s.Prepare() shall be called once',[fStatementClassName]);
+    raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
     PrepareStatementWithParams(UTF8ToString(fSQL),
@@ -725,16 +724,15 @@ begin
     fillchar(ndx,sizeof(ndx),0);
     for p := 0 to fParamCount-1 do begin
       if fParams[p].VInt64<>fParamsArrayCount then
-        raise ESQLDBZEOS.CreateFmt(
-          '%s.ExecutePrepared: %d parameter expected array count %d, got %d',
-          [fStatementClassName,p,fParamsArrayCount,fParams[p].VInt64]);
+        raise ESQLDBZEOS.CreateUTF8(
+          '%.ExecutePrepared: % parameter expected array count %, got %',
+          [self,p,fParamsArrayCount,fParams[p].VInt64]);
       SetLength(fNullArray[p],fParamsArrayCount);
       with fParams[p] do begin
         case VType of
         ftUnknown:
-          raise ESQLDBZEOS.CreateFmt(
-            '%s.ExecutePrepared: Unknown type array parameter #%d',
-            [fStatementClassName,p+1]);
+          raise ESQLDBZEOS.CreateUTF8(
+            '%.ExecutePrepared: Unknown type array parameter #%',[self,p+1]);
         ftNull: begin
           // handle null column
           for j := 0 to fParamsArrayCount -1 do
@@ -818,23 +816,23 @@ begin
     if sllSQL in Family.Level then
       LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
   if fStatement=nil then
-    raise ESQLDBZEOS.CreateFmt('%s.ExecutePrepared() invalid call',[fStatementClassName]);
+    raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() invalid call',[self]);
   if fResultSet<>nil then
-    raise ESQLDBZEOS.CreateFmt('%s.ExecutePrepared() miss a Reset',[fStatementClassName]);
+    raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() miss a Reset',[self]);
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
   if fParamsArrayCount>0 then
     with (fConnection.Properties as TSQLDBZEOSConnectionProperties) do
     if fSupportsArrayBindings then
       arrayBinding := TZeosArrayBinding.Create(self) else
-      raise ESQLDBZEOS.CreateFmt('%s.BindArray() not supported by %s provider',
-        [fStatementClassName,DBMSName]) else
+      raise ESQLDBZEOS.CreateUTF8(
+        '%.BindArray() not supported by % provider',[self,DBMSName]) else
     arrayBinding := nil;
   try
     if arrayBinding=nil then
   {$else}
   if fParamsArrayCount>0 then
-    raise ESQLDBZEOS.CreateFmt('%s.BindArray() not supported',[fStatementClassName]) else
+    raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported',[self]) else
   {$endif}
     for i := 1 to fParamCount do
       with fParams[i-1] do
@@ -863,8 +861,8 @@ begin
         fStatement.SetBlob(i,stBinaryStream,blob);
       end;
       else
-        raise ESQLDBZEOS.CreateFmt('%s.ExecutePrepared: Invalid type parameter #%d',
-          [fStatementClassName,i]);
+        raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid type parameter #%',
+          [self,i]);
       end;
     // 2. Execute query
     if fExpectResults then begin
@@ -874,8 +872,8 @@ begin
       fResultSet := fStatement.ExecuteQueryPrepared;
       if fResultSet=nil then begin
         // e.g. PRAGMA in TZSQLiteCAPIPreparedStatement.ExecuteQueryPrepared
-        Log.Log(sllWarning,'%.ExecutePrepared(%s) returned nil',
-          [fStatementClassName,SQLWithInlinedParams]);
+        Log.Log(sllWarning,'TSQLDBZEOSStatement.ExecutePrepared(%s) returned nil',
+          [SQLWithInlinedParams]);
       end else begin
         fResultInfo := fResultSet.GetMetadata;
         Props := fConnection.Properties as TSQLDBZEOSConnectionProperties;
@@ -916,7 +914,7 @@ begin
   if fColumnCount=0 then // no row returned
     result := false else
   if fResultSet=nil then
-    raise ESQLDBZEOS.CreateFmt('%s.Step() invalid call',[fStatementClassName]) else
+    raise ESQLDBZEOS.CreateUTF8('%.Step() invalid self',[self]) else
   if SeekFirst then begin
     result := fResultSet.First;
     if result then
@@ -933,7 +931,7 @@ function TSQLDBZEOSStatement.ColumnBlob(Col: Integer): RawByteString;
 var blob: IZBlob;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnBlob(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnBlob(%) ResultSet=%',[self,Col,fResultSet]);
   blob := fResultSet.GetBlob(Col+1);
   if (blob=nil) or blob.IsEmpty then
     result := '' else
@@ -943,7 +941,7 @@ end;
 function TSQLDBZEOSStatement.ColumnCurrency(Col: Integer): currency;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnCurrency(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnCurrency(%) ResultSet=%',[self,Col,fResultSet]);
   {$ifdef ZEOS72UP}
   result := fResultSet.GetCurrency(Col+1);
   {$else}
@@ -954,35 +952,35 @@ end;
 function TSQLDBZEOSStatement.ColumnDateTime(Col: Integer): TDateTime;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnDateTime(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnDateTime(%) ResultSet=%',[self,Col,fResultSet]);
   result := fResultSet.GetTimestamp(Col+1);
 end;
 
 function TSQLDBZEOSStatement.ColumnDouble(Col: Integer): double;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnDouble(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnDouble(%) ResultSet=%',[self,Col,fResultSet]);
   result := fResultSet.GetDouble(Col+1);
 end;
 
 function TSQLDBZEOSStatement.ColumnInt(Col: Integer): Int64;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnInt(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnInt(%) ResultSet=%',[self,Col,fResultSet]);
   result := fResultSet.GetLong(Col+1);
 end;
 
 function TSQLDBZEOSStatement.ColumnNull(Col: Integer): boolean;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnNull(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnNull(%) ResultSet=%',[self,Col,fResultSet]);
   result := fResultSet.IsNull(Col+1);
 end;
 
 function TSQLDBZEOSStatement.ColumnUTF8(Col: Integer): RawUTF8;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBZEOS.CreateFmt('%s.ColumnUTF8(%d)',[fStatementClassName,Col]);
+    raise ESQLDBZEOS.CreateUTF8('%.ColumnUTF8(%) ResultSet=%',[self,Col,fResultSet]);
   {$ifdef ZEOS72UP}
   result := fResultSet.GetUTF8String(Col+1);
   {$else}

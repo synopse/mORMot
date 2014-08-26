@@ -11190,8 +11190,7 @@ begin
     Check(false);
   except
     on E: EInterfaceFactoryException do
-      Check(E.Message='Invalid fake ICalculator.Add interface call: '+
-        'TInterfaceStub returned error: expected exception',E.Message);
+      Check(Pos('TInterfaceStub returned error: expected exception',E.Message)>0,E.Message);
   end;
   try
     I.Add(1,2);

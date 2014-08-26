@@ -248,7 +248,8 @@ begin
      (fDBMS<>dNexusDB) then begin
     for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
       namevalue := ' '+namevalue+FIREDAC_PROVIDER[p];
-    raise ESQLDBFireDAC.CreateFmt('Unknown provider - available:%s',[namevalue]);
+    raise ESQLDBFireDAC.CreateUTF8('%.Create: unknown provider - available:%',
+      [self,namevalue]);
   end;
   fFireDACOptions.Text := UTF8ToString(FormatUTF8(
     'DriverID=%'#13#10'User_Name=%'#13#10'Password=%'#13#10'Database=%',
@@ -423,8 +424,8 @@ procedure TSQLDBFireDACConnection.Connect;
 var Log: ISynLog;
 begin
   if fDatabase=nil then
-    raise ESQLDBFireDAC.CreateFmt('TSQLDBFireDACConnection.Connect(%s): Database=nil',
-      [fProperties.ServerName]);
+    raise ESQLDBFireDAC.CreateUTF8('%.Connect(%): Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to DriverID=% Database=%',
     [FIREDAC_PROVIDER[fProperties.DBMS],fProperties.DatabaseName])),true);
   try
@@ -506,9 +507,9 @@ procedure TSQLDBFireDACStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBFireDAC.CreateFmt(
-      '%s.Prepare() expected %d parameters in request, found %d - [%s]',
-      [fStatementClassName,fPreparedParamsCount,fQueryParams.Count,aSQL]);
+    raise ESQLDBFireDAC.CreateUTF8(
+      '%.Prepare() expected % parameters in request, found % - [%]',
+      [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 
 procedure TSQLDBFireDACStatement.DatasetExecSQL;
@@ -641,9 +642,10 @@ begin
               P.AsBlob := VArray[aArrayIndex] else
             P.AsBlob := VData;
         else
-          raise ESQLDBFireDAC.CreateFmt(
-            'Invalid type on bound parameter #%d',[aParamIndex+1]);
-        end;
+          raise ESQLDBFireDAC.CreateUTF8(
+            '%.DataSetBindSQLParam: invalid type % on bound parameter #%',
+            [Self,ord(VType),aParamIndex+1]);
+        end;   
   end;
 end;
 

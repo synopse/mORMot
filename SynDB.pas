@@ -276,7 +276,7 @@ uses
 
 type
   /// generic Exception type, as used by the SynDB unit
-  ESQLDBException = class(Exception);
+  ESQLDBException = class(ESynException);
 
   // NOTE: TSQLDBFieldType is defined in SynCommons.pas (used by TSQLVar)
   
@@ -1460,7 +1460,6 @@ type
     fColumnCount: integer;
     fTotalRowsRetrieved: Integer;
     fCurrentRow: Integer;
-    fStatementClassName: string;
     fSQLWithInlinedParams: RawUTF8;
     function GetSQLWithInlinedParams: RawUTF8;
     /// raise an exception if Col is out of range according to fColumnCount
@@ -3446,8 +3445,8 @@ begin
   if self=nil then
     raise ESQLDBException.Create('TSQLDBConnection not created');
   if not Connected then
-    raise ESQLDBException.CreateFmt('%s on %s/%s should be connected',
-      [ClassName,Properties.ServerName,Properties.DataBaseName]);
+    raise ESQLDBException.CreateUTF8('% on %/% should be connected',
+      [self,Properties.ServerName,Properties.DataBaseName]);
 end;
 
 procedure TSQLDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
@@ -3474,7 +3473,7 @@ procedure TSQLDBConnection.Commit;
 begin
   CheckConnection;
   if TransactionCount<=0 then
-    raise ESQLDBException.CreateFmt('Invalid %s.Commit call',[ClassName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.Commit call',[self]);
   dec(fTransactionCount);
 end;
 
@@ -3615,7 +3614,7 @@ procedure TSQLDBConnection.Rollback;
 begin
   CheckConnection;
   if TransactionCount<=0 then
-    raise ESQLDBException.CreateFmt('Invalid %s.Rollback call',[ClassName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.Rollback call',[self]);
   dec(fTransactionCount);
 end;
 
@@ -3762,11 +3761,11 @@ end;
 function TSQLDBConnectionProperties.PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement;
 var Query: ISQLDBStatement;
     i, maxParam: integer;
-    Types: TSQLParamTypeDynArray; 
+    Types: TSQLParamTypeDynArray;
     Nulls: TSQLFieldBits;
     Values: TRawUTF8DynArray;
     GenericSQL: RawUTF8;
-begin                               
+begin
   result := nil; // returns nil interface on error
   if self=nil then
     exit;
@@ -3786,8 +3785,9 @@ begin
                      Query.BindNull(i+1) else
                      Query.BindBlob(i+1,pointer(Values[i]),length(Values[i]));
       sptDateTime: Query.BindDateTime(i+1,Iso8601ToDateTime(Values[i]));
-      else raise ESQLDBException.CreateFmt('Unrecognized parameter Type[%d] in "%s"',
-        [i+1,UTF8ToString(aSQL)]);
+      else raise ESQLDBException.CreateUTF8(
+        '%.PrepareInlined: Unrecognized parameter Type[%] = % in "%"',
+        [self,i+1,ord(Types[i]),aSQL]);
     end;
   result := Query;
 end;
@@ -4557,7 +4557,8 @@ begin
       end;
       AddShort('end');
       if TextLength>32700 then
-        raise ESQLDBException.CreateFmt('Execute Block length=%d',[TextLength]);
+        raise ESQLDBException.CreateUTF8(
+          '%.MultipleValuesInsert: Firebird Execute Block length=%',[self,TextLength]);
       SQLCached := false; // ftUTF8 values will have varying field length
     end;
     dOracle: begin // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
@@ -4613,8 +4614,8 @@ var batchRowCount,paramCountLimit: integer;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) then
-    raise ESQLDBException.CreateFmt('Invalid %s.MultipleValuesInsert(%s) call',
-      [ClassName,TableName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsert(%) call',
+      [self,TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
   case Props.DBMS of
@@ -4641,8 +4642,8 @@ begin
       batchRowCount := paramCountLimit div maxf else
       batchRowCount := RowCount;
   if batchRowCount=0 then
-    raise ESQLDBException.CreateFmt('%s.MultipleValuesInsert(%s) with # params = %d > %d',
-      [ClassName,TableName,RowCount*maxf,paramCountLimit]);
+    raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert(%) with # params = %>%',
+      [self,TableName,RowCount*maxf,paramCountLimit]);
   dec(maxf);
   prevrowcount := 0;
   SQLCached := false;
@@ -4666,8 +4667,8 @@ begin
       end; // exception leaves Query=nil to raise exception
     end;
     if Query=nil then
-      raise ESQLDBException.CreateFmt('%s.MultipleValuesInsert() Prepare(%s)',
-        [ClassName,SQL]);
+      raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Query=nil for "%"',
+        [self,SQL]);
     try
       p := 1;
       for i := 1 to prevrowcount do begin
@@ -4694,8 +4695,8 @@ begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) or
      (Props.DBMS<>dFirebird) then
-    raise ESQLDBException.CreateFmt('Invalid %s.MultipleValuesInsertInlined(%s) call',
-      [ClassName,TableName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsertFirebird(%,%)',
+      [self,Props,TableName]);
   sqllenwitoutvalues := 3*maxf+24;
   dec(maxf);
   for f := 0 to maxf do
@@ -4899,8 +4900,9 @@ begin
         ftDate:     Stmt.BindDateTime(i,PDateTime(@VInt64)^,VInOut);
         ftUTF8:     Stmt.BindTextU(i,VData,VInOut);
         ftBlob:     Stmt.BindBlob(i,VData,VInOut);
-        else raise ESQLDBException.CreateFmt(
-          'Invalid parameter #%d in %s.ProcessExec(cExecute)',[i,ClassName]);
+        else raise ESQLDBException.CreateUTF8(
+          'Invalid VType=% parameter #% in %.ProcessExec(cExecute)',
+          [ord(VType),i,self]);
       end else
       Stmt.BindArray(i,VType,VArray,InputExecute.ArrayCount);
     Stmt.ExecutePrepared;
@@ -4918,8 +4920,8 @@ begin
       OutputRawUTF8 := Stmt.FetchAllAsJSON(Command=cExecuteToExpandedJSON);
     end;
   end;
-  else raise ESQLDBException.CreateFmt('Unknown %s.ProcessExec() command %d',
-    [ClassName,ord(Command)]);
+  else raise ESQLDBException.CreateUTF8('Unknown %.ProcessExec() command %',
+        [self,ord(Command)]);
   end;
 end;
 {$endif DELPHI5OROLDER}
@@ -5063,8 +5065,8 @@ begin
     ftCurrency: Bind(Param,VCurrency,IO);
     ftUTF8:     BindTextP(Param,VText,IO);
     ftBlob:     BindBlob(Param,VBlob,VBlobLen,IO);
-    else raise ESQLDBException.CreateFmt(
-      '%s.Bind(Param=%d,VType=%d)',[fStatementClassName,Param,ord(VType)]);
+    else raise ESQLDBException.CreateUTF8('%.Bind(Param=%,VType=%)',
+      [self,Param,ord(VType)]);
   end;
 end;
 
@@ -5096,8 +5098,8 @@ begin
             UnQuoteSQLStringVar(pointer(Value),tmp);
           BindTextU(Param,tmp,IO);
         end;
-      else raise ESQLDBException.CreateFmt('Invalid %s.Bind(%d,TSQLDBFieldType(%d),%s)',
-        [fStatementClassName,Param,ord(ParamType),Value]);
+      else raise ESQLDBException.CreateUTF8('Invalid %.Bind(%,TSQLDBFieldType(%),%)',
+        [self,Param,ord(ParamType),Value]);
     end;
 end;
 
@@ -5134,12 +5136,13 @@ begin
     vtInt64:      Bind(i,VInt64^,IO);
     vtCurrency:   BindCurrency(i,VCurrency^,IO);
     vtExtended:   Bind(i,VExtended^,IO);
-    vtPointer:    if VPointer=nil then
-                     BindNull(i,IO) else
-                     raise ESQLDBException.Create('Unexpected BOUND pointer');
+    vtPointer:
+      if VPointer=nil then
+        BindNull(i,IO) else
+        raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',[self]);
     else
-      raise ESQLDBException.CreateFmt(
-      '%s.BindArrayOfConst(Param=%d,Type=%d)',[fStatementClassName,i,VType]);
+      raise ESQLDBException.CreateUTF8(
+        '%.BindArrayOfConst(Param=%,Type=%)',[self,i,VType]);
   end;
 end;
       
@@ -5186,8 +5189,8 @@ begin
     {$ifdef UNICODE}
     varUString:
       if DataIsBlob then
-        raise ESQLDBException.CreateFmt(
-          '%s: BLOB should not be UnicodeString',[fStatementClassName]) else
+        raise ESQLDBException.CreateUTF8(
+          '%.BindVariant: BLOB should not be UnicodeString',[self]) else
         BindTextU(Param,StringToUTF8(UnicodeString(TVarData(Data).VAny)),IO);
     {$endif}
     varString:
@@ -5198,8 +5201,8 @@ begin
         BindTextU(Param,CurrentAnsiConvert.AnsiToUTF8(AnsiString(TVarData(Data).VAny)),IO);
     else
     {$ifdef LVCL}
-      raise ESQLDBException.CreateFmt(
-        'Unhandled variant type in %s.BindVariant',[fStatementClassName]);
+      raise ESQLDBException.CreateUTF8(                                  
+        'Unhandled variant type % in %.BindVariant',[TVarData(Data).VType,self]);
     {$else}
       // also use TEXT for any non native VType parameter
       BindTextU(Param,StringToUTF8(string(Data)),IO);
@@ -5223,8 +5226,8 @@ begin
   if (Param<=0) or (ParamType in [ftUnknown,ftNull]) or (ValuesCount<=0) or
      (length(Values)<ValuesCount) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
-    raise ESQLDBException.CreateFmt('Invalid call to %s.BindArray(Param=%d,Type=%s)',
-      [fStatementClassName,Param,TSQLDBFieldTypeToString(ParamType)]);
+    raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
+      [self,Param,TSQLDBFieldTypeToString(ParamType)]);
 end;
 
 procedure TSQLDBStatement.BindArray(Param: Integer; const Values: array of Int64);
@@ -5256,8 +5259,7 @@ end;
 procedure TSQLDBStatement.CheckCol(Col: integer);
 begin
   if (self=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
-    raise ESQLDBException.CreateFmt('Invalid call to %s.Column*(Col=%d)',
-      [fStatementClassName,Col]);
+    raise ESQLDBException.CreateUTF8('Invalid call to %.Column*(Col=%)',[self,Col]);
 end;
 
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
@@ -5265,7 +5267,6 @@ begin
   // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
-  fStatementClassName := string(ClassName);
 end;
 
 function TSQLDBStatement.ColumnCount: integer;
@@ -5327,9 +5328,8 @@ begin
           {$endif}
             UTF8ToSynUnicode(V.VText,V.VBlobLen,SynUnicode(VAny));
       end;
-      else raise ESQLDBException.CreateFmt(
-        '%s.ColumnToVariant: Invalid ColumnType(%d)=%d',
-        [fStatementClassName,Col,ord(result)]);
+      else raise ESQLDBException.CreateUTF8(
+        '%.ColumnToVariant: Invalid ColumnType(%)=%',[self,Col,ord(result)]);
     end;
   end;
 end;
@@ -5382,9 +5382,8 @@ begin
           blob := ColumnBlob(col);
           WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
         end;
-      else raise ESQLDBException.CreateFmt(
-        '%s.ColumnsToJSON: Invalid ColumnType(%d)=%d',
-        [fStatementClassName,col,ord(ColumnType(col))]);
+      else raise ESQLDBException.CreateUTF8(
+        '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(ColumnType(col))]);
     end;
     WR.Add(',');
   end;
@@ -5424,7 +5423,7 @@ function TSQLDBStatement.ColumnToTypedValue(Col: integer;
   DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
 {$ifdef LVCL}
 begin
-  raise ESQLDBException.Create('ColumnToTypedValue non implemented in LVCL');
+  raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue non implemented in LVCL',[self]);
 end;
 {$else}
 var Temp: Variant; // rely on a temporary variant value for the conversion
@@ -5437,8 +5436,8 @@ begin
   ftDate:     TDateTime(Dest) := Temp;
   ftUTF8:     RawUTF8(Dest) := StringToUTF8(string(Temp));
   ftBlob:     TBlobData(Dest) := TBlobData(Temp);
-    else raise ESQLDBException.CreateFmt('%s.ColumnToTypedValue: Invalid Type "%s"',
-      [fStatementClassName,TSQLDBFieldTypeToString(result)]);
+    else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
+      [self,TSQLDBFieldTypeToString(result)]);
   end;
 end;
 {$endif}
@@ -5449,8 +5448,7 @@ function TSQLDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
 begin
   dec(Param); // start at #1
   if (self=nil) or (cardinal(Param)>=cardinal(fParamCount)) then
-    raise ESQLDBException.CreateFmt('%s.ParamToVariant(%d)',
-      [fStatementClassName,Param]);
+    raise ESQLDBException.CreateUTF8('%.ParamToVariant(%)',[self,Param]);
   // overridden method should fill Value with proper data
   result := ftUnknown;
 end;
@@ -5560,9 +5558,9 @@ begin
               W.AddNoJSONEscape(V.VText);
           end;
           ftBlob: W.AddShort(BLOB[Tab]);  // DoNotFetchBlobs=true
-          else raise ESQLDBException.CreateFmt(
-            '%s.FetchAllToCSVValues: Invalid ColumnType() %s',
-            [fStatementClassName,TSQLDBFieldTypeToString(ColumnType(F))]);
+          else raise ESQLDBException.CreateUTF8(
+            '%.FetchAllToCSVValues: Invalid ColumnType(%) %',
+            [self,F,TSQLDBFieldTypeToString(ColumnType(F))]);
         end;
         if F=FMax then
           W.AddCR else
@@ -5620,9 +5618,8 @@ begin
       W.Write(ColumnUTF8(F));
     ftBlob:
       W.Write(ColumnBlob(F));
-    else raise ESQLDBException.CreateFmt(
-      '%s.ColumnsToBinary: invalid ColTypes[%d]=%d',
-      [fStatementClassName,F,ord(ColTypes[F])]);
+    else raise ESQLDBException.CreateUTF8(
+      '%.ColumnsToBinary: invalid ColTypes[%]=%',[self,F,ord(ColTypes[F])]);
     end;
 end;
 
@@ -5656,8 +5653,7 @@ begin
       // initialize null handling
       NullRowSize := (FMax shr 3)+1;
       if NullRowSize>sizeof(Null) then
-        raise ESQLDBException.CreateFmt(
-          '%s.FetchAllToBinary: too many columns',[fStatementClassName]);
+        raise ESQLDBException.CreateUTF8('%.FetchAllToBinary: too many columns',[self]);
       // save all data rows
       StartPos := W.TotalWritten;
       if (CurrentRow=1) or Step then // Step may already be done (e.g. TQuery.Open)
@@ -5788,8 +5784,7 @@ end;
 
 function TSQLDBStatement.ColumnCursor(Col: integer): ISQLDBRows;
 begin
-  raise ESQLDBException.CreateFmt(
-    '%s does not support CURSOR columns',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('% does not support CURSOR columns',[self]);
 end;
 
 function TSQLDBStatement.Instance: TSQLDBStatement;
@@ -5848,7 +5843,7 @@ end;
 function TSQLDBStatement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
 {$ifdef LVCL}
 begin
-  raise ESQLDBException.Create('Unhandled GetParamValueAsText()');
+  raise ESQLDBException.CreateUTF8('Unhandled %.GetParamValueAsText()',[self]);
 end;
 {$else}
 var V: variant;
@@ -5991,8 +5986,8 @@ begin
       ftNull:
         ColumnType := ftUTF8; // if not identified, we'll set a flexible content
       ftUnknown:
-        raise ESQLDBException.CreateFmt(
-          '%s.ColumnsToSQLInsert: Invalid column %s',[fStatementClassName,ColumnName]);
+        raise ESQLDBException.CreateUTF8(
+          '%.ColumnsToSQLInsert: Invalid column %',[self,ColumnName]);
       end;
       Result := Result+ColumnName+',';
     end;
@@ -6024,14 +6019,12 @@ end;
 
 procedure TSQLDBStatement.BindCursor(Param: integer);
 begin
-  raise ESQLDBException.CreateFmt(
-    '%s does not support CURSOR parameter',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter',[self]);
 end;
 
 function TSQLDBStatement.BoundCursor(Param: Integer): ISQLDBRows;
 begin
-  raise ESQLDBException.CreateFmt(
-    '%s does not support CURSOR parameter',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter',[self]);
 end;
 
 
@@ -6046,14 +6039,14 @@ var Rows: TSQLDBStatement;
 begin
   Rows := TSQLDBStatement(TVarData(V).VPointer);
   if Rows=nil then
-    ESQLDBException.Create('Invalid TSQLDBRowVariantType call');
+    raise ESQLDBException.Create('Invalid TSQLDBRowVariantType call');
   Rows.ColumnToVariant(Rows.ColumnIndex(RawByteString(Name)),Variant(Dest));
 end;
 
 procedure TSQLDBRowVariantType.IntSet(const V, Value: TVarData;
   Name: PAnsiChar);
 begin
-  ESQLDBException.Create('TSQLDBRowVariantType is read-only');
+  raise ESQLDBException.Create('TSQLDBRowVariantType is read-only');
 end;
 
 {$endif}
@@ -6066,7 +6059,7 @@ function TSQLDBStatementWithParams.CheckParam(Param: Integer;
   NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType): PSQLDBParam;
 begin
   if self=nil then
-    raise ESQLDBException.CreateFmt('Invalid %s.Bind*()',[fStatementClassName]);
+    raise ESQLDBException.Create('self=nil for TSQLDBStatement.Bind*()');
   if Param>fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param-1];
@@ -6080,8 +6073,8 @@ begin
   result := CheckParam(Param,NewType,IO);
   if (NewType in [ftUnknown,ftNull]) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
-    raise ESQLDBException.CreateFmt('Invalid call to %s.BindArray(Param=%d,Type=%s)',
-      [fStatementClassName,Param,TSQLDBFieldTypeToString(NewType)]);
+    raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
+      [self,Param,TSQLDBFieldTypeToString(NewType)]);
   SetLength(result^.VArray,ArrayCount);
   result^.VInt64 := ArrayCount;
   fParamsArrayCount := ArrayCount;
@@ -6174,8 +6167,7 @@ begin
   inherited ParamToVariant(Param,Value); // raise exception if Param incorrect
   dec(Param); // start at #1
   if CheckIsOutParameter and (fParams[Param].VInOut=paramIn) then
-    raise ESQLDBException.CreateFmt('%s.ParamToVariant expects an [In]Out parameter',
-      [fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('%.ParamToVariant expects an [In]Out parameter',[self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
   // -> we have nothing to do but return the current value! :)
@@ -6286,7 +6278,7 @@ procedure TSQLDBStatementWithParams.BindArrayRow(const aValues: array of const);
 var i: integer;
 begin
   if length(aValues)<>fParamCount then
-    raise ESQLDBException.CreateFmt('Invalid %s.BindArrayRow call',[fStatementClassName]);
+    raise ESQLDBException.CreateFmt('Invalid %.BindArrayRow call',[self]);
   for i := 0 to high(aValues) do
     with fParams[i] do begin
       if length(VArray)<=fParamsArrayCount then
@@ -6316,7 +6308,7 @@ var F: integer;
 begin
   if Rows<>nil then
     if Rows.ColumnCount<>fParamCount then
-      raise ESQLDBException.CreateFmt('Invalid %s.BindFromRows call',[fStatementClassName]) else
+      raise ESQLDBException.CreateUTF8('Invalid %.BindFromRows call',[self]) else
     for F := 0 to fParamCount-1 do
     with fParams[F] do begin
       if length(VArray)<=fParamsArrayCount then
@@ -6601,7 +6593,7 @@ begin
   until false;
   fDataRowCount := 0;
   fColumnCount := 0;
-  raise ESQLDBException.CreateFmt('Invalid %s.IntHeaderProcess',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('Invalid %.IntHeaderProcess',[self]);
 end;
 
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte);
@@ -6611,7 +6603,7 @@ begin
   FillChar(fDataCurrentRowNull,fDataRowNullSize,0);
   NullLen := FromVarUInt32(Reader);
   if NullLen>fDataRowNullSize then
-    raise ESQLDBException.CreateFmt('Invalid %s.IntFillDataCurrent',[fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.IntFillDataCurrent',[self]);
   if NullLen>0 then begin
     Move(Reader^,fDataCurrentRowNull,NullLen);
     inc(Reader,NullLen);
@@ -6632,8 +6624,8 @@ begin
           ColumnDataSize := Len;
         inc(Reader,Len); // jump string/blob content
       end;
-      else raise ESQLDBException.CreateFmt('%s.IntStep: Invalid ColumnType(%s)=%d',
-        [fStatementClassName,ColumnName,ord(ColumnType)]);
+      else raise ESQLDBException.CreateUTF8('%.IntStep: Invalid ColumnType(%)=%',
+        [self,ColumnName,ord(ColumnType)]);
       end;
     end;
 end;
@@ -6700,7 +6692,7 @@ begin
           FieldSize^ := ColumnDataSize; // true max size as computed at loading 
         result := ColumnType;
       end else
-    raise ESQLDBException.CreateFmt('Invalid %s.ColumnType()',[fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.ColumnType()',[self]);
 end;
 
 function TSQLDBProxyStatementAbstract.IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;
@@ -6722,7 +6714,7 @@ begin
   ftInt64: result := FromVarInt64Value(Data);
   ftDouble, ftDate: result := PDouble(Data)^;
   ftCurrency: result := PCurrency(Data)^;
-  else raise ESQLDBException.CreateFmt('%s.ColumnCurrency()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnCurrency()',[self]);
   end;
 end;
 
@@ -6735,7 +6727,7 @@ begin
   ftDouble, ftDate: result := PDouble(Data)^;
   ftUTF8: with FromVarBlob(Data) do
             result := Iso8601ToDateTimePUTF8Char(PUTF8Char(Ptr),Len);
-  else raise ESQLDBException.CreateFmt('%s.ColumnDateTime()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnDateTime()',[self]);
   end;
 end;
 
@@ -6747,7 +6739,7 @@ begin
   ftInt64: result := FromVarInt64Value(Data);
   ftDouble, ftDate: result := PDouble(Data)^;
   ftCurrency: result := PCurrency(Data)^;
-  else raise ESQLDBException.CreateFmt('%s.ColumnDouble()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnDouble()',[self]);
   end;
 end;
 
@@ -6759,7 +6751,7 @@ begin
   ftInt64: result := FromVarInt64Value(Data);
   ftDouble, ftDate: result := Trunc(PDouble(Data)^);
   ftCurrency: result := PInt64(Data)^ div 10000;
-  else raise ESQLDBException.CreateFmt('%s.ColumnInt()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnInt()',[self]);
   end;
 end;
 
@@ -6775,7 +6767,7 @@ begin
   ftNull: result := '';
   ftDouble, ftCurrency, ftDate: SetString(result,PAnsiChar(Data),sizeof(Int64));
   ftBlob, ftUTF8: with FromVarBlob(Data) do SetString(result,Ptr,Len);
-  else raise ESQLDBException.CreateFmt('%s.ColumnBlob()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnBlob()',[self]);
   end;
 end;
 
@@ -6789,7 +6781,7 @@ begin
   ftCurrency: result := Curr64ToStr(PInt64(Data)^);
   ftDate: DateTimeToIso8601TextVar(PDateTime(Data)^,'T',result);
   ftBlob, ftUTF8: with FromVarBlob(Data) do SetString(result,Ptr,Len);
-  else raise ESQLDBException.CreateFmt('%s.ColumnUTF8()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnUTF8()',[self]);
   end;
 end;
 
@@ -6804,7 +6796,7 @@ begin
   ftDate: DateTimeToIso8601StringVar(PDateTime(Data)^,'T',result);
   ftUTF8: with FromVarBlob(Data) do UTF8DecodeToString(PUTF8Char(Ptr),Len,result);
   ftBlob: with FromVarBlob(Data) do SetString(result,Ptr,Len shr 1);
-  else raise ESQLDBException.CreateFmt('%s.ColumnString()',[fStatementClassName]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnString()',[self]);
   end;
 end;
 
@@ -6814,7 +6806,7 @@ end;
 procedure TSQLDBProxyStatement.ParamsToCommand(var Input: TSQLDBProxyConnectionCommandExecute);
 begin
   if (fColumnCount>0) or (fDataInternalCopy<>'') then
-    raise ESQLDBException.CreateFmt('Invalid %s.ExecutePrepared* call',[fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('Invalid %.ExecutePrepared* call',[self]);
   Input.SQL := fSQL;
   if length(fParams)<>fParamCount then // strip to only needed memory
     SetLength(fParams,fParamCount);
@@ -6847,7 +6839,7 @@ end;
 
 procedure TSQLDBProxyStatement.Reset;
 begin
-  raise ESQLDBException.CreateFmt('%s should not be Reset',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('Unexpected %.Reset',[self]);
 end;
 
 function TSQLDBProxyStatement.Step(SeekFirst: boolean): boolean;
@@ -6903,7 +6895,7 @@ begin
   result := (cardinal(Index)<cardinal(fDataRowCount)) and (fColumnCount>0);
   if not result then
     if RaiseExceptionOnWrongIndex then
-      raise ESQLDBException.CreateFmt('Invalid %s.GotoRow(%d)',[fStatementClassName,Index]) else
+      raise ESQLDBException.CreateUTF8('Invalid %.GotoRow(%)',[self,Index]) else
       exit;
   Reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
   IntFillDataCurrent(Reader);
@@ -6911,12 +6903,12 @@ end;
 
 procedure TSQLDBProxyStatementRandomAccess.ExecutePrepared;
 begin
-  raise ESQLDBException.CreateFmt('Unexpected %s.ExecutePrepared',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('Unexpected %.ExecutePrepared',[self]);
 end;
 
 function TSQLDBProxyStatementRandomAccess.Step(SeekFirst: boolean=false): boolean;
 begin
-  raise ESQLDBException.CreateFmt('Unexpected %s.Step',[fStatementClassName]);
+  raise ESQLDBException.CreateUTF8('Unexpected %.Step',[self]);
 end;
 
 

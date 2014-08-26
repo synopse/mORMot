@@ -435,7 +435,8 @@ procedure TSQLDBUniDACConnection.Connect;
 var Log: ISynLog;
 begin
   if fDatabase=nil then
-    raise ESQLDBUniDAC.CreateFmt('%s.Connect(%s): Database=nil',[ClassName,fProperties.ServerName]);
+    raise ESQLDBUniDAC.CreateUTF8('%.Connect(%): Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName,fDatabase.Database,fDatabase.Server])),true);
   try

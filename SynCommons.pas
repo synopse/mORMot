@@ -411,6 +411,8 @@ unit SynCommons;
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
     variable, and ESynException.CustomLog() method to customize how raised
     exception are logged when intercepted - feature request [495720e0b9]
+  - added ESynException.CreateUTF8() constructor, more powerful than the
+    default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
   - now FileSize() function won't raise any exception if the file does not exist
     and will return any size > 2 GB as expected
   - faster PosEx() function in pure pascal mode (based on Avatar Zondertau work)
@@ -3857,12 +3859,12 @@ type
     /// ensure a given element name is unique, then add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
-    // an ESynException.CreateFmt() is raised with the supplied arguments 
+    // an ESynException.CreateUTF8() is raised with the supplied arguments 
     // - use internaly FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
     function AddUniqueName(const aName: RawUTF8;
-      const ExceptionMsg: string; const ExceptionArgs: array of const): pointer;
+      ExceptionMsg: PUTF8Char; const ExceptionArgs: array of const): pointer;
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -6044,6 +6046,7 @@ type
   protected
     fMap: TMemoryMap;
     fFileStream: TFileStream;
+    fFileName: TFileName;
   public
     /// create a TStream from a file content using fast memory mapping
     // - if aCustomSize and aCustomOffset are specified, the corresponding
@@ -6057,6 +6060,8 @@ type
       aCustomSize: cardinal=0; aCustomOffset: Int64=0); overload;
     /// release any internal mapped file instance
     destructor Destroy; override;
+    /// the file name, if created from such Create(aFileName) constructor
+    property FileName: TFileName read fFileName;
   end;
 
   /// available kind of integer array storage, corresponding to the data layout
@@ -11343,6 +11348,12 @@ type
   /// generic parent class of all custom Exception types of this unit
   ESynException = class(Exception)
   public
+    /// constructor which will use FormatUTF8() instead of Format()
+    // - expect % as delimitor, so is less error prone than %s %d %g
+    // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
+    // appending class name for any class or object, the hexa value for a
+    // pointer, or the JSON representation of the supplied variant
+    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the DefaultSynLogExceptionToStr()
@@ -11521,7 +11532,8 @@ begin
     result := Dest+MultiByteToWideChar(
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
     {$else}
-    raise ESynException.CreateFmt('AnsiBufferToUnicode() not supported yet for CP=%d',[CodePage]);
+    raise ESynException.CreateUTF8('%.AnsiBufferToUnicode() not supported yet for CP=%',
+      [self,CodePage]);
     {$endif}
     {$endif}
     {$ifndef DELPHI5OROLDER}
@@ -11727,7 +11739,8 @@ begin
     result := Dest+WideCharToMultiByte(
       fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
     {$else}
-    raise ESynException.CreateFmt('UnicodeBufferToAnsi() not supported yet for CP=%d',[CodePage]);
+    raise ESynException.CreateUTF8('%.UnicodeBufferToAnsi() not supported yet for CP=%',
+      [self,CodePage]);
     {$endif}
 end;
 
@@ -11926,7 +11939,7 @@ constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var i: integer;
     A256: array[0..256] of AnsiChar;
     U256: array[0..256] of WideChar; // AnsiBufferToUnicode() write a last #0
-begin                      
+begin // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here                     
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
     raise ESynException.CreateFmt('%s.Create - Invalid code page %d',
@@ -12176,7 +12189,7 @@ end;
 constructor TSynAnsiUTF8.Create(aCodePage: cardinal);
 begin
   if aCodePage<>CP_UTF8 then
-    raise ESynException.CreateFmt('TSynAnsiUTF8.Create(%d)',[aCodePage]);
+    raise ESynException.CreateUTF8('%.Create(%)',[self,aCodePage]);
   inherited Create(aCodePage);
 end;
 
@@ -12241,7 +12254,7 @@ end;
 constructor TSynAnsiUTF16.Create(aCodePage: cardinal);
 begin
   if aCodePage<>CP_UTF16 then
-    raise ESynException.CreateFmt('TSynAnsiUTF16.Create(%d)',[aCodePage]);
+    raise ESynException.CreateUTF8('%.Create(%)',[self,aCodePage]);
   inherited Create(aCodePage);
 end;
 
@@ -16209,7 +16222,8 @@ Txt:  len := Format-PDeb;
   if L=0 then
     exit;
   if (not JSONFormat) and (tmpN>SizeOf(inlin)shl 3) then
-    raise ESynException.Create('Too many parameters for FormatUTF8');
+    raise ESynException.CreateUTF8(
+      'Too many parameters for FormatUTF8(): %>%',[tmpN,SizeOf(inlin)shl 3]);
   SetLength(result,L);
   Format := pointer(result);
   for i := 0 to tmpN-1 do
@@ -25767,7 +25781,7 @@ function TJSONCustomParsers.Search(aTypeInfo: pointer;
 var added: boolean;
 begin
   if (aTypeInfo=nil) or (self=nil) then
-    raise ESynException.Create('Invalid aTypeInfo');
+    raise ESynException.CreateUTF8('%.Search(%)',[self,aTypeInfo]);
   fillchar(Reg,sizeof(Reg),0);
   case PDynArrayTypeInfo(aTypeInfo)^.kind of
   tkDynArray: begin
@@ -25780,7 +25794,8 @@ begin
     Reg.RecordTypeInfo := aTypeInfo;
     result := RecordSearch(Reg.RecordTypeInfo,false);
   end;
-  else raise ESynException.Create('aTypeInfo should be DynArray or Record');
+  else raise ESynException.CreateUTF8('%.Search(kind=%) not DynArray or Record',
+    [self,ord(PDynArrayTypeInfo(aTypeInfo)^.kind)]);
   end;
   if not AddIfNotExisting then
     exit;
@@ -25788,7 +25803,7 @@ begin
   if Reg.RecordTypeName='' then
     TypeInfoToName(Reg.DynArrayTypeInfo,Reg.RecordTypeName);
   if Reg.RecordTypeName='' then
-    raise ESynException.Create('No type name');
+    raise ESynException.CreateUTF8('%.Search(%) has no type name',[self,aTypeInfo]);
   if result<0 then
     result := fParsers.FindHashedForAdding(Reg.RecordTypeName,added);
 end;
@@ -25864,11 +25879,12 @@ begin // code below must match TTextWriter.AddRecordJSON
   if JSON=nil then
     exit;
   if (@Rec=nil) or (TypeInfo=nil) then
-    raise ESynException.Create('Invalid RecordLoadJSON call');
+    raise ESynException.CreateUTF8('Invalid RecordLoadJSON(%) call',[TypeInfo]);
   if JSON^=' ' then repeat inc(JSON); if JSON^=#0 then exit; until JSON^<>' ';
   if PCardinal(JSON)^=JSON_BASE64_MAGIC_QUOTE then begin
     if PDynArrayTypeInfo(TypeInfo)^.kind<>tkRecord then
-      raise ESynException.Create('Invalid RecordLoadJSON(TypeInfo)');
+      raise ESynException.CreateUTF8('RecordLoadJSON(%) kind=%',
+        [TypeInfo,ord(PDynArrayTypeInfo(TypeInfo)^.kind)]);
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
     if (Val=nil) or (not wasString) or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
@@ -25956,8 +25972,9 @@ begin
     end;
     tkArray: begin
       if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
-        raise ESynException.CreateFmt('TJSONCustomParserCustomSimple.Create("%s") '+
-          'supports only one dimension static array)',[aCustomTypeName]);
+        raise ESynException.CreateUTF8(
+          '%.Create("%") supports only one dimension static array)',
+          [self,aCustomTypeName]);
       fKnownType := ktStaticArray;
       fDataSize := PArrayTypeInfo(fTypeData)^.Size;
       fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
@@ -25965,9 +25982,8 @@ begin
         '',PArrayTypeInfo(fTypeData)^.elType^,fFixedSize);
     end
     else
-      raise ESynException.CreateFmt(
-        'TJSONCustomParserCustomSimple.Create("%s") non supported type: %d)',
-        [aCustomTypeName,PByte(fCustomTypeInfo)^]);
+      raise ESynException.CreateUTF8('%.Create("%") unsupported type: %',
+        [self,aCustomTypeName,PByte(fCustomTypeInfo)^]);
     end;
   end;
 end;
@@ -26103,8 +26119,8 @@ var parser: PJSONCustomParserRegistration;
 begin
   parser := GetJSONCustomParserRegistration;
   if (parser^.RecordCustomParser=nil) or (parser^.RecordCustomParser.Root=nil) then
-    raise ESynException.CreateFmt('%s.ContextNestedProperties without custom parser',
-      [ClassName]);
+    raise ESynException.CreateUTF8('%.ContextNestedProperties without custom parser',
+      [self]);
   result := parser^.RecordCustomParser.Root.ContextNestedProperties(aRegisteredTypes);
 end;
 {$endif}
@@ -26115,16 +26131,16 @@ begin
   inherited Create(aPropertyName,aCustomTypeName);
   fCustomTypeIndex := GlobalJSONCustomParsers.RecordSearch(aCustomTypeName);
   if fCustomTypeIndex<0 then
-    raise ESynException.CreateFmt('%s.Create(unknown "%s" type)',
-      [ClassName,aCustomTypeName]);
+    raise ESynException.CreateUTF8('%.Create(unknown "%" type)',
+      [self,aCustomTypeName]);
   with GlobalJSONCustomParsers.fParser[fCustomTypeIndex] do begin
     fCustomTypeInfo := RecordTypeInfo;
     fCustomTypeName := RecordTypeName;
   end;
   fDataSize := RecordTypeInfoSize(fCustomTypeInfo);
   if fDataSize=0 then
-    raise ESynException.CreateFmt('%s.Create("%s" non record type)',
-      [ClassName,aCustomTypeName]);
+    raise ESynException.CreateUTF8('%.Create("%" non record type)',
+      [self,aCustomTypeName]);
 end;
 
 constructor TJSONCustomParserCustomRecord.Create(
@@ -26151,8 +26167,8 @@ begin
       result := @GlobalJSONCustomParsers.fParser[fCustomTypeIndex];
   end;
   if result=nil then
-    raise ESynException.CreateFmt('"%s" type should not have been un-registered',
-      [fCustomTypeName]);
+    raise ESynException.CreateUTF8(
+      '%: "%" type should not have been un-registered',[self,fCustomTypeName]);
 end;
 
 procedure TJSONCustomParserCustomRecord.CustomWriter(
@@ -26321,7 +26337,8 @@ begin
         if ndx<0 then
           ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
         if ndx<0 then
-          raise ESynException.CreateFmt('AddItemFromEnhancedRTTI("%s")',[ItemTypeName]);
+          raise ESynException.CreateUTF8('%.AddItemFromEnhancedRTTI("%")',
+            [self,ItemTypeName]);
         result := TJSONCustomParserCustomRecord.Create(PropertyName,ndx);
       end else
       result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
@@ -26460,7 +26477,7 @@ procedure TJSONCustomParserRTTI.ReAllocateNestedArray(var Data: PtrUInt;
 var OldLength: integer;
 begin
   if Data=0 then
-    raise ESynException.Create('ReAllocateNestedArray(nil)');
+    raise ESynException.CreateUTF8('%.ReAllocateNestedArray(nil)',[self]);
   dec(Data,sizeof(TDynArrayRec));
   ReAllocMem(pointer(Data),sizeof(TDynArrayRec)+fNestedDataSize*NewLength);
   OldLength := PDynArrayRec(Data)^.length;
@@ -26584,7 +26601,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       if P=nil then
         exit;
       if P[-1]<>EndOfObject then
-        raise ESynException.Create('Unexpected RawJSON end');
+        raise ESynException.CreateUTF8('%.ReadOneLevel: Unexpected RawJSON end',[self]);
       SetString(PRawJSON(Data)^,PAnsiChar(PropValue),P-PropValue-1);
     end;
     else begin
@@ -26948,8 +26965,8 @@ begin
     result := TJSONCustomParserRTTI.CreateFromTypeName(
       aPropertyName,aCustomRecordTypeName);
     if result=nil then
-      raise ESynException.CreateFmt('Unknown ptCustom for %s.AddItem(%s: %s)',
-        [ClassName,aPropertyName,aCustomRecordTypeName]);
+      raise ESynException.CreateUTF8('Unknown ptCustom for %.AddItem(%: %)',
+        [self,aPropertyName,aCustomRecordTypeName]);
   end else
     result := TJSONCustomParserRTTI.Create(aPropertyName,aPropertyType);
   fItems.Add(result);
@@ -27015,10 +27032,10 @@ begin
   fRoot.ComputeDataSizeAfterAdd;
   recordInfoSize := RecordTypeInfoSize(aRecordTypeInfo);
   if (recordInfoSize<>0) and (fRoot.fDataSize<>recordInfoSize) then
-    raise ESynException.CreateFmt('%s text definition is not accurate, '+
-      'or the type has not been defined as PACKED record: record size is %d '+
-      'bytes but text definition generated %d bytes',
-      [fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
+    raise ESynException.CreateUTF8('%.Create: % text definition is not accurate,'+
+      ' or the type has not been defined as PACKED record: RTTI size is %'+
+      ' bytes but text definition generated % bytes',
+      [self,fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
 procedure TJSONCustomParserFromTextDefinition.Parse(Props: TJSONCustomParserRTTI;
@@ -27029,7 +27046,7 @@ procedure TJSONCustomParserFromTextDefinition.Parse(Props: TJSONCustomParserRTTI
     if GetNextFieldProp(P,TypIdent) then
       result := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
         pointer(TypIdent),length(TypIdent),TypIdent) else
-      raise ESynException.Create('Expected field type');
+      raise ESynException.CreateUTF8('%.Parse: missing field type',[self]);
   end;
 var PropsName: TRawUTF8DynArray;
     PropsMax, ndx, firstNdx: cardinal;
@@ -27077,8 +27094,8 @@ begin
           end else
             P := nil;
           if P=nil then
-            raise ESynException.Create(
-              'Expected syntax is "array of record" or "array of SimpleType"');
+            raise ESynException.CreateUTF8('%.Parse: expected syntax is '+
+              '"array of record" or "array of SimpleType"',[self]);
           ExpectedEnd := eeEndKeyWord;
         end;
         ptRecord:
@@ -27140,9 +27157,10 @@ begin
     fRoot := TJSONCustomParserRTTI.Create('',ptRecord);
     FromEnhancedRTTI(fRoot,aRecordTypeInfo);
     if fRoot.fNestedDataSize<>RecordTypeInfoSize(aRecordTypeInfo) then
-      raise ESynException.Create('Error when retrieving enhanced RTTI');
+      raise ESynException.CreateUTF8(
+        '%.Create: error when retrieving enhanced RTTI for %',[self,aRecordTypeInfo]);
     {$else}
-    raise ESynException.Create('TJSONCustomParserFromRTTI.Create');
+    raise ESynException.CreateUTF8('%.Create with no enhanced RTTI',[self]);
     {$endif}
   end;
   fItems.Add(fRoot);
@@ -27172,7 +27190,7 @@ var FieldTable: PFieldTable;
 begin // only tkRecord is needed here
   FieldTable := RecordTypeInfoFieldTable(Info);
   if FieldTable=nil then
-    raise ESynException.Create('FromEnhancedRTTI(record?)');
+    raise ESynException.CreateUTF8('%.FromEnhancedRTTI(%=record?)',[self,Info]);
   FieldSize := FieldTable^.Size;
   inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
   inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
@@ -27301,7 +27319,8 @@ begin
     varUString:
       UTF8DecodeToUnicodeString(pointer(Txt),length(Txt),UnicodeString(Value.VAny));
     {$endif}
-    else raise ESynException.CreateFmt('RawUTF8ToVariant(,%d)',[ExpectedValueType]);
+    else raise ESynException.CreateFmt('RawUTF8ToVariant(ExpectedValueType=%d)',
+      [ExpectedValueType]);
   end;
 end;
   
@@ -27737,7 +27756,7 @@ end;
 procedure TSynInvokeableVariantType.ToJSON(W: TTextWriter; const Value: variant;
   Escape: TTextWriterKind);
 begin
-  raise ESynException.CreateFmt('%s.ToJSON: unhandled variant type',[ClassName]);
+  raise ESynException.CreateUTF8('%.ToJSON: unimplemented variant type',[self]);
 end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
@@ -28010,7 +28029,8 @@ begin // this code should copy parameters without any reference count handling
     end;
     {$endif}
   else
-    raise EInvalidCast.CreateFmt('ParseParamPointer: Invalid VarType=%d',[aType and TYPE_BYREF_MASK]);
+    raise EInvalidCast.CreateFmt('ParseParamPointer: Invalid VarType=%d',
+      [aType and TYPE_BYREF_MASK]);
   end;
   result := PAnsiChar(P)+Size;
 end;
@@ -29645,7 +29665,7 @@ begin
   SetString(result,nil,Len);
   if Len<>0 then
     if SaveTo(pointer(result))-pointer(result)<>Len then
-      raise ESynException.Create('TDynArray.SaveTo');
+      raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
 function JSONArrayCount(P: PUTF8Char): integer;
@@ -30474,7 +30494,7 @@ begin
   Init(aTypeInfo,aValue,aCountPointer);
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   if @Comp=nil then
-    raise ESynException.Create('TDynArray.InitSpecific wrong aKind');
+    raise ESynException.CreateFmt('TDynArray.InitSpecific wrong aKind=%d',[ord(aKind)]);
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];
@@ -30515,11 +30535,6 @@ end;
 {$endif}
 
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
-  procedure RangeError;
-  begin
-    raise ERangeError.CreateFmt('SetLength(%s,%d)',
-      [PShortString(@PDynArrayTypeInfo(ArrayType)^.NameLen)^,NewLength]);
-  end;
 var p: PDynArrayRec;
     pa: PAnsiChar absolute p;
     OldLength, NeededSize, minLength: PtrUInt;
@@ -30544,7 +30559,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength*ElemSize+Sizeof(TDynArrayRec);
   if NeededSize>1024*1024*512 then // max allowed memory block is 512MB
-    RangeError;
+    raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
+      [PShortString(@PDynArrayTypeInfo(ArrayType)^.NameLen)^,NewLength]);
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
     if (NewLength<OldLength) and (ElemType<>nil) then
@@ -30987,7 +31003,7 @@ begin
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUTF8;
-  const ExceptionMsg: string; const ExceptionArgs: array of const): pointer;
+  ExceptionMsg: PUTF8Char; const ExceptionArgs: array of const): pointer;
 var ndx: integer;
     added: boolean;
 begin
@@ -30997,9 +31013,9 @@ begin
     result := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
-    if ExceptionMsg='' then
-      raise ESynException.CreateFmt('Duplicated "%s" name',[aName]) else
-      raise ESynException.CreateFmt(ExceptionMsg,ExceptionArgs);
+    if ExceptionMsg=nil then
+      raise ESynException.CreateUTF8('Duplicated "%" name',[aName]) else
+      raise ESynException.CreateUTF8(ExceptionMsg,ExceptionArgs);
 end;
 
 function TDynArrayHashed.FindHashedAndFill(var Elem): integer;
@@ -31284,7 +31300,7 @@ begin
         looped := true;
       end;
   until false;
-  raise ESynException.Create('HashFind'); // we should never reach here
+  raise ESynException.Create('HashFind fatal collision'); // should never be here
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
@@ -31482,7 +31498,7 @@ begin
         looped := true;
       end;
   until false;
-  raise ESynException.Create('HashFind'); // we should never reach here
+  raise ESynException.CreateUTF8('%.HashFind fatal collision',[self]); 
 end;
 
 procedure TObjectHash.HashInit(aCountToHash: integer);
@@ -31503,7 +31519,7 @@ begin
     H := Hash(O);
     ndx := HashFind(H,O);
     if ndx>=0 then
-      raise ESynException.Create('HashInit found dup');
+      raise ESynException.CreateUTF8('%.HashInit found dup',[self]);
     with fHashs[-ndx-1] do begin
       Hash := H;
       Index := i;
@@ -31524,7 +31540,7 @@ begin
   n := Count-1;
   O := Get(n);
   if O=nil then
-    raise ESynException.Create('Invalid JustAdded call');
+    raise ESynException.CreateUTF8('Invalid %.JustAdded call',[self]);
   if n<COUNT_TO_START_HASHING then begin
     result := false;
     for ndx := 0 to n-1 do // loop comparison if not worth it
@@ -32091,7 +32107,7 @@ var customWriter: TDynArrayJSONCustomWriter;
 begin
   if (self=nil) or (@Rec=nil) or (TypeInfo=nil) or
      (PDynArrayTypeInfo(TypeInfo)^.kind<>tkRecord) then
-    raise ESynException.Create('Invalid TTextWriter.AddRecordJSON call');
+    raise ESynException.CreateUTF8('Invalid %.AddRecordJSON(%)',[self,TypeInfo]);
   if GlobalJSONCustomParsers.RecordSearch(TypeInfo,customWriter,nil) then
     customWriter(self,Rec) else
     WrRecord(Rec,TypeInfo);
@@ -32103,7 +32119,7 @@ var tmp: TBytes;
 begin
   typ := TypeInfo;
   if (self=nil) or (typ=nil) or (typ^.kind<>tkRecord) then
-    raise ESynException.Create('Invalid TTextWriter.AddVoidRecordJSON call');
+    raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
   inc(PtrUInt(typ),typ^.NameLen);
   {$ifdef FPC}
   typ := AlignToPtr(typ);
@@ -32160,7 +32176,7 @@ begin
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
     TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
-    raise ESynException.CreateFmt('Unhandled variant type %d',[VType]);
+    raise ESynException.CreateUTF8('%.AddVariantJSON(VType=%)',[self,VType]);
   end;
 end;
 {$endif NOVARIANTS}
@@ -36476,7 +36492,7 @@ begin
   with Int64Rec(fFileSize) do
     fMap := CreateFileMapping(fFile,nil,PAGE_READONLY,Hi,Lo,nil);
   if fMap=0 then
-    raise ESynException.Create('MemoryMap.Map');
+    raise ESynException.Create('TMemoryMap.Map: CreateFileMapping()=0');
   with Int64Rec(aCustomOffset) do
     fBuf := MapViewOfFile(fMap,FILE_MAP_READ,Hi,Lo,fBufSize);
   if fBuf=nil then begin
@@ -36564,6 +36580,7 @@ end;
 
 constructor TSynMemoryStreamMapped.Create(const aFileName: TFileName; aCustomSize: cardinal; aCustomOffset: Int64);
 begin
+  fFileName := aFileName; 
   fFileStream := TFileStream.Create(aFileName,fmOpenRead or fmShareDenyNone);
   Create(fFileStream.Handle);
 end;
@@ -36571,7 +36588,7 @@ end;
 constructor TSynMemoryStreamMapped.Create(aFile: THandle; aCustomSize: cardinal; aCustomOffset: Int64);
 begin
   if not fMap.Map(aFile) then
-    raise ESynException.CreateFmt('%s mapping error',[ClassName]);
+    raise ESynException.CreateUTF8('%.Create(%) mapping error',[self,fFileName]);
   inherited Create(fMap.fBuf,fMap.fBufSize);
 end;
 
@@ -36740,7 +36757,8 @@ begin
   tmp := nil;
   len := VariantSaveLength(Value);
   if len=0 then
-    raise ESynException.CreateFmt('Unhandled variant type %d',[TVarData(Value).VType]);
+    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',
+      [self,TVarData(Value).VType]);
   if fPos+len>fBufLen then begin
     fStream.Write(pointer(fBuf)^,fPos);
     fPos := 0;
@@ -36752,7 +36770,8 @@ begin
   end else
     buf := @PByteArray(fBuf)^[fPos];
   if VariantSave(Value,buf)=nil then
-    raise ESynException.CreateFmt('Unhandled variant type %d',[TVarData(Value).VType]);
+    raise ESynException.CreateUTF8('%.Write(VType=%) VariantSave=nil',
+      [self,TVarData(Value).VType]);
   inc(fTotalWritten,len);
   if tmp=nil then
     inc(fPos,len) else
@@ -37070,7 +37089,7 @@ begin
         PBeg := PAnsiChar(P)+4; // leave space for chunk size
         P := PByte(CleverStoreInteger(pointer(PI),PBeg,PEnd,ValuesCount,n));
         if P=nil then
-          raise ESynException.Create('WriteVarUInt32Array: data not sorted');
+          raise ESynException.CreateUTF8('%.WriteVarUInt32Array: data not sorted',[self]);
         PInteger(PBeg-4)^ := PAnsiChar(P)-PBeg; // format: Isize+cleverStorage
       end;
       end;
@@ -38003,7 +38022,7 @@ begin
   end;
   if RecordBuffer=pointer(result) then
     // update content code below will fail -> please correct calling code
-    raise ETableDataException.Create('In-place call of TSynTable.UpdateFieldData');
+    raise ETableDataException.CreateUTF8('In-place call of %.UpdateFieldData',[self]);
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(fField.Count)) then begin
     SetString(result,PAnsiChar(RecordBuffer),RecordBufferLen);
     exit;
@@ -38030,7 +38049,7 @@ end;
 constructor TSynTable.Create(const aTableName: RawUTF8);
 begin
   if not PropNameValid(pointer(aTableName)) then
-    raise ETableDataException.CreateFmt('Invalid TSynTable.Create(%s)',[aTableName]);
+    raise ETableDataException.CreateUTF8('Invalid %.Create(%)',[self,aTableName]);
   fTableName := aTableName;
   fField := TObjectList.Create;
   fFieldVariableIndex := -1;
@@ -38369,7 +38388,7 @@ begin // in practice, this data processing is very fast (thanks to WR speed)
       // add default field content for a newly added field
       WR.Write(Pointer(fDefaultFieldData),fDefaultFieldLength);
     if WR.fTotalWritten>1 shl 30 then
-      raise ETableDataException.Create('File size too big (>1GB)') else
+      raise ETableDataException.CreateUTF8('%: File size too big (>1GB)',[self]) else
       Offsets64[Count] := WR.fTotalWritten;
     IDs[Count] := ID;
     NewIndexs[Index] := Count;
@@ -38872,8 +38891,8 @@ begin
       // added record
       if tfoUnique in Options then begin
         if fOrderedIndexFindAdd<0 then
-          raise ETableDataException.CreateFmt(
-            '%s.CheckConstraint call needed before %s.OrderedIndexUpdate',[ClassName,Name]);
+          raise ETableDataException.CreateUTF8(
+            '%.CheckConstraint call needed before %.OrderedIndexUpdate',[self,Name]);
         OrderedIndexReverseSet(InsertInteger(OrderedIndex,OrderedIndexCount,
           aNewIndex,fOrderedIndexFindAdd));
       end else begin
@@ -40629,7 +40648,7 @@ begin
     W.fTotalWritten := W.Flush;
   with W do
     if fPos+n*5>fBufLen then // BufLen=1 shl 19=512 KB should be enough
-      raise ESynException.CreateFmt('too big %s',[
+      raise ESynException.CreateFmt('TSynMapFile.WriteSymbol: too big %s',[
         PShortString(@PDynArrayTypeInfo(A.ArrayType).NameLen)^]) else
       P := @PByteArray(fBuf)^[fPos];
   Beg := PtrUInt(P);
@@ -40874,11 +40893,17 @@ threadvar
   // - TSynLogFile instance is SynLogFileList[SynLogFileIndex[TSynLogFamily.Ident]-1]
   SynLogFileIndexThreadVar: TSynLogFileIndex;
 
-{$ifndef NOEXCEPTIONINTERCEPT}
 
 { ESynException }
 
-function ESynException.CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; 
+constructor ESynException.CreateUTF8(Format: PUTF8Char; const Args: array of const);
+begin
+  Create(UTF8ToString(FormatUTF8(Format,Args)));
+end;
+
+{$ifndef NOEXCEPTIONINTERCEPT}
+
+function ESynException.CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 begin
   if Assigned(TSynLogExceptionToStrCustom) then
     result := TSynLogExceptionToStrCustom(WR,Context) else
@@ -41709,8 +41734,7 @@ begin // private sub function makes the code faster in most case
     // store the TSynLogFamily  instance into AutoTable unused VMT entry
     PVMT := pointer(PtrInt(self)+vmtAutoTable);
     if PPointer(PVMT)^<>nil then
-      raise ESynException.CreateFmt('%s.AutoTable VMT entry already set',
-        [PShortString(PPointer(PtrInt(self)+vmtClassName)^)^]);
+      raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
     // register to the internal garbage collection (avoid memory leak)
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
@@ -43361,8 +43385,8 @@ begin
           except
             {$ifdef DELPHI5OROLDER}
             on E: Exception do
-              fBackgroundException := Exception.CreateFmt('Redirected %s: "%s"',
-                [PShortString(PPointer(PPtrInt(E)^+vmtClassName)^)^,E.Message]);
+              fBackgroundException := ESynException.CreateUTF8(
+                'Redirected %: "%"',[E,E.Message]);
             {$else}
             fBackgroundException := AcquireExceptionObject;
             {$endif}
@@ -43459,7 +43483,7 @@ end;
 procedure TSynBackgroundThreadEvent.Process;
 begin
   if not Assigned(fOnProcess) then
-    raise ESynException.CreateFmt('Invalid %s.RunAndWait() call',[ClassName]);
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
   fOnProcess(self,fParam);
 end;
 
@@ -43470,7 +43494,7 @@ procedure TSynBackgroundThreadMethod.Process;
 var Method: ^TThreadMethod;
 begin
   if fParam=nil then
-    raise ESynException.CreateFmt('Invalid %s.RunAndWait() call',[ClassName]);
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
   Method := fParam;
   Method^();
 end;
@@ -43494,7 +43518,7 @@ end;
 procedure TSynBackgroundThreadProcedure.Process;
 begin
   if not Assigned(fOnProcess) then
-    raise ESynException.CreateFmt('Invalid %s.RunAndWait() call',[ClassName]);
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
   fOnProcess(fParam);
 end;
 

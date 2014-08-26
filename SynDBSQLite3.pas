@@ -634,8 +634,7 @@ end;
 constructor TSQLDBSQLite3Statement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TSQLDBSQLite3Connection) then
-    raise ESQLDBException.CreateFmt('%s.Create expects a TSQLDBSQLite3Connection',
-      [fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('%.Create(%)',[self,aConnection]);
   inherited Create(aConnection);
   if sllSQL in SynDBLog.Family.Level then
     fBindShouldStoreValue := true;
@@ -696,7 +695,7 @@ function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;
 begin
   if SeekFirst then begin
     if fCurrentRow>0 then
-      raise ESQLDBException.CreateFmt('%s.Step(SeekFirst=true) not implemented',[fStatementClassName]);
+      raise ESQLDBException.CreateUTF8('%.Step(SeekFirst=true) not implemented',[self]);
     fCurrentRow := 0;
     //fStatement.Reset;
   end;
