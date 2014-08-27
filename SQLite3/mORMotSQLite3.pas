@@ -684,7 +684,7 @@ begin
       fBatchTableIndex := TableModelIndex;
       if fBatchFirstID=0 then begin
         SQL := 'select max(rowid) from '+SQL;
-        if InternalExecute(SQL,nil,nil,nil,@LastID) then
+        if InternalExecute(SQL,@LastID) then
           fBatchFirstID := LastID+1 else begin
           fBatchFirstID := -1; // will force error for whole BATCH block
           exit;
