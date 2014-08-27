@@ -4,11 +4,14 @@ interface
 
 {$I Synopse.inc}
 
+// enable/disable third-party libraries
 {.$define USENEXUSDB}
 {.$define USEBDE}
 {.$define USEUNIDAC}
 {.$define USEZEOS}
 {.$define USEFIREDAC}
+
+// enable/disable database engines
 {.$define USEJET}
 {.$define ODBCSQLITEFIREBIRD}
 {.$define USELOCALMSSQLEXPRESS}    // SQL Server 2008 R2 Express locally
@@ -17,6 +20,7 @@ interface
 {.$define USELOCALPOSTGRESQL}
 {.$define USELOCALMYSQL}
 {.$define USEMONGODB}
+
 {$ifdef CPU64}
   {$undef USENEXUSDB} // official NexusDB is not yet 64 bit ready :(
   {$undef USEJET}     // MS Access / JET is not available under Win64
@@ -683,8 +687,10 @@ begin
             (Client.Server.StaticDataServer[TSQLRecordSample] as
               TSQLRestStorageMongoDB).Drop else
           {$endif}
-          if not DBIsFile then
+          if not DBIsFile then begin
+            Client.Server.FlushStatementCache;
             Client.Server.ExecuteFmt('drop table %',[Value.SQLTableName]);
+          end;
         finally
           Client.Free;
         end;

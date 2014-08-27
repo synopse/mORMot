@@ -2315,7 +2315,7 @@ type
     /// intialize the cache
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
-    function Prepare(const GenericSQL: RaWUTF8): PSQLRequest;
+    function Prepare(const GenericSQL: RawUTF8): PSQLRequest;
     // used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
   end;
@@ -4665,7 +4665,7 @@ begin
   DB := aDB;
 end;
 
-function TSQLStatementCached.Prepare(const GenericSQL: RaWUTF8): PSQLRequest;
+function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8): PSQLRequest;
 var added: boolean;
 begin
   with Cache[Caches.FindHashedForAdding(GenericSQL,added)] do begin

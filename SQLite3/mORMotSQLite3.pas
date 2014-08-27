@@ -228,6 +228,7 @@ unit mORMotSQLite3;
     - fix ticket [b2f158aa3c] and let VirtualTableExternalRegisterAll() work
       as expected, with no error message (see sample Project14ServerExternal)
     - TSQLRestServerDB.EngineAdd() will now handle forced ID in sent data
+    - added TSQLRestServerDB.FlushStatementCache (used before a DROP TABLE e.g.)
     - new constructor TSQLRestClientDB.Create(aRunningServer) for direct access
       to an existing TSQLRestServerDB instance
     - TSQLRestClientDB.Destroy will now unlock records before ending server
@@ -343,7 +344,7 @@ type
     // :(%): parameter values; in this case, TSQLRequest.Close must not be called
     // - expect sftBlob, sftBlobDynArray and sftBlobRecord properties
     // to be encoded as ':("\uFFF0base64encodedbinary"):'
-    function GetAndPrepareStatement(const SQL: RawUTF8): PSQLRequest;
+    function GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean): PSQLRequest;
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
     /// overridden methods for direct sqlite3 database engine call:
@@ -365,8 +366,9 @@ type
     // - intercept any DB exception and return false on error, true on success
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
     // retrieve the proper ID when aSQL is an INSERT statement (thread safe)
-    function InternalExecute(const aSQL: RawUTF8; ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil;
-      ValueInts: PIntegerDynArray=nil; LastInsertedID: PInt64=nil): boolean;
+    function InternalExecute(const aSQL: RawUTF8; ForceCacheStatement: boolean;
+      ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil; ValueInts: PIntegerDynArray=nil;
+      LastInsertedID: PInt64=nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
@@ -439,6 +441,10 @@ type
     // the database content without proper notification
     // - this overridden implementation will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; override;
+    /// call this method to flush the internal SQL prepared statements cache
+    // - you should not have to flush the cache, only e.g. before a DROP TABLE
+    // - in all cases, running this method would never harm, nor be slow
+    procedure FlushStatementCache;
     /// execute one SQL statement, and apply an Event to every record
     // - lock the database during the run
     // - call a fast "stored procedure"-like method for each row of the request;
@@ -625,7 +631,8 @@ end;
 
 { TSQLRestServerDB }
 
-function TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8): PSQLRequest;
+function TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
+  ForceCacheStatement: boolean): PSQLRequest;
 var i, maxParam: integer;
     Types: TSQLParamTypeDynArray;
     Nulls: TSQLFieldBits;
@@ -633,17 +640,14 @@ var i, maxParam: integer;
     GenericSQL: RawUTF8;
 begin
   GenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
-  if maxParam=0 then begin
+  if (maxParam=0) and not ForceCacheStatement then begin
     // SQL code with no valid :(...): internal parameters
-    if not (IdemPChar(pointer(SQL),'INSERT INTO ') and
-            (PosEx(' DEFAULT VALUES;',SQL,13)=Length(SQL)-15)) then begin
-      result := @fStaticStatement;
-      result^.Prepare(DB.DB,SQL);
-      {$ifdef WITHLOG}
-      DB.Log.Log(sllSQL,'% is no prepared statement',SQL,self);
-      {$endif}
-      exit;
-    end;
+    result := @fStaticStatement;
+    result^.Prepare(DB.DB,SQL);
+    {$ifdef WITHLOG}
+    DB.Log.Log(sllSQL,'% is no prepared statement',SQL,self);
+    {$endif}
+    exit;
   end;
   {$ifdef WITHLOG}
   DB.Log.Log(sllSQL,'% prepared with % param%',[SQL,maxParam,PLURAL_FORM[maxParam>1]],self);
@@ -661,6 +665,16 @@ begin
       sptInteger: result^.Bind(i+1,GetInt64(pointer(Values[i])));
       sptFloat:   result^.Bind(i+1,GetExtended(pointer(Values[i])));
     end;
+end;
+
+procedure TSQLRestServerDB.FlushStatementCache;
+begin
+  DB.Lock;
+  try
+    fStatementCache.ReleaseAllDBStatements;
+  finally
+    DB.Unlock;
+  end;
 end;
 
 function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
@@ -684,7 +698,7 @@ begin
       fBatchTableIndex := TableModelIndex;
       if fBatchFirstID=0 then begin
         SQL := 'select max(rowid) from '+SQL;
-        if InternalExecute(SQL,@LastID) then
+        if InternalExecute(SQL,true,@LastID) then
           fBatchFirstID := LastID+1 else begin
           fBatchFirstID := -1; // will force error for whole BATCH block
           exit;
@@ -700,7 +714,7 @@ begin
     SQL := SQL+' DEFAULT VALUES;' else
     SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
       JSONRetrieveIDField(pointer(SentData)))+';';
-  if InternalExecute(SQL,nil,nil,nil,@LastID) then begin
+  if InternalExecute(SQL,true,nil,nil,nil,@LastID) then begin
     result := LastID;
     InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
   end;
@@ -882,7 +896,7 @@ begin
     try
       fStatementCache.ReleaseAllDBStatements;
     finally
-      fOwnedDB.Free;
+      fOwnedDB.Free; // do nothing if DB<>fOwnedDB
     end;
   end;
 end;
@@ -900,8 +914,8 @@ begin
 end;
 
 function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
-  ValueInt: PInt64; ValueUTF8: PRawUTF8; ValueInts: PIntegerDynArray;
-  LastInsertedID: PInt64): boolean;
+  ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUTF8;
+  ValueInts: PIntegerDynArray; LastInsertedID: PInt64): boolean;
 var Req: PSQLRequest;
     ValueIntsCount, Res: Integer;
 begin
@@ -912,7 +926,7 @@ begin
       result := true;
       if not PrepareVacuum(aSQL) then
         exit; // no-op if there are some static virtual tables around
-      Req := GetAndPrepareStatement(aSQL);
+      Req := GetAndPrepareStatement(aSQL,ForceCacheStatement);
       if Req<>nil then
       with Req^ do
       try
@@ -997,7 +1011,7 @@ end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
-  result := InternalExecute(aSQL);
+  result := InternalExecute(aSQL,false);
 end;
 
 function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
@@ -1014,7 +1028,7 @@ begin
     if result='' then // Execute request if was not got from cache
     try
       try
-        Req := GetAndPrepareStatement(SQL);
+        Req := GetAndPrepareStatement(SQL,false);
         if Req<>nil then begin
           MS := TRawByteStringStream.Create;
           try
@@ -1206,7 +1220,7 @@ begin
         ID[0] := WhereID;
       end else
         if not InternalExecute(FormatUTF8('select RowID from % where %=:(%):',
-           [SQLTableName,WhereFieldName,WhereValue]),nil,nil,@ID) then
+           [SQLTableName,WhereFieldName,WhereValue]),true,nil,nil,@ID) then
           exit else
           if ID=nil then begin
             result := true; // nothing to update, but return success
@@ -1500,7 +1514,7 @@ begin
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchFirstID);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
-      InternalExecute(SQL);
+      InternalExecute(SQL,true);
       exit;
     end;
     DecodeSaved := true;
