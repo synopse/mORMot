@@ -1193,7 +1193,7 @@ begin
   if cardinal(Status)<=cardinal(ord(high(TOleDBStatus))) then
     msg := UnCamelCase(TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TOleDBStatus),Status))) else
 {$else}
-    msg := Int32ToUtf8(Status);
+    Int32ToUtf8(Status,msg);
 {$endif}
   SynDBLog.Add.Log(sllError,
   {$ifdef DELPHI5OROLDER}

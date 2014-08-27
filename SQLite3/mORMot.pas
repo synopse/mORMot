@@ -17124,7 +17124,7 @@ begin
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
-    SetRawUTF8(Result,P,StrLen(P));
+    SetString(Result,P,StrLen(P));
   end;
 end;
 
@@ -21391,7 +21391,7 @@ begin
   if UsingStream<>nil then begin
     UsingStream.Seek(0,soFromBeginning);
     GetJSONValues(UsingStream,Expand,withID,Occasion);
-    SetRawUTF8(result,UsingStream.Memory,UsingStream.Seek(0,soFromCurrent));
+    SetString(result,PAnsiChar(UsingStream.Memory),UsingStream.Seek(0,soFromCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
@@ -21857,7 +21857,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
   begin
     B := P;
     while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-    SetRawUTF8(result,B,P-B);
+    SetString(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
        IdemPropNameU(result,'NULL') then
@@ -24370,9 +24370,6 @@ begin
   end;
 end;
 
-const
-  AUTOMATICTRANSACTIONPERROW_PATTERN = '"AUTOMATICTRANSACTIONPERROW",';
-
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal): boolean;
 begin
@@ -24388,7 +24385,7 @@ begin
   end;
   fBatch.Add('[');
   if AutomaticTransactionPerRow>0 then begin // should be the first command
-    fBatch.AddShort(AUTOMATICTRANSACTIONPERROW_PATTERN);
+    fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.Add(AutomaticTransactionPerRow);
     fBatch.Add(',');
   end;
@@ -28476,8 +28473,8 @@ begin
   if Sent^<>'[' then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing [',[self]);
   inc(Sent);
-  if IdemPChar(Sent,AUTOMATICTRANSACTIONPERROW_PATTERN) then begin
-    inc(Sent,Length(AUTOMATICTRANSACTIONPERROW_PATTERN));
+  if IdemPChar(Sent,'"AUTOMATICTRANSACTIONPERROW",') then begin
+    inc(Sent,29);
     AutomaticTransactionPerRow := GetNextItemCardinal(Sent,',');
     if (AutomaticTransactionPerRow>0) and (TransactionActiveSession<>0) then begin
       InternalLog('Active Transaction -> ignore AutomaticTransactionPerRow',sllWarning);
@@ -31346,10 +31343,10 @@ begin
     result := '' else begin
     fLogTableWriter.Flush;
     Data := fLogTableStorage.Memory;
-    SetRawUTF8(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
+    SetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
     // format as valid not expanded JSON table content:
     if StartPosition<>0 then begin
-      SetRawUTF8(JSONStart,Data,fLogTableWriter.StartDataPosition);
+      SetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
       result := JSONStart+result;
     end;
     result := result+']}';

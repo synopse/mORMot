@@ -1265,6 +1265,10 @@ const
 
 /// faster equivalence to SetString() function for a RawUTF8
 // - will reallocate the content in-place if the string refcount is 1
+// - to be used instead of SetString() for "var" RawUTF8 parameters
+// - for RawUTF8 function result, SetString is still faster:
+// ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetRawUTF8 245.64ms
+// ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetString  136.39ms
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
@@ -15894,7 +15898,7 @@ begin
     result := SQL;
     exit;
   end;
-  SetRawUTF8(result,PAnsiChar(pointer(SQL)),length(SQL));
+  SetString(result,PAnsiChar(pointer(SQL)),length(SQL));
   // compute GenericSQL from SQL, converting :(...): into ?
   Gen := PUTF8Char(pointer(result))+ppBeg-1; // Gen^ just before :(
   P := PUTF8Char(pointer(SQL))+ppBeg+1; // P^ just after :(
@@ -15940,7 +15944,7 @@ begin
     P^ := '-';
   end else
     P := StrUInt32(@tmp[15],Value);
-  SetRawUTF8(result,P,@tmp[15]-P);
+  SetString(result,P,@tmp[15]-P);
 end;
 
 function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
@@ -15948,7 +15952,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   P := StrInt64(@tmp[23],Value);
-  SetRawUTF8(result,P,@tmp[23]-P);
+  SetString(result,P,@tmp[23]-P);
 end;
 
 {$endif}
@@ -15958,7 +15962,7 @@ var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
   P := StrUInt32(@tmp[15],Value);
-  SetRawUTF8(result,P,@tmp[15]-P);
+  SetString(result,P,@tmp[15]-P);
 end;
 
 procedure UInt32ToUtf8(Value: cardinal; var result: RawUTF8);
@@ -16065,7 +16069,7 @@ end;
 function ExtendedToStr(Value: Extended; Precision: integer): RawUTF8;
 var tmp: ShortString;
 begin
-  SetRawUTF8(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
+  SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
 end;
 
 procedure ExtendedToStr(Value: Extended; Precision: integer; var result: RawUTF8);
@@ -16079,7 +16083,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := '0' else
-    SetRawUTF8(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,DOUBLE_PRECISION));
+    SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,DOUBLE_PRECISION));
 end;
 
 function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8;
@@ -17326,7 +17330,7 @@ function UpperCaseU(const S: RawUTF8): RawUTF8;
 var LS,LD: integer;
 begin
   LS := length(S);
-  SetRawUTF8(result,pointer(S),LS);
+  SetString(result,PAnsiChar(pointer(S)),LS);
   LD := ConvertCaseUTF8(pointer(result),NormToUpperByte);
   if LS<>LD then
     SetLength(result,LD);
@@ -17336,7 +17340,7 @@ function LowerCaseU(const S: RawUTF8): RawUTF8;
 var LS,LD: integer;
 begin
   LS := length(S);
-  SetRawUTF8(result,pointer(S),LS);
+  SetString(result,PAnsiChar(pointer(S)),LS);
   LD := ConvertCaseUTF8(pointer(result),NormToLowerByte);
   if LS<>LD then
     SetLength(result,LD);
@@ -18162,7 +18166,7 @@ function UpperCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
   L := length(S);
-  SetRawUTF8(Result,PAnsiChar(pointer(S)),L);
+  SetString(Result,PAnsiChar(pointer(S)),L);
   for i := 0 to L-1 do
     if PByteArray(result)[i] in [ord('a')..ord('z')] then
       dec(PByteArray(result)[i],32);
@@ -18191,7 +18195,7 @@ function LowerCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
   L := length(S);
-  SetRawUTF8(result,PAnsiChar(pointer(S)),L);
+  SetString(result,PAnsiChar(pointer(S)),L);
   for i := 0 to L-1 do
     if PByteArray(result)[i] in [ord('A')..ord('Z')] then
       inc(PByteArray(result)[i],32);
@@ -18213,7 +18217,7 @@ begin
   i := Length(S);
   while (i > 0) and (S[i] <= ' ') do
     Dec(i);
-  SetRawUTF8(result,PAnsiChar(pointer(S)),i);
+  SetString(result,PAnsiChar(pointer(S)),i);
 end;
 
 const
@@ -18654,7 +18658,7 @@ begin
     if IdemPChar(PDeb,UpperName) then begin
       inc(PDeb,StrLen(PUTF8Char(UpperName)));
       L := 0; while PDeb[L]>=' ' do inc(L); // get line length
-      SetRawUTF8(result,PDeb,L);
+      SetString(result,PDeb,L);
       exit;
     end;
   end;
@@ -18708,7 +18712,7 @@ begin
     GetNextLineBegin(SectionFirstLine,SectionFirstLine);
   if SectionFirstLine=nil then
     result := PDeb else
-    SetRawUTF8(result,PDeb,SectionFirstLine-PDeb);
+    SetString(result,PDeb,SectionFirstLine-PDeb);
 end;
 
 function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8; overload;
@@ -20814,7 +20818,7 @@ begin
     exit;
   end;
   while source^ in ANSICHARNOT01310 do inc(source);
-  SetRawUTF8(result,PAnsiChar(next),source-next);
+  SetString(result,PAnsiChar(next),source-next);
   if source^=#13 then inc(source);
   if source^=#10 then inc(source);
   if source^=#0 then
@@ -20957,7 +20961,7 @@ begin
     S := P;
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
-    SetRawUTF8(result,P,S-P);
+    SetString(result,P,S-P);
     if S^<>#0 then
       P := S+1 else
       P := nil;
@@ -21490,7 +21494,7 @@ begin
     inc(P);
   until false;
   if Dest=@tmp then
-    SetRawUTF8(result,@tmp,P-Dest) else
+    SetString(result,PAnsiChar(@tmp),P-Dest) else
     SetLength(result,P-Dest);
 end;
 
@@ -22564,11 +22568,11 @@ begin
   if Expanded then begin
     DateToIso8601PChar(D,tmp,true);
     TimeToIso8601PChar(D,@tmp[10],true,FirstChar);
-    SetRawUTF8(result,@tmp,19);
+    SetString(result,PAnsiChar(@tmp),19);
   end else begin
     DateToIso8601PChar(D,tmp,false);
     TimeToIso8601PChar(D,@tmp[8],false,FirstChar);
-    SetRawUTF8(result,@tmp,15);
+    SetString(result,PAnsiChar(@tmp),15);
   end;
 end;
 
@@ -22944,7 +22948,7 @@ var tmp: array[0..31] of AnsiChar;
 begin
   if Value=0 then
     result := '' else
-    SetRawUTF8(result,@tmp,Text(tmp,Expanded,FirstTimeChar));
+    SetString(result,PAnsiChar(@tmp),Text(tmp,Expanded,FirstTimeChar));
 end;
 
 function TimeLogNow: TTimeLog;
@@ -23481,7 +23485,7 @@ begin
   end;
   if L=0 then
     result := V^ else
-    SetRawUTF8(result,P,L);
+    SetString(result,P,L);
 end;
 {$else}
 asm // eax=V
@@ -23631,7 +23635,7 @@ begin
     end;
   if (Trimleft=0) and (DelphiName[1]='T') then
     Trimleft := 1;
-  SetRawUTF8(result,@DelphiName[TrimLeft+1],ord(DelphiName[0])-TrimLeft);
+  SetString(result,PAnsiChar(@DelphiName[TrimLeft+1]),ord(DelphiName[0])-TrimLeft);
 end;
 
 function GetCaptionFromClass(C: TClass): string;
@@ -24799,7 +24803,7 @@ function FromVarString(var Source: PByte): RawUTF8;
 var Len: PtrUInt;
 begin
   Len := FromVarUInt32(Source);
-  SetRawUTF8(Result,Source,Len);
+  SetString(Result,PAnsiChar(Source),Len);
   inc(Source,Len);
 end;
 
@@ -38699,7 +38703,7 @@ begin
     len := FromVarUInt32(PB);
     if len>0 then
       if FieldType<>tftWinAnsi then
-        SetRawUTF8(result,PC,len) else
+        SetString(result,PC,len) else
         result := WinAnsiConvert.AnsiBufferToRawUTF8(PC,len) else
       result := '';
   end;
@@ -42521,7 +42525,7 @@ function TMemoryMapText.GetLine(aIndex: integer): RawUTF8;
 begin
   if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) then
     result := '' else
-    SetRawUTF8(result,fLines[aIndex],GetLineSize(fLines[aIndex],fMapEnd));
+    SetString(result,PAnsiChar(fLines[aIndex]),GetLineSize(fLines[aIndex],fMapEnd));
 end;
 
 function TMemoryMapText.GetString(aIndex: integer): string;
@@ -43052,7 +43056,7 @@ begin
     L := GetLineSize(fLines[index],fMapEnd);
     if L<=fLineLevelOffset then
       result := '' else
-      SetRawUTF8(result,PAnsiChar(fLines[index])+fLineLevelOffset,L-fLineLevelOffset);
+      SetString(result,PAnsiChar(fLines[index])+fLineLevelOffset,L-fLineLevelOffset);
   end;
 end;
 
