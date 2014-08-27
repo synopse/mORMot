@@ -544,7 +544,7 @@ DocumentIndex=Pictures,Source,Index
 WithAllfields=Yes
 ; write all field properties of all object and classes: document is huge, but contains all available architecture intel
 
-:Introduction
+:Foreword
 The whole Software documentation process follows the typical steps of this diagram:
 %%FMEADI
 : Purpose
@@ -3854,25 +3854,25 @@ Here we insert 5,000 rows of data, with diverse scenarios:
 Here are some insertion speed values, in objects/second:
 |%30%15%15%15%15
 ||\b Direct|Batch|Trans|Batch Trans\b0
-|{\b SQLite3 (file full)}|462|356|95377|130086
-|{\b SQLite3 (file off)}|844|821|100389|136675
-|{\b SQLite3 (file off exc)}|28847|35316|102599|144258
-|{\b SQLite3 (mem)}|89456|120513|104249|146933
+|{\b SQLite3 (file full)}|462|28123|78099|172872
+|{\b SQLite3 (file off)}|2102|83093|81756|188309
+|{\b SQLite3 (file off exc)}|28847|182862|84051|186971
+|{\b SQLite3 (mem)}|89456|210544|104249|203020
 |{\b TObjectList (static)}|314465|543892|326370|542652
 |{\b TObjectList (virtual)}|325393|545672|298846|545018
-|{\b SQLite3 (ext full)}|424|11297|102049|164636
-|{\b SQLite3 (ext off)}|830|21406|109706|189250
+|{\b SQLite3 (ext full)}|424|14523|102049|164636
+|{\b SQLite3 (ext off)}|2245|47961|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
-|{\b SQLite3 (ext mem)}|101440|234576|113530|190142
+|{\b SQLite3 (ext mem)}|101440|183884|113530|190142
 |{\b MongoDB (ack)}|10081|84585|9800|85232
-|{\b MongoDB (no ack)}|33223|189186|27974|226355
+|{\b MongoDB (no ack)}|33223|273672|34665|274393
 |{\b ODBC SQLite3}|492|11746|35367|82425
 |{\b ZEOS SQlite3}|494|11851|56206|85705
-|{\b FireDAC SQlite3}|26369|50306|49755|155115
+|{\b FireDAC SQlite3}|20605|38853|40042|113752
 |{\b UniDAC SQlite3}|477|8725|26552|38756
 |{\b ODBC Firebird}|1495|18056|13485|17731
 |{\b ZEOS Firebird}|9733|52214|26348|52616
-|{\b FireDAC Firebird}|24233|52021|24791|52111
+|{\b FireDAC Firebird}|18147|46877|18922|46353
 |{\b UniDAC Firebird}|5986|14809|6522|14948
 |{\b Jet}|4235|4424|4954|5094
 |{\b NexusDB}|5998|15494|7687|18619
@@ -3888,17 +3888,17 @@ Here are some insertion speed values, in objects/second:
 |{\b UniDAC MSSQL}|4392|29768|8649|33464
 |{\b ODBC DB2}|4792|48387|14085|70104
 |{\b FireDAC DB2}|4452|48635|11014|52781
-|{\b ZEOS PostgreSQL}|4196|26663|9689|38735
-|{\b ODBC PostgreSQL}|4068|19515|5130|27843
-|{\b FireDAC PostgreSQL}|4181|37000|10111|36483
-|{\b UniDAC PostgreSQL}|2705|18563|4442|22317
+|{\b ZEOS PostgreSQL}|4196|31409|9689|41225
+|{\b ODBC PostgreSQL}|4068|26262|5130|30435
+|{\b FireDAC PostgreSQL}|4181|26635|10111|36483
+|{\b UniDAC PostgreSQL}|2705|18563|4442|28337
 |{\b ODBC MySQL}|3160|38309|10856|47630
 |{\b ZEOS MySQL}|3426|34037|12217|40186
 |{\b FireDAC MySQL}|3078|43053|10955|45781
 |{\b UniDAC MySQL}|3119|27772|11246|33288
 |%
 Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
-So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows.
+So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows. In {\i SQLite3} direct mode, BATCH process benefits of multi-INSERT statements (just llike external databases): it explain why {\f1\fs20 BatchAdd()} is faster than plain {\f1\fs20 Add()}, even in the slowest and safest "{\i file full}" mode.
 For our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, and for {\f1\s20 SynDBZeos.pas} or {\f1\fs20 SynDBFireDAC.pas} (known as {\i Array DML} in {\i FireDAC/AnyDAC}) libraries, BATCH process benefits of the @*array bind@ing feature a lot.
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
 - {\i SQlite3, @*MySQL@, @*PostgreSQL@, MSSQL 2008, @*DB2@, @*MySQL@} or {\i @*NexusDB@} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 INSERT INTO .. VALUES (..),(..),(..)..};
@@ -7201,6 +7201,7 @@ Some global variable were also defined to tune the behavior of those two callbac
 !  OnIdleProcessTemporaryFormMessage: string;
 You can therefore change those settings to customize the user experience. We tested it with a 3 second artificial temporizer for each request, and the applications were running smoothly, even if slowly - but comparable to most web applications, in fact. The {\i SynFile} main demo (available in the {\f1\fs20 SQlite3\\Samples\\MainDemo} folder) defines such a callback.
 Note that this {\f1\fs20 OnIdle} feature is defined at {\f1\fs20 TSQLRestClientURI} class level, so is available for all communication protocols, not only HTTP but named pipes or in-process, so could be used to enhance user experience in case of some time consuming process.
+\page
 :28 BATCH sequences for adding/updating/deleting records
 :  BATCH process
 When use the so-called @**BATCH@ sequences?
@@ -7221,12 +7222,12 @@ Since the statements are performed at once, you can't receive the result (e.g. t
 As you may guess, it's also a good idea to use a @*transaction@ for the whole process. By default, the BATCH sequence is not embedded into a transaction.
 You have two possibilities to add a transaction:
 - Either let the caller use an explicit {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block;
-- Or specify a number of rows as {\f1\fs20 AutomaticTransactionPerRow} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emmited (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
+- Or specify a number of rows as {\f1\fs20 @*AutomaticTransactionPerRow@} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emitted (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
 This second method is preferred, since defining transactions from the client side is not a good idea: it may block other clients attempts to create their own transaction.
 Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelfTests.pas}:
 !  // start the BATCH sequence
 !!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));
-!  // now a transaction will be created by block of 1000 modifications
+!  // now a transaction will be created by chunk of 1000 modifications
 !  // delete some elements
 !  for i := 0 to n-1 do
 !!    Check(ClientDist.BatchDelete(IntArray[i])=i);
@@ -7256,42 +7257,46 @@ Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelf
 !  // Results[0] to Results[n-1] should be 200 = deletion OK
 !  // Results[n] to Results[n+nupd-1] should be 200 = update OK
 !  // Results[n+nupd] to Results[high(Results)] are the IDs of each added record
+!  for i := 0 to high(Results) do
+!    if i<nupd+n then
+!      Check(Results[i]=200) else
+!    begin
+!      Check(Results[i]>0);
+!      ndx := aStatic.IDToIndex(Results[i]);
+!      Check(ndx>=0);
+!      with TSQLRecordPeople(aStatic.Items[ndx]) do
+!      begin
+!        Check(LastName='New','BatchAdd');
+!        Check(YearOfBirth=1000+i-nupd-n);
+!      end;
+!    end;
+!  // check ClientDist.BatchDelete(IntArray[i]) did erase the record
 !  for i := 0 to n-1 do
 !    Check(not ClientDist.Retrieve(IntArray[i],V),'BatchDelete');
-!    for i := 0 to high(Results) do
-!      if i<nupd+n then
-!        Check(Results[i]=200) else
-!      begin
-!        Check(Results[i]>0);
-!        ndx := aStatic.IDToIndex(Results[i]);
-!        Check(ndx>=0);
-!        with TSQLRecordPeople(aStatic.Items[ndx]) do
-!        begin
-!          Check(LastName='New','BatchAdd');
-!          Check(YearOfBirth=1000+i-nupd-n);
-!        end;
-!      end;
-In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 Batch*()} methods instead of plain {\f1\fs20 Add / Delete / Update}. The ORM will take care of all internal process, including serialization.
-:  Implementation details
-As described above, all {\f1\fs20 Batch*()} methods are serialized as JSON on the client side, then sent as once to the server, where it will be processed without any client-server {\i round-trip }and slow latency.
-Here is typical JSON stream sent to the server:
-${"People":["DELETE":2,"DELETE":13,"DELETE":24,
+In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 BatchAdd BatchDelete BatchUpdate} methods instead of plain {\f1\fs20 Add Delete Update} methods. The ORM will take care of all the low-level data process, including JSON serialization, automatic per-chunk transactions creation, and SQL statements generation, with several optimizations - see @78@ and @99@.
+:  Transmitted JSON
+As described above, all {\f1\fs20 Batch*()} methods do serialize the objects values as JSON on the client side, then send this JSON at once to the server, where it will be processed without any client-server {\i round-trip} and slow latency.
+Here is some extract of typical JSON stream as sent to the server:
+${"People":["DELETE",2,"DELETE",13,"DELETE",24,
 $   (...)  all DELETE actions
-$  ,"DELETE":11010,
-$  "PUT":{"RowID":3,"FirstName":"Sergei1","LastName":"Rachmaninoff","YearOfBirth":1800, "YearOfDeath":1943},
-$  "PUT":{"RowID":4,"FirstName":"Alexandre1","LastName":"Dumas","YearOfBirth":1801, "YearOfDeath":1870},
+$  ,"DELETE",11010,
+$  "PUT",{"RowID":3,"FirstName":"Sergei1","LastName":"Rachmaninoff","YearOfBirth":1800, "YearOfDeath":1943},
+$  "PUT",{"RowID":4,"FirstName":"Alexandre1","LastName":"Dumas","YearOfBirth":1801, "YearOfDeath":1870},
 $   (...)  all PUT = update actions
-$  "PUT":{"RowID":11012,"FirstName":"Leonard","LastName":"da Vin√ßi","YearOfBirth":9025, "YearOfDeath":1519},
-$  "POST":{"FirstName":"‚Äö@‚Ä¢≈"H‚Ä m¬£¬ g","LastName":"New","YearOfBirth":1000, "YearOfDeath":1519},
-$  "POST":{"FirstName":"@‚Ä¶,KA¬Ω√ #¬∂f","LastName":"New","YearOfBirth":1001, "YearOfDeath":1519},
+$  "PUT",{"RowID":11012,"FirstName":"Leonard","LastName":"da Vin√ßi","YearOfBirth":9025, "YearOfDeath":1519},
+$  "POST",{"FirstName":"‚Äö@‚Ä¢≈"H‚Ä m¬£¬ g","LastName":"New","YearOfBirth":1000, "YearOfDeath":1519},
+$  "POST",{"FirstName":"@‚Ä¶,KA¬Ω√ #¬∂f","LastName":"New","YearOfBirth":1001, "YearOfDeath":1519},
 $   (...)  all POST = add actions
-$ "POST":{"FirstName":"+¬ÅtqCXW3√Ç\"","LastName":"New","YearOfBirth":2000, "YearOfDeath":1519}
+$ "POST",{"FirstName":"+¬ÅtqCXW3√Ç\"","LastName":"New","YearOfBirth":2000, "YearOfDeath":1519}
 $  ]}
-Here is typical JSON stream receiver from the server, on success:
+On success, the following JSON stream will be received from the server:
 $ [200,200,...]
-All the JSON generation (client-side) and parsing (server-side) is very optimized and fast. With the new internal {\i @*SynLZ@} compression (available by default in our @*HTTP@ Client-Server classes), used bandwidth is minimal.
-Thanks to these methods, most time is now spent into the database engine itself, and not in the communication layer.
-Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}). For instance, in the following code, {\f1\fs20 V.FillPrepare} will retrieve only {\f1\fs20 ID} and {\f1\fs20 YearOfBirth} fields of the {\f1\fs20 TSQLRecordPeople} table, so subsequent {\f1\fs20 BatchUpdate(V)} calls will only update the {\f1\fs20 YearOfBirth} field:
+This array of results is either the HTTP status codes (here 200 means OK), or the inserted new ID (for a {\f1\fs20 BatchAdd} command).
+All the JSON generation (client-side) and parsing (server-side) has been optimized to minimize the resource needed. With the new internal {\i @*SynLZ@} compression (available by default in our @*HTTP@ Client-Server classes), used bandwidth is minimal.
+Thanks to this BATCH process, most time is now spent into the database engine itself, and not in the communication layer.
+:100  Unit Of Work pattern
+In practice, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}).
+For instance, in the following code, {\f1\fs20 V.FillPrepare} will retrieve only {\f1\fs20 ID} and {\f1\fs20 YearOfBirth} fields of the {\f1\fs20 TSQLRecordPeople} table, so subsequent {\f1\fs20 BatchUpdate(V)} calls will only update the {\f1\fs20 YearOfBirth} field:
 !  // test BATCH update from partial FillPrepare
 !!  V.FillPrepare(ClientDist,'LastName=:("New"):','ID,YearOfBirth');
 !  if ClientDist.TransactionBegin(TSQLRecordPeople) then
@@ -7307,9 +7312,15 @@ Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method
 !      inc(n);
 !    end;
 !  (...)
-:78  Array binding
-When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature - by now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
-In fact, when using a remote database on a physical network, you won't be able to achieve more than 500-600 requests per second when performing {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements: the same {\f1\fs20 round-trip} occurs, this time between the ORM server side and the external Database engine.
+The transmitted JSON will be computed as such on the client side:
+$  ....,"PUT",{"RowID":324,"YearOfBirth":1000},...
+And the generated SQL on the server side would be:
+$ UPDATE People SET YearOfBirth=? WHERE RowID=?
+$ ... with bound parameters: [324,1000]
+As a result, BATCH process could be seen as a good way of implementing {\i @*Unit Of Work@} for your business layer - see @102@.\line You will be able to modify all your objects as requested, with high-level OOP methods, then have all data transmitted and processed at once when {\f1\fs20 BatchSend()} is called. The {\f1\fs20 BatchStart} - {\f1\fs20 BatchSend} - {\f1\fs20 BatchAbort} commands will induce a safe transactional model, relying on the client side for tracking the object modifications, and optimizing the database process on the server side as a simple "save and forget" task, to any SQL or @*NoSQL@ engine.
+Note that if several {\f1\fs20 ClientDist.BatchUpdate(V)} commands are executed within the same {\f1\fs20 FillPrepare()} context, they will contain the same fields ({\f1\fs20 RowID} and {\f1\fs20 YearOfBirth}). They will therefore generate the same statement ({\f1\fs20 UPDATE People SET YearOfBirth=? WHERE RowID=?}), which would benefit of {\i Array Binding} on the database side - see @78@ - if available.
+:  Local network as bottleneck
+When using a remote database on a physical network, a {\i round-trip} delay occurs for each request, this time between the ORM server side and the external Database engine.
 \graph BATCHRoundTrip2 BATCH mode latency issue on external DB
 \ORM CRUD operation\ORM HTTP Client\In-process§no latency
 \ORM HTTP Client\ORM CRUD operation
@@ -7320,18 +7331,29 @@ In fact, when using a remote database on a physical network, you won't be able t
 \ORM database core\External DB\Local Network§1 ms latency
 \External DB\ORM database core
 \
-Of course, this 1 ms latency due to the external database additional round-trip may sounds negligible, but in @17@ when most process is done on the server side, it may introduce a huge performance difference. Your customers would not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for.
-Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing {\i array binding} for faster database batch modifications. It is working in conjunction with our BATCH methods, so CRUD modification actions are grouped within one {\i round-trip} over the network.
+At first, the 1 ms latency due to the external database round-trip may sound negligible. @28@ did already shortcut the Internet latency, which was much higher.
+But in a @17@, most of the process is done on the server side: the slightest execution delay would induce a noticeable performance penalty. In practice, you won't be able to achieve more than 500-600 requests per second when performing individual {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements over any SQL database. Even if run locally on the same server, most SQL databases would suffer from the overhead of inter-process communications, achieving 6,000-7,000 update requests per second at best.
+Your customers may not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for, since {\i SQLite3} runs locally in the ORM server process. One common solution is to use stored procedures, or tune the SQL for your database - but you would loose most of the ORM and SOA benefits - see @101@.
+Of course, {\i mORMot} can do better than that. Its ORM will automatically use two ways of diminishing the number of round-trips to the database:
+- Using {\i Array Binding} - see @78@;
+- Or {\i multi-INSERT statements} - see @99@.
+Both methods will group all the transmitted data in chunks, as much as possible. Performance will therefore increase, reaching 50,000-60,000 writes per second, depending on the database abilities.
+Those features are enabled by default, and the fastest method will always be selected by the ORM core, as soon as it is available on the database back-end. You do not have to worry about configuring your application. Just enjoy its speed.
+:78   Array binding
+When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature. By now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
+Our {\f1\fs20 SynDB} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
-Our beloved @94@ Open Source library just introduced {\i array binding} to its 7.2 branch. It is handled by our framework, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature, and our own implementation in {\f1\fs20 SynDBOracle} still gives better performance results.
-The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} commercial libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
-In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
-:93  Optimized SQL for bulk insert
-Sadly, array binding is not available for all databases or libraries. In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once.
-It induces a noticeable speed increase when saving several objects into an external database.
-This feature is available for {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*MySQL@} and {\i @*NexusDB@}.
-Since it is working at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@}.
-It means that even properties not implementing array binding (like {\i OleDB, Zeos} or {\i UniDAC}) are able to have a huge boost at data insertion, ready to compete with the (until now) more optimized libraries.
+The great maintainers of the {\i ZEOS Open Source} library did especially tune its internals to support {\i mORMot} at its full speed, directly accessing the {\i ZDBC} layer - see @94@. The {\i ZEOS 7.2} branch did benefit of a huge code refactoring, and also introduced {\i array binding} abilities. This feature will be recognized and handled by our ORM, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature. But the list is growing.
+The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
+In practice, when accessing {\i Oracle}, our own direct implementation in {\f1\fs20 SynDBOracle} still gives better performance results than the {\i ZDBC} / {\i FireDAC} implementation.
+In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure executing individual statements within a loop.
+:99   Optimized SQL for bulk insert
+Sadly, array binding is not available for all databases or libraries.\line In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once. It induces a noticeable speed increase when saving several objects into an external database.
+Automatic multi-INSERT statement generation is available for:
+- Our internal {\i SQLite3} engine (in the {\f1\fs20 mORMotSQLite3.pas} unit);
+- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*MySQL@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
+- And, in the {\i @*NoSQL@} form of "documents array" insertion, for the {\i @*MongoDB@} database (in the {\f1\fs20 mORMotMongoDB.pas} unit).
+It means that even providers not implementing array binding (like {\i OleDB}, {\i ODBC} or {\i UniDAC}) are able to have a huge boost at data insertion.
 {\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2, MySQL} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
 $INSERT INTO TABLE (column-a, [column-b, ...])
 $VALUES ('value-1a', ['value-1b', ...]),
@@ -7349,13 +7371,14 @@ $begin
 $  INSERT INTO phone_book VALUES ('John Doe', '555-1212');
 $  INSERT INTO phone_book VALUES ('Peter Doe', '555-2323');
 $end
-As a result, most engines show a nice speed boost when using the {\f1\fs20 BatchInsert()} method. See @59@ and for details, and the article (including performance charts) available at @http://blog.synopse.info/post/2014/03/03/ORM-enhanced-for-BATCH-insert
-Even {\i SQLite3} is faster when used as external engine, in respect to direct execution of individual prepared statements in loop!
-If you want to use a {\i @*map/reduce@} algorithm in your application, or the @13@ {\i @*Unit Of Work@} pattern, in addition to ORM data access, all those enhancements may speed up a lot your process. Reading and writing huge amount of data has never been so fast and easy: you may even be tempted to replace stored-procedure process by high-level code implemented in your Domain service. N-tier separation would benefit from it.
+As a result, most engines show a nice speed boost when using the {\f1\fs20 BatchAdd()} method. See @59@ for numbers and details.
+If you want to use a {\i @*map/reduce@} algorithm in your application, or the @100@ - in addition to ORM data access - all those enhancements would speed up a lot your data process. Reading and writing huge amount of data has never been so fast and easy: it is time to replace stored-procedure process by high-level code implemented in your {\i Domain} service.
+\page
 :39 CRUD level cache
+Starting with revision 1.16 of the framework, tuned record @*cache@ has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides.
+See @38@ for the other data cache patterns available in the framework, mainly @37@ at {\i SQlite3} level, on the server side. All {\i mORMot}'s data caches are using @2@ as storage format, which was found to be simple and efficient for this purpose.
 :  Where to cache
-Starting with revision 1.16 of the framework, tuned record @*cache@ has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides. See @38@ for the other cache patterns available in the framework, mainly @37@ at {\i SQlite3} level, on the server side.
-In fact, a unique caching mechanism is shared at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
+In fact, a unique caching mechanism is available at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
 By default, there is no caching at REST level. Then you can use the {\f1\fs20 TSQLRest.Cache} property to tune your cache policy for each {\f1\fs20 TSQLRest} instance.
 \graph mORMotCaching CRUD caching in mORMot
 \Internet (VPN)\Local Network
@@ -7393,7 +7416,7 @@ label="PC n";
 \
 When caching is set {\i on the server} for a particular record or table, in-memory values could be retrieved from this cache instead of calling the database engine each time. When properly used, this would increase global server responsiveness and allow more clients to be served with the same hardware.
 {\i On the client} side, a local in-memory cache could be first checked when a record is to be retrieved. If the item is found, the client uses this cached value. If the data item is not in the local cache, the query is then sent to the server, just as usual. Due to the high latency of a remote client-server request, adding caching on the client side does make sense. Client caching properties can be tuned in order to handle properly remote HTTP access via the Internet, which may be much slower than a local Network.
-Our caching implementation is transparent to the CRUD code. The very same usual ORM methods are to be called to access a record ({\f1\fs20 Retrieve  / Update / Add}), then either client or server cache will be used, if available. For applications that frequently access the same data - a large category - record-level caching improves both performance and scalability.
+Our caching implementation is transparent to the CRUD code. The very same usual ORM methods are to be called to access a record ({\f1\fs20 Retrieve Update Add}), then either client or server cache will be used, if available. For applications that frequently access the same data - a large category - record-level caching improves both performance and scalability.
 :  When to cache
 The main problem with cache is about data that both changes and is accessed simultaneously by multiple clients.
 In the current implementation, a "pessimistic" concurrency control is used by our framework, relying on explicit locks, and (ab)use of its @15@ general design. It is up to the coder to ensure that no major confusion could arise from concurrency issues.
@@ -7462,12 +7485,12 @@ Beside optimization, your code would probably become easier to maintain and scal
 On the server side, your business code, written using CRUD / ORM methods, could be optimized.
 First of all, ORM caching may also be used. Any unneeded round-trip to the database - even more with @27@ - could impact your application responsiveness. Then your business logic, written as services, would benefit from it.
 Then you may regroup all your database modifications using @28@.\line This would offer several benefits:
-- Transaction support (nothing is written to the database until {\f1\fs20 BatchSend} method is executed) similar to the {\i @*Unit Of Work@} pattern;
-- Faster insertion, update or deletion - via @78@ and @93@;
+- Transaction support (nothing is written to the database until {\f1\fs20 BatchSend} method is executed) similar to the @100@;
+- Faster insertion, update or deletion - via @78@ and @99@;
 - Perfect integration with the ORM.
 In fact, we found out that {\i Array DML} or {\i optimized INSERT} could be much faster than a regular {\i stored procedure}, with individual SQL statements run in a loop.
 : Stored procedures
-:  Why to avoid stored procedures
+:101  Why to avoid stored procedures
 In practice, {\i stored procedures} have some huge drawbacks:
 - Your business logic is tied to the data layout used for storage - and the {\i Relational Model} is far away from natural language - see @91@;
 - Debugging is somewhat difficult, since stored procedures will be executed on the database server, far away from your application;
@@ -7636,7 +7659,8 @@ See the description of the {\f1\fs20 TOnSQLStoredProc} event handler and associa
 If the application relies on external databases - see @27@ - the external database may be located on a remote computer.
 In such situation, all RESTful Server-sided solutions could produce a lot of network traffic. In fact, custom SQL functions or stored procedures both use the {\i @*SQLite3@} engine as root component.
 In order to speed up the process, you may define some RDMS stored procedures in the external database syntax (P/SQL, {\i .Net}, {\i Java} or whatever), then define some @11@ to launch those functions.\line Note that in this case, you'll loose the database independence of the framework, and most of the benefits of using an ORM/ODM - later on, switching to another database engine may become impossible. Such RDBMS stored procedures may be envisaged only during the transition phase of an existing application. @28@ has almost all the speed advantages of stored procedures, with the benefit of a pure object oriented code, easy to debug and maintain.
-:11Server side Services
+\page
+:11 Server side Services
 %cartoon03.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @35@;
@@ -7645,7 +7669,7 @@ In order to follow a @17@ design, your application's business logic can be imple
 The first is similar to {\i RemObject's DataAbstract} product, which allows remote access to database, over several protocols. There are some similarities with {\i mORMot} (like on-the-fly SQL translation for external databases), but also a whole diverse use case (RAD/components and wizards versus ORM/MVC) and implementation ({\i mORMot} takes advantages of the {\i @*SQLite3@} SQL core and is much more optimized for speed and scaling).
 If you paid for a {\i Delphi Architect} edition, the first two items can be compared to the {\i DataSnap} Client-Server features. Since {\i Delphi} 2010, you can in fact define @*JSON@-based RESTful services, in addition to the original {\i DCOM/DBExpress} remote data broker. It makes uses of the new RTTI available since {\i Delphi} 2010, but it has some known stability and performance issues, and lack of strong security. It is also RAD/Wizard based, whereas {\i mORMot} uses a code approach.
 The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a @*KISS@ {\i @*convention over configuration@} manner.
-So {\i mORMot} is quite unique, in the fact that it features, in an unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a Domain-Driven Design, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
+So {\i mORMot} is quite unique, in the fact that it features, in one unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a {\i Domain-Driven Design}, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
 %cartoon04.png
 To implement a service in the {\i Synopse mORMot framework}, the first method is to define @**published method@ Server-side, then use easy functions about JSON or URL-parameters to get the request encoded and decoded as expected, on Client-side.
@@ -9648,7 +9672,7 @@ Since SOAP features a lot of requirements, and expects some plumping according t
 But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
 Optionally, {\i mORMot}'s interface based services allow to publish their result as XML, and encode the incoming parameters at URI level. It makes it a good alternative to SOAP, in the XML world.
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
-{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
+;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon07.png
 Current version of the main framework units target only {\i Win32} and {\i Win64} systems.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the {\i Windows} world, especially mobile devices.
@@ -10051,7 +10075,7 @@ As we already stated, @*BATCH@ mode is also supported, with the classic {\i mORM
 !    check(res[i-1]=i); // server returned the IDs of the newly created records
 Those {\f1\fs20 BatchAdd} / {\f1\fs20 BatchDelete} / {\f1\fs20 BatchUpdate} methods of {\f1\fs20 TSQLRest} have the benefit to introduce at client level:
 - Much higher performance, especially on multi-insertion or multi-update of data;
-- Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 AutomaticTransactionPerRow} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, and an ACID rollback in case of any failure.
+- Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 @*AutomaticTransactionPerRow@} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, enable @78@ or @99@ on the server side if available, and an ACID rollback in case of any failure.
 You can note that all above code has exactly the same structure and methods than standard {\i mORMot} clients.
 The generated {\f1\fs20 mORMotClient.pas} unit contains all needed {\f1\fs20 TSQLRecord} types, and its used properties, including enumerations or complex records. The only dependency of this unit are {\f1\fs20 SynCrossPlatform*} units, so would be perfectly cross-platform (whereas our main {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units do target only {\i Win32} and {\i Win64}).
 As a result, you are able to {\i share} server and client code between a Windows project and any supported platform, even AJAX (see "{\i Smart Mobile Studio client samples}" below). A shared unique code base would eventually reduce both implementation and debugging time, which is essential to unleash your business code potential and maximize your ROI.
@@ -10625,7 +10649,7 @@ In addition, sessions are used to manage safe cross-client @**transaction@s:
 - If a transaction began and another client session try to write on the DB, it will wait until the current transaction is released - a timeout may occur if the server is not able to acquire the write status within some time;
 - This global write locking is defined by the {\f1\fs20 TSQLRest.AcquireWriteMode / AcquireWriteTimeOut} properties, and used on the Server-Side by {\f1\fs20 TSQLRestServer.URI} - you can change this behavior by setting e.g. {\f1\fs20 AcquireWriteMode := amBackgroundThread} which will lock any write process to be executed in a dedicated thread: this may be mandatory is your database client expects the transaction process to take place in the same thread (e.g. @*MS SQL@);
 - If the server do not handle Session/Authentication, transactions can be unsafe, in a multi-client concurrent architecture.
-For performance reasons in a multi-client environment, it's mandatory to release a transaction (via commit or rollback) as soon as possible, using e.g. @28@, or - even better - write dedicated @63@ which will process the whole transaction in one step, following the {\i @*Unit Of Work@} pattern.
+For performance reasons in a multi-client environment, it's mandatory to release a transaction (via commit or rollback) as soon as possible, using e.g. @28@, or - even better - write dedicated @63@ which will process the whole transaction in one step, following the @100@.
 :  Authentication schemes
 :   Class-driven authentication
 Authentication is implemented in {\i mORMot} via the following classes:
@@ -11135,7 +11159,7 @@ In addition to these domain-level objects, some cross-cutting types may appear, 
 - {\i Data Transfer Objects} (@**DTO@) are transmission objects, which purpose is to not send your domain across the wire (i.e. separate your layers, following the {\i Anti-Corruption Layer} pattern). It encourages you to create gatekeepers that work to prevent non-domain concepts from leaking into your model.
 - {\i Commands} and {\i Events} are some kind of DTO, since they communicate data about an event and they themselves encapsulate no behavior - in {\i mORMot}, we try to let the framework do all the plumbing, letting those types be implemented via interfaces, avoiding the need to define them by hand.
 Those kind of objects are needed to isolate the domain from the outer world. But if your domain is properly defined, most of your {\i Value Objects} may be used with no translation, so could be used as DTO classes. Even {\i Entities} may be transmitted directly, since their methods should not refer to nothing but their internal properties, so may be of some usefulness outside the domain itself.\line Only the {\i Aggregates} should better be isolated and stay at the {\i Application layer}, given access to its methods and nested objects via proper high-level remote Services.
-:  Services
+:102  Services
 {\i @*Aggregate root@s} (and sometimes {\i Entities}), with all their methods, often end up as {\i state machines}, and the behavior matches accordingly.\line In the domain, since {\i Aggregate roots} are the only kind of entities to which your software may hold a reference, they tend to be the main access point of any process. It could be handy to publish their methods as stateless @*Service@s, isolated at {\i Application layer} level.
 {\i Domain services pattern} is used to model primary operations.\line Domain Services give you a tool for modeling processes that do not have an identity or life-cycle in your domain, that is, that are not linked to one aggregate root, perhaps none, or several. In this terminology, services are not tied to a particular person, place, or thing in my application, but tend to embody processes. They tend to be named after verbs or business activities that domain experts introduce into the so-called {\i Ubiquitous Language}. If you follow the interface segregation principle - see @47@, your domain services should be exposed as dedicated client-oriented methods. Do not leak your domain! In DDD, you develop your {\i Application layer} services directly from the needs of your client applications, letting the {\i Domain layer} focus on the business logic.
 {\i @**Unit Of Work@} can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems.\line In short, it implements transactional process at Domain level, and may be implemented either at service or ORM level. It features so-called @**Persistence Ignorance@, meaning that your domain code may not be tied to a particular persistence implementation, but "hydrate" {\i Aggregate roots} class instances as abstractly as possible.
@@ -11230,7 +11254,7 @@ In all cases, when defining domain objects, we should always make the implicit {
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
 DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a @*KISS@ implementation.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
-@28@ is a convenient implementation of the {\i @*Unit of Work@} pattern (i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods). Note that the current implementation of {\f1\fs20 Batch*} methods in {\i mORMot}, which focuses on Client side, should be enhanced to be more convenient and available on the server side, i.e. in the {\i Application Layer}.
+@28@ is a convenient implementation of the @100@ - i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods. In fact, {\f1\fs20 Batch*} methods do work on both Client and Server sides: you may use them to implement safe and fast {\i @*Unit of Work@} object modification tracking in the {\i Application Layer} services.
 :  Defining services
 In practice, {\i mORMot}'s Client-Server architecture may be used as such:
 - {\i @*Service@s via methods} - see @49@ - can be used to publish methods corresponding to your aggregate roots defined as {\f1\fs20 TSQLRecord}.\line This will make it pretty @*REST@ful compatible.
