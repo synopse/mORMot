@@ -27707,7 +27707,7 @@ begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     {$ifdef WITHLOG}
-    SQLite3Log.Family.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
+    Ctxt.Log.Log(sllUserAuth,'Deleted session %/% from %/%',
       [User.LogonName,IDCardinal,RemoteIP,ConnectionID],self);
     {$endif}
     if Assigned(OnSessionClosed) then
@@ -28436,7 +28436,7 @@ var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
     URIMethod, RunningBatchURIMethod: TSQLURIMethod;
-    RunningBatchRest: TSQLRest; { TODO: allow nested batch between tables? }
+    RunningBatchRest: TSQLRest; 
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     ID, Count: integer;
@@ -28444,6 +28444,16 @@ var EndOfObject: AnsiChar;
     RunTableIndex: integer;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
+  procedure PerformAutomaticCommit;
+  begin
+    if RunningBatchRest<>nil then begin
+      RunningBatchRest.InternalBatchStop; // send pending rows before commit
+      RunningBatchRest := nil;
+      RunningBatchTable := nil;
+    end;
+    Commit(CONST_AUTHENTICATION_NOT_USED);
+    RowCountForCurrentTransaction := 0;
+  end;
 begin
   Sent := pointer(Data);
   if Sent=nil then
@@ -28455,7 +28465,7 @@ begin
       raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing {',[self]);
     inc(Sent);
     TableName := GetJSONPropName(Sent);
-    if (TableName='') or (Sent=nil) then 
+    if (TableName='') or (Sent=nil) then
       raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong "Table":"%"',
         [self,TableName]);
   end; // or '["cmd@Table":values,...]'
@@ -28508,6 +28518,24 @@ begin
       if IdemPChar(Method,'PUT') then
         URIMethod := mPUT else
         URIMethod := mNone;
+      // handle auto-committed transaction process
+      if AutomaticTransactionPerRow>0 then begin
+        if PrevRunTable<>RunTable then begin // allow method change for same table
+          if RowCountForCurrentTransaction>0 then
+            // table changed -> commit previous trans
+            PerformAutomaticCommit;
+          PrevRunTable := RunTable;
+        end;
+        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
+          PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
+        if RowCountForCurrentTransaction>0 then
+          inc(RowCountForCurrentTransaction) else
+          if TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
+            inc(RowCountForCurrentTransaction) else begin
+            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
+            AutomaticTransactionPerRow := 0;
+          end;
+      end;
       // handle batch pending request sending (if table or method changed)
       if (RunningBatchRest<>nil) and
          ((RunTable<>RunningBatchTable) or (RunningBatchURIMethod<>URIMethod)) then begin
@@ -28526,27 +28554,6 @@ begin
         RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
         RunningBatchTable := RunTable;
         RunningBatchURIMethod := URIMethod;
-      end;
-      // handle auto-committed transaction process
-      if AutomaticTransactionPerRow>0 then begin
-        if PrevRunTable<>RunTable then begin // allow method change for same table
-          if RowCountForCurrentTransaction>0 then begin
-            Commit(CONST_AUTHENTICATION_NOT_USED); // table changed -> commit previous trans
-            RowCountForCurrentTransaction := 0;
-          end;
-          PrevRunTable := RunTable;
-        end;
-        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then begin
-          Commit(CONST_AUTHENTICATION_NOT_USED);
-          RowCountForCurrentTransaction := 0;
-        end;
-        if RowCountForCurrentTransaction>0 then
-          inc(RowCountForCurrentTransaction) else
-          if TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
-            inc(RowCountForCurrentTransaction) else begin
-            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
-            AutomaticTransactionPerRow := 0;
-          end;
       end;
       // process CRUD method operation
       case URIMethod of
@@ -28592,14 +28599,9 @@ begin
       end;
       inc(Count);
     until EndOfObject=']';
-    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
-      if RunningBatchRest<>nil then begin
-        RunningBatchRest.InternalBatchStop; // send pending rows within transaction
-        RunningBatchRest := nil;
-      end;
-      Commit(CONST_AUTHENTICATION_NOT_USED);
-      RowCountForCurrentTransaction := 0;
-    end;
+    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
+      // send pending rows within transaction
+      PerformAutomaticCommit;
   finally
     if RunningBatchRest<>nil then
       RunningBatchRest.InternalBatchStop; // send pending rows, and release lock
@@ -28608,7 +28610,7 @@ begin
     on Exception do begin
       if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
         RollBack(CONST_AUTHENTICATION_NOT_USED);
-        InternalLog('PARTIAL rollback of latest auto-commited transaction',sllWarning);
+        InternalLog('PARTIAL rollback of latest auto-committed transaction',sllWarning);
       end;
       raise;
     end;
@@ -34627,7 +34629,7 @@ begin
         fConnectionID := FindIniNameValue(pointer(fSentHeaders),'CONNECTIONID: ');
       end;
       {$ifdef WITHLOG}
-      SQLite3Log.Family.SynLog.Log(sllUserAuth,
+      aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
         [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,fConnectionID,
          FindIniNameValue(pointer(fSentHeaders),'USER-AGENT: ')],self);
@@ -35254,7 +35256,7 @@ begin
     // 1st call: create SecCtxId
     if High(fSSPIAuthContexts)>MAXSSPIAUTHCONTEXTS then begin
       {$ifdef WITHLOG}
-      SQLite3Log.Family.SynLog.Log(sllUserAuth,
+      Ctxt.Log.Log(sllUserAuth,
         'Too many Windows Authenticated session in pending state: MAXSSPIAUTHCONTEXTS=%',
         [MAXSSPIAUTHCONTEXTS],self);
       {$endif}
