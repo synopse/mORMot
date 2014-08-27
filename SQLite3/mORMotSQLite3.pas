@@ -1491,15 +1491,22 @@ var ndx,f,prop,fieldCount,valuesCount: integer;
     Decode: TJSONObjectDecoder;
 begin
   if fBatchMethod<>mPOST then
-    raise EORMException.CreateUTF8('%.InternalBatchStop: wrong BatchMethod',[self]);
+    raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
+      [self,ord(fBatchMethod)]);
   try
     if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
-      exit; // nothing to add
+      exit; // not hing to add
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
+    if fBatchValuesCount=1 then begin // handle single record insertion as usual
+      Decode.Decode(fBatchValues[0],nil,pInlined,fBatchFirstID);
+      SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
+      InternalExecute(SQL);
+      exit;
+    end;
     DecodeSaved := true;
     valuesCount := 0;
     SetLength(ValuesNull,(MAX_PARAMS shr 3)+1);
-    SetLength(Values,MAX_PARAMS);
+    SetLength(Values,32);
     Fields := nil; // makes compiler happy
     fieldCount := 0;
     ndx := 0;
@@ -1512,7 +1519,7 @@ begin
             raise EORMException.CreateUTF8('%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
           P := @privateCopy[1]; // make copy before in-place decoding
           while P^ in [#1..' ','{','['] do inc(P);
-          Decode.Decode(P,nil,pNonQuoted,fBatchFirstID+ndx,false);
+          Decode.Decode(P,nil,pNonQuoted,fBatchFirstID+ndx);
           inc(ndx);
           DecodeSaved := false;
         end;
@@ -1533,6 +1540,8 @@ begin
           if valuesCount+fieldCount>MAX_PARAMS then
             break; // this item would bound too many params
         // if we reached here, we can add this row to Values[]
+        if valuesCount+fieldCount>length(Values) then
+          SetLength(Values,MAX_PARAMS);
         for f := 0 to fieldCount-1 do
           if Decode.FieldTypeApproximation[f]=ftaNull then
             SetBit(ValuesNull[0],valuesCount) else
@@ -1543,6 +1552,7 @@ begin
       // INSERT Values[] into the DB
       SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',
         (valuesCount div fieldCount)-1);
+      Statement := nil; // make compiler happy
       DB.LockAndFlushCache;
       try
         if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
@@ -1568,16 +1578,15 @@ begin
           if prop=fieldCount then
             prop := 0;
         end;
-        repeat
-        until Statement^.Step<>SQLITE_ROW;
+        repeat until Statement^.Step<>SQLITE_ROW;
       finally
         if Statement=@fStaticStatement then
           fStaticStatement.Close;
         DB.UnLock;
       end;
+      fillchar(ValuesNull[0],(ValuesCount shr 3)+1,0);
       ValuesCount := 0;
-      fillchar(ValuesNull[0],length(ValuesNull),0);
-      Fields := nil; // force new sending block
+      Fields := nil; // force new SQL statement and Values[]
     until DecodeSaved and (ndx=fBatchValuesCount);
   finally
     fBatchMethod := mNone;
