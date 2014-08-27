@@ -960,6 +960,7 @@ unit mORMot;
       should be able to implement interfaces
     - now Batch*() methods are available at TSQLRest level, so will work
       for TSQLRestClientURI and TSQLRestServer classes (not TSQLRestStorage)
+    - fixed BATCH process to generate valid JSON content
     - added optional CustomFields parameter to TSQLRest.BatchUpdate()
       and BatchAdd() methods - TModTime fields will always be sent
     - implemented automatic transaction generation during BATCH process via
@@ -24276,11 +24277,11 @@ begin
   Props := Value.RecordProps;
   if fBatchTable<>nil then
     if PSQLRecordClass(Value)^<>fBatchTable then
-      exit else // '{"Table":[...,"POST":{object},...]}'
-      fBatch.AddShort('"POST":') else begin
-      fBatch.AddShort('"POST@'); // '[...,"POST@Table":{object}',...]'
+      exit else // '{"Table":[...,"POST",{object},...]}'
+      fBatch.AddShort('"POST",') else begin
+      fBatch.AddShort('"POST@'); // '[...,"POST@Table",{object}',...]'
       fBatch.AddString(Props.SQLTableName);
-      fBatch.Add('"',':');
+      fBatch.Add('"',',');
     end;
   if SendData then begin
     if Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID then
@@ -24297,7 +24298,7 @@ begin
     if ForceID then
       fCache.Notify(Value,soInsert);
   end else
-    fBatch.Add('{','}'); // '{"Table":[...,"POST":{},...]}'
+    fBatch.Add('{','}'); // '{"Table":[...,"POST",{},...]}'
   fBatch.Add(',');
   result := fBatchCount;
   inc(fBatchCount);
@@ -24318,7 +24319,7 @@ begin
     exit;
   end;
   fCache.NotifyDeletion(fBatchTable,ID);
-  fBatch.AddShort('"DELETE":'); // '{"Table":[...,"DELETE":ID,...]}'
+  fBatch.AddShort('"DELETE",'); // '{"Table":[...,"DELETE",ID,...]}'
   fBatch.Add(ID);
   fBatch.Add(',');
   result := fBatchCount;
@@ -24333,9 +24334,9 @@ begin
     exit;
   end;
   fCache.NotifyDeletion(Table,ID);
-  fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table":ID,...]}'
+  fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table",ID,...]}'
   fBatch.AddString(Table.RecordProps.SQLTableName);
-  fBatch.Add('"',':');
+  fBatch.Add('"',',');
   fBatch.Add(ID);
   fBatch.Add(',');
   result := fBatchCount;
@@ -24368,7 +24369,7 @@ begin
 end;
 
 const
-  AUTOMATICTRANSACTIONPERROW_PATTERN = '"AUTOMATICTRANSACTIONPERROW":';
+  AUTOMATICTRANSACTIONPERROW_PATTERN = '"AUTOMATICTRANSACTIONPERROW",';
 
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal): boolean;
@@ -24406,11 +24407,11 @@ begin
   Props := Value.RecordProps;
   if fBatchTable<>nil then
     if PSQLRecordClass(Value)^<>fBatchTable then
-      exit else // '{"Table":[...,"PUT":{object},...]}'
-      fBatch.AddShort('"PUT":') else begin
-      fBatch.AddShort('"PUT@'); // '[...,"PUT@Table":{object}',...]'
+      exit else // '{"Table":[...,"PUT",{object},...]}'
+      fBatch.AddShort('"PUT",') else begin
+      fBatch.AddShort('"PUT@'); // '[...,"PUT@Table",{object}',...]'
       fBatch.AddString(Props.SQLTableName);
-      fBatch.Add('"',':');
+      fBatch.Add('"',',');
     end;
   // same format as TSQLRest.Update, BUT including the ID
   if IsZero(CustomFields) then
@@ -28459,7 +28460,7 @@ begin
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
   if Table<>nil then begin
-    // unserialize expected sequence array as '{"Table":["cmd":values,...]}'
+    // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
     while not (Sent^ in ['{',#0]) do inc(Sent);
     if Sent^<>'{' then
       raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing {',[self]);
@@ -28492,14 +28493,14 @@ begin
   try // to protect InternalBatchStart/Stop locking
     repeat // main loop: process one POST/PUT/DELETE per iteration
       // retrieve method name and associated (static) table
-      Method := GetJSONPropName(Sent);
-      if (Sent=nil) or (Method=nil) then
+      Method := GetJSONField(Sent,Sent,@wasString);
+      if (Sent=nil) or (Method=nil) or not wasString then
         raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing CMD',[self]);
       MethodTable := PosChar(Method,'@');
-      if MethodTable=nil then begin // e.g. '{"Table":[...,"POST":{object},...]}'
+      if MethodTable=nil then begin // e.g. '{"Table":[...,"POST",{object},...]}'
         RunTableIndex := Model.GetTableIndexExisting(Table);
         RunTable := Table;
-      end else begin                // e.g. '[...,"POST@Table":{object},...]'
+      end else begin                // e.g. '[...,"POST@Table",{object},...]'
         RunTableIndex := Model.GetTableIndex(MethodTable+1);
         if RunTableIndex<0 then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown %',
@@ -28557,7 +28558,7 @@ begin
       end;
       // process CRUD method operation
       case URIMethod of
-      mDELETE: begin // '{"Table":[...,"DELETE":ID,...]}' or '[...,"DELETE@Table":ID,...]'
+      mDELETE: begin // '{"Table":[...,"DELETE",ID,...]}' or '[...,"DELETE@Table",ID,...]'
         ID := GetInteger(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
         if (ID<=0) or wasString then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
@@ -28572,7 +28573,7 @@ begin
             Results[Count] := HTML_SUCCESS; // 200 OK
         end;
       end;
-      mPOST: begin // '{"Table":[...,"POST":{object},...]}' or '[...,"POST@Table":{object},...]'
+      mPOST: begin // '{"Table":[...,"POST",{object},...]}' or '[...,"POST@Table",{object},...]'
         Value := JSONGetObject(Sent,nil,EndOfObject);
         if Sent=nil then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
@@ -28583,7 +28584,7 @@ begin
         Results[Count] := ID;
         fCache.Notify(RunTable,ID,Value,soInsert);
       end;
-      mPUT: begin // '{"Table":[...,"PUT":{object},...]}' or '[...,"PUT@Table":{object},...]'
+      mPUT: begin // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
         Value := JSONGetObject(Sent,@ID,EndOfObject);
         if (Sent=nil) or (Value='') then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);

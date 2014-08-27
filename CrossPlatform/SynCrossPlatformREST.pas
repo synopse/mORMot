@@ -2009,9 +2009,9 @@ begin
     result := false; // already opened BATCH sequence
     exit;
   end;
-  if aTable<>nil then // sent as '{"Table":["cmd":values,...]}'
+  if aTable<>nil then // sent as '{"Table":["cmd",values,...]}'
     fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
-  fBatch := fBatch+'["automaticTransactionPerRow":'+
+  fBatch := fBatch+'["automaticTransactionPerRow",'+
     IntToStr(AutomaticTransactionPerRow)+',';
   fBatchTable := aTable;
   result := true;
@@ -2027,8 +2027,8 @@ begin
   if fBatchTable<>nil then
     if fBatchTable<>Table then
       exit else 
-      fBatch := fBatch+CMD+'":' else
-      fBatch := fBatch+CMD+'@'+Info.Name+'":';
+      fBatch := fBatch+CMD+'",' else
+      fBatch := fBatch+CMD+'@'+Info.Name+'",';
   result := fBatchCount;
   inc(fBatchCount);
 end;
