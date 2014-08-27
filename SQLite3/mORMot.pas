@@ -1402,11 +1402,12 @@ type
   /// define how TJSONObjectDecoder.Decode() will handle JSON string values
   TJSONObjectDecoderParams = (pInlined, pQuoted, pNonQuoted);
 
-  /// record/object helper to handle JSON object decoding
-  // - used e.g. by GetJSONObjectAsSQL() function or TSQLRestStorageExternal
-  // ExecuteFromJSON and InternalBatchStop methods
+  /// JSON object decoding and SQL generation, in the context of ORM process
+  // - this is the main process for marshalling JSON into SQL statements
+  // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
+  // InternalBatchStop methods
   TJSONObjectDecoder = {$ifdef UNICODE}record{$else}object{$endif}
-    /// contains the decoded field names or value
+    /// contains the decoded field names or values
     FieldNames, FieldValues: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// Decode() will set each field type approximation
     // - will recognize also JSON_BASE64_MAGIC/JSON_SQLDATE_MAGIC prefix
@@ -1429,13 +1430,18 @@ type
     // - if Fields=nil, P should be a true JSON object, i.e. defined
     // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
     // contains column names and expects a JSON array as "VAL1","VAL2".. in P
+    // - P should be after the initial '{' or '[' character, i.e. at first field
     // - P returns the next object start or nil on unexpected end of input
+    // - P^ buffer will let the JSON be decoded in-place, so consider using
+    // the overloaded Decode(JSON: RawUTF8; ...) method
     // - FieldValues[] strings will be quoted and/or inlined depending on Params
     // - if RowID is set, a RowID column will be added within the returned content
     procedure Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
       Params: TJSONObjectDecoderParams; RowID: integer=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
-    // - overloaded method expecting a RawUTF8 buffer, calling Decode(P: PUTF8Char)
+    // - overloaded method expecting a RawUTF8 buffer, making a private copy
+    // of the JSON content to avoid unexpected in-place modification, then
+    // calling Decode(P: PUTF8Char) to perform the process
     procedure Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
       Params: TJSONObjectDecoderParams; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// encode as a SQL-ready INSERT or UPDATE statement
@@ -1466,6 +1472,7 @@ type
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that it is an unique string
+// - P should be after the initial '{' or '[' character, i.e. at first field
 // - P contains the next object start or nil on unexpected end of input
 // - if Fields is void, expects expanded "COL1"="VAL1" pairs in P^, stopping at '}' or ']'
 // - otherwise, Fields[] contains the column names and expects "VAL1","VAL2".. in P^
@@ -1480,14 +1487,14 @@ function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
   Update, InlinedParams: boolean; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
-// - is used mainly by TSQLRestServerDB.EngineAdd/EngineUpdate methods
-// - expect JSON expanded object as "COL1"="VAL1",...} pairs
+// - is used e.g. by TSQLRestServerDB.EngineAdd/EngineUpdate methods
+// - expect a regular JSON expanded object as "COL1"="VAL1",...} pairs
 // - make its own temporary copy of JSON data before calling GetJSONObjectAsSQL() above
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
 // - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
 // - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
-function GetJSONObjectAsSQL(JSON: RawUTF8; Update, InlinedParams: boolean;
+function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
   RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 
 /// get the FIRST field value of the FIRST row, from a JSON content
@@ -19225,7 +19232,7 @@ begin
   result := Decoder.EncodeAsSQL(Update);
 end;
 
-function GetJSONObjectAsSQL(JSON: RawUTF8; Update, InlinedParams: boolean;
+function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
  RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 var Decoder: TJSONObjectDecoder;
 begin
@@ -28585,11 +28592,17 @@ begin
       end;
       inc(Count);
     until EndOfObject=']';
-    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
+    if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
+      if RunningBatchRest<>nil then begin
+        RunningBatchRest.InternalBatchStop; // send pending rows within transaction
+        RunningBatchRest := nil;
+      end;
       Commit(CONST_AUTHENTICATION_NOT_USED);
+      RowCountForCurrentTransaction := 0;
+    end;
   finally
     if RunningBatchRest<>nil then
-      RunningBatchRest.InternalBatchStop; // send pending statements
+      RunningBatchRest.InternalBatchStop; // send pending rows, and release lock
   end;
   except
     on Exception do begin
