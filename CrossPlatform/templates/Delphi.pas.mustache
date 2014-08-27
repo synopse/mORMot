@@ -54,7 +54,7 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
-{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
+{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
 type
   {{#soa.services}}
   /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}

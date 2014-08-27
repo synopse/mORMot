@@ -7146,6 +7146,8 @@ type
     ArgsOutFirst: integer;
     /// the index of the last var / out / result argument in Args[]
     ArgsOutLast: integer;
+    /// the index of the last argument in Args[], excepting result
+    ArgsNotResultLast: integer;
     /// the index of the last var / out argument in Args[]
     ArgsOutNotResultLast: integer;
     /// the number of const / var parameters in Args[]
@@ -36254,10 +36256,10 @@ begin
     arguments.Init(JSON_OPTIONS[true]);
     for a := 1 to high(args) do begin // ignore self as a=0
       arg := args[a].ContextFromArguments(aRegisteredTypes);
-      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then begin
-        arg.commaIn := '; ';
+      if a<ArgsNotResultLast then
+        arg.commaArg := '; ';
+      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
         arg.commaInSingle := RawUTF8(',');
-      end;
       if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
         arg.commaOut := '; ';
       if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
@@ -36334,6 +36336,7 @@ begin
       ArgsInLast := -2;
       ArgsOutFirst := -1;
       ArgsOutLast := -2;
+      ArgsNotResultLast := -2;
       ArgsOutNotResultLast := -2;
       ArgsManagedFirst := -1;
       ArgsManagedLast := -2;
@@ -36345,6 +36348,7 @@ begin
           ValueDirection := smdVar else
         if pfOut in f then
           ValueDirection := smdOut;
+        ArgsNotResultLast := a;
         if ValueDirection<>smdConst then
           ArgsOutNotResultLast := a;
         ParamName := PS;

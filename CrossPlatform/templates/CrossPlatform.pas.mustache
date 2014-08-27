@@ -56,7 +56,7 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
-{{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
+{{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
 type
 {{#soa.services}}
   /// service implemented by TService{{interfaceURI}}

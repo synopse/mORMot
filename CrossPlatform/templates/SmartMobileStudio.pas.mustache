@@ -57,7 +57,7 @@ type // define some record types, used as properties below
 {{/records}}
 {{/withRecords}}
 type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
-      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
+      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
 {{#soa.services}}
   /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
