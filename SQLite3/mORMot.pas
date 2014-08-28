@@ -753,7 +753,7 @@ unit mORMot;
       is set (can be useful e.g. when consuming services from XML only clients) -
       as an alternative, ResultAsXMLObjectIfAcceptOnlyXML option will recognize
       'Accept: application/xml' or 'Accept: text/xml' HTTP header and return
-      XML content instead of JSON 
+      XML content instead of JSON - with optional ResultAsXMLObjectNameSpace 
     - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
@@ -3925,6 +3925,13 @@ type
     // - TSQLRestServerURIContext.InternalExecuteSOAByInterface will inspect the
     // Accept HTTP header to check if the answer should be XML rather than JSON
     ForceServiceResultAsXMLObject: boolean;
+    /// specify a custom name space content when returning a XML object
+    // - default behavior is to follow Service.ResultAsXMLObjectNameSpace
+    // property (which is void by default)
+    // - service may set e.g. XMLUTF8_NAMESPACE, which will append <content ...>
+    // </content> around the generated XML data, to avoid validation problems
+    // or set a particular XML name space, depending on the application
+    ForceServiceResultAsXMLObjectNameSpace: RawUTF8;
     /// URI inlined parameters
     // - use UrlDecodeValue*() functions to retrieve the values
     Parameters: PUTF8Char;
@@ -4262,6 +4269,10 @@ type
 
   /// the possible options for TSQLRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
+  // - itoNoIndex4ID won't create the index for the main ID field
+  // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
+  // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
+  // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
   TSQLInitializeTableOption = (
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference);
@@ -8240,6 +8251,7 @@ type
     fResultAsJSONObject: boolean;
     fResultAsXMLObject: boolean;
     fResultAsJSONObjectIfAccept: boolean;
+    fResultAsXMLObjectNameSpace: RawUTF8;
     fBackgroundThread: TSynBackgroundThreadProcedure;
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
@@ -8453,6 +8465,13 @@ type
     // or AJAX clients) and XML requests (from XML-only clients)
     property ResultAsXMLObjectIfAcceptOnlyXML: boolean
       read fResultAsJSONObjectIfAccept write fResultAsJSONObjectIfAccept;
+    /// specify a custom name space content when returning a XML object
+    // - by default, no name space would be appended - but such rough XML would
+    // have potential validation problems
+    // - you may use e.g. XMLUTF8_NAMESPACE, which will append <content ...> ...
+    // </content> around the generated XML data
+    property ResultAsXMLObjectNameSpace: RawUTF8
+      read fResultAsXMLObjectNameSpace write fResultAsXMLObjectNameSpace;
   end;
 
   /// a service provider implemented on the client side
@@ -26699,11 +26718,13 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       Error('Parameters required');
       exit;
     end;
-    ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
+    ForceServiceResultAsXMLObject := ForceServiceResultAsXMLObject or
       Service.ResultAsXMLObject;
     ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
       Service.ResultAsJSONObject or
       ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
+    if ForceServiceResultAsXMLObjectNameSpace='' then
+      ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
     inc(Server.fStats.fServices);
     case ServiceMethodIndex of
     ord(imFree):
@@ -26752,7 +26773,8 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
      CompareMem(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
     delete(Call.OutHead,15,31);
     insert(XML_CONTENT_TYPE,Call.OutHead,15);
-    JSONBufferToXML(pointer(Call.OutBody),XMLUTF8_HEADER,xml);
+    JSONBufferToXML(pointer(Call.OutBody),XMLUTF8_HEADER,
+      ForceServiceResultAsXMLObjectNameSpace,xml);
     Call.OutBody := xml;
   end;
 end;
