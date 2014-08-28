@@ -32814,7 +32814,9 @@ begin
     repeat
       case Text[i] of
       #0: exit;
-      #1..#31: begin // characters below ' ', #7 e.g. -> // '&#x07;'
+      #1..#8,#11,#12,#14..#31:
+        ; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char 
+      #9,#10,#13: begin // characters below ' ', #9 e.g. -> // '&#x09;'
         AddShort('&#x');
         Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
         Add(';');
