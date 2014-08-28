@@ -332,6 +332,7 @@ type
     function PrepareVacuum(const aSQL: RawUTF8): boolean;
   protected
     fBatchMethod: TSQLURIMethod;
+    fBatchOptions: TSQLRestBatchOptions;
     fBatchTableIndex: integer;
     fBatchFirstID: integer;
     fBatchValues: TRawUTF8DynArray;
@@ -371,7 +372,8 @@ type
       LastInsertedID: PInt64=nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
     // will properly handle operations until InternalBatchStop is called
-    function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast
     // multi-INSERT statements to the SQLite3 engine
     procedure InternalBatchStop; override;
@@ -1472,7 +1474,7 @@ begin
 end;
 
 function TSQLRestServerDB.InternalBatchStart(
-  Method: TSQLURIMethod): boolean;
+  Method: TSQLURIMethod; BatchOptions: TSQLRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
@@ -1481,6 +1483,7 @@ begin
       if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) then
         raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
       fBatchMethod := method;
+      fBatchOptions := BatchOptions;
       fBatchTableIndex := -1;
       fBatchFirstID := 0; // MainEngineAdd() will search for max(id)
       result := true; // means BATCH mode is supported
@@ -1540,7 +1543,7 @@ begin
         if Fields=nil then begin
           Decode.AssignFieldNamesTo(Fields);
           fieldCount := Decode.FieldCount;
-          SQL := Decode.EncodeAsSQLPrepared(Props.SQLTableName,soInsert,'');
+          SQL := Decode.EncodeAsSQLPrepared(Props.SQLTableName,soInsert,'',fBatchOptions);
           SetLength(Types,fieldCount);
           for f := 0 to fieldCount-1 do begin
             prop := Props.Fields.IndexByNameOrExcept(Decode.FieldNames[f]);

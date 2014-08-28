@@ -213,7 +213,9 @@ type
       const FieldValue: array of const; var ResultID: TIntegerDynArray): boolean;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete 
     // will properly handle operations until InternalBatchStop is called
-    function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
+    // BatchOptions is ignored with external DB (syntax are too much specific)
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
@@ -239,7 +241,7 @@ type
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
-      Occasion: TSQLOccasion): RawUTF8;     
+      Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister() 
@@ -900,7 +902,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.InternalBatchStart(
-  Method: TSQLURIMethod): boolean;
+  Method: TSQLURIMethod; BatchOptions: TSQLRestBatchOptions): boolean;
 const BATCH: array[mPOST..mDELETE] of TSQLDBStatementCRUD = (
   cCreate, cUpdate, cDelete);
 begin
@@ -972,7 +974,7 @@ begin
           end;
           if Fields=nil then begin
             Decode.AssignFieldNamesTo(Fields);
-            SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion);
+            SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
             SetLength(Values,Decode.FieldCount);
             ValuesMax := fBatchCount-BatchBegin;
             if ValuesMax>max then
@@ -1657,7 +1659,7 @@ begin
       exit;
     end;
     // compute SQL statement and associated bound parameters
-    SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion);
+    SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
     if Occasion=soUpdate then
       UInt32ToUTF8(UpdatedID,Decoder.FieldValues[Decoder.FieldCount-1]);
     // execute statement
@@ -1697,7 +1699,8 @@ end;
 
 function TSQLRestStorageExternal.JSONDecodedPrepareToSQL(
   var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
-  out Types: TSQLDBFieldTypeArray; Occasion: TSQLOccasion): RawUTF8;
+  out Types: TSQLDBFieldTypeArray; Occasion: TSQLOccasion;
+  BatchOptions: TSQLRestBatchOptions): RawUTF8;
 var f,k: Integer;
 begin
   SetLength(ExternalFields,Decoder.FieldCount);
@@ -1713,7 +1716,7 @@ begin
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
-    StoredClassProps.ExternalDB.RowIDFieldName);
+    StoredClassProps.ExternalDB.RowIDFieldName,BatchOptions);
   if Occasion=soUpdate then begin
     Types[Decoder.FieldCount] := ftInt64; // add "where ID=?" parameter
     inc(Decoder.FieldCount);

@@ -30,6 +30,7 @@ unit mORMot;
 
   Contributor(s):
     Alexander (chaa)
+    DigDiver
     Esmond
     Pavel (mpv)
     Martin Suer
@@ -1400,6 +1401,16 @@ const
       {$ifndef NOVARIANTS}, sftVariant{$endif}];
 
 type
+  /// the available options for TSQLRest.BatchStart() process
+  // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
+  // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
+  TSQLRestBatchOption = (
+    boInsertOrIgnore);
+
+  /// a set of options for TSQLRest.BatchStart() process
+  // - TJSONObjectDecoder will use it to compute the corresponding SQL
+  TSQLRestBatchOptions = set of TSQLRestBatchOption;
+
   /// define how TJSONObjectDecoder.Decode() will handle JSON string values
   TJSONObjectDecoderParams = (pInlined, pQuoted, pNonQuoted);
 
@@ -1459,9 +1470,11 @@ type
     // - Occasion can be only soInsert or soUpdate
     // - for soInsert, it will create an INSERT with multiple VALUES if
     //  MultipleInsertCount>1, like 'INSERT ... VALUES (?,?), (?,?), ....'
-    // - for soUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=? 
+    // - for soUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
+    // - you can specify some options, e.g. boInsertOrIgnore for soInsert
     function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TSQLOccasion;
-      const UpdateIDFieldName: RawUTF8; MultipleInsertCount: integer=0): RawUTF8;
+      const UpdateIDFieldName: RawUTF8; BatchOptions: TSQLRestBatchOptions;
+      MultipleInsertCount: integer=0): RawUTF8;
     /// set the specified array to the fields names
     // - after a successfull call to Decode()
     procedure AssignFieldNamesTo(var Fields: TRawUTF8DynArray);
@@ -8858,7 +8871,8 @@ type
     // - an overridden method returning TRUE shall ensure that calls to
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
-    function InternalBatchStart(Method: TSQLURIMethod): boolean; virtual;
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
     /// internal method called by TSQLRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     // - this default implementation will raise an EORMException (since
@@ -9587,10 +9601,13 @@ type
        BATCH processes within an unique transaction grouped by a given number 
        of rows, on the server side - set AutomaticTransactionPerRow=maxInt if 
        you want one huge transaction, or set a convenient value (e.g. 10000) 
-	   depending on the back-end database engine abilities, if you want to 
-	   retain the transaction log file small enough for the database engine }
+	     depending on the back-end database engine abilities, if you want to
+	     retain the transaction log file small enough for the database engine
+     - BatchOptions could be set to tune the SQL execution, e.g. force INSERT
+       OR IGNORE on internal SQLite3 engine }
     function BatchStart(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=0): boolean; virtual;
+      AutomaticTransactionPerRow: cardinal=0;
+      BatchOptions: TSQLRestBatchOptions=[]): boolean; virtual;
     /// create a new member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -11380,7 +11397,8 @@ type
     // - this overridden method will raise an EORMException since BATCH mode is
     // not supported for TSQLStorageClass: it has no interrest at table level
     function BatchStart(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=0): boolean; override;
+      AutomaticTransactionPerRow: cardinal=0;
+      BatchOptions: TSQLRestBatchOptions=[]): boolean; override;
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
@@ -19096,11 +19114,9 @@ end;
 
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
-  MultipleInsertCount: integer): RawUTF8;
-const SQL: array[boolean] of PUTF8Char = (
-   'insert into %%', 'update % set % where %=?');
+  BatchOptions: TSQLRestBatchOptions; MultipleInsertCount: integer): RawUTF8;
 var F: integer;
-    P: PUTF8Char;
+    P,SQL: PUTF8Char;
     tmp: RawUTF8;
 begin
   result := '';
@@ -19118,6 +19134,7 @@ begin
         inc(P,3);
       end;
       dec(P);
+      SQL := 'update % set % where %=?';
     end;
     soInsert: begin
       // returns ' (COL1,COL2) VALUES (?,?)' (INSERT format)
@@ -19141,6 +19158,9 @@ begin
         PWord(P)^ := Ord(',')+Ord('(')shl 8;
         inc(P,2);
       until false;
+      if boInsertOrIgnore in BatchOptions then
+        SQL := 'insert or ignore into %%' else
+        SQL := 'insert into %%';
     end;
     else
       raise EORMException.Create('Invalid EncodeAsSQLPrepared() call');
@@ -19151,7 +19171,7 @@ begin
     if Occasion=soUpdate then
       exit else
       tmp := ' default values';
-  result := FormatUTF8(SQL[Occasion=soUpdate],[TableName,tmp,UpdateIDFieldName]);
+  result := FormatUTF8(SQL,[TableName,tmp,UpdateIDFieldName]);
 end;
 
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
@@ -24215,7 +24235,8 @@ begin
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
-function TSQLRest.InternalBatchStart(Method: TSQLURIMethod): boolean;
+function TSQLRest.InternalBatchStart(Method: TSQLURIMethod;
+  BatchOptions: TSQLRestBatchOptions): boolean;
 begin
   result := false;
 end;
@@ -24371,7 +24392,7 @@ begin
 end;
 
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal): boolean;
+  AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
 begin
   if (fBatchCount>0) or (fBatch<>nil) then begin
     // already opened BATCH sequence
@@ -24387,6 +24408,11 @@ begin
   if AutomaticTransactionPerRow>0 then begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.Add(AutomaticTransactionPerRow);
+    fBatch.Add(',');
+  end;
+  if byte(BatchOptions)<>0 then begin
+    fBatch.AddShort('"options",');
+    fBatch.Add(byte(BatchOptions));
     fBatch.Add(',');
   end;
   fBatchTable := aTable;
@@ -28440,6 +28466,7 @@ var EndOfObject: AnsiChar;
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     ID, Count: integer;
+    batchOptions: TSQLRestBatchOptions;
     RunTable, PrevRunTable, RunningBatchTable: TSQLRecordClass;
     RunTableIndex: integer;
     RunStatic: TSQLRest;
@@ -28482,6 +28509,11 @@ begin
     end;
   end else
     AutomaticTransactionPerRow := 0;
+  if IdemPChar(Sent,'"OPTIONS",') then begin
+    inc(Sent,10);
+    byte(batchOptions) := GetNextItemCardinal(Sent,',');
+  end else
+    byte(batchOptions) := 0;
   RowCountForCurrentTransaction := 0;
   PrevRunTable := nil;
   RunningBatchRest := nil;
@@ -28544,13 +28576,13 @@ begin
         RunningBatchTable := nil;
       end;
       if (RunStatic<>nil) and (RunStatic<>RunningBatchRest) and
-         RunStatic.InternalBatchStart(URIMethod) then begin
+         RunStatic.InternalBatchStart(URIMethod,batchOptions) then begin
         RunningBatchRest := RunStatic;
         RunningBatchTable := RunTable;
         RunningBatchURIMethod := URIMethod;
       end else
       if (RunningBatchRest=nil) and (RunStatic=nil) and
-         InternalBatchStart(URIMethod) then begin
+         InternalBatchStart(URIMethod,batchOptions) then begin
         RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
         RunningBatchTable := RunTable;
         RunningBatchURIMethod := URIMethod;
@@ -30703,7 +30735,8 @@ begin
   end;
 end;
 
-function TSQLRestStorage.BatchStart(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0): boolean;
+function TSQLRestStorage.BatchStart(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal=0; BatchOptions: TSQLRestBatchOptions=[]): boolean;
 begin
   raise EORMBatchException.CreateUTF8('%.BatchStart() does not make sense',[self]);
 end;

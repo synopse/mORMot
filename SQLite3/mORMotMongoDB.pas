@@ -131,7 +131,9 @@ type
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     // overridden method returning TRUE for next calls to EngineAdd/Delete
     // will properly handle operations until InternalBatchStop is called
-    function InternalBatchStart(Method: TSQLURIMethod): boolean; override;
+    // BatchOptions is ignored with MongoDB (yet)
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; override;
     // internal method called by TSQLRestServer.RunBatch() to process fast
     // BULK sending to remote MongoDB database
     procedure InternalBatchStop; override;
@@ -895,7 +897,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.InternalBatchStart(
-  Method: TSQLURIMethod): boolean;
+  Method: TSQLURIMethod; BatchOptions: TSQLRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
   if method in [mPOST,mDELETE] then begin

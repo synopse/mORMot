@@ -619,6 +619,14 @@ type
       const method, params, clientDrivenID: string; var sent: string); override;
   end;
 
+  /// the available options for TSQLRest.BatchStart() process
+  // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
+  // plain 'INSERT' - by now, only direct SQLite3 engine supports it on server
+  TSQLRestBatchOption = (
+    boInsertOrIgnore);
+
+  /// a set of options for TSQLRest.BatchStart() process
+  TSQLRestBatchOptions = set of TSQLRestBatchOption;
 
   /// abstract REST access class
   TSQLRest = class
@@ -690,7 +698,8 @@ type
     function Update(Value: TSQLRecord; FieldNames: string=''): boolean; virtual;
 
     /// begin a BATCH sequence to speed up huge database change
-    // - then call BatchAdd(), BatchUpdate()  or BatchDelete() methods
+    // - then call BatchAdd(), BatchUpdate()  or BatchDelete() methods with the
+    // proper class or instance of the
     // - at BatchSend call, all the sequence transactions will be sent at once
     // - at BatchAbort call, all operations will be aborted
     // - expect one TSQLRecordClass as parameter, which will be used for the whole
@@ -699,10 +708,25 @@ type
     //   kind of individual record in BatchAdd/BatchUpdate/BatchDelete
     // - return TRUE on success, FALSE if aTable is incorrect or a previous BATCH
     //   sequence was already initiated
-    // - AutomaticTransactionPerRow will execute all BATCH process within an
-    // unique transaction grouped by a given number of rows, on the server side
+    // - this method includes a AutomaticTransactionPerRow parameter, which will
+    // let all BATCH process be executed on the server side within an unique
+    // transaction grouped by the given number of rows
     function BatchStart(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=10000): boolean; virtual;
+    {$ifdef ISSMS}
+      AutomaticTransactionPerRow: cardinal=10000): boolean;
+    /// begin a BATCH sequence to speed up huge database change
+    // - this method includes a BatchOptions parameter, which could be set
+    // to tune the SQL execution on server
+    // - this specific method is needed to circumvent current SMS limitations:
+    // SMS does not let [] compile as a set, nor handle sets as parameter types
+    // for overloaded methods
+    function BatchStartWithOptions(aTable: TSQLRecordClass;
+      AutomaticTransactionPerRow: cardinal;
+      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
+    {$else}
+      AutomaticTransactionPerRow: cardinal=10000;
+      BatchOptions: TSQLRestBatchOptions=[]): boolean; virtual;
+    {$endif}
     /// create a new member in current BATCH sequence
     // - similar to Add(), but in BATCH mode: nothing is sent until BatchSend()
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -2002,8 +2026,28 @@ begin
     Value.fInternalState := InternalState;
 end;
 
+{$ifdef ISSMS}
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal=10000): boolean;
+  AutomaticTransactionPerRow: cardinal): boolean;
+begin
+  result := BatchStartWithOptions(aTable,AutomaticTransactionPerRow,[]);
+end;
+
+function TSQLRestBatchOptionsToInteger(value: TSQLRestBatchOptions): integer;
+begin
+  asm @result = @value[0]; end;
+end;
+
+function TSQLRest.BatchStartWithOptions(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
+{$else}
+
+type
+  TSQLRestBatchOptionsToInteger = byte;
+
+function TSQLRest.BatchStart(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
+{$endif}
 begin
   if (fBatchCount<>0) or (fBatch<>'') or (AutomaticTransactionPerRow<=0) then begin
     result := false; // already opened BATCH sequence
@@ -2011,8 +2055,8 @@ begin
   end;
   if aTable<>nil then // sent as '{"Table":["cmd",values,...]}'
     fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
-  fBatch := fBatch+'["automaticTransactionPerRow",'+
-    IntToStr(AutomaticTransactionPerRow)+',';
+  fBatch := Format('%s,["automaticTransactionPerRow",%d,"options",%d,',
+    [fBatch,AutomaticTransactionPerRow,TSQLRestBatchOptionsToInteger(BatchOptions)]);
   fBatchTable := aTable;
   result := true;
 end;
