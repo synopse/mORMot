@@ -19159,6 +19159,7 @@ var F: integer;
     P,SQL: PUTF8Char;
     tmp: RawUTF8;
 begin
+  SQL := nil;
   result := '';
   if FieldCount<>0 then begin
     if (Occasion<>soInsert) or (MultipleInsertCount<=0) then
