@@ -47,6 +47,6 @@ begin
   Form1.Caption := ' Sample 02 - Embedded SQLite3 ORM';
   Form1.Database := TSQLRestServerDB.Create(Form1.Model,
     ChangeFileExt(paramstr(0),'.db3'));
-  TSQLRestServerDB(Form1.Database).CreateMissingTables(0);
+  TSQLRestServerDB(Form1.Database).CreateMissingTables;
   Application.Run;
 end.

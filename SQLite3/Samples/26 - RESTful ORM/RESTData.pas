@@ -80,6 +80,7 @@ class procedure TSQLNoteKind.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8);
 var Kind: TSQLNoteKind;
 begin
+  inherited;
   Kind := TSQLNoteKind.Create;
   Kind.Name := 'PostIt';
   Server.Add(Kind,true);

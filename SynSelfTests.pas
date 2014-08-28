@@ -8912,7 +8912,7 @@ var n, i, ndx: integer;
 begin
   Client.Server.StaticVirtualTableDirect := DirectSQL;
   Check(Client.Server.ExecuteFmt('DROP TABLE %',[aClass.SQLTableName]));
-  Client.Server.CreateMissingTables(0);
+  Client.Server.CreateMissingTables;
   VD := aClass.Create as TSQLRecordDali1;
   try
     if aClient.TransactionBegin(aClass) then
@@ -9102,7 +9102,7 @@ begin
           if not CheckFailed(GetTableIndex(Tables[i])=i) then
             Check(GetTableIndex(Tables[i].SQLTableName)=i);
       // direct client access test
-      Client.Server.CreateMissingTables(0); // NEED Dest,Source,Dests,...
+      Client.Server.CreateMissingTables; // NEED Dest,Source,Dests,...
       Check(Client.SetUser('User','synopse')); // use default user
       DaVinci := WinAnsiToUtf8('da Vin'+#$00E7+'i');
       Check(Client.Retrieve('LastName='''+DaVinci+'''',V));

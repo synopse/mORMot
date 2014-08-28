@@ -89,7 +89,7 @@ begin
   end;
   DB := TSQLRestServerDB.Create(Model,fDatabaseFileName);
   // initialize and launch the server
-  DB.CreateMissingTables(0);
+  DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
 end;

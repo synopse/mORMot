@@ -797,6 +797,8 @@ unit mORMot;
       constructors, to auto-initialize and load nested TSQLRecord properties
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
       fields (including ID/RowID)
+    - added TSQLInitializeTableOptions parameter to CreateMissingTables and
+      InitializeTable methods, to tune underlying table creation (e.g. indexes)
     - introducing TInterfaceStub and TInterfaceMock classes to define
       high-performance interface stubbing and mocking via a fluent interface
     - integrated Windows Authentication to the mORMot Client-Server layer: in
@@ -4258,6 +4260,16 @@ type
   /// the possible options for handling table names
   TSQLCheckTableName = (ctnNoCheck,ctnMustExist,ctnTrimExisting);
 
+  /// the possible options for TSQLRestServer.CreateMissingTables and
+  // TSQLRecord.InitializeTable methods
+  TSQLInitializeTableOption = (
+    itoNoIndex4ID, itoNoIndex4UniqueField,
+    itoNoIndex4NestedRecord, itoNoIndex4RecordReference);
+
+  /// the options to be specified for TSQLRestServer.CreateMissingTables and
+  // TSQLRecord.InitializeTable methods
+  TSQLInitializeTableOptions = set of TSQLInitializeTableOption;
+
   /// internal data used by TSQLRecord.FillPrepare()/FillPrepareMany() methods
   // - using a dedicated class will reduce memory usage for each TSQLRecord
   // instance (which won't need these properties most of the time)
@@ -4429,8 +4441,10 @@ type
       - by default, create indexes for all TRecordReference properties, and
         for all TSQLRecord inherited properties (i.e. of sftID type, that is
         an INTEGER field containing the ID of the pointing record)
-     - is not part of TSQLRecordProperties because has been declared as virtual }
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); virtual;
+      - the options specified at CreateMissingTables() are passed to this method
+      - is not part of TSQLRecordProperties because has been declared as virtual }
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); virtual;
 
     {/ filter the specified fields values of the current TSQLRecord instance
     - by default, this will perform all TSynFilter as registered by
@@ -10122,7 +10136,8 @@ type
     // - of course, you can change and tune the settings of the AuthGroup and
     // AuthUser tables, but only 'Admin' group users will be able to remotly
     // modify the content of those table
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
     /// corresponding TSQLAccessRights for this authentication group
     // - content is converted into/from text format via AccessRight DB property
     // (so it will be not fixed e.g. by the binary TSQLFieldTables layout, i.e.
@@ -10588,7 +10603,8 @@ type
     function ModifiedID: PtrInt;
     /// called when the associated table is created in the database
     // - create index on History(ModifiedRecord,History) for process speed-up
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
   public
     /// prepare to access the History BLOB content
     // - ModifiedRecord should have been set to a proper value
@@ -10738,6 +10754,7 @@ type
     fPublishedMethods: TDynArrayHashed;
     fStats: TSQLRestServerStats;
     fShutdownRequested: boolean;
+    fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistory: array of record
@@ -11020,7 +11037,10 @@ type
     // - this virtual method do nothing by default - overridden versions should
     // implement it as expected by the underlying storage engine (e.g. SQLite3
     // or TSQLRestServerFullInMemory)
-    procedure CreateMissingTables(user_version: cardinal=0); virtual;
+    // - you can tune some options transmitted to the TSQLRecord.InitializeTable
+    // virtual methods, e.g. to avoid the automatic create of indexes
+    procedure CreateMissingTables(user_version: cardinal=0;
+      options: TSQLInitializeTableOptions=[]); virtual;
     /// create an external static in-memory database for a specific class
     // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
     // warning: if you don't call this method before CreateMissingTable method
@@ -11810,7 +11830,8 @@ type
     // has been modified; only field adding is available, field renaming or
     // field deleting are not allowed in the FrameWork (in such cases, you must
     // create a new TSQLRecord type)
-    procedure CreateMissingTables(user_version: cardinal=0); override;
+    procedure CreateMissingTables(user_version: cardinal=0;
+      Options: TSQLInitializeTableOptions=[]); override;
     /// load the content from the specified file name
     // - do nothing if file name was not assigned
     procedure LoadFromFile; virtual;
@@ -21004,17 +21025,20 @@ begin
     aClient.Retrieve(FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),self);
 end;
 
-class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8);
+class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+  Options: TSQLInitializeTableOptions);
 var f: integer;
 begin // is not part of TSQLRecordProperties because has been declared as virtual
   if (self<>nil) and (Server<>nil) then begin
-    if (FieldName='') or IsRowID(pointer(FieldName)) then
-      Server.CreateSQLIndex(self,'ID',true); // for external tables
+    if not (itoNoIndex4ID in Options) then
+      if (FieldName='') or IsRowID(pointer(FieldName)) then
+        Server.CreateSQLIndex(self,'ID',true); // for external tables
     with RecordProps do
     for f := 0 to Fields.Count-1 do
       with Fields.List[f] do
-      if (SQLFieldType in [sftRecord, sftID]) or
-         (aIsUnique in Attributes) then
+      if ((aIsUnique in Attributes) and not (itoNoIndex4UniqueField in Options)) or
+         ((SQLFieldType=sftRecord) and not (itoNoIndex4RecordReference in Options)) or
+         ((SQLFieldType=sftID) and not (itoNoIndex4NestedRecord in Options)) then
         if (FieldName='') or IdemPropNameU(FieldName,Name) then
             Server.CreateSQLIndex(self,Name,false);
   end; // failure in Server.CreateSQLIndex() above is ignored (may already exist)
@@ -25847,8 +25871,10 @@ begin
   ServiceMethodByPassAuthentication('TimeStamp');
 end;
 
-procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0);
-begin // nothing to do by default
+procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0;
+  Options: TSQLInitializeTableOptions=[]);
+begin 
+  fCreateMissingTablesOptions := Options;
 end;
 
 destructor TSQLRestServer.Destroy;
@@ -26283,7 +26309,7 @@ begin
     if fAfterCreation and
       ((not TableHasRows(fSQLAuthUserClass)) or
        (not TableHasRows(fSQLAuthGroupClass))) then
-      CreateMissingTables(0);
+      CreateMissingTables(0,fCreateMissingTablesOptions);
   finally
     LeaveCriticalSection(fSessionCriticalSection);
   end;
@@ -27894,9 +27920,9 @@ begin
 end;
 
 class procedure TSQLRecordHistory.InitializeTable(Server: TSQLRestServer;
-  const FieldName: RawUTF8);
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 begin
-  inherited InitializeTable(Server,FieldName);
+  inherited InitializeTable(Server,FieldName,Options);
   if FieldName='' then
     Server.CreateSQLMultiIndex(Self,['ModifiedRecord','Event'],false);
 end;
@@ -30758,12 +30784,14 @@ begin
     fStorage[t].fStorageLockShouldIncreaseOwnerInternalState := true;
   end;
   LoadFromFile;
-  CreateMissingTables(0);
+  CreateMissingTables(0,[]);
 end;
 
-procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0);
+procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0;
+  Options: TSQLInitializeTableOptions=[]);
 var t: integer;
 begin
+  inherited;
   // create any missing static instances
   if integer(fStaticDataCount)<>length(fModel.Tables) then begin
     SetLength(fStorage,length(fModel.Tables));
@@ -30777,7 +30805,7 @@ begin
   for t := 0 to fStaticDataCount-1 do
     with TSQLRestStorageInMemory(fStaticData[t]) do
     if Count=0 then // emulates TSQLRestServerDB.CreateMissingTables
-      StoredClass.InitializeTable(Self,'');
+      StoredClass.InitializeTable(Self,'',Options);
 end;
 
 destructor TSQLRestServerFullMemory.Destroy;
@@ -34751,7 +34779,7 @@ begin
 end;
 
 class procedure TSQLAuthGroup.InitializeTable(Server: TSQLRestServer;
-  const FieldName: RawUTF8);
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var G: TSQLAuthGroup;
     A: TSQLAccessRights;
     U: TSQLAuthUser;

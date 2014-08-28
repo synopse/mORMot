@@ -64,7 +64,7 @@ begin
   DB.URIPagingParameters.Results := 'LIMIT=';
   DB.URIPagingParameters.SendTotalRowsCountFmt := ',"total":%';
   // initialize and launch the server
-  DB.CreateMissingTables(0);
+  DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
 end;
@@ -88,6 +88,7 @@ class procedure TSQLSampleRecord.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8);
 var Rec: TSQLSampleRecord;
 begin
+  inherited;
   if FieldName<>'' then
     exit; // create database only if void
   Rec := TSQLSampleRecord.CreateAndFillPrepare(

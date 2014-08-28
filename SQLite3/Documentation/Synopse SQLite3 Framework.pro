@@ -681,15 +681,16 @@ At first, some points can be highlighted, which make this framework distinct to 
 - {\i Service-Oriented-Architecture} model, using custom RESTful JSON services - you can send as JSON any {\f1\fs20 TStrings, TCollection, TPersistent} or {\f1\fs20 TObject} (via registration of a custom serializer) instance, or even a {\i dynamic array}, or any record content, with integrated JSON @*serialization@, via an @*interface@-based contract shared on both client and server sides;
 - Truly RESTful authentication with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
-- Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
+- Fast a configuration-less @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
 - Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
 - RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
 - Full @*Text Search@ engine included, with enhanced Google-like ranking algorithm;
+- Server-side @*JavaScript@ engine, for defining your business intelligence;
 - Direct User Interface generation: grids are created on the fly, together with a modern Ribbon ('Office 2007'-like) screen layout - the code just has to define actions, and assign them to the tables, in order to construct the whole interface from a few lines of code, without any IDE usage;
 - Integrated @*Report@ing system, which could serve complex @*PDF@ reports from your application;
 - Designed to be as fast as possible (asm used when needed, buffered reading and writing avoid most memory consumption, multi-thread ready architecture...) so benchmarks sound impressive when compared to other solutions - see @59@;
-- More than 1500 pages of documentation;
+- More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
 - Works from {\i Delphi} 6 up to XE6, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
@@ -7975,7 +7976,7 @@ More on this later on... first we'll take a look at good principles of playing w
 The acronym @**SOLID@ is derived from the following @*OOP@ principles (quoted from the corresponding {\i Wikipedia} article):
 - {\i Single responsibility principle}: the notion that an object should have only a single responsibility;
 - {\i Open/closed principle}: the notion that “software entities ... should be open for extension, but closed for modification”;
-- {\i Liskov substitution principle}: the notion that “objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program” - also named as "{\i design by contract}";
+- {\i @Liskov substitution principle@}: the notion that “objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program” - also named as "{\i design by contract}";
 - {\i @*Interface@ segregation principle}: the notion that “many client specific interfaces are better than one general purpose interface.”;
 - {\i Dependency inversion principle}: the notion that one should “Depend upon Abstractions. Do not depend upon concretions.”. {\i Dependency injection} is one method of following this principle.
 If you have some programming skills, those principles are general statements you may already found out by yourself. If you start doing serious object-oriented coding, those principles are best-practice guidelines you would gain following.
@@ -8021,7 +8022,7 @@ Some other guidelines may be added, but you got the main idea. Conformance to th
 Following this principle will make your code far away from a regular RAD style. But benefits will be huge.
 :  Liskov substitution principle
 Even if her name is barely unmemorable, {\i Barbara Liskov} is a great computer scientist, we should better learn from.
-Her "substitution principle" states that, if {\f1\fs20 TChild} is a subtype of {\f1\fs20 TParent}, then objects of type {\f1\fs20 TParent} may be replaced with objects of type {\f1\fs20 TChild} (i.e., objects of type {\f1\fs20 TChild} may be substitutes for objects of type {\f1\fs20 TParent}) without altering any of the desirable properties of that program (correctness, task performed, etc.).
+The "{\i @**Liskov substitution principle@}" states that, if {\f1\fs20 TChild} is a subtype of {\f1\fs20 TParent}, then objects of type {\f1\fs20 TParent} may be replaced with objects of type {\f1\fs20 TChild} (i.e., objects of type {\f1\fs20 TChild} may be substitutes for objects of type {\f1\fs20 TParent}) without altering any of the desirable properties of that program (correctness, task performed, etc.).
 For our framework, it would signify that {\f1\fs20 TSQLRestServer} or {\f1\fs20 TSQLRestClient} instances can be substituted to a {\f1\fs20 TSQLRest} object. Most @*ORM@ methods expect a {\f1\fs20 TSQLRest} parameter to be supplied.
 Your code shall refer to abstractions, not to implementations. By using only methods and properties available at classes parent level, your code won't need to change because of a specific implementation.
 The main advantages of this coding pattern are the following:
@@ -8050,7 +8051,7 @@ By defining {\i Delphi} {\f1\fs20 interface} instead of plain {\f1\fs20 class}, 
 Another form of decoupling is to invert the dependency between high and low level of a software design:
 - High-level modules should not depend on low-level modules. Both should depend on abstractions;
 - Abstractions should not depend upon details. Details should depend upon abstractions.
-In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the Liskov's substitution principle.
+In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the {\i @Liskov substitution principle@}.
 The goal of the {\i dependency inversion principle} is to decouple high-level components from low-level components such that reuse with different low-level component implementations becomes possible. A simple implementation pattern could be to use only @*interface@s owned by, and existing only with the high-level component package.
 In other languages (like Java or .Net), various patterns such as {\i Plug-in, Service Locator}, or {\i Dependency Injection} are then employed to facilitate the run-time provisioning of the chosen low-level component implementation to the high-level component.
 Our @*Client-Server@ architecture facilitated this decoupling pattern, and allows the use of native {\i Delphi} {\f1\fs20 interface} to call services from an abstract @*factory@.
@@ -8185,7 +8186,7 @@ The {\f1\fs20 constructor} will indeed {\i inject} its dependencies into its own
 !  fUserRepository := aUserRepository;
 !  fSmsSender := aSmsSender;
 !end;
-The dependencies are defined with the following two interfaces(only the needed methods are listed here, but a real interface may have much more members, but not too much, to follow the {\i interface segregation} SOLID principle):
+The dependencies are defined with the following two interfaces(only the needed methods are listed here, but a real interface may have much more members, but not too much, to follow the {\i interface segregation} @*SOLID@ principle):
 !  IUserRepository = interface(IInvokable)
 !    ['{B21E5B21-28F4-4874-8446-BD0B06DAA07F}']
 !    function GetUserByName(const Name: RawUTF8): TUser;
@@ -11151,7 +11152,7 @@ In practice, {\i Aggregates} may be the only kind of objects which will be persi
 DDD services may just permit remote access to {\i Aggregates} methods, where the domain logic will be defined and isolated.
 :  Factory and Repository patterns
 DDD then favors some patterns to use those objects efficiently.
-The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).
+The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).\line In fact, Delphi is ahead of Java or C#, since it allows {\f1\fs20 virtual} constructors to be defined. Those {\f1\fs20 virtual} constructors are in fact a clean and efficient way of implementing a {\i Factory}, and also fulfil @*SOLID@ principles, especially the {\i @Liskov substitution principle@}: the parent class define an {\i abstract} constructor on which you rely, but the implementation will take place in the {\i overriden} constructor.
 The {\i Factory pattern} can also be used to create {\f1\fs20 interface} instances - see @46@. Main benefit is that alternative implementations may be easily interchanged. Such abstraction helps testing - see @62@ - but also introduces interface-based services - see @63@.
 {\i @**Repository@ pattern} is used to save and dispense each {\i Aggregate Root}.\line It matches the "@*Layer Supertype@" pattern (see above), e.g. via our {\i mORMot} {\f1\fs20 TSQLRecord} and {\f1\fs20 TSQLRest} classes and their Client-Server @*ORM@ features, or via dedicated repository classes - saving data is indeed a concern orthogonal to the model itself. DDD architects claim that persistence is infrastructure, not domain. You may benefit in defining your own repository interface, if the standard ORM / CRUD operations are not enough.
 :  DTO and Events
@@ -11698,7 +11699,7 @@ To properly upgrade to the latest revision:
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
 - Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static} unit (for {\i Win32}).
 4. Consult the units' headers about 1.18 for breaking changes, mainly:
-- Renamed @*Iso8601@ low-level structure as {\f1\fs20 TTimeLogBits};
+- Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 TTimeLogBits};
 - {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
 - {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 TSQLRestServerURIContext} class;
 - {\f1\fs20 rmJSON*} enumerates replaced by {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes;

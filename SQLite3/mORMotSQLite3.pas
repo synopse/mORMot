@@ -481,7 +481,8 @@ type
     // has been modified; only field adding is available, field renaming or
     // field deleting are not allowed in the FrameWork (in such cases, you must
     // create a new TSQLRecord type)
-    procedure CreateMissingTables(user_version: cardinal=0); override;
+    procedure CreateMissingTables(user_version: cardinal=0;
+      Options: TSQLInitializeTableOptions=[]); override;
 
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -789,7 +790,8 @@ begin
   Create(aModel,fOwnedDB,aHandleUserAuthentication);
 end;
 
-procedure TSQLRestServerDB.CreateMissingTables(user_version: cardinal);
+procedure TSQLRestServerDB.CreateMissingTables(user_version: cardinal;
+  Options: TSQLInitializeTableOptions);
 var t,f,nt,nf: integer;
     TableNamesAtCreation, aFields: TRawUTF8DynArray;
     TableJustCreated: TSQLFieldTables;
@@ -828,7 +830,7 @@ begin
                 DB.TransactionBegin; // make initialization faster by using transaction
               DB.Execute(aSQL);
             end;
-            Model.Tables[t].InitializeTable(self,Name);
+            Model.Tables[t].InitializeTable(self,Name,Options);
           end;
       end;
     if not DB.TransactionActive then
@@ -842,7 +844,7 @@ begin
         if t in TableJustCreated then
           if (not(Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL)) or
              (not TableHasRows(Model.Tables[t])) then // check is really void
-            Model.Tables[t].InitializeTable(self,''); // '' for table creation
+            Model.Tables[t].InitializeTable(self,'',Options); // '' for table creation
     DB.Commit;
   except
     on E: Exception do begin
@@ -1362,10 +1364,14 @@ begin
       end;
     finally
       if Closed then begin
-        DB.DBOpen; // reopen the database if was previously closed
-        FreeAndNil(fRegisteredVirtualTableModules); // force register modules
-        InitializeEngine;                   // register functions and modules
-        CreateMissingTables(user_version);  // register virtual tables
+        // reopen the database if was previously closed
+        DB.DBOpen;
+        // force register modules
+        FreeAndNil(fRegisteredVirtualTableModules);
+        // register functions and modules
+        InitializeEngine;
+        // register virtual tables
+        CreateMissingTables(user_version,fCreateMissingTablesOptions);
       end;
     end;
   finally
@@ -1452,9 +1458,12 @@ begin
           MoveFile(pointer(BackupFileName),pointer(DB.FileName));
           DB.DBOpen; // always reopen the database
         end;
-        FreeAndNil(fRegisteredVirtualTableModules); // force register modules
-        InitializeEngine;                   // register functions and modules
-        CreateMissingTables(user_version);  // register virtual tables
+        // force register modules
+        FreeAndNil(fRegisteredVirtualTableModules);
+        // register functions and modules
+        InitializeEngine;
+        // register virtual tables
+        CreateMissingTables(user_version,fCreateMissingTablesOptions);
       end;
     finally
       DB.UnLock;

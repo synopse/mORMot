@@ -91,7 +91,7 @@ begin
     DoStop(nil); // should never happen
   Model := CreateSampleModel;
   DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'));
-  DB.CreateMissingTables(0);
+  DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
   TSQLLog.Add.Log(sllInfo,'Server % started by %',[Server.HttpServer,Server]);
 end;
