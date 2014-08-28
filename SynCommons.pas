@@ -6519,17 +6519,25 @@ const
   /// standard header for an UTF-8 encoded XML file 
   XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
 
+  /// standard namespace for a generic XML File
+  XMLUTF8_NAMESPACE = '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">';
+
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around TTextWriter.AddJSONToXML, with an optional
-// header before the XML converted data (e.g. XMLUTF8_HEADER)
+// header before the XML converted data (e.g. XMLUTF8_HEADER), and an optional
+// name space content node which will nest the generated XML data (e.g.
+// '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">') - the
+// corresponding ending token will be appended after (e.g. '</contents>')
 // - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
-procedure JSONBufferToXML(P: PUTF8Char; const Header: RawUTF8; out result: RawUTF8);
+procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8; out result: RawUTF8);
 
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
 // of the supplied JSON buffer (so that JSON content  would stay untouched)
 // - the optional header is added at the beginning of the resulting string
-function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8=XMLUTF8_HEADER): RawUTF8;
+// - an optional name space content node could be added around the generated XML
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8=XMLUTF8_HEADER;
+  const NameSpace: RawUTF8=''): RawUTF8;
 
 /// formats and indents a JSON array or document to the specified layout
 // - just a wrapper around TTextWriter.AddJSONReformat() method
@@ -34307,25 +34315,43 @@ begin // replace comments by ' ' characters which will be ignored by parser
   end;
 end;
 
-procedure JSONBufferToXML(P: PUTF8Char; const Header: RawUTF8; out result: RawUTF8);
+procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8;
+  out result: RawUTF8);
+var EndNameSpace: RawUTF8;
+    i,j,L: integer;
 begin
   if P=nil then
     result := Header else
     with TTextWriter.CreateOwnedStream do
     try
       AddNoJSONEscape(pointer(Header),length(Header));
+      if NameSpace<>'' then begin
+        L := length(NameSpace);
+        AddNoJSONEscape(pointer(NameSpace),L);
+        for i := 1 to L do
+          if NameSpace[i]='<' then begin
+            for j := i+1 to L do
+              if NameSpace[j] in [' ','>'] then begin
+                EndNameSpace := '</'+copy(NameSpace,i+1,j-i-1)+'>';
+                break;
+              end;
+            break;
+          end;
+      end;
       AddJSONToXML(P);
+      if EndNameSpace<>'' then
+        AddNoJSONEscape(pointer(EndNameSpace),length(EndNameSpace));
       SetText(result);
     finally
       Free;
     end;
 end;
 
-function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8): RawUTF8;
+function JSONToXML(const JSON: RawUTF8; const Header,NameSpace: RawUTF8): RawUTF8;
 var tmp: RawUTF8;
 begin
   SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  JSONBufferToXML(pointer(tmp),Header,result);
+  JSONBufferToXML(pointer(tmp),Header,NameSpace,result);
 end;
 
 procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;

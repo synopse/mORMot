@@ -4268,6 +4268,8 @@ begin
   Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
   X := JSONToXML(U,'');
   Check(X='<A>0</A><B>0</B><C>0</C><D></D><E><E1>0</E1><E2>0</E2></E><F></F>');
+  J := JSONToXML(U,'',XMLUTF8_NAMESPACE);
+  Check(J=XMLUTF8_NAMESPACE+X+'</contents>');
   J := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
   Check(J='{"A":0,"B":0,"C":0,"D":null,"E":[],"F":""}');
   X := JSONToXML(J,'');
