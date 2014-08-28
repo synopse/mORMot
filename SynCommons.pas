@@ -397,7 +397,7 @@ unit SynCommons;
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
-  - faster x86 asm version of StrUInt32(), StrInt32() and StrInt64() functions
+  - faster x86/x64 asm versions of StrUInt32() StrInt32() StrInt64() functions
   - new StrUInt64() and SetRawUTF8() functions
   - recognize 8.1 and upcoming "Threshold" 9 in TWindowsVersion
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
@@ -13119,11 +13119,7 @@ procedure Int32ToUTF8(Value : integer; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  if Value<0 then begin
-    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
-    P^ := '-';
-  end else
-    P := StrUInt32(@tmp[15],Value);
+  P := StrInt32(@tmp[15],Value);
   SetRawUTF8(result,P,@tmp[15]-P);
 end;
 
@@ -13387,6 +13383,50 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
+{$ifdef CPU64}
+asm // rcx=P, rdx=val
+    {$ifdef CPUX64}
+    .NOFRAME
+    {$endif}
+    mov r10,rdx
+    sar r10,63                  // r10=0 if val>=0 or -1 if val<0
+    xor rdx,r10
+    sub rdx,r10                 // rdx=abs(val)
+    cmp rdx,10; jb @3           // direct process of common val<10
+    mov rax,rdx
+    lea r8,TwoDigitLookupW
+@s: cmp rax,100
+    lea rcx,rcx-2
+    jb @2
+    lea r9,rax*2
+    shr rax,2
+    mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
+    mul rdx
+    shr rdx,2
+    mov rax,rdx
+    imul rdx,-200
+    lea rdx,rdx+r8
+    movzx rdx,word ptr [rdx+r9]
+    mov [rcx],dx
+    cmp rax,10
+    jae @s
+@1: or al,'0'
+    mov byte ptr [rcx-2],'-'
+    mov [rcx-1],al
+    lea rax,[rcx+r10-1]         // includes '-' if val<0
+    ret
+@2: movzx eax,word ptr [r8+rax*2]
+    mov byte ptr [rcx-1],'-'
+    mov [rcx],ax
+    lea rax,[rcx+r10]           // includes '-' if val<0
+    ret
+@3: or dl,'0'
+    mov byte ptr [rcx-2],'-'
+    mov [rcx-1],dl
+    lea rax,[rcx+r10-1]         // includes '-' if val<0
+end;
+{$else}
+{$ifdef PUREPASCAL}
 begin // this code is faster than the Borland's original str() or IntToStr()
   if val<0 then begin
     result := StrUInt32(P,PtrUInt(-val))-1;
@@ -13394,6 +13434,57 @@ begin // this code is faster than the Borland's original str() or IntToStr()
   end else
     result := StrUInt32(P,val);
 end;
+{$else}
+asm // eax=P, edx=val
+    mov ecx,edx
+    sar ecx,31         // 0 if val>=0 or -1 if val<0
+    push ecx
+    xor edx,ecx
+    sub edx,ecx        // edx=abs(val) 
+    cmp edx,10; jb @3  // direct process of common val<10
+    push edi
+    mov edi,eax
+    mov eax,edx
+    nop; nop           // for loop alignment
+@s: cmp eax,100
+    lea edi,[edi-2]
+    jb @2
+    mov ecx,eax
+    mov	edx,1374389535 // use power of two reciprocal to avoid division
+    mul edx
+    shr	edx,5          // now edx=eax div 100
+    mov eax,edx
+    imul edx,-200
+    movzx edx,word ptr [TwoDigitLookupW+ecx*2+edx]
+    mov [edi],dx
+    cmp eax,10
+    jae @s
+@1: dec edi
+    or al,'0'
+    mov byte ptr [edi-1],'-'
+    mov [edi],al
+    mov eax,edi
+    pop edi
+    pop ecx
+    lea eax,[eax+ecx] // includes '-' if val<0
+    ret
+@2: movzx eax,word ptr [TwoDigitLookupW+eax*2]
+    mov byte ptr [edi-1],'-'
+    mov [edi],ax
+    mov eax,edi
+    pop edi
+    pop ecx
+    lea eax,[eax+ecx] // includes '-' if val<0
+    ret
+@3: dec eax
+    pop ecx
+    or dl,'0'
+    mov byte ptr [eax-1],'-'
+    mov [eax],dl
+    lea eax,[eax+ecx] // includes '-' if val<0
+end;
+{$endif CPU64}
+{$endif PUREPASCAL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef CPU64}
@@ -13401,7 +13492,7 @@ asm // rcx=P, rdx=val
     {$ifdef CPUX64}
     .NOFRAME
     {$endif}
-    cmp rdx,10; jb @3           // direct process of common val=0 (or val<10)
+    cmp rdx,10; jb @3           // direct process of common val<10
     mov rax,rdx
     lea r8,TwoDigitLookupW
 @s: cmp rax,100
@@ -13428,10 +13519,9 @@ asm // rcx=P, rdx=val
     mov [rcx],ax
     mov rax,rcx
     ret
-@3: dec rcx
+@3: lea rax,[rcx-1]
     or dl,'0'
-    mov [rcx],dl
-    mov rax,rcx
+    mov [rax],dl
 end;
 {$else}
 {$ifdef PUREPASCAL}
@@ -13480,7 +13570,7 @@ asm // eax=P, edx=val
 @1: dec edi
     or al,'0'
     mov [edi],al
-@0: mov eax,edi
+    mov eax,edi
     pop edi
     ret
 @2: movzx eax,word ptr [TwoDigitLookupW+eax*2]
@@ -14119,11 +14209,7 @@ function IntToString(Value: integer): string;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  if Value<0 then begin
-    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
-    P^ := '-';
-  end else
-    P := StrUInt32(@tmp[15],Value);
+  P := StrInt32(@tmp[15],Value);
   SetString(result,P,@tmp[15]-P);
 end;
 {$else}
@@ -15939,11 +16025,7 @@ function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  if Value<0 then begin
-    P := StrUInt32(@tmp[15],PtrUInt(-Value))-1;
-    P^ := '-';
-  end else
-    P := StrUInt32(@tmp[15],Value);
+  P := StrInt32(@tmp[15],Value);
   SetString(result,P,@tmp[15]-P);
 end;
 
@@ -31599,12 +31681,7 @@ var tmp: array[0..15] of AnsiChar;
 begin
   if B+16>=BEnd then
     Flush;
-  if Value<0 then begin
-    B[1] := '-';
-    inc(B);
-    P := StrUInt32(@tmp[15],PtrUInt(-value));
-  end else
-    P := StrUInt32(@tmp[15],value);
+  P := StrInt32(@tmp[15],value);
   Len := @tmp[15]-P;
   move(P[0],B[1],Len);
   inc(B,Len);

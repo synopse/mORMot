@@ -4031,8 +4031,8 @@ begin
   i64[1] := $2030303030303030; // t[15]=' '
   if Value<0 then
     Value := 0;
-  StrInt32(@t[15],Value);
-  inc(DigitCount);
+  StrUInt32(@t[15],Value);
+  inc(DigitCount); // includes trailing t[15]=' '
   Move(t[16-DigitCount],B^,DigitCount);
   inc(B,DigitCount);
   result := self;

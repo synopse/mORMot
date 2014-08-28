@@ -2380,6 +2380,8 @@ begin
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
   DecimalSeparator := '.';
 {$endif}
+  for i := -10000 to 10000 do
+    check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
     j := Random(maxInt)-Random(maxInt);
     str(j,a);
