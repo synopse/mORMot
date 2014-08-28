@@ -446,7 +446,7 @@ unit SynCommons;
   - added faster TTextWriter.SetText() method in conjuction to Text function
   - added TTextWriter.Add(const guid: TGUID) overloaded method
   - TTextWriter.Add(Format..) will now ignore any character afer |, i.e. |$ = $
-  - added TTextWriter.AddQuotedStr() method
+  - added TTextWriter.AddQuotedStr() and AddStringCopy() methods
   - added TTextWriter.AddVoidRecordJSON() method
   - added TTextWriter.AddJSONEscapeAnsiString() method
   - added TTextWriter.AddAnyAnsiString() method and AnyAnsiToUTF8() function
@@ -5153,6 +5153,9 @@ type
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append a sub-part of an UTF-8  String
+    // - emulates AddString(copy(Text,start,len))
+    procedure AddStringCopy(const Text: RawUTF8; start,len: integer);
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)
     procedure AddTrimLeftLowerCase(Text: PShortString);
     /// append a ShortString property name, as '"PropName":'
@@ -33368,6 +33371,22 @@ begin
     AddNoJSONEscape(pointer(Text),L);
 end;
 
+procedure TTextWriter.AddStringCopy(const Text: RawUTF8; start,len: integer);
+var L: integer;
+begin
+  if (len<=0) or (PtrInt(Text)=0) then
+    exit;
+  if start<0 then
+    start := 0 else
+    dec(start);
+  L := PInteger(PtrInt(Text)-sizeof(integer))^-start;
+  if L>0 then begin
+    if len<L then
+      L := len;
+    AddNoJSONEscape(@PByteArray(Text)[start],L);
+  end;
+end;
+
 procedure TTextWriter.AddStrings(const Text: array of RawUTF8);
 var i: integer;
 begin
@@ -34319,30 +34338,29 @@ end;
 
 procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8;
   out result: RawUTF8);
-var EndNameSpace: RawUTF8;
-    i,j,L: integer;
+var i,j,L: integer;
 begin
   if P=nil then
     result := Header else
     with TTextWriter.CreateOwnedStream do
     try
       AddNoJSONEscape(pointer(Header),length(Header));
-      if NameSpace<>'' then begin
-        L := length(NameSpace);
+      L := length(NameSpace);
+      if L<>0 then
         AddNoJSONEscape(pointer(NameSpace),L);
+      AddJSONToXML(P);
+      if L<>0 then 
         for i := 1 to L do
           if NameSpace[i]='<' then begin
             for j := i+1 to L do
               if NameSpace[j] in [' ','>'] then begin
-                EndNameSpace := '</'+copy(NameSpace,i+1,j-i-1)+'>';
+                Add('<','/');
+                AddStringCopy(NameSpace,i+1,j-i-1);
+                Add('>');
                 break;
               end;
             break;
           end;
-      end;
-      AddJSONToXML(P);
-      if EndNameSpace<>'' then
-        AddNoJSONEscape(pointer(EndNameSpace),length(EndNameSpace));
       SetText(result);
     finally
       Free;
