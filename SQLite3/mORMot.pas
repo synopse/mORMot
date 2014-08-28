@@ -27733,7 +27733,7 @@ begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllUserAuth,'Deleted session %/% from %/%',
+    SQLite3Log.Add.Log(sllUserAuth,'Deleted session %/% from %/%',
       [User.LogonName,IDCardinal,RemoteIP,ConnectionID],self);
     {$endif}
     if Assigned(OnSessionClosed) then
@@ -34875,7 +34875,7 @@ begin
   result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
   if result.fID=0 then begin
     {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllUserAuth,
+    SQLite3Log.Add.Log(sllUserAuth,
       'User.LogonName=% not found in AuthUser table',[aUserName],self);
     {$endif}
     FreeAndNil(result);
