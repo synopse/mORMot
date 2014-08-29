@@ -4413,10 +4413,8 @@ begin
     FieldsCSV := RawUTF8ArrayToCSV(aFieldNames,'');
     if length(FieldsCSV)+length(Table)>27 then
       // sounds like if some DB limit the identifier length to 32 chars
-      IndexName := IndexName+'INDEX'+
-        CardinalToHex(crc32c(0,pointer(Table),length(Table)))+
-        CardinalToHex(crc32c(0,pointer(FieldsCSV),length(FieldsCSV)))+
-        CardinalToHex(GetTickCount64) else
+      IndexName := IndexName+'INDEX'+crc32cUTF8ToHex(Table)+
+        crc32cUTF8ToHex(FieldsCSV)+CardinalToHex(GetTickCount64) else
       IndexName := IndexName+'NDX'+Table+FieldsCSV;
   end else
     IndexName := aIndexName;

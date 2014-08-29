@@ -7123,7 +7123,7 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
-// - not the best, but simple and efficient code - good candidate for THasher
+// - simple and efficient code, but too much collisions for THasher
 // - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.7 GB/s
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
@@ -7170,6 +7170,10 @@ var
   // - this variable will use the fastest mean available, e.g. SSE 4.2
   // - you should use this function instead of crc32cfast() nor crc32csse42()
   crc32c: THasher;
+
+/// compute the hexadecimal representation of the crc32 checkum of a given text
+// - wrapper around CardinalToHex(crc32c(...))
+function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 
 var
   /// the default hasher used by TDynArrayHashed()
@@ -22379,6 +22383,11 @@ asm // eax=crc, edx=buf, ecx=len
 @0: not eax
 end;
 {$endif PUREPASCAL}
+
+function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
+begin
+  result := CardinalToHex(crc32c(0,pointer(str),length(str)));
+end;
 
 type TWordRec = packed record YDiv100, YMod100: byte; end;
 
