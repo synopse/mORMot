@@ -11148,6 +11148,14 @@ type
     function CreateSQLIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean): boolean; overload;
     /// create one index for all specific FieldNames at once
+    // - will call any static engine for the index creation of such tables, or
+    // execute a CREATE INDEX IF NOT EXISTS on the main engine
+    // - note that with SQLite3, your database schema should never contain two
+    // indices where one index is a prefix of the other, e.g. if you defined:
+    // ! aServer.CreateSQLMultiIndex(TEmails, ['Email','GroupID'], True);
+    // Then the following index is not mandatory for SQLite3:
+    // ! aServer.CreateSQLIndex(TEmails, 'Email', False);
+    // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; virtual;
 
@@ -26282,8 +26290,13 @@ begin
   if Unique then
     SQL := 'UNIQUE ' else
     SQL := '';
-  if IndexName='' then
+  if IndexName='' then begin
     IndexName := RawUTF8ArrayToCSV(FieldNames,'');
+    if length(IndexName)+length(Props.SQLTableName)>64 then
+      // avoid reaching potential identifier name size limit 
+      IndexName := crc32cUTF8ToHex(Props.SQLTableName)+
+                   crc32cUTF8ToHex(IndexName)+CardinalToHex(GetTickCount64);
+  end;
   SQL := FormatUTF8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
     [SQL,Props.SQLTableName,IndexName,Props.SQLTableName,RawUTF8ArrayToCSV(FieldNames,',')]);
   result := EngineExecute(SQL);
@@ -27265,7 +27278,7 @@ begin
     if Handle304NotModified and (Status=HTML_SUCCESS) and
        (Length(Result)>64) then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
-      serverHash := '"'+CardinalToHex(crc32c(0,pointer(Result),Length(Result)))+'"';
+      serverHash := '"'+crc32cUTF8ToHex(Result)+'"';
       if clientHash<>serverHash then
         Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
         Call.OutBody := ''; // save bandwidth for "304 Not Modified"
