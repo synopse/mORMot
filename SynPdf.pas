@@ -5845,7 +5845,7 @@ begin
   if (name=nil) or (name^.format<>0) then
     exit;
   Rec := @name^.FirstNameRecord;
-  for i := 0 to name^.count-1 do 
+  for i := 0 to name^.count-1 do
     if (Rec^.nameID=NAME_POSTCRIPT) and (Rec^.platformID=TTFCFP_MS_PLATFORMID) and
        (Rec^.encodingID=1) and (Rec^.languageID=$409) then begin
       PW := PAnsiChar(name)+name^.stringOffset+Rec^.offset;
@@ -5884,91 +5884,6 @@ begin
   fLastOutline := result;
 end;
 
-function HashOf(P: PByteArray; Len: integer): cardinal;
-// algorithm from IniFiles.TStringHash.HashOf
-{$ifdef PUREPASCAL}
-var I: Integer;
-begin
-  Result := 0;
-  for I := 0 to Len-1 do
-    Result := ((Result shl 2) or (Result shr (SizeOf(Result)*8-2))) xor P[I];
-end;
-{$else}
-asm // faster asm version by Synopse
-    or edx,edx
-    jz @z
-    push ebx
-    mov ebx,edx     // ebx = length(Key)
-    mov edx,eax     // edx = Text
-    xor eax,eax     // eax = Result
-    xor ecx,ecx     // ecx = Result shl 2 = 0
-@1: shr eax,$1e     // eax = Result shr (SizeOf(Result) * 8 - 2))
-    or ecx,eax      // ecx = ((Result shl 2) or (Result shr (SizeOf(Result)*8-2)))
-    movzx eax,byte ptr [edx] // eax = ord(Key[i])
-    inc edx
-    xor eax,ecx     // eax = () xor ord(Key[i])
-    dec ebx
-    lea ecx,[eax*4] // ecx = Result shl 2
-    jnz @1
-    pop ebx
-@z:
-end;
-{$endif}
-
-{$ifndef USE_SYNZIP} // ZLib.pas from Borland times does not export those functions
-var
-  crc32Tab : array [0..255] of cardinal;
-
-procedure InitCrc32Tab;
-var i,n,crc: cardinal;
-begin // this code is 49 bytes long, generating a 1KB table
-  for i := 0 to 255 do begin
-    crc := i;
-    for n := 1 to 8 do
-      if (crc and 1)<>0 then
-        // $edb88320 from polynomial p=(0,1,2,4,5,7,8,10,11,12,16,22,23,26)
-        crc := (crc shr 1) xor $edb88320 else
-        crc := crc shr 1;
-    CRC32Tab[i] := crc;
-  end;
-end;
-
-function crc32(aCRC32: cardinal; inBuf: pointer; inLen: integer) : cardinal;
-var i: integer;
-begin // slowest but always accurate version
-  result := not aCRC32;
-  for i := 1 to inLen do begin
-    result := crc32Tab[byte(result xor pByte(inBuf)^)] xor (result shr 8);
-    inc(PByte(inBuf));
-  end;
-  result := not result;
-end;
-
-function adler32(Adler: cardinal; p: pointer; Count: Integer): cardinal;
-// simple Adler32 implementation (twice slower than Asm, but shorter code size)
-var s1, s2: cardinal;
-    i, n: integer;
-begin
-  s1 := LongRec(Adler).Lo;
-  s2 := LongRec(Adler).Hi;
-  while Count>0 do begin
-    if Count<5552 then
-      n := Count else
-      n := 5552;
-    for i := 1 to n do begin
-      inc(s1,pByte(p)^);
-      inc(PtrUInt(p));
-      inc(s2,s1);
-    end;
-    s1 := s1 mod 65521;
-    s2 := s2 mod 65521;
-    dec(Count,n);
-  end;
-  result := word(s1)+cardinal(word(s2)) shl 16;
-end;
-{$endif}
-
-
 function TPdfDocument.CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox; ClipRc: PPdfBox): PDFString;
 var J: TJpegImage;
     Img: TPdfImage;
@@ -5978,11 +5893,11 @@ var J: TJpegImage;
     Pals: array of TPaletteEntry;
 const PERROW: array[TPixelFormat] of byte = (0,1,4,8,15,16,24,32,0);
 procedure DoHash(bits: pointer; size: Integer);
-begin // "4 algorithms to rule them all"
-  Hash[0] := Hash[0] xor Hash32(bits,size);
-  Hash[1] := Hash[1] xor HashOf(bits,size);
-  Hash[2] := crc32(Hash[2],bits,size);
-  Hash[3] := adler32(Hash[3],bits,size);
+begin // "4 algorithms to rule them all": all SynCommons hashers to the rescue!
+  Hash[0] := crc32c(Hash[0],bits,size);
+  Hash[1] := kr32(Hash[1],bits,size);
+  Hash[2] := fnv32(Hash[2],bits,size);
+  Hash[3] := Hash[3] xor Hash32(bits,size);
 end;
 begin
   result := '';
@@ -6008,7 +5923,7 @@ begin
     row := BytesPerScanline(w,row,32);
     for y := 0 to h-1 do
       DoHash(B.ScanLine[y],row);
-    result := GetXObjectImageName(Hash,w,h);
+    result := GetXObjectImageName(Hash,w,h); // search for matching image
   end;
   if result='' then begin
      // create new if no existing TPdfImage match
