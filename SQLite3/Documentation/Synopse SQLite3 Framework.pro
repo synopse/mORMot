@@ -1022,10 +1022,10 @@ Our {\i Delphi} {\f1\fs20 class} instances are not directly usable with a relati
 Sometimes, there will be nothing better than a tuned SQL statement, able to aggregate and join information from several tables. But most of the time, you will need just to perform some basic operations, known as @**CRUD@ (for {\i Create Retrieve Update Delete} actions) on well identified objects: this is where ORM may give you a huge hint, since it is able to generate the SQL statements for you.
 The ORM works in fact as such:
 \graph mORMotORMprocess ORM Process
-\object instance\ORM\CRUD¤operations
+\object¤instance\ORM\CRUD¤operations
 \ORM\SQL\mapping
-\SQL\RDBMS
-\ORM\object instance
+\SQL\RDBMS\DB client
+\ORM\object¤instance
 \SQL\ORM
 \RDBMS\SQL
 \

@@ -35258,22 +35258,22 @@ begin
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef LINUX}  'Kylix'   {$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    'Delphi '
-    {$if     defined(VER140)} +'6'
-    {$elseif defined(VER150)} +'7'
-    {$elseif defined(VER160)} +'8'
-    {$elseif defined(VER170)} +'2005'
-    {$elseif defined(VER185)} +'2007'
-    {$elseif defined(VER180)} +'2006'
-    {$elseif defined(VER200)} +'2009'
-    {$elseif defined(VER210)} +'2010'
-    {$elseif defined(VER220)} +'XE'
-    {$elseif defined(VER230)} +'XE2'
-    {$elseif defined(VER240)} +'XE3'
-    {$elseif defined(VER250)} +'XE4'
-    {$elseif defined(VER260)} +'XE5'
-    {$elseif defined(VER270)} +'XE6'
-    {$elseif defined(VER280)} +'XE7'
+    'Delphi'
+    {$if     defined(VER140)}+' 6'
+    {$elseif defined(VER150)}+' 7'
+    {$elseif defined(VER160)}+' 8'
+    {$elseif defined(VER170)}+' 2005'
+    {$elseif defined(VER185)}+' 2007'
+    {$elseif defined(VER180)}+' 2006'
+    {$elseif defined(VER200)}+' 2009'
+    {$elseif defined(VER210)}+' 2010'
+    {$elseif defined(VER220)}+' XE'
+    {$elseif defined(VER230)}+' XE2'
+    {$elseif defined(VER240)}+' XE3'
+    {$elseif defined(VER250)}+' XE4'
+    {$elseif defined(VER260)}+' XE5'
+    {$elseif defined(VER270)}+' XE6'
+    {$elseif defined(VER280)}+' XE7'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
