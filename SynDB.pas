@@ -4146,9 +4146,18 @@ begin
     '   order by ic.key_ordinal for xml path('''') '+
     '   ),1,1,'''') as included_columns) AS ic '+
     'where t.type = ''U'' and t.name like ''%''';
-{  fFirebird: FMT :=
-    'select RDB$Index_name, RDB$Unique_Flag, RDB$Index_Type,  from rdb$indices i where i.rdb$relation_name like ''%'''; }
-  else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+  dFirebird: FMT :=
+    'select i.rdb$index_name, i.rdb$unique_flag, i.rdb$index_type, case rc.rdb$constraint_type '+
+    ' when ''PRIMARY KEY'' then 1 else 0 end as is_primary_key, 0 as unique_constraint, '+
+    ' null as index_filter, (select list(trim(rdb$field_name), '', '') from '+
+    '  (select * from rdb$index_segments where rdb$index_name = i.rdb$index_name '+
+    '  order by rdb$field_position)) as key_columns, null as included_columns '+
+    'from rdb$indices i '+
+    'left outer join rdb$relation_constraints rc on rc.rdb$index_name = i.rdb$index_name and '+
+    '  rc.rdb$constraint_type=''PRIMARY KEY'' '+
+    'where exists(select * from rdb$index_segments where rdb$index_name = i.rdb$index_name) and '+
+    ' i.rdb$relation_name = ''%''';
+  else exit; // others (e.g. dMySQL or dDB2) will retrieve info from (ODBC) driver
   end;
   Split(aTableName,'.',Owner,Table);
   if Table='' then begin
