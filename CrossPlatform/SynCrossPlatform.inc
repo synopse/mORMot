@@ -55,6 +55,7 @@
   {$PACKENUM 1}
 
   {$define HASINLINE}
+  {$define USEOBJECTINSTEADOFRECORD}
 
 {$else}
 
@@ -69,7 +70,10 @@
     {$define ISDELPHIXE}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$ifdef VER140} 
+    {$ifndef UNICODE}
+      {$define USEOBJECTINSTEADOFRECORD}
+    {$endif}
+    {$ifdef VER140}
       {$define ISDELPHI6}
     {$endif}
     {$if CompilerVersion >= 18}    // Delphi 2006 or newer
@@ -81,12 +85,16 @@
     {$if CompilerVersion >= 22.0}
       {$define ISDELPHIXE}
     {$ifend}
+    {$if CompilerVersion >= 23.0}
+      {$define ISDELPHIXE2} // e.g. for Vcl.Graphics 
+    {$ifend}
     {$if CompilerVersion >= 25.0}
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$ifend}
   {$else}
     {$define ISDELPHI5OROLDER}
+    {$define USEOBJECTINSTEADOFRECORD}
   {$endif CONDITIONALEXPRESSIONS}
   {$endif NEXTGEN}
 {$endif DELPHIWEBSCRIPT}
