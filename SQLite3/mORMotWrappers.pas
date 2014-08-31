@@ -184,6 +184,7 @@ var orm,fields,records,enumerates,sets: TDocVariantData;
     typeNames: TPropNameList;
     rtti: TJSONCustomParserRTTI;
     simple: TJSONCustomParserCustomSimple;
+    authClass: TClass;
 begin
   SetVariantNull(result);
   if aServer=nil then
@@ -282,8 +283,15 @@ begin
       'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION, 'root',aServer.Model.Root,
       'orm',variant(orm),
       'soa',aServer.Services.ContextFromRegisteredServices(parsersServices)]);
-    if aServer.AuthenticationSchemes<>nil then
-      result.authClass := aServer.AuthenticationSchemes[0].ClassName;
+    // add the first registered supported authentication class type as default 
+    for s := 0 to aServer.AuthenticationSchemesCount-1 do begin
+      authClass := aServer.AuthenticationSchemes[s].ClassType;
+      if (authClass=TSQLRestServerAuthenticationDefault) or
+         (authClass=TSQLRestServerAuthenticationNone) then begin
+        result.authClass := authClass.ClassName;
+        break;
+      end;
+    end;
     // add the traling RTTI defined for services to the list
     for s := 0 to parsersServices.Count-1 do begin
       rtti := TJSONCustomParserRTTI(parsersServices.Objects[s]);

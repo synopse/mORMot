@@ -10782,6 +10782,7 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
+    function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
@@ -11245,8 +11246,13 @@ type
 
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
+    // - note that the exact number or registered services in this list is
+    // stored in the AuthenticationSchemesCount property
     property AuthenticationSchemes: TSQLRestServerAuthenticationDynArray
       read fSessionAuthentication;
+    /// how many authentication methods are registered in AuthenticationSchemes
+    property AuthenticationSchemesCount: integer
+      read GetAuthenticationSchemesCount;
     /// retrieve the TSQLRestStorage instance used to store and manage
     // a specified TSQLRecordClass in memory
     // - has been associated by the StaticDataCreate method
@@ -26316,6 +26322,11 @@ begin
   for i := 0 to high(FieldNames) do
     if not CreateSQLMultiIndex(Table,[FieldNames[i]],Unique) then
      result := false;
+end;
+
+function TSQLRestServer.GetAuthenticationSchemesCount: integer;
+begin
+  result := fSessionAuthentications.Count;
 end;
 
 procedure TSQLRestServer.AuthenticationRegister(aMethod: TSQLRestServerAuthenticationClass);
