@@ -26948,7 +26948,7 @@ const
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'WideString','word','**custom**'),
     ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob',{$ifdef NOVARIANTS}'string'{$else}'dynamic'{$endif},
+     'TSQLRawBlob',{$ifdef NOVARIANTS}'string'{$else}'variant'{$endif},
      'string','**record**','single','string','string',
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'string','word','**custom**'),
