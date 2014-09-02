@@ -26948,18 +26948,15 @@ const
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'WideString','word','**custom**'),
     ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob',{$ifdef NOVARIANTS}'string'{$else}'variant'{$endif},
-     'string','**record**','single','string','string',
+     'TSQLRawBlob','variant','string','**record**','single','string','string',
      'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
      'string','word','**custom**'),
     ('**array**','bool','byte','uint','decimal','double','int64','integer',
-     'byte[]',{$ifdef NOVARIANTS}'string'{$else}'dynamic'{$endif},
-     'string','**record**','single','string','string',
+     'byte[]','dynamic','string','**record**','single','string','string',
      'double','Guid','long',{$ifndef NOVARIANTS}'dynamic',{$endif}
      'string','word','**custom**'),
     ('**array**','boolean','byte','long','BigDecimal','double','long','int',
-     'byte[]',{$ifdef NOVARIANTS}'String'{$else}'Object'{$endif},
-     'String','**record**','single','String','String',
+     'byte[]','Object','String','**record**','single','String','String',
      'double','String','long',{$ifndef NOVARIANTS}'Object',{$endif}
      'String','int','**custom**'));
 

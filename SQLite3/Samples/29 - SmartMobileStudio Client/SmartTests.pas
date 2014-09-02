@@ -81,6 +81,7 @@ begin
   assert(VariantType(123)=jvUndefined);
   assert(VariantType(null)=jvUndefined);
   assert(VariantType(TVariant.CreateObject)=jvObject);
+  assert(VariantType(new JObject)=jvObject);
   assert(VariantType(TVariant.CreateArray)=jvArray);
   doc := TJSONVariantData.Create('{"a":1,"b":"B"}');
   assert(doc.Kind=jvObject);

@@ -142,12 +142,12 @@ implementation
 {{/nestedRecordArray}}{{/fields}}{{/setrec}}
 {{<getrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := Value.{{fullPropName}};
-{{/isSimple}}{{#nestedRecord}}  result.{{fullPropName}} := TVariant.CreateObject;
+{{/isSimple}}{{#nestedRecord}}  result.{{fullPropName}} := new JObject;
 {{>getrec}}{{/nestedRecord}}{{#toVariant}}  result.{{fullPropName}} := {{toVariant}}(Value.{{fullPropName}});
 {{/toVariant}}{{#nestedSimpleArray}}  result.{{fullPropName}} := variant(Value.{{fullPropName}});
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  result.{{fullPropName}} := TVariant.CreateArray;
   for var source in Value.{{fullPropName}} do begin
-    var dest := TVariant.CreateObject;
+    var dest: variant := new JObject;
 {{#fields}}
     dest.{{propName}} := {{#toVariant}}{{toVariant}}({{/toVariant}}source.{{propName}}{{#toVariant}}){{/toVariant}};
 {{/fields}}
@@ -184,7 +184,7 @@ end;
 
 function {{name}}2Variant(const Value: {{name}}): variant;
 begin
-  result := TVariant.CreateObject;
+  result := new JObject;
 {{>getrec}}
 end;
 {{/records}}

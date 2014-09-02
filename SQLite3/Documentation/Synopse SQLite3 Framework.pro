@@ -2269,7 +2269,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !end;
 Of course, you can have a {\f1\fs20 TSQLBaby} instance alive during a longer time. The same {\f1\fs20 TSQLBaby} instance can be used to access several record content, and call {\f1\fs20 Retrieve / Add / Delete / Update} methods on purpose.
 No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. It could even work with @*NoSQL@ databases, like a fast {\f1\fs20 TObjectList} or @*MongoDB@. This is the magic of @*ORM@.
-To be honnest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little but the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
+To be honnest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little bit the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':

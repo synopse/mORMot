@@ -345,6 +345,14 @@ procedure DoubleToJSON(Value: double; var result: string);
 // - if Date is 0, will return ""
 function DateTimeToJSON(Value: TDateTime): string;
 
+/// compute the JSON representation of a variant value
+// - will work for simple types, or TJSONVariant object or array
+function ValueToJSON(const Value: variant): string;
+
+/// compute a variant from its JSON representation
+// - will work for simple types, or TJSONVariant object or array
+function JSONToValue(const JSON: string): variant;
+
 /// compute the ISO-8601 JSON text representation of the current date/time value
 // - e.g. "2014-06-27T20:59:29"
 function NowToIso8601: string;
@@ -357,9 +365,6 @@ function DateTimeToIso8601(Value: TDateTime): string;
 /// convert unquoted ISO-8601 text representation into a date/time value
 // - e.g. 'YYYY-MM-DD' 'Thh:mm:ss' or 'YYYY-MM-DDThh:mm:ss'
 function Iso8601ToDateTime(const Value: string): TDateTime;
-
-/// compute the JSON representation of a variant value
-function ValueToJSON(const Value: variant): string;
 
 /// compute the JSON representation of an object published properties
 // - handle only simple types of properties, not nested class instances
@@ -1118,9 +1123,17 @@ begin
 end;
 
 
+function JSONToValue(const JSON: string): variant;
+var Parser: TJSONParser;
+begin
+  Parser.Init(JSON,1);
+  Parser.GetNextJSON(result);
+end;
+
+
 { RTTI-oriented functions }
 
-const 
+const
   BASE64: array[0..63] of char =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 var

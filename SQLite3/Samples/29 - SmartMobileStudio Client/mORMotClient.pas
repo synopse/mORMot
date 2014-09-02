@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 // - retrieved from http://localhost:888/root/wrapper/SmartMobileStudio/mORMotClient.pas
-// at 2014-08-09 19:09:50 using "SmartMobileStudio.pas.mustache" template
+// at 2014-09-02 12:42:46 using "SmartMobileStudio.pas.mustache" template
 unit mORMotClient;
 
 {
@@ -54,8 +54,8 @@ type
   /// service accessible via http://localhost:888/root/Calculator
   // - this service will run in sicShared mode
   // - synchronous and asynchronous methods are available, depending on use case
-  // - synchronous _*() methods names will block the browser execution, so won't
-  // be appropriate for long process - on error, they may raise EServiceException
+  // - synchronous _*() methods will block the browser execution, so won't be
+  // appropriate for long process - on error, they may raise EServiceException
   TServiceCalculator = class(TServiceClientAbstract)
   public
     /// will initialize an access to the remote service
@@ -169,19 +169,19 @@ end;
 
 function TTestCustomJSONArraySimpleArray2Variant(const Value: TTestCustomJSONArraySimpleArray): variant;
 begin
-  result := TVariant.CreateObject;
+  result := new JObject;
   result.F := Value.F;
   result.G := variant(Value.G);
-  result.H := TVariant.CreateObject;
+  result.H := new JObject;
   result.H.H1 := Value.H.H1;
   result.H.H2 := Value.H.H2;
-  result.H.H3 := TVariant.CreateObject;
+  result.H.H3 := new JObject;
   result.H.H3.H3a := Value.H.H3.H3a;
   result.H.H3.H3b := BlobToVariant(Value.H.H3.H3b);
   result.I := DateTimeToIso8601(Value.I);
   result.J := TVariant.CreateArray;
   for var source in Value.J do begin
-    var dest := TVariant.CreateObject;
+    var dest: variant := new JObject;
     dest.J1 := source.J1;
     dest.J2 := GUIDToVariant(source.J2);
     dest.J3 := ord(source.J3);

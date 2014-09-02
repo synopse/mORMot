@@ -322,6 +322,17 @@ type
 /// guess the type of a supplied variant
 function VariantType(const Value: variant): TJSONVariantKind;
 
+/// faster than chr(c) when you are sure that c<=$ffff
+function DirectChr(c: Integer): String; external 'String.fromCharCode';
+
+/// compute the JSON representation of a variant value
+// - match function signature as defined in SynCrossPlatformJSON
+function ValueToJSON(Value: variant): string; external 'JSON.stringify';
+
+/// compute a variant from its JSON representation
+// - match function signature as defined in SynCrossPlatformJSON
+function JSONToValue(JSON: string): variant; external 'JSON.parse';
+
 {$endif}
 
 

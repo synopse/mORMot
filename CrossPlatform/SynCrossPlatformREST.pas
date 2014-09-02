@@ -1130,7 +1130,7 @@ begin
           DoubleQuoteStr(tmp);
         inc(arg);
       end;
-        result := result+tmp+'):';
+      result := result+tmp+'):';
       inc(i);
       deb := i;
     end else
@@ -1335,7 +1335,7 @@ begin
     prop.Name := name;
     Props.Add(prop);
   end;
-  PropCache := TVariant.CreateObject;
+  PropCache := new JObject;
   for p := 0 to high(Props) do begin
     prop := Props[p];
     prop.FieldIndex := p;
@@ -1360,7 +1360,7 @@ begin
 end;
 
 var
-  RTTI_Cache: variant = TVariant.CreateObject;
+  RTTI_Cache: variant = new JObject;
 
 {$HINTS OFF}
 class function TSQLRecord.GetRTTI: TRTTIPropInfos;
@@ -1780,7 +1780,7 @@ begin
 {$ifdef ISSMS}
   if Value=nil then
     exit('null');
-  var doc := TVariant.CreateObject;
+  var doc: variant := new JObject;
   for f := 0 to length(Prop)-1 do
     if f in Fields then
       doc[Prop[ord(f)].Name] := Value.GetProperty(f);
