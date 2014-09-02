@@ -1052,9 +1052,8 @@ unit mORMot;
       methods and associated TSQLRestServerAuthentication* classes, used also by
       TSQLRestClientURI.SetUser() to allow generic class-driven authentication
       schemes for feature request [8c8a2a880c]
-    - added TSQLRestServer.AuthenticationScheme[] property and
-      TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck to disable
-      the session timestamp check during URI signature authentication
+    - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck
+      to disable the session timestamp check during URI signature authentication
     - new TSQLRestServerAuthenticationNone weak but simple method
     - force almost-random session ID for TSQLRestServer to avoid collision
       after server restart
@@ -10414,6 +10413,8 @@ type
     // - but if your client is asynchronous (e.g. for AJAX requests), session
     // may be rejected due to the delay involved on the client side: you can set
     // this property to TRUE to enabled a weaker but more tolerant behavior
+    // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
     property NoTimeStampCoherencyCheck: Boolean read fNoTimeStampCoherencyCheck
       write SetNoTimeStampCoherencyCheck;
   end;
@@ -10797,8 +10798,6 @@ type
       MaxUncompressedBlobSize: integer;
     end;
     function GetAuthenticationSchemesCount: integer;
-    function GetAuthenticationScheme(
-      aScheme: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
@@ -11177,7 +11176,14 @@ type
       Unique: boolean; IndexName: RawUTF8=''): boolean; virtual;
 
     /// call this method to add an authentication method to the server
-    procedure AuthenticationRegister(aMethod: TSQLRestServerAuthenticationClass); overload;
+    // - will return the just created TSQLRestServerAuthentication instance,
+    // or the existing instance if it has already been registered
+    // - you can use this method to tune the authencation, e.g. if you have
+    // troubles with AJAX asynchronous callbacks:
+    // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
+    function AuthenticationRegister(
+      aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication; overload;
     /// call this method to add several authentication methods to the server
     // - if TSQLRestServer.Create() constructor is called with aHandleUserAuthentication
     // set to TRUE, it will register the two following classes:
@@ -11269,14 +11275,6 @@ type
     /// how many authentication methods are registered in AuthenticationSchemes
     property AuthenticationSchemesCount: integer
       read GetAuthenticationSchemesCount;
-    /// get the running instance of a registered server-side authentication
-    // - returns nil if the authentication scheme was not registered
-    // - you can use this method to tune the authencation, e.g. if you have
-    // troubles with AJAX asynchronous callbacks:
-    // ! (aServer.AuthenticationScheme[TSQLRestServerAuthenticationDefault) as
-    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
-    property AuthenticationScheme[aScheme: TSQLRestServerAuthenticationClass]:
-      TSQLRestServerAuthentication read GetAuthenticationScheme;
     /// retrieve the TSQLRestStorage instance used to store and manage
     // a specified TSQLRecordClass in memory
     // - has been associated by the StaticDataCreate method
@@ -26353,29 +26351,23 @@ begin
   result := fSessionAuthentications.Count;
 end;
 
-function TSQLRestServer.GetAuthenticationScheme(
-  aScheme: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
-var i: integer;
-begin
-  for i := 0 to fSessionAuthentications.Count-1 do
-    if PPointer(fSessionAuthentication[i])^=aScheme then begin
-      result := fSessionAuthentication[i];
-      exit;
-    end;
-  result := nil;
-end;
-
-procedure TSQLRestServer.AuthenticationRegister(aMethod: TSQLRestServerAuthenticationClass);
+function TSQLRestServer.AuthenticationRegister(
+  aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
 var i, TableIndex: integer;
 begin
+  result := nil;
   if self=nil then
     exit;
   EnterCriticalSection(fSessionCriticalSection);
   try
     for i := 0 to fSessionAuthentications.Count-1 do
-      if fSessionAuthentication[i].ClassType=aMethod then
-        exit; // check not already there 
-    fSessionAuthentications.Add(aMethod.Create(self));
+      if fSessionAuthentication[i].ClassType=aMethod then begin
+        result := fSessionAuthentication[i];
+        exit; // method already there
+      end;
+    // create and initilize new authentication instance
+    result := aMethod.Create(self);
+    fSessionAuthentications.Add(result); // will be owned by fSessionAuthentications
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
     TableIndex := Model.GetTableIndexInheritsFrom(TSQLAuthUser);
