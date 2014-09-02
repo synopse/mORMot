@@ -1052,6 +1052,9 @@ unit mORMot;
       methods and associated TSQLRestServerAuthentication* classes, used also by
       TSQLRestClientURI.SetUser() to allow generic class-driven authentication
       schemes for feature request [8c8a2a880c]
+    - added TSQLRestServer.AuthenticationScheme[] property and
+      TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck to disable
+      the session timestamp check during URI signature authentication
     - new TSQLRestServerAuthenticationNone weak but simple method
     - force almost-random session ID for TSQLRestServer to avoid collision
       after server restart
@@ -10366,7 +10369,7 @@ type
     // published method to create a session for this user
     // - returns true on success
     class function ClientSetUser(Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
-      aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean; virtual; 
+      aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean; virtual;
     /// class method to be called on client side to sign an URI
     // - used by TSQLRestClientURI.URI()
     // - shall match the method as expected by RetrieveSession() virtual method
@@ -10378,7 +10381,7 @@ type
   TSQLRestServerAuthenticationURI = class(TSQLRestServerAuthentication)
   public
     /// will check URI-level signature
-    // - retrieve the session ID from 'session_signature=...' parameter 
+    // - retrieve the session ID from 'session_signature=...' parameter
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// class method to be called on client side to add the SessionID to the URI
     // - append '&session_signature=SessionID' to the url
@@ -10393,6 +10396,9 @@ type
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
   // !            Hexa8(TimeStamp)+url))
   TSQLRestServerAuthenticationSignedURI = class(TSQLRestServerAuthenticationURI)
+  protected
+    fNoTimeStampCoherencyCheck: Boolean;
+    procedure SetNoTimeStampCoherencyCheck(value: boolean);
   public
     /// will check URI-level signature
     // - check session_signature=... parameter to be a valid digital signature
@@ -10402,6 +10408,14 @@ type
     // - timestamp resolution is about 256 ms in the current implementation
     class procedure ClientSessionSign(Sender: TSQLRestClientURI;
       var Call: TSQLRestURIParams); override;
+    /// allow any order when creating sessions
+    // - by default, signed sessions are expected to be sequential, and new
+    // signed session signature can't be older in time than the last one
+    // - but if your client is asynchronous (e.g. for AJAX requests), session
+    // may be rejected due to the delay involved on the client side: you can set
+    // this property to TRUE to enabled a weaker but more tolerant behavior
+    property NoTimeStampCoherencyCheck: Boolean read fNoTimeStampCoherencyCheck
+      write SetNoTimeStampCoherencyCheck;
   end;
 
   /// mORMot secure RESTful authentication scheme
@@ -10649,7 +10663,7 @@ type
     /// retrieve an historical version
     // - HistoryOpen() or CreateHistory() should have been called before 
     // - this method will ignore any previous HistoryAdd() call
-    // - will return either nil, or a TSQLRecord with all simple properties set  
+    // - will return either nil, or a TSQLRecord with all simple properties set
     function HistoryGet(Index: integer): TSQLRecord; overload;
     /// retrieve the latest stored historical version
     // - HistoryOpen() or CreateHistory() should have been called before 
@@ -10783,6 +10797,8 @@ type
       MaxUncompressedBlobSize: integer;
     end;
     function GetAuthenticationSchemesCount: integer;
+    function GetAuthenticationScheme(
+      aScheme: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
@@ -11253,6 +11269,14 @@ type
     /// how many authentication methods are registered in AuthenticationSchemes
     property AuthenticationSchemesCount: integer
       read GetAuthenticationSchemesCount;
+    /// get the running instance of a registered server-side authentication
+    // - returns nil if the authentication scheme was not registered
+    // - you can use this method to tune the authencation, e.g. if you have
+    // troubles with AJAX asynchronous callbacks:
+    // ! (aServer.AuthenticationScheme[TSQLRestServerAuthenticationDefault) as
+    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
+    property AuthenticationScheme[aScheme: TSQLRestServerAuthenticationClass]:
+      TSQLRestServerAuthentication read GetAuthenticationScheme;
     /// retrieve the TSQLRestStorage instance used to store and manage
     // a specified TSQLRecordClass in memory
     // - has been associated by the StaticDataCreate method
@@ -26329,6 +26353,18 @@ begin
   result := fSessionAuthentications.Count;
 end;
 
+function TSQLRestServer.GetAuthenticationScheme(
+  aScheme: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
+var i: integer;
+begin
+  for i := 0 to fSessionAuthentications.Count-1 do
+    if PPointer(fSessionAuthentication[i])^=aScheme then begin
+      result := fSessionAuthentication[i];
+      exit;
+    end;
+  result := nil;
+end;
+
 procedure TSQLRestServer.AuthenticationRegister(aMethod: TSQLRestServerAuthenticationClass);
 var i, TableIndex: integer;
 begin
@@ -35032,6 +35068,12 @@ end;
 // Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
 //             Hexa8(TimeStamp)+url))
 
+procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(value: boolean);
+begin
+  if self<>nil then
+    fNoTimeStampCoherencyCheck := value;
+end;
+
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
   Ctxt: TSQLRestServerURIContext): TAuthSession;
 var aTimeStamp, aSignature: cardinal;
@@ -35048,7 +35090,7 @@ begin
   aURLlength := Ctxt.URISessionSignaturePos-1;
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
-     (aTimeStamp>=result.fLastTimeStamp) and // check time stamp coherency
+     (fNoTimeStampCoherencyCheck or (aTimeStamp>=result.fLastTimeStamp)) and 
      HexDisplayToCardinal(PTimeStamp+8,aSignature) and
      (crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
        pointer(Ctxt.Call^.url),aURLlength)=aSignature) then
