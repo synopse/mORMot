@@ -70,7 +70,11 @@
     {$define ISDELPHIXE}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$ifndef UNICODE}
+    {$ifdef UNICODE}
+      {$ifdef CPUX64}
+        {$define CPU64}
+      {$endif}
+    {$else}
       {$define USEOBJECTINSTEADOFRECORD}
     {$endif}
     {$ifdef VER140}

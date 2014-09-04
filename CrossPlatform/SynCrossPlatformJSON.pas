@@ -81,6 +81,7 @@ type
   {$ifndef UNICODE}
   NativeInt = integer;
   NativeUInt = cardinal;
+  RawByteString = AnsiString;
   {$endif}
 
   // this type will store UTF-8 encoded buffer (also on NextGen platform)

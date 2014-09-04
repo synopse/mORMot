@@ -16615,6 +16615,7 @@ begin
       inc(Str2);
     until Str1^<>Str2^;
     result := pWord(Str1)^-pWord(Str2)^;
+    exit;
   end else
   result := 1 else  // Str2=''
   result := -1 else // Str1=''
@@ -16634,6 +16635,7 @@ begin
       inc(PtrUInt(Str2));
     until pByte(Str1)^<>pByte(Str2)^;
     result := pByte(Str1)^-pByte(Str2)^;
+    exit;
   end else
   result := 1 else  // Str2=''
   result := -1 else // Str1=''

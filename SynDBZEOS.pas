@@ -32,6 +32,7 @@ unit SynDBZEOS;
   - delphinium
   - EgonHugeist
   - alexpirate
+  - jokussoftware
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -298,6 +299,8 @@ type
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBZeos on any error }
     procedure ExecutePrepared; override;
+    /// gets a number of updates made by latest executed statement
+    function UpdateCount: integer; override;
     {/ Reset the previous prepared statement
      - this overridden implementation will reset all bindings and the cursor state
      - raise an ESQLDBZeos on any error }
@@ -992,6 +995,11 @@ begin
   {$endif}
 end;
 
-
+function TSQLDBZEOSStatement.UpdateCount: integer;
+begin
+  if fStatement<>nil then
+    result:= fStatement.GetUpdateCount else
+    result:= inherited UpdateCount; // returns 0
+end;
 
 end.
