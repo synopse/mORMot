@@ -34132,7 +34132,7 @@ begin
           Obj := pointer(GetOrdProp(Value,pointer(P)));  // works also for CPU64
           if (IsObj<>oSQLMany) or
              not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
-            if (IsObj in [oSQLRecord,oSQLMany]) and
+            if (IsObj in [oSQLRecord,oPersistent,oSQLMany]) and
                (P^.PropType^^.ClassSQLFieldType=sftID) and
                not TSQLRecord(Value).fFill.JoinedFields then begin
               HR(P);
