@@ -32,7 +32,7 @@ unit SynDBZEOS;
   - delphinium
   - EgonHugeist
   - alexpirate
-  - jokussoftware
+  - Joe (jokussoftware)
 
 
   Alternatively, the contents of this file may be used under the terms of

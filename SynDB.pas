@@ -167,6 +167,9 @@ unit SynDB;
     TSQLDBConnection.NewStatementPrepared() method
   - added TSQLDBConnection.LastErrorMessage and LastErrorException properties,
     to retrieve the error when NewStatementPrepared() returned nil
+  - added TSQLDBConnectionProperties.ConnectionTimeOutMinutes property to
+    allow automatic recreation of all connections after an idle period of
+    time, to avoid potential broken connection issues - see [f024266c08]
   - added TSQLDBConnectionProperties.ForcedSchemaName optional property
   - added TSQLDBConnectionProperties.SQLGetIndex() and GetIndexes() methods
     to retrieve advanced information about database indexes (e.g. for indexes
@@ -937,6 +940,10 @@ type
     fEngineName: RawUTF8;
     fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
+    fLastConnectionAccessTicks: Int64;
+    fConnectionTimeOutTicks: Int64;
+    procedure SetConnectionTimeOutMinutes(minutes: cardinal);
+    function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDBMS value or dDefault
     // (never returns dUnknwown)
     function GetDBMS: TSQLDBDefinition; virtual;
@@ -944,6 +951,7 @@ type
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
     function GetMainConnection: TSQLDBConnection; virtual;
+    procedure CheckConnectionTimeout; virtual;
     /// will be called at the end of constructor
     // - this default implementation will do nothing
     procedure SetInternalProperties; virtual;
@@ -1042,7 +1050,28 @@ type
     /// release all existing connections
     // - can be called e.g. after a DB connection problem, to purge the
     // connection pool, and allow automatic reconnection
+    // - is called automatically if ConnectionTimeOutMinutes property is set
+    // - warning: no connection shall still be used on the background (e.g. in
+    // multi-threaded applications), or some unexpected border effects may occur
     procedure ClearConnectionPool; virtual;
+    /// specify a maximum period of inactivity after which all connections will
+    // be flushed and recreated, to avoid potential broken connections issues
+    // - in practice, recreating the connections after a while is safe and
+    // won't slow done the process - on the contrary, it may help reducing the
+    // consumpted resources, and stabilize long running n-Tier servers
+    // - ThreadSafeConnection method will check for the last activity on this
+    // TSQLDBConnectionProperties instance, then call ClearConnectionPool
+    // to release all active connections if the idle time elapsed was too long 
+    // - warning: no connection shall still be used on the background (e.g. in
+    // multi-threaded applications), or some unexpected issues may occur - for
+    // instance, ensure that your mORMot ORM server runs all its statements in
+    // blocking mode for both read and write:
+    // ! aServer.AcquireExecutionMode[execORMGet] := am***;
+    // ! aServer.AcquireExecutionMode[execORMWrite] := am***;
+    // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
+    // amLocked, amBackgroundThread or amMainThread
+    property ConnectionTimeOutMinutes: cardinal
+      read GetConnectionTimeOutMinutes write SetConnectionTimeOutMinutes;
     /// create a new thread-safe statement
     // - this method will call ThreadSafeConnection.NewStatement
     function NewThreadSafeStatement: TSQLDBStatement;
@@ -1971,8 +2000,8 @@ type
     /// release all existing connections
     // - this overridden implementation will release all per-thread
     // TSQLDBConnection internal connection pool
-    // - warning: no connection shall be still be used on the background, or
-    // some unexpected border effects may occur
+    // - warning: no connection shall still be used on the background (e.g. in
+    // multi-threaded applications), or some unexpected border effects may occur
     procedure ClearConnectionPool; override;
     /// you can call this method just before a thread is finished to ensure
     // that the associated Connection will be released
@@ -3813,14 +3842,32 @@ begin
   result := ExecuteInlined(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
 
+procedure TSQLDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
+begin
+  fConnectionTimeOutTicks := minutes*60000; // minutes to ms conversion 
+end;
+
+function TSQLDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
+begin
+  result := fConnectionTimeOutTicks div 60000;
+end;
+
+procedure TSQLDBConnectionProperties.CheckConnectionTimeout;
+var Ticks: Int64;
+begin
+  Ticks := GetTickCount64;
+  if (fConnectionTimeOutTicks<>0) and (fLastConnectionAccessTicks<>0) and
+     (Ticks-fLastConnectionAccessTicks>fConnectionTimeOutTicks) then
+    ClearConnectionPool; 
+  fLastConnectionAccessTicks := Ticks;
+end;
+
 function TSQLDBConnectionProperties.GetMainConnection: TSQLDBConnection;
 begin
-  if self=nil then
-    result := nil else begin
-    if fMainConnection=nil then
-      fMainConnection := NewConnection;
-    result := fMainConnection;
-  end;
+  CheckConnectionTimeout;
+  if fMainConnection=nil then
+    fMainConnection := NewConnection;
+  result := fMainConnection;
 end;
 
 function TSQLDBConnectionProperties.ThreadSafeConnection: TSQLDBConnection;
@@ -5020,6 +5067,7 @@ end;
 function TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSQLDBConnection;
 var i: integer;
 begin
+  CheckConnectionTimeout;
   case fThreadingMode of
   tmThreadPool: begin
     EnterCriticalSection(fConnectionCS);

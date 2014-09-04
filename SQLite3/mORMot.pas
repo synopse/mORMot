@@ -9759,7 +9759,14 @@ type
     // other operations won't be protected (for better scaling)
     // - you can tune this behavior by setting this property to the expected
     // execution mode, e.g. execute all method-based services in a dedicated
-    // thread via AcquireExecutionMode[execSOAByMethod] := amBackgroundThread
+    // thread via
+    // ! aServer.AcquireExecutionMode[execSOAByMethod] := amBackgroundThread;
+    // - if you use external DB and a custom ConnectionTimeOutMinutes value,
+    // both read and write access should be locked, so you should set:
+    // ! aServer.AcquireExecutionMode[execORMGet] := am***;
+    // ! aServer.AcquireExecutionMode[execORMWrite] := am***;
+    // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
+    // amLocked, amBackgroundThread or amMainThread
     property AcquireExecutionMode[Cmd: TSQLRestServerURIContextCommand]: TSQLRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
