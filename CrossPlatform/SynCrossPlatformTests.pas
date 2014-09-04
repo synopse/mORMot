@@ -322,6 +322,7 @@ var doc: variant;
     obj1,obj2: TMain;
     item: TMainNested;
 begin
+  doc := JSONVariant('[{"ID:1,"Username":"xx","FirstName":"System","Active":-1}]');
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   check(doc.test=1234);
   check(doc.name='Joh"n'#13);
