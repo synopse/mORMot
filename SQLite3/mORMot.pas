@@ -33,6 +33,7 @@ unit mORMot;
     DigDiver
     Esmond
     Pavel (mpv)
+    Jordi Tudela
     Martin Suer
     Sabbiolina
     Vadim Orel
@@ -835,6 +836,7 @@ unit mORMot;
     - added JSON serialization of Variant and WideString types, and corresponding
       TJSONToObjectOptions optional parameter in JSONToObject() / ObjectToJSON()
       functions and WriteObject() method - including TDocVariant or TBSONVariant
+    - fixed TPersistent process in TJSONWriter.WriteObject - thanks Jordi!
     - JSONToObject() is now able to unserialize a nested record - see [5e49b3096a]
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
@@ -34132,7 +34134,7 @@ begin
           Obj := pointer(GetOrdProp(Value,pointer(P)));  // works also for CPU64
           if (IsObj<>oSQLMany) or
              not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
-            if (IsObj in [oSQLRecord,oSQLMany]) and
+            if (IsObj in [oSQLRecord,oPersistent,oSQLMany]) and
                (P^.PropType^^.ClassSQLFieldType=sftID) and
                not TSQLRecord(Value).fFill.JoinedFields then begin
               HR(P);
