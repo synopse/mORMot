@@ -367,7 +367,7 @@ unit SynCommons;
   - BREAKING CHANGE rename of Iso8601 low-level structure as TTimeLogBits, to use
     explicitly the TTimeLog type and name for all Int64 bit-oriented functions -
     now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
-  - Delphi XE4/XE5/XE6 compatibility (Windows target platform only)
+  - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
     kind varString and type RawUTF8 - prior to Delphi 2009, ensure you call
