@@ -48,7 +48,7 @@ unit SynCrossPlatformREST;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
 
 }
 
@@ -712,21 +712,8 @@ type
     // let all BATCH process be executed on the server side within an unique
     // transaction grouped by the given number of rows
     function BatchStart(aTable: TSQLRecordClass;
-    {$ifdef ISSMS}
-      AutomaticTransactionPerRow: cardinal=10000): boolean;
-    /// begin a BATCH sequence to speed up huge database change
-    // - this method includes a BatchOptions parameter, which could be set
-    // to tune the SQL execution on server
-    // - this specific method is needed to circumvent current SMS limitations:
-    // SMS does not let [] compile as a set, nor handle sets as parameter types
-    // for overloaded methods
-    function BatchStartWithOptions(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal;
-      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
-    {$else}
       AutomaticTransactionPerRow: cardinal=10000;
       BatchOptions: TSQLRestBatchOptions=[]): boolean; virtual;
-    {$endif}
     /// create a new member in current BATCH sequence
     // - similar to Add(), but in BATCH mode: nothing is sent until BatchSend()
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -2026,28 +2013,8 @@ begin
     Value.fInternalState := InternalState;
 end;
 
-{$ifdef ISSMS}
-function TSQLRest.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal): boolean;
-begin
-  result := BatchStartWithOptions(aTable,AutomaticTransactionPerRow,[]);
-end;
-
-function TSQLRestBatchOptionsToInteger(value: TSQLRestBatchOptions): integer;
-begin
-  asm @result = @value[0]; end;
-end;
-
-function TSQLRest.BatchStartWithOptions(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
-{$else}
-
-type
-  TSQLRestBatchOptionsToInteger = byte;
-
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
-{$endif}
 begin
   if (fBatchCount<>0) or (fBatch<>'') or (AutomaticTransactionPerRow<=0) then begin
     result := false; // already opened BATCH sequence
@@ -2056,7 +2023,7 @@ begin
   if aTable<>nil then // sent as '{"Table":["cmd",values,...]}'
     fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
   fBatch := Format('%s,["automaticTransactionPerRow",%d,"options",%d,',
-    [fBatch,AutomaticTransactionPerRow,TSQLRestBatchOptionsToInteger(BatchOptions)]);
+    [fBatch,AutomaticTransactionPerRow,integer(BatchOptions)]);
   fBatchTable := aTable;
   result := true;
 end;
