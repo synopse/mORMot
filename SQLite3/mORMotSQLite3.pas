@@ -1505,7 +1505,7 @@ end;
 
 procedure TSQLRestServerDB.InternalBatchStop;
 const MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
-var ndx,f,prop,fieldCount,valuesCount: integer;
+var ndx,f,r,prop,fieldCount,valuesCount,rowCount,valuesFirstRow: integer;
     P: PUTF8Char;
     DecodeSaved: boolean;
     Fields, Values: TRawUTF8DynArray;
@@ -1526,11 +1526,14 @@ begin
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchFirstID);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
-      InternalExecute(SQL,true);
+      if InternalExecute(SQL,true) then
+        InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID,fBatchValues[0],nil);
       exit;
     end;
     DecodeSaved := true;
     valuesCount := 0;
+    rowCount := 0;
+    valuesFirstRow := 0;
     SetLength(ValuesNull,(MAX_PARAMS shr 3)+1);
     SetLength(Values,32);
     Fields := nil; // makes compiler happy
@@ -1573,11 +1576,11 @@ begin
             SetBit(ValuesNull[0],valuesCount) else
             Values[valuesCount+f] := Decode.FieldValues[f];
         inc(ValuesCount,fieldCount);
+        inc(rowCount);
         DecodeSaved := true;
       until ndx=fBatchValuesCount;
       // INSERT Values[] into the DB
-      SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',
-        (valuesCount div fieldCount)-1);
+      SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
       Statement := nil; // make compiler happy
       DB.LockAndFlushCache;
       try
@@ -1605,6 +1608,9 @@ begin
             prop := 0;
         end;
         repeat until Statement^.Step<>SQLITE_ROW;
+        for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
+          InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID+r,fBatchValues[r],nil);
+        inc(valuesFirstRow,rowCount);
       finally
         if Statement=@fStaticStatement then
           fStaticStatement.Close;
@@ -1612,8 +1618,10 @@ begin
       end;
       fillchar(ValuesNull[0],(ValuesCount shr 3)+1,0);
       ValuesCount := 0;
+      rowCount := 0;
       Fields := nil; // force new SQL statement and Values[]
     until DecodeSaved and (ndx=fBatchValuesCount);
+    assert(valuesFirstRow=fBatchValuesCount);
   finally
     fBatchMethod := mNone;
     fBatchValuesCount := 0;

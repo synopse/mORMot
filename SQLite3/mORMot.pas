@@ -10975,7 +10975,9 @@ type
     // - you can manually call this method to force History BLOB update, e.g.
     // when the server is in Idle state, and ready for process
     procedure TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass); virtual;
-    /// check if OnUpdateEvent or change tracked has been defined for this table 
+    /// check if OnUpdateEvent or change tracked has been defined for this table
+    // - is used internally e.g. by TSQLRestServerDB.MainEngineUpdateField to
+    // ensure that the updated ID fields will be computed as expected 
     function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
