@@ -2023,7 +2023,7 @@ begin
   if aTable<>nil then // sent as '{"Table":["cmd",values,...]}'
     fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
   fBatch := Format('%s,["automaticTransactionPerRow",%d,"options",%d,',
-    [fBatch,AutomaticTransactionPerRow,integer(BatchOptions)]);
+    [fBatch,AutomaticTransactionPerRow,byte(BatchOptions)]);
   fBatchTable := aTable;
   result := true;
 end;
