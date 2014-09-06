@@ -22,7 +22,8 @@ type
   protected
     fName: RawUTF8;
   public
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    class procedure InitializeTable(Server: TSQLRestServer;
+      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
   published
     property Name: RawUTF8 read fName write fName stored AS_UNIQUE;
   end;
@@ -77,7 +78,7 @@ end;
 { TSQLNoteKind }
 
 class procedure TSQLNoteKind.InitializeTable(Server: TSQLRestServer;
-  const FieldName: RawUTF8);
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var Kind: TSQLNoteKind;
 begin
   inherited;
