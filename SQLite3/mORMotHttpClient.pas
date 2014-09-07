@@ -112,6 +112,8 @@ unit mORMotHttpClient;
        not consistent in practice among clients
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
+     - added TSQLHttpClientWinGeneric.CreateForRemoteLogging() constructor for
+       easy remote logging to our LogView tool, running as server process
         
 
 }
@@ -237,6 +239,7 @@ type
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout: DWORD;
     fHttps: boolean;
+    fCreatedForRemoteLogging: boolean;
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -245,7 +248,7 @@ type
     /// overridden protected method to handle HTTP connection
     function InternalCheckOpen: boolean; override;
     /// set the fWinAPI class
-    // - the overridden implementation should set the expected fWinAPIClass 
+    // - the overridden implementation should set the expected fWinAPIClass
     procedure InternalSetClass; virtual; abstract;
   public
     /// connect to TSQLHttpServer on aServer:aPort
@@ -262,6 +265,12 @@ type
       const aProxyByPass: AnsiString='';
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
       ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce;
+    /// connnect to a LogView HTTP Server for remote logging
+    // - will associate the EchoCustom callback of the TSynLog to this server
+    constructor CreateForRemoteLogging(const aServer, aPort: AnsiString;
+      aLogClass: TSynLogClass; const aRoot: RawUTF8='root');
+    /// finalized used memory
+    destructor Destroy; override;
     /// internal class instance used for the connection
     // - will return either a TWinINet, either a TWinHTTP class instance
     property WinAPI: TWinHttpAPI read fWinAPI;
@@ -460,6 +469,35 @@ begin
   fProxyByPass := aProxyByPass;
   fSendTimeout := SendTimeout;
   fReceiveTimeout := ReceiveTimeout;
+end;
+
+constructor TSQLHttpClientWinGeneric.CreateForRemoteLogging(const aServer,
+  aPort: AnsiString; aLogClass: TSynLogClass; const aRoot: RawUTF8);
+var aModel: TSQLModel;
+begin
+  aModel := TSQLModel.Create([],aRoot);
+  Create(aServer,aPort,aModel);
+  aModel.Owner := self;
+  if not ServerRemoteLog(nil,sllClient,FormatUTF8('%00% Remote Client %(%) Connected',
+    [NowToString(false),LOG_LEVEL_TEXT[sllClient],self,pointer(self)])) then
+    raise ECommunicationException.CreateUTF8(
+      'Connection to http://%/%:% impossible'#13#10'%',
+      [aServer,aRoot,aPort,LastErrorMessage]);
+  if Assigned(aLogClass) then
+    aLogClass.Family.EchoCustom := ServerRemoteLog;
+  fCreatedForRemoteLogging := true;
+end;
+
+destructor TSQLHttpClientWinGeneric.Destroy;
+begin
+  if fCreatedForRemoteLogging then
+  try
+    ServerRemoteLog(nil,sllClient,FormatUTF8('%00% Disconnected Client %(%)',
+      [NowToString(false),LOG_LEVEL_TEXT[sllClient],self,pointer(self)]));
+  except
+    on Exception do;
+  end;
+  inherited;
 end;
 
 function TSQLHttpClientWinGeneric.InternalCheckOpen: boolean;
