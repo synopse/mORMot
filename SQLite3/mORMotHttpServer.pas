@@ -119,6 +119,7 @@ unit mORMotHttpServer;
       - renamed SQLite3HttpServer.pas unit to mORMotHttpServer.pas
       - classes TSQLHttpServer* renamed as TSQLHttpServer*
       - added TSQLHttpServer.RemoveServer() and Shutdown methods
+      - added TSQLHttpServer.Port and DomainName properties
       - added TSQLHttpServer.AccessControlAllowOrigin property to handle
         cross-site AJAX requests via cross-origin resource sharing (CORS)
       - TSQLHttpServer now handles sub-domains generic matching (via
@@ -205,7 +206,11 @@ type
   // ! THttpApiServer.AddUrlAuthorize('root','888',false,'+'))
   // - useHttpApiRegisteringURI will first registry the given URI, then use
   // kernel-mode HTTP.SYS server (THttpApiServer) - will need Administrator
-  // execution rights at least one time (e.g. during setup)
+  // execution rights at least one time (e.g. during setup); note that if
+  // the URI is already registered, the server will still be launched, even if
+  // the program does not run as Administrator - it is therefore sufficient
+  // to run such a program once as Administrator to register the URI, when this
+  // useHttpApiRegisteringURI option is set
   // - useHttpSocket will use the standard Sockets library (e.g. WinSock) - it
   // will trigger the Windows firewall popup UAC window at first run
   TSQLHttpServerOptions =
@@ -305,8 +310,8 @@ type
     /// you can call this method to prepare the HTTP server for shutting down
     // - it will call all associated TSQLRestServer.Shutdown methods
     // - note that Destroy won't call this method on its own, since the
-    // TSQLRestServer instances may have a life-time uncoupled from HTTP process 
-    procedure Shutdown; 
+    // TSQLRestServer instances may have a life-time uncoupled from HTTP process
+    procedure Shutdown;
     /// try to register another TSQLRestServer instance to the HTTP server
     // - each TSQLRestServer class must have an unique Model.Root value, to
     // identify which instance must handle a particular request from its URI
@@ -328,6 +333,10 @@ type
     /// the associated running HTTP server instance
     // - either THttpApiServer, either THttpServer
     property HttpServer: THttpServerGeneric read fHttpServer;
+    /// the TCP/IP port on which this server is listening to
+    property Port: AnsiString read fPort;
+    /// the URLprefix used for internal HttpAddUrl API call
+    property DomainName: AnsiString read fDomainName;
     /// read-only access to the number of registered internal servers
     property DBServerCount: integer read GetDBServerCount;
     /// read-only access to all internal servers
