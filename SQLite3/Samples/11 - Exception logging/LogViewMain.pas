@@ -6,14 +6,26 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  SynCommons, ImgList, StdCtrls, CheckLst, Menus, ExtCtrls, ShellAPI,
-  Grids,
+  ImgList, StdCtrls, CheckLst, Menus, ExtCtrls, ShellAPI, Grids, Clipbrd, 
 {$WARN UNIT_PLATFORM OFF}
   FileCtrl,
 {$WARN UNIT_PLATFORM ON}
-  Clipbrd;
+  SynCommons, mORMot, mORMotHttpServer;
 
 type
+  TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
+  
+  THTTPRemoteLogServer = class(TSQLHttpServer)
+  protected
+    fServer: TSQLRestServerFullMemory;
+    fEvent: TRemoteLogReceivedOne;
+  published
+    constructor Create(const aRoot: RawUTF8; aPort: integer;
+      aEvent: TRemoteLogReceivedOne);
+    destructor Destroy; override;
+    procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
+  end;
+
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
     BtnBrowse: TButton;
@@ -48,6 +60,11 @@ type
     ListMenu: TPopupMenu;
     ListMenuCopy: TMenuItem;
     BtnSearchPrevious: TButton;
+    btnServerLaunch: TButton;
+    lblServerRoot: TLabel;
+    edtServerRoot: TEdit;
+    lblServerPort: TLabel;
+    edtServerPort: TEdit;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -82,6 +99,7 @@ type
     procedure FilesClick(Sender: TObject);
     procedure ListMenuCopyClick(Sender: TObject);
     procedure BtnSearchPreviousClick(Sender: TObject);
+    procedure btnServerLaunchClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -93,10 +111,12 @@ type
     FThreadSelected: TByteDynArray;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
+    FRemoteLogService: THTTPRemoteLogServer;
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
     procedure BtnFilterMenu(Sender: TObject);
     procedure ThreadListCheckRefresh;
+    procedure ReceivedOne(const Text: RawUTF8);
   public
     destructor Destroy; override;
     property LogFileName: TFileName write SetLogFileName;
@@ -115,6 +135,19 @@ type
   TLogFilter = (
     lfNone,lfAll,lfErrors,lfExceptions,lfProfile,lfDatabase,lfClientServer,
     lfDebug,lfCustom);
+
+resourcestring
+  sEnterAddress = 'Enter an hexadecimal address:';
+  sStats = #13#10'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10'Size: %s'#13#10#13#10+
+    'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10+
+    'Date: %s'#13#10#13#10'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
+    'User: %s'#13#10'CPU: %s'#13#10'OS: Windows %s (service pack %d)'#13#10+
+    'Wow64: %d'#13#10#13#10'Log content'#13#10'-----------'#13#10#13#10+
+    'Log started at: %s'#13#10'Events count: %d'#13#10'Methods count: %d'#13#10+
+    'Threads count: %d'#13#10'Time elapsed: %s'#13#10#13#10+
+    'Per event stats'#13#10'---------------'#13#10#13#10;
+  sNoFile = 'No File';
+  sRemoteLog = 'Remote Log';
 
 const
   LOG_FILTER: array[TLogFilter] of TSynLogInfos = (
@@ -152,10 +185,12 @@ begin
   Finalize(FLogSelected);
   FLogSelectedCount := 0;
   ThreadListBox.Clear;
-  Caption := FMainCaption+ExpandFileName(Value);
-  Screen.Cursor := crHourGlass;
+  List.RowCount := 0;
+  EventsList.Items.Clear;
+  if FileExists(Value) then
   try
-    List.RowCount := 0;
+    Screen.Cursor := crHourGlass;
+    Caption := FMainCaption+ExpandFileName(Value);
     if SameText(ExtractFileExt(Value),'.synlz') then begin
       FLogUncompressed := StreamUnSynLZ(Value,LOG_MAGIC);
       if FLogUncompressed=nil then
@@ -165,7 +200,6 @@ begin
     end else
       FLog := TSynLogFile.Create(Value);
     EventsList.Items.BeginUpdate;
-    EventsList.Items.Clear;
     if FLog.EventLevel=nil then begin // if not a TSynLog file -> open as plain text
       List.ColCount := 1;
       List.ColWidths[0] := 2000;
@@ -188,19 +222,18 @@ begin
         List.ColWidths[2] := 2000;
       end;
       SetLength(FLogSelected,FLog.Count);
-      for E := succ(sllNone) to high(E) do begin
-        FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
+      for E := succ(sllNone) to high(E) do
         if E in FLog.EventLevelUsed then
           EventsList.Items.AddObject(FEventCaption[E],pointer(ord(E)));
-      end;
       for i := 1 to FilterMenu.Items.Count-1 do
         FilterMenu.Items[i].Visible :=
           LOG_FILTER[TLogFilter(FilterMenu.Items[i].Tag)]*FLog.EventLevelUsed<>[];
     end;
   finally
+    EventsList.Items.EndUpdate;
     Screen.Cursor := crDefault;
-  end;
-  EventsList.Items.EndUpdate;
+  end else
+    Caption := FMainCaption+sNoFile;
   EventsList.Height := 8+EventsList.Count*EventsList.ItemHeight;
   ProfileGroup.Top := EventsList.Top+EventsList.Height+12;
   MergedProfile.Top := ProfileGroup.Top+ProfileGroup.Height+2;
@@ -226,19 +259,28 @@ begin
   ProfileGroup.ItemIndex := 0;
   MergedProfile.Checked := false;
   BtnFilterMenu(FMenuFilterAll);
-  EventsList.Enabled := FLog<>nil;
-  ProfileGroup.Enabled := (FLog<>nil) and (FLog.LogProcCount<>0);
-  MergedProfile.Enabled := ProfileGroup.Enabled;
-  BtnStats.Enabled := (FLog<>nil) and (FLog.EventLevel<>nil);
-  BtnSearchNext.Enabled := FLog<>nil;
-  BtnSearchPrevious.Enabled := FLog<>nil;
-  EditSearch.Enabled := FLog<>nil;
+  EventsList.Visible := FLog<>nil;
+  ProfileGroup.Visible := (FLog<>nil) and (FLog.LogProcCount<>0);
+  MergedProfile.Visible := ProfileGroup.Visible;
+  BtnStats.Visible:= (FLog<>nil) and (FLog.EventLevel<>nil);
+  BtnMapSearch.Visible := FLog<>nil;
+  EditSearch.Visible := FLog<>nil;
+  if FLog<>nil then
+    EditSearch.SetFocus;
+  BtnSearchNext.Visible  := FLog<>nil;
+  BtnSearchPrevious.Visible := FLog<>nil;
+  lblServerRoot.Visible := FLog=nil;
+  lblServerPort.Visible := FLog=nil;
+  edtServerRoot.Visible := FLog=nil;
+  edtServerPort.Visible := FLog=nil;
+  btnServerLaunch.Visible := FLog=nil;
   List.Visible := FLog<>nil;
   EventsListClickCheck(nil);
 end;
 
 destructor TMainLogView.Destroy;
 begin
+  FRemoteLogService.Free;
   FLog.Free;
   FLogUncompressed.Free;
   inherited;
@@ -248,6 +290,7 @@ procedure TMainLogView.FormCreate(Sender: TObject);
 var F: TLogFilter;
     O: TLogProcSortOrder;
     M: TMenuItem;
+    E: TSynLogInfo;
 begin
   FMainCaption := Caption;
   for F := low(F) to high(F) do begin
@@ -265,6 +308,8 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
+  for E := succ(sllNone) to high(E) do 
+    FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -277,9 +322,9 @@ begin
       Directory.Directory := CmdLine;
     end else
       LogFileName := CmdLine;
-    end;
-  WindowState := wsMaximized;
-  EditSearch.SetFocus;
+    end else
+      LogFileName := '';
+  WindowState := wsMaximized;    
 end;
 
 procedure TMainLogView.BtnFilterClick(Sender: TObject);
@@ -701,17 +746,6 @@ begin
   end;
 end;
 
-resourcestring
-  sEnterAddress = 'Enter an hexadecimal address:';
-  sStats = #13#10'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10'Size: %s'#13#10#13#10+
-    'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10+
-    'Date: %s'#13#10#13#10'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
-    'User: %s'#13#10'CPU: %s'#13#10'OS: Windows %s (service pack %d)'#13#10+
-    'Wow64: %d'#13#10#13#10'Log content'#13#10'-----------'#13#10#13#10+
-    'Log started at: %s'#13#10'Events count: %d'#13#10'Methods count: %d'#13#10+
-    'Threads count: %d'#13#10'Time elapsed: %s'#13#10#13#10+
-    'Per event stats'#13#10'---------------'#13#10#13#10;
-
 procedure TMainLogView.BtnStatsClick(Sender: TObject);
 var M: TMemo;
     F: TForm;
@@ -939,5 +973,94 @@ begin
   Clipboard.AsText := s;
 end;
 
-end.
+procedure TMainLogView.btnServerLaunchClick(Sender: TObject);
+begin
+  if (FRemoteLogService<>nil) or (FLog<>nil) then
+    exit;
+  try
+    FRemoteLogService := THTTPRemoteLogServer.Create(
+      StringToUTF8(edtServerRoot.Text),StrToInt(edtServerPort.Text),ReceivedOne);
+  except
+    on E: Exception do begin
+      ShowMessage(E.Message);
+      exit;
+    end;
+  end;
+  Caption := FMainCaption+sRemoteLog;
+  FLog := TSynLogFile.Create;
+  List.ColCount := 3;
+  List.ColWidths[0] := 70;
+  List.ColWidths[1] := 60;
+  List.ColWidths[2] := 2000;
+  SetLength(FLogSelected,FLog.Count);
+  lblServerRoot.Hide;
+  lblServerPort.Hide;
+  edtServerRoot.Hide;
+  edtServerPort.Hide;
+  btnServerLaunch.Hide;
+  EditSearch.Show;
+  EditSearch.SetFocus;
+  BtnSearchNext.Show;
+  BtnSearchPrevious.Show;
+  ReceivedOne(FormatUTF8(
+    '%00 info  Remote Logging Server started on port % with root name "%"',
+    [NowToString(false),FRemoteLogService.Port,FRemoteLogService.fServer.Model.Root]));
+  List.Show;
+end;
 
+procedure TMainLogView.ReceivedOne(const Text: RawUTF8);
+var withoutThreads: boolean;
+    P: PUTF8Char;
+    line: RawUTF8;
+begin
+  P := pointer(Text);
+  repeat // handle multiple log rows in the incoming text 
+    line := GetNextLine(P,P);
+    if length(line)<24 then
+      continue;
+    withoutThreads := FLog.EventThread=nil;
+    FLog.AddInMemoryLine(line);
+    if withoutThreads and (FLog.EventThread<>nil) then begin
+      List.ColCount := 4;
+      List.ColWidths[2] := 30;
+      List.ColWidths[3] := 2000;
+    end;
+    AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
+  until P=nil;
+  List.RowCount := FLog.Count;
+  List.Invalidate;
+end;
+
+
+{ THTTPRemoteLogServer }
+
+constructor THTTPRemoteLogServer.Create(const aRoot: RawUTF8;
+  aPort: integer; aEvent: TRemoteLogReceivedOne);
+var aModel: TSQLModel;
+begin
+  aModel := TSQLModel.Create([],aRoot);
+  fServer := TSQLRestServerFullMemory.Create(aModel);
+  aModel.Owner := fServer;
+  fServer.ServiceMethodRegisterPublishedMethods('',self);
+  inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
+  fEvent := aEvent;
+end;
+
+destructor THTTPRemoteLogServer.Destroy;
+begin
+  try
+    inherited;
+  finally
+    fServer.Free;
+  end;
+end;
+
+procedure THTTPRemoteLogServer.RemoteLog(Ctxt: TSQLRestServerURIContext);
+begin
+  if Assigned(fEvent) and (Ctxt.Method=mPUT) then begin
+    fEvent(Ctxt.Call^.InBody);
+    Ctxt.Success;
+  end;
+end;
+
+end.
