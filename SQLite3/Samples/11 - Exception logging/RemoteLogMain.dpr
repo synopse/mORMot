@@ -40,12 +40,12 @@ implementation
 
 procedure TMainForm.btnConnectClick(Sender: TObject);
 begin
-  TSynLog.Family.Level := LOG_VERBOSE;
+  SQLite3Log.Family.Level := LOG_VERBOSE;
   try
     Screen.Cursor := crHourGlass;
     try
       fClient := TSQLHttpClient.CreateForRemoteLogging(
-        edtServer.Text,edtPort.Text,TSynLog);
+        AnsiString(edtServer.Text),AnsiString(edtPort.Text),SQLite3Log);
     finally
       Screen.Cursor := crDefault;
     end;
@@ -70,7 +70,7 @@ end;
 
 procedure TMainForm.btnEventSendClick(Sender: TObject);
 begin
-  TSynLog.Add.Log(TSynLogInfo(cbbEvent.ItemIndex),
+  SQLite3Log.Add.Log(TSynLogInfo(cbbEvent.ItemIndex),
     FormatUTF8('% - %',[edtText.Text,fNumber]));
   inc(fNumber);
 end;

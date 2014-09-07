@@ -1028,6 +1028,7 @@ begin
     AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
   List.RowCount := FLog.Count;
+  List.TopRow := FLog.Count-List.VisibleRowCount;
   List.Invalidate;
 end;
 

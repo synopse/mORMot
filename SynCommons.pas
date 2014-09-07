@@ -11144,6 +11144,9 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject=nil;
       const IgnoreWhenStartWith: PAnsiChar=nil);
+    /// access to the low-level text writer class
+    // - should not be used usually, since it would not be thread safe to do so
+    property Writer: TTextWriter read fWriter;
   published
     /// the associated logging family
     property GenericFamily: TSynLogFamily read fFamily;
@@ -33606,6 +33609,8 @@ end;
 
 procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
 begin
+  if fEchos=nil then
+    fEchoStart := B-fTempBuf+1; // ignore any previous buffer
   MultiEventAdd(fEchos,TMethod(aEcho));
 end;
 

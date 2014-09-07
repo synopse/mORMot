@@ -35,6 +35,7 @@ object MainForm: TMainForm
       Width = 145
       Height = 21
       Style = csDropDownList
+      DropDownCount = 50
       ItemHeight = 13
       TabOrder = 0
     end

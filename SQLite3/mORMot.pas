@@ -25023,18 +25023,16 @@ end;
 
 function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
-var aDummyResp: RawUTF8;
 begin
-  if fRemoteLogActive then begin
-    result := false;
-    exit;
-  end;
-  fRemoteLogActive := true;
-  try
-    result := CallBackPut('RemoteLog',Text,aDummyResp)=HTML_SUCCESS;
-  finally
-    fRemoteLogActive := false;
-  end;
+  if fRemoteLogActive then
+    result := false else
+    try // direct call of URI() to avoid nested logging
+      fRemoteLogActive := true;
+      result := URI(Model.getURICallBack('RemoteLog',nil,0),
+        'PUT',nil,nil,@Text).Lo=HTML_SUCCESS;
+    finally
+      fRemoteLogActive := false;
+    end;
 end;
 
 function TSQLRestClientURI.UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;

@@ -239,7 +239,7 @@ type
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout: DWORD;
     fHttps: boolean;
-    fCreatedForRemoteLogging: boolean;
+    fCreatedForRemoteLogging: TSynLog;
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -475,25 +475,31 @@ constructor TSQLHttpClientWinGeneric.CreateForRemoteLogging(const aServer,
   aPort: AnsiString; aLogClass: TSynLogClass; const aRoot: RawUTF8);
 var aModel: TSQLModel;
 begin
+  if not Assigned(aLogClass) then
+    raise ECommunicationException.Create('No LogClass');
   aModel := TSQLModel.Create([],aRoot);
   Create(aServer,aPort,aModel);
   aModel.Owner := self;
-  if not ServerRemoteLog(nil,sllClient,FormatUTF8('%00% Remote Client %(%) Connected',
+  if not ServerRemoteLog(nil,sllClient,FormatUTF8('%00%Remote Client %(%) Connected',
     [NowToString(false),LOG_LEVEL_TEXT[sllClient],self,pointer(self)])) then
     raise ECommunicationException.CreateUTF8(
       'Connection to http://%/%:% impossible'#13#10'%',
       [aServer,aRoot,aPort,LastErrorMessage]);
-  if Assigned(aLogClass) then
-    aLogClass.Family.EchoCustom := ServerRemoteLog;
-  fCreatedForRemoteLogging := true;
+  fCreatedForRemoteLogging := aLogClass.Add;
+  fCreatedForRemoteLogging.Writer.EchoAdd(ServerRemoteLog);
+  fCreatedForRemoteLogging.Log(sllTrace,
+    'Echoing to remote server http://%/%/RemoteLog:%',[aServer,aRoot,aPort]);
 end;
 
 destructor TSQLHttpClientWinGeneric.Destroy;
 begin
-  if fCreatedForRemoteLogging then
+  if fCreatedForRemoteLogging<>nil then
   try
-    ServerRemoteLog(nil,sllClient,FormatUTF8('%00% Disconnected Client %(%)',
+    fCreatedForRemoteLogging.Log(sllTrace,'End Echoing to remote server');
+    fCreatedForRemoteLogging.Writer.EchoRemove(ServerRemoteLog);
+    ServerRemoteLog(nil,sllClient,FormatUTF8('%00%Remote Client %(%) Disconnected',
       [NowToString(false),LOG_LEVEL_TEXT[sllClient],self,pointer(self)]));
+    fCreatedForRemoteLogging := nil;
   except
     on Exception do;
   end;
