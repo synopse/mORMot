@@ -973,6 +973,7 @@ unit mORMot;
     - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
     - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
       synchronization with the server - can be handy to test the connection
+    - added TSQLRestClientURI.ServerRemoteLog wrapper to method-based service
     - added TSQLRest.TableHasRows/TableRowCount methods, and overridden direct
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
@@ -12178,6 +12179,7 @@ type
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
+    fRemoteLogActive: boolean;
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -12297,21 +12299,27 @@ type
     // current selected row of this table, in order to refresh its value
     // - use this method to refresh the client UI, e.g. via a timer
     function UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
-      PCurrentRow: PInteger = nil): boolean;
+      PCurrentRow: PInteger = nil): boolean; virtual;
     /// send a flush command to the remote Server cache
     // - this method will remotely call the Cache.Flush() methods of the server
     // instance, to force cohesion of the data
     // - ServerCacheFlush() with no parameter will flush all stored JSON content
     // - ServerCacheFlush(aTable) will flush the cache for a given table
     // - ServerCacheFlush(aTable,aID) will flush the cache for a given record
-    function ServerCacheFlush(aTable: TSQLRecordClass=nil; aID: integer=0): boolean;
+    function ServerCacheFlush(aTable: TSQLRecordClass=nil; aID: integer=0): boolean; virtual;
     /// you can call this method to call the remote URI root/TimeStamp
     // - this can be an handy way of testing the connection, since this method
     // is always available, even without authentication
     // - returns TRUE if the client time correction has been retrieved
     // - returns FALSE on any connection error - check LastErrorMessage and
     // LastErrorException to find out the exact connection error
-    function ServerTimeStampSynchronize: boolean;
+    function ServerTimeStampSynchronize: boolean; 
+    /// call a 'RemoteLog' remote logging method on the server
+    // - as implemented by mORMot's LogView tool in server mode
+    // - map TOnTextWriterEcho signature, so that you would be able to set e.g.:
+    // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
+    function ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean; virtual;
 
     {/ begin a transaction
      - implements REST BEGIN collection
@@ -25013,6 +25021,22 @@ begin
   end;
 end;
 
+function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
+var aDummyResp: RawUTF8;
+begin
+  if fRemoteLogActive then begin
+    result := false;
+    exit;
+  end;
+  fRemoteLogActive := true;
+  try
+    result := CallBackPut('RemoteLog',Text,aDummyResp)=HTML_SUCCESS;
+  finally
+    fRemoteLogActive := false;
+  end;
+end;
+
 function TSQLRestClientURI.UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
   PCurrentRow: PInteger): boolean;
 // notes about refresh mechanism:
@@ -25413,7 +25437,7 @@ begin
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
       'PUT',@aResponse,aResponseHead,@aSentData).Lo;
 {$ifdef WITHLOG}
-    SQLite3Log.Add.Log(sllServiceReturn,'result=%',result);
+    SQLite3Log.Add.Log(sllServiceReturn,'result=% resplen=%',[result,length(aResponse)]);
 {$endif}
   end;
 end;
