@@ -408,6 +408,8 @@ unit SynCommons;
   - added WordScanIndex() and swap32() functions
   - speed improvement of IdemPropNameU() function, with new overload function
   - added TSynLogFile.Freq read-only property
+  - added TMemoryMapText.AddInMemoryLine method to allow runtime appending of
+    new lines of text - used e.g. by TSynLogFile for life update of remote logs
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
     variable, and ESynException.CustomLog() method to customize how raised
     exception are logged when intercepted - feature request [495720e0b9]
@@ -4987,8 +4989,10 @@ type
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
   /// callback used to echo each line of TTextWriter class
-  TOnTextWriterEcho = procedure(Sender: TTextWriter; Level: TSynLogInfo;
-    const Text: RawUTF8) of object;
+  // - should return TRUE on sucess, FALSE if the log was not echoed: but
+  // TSynLog will continue logging, even if this event returned FALSE
+  TOnTextWriterEcho = function(Sender: TTextWriter; Level: TSynLogInfo;
+    const Text: RawUTF8): boolean of object;
 
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
@@ -5949,10 +5953,13 @@ type
   TMemoryMapText = class
   protected
     fLines: PPointerArray;
+    fLinesMax: integer;
     fCount: integer;
     fMapEnd: PUTF8Char;
     fMap: TMemoryMap;
     fFileName: TFileName;
+    fAppendedLines: TRawUTF8DynArray;
+    fAppendedLinesCount: integer;
     function GetLine(aIndex: integer): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
     function GetString(aIndex: integer): string; {$ifdef HASINLINE}inline;{$endif}
     /// call once by Create constructors when fMap has been initialized
@@ -5961,8 +5968,12 @@ type
     // - default implementation will set  fLines[fCount] := LineBeg;
     // - override this method to add some per-line process at loading: it will
     // avoid reading the entire file more than once
-    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char; var max: Integer); virtual;
+    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); virtual;
   public
+    /// initialize the memory mapped text file
+    // - this default implementation just do nothing but is called by overloaded
+    // constructors so may be overriden to initialize an inherited class
+    constructor Create; overload; virtual;
     /// read an UTF-8 encoded text file
     // - every line beginning is stored into LinePointers[]
     constructor Create(const aFileName: TFileName); overload;
@@ -5973,6 +5984,10 @@ type
     constructor Create(aFileContent: PUTF8Char; aFileSize: integer); overload;
     /// release the memory map and internal LinePointers[]
     destructor Destroy; override;
+    /// add a new line to the already parsed content
+    // - this line won't be stored in the memory mapped file, but stay in memory
+    // and appended to the existing lines, until this instance is released 
+    procedure AddInMemoryLine(const aNewLine: RawUTF8); virtual;
     /// retrieve the number of UTF-8 chars of the given line
     // - warning: no range check is performed about supplied index
     function LineSize(aIndex: integer): integer;
@@ -5982,7 +5997,7 @@ type
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean; virtual;
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
@@ -10853,14 +10868,16 @@ type
     // - this property shall be set before any actual logging, otherwise it
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
+    // - EchoCustom or EchoService can be activated separately
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
+    // - EchoToConsole or EchoService can be activated separately
     // - you may even disable the integrated file output, via NoFile := true
     property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
     /// define how the logger will emit its line feed
     // - by default (FALSE), a single CR (#13) char will be written, to save
-    // storage space 
+    // storage space
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
     // - TSynLogFile class and our LogView tool will handle both patterns
@@ -10965,8 +10982,8 @@ type
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
     procedure LockAndGetThreadContextInternal(ID: DWORD);
     function Instance: TSynLog;
-    procedure ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
-      const Text: RawUTF8); virtual;
+    function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean; virtual;
   public
     /// intialize for a TSynLog class instance
     // - WARNING: not to be called directly! Use Enter or Add class function instead
@@ -11199,6 +11216,8 @@ type
     fThreadsRowsCount: cardinal;
     fThreadMax: cardinal;
     fLineLevelOffset: cardinal;
+    fLineTextOffset: cardinal;
+    fLineHeaderCountToIgnore: integer;
     /// as extracted from the .log header
     fExeName, fExeVersion, fHost, fUser, fCPU, fOSDetailed, fInstanceName: RawUTF8;
     fExeDate: TDateTime;
@@ -11235,11 +11254,15 @@ type
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer=32); override;
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
-    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char; var max: integer); override;
+    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); override;
     /// called by LogProcSort method
     function LogProcSortComp(A,B: Integer): integer;
     procedure LogProcSortInternal(L,R: integer);
   public
+    /// initialize internal structure
+    constructor Create; override;
+    /// returns TRUE if the supplied text is contained in the corresponding line
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean; override;
     /// retrieve the date and time of an event
     // - returns 0 in case of an invalid supplied index
     function EventDateTime(aIndex: integer): TDateTime;
@@ -18472,12 +18495,12 @@ end;
 
 procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   const Value: RawUTF8);
-var n: integer;
+var capacity: integer;
 begin
-  n := Length(Values);
-  if ValuesCount=n then begin
-    inc(n,64+n shr 3);
-    SetLength(Values,n);
+  capacity := Length(Values);
+  if ValuesCount=capacity then begin
+    inc(capacity,64+capacity shr 3);
+    SetLength(Values,capacity);
   end;
   Values[ValuesCount] := Value;
   inc(ValuesCount);
@@ -21047,8 +21070,11 @@ function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
 begin
   result := PtrUInt(P);
   if P<>nil then
-    while (P<PEnd) and (P^ in ANSICHARNOT01310) do 
-      inc(P);
+    if PEnd=nil then
+      while P^ in ANSICHARNOT01310 do
+        inc(P) else
+      while (P<PEnd) and (P^ in ANSICHARNOT01310) do
+        inc(P);
   result := PtrUInt(P)-result;
 end;
 
@@ -41921,8 +41947,8 @@ begin
   result := self;
 end;
 
-procedure TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
-  const Text: RawUTF8);
+function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
 {$ifdef MSWINDOWS}
 var tmp: AnsiString;
 {$endif}
@@ -41938,6 +41964,7 @@ const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
 //    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun
   ccLightGray, ccLightGray,ccLightGray,ccLightGray,ccLightMagenta);
 begin
+  result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
   {$ifdef MSWINDOWS}
@@ -42632,14 +42659,20 @@ end;
 
 { TMemoryMapText }
 
+constructor TMemoryMapText.Create;
+begin
+end;
+
 constructor TMemoryMapText.Create(aFileContent: PUTF8Char; aFileSize: integer);
 begin
+  Create;
   fMap.Map(aFileContent,aFileSize);
   LoadFromMap;
 end;
 
 constructor TMemoryMapText.Create(const aFileName: TFileName);
 begin
+  Create;
   fFileName := aFileName;
   if fMap.Map(aFileName) then
     LoadFromMap;
@@ -42669,8 +42702,20 @@ end;
 function GetLineContains(p,pEnd, up: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
 label Fnd;
-begin // fast unrolled search
-  repeat
+begin
+  if (p<>nil) and (up<>nil) then
+  if pEnd=nil then
+    repeat
+      i := ord(p^);
+      if not (AnsiChar(i) in ANSICHARNOT01310) then break;
+      inc(p);
+      if (NormToUpperAnsi7Byte[i]=ord(up^)) and IdemPChar(p,@up[1]) then begin
+        result := true;
+        exit;
+      end;
+    until false
+  else
+  repeat // fast unrolled search
     if p>=pEnd then break;
     i := ord(p^);
     if not (AnsiChar(i) in ANSICHARNOT01310) then break;
@@ -42691,7 +42736,7 @@ begin // fast unrolled search
     if not (AnsiChar(i) in ANSICHARNOT01310) then break;
     if NormToUpperAnsi7Byte[i]<>ord(up^) then begin
       inc(p);
-      Continue;
+      continue;
     end;
 Fnd:i := 0;
     repeat
@@ -42738,18 +42783,17 @@ begin
   result := GetLineSizeSmallerThan(fLines[aIndex],fMapEnd,aMinimalCount);
 end;
 
-procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char; var max: Integer);
+procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
 begin
+  if fCount=fLinesMax then begin
+    inc(fLinesMax,256+fLinesMax shr 3);
+    Reallocmem(fLines,fLinesMax*sizeof(pointer));
+  end;
   fLines[fCount] := LineBeg;
   inc(fCount);
-  if fCount=max then begin
-    max := max+256+max shr 3;
-    Reallocmem(fLines,max*sizeof(pointer));
-  end;
 end;
 
 procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer=32);
-var max: integer;
 procedure ParseLines(P,PEnd: PUTF8Char);
 var PBeg: PUTF8Char;
 begin // generated asm is much better with a local proc
@@ -42757,7 +42801,7 @@ begin // generated asm is much better with a local proc
     PBeg := P;
     while (P<PEnd) and (P^<>#13) and (P^<>#10) do
       inc(P);
-    ProcessOneLine(PBeg,P,max);
+    ProcessOneLine(PBeg,P);
     if P+1>=PEnd then
       break;
     if P[0]=#13 then
@@ -42769,19 +42813,36 @@ begin // generated asm is much better with a local proc
 end;
 var P: PUTF8Char;
 begin
-  max := fMap.fFileSize div AverageLineLength+8;
-  Getmem(fLines,max*sizeof(pointer));
+  fLinesMax := fMap.fFileSize div AverageLineLength+8;
+  Getmem(fLines,fLinesMax*sizeof(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P+fMap.Size;
   if TextFileKind(Map)=isUTF8 then
     inc(PByte(P),3); // ignore UTF-8 BOM
   ParseLines(P,fMapEnd);
-  if max>fCount+16384 then
+  if fLinesMax>fCount+16384 then
     Reallocmem(fLines,fCount*sizeof(pointer)); // size down only if worth it
+end;
+
+procedure TMemoryMapText.AddInMemoryLine(const aNewLine: RawUTF8);
+var P: PUTF8Char;
+begin
+  if aNewLine='' then
+    exit;
+  AddRawUTF8(fAppendedLines,fAppendedLinesCount,aNewLine);
+  P := pointer(fAppendedLines[fAppendedLinesCount-1]);
+  ProcessOneLine(P,P+StrLen(P));
 end;
 
 
 { TSynLogFile }
+
+constructor TSynLogFile.Create;
+var L: TSynLogInfo;
+begin
+  for L := low(TSynLogInfo) to high(TSynLogInfo) do // needed by ProcessOneLine
+    fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^; // [3] -> e.g. 'UST4'
+end;
 
 function TSynLogFile.EventCount(const aSet: TSynLogInfos): integer;
 var i: integer;
@@ -42790,6 +42851,14 @@ begin
   for i := 0 to Count-1 do
     if fLevels[i] in aSet then
       inc(result);
+end;
+
+function TSynLogFile.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
+begin
+  if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) or (aUpperSearch='') then
+    result := false else
+    result := GetLineContains(PUTF8Char(fLines[aIndex])+fLineTextOffset,
+      fMapEnd,pointer(aUpperSearch));
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
@@ -42878,12 +42947,10 @@ procedure TSynLogFile.LoadFromMap(AverageLineLength: integer=32);
 var aWow64: RawUTF8;
     i, j, Level: integer;
     TSEnter, TSLeave: Int64;
-    L: TSynLogInfo;
     OK: boolean;
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
-  for L := low(TSynLogInfo) to high(TSynLogInfo) do // needed by ProcessOneLine
-    fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^; // [3] -> e.g. 'UST4'
+  fLineHeaderCountToIgnore := 3;
   inherited LoadFromMap(100);
   // 2. fast retrieval of header
   OK := false;
@@ -42891,8 +42958,9 @@ begin
 {  C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-07 11:09:06)
    Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
    TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
-    if (fCount<=4) or LineSizeSmallerThan(0,24) or not IdemPChar(fLines[1],'HOST=') or
-       LineSizeSmallerThan(2,24) or (fLevels=nil) or (fLineLevelOffset=0) then
+    if (fCount<=fLineHeaderCountToIgnore) or LineSizeSmallerThan(0,24) or
+       not IdemPChar(fLines[1],'HOST=') or LineSizeSmallerThan(2,24) or
+       (fLevels=nil) or (fLineLevelOffset=0) then
       exit;
     PBeg := fLines[0];
     PEnd := PBeg+LineSize(0)-12;
@@ -42991,7 +43059,6 @@ begin
       inc(i);
     end;
     LogProcMerged := false; // set LogProp[]
-    inc(fLineLevelOffset,4);
     OK := true;
   finally
     if not OK then begin
@@ -43030,8 +43097,8 @@ function TSynLogFile.LogProcSortComp(A, B: Integer): integer;
 begin
   case fLogProcSortInternalOrder of
     soByName: result :=
-      StrICompLeftTrim(PUTF8Char(fLines[LogProc[A].Index])+fLineLevelOffset,
-                       PUTF8Char(fLines[LogProc[B].Index])+fLineLevelOffset);
+      StrICompLeftTrim(PUTF8Char(fLines[LogProc[A].Index])+fLineTextOffset,
+                       PUTF8Char(fLines[LogProc[B].Index])+fLineTextOffset);
     soByOccurrence: result := LogProc[A].Index-LogProc[B].Index;
     soByTime:       result := LogProc[B].Time-LogProc[A].Time;
     soByProperTime: result := LogProc[B].ProperTime-LogProc[A].ProperTime;
@@ -43061,7 +43128,7 @@ begin
   until I>=R;
 end;
 
-procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char; var max: integer);
+procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
   function DecodeMicroSec(P: PByte): integer;
   var B: integer;
   begin // fast decode 00.020.006 at the end of the line
@@ -43116,8 +43183,10 @@ var V: cardinal;
     MS: integer;
     L: TSynLogInfo;
 begin
-  inherited;
-  if (fCount<4) or (LineEnd-LineBeg<24) then
+  inherited ProcessOneLine(LineBeg,LineEnd);
+  if length(fLevels)<fLinesMax then
+    SetLength(fLevels,fLinesMax);
+  if (fCount<=fLineHeaderCountToIgnore) or (LineEnd-LineBeg<24) then
     exit;
   if fLineLevelOffset=0 then begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
@@ -43127,12 +43196,11 @@ begin
       fLineLevelOffset := 18;
     if LineBeg[19]='!' then begin // thread number = 1 -> '  !'
       inc(fLineLevelOffset,3);
-      fThreadsCount := max;
-      SetLength(fThreads,max);
+      fThreadsCount := fLinesMax;
+      SetLength(fThreads,fLinesMax);
     end;
+    fLineTextOffset := fLineLevelOffset+4;
   end;
-  if length(fLevels)<max then
-    SetLength(fLevels,max);
   V := PCardinal(LineBeg+fLineLevelOffset)^;
   for L := succ(sllNone) to high(TSynLogInfo) do
     if V=fLogLevelsTextMap[L] then begin
@@ -43160,9 +43228,9 @@ begin
       end;
       end;
       if fThreads<>nil then begin
-        if fThreadsCount<max then begin
-          fThreadsCount := max;
-          SetLength(fThreads,max);
+        if fThreadsCount<fLinesMax then begin
+          fThreadsCount := fLinesMax;
+          SetLength(fThreads,fLinesMax);
         end;
         V := Chars3ToInt18(LineBeg+fLineLevelOffset-5);
         fThreads[fCount-1] := V;
@@ -43185,9 +43253,9 @@ begin
   if (self=nil) or (cardinal(index)>=cardinal(fCount)) then
     result := '' else begin
     L := GetLineSize(fLines[index],fMapEnd);
-    if L<=fLineLevelOffset then
+    if L<=fLineTextOffset then
       result := '' else
-      SetString(result,PAnsiChar(fLines[index])+fLineLevelOffset,L-fLineLevelOffset);
+      SetString(result,PAnsiChar(fLines[index])+fLineTextOffset,L-fLineTextOffset);
   end;
 end;
 
