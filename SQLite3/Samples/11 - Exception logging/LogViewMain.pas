@@ -53,6 +53,7 @@ type
     lblServerPort: TLabel;
     edtServerPort: TEdit;
     tmrRefresh: TTimer;
+    btnListClear: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -89,6 +90,7 @@ type
     procedure BtnSearchPreviousClick(Sender: TObject);
     procedure btnServerLaunchClick(Sender: TObject);
     procedure tmrRefreshTimer(Sender: TObject);
+    procedure btnListClearClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -264,6 +266,7 @@ begin
   edtServerRoot.Visible := FLog=nil;
   edtServerPort.Visible := FLog=nil;
   btnServerLaunch.Visible := FLog=nil;
+  btnListClear.Hide;
   List.Visible := FLog<>nil;
   EventsListClickCheck(nil);
 end;
@@ -968,30 +971,32 @@ end;
 
 procedure TMainLogView.btnServerLaunchClick(Sender: TObject);
 begin
-  if (FRemoteLogService<>nil) or (FLog<>nil) then
-    exit;
+  if FRemoteLogService=nil then
   try
     FRemoteLogService := TSQLHTTPRemoteLogServer.Create(
       StringToUTF8(edtServerRoot.Text),StrToInt(edtServerPort.Text),ReceivedOne);
+    Caption := FMainCaption+sRemoteLog;
   except
     on E: Exception do begin
       ShowMessage(E.Message);
       exit;
     end;
   end;
-  Caption := FMainCaption+sRemoteLog;
-  FLog := TSynLogFile.Create;
+  if FLog=nil then
+    FLog := TSynLogFile.Create;
   List.DoubleBuffered := true;
   List.ColCount := 3;
   List.ColWidths[0] := 70;
   List.ColWidths[1] := 60;
   List.ColWidths[2] := 2000;
-  SetLength(FLogSelected,FLog.Count);
+  FLogSelected := nil;
+  FLogSelectedCount := 0;
   lblServerRoot.Hide;
   lblServerPort.Hide;
   edtServerRoot.Hide;
   edtServerPort.Hide;
   btnServerLaunch.Hide;
+  btnListClear.Show;
   EditSearch.Show;
   EditSearch.SetFocus;
   BtnSearchNext.Show;
@@ -1033,6 +1038,12 @@ begin
   List.RowCount := FLog.Count;
   List.TopRow := FLog.Count-List.VisibleRowCount;
   List.Invalidate;
+end;
+
+procedure TMainLogView.btnListClearClick(Sender: TObject);
+begin
+  FreeAndNil(FLog);
+  btnServerLaunchClick(nil);
 end;
 
 end.

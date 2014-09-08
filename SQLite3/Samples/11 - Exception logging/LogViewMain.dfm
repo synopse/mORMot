@@ -314,6 +314,16 @@ object MainLogView: TMainLogView
       TabOrder = 12
       Text = '888'
     end
+    object btnListClear: TButton
+      Left = 16
+      Top = 160
+      Width = 105
+      Height = 25
+      Caption = 'Clear List'
+      TabOrder = 13
+      Visible = False
+      OnClick = btnListClearClick
+    end
   end
   object MemoBottom: TMemo
     Left = 0

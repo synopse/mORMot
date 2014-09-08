@@ -705,6 +705,7 @@ begin
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
   inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
   fEvent := aEvent;
+  AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS 
 end;
 
 destructor TSQLHTTPRemoteLogServer.Destroy;

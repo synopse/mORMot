@@ -504,9 +504,14 @@ end;
 
 procedure TSynCrossPlatformClient.Connection;
 begin
-  if fAuthentication=TSQLRestServerAuthenticationDefault then
-    fClient := GetClient('localhost','User','synopse') else begin
+  if fAuthentication=TSQLRestServerAuthenticationDefault then begin
+    fClient := GetClient('localhost','User','synopse');
+    //fClient.LogToFile(LOG_VERBOSE);
+    fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
+  end else begin
     fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,GetModel,true);
+    //fClient.LogToFile(LOG_VERBOSE);
+    fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
     check(fClient.Connect);
     check(fClient.ServerTimeStamp<>0);
     if fAuthentication<>nil then

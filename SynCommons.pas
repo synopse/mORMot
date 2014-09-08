@@ -5988,6 +5988,8 @@ type
     // - this line won't be stored in the memory mapped file, but stay in memory
     // and appended to the existing lines, until this instance is released 
     procedure AddInMemoryLine(const aNewLine: RawUTF8); virtual;
+    /// clear all in-memory appended rows 
+    procedure AddInMemoryLinesClear; virtual;
     /// retrieve the number of UTF-8 chars of the given line
     // - warning: no range check is performed about supplied index
     function LineSize(aIndex: integer): integer;
@@ -42841,6 +42843,13 @@ begin
   AddRawUTF8(fAppendedLines,fAppendedLinesCount,aNewLine);
   P := pointer(fAppendedLines[fAppendedLinesCount-1]);
   ProcessOneLine(P,P+StrLen(P));
+end;
+
+procedure TMemoryMapText.AddInMemoryLinesClear;
+begin
+  dec(fCount,fAppendedLinesCount);
+  fAppendedLinesCount := 0;
+  fAppendedLines := nil;
 end;
 
 
