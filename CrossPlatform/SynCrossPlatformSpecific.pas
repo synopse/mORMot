@@ -135,6 +135,8 @@ type
   TSQLRestURIParams = record
     /// input parameter containing the caller URI
     Url: string;
+    /// caller URI, without any appended signature
+    UrlWithoutSignature: string;
     /// input parameter containing the caller method
     {$ifdef ISDWS}&Method{$else}Method{$endif}: string;
     /// input parameter containing the caller message headers
