@@ -304,7 +304,7 @@ object MainLogView: TMainLogView
       Width = 121
       Height = 21
       TabOrder = 11
-      Text = 'root'
+      Text = 'LogService'
     end
     object edtServerPort: TEdit
       Left = 16

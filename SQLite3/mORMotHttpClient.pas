@@ -187,7 +187,7 @@ type
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     constructor CreateForRemoteLogging(const aServer, aPort: AnsiString;
-      aLogClass: TSynLogClass; const aRoot: RawUTF8='root');
+      aLogClass: TSynLogClass; const aRoot: RawUTF8='LogService');
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds

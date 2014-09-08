@@ -1128,6 +1128,7 @@ uses
   TypInfo,
 {$endif}
 {$ifndef LVCL}
+  SyncObjs,
   Contnrs,  // for TObjectList
   {$ifndef NOVARIANTS}
     Variants,
@@ -8876,7 +8877,7 @@ type
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     {$endif}
     /// log the corresponding text (if logging is enabled)
-    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
+    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); 
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
     /// override this method to guess if this record can be updated or deleted
@@ -12192,14 +12193,16 @@ type
     fSessionHttpHeader: RawUTF8; // e.g. for TSQLRestServerAuthenticationHttpBasic
     /// used to make the internal client-side process reintrant
     fMutex: TRTLCriticalSection;
+    fRemoteLogClass: TSynLog;
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
-    fRemoteLogClass: TSynLog;
+    fRemoteLogThread: TObject; // private TRemoteLogThread
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
 {$endif}
+    function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
@@ -12330,8 +12333,12 @@ type
     // - returns FALSE on any connection error - check LastErrorMessage and
     // LastErrorException to find out the exact connection error
     function ServerTimeStampSynchronize: boolean; 
-    /// call a 'RemoteLog' remote logging method on the server
+    /// asynchronous call a 'RemoteLog' remote logging method on the server
     // - as implemented by mORMot's LogView tool in server mode
+    // - to be used via ServerRemoteLogStart/ServerRemoteLogStop methods
+    // - a dedicated background thread will run the transmission process without
+    // blocking the main program execution, gathering log rows in chunks in case
+    // of high activity
     // - map TOnTextWriterEcho signature, so that you would be able to set e.g.:
     // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
     function ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
@@ -12344,9 +12351,12 @@ type
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
     // ServerRemoteLog() method
-    // - warning: current implementation will disable all logging during call
-    // to 'RemoteLog', also for any other concurrent thread - to be used only
-    // for simple client debugging running in the main thread   
+    // - warning: current implementation will disable all logging for this
+    // TSQLRestClientURI instance, to avoid any potential concern (e.g. for
+    // multi-threaded process, or in case of communication error): you should
+    // therefore use this TSQLRestClientURI connection only for the remote log
+    // server, e.g. via TSQLHttpClientGeneric.CreateForRemoteLogging() - do
+    // not call ServerRemoteLogStart() from a high-level business client!    
     procedure ServerRemoteLogStart(aLogClass: TSynLogClass);
     /// stop sending all logs to the server 'RemoteLog' method-based service
     procedure ServerRemoteLogStop;
@@ -25065,22 +25075,109 @@ begin
   end;
 end;
 
+function TSQLRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
+begin
+  result := URI(Model.getURICallBack('RemoteLog',nil,0),
+    'PUT',nil,nil,@aText).Lo=HTML_SUCCESS;
+end;
+
+{$ifdef LVCL} // SyncObjs.TEvent not available in LVCL yet
 function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
-var state: TSynLogInfos;
 begin
-  try
-    if fRemoteLogClass<>nil then begin // avoid nested logging
-      state := fRemoteLogClass.Family.Level; 
-      fRemoteLogClass.Family.Level := LOG_STACKTRACE; // log only errors
+  result := InternalRemoteLogSend(Text);
+end;
+{$else}
+type
+  TRemoteLogThread = class(TThread)
+  protected
+    fClient: TSQLRestClientURI;
+    fPendingRows: RawUTF8;
+    fLock: TRTLCriticalSection;
+    fNotifier: TEvent;
+    procedure Execute; override;
+  public
+    constructor Create(aClient: TSQLRestClientURI); reintroduce;
+    destructor Destroy; override;
+    procedure AddRow(const aText: RawUTF8);
+  end;
+
+constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
+begin
+  InitializeCriticalSection(fLock);
+  fNotifier := TEvent.Create(nil,false,false,'');
+  inherited Create(false);
+  fClient := aClient;
+end;
+
+destructor TRemoteLogThread.Destroy;
+var i: integer;
+begin
+  if fPendingRows<>'' then begin
+    fNotifier.SetEvent;
+    for i := 1 to 200 do begin
+      Sleep(10);
+      if fPendingRows='' then
+        break;
     end;
-    result := URI(Model.getURICallBack('RemoteLog',nil,0),'PUT',nil,nil,@Text).
-      Lo=HTML_SUCCESS;
-  finally
-    if fRemoteLogClass<>nil then
-      fRemoteLogClass.Family.Level := state;
+  end;
+  fClient := nil; // will notify Execute that the process is finished
+  fNotifier.SetEvent;
+  Sleep(50); // wait for Execute to finish
+  fNotifier.Free;
+  DeleteCriticalSection(fLock);
+  inherited;
+end;
+
+procedure TRemoteLogThread.AddRow(const aText: RawUTF8);
+begin
+  EnterCriticalSection(fLock);
+  if fPendingRows='' then
+    fPendingRows := aText else
+    fPendingRows := fPendingRows+#13#10+aText;
+  LeaveCriticalSection(fLock);
+  fNotifier.SetEvent;
+end;
+
+procedure TRemoteLogThread.Execute;
+var aText: RawUTF8;
+    i: integer;
+begin
+  while (fClient<>nil) and not Terminated do 
+    if fNotifier.WaitFor(INFINITE)=wrSignaled then begin
+      if Terminated or (fClient=nil) then
+        break;
+      EnterCriticalSection(fLock);
+      aText := fPendingRows;
+      fPendingRows := '';
+      LeaveCriticalSection(fLock);
+      if aText<>'' then
+      try
+        while not fClient.InternalRemoteLogSend(aText) do
+          for i := 1 to 1000 do begin // retry after 2 seconds delay
+            sleep(10); // 10<50 as in Destroy
+            if Terminated or (fClient=nil) then
+              exit;
+          end;
+      except
+        on E: Exception do
+          if (fClient<>nil) and not Terminated then
+            fClient.InternalLog('TRemoteLogThread fatal error: '+
+              'some events were not transmitted',sllWarning);
+      end;
+    end;
+end;
+
+function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
+begin
+  if fRemoteLogThread=nil then
+    result := InternalRemoteLogSend(Text) else begin
+    TRemoteLogThread(fRemoteLogThread).AddRow(Text);
+    result := true;
   end;
 end;
+{$endif LVCL}
 
 function TSQLRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
   FormatMsg: PUTF8Char; const Args: array of const): boolean;
@@ -25090,14 +25187,25 @@ begin
       FormatUTF8(FormatMsg,Args)]));
 end;
 
+type
+  TRemoteLogVoid = class(TSQLLog);
+
 procedure TSQLRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass);
 begin
   if (fRemoteLogClass<>nil) or (aLogClass=nil) then
     exit;
-  if not ServerRemoteLog(sllClient,
-    'Remote Client %(%) Connected',[self,pointer(self)]) then
+  if not ServerRemoteLog(sllClient,'Remote Client %(%) Connected',
+      [self,pointer(self)]) then // first test server without threading
     raise ECommunicationException.CreateUTF8(
       'Connection to RemoteLog server impossible'#13#10'%',[LastErrorMessage]);
+  {$ifdef WITHLOG}
+  TRemoteLogVoid.Family.Level := [];
+  SetLogClass(TRemoteLogVoid); // this client won't log anything
+  {$endif}
+  {$ifndef LVCL}
+  assert(fRemoteLogThread=nil);
+  fRemoteLogThread := TRemoteLogThread.Create(self);
+  {$endif}
   fRemoteLogClass := aLogClass.Add;
   fRemoteLogClass.Writer.EchoAdd(ServerRemoteLog);
 end;
@@ -25109,6 +25217,9 @@ begin
   fRemoteLogClass.Log(sllTrace,'End Echoing to remote server');
   fRemoteLogClass.Writer.EchoRemove(ServerRemoteLog);
   ServerRemoteLog(sllClient,'Remote Client %(%) Disconnected',[self,pointer(self)]);
+  {$ifndef LVCL}
+  FreeAndNil(fRemoteLogThread);
+  {$endif}
   fRemoteLogClass := nil;
 end;
 
