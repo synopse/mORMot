@@ -112,6 +112,8 @@ unit mORMotHttpClient;
        not consistent in practice among clients
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
+     - added TSQLHttpClientGeneric.CreateForRemoteLogging() constructor for
+       easy remote logging to our LogView tool, running as server process
         
 
 }
@@ -181,7 +183,11 @@ type
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// connect to TSQLHttpServer on aServer:aPort
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; 
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; virtual;
+    /// connnect to a LogView HTTP Server for remote logging
+    // - will associate the EchoCustom callback of the log class to this server
+    constructor CreateForRemoteLogging(const aServer, aPort: AnsiString;
+      aLogClass: TSynLogClass; const aRoot: RawUTF8='LogService');
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -245,9 +251,11 @@ type
     /// overridden protected method to handle HTTP connection
     function InternalCheckOpen: boolean; override;
     /// set the fWinAPI class
-    // - the overridden implementation should set the expected fWinAPIClass 
+    // - the overridden implementation should set the expected fWinAPIClass
     procedure InternalSetClass; virtual; abstract;
   public
+    /// connect to TSQLHttpServer on aServer:aPort with the default settings
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); overload; override;
     /// connect to TSQLHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
@@ -258,10 +266,10 @@ type
     // parameters, so we won't publish any properties to change those
     // initial values once created
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      aHttps: boolean=false; const aProxyName: AnsiString='';
+      aHttps: boolean; const aProxyName: AnsiString='';
       const aProxyByPass: AnsiString='';
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce;
+      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce; overload; 
     /// internal class instance used for the connection
     // - will return either a TWinINet, either a TWinHTTP class instance
     property WinAPI: TWinHttpAPI read fWinAPI;
@@ -320,12 +328,9 @@ implementation
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P: PUTF8Char;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self,nil,true);
+  fLogClass.Enter(self,nil,true);
 {$endif}
   Head := Call.InHead;
   Content := Call.InBody;
@@ -359,7 +364,8 @@ begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
 {$ifdef WITHLOG}
   with Call do
-    Log.Log(sllClient,'% % status=% state=%',[method,url,OutStatus,OutInternalState],self);
+    fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',
+      [method,url,OutStatus,OutInternalState],self);
 {$endif}
 end;
 
@@ -383,6 +389,20 @@ begin
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ];
+end;
+
+constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer,
+  aPort: AnsiString; aLogClass: TSynLogClass; const aRoot: RawUTF8);
+var aModel: TSQLModel;
+begin
+  if not Assigned(aLogClass) then
+    raise ECommunicationException.Create('No LogClass');
+  aModel := TSQLModel.Create([],aRoot);
+  Create(aServer,aPort,aModel);
+  aModel.Owner := self;
+  ServerRemoteLogStart(aLogClass);
+  fRemoteLogClass.Log(sllTrace,
+    'Echoing to remote server http://%/%/RemoteLog:%',[aServer,aRoot,aPort]);
 end;
 
 
@@ -460,6 +480,12 @@ begin
   fProxyByPass := aProxyByPass;
   fSendTimeout := SendTimeout;
   fReceiveTimeout := ReceiveTimeout;
+end;
+
+constructor TSQLHttpClientWinGeneric.Create(const aServer,
+  aPort: AnsiString; aModel: TSQLModel);
+begin
+  Create(aServer,aPort,aModel,false); // will use default settings
 end;
 
 function TSQLHttpClientWinGeneric.InternalCheckOpen: boolean;

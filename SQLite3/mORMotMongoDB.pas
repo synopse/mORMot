@@ -204,8 +204,8 @@ begin
     exit; // avoid GPF
   {$ifdef WITHLOG}
   if aMongoDatabase.Client.Log=nil then
-    aMongoDatabase.Client.SetLog(SQLite3Log);
-  SQLite3Log.Enter;
+    aMongoDatabase.Client.SetLog(aServer.LogClass);
+  aServer.LogClass.Enter;
   {$endif}
   Props := aServer.Model.Props[aClass];
   if Props=nil then
@@ -224,13 +224,12 @@ end;
 
 constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer);
 begin
-  inherited;
   if fStoredClassProps=nil then
     raise EORMMongoDBException.CreateUTF8('StoredClassProps needed for %',[aClass]);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllInfo,'will store % using %',[aClass,Collection],self);
+  fOwner.LogFamily.SynLog.Log(sllInfo,'will store % using %',[aClass,Collection],self);
   {$endif}
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
@@ -317,7 +316,7 @@ begin
   inherited;
   FreeAndNil(fBatchWriter);
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllInfo,'Destroy for % using %',[fStoredClass,Collection],self);
+  fOwner.LogFamily.SynLog.Log(sllInfo,'Destroy for % using %',[fStoredClass,Collection],self);
   {$endif}
 end;
 
@@ -345,7 +344,7 @@ begin
   if DocVariantType.IsOfType(res) then
     fEngineLastID := VariantToIntegerDef(res.max,0);
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
+  fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
   {$endif}
 end;
 begin

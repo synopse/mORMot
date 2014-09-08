@@ -151,6 +151,8 @@ unit SynSQLite3;
   - added TSQLDataBase.CacheSize and LockingMode properties for performance tuning
   - added TSQLDataBase.MemoryMappedMB for optional Memory-Mapped I/O process
   - added TSQLDatabase.LogResultMaximumSize property to reduce logged extend
+  - added TSQLDataBase.Log property to customize the logging class (e.g. to
+    match the one used by TSQLRestServerDB)
   - added TSQLDataBase.LockAndFlushCache method to be used instead of Lock('ALTER')
   - added TSQLDataBase.Lock() method to be used instead of Lock('S')
   - added sqlite3.open_v2() support and optional flags for TSQLDataBase.Create()
@@ -2435,7 +2437,7 @@ type
     fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
     {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
-    fLog: TSynLog;
+    fLog: TSynLogClass;
     {$endif}
     /// store TSQLDataBaseSQLFunction instances
     fSQLFunctions: TObjectList;
@@ -2765,8 +2767,9 @@ type
     // - see @http://www.sqlite.org/c3ref/limit.html
     property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
     {$ifdef WITHLOG}
-    {/ access to the log instance associated with this SQLite3 database engine }
-    property Log: TSynLog read fLog;
+    /// access to the log class associated with this SQLite3 database engine
+    // - can be customized, e.g. by overriden TSQLRestServerDB.SetLogClass()
+    property Log: TSynLogClass read fLog write fLog;
     /// sets a maximum size (in bytes) to be logged as sllResult rows
     // - by default, is set to 512 bytes, which sounds a good compromise
     // since it does not make sense to log all the JSON content retrieved from
@@ -3232,7 +3235,7 @@ begin
       'either add SynSQLite3Static to your project uses clause, '+
       'either set sqlite3 := TSQLite3LibraryDynamic.Create to load sqlite3.dll');
   {$ifdef WITHLOG}
-  fLog := SynSQLite3Log.Family.SynLog; // leave fLog=nil if no Logging wanted
+  fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
   {$endif}
   fOpenV2Flags := aOpenV2Flags;
@@ -3285,15 +3288,11 @@ end;
 
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
@@ -3305,15 +3304,11 @@ end;
 
 procedure TSQLDataBase.Execute(const aSQL: RawUTF8);
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   Lock(aSQL); // run one statement -> we can trust isSelect()
   try
@@ -3325,17 +3320,13 @@ end;
 
 function TSQLDataBase.Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   Lock(aSQL);
   try
@@ -3347,15 +3338,11 @@ end;
 
 procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: Int64);
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   Lock(aSQL);
   try
@@ -3367,15 +3354,11 @@ end;
 
 procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: RawUTF8);
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   Lock(aSQL);
   try
@@ -3421,7 +3404,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  SynSQLite3Log.Enter(self,nil,true);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);;
 {$endif}
   result := LockJSON(aSQL,aResultCount); // lock and try getting the request from the cache
   if result='' then // only Execute the DB request if not got from cache
@@ -3436,17 +3419,13 @@ end;
 
 function TSQLDataBase.Execute(const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer;
 var R: TSQLRequest;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   if self=nil then begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
 {$ifdef WITHLOG}
-  Log := SynSQLite3Log.Enter(self,nil,true);
-  Log.Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
 {$endif}
   Lock(aSQL);
   try
@@ -3464,11 +3443,12 @@ begin
       Lock;
       result := sqlite3.last_insert_rowid(DB);
       {$ifdef WITHLOG}
-      {$ifdef DELPHI5OROLDER}
-      fLog.Log(sllDB,'LastInsertRowID='+Int64ToUTF8(result),self);
-      {$else}
-      fLog.Log(sllDB,'LastInsertRowID=%',result,self);
-      {$endif}
+      if fLog<>nil then
+        {$ifdef DELPHI5OROLDER}
+        fLog.Add.Log(sllDB,'LastInsertRowID='+Int64ToUTF8(result),self);
+        {$else}
+        fLog.Add.Log(sllDB,'LastInsertRowID=%',result,self);
+        {$endif}
       {$endif}
     finally
       UnLock;
@@ -3483,11 +3463,12 @@ begin
       Lock;
       result := sqlite3.changes(DB);
       {$ifdef WITHLOG}
-      {$ifdef DELPHI5OROLDER}
-      fLog.Log(sllDB,'LastChangeCount='+Int64ToUTF8(result),self);
-      {$else}
-      fLog.Log(sllDB,'LastChangeCount=%',result,self);
-      {$endif}
+      if fLog<>nil then
+        {$ifdef DELPHI5OROLDER}
+        fLog.Add.Log(sllDB,'LastChangeCount='+Int64ToUTF8(result),self);
+        {$else}
+        fLog.Add.Log(sllDB,'LastChangeCount=%',result,self);
+        {$endif}
       {$endif}
     finally
       UnLock;
@@ -3499,7 +3480,8 @@ begin // SQL statement taken from official SQLite3 FAQ
   SetLength(Names,Execute(SQL_GET_TABLE_NAMES,Names));
   {$ifdef WITHLOG}
   {$ifndef DELPHI5OROLDER}
-  fLog.Log(sllDebug,'TableNames',TypeInfo(TRawUTF8DynArray),Names,self);
+  if fLog<>nil then
+    fLog.Add.Log(sllDebug,'TableNames',TypeInfo(TRawUTF8DynArray),Names,self);
   {$endif}
   {$endif}
 end;
@@ -3591,15 +3573,18 @@ begin
       result := fCache.Find(aSQL,aResultCount); // try to get JSON result from cache
       if result<>'' then begin
         {$ifdef WITHLOG}
-        fLog.Log(sllSQL,aSQL,self);
-        fLog.Log(sllCache,'from cache',self);
-        fLog.Log(sllResult,result,self,fLogResultMaximumSize);
+        if fLog<>nil then begin
+          fLog.Add.Log(sllSQL,aSQL,self);
+          fLog.Add.Log(sllCache,'from cache',self);
+          fLog.Add.Log(sllResult,result,self,fLogResultMaximumSize);
+        end;
         {$endif}
         LeaveCriticalSection(fLock); // found in cache -> leave critical section
       end
       {$ifdef WITHLOG}
       else
-        fLog.Log(sllCache,'not in cache',self);
+        if fLog<>nil then
+          fLog.Add.Log(sllCache,'not in cache',self);
       {$endif}
     end else begin
       // UPDATE, INSERT or any non SELECT statement
@@ -3619,7 +3604,8 @@ begin
   if self<>nil then
   try
     {$ifdef WITHLOG}
-    fLog.Log(sllResult,aJSONResult,self,fLogResultMaximumSize);
+    if fLog<>nil then
+      fLog.Add.Log(sllResult,aJSONResult,self,fLogResultMaximumSize);
     {$endif}
     fCache.Add(aJSONResult,aResultCount); // no-op if Reset was made just before
   finally
@@ -3628,10 +3614,13 @@ begin
 end;
 
 function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
+{$ifdef WITHLOG}
+var Log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true);
-  {$endif}
+  Log := fLog.Enter(self,nil,true);
+{$else}
+begin
+{$endif}
   if self=nil then begin
     result := false;
     exit; // avoid GPF in case of call from a static-only server
@@ -3642,16 +3631,19 @@ begin
   try
     try
       {$ifdef WITHLOG}
-      fLog.Log(sllTrace,'close',self);
+      if Log<>nil then
+        Log.Log(sllTrace,'close',self);
       {$endif}
       DBClose;
       {$ifdef WITHLOG}
-      fLog.Log(sllTrace,'copy file',self);
+      if Log<>nil then
+        Log.Log(sllTrace,'copy file',self);
       {$endif}
       result := CopyFile(pointer(fFileName),pointer(BackupFileName),false);
     finally
       {$ifdef WITHLOG}
-      fLog.Log(sllTrace,'reopen',self);
+      if Log<>nil then
+        Log.Log(sllTrace,'reopen',self);
       {$endif}
       DBOpen;
     end;
@@ -3731,9 +3723,12 @@ end;
 function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
-begin
 {$ifdef WITHLOG}
-  fLog.Enter;
+    Log: ISynLog;
+begin
+  Log := fLog.Enter(self,nil,true);
+{$else}
+begin
 {$endif}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
@@ -3745,12 +3740,13 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    {$ifdef DELPHI5OROLDER}
-    fLog.Log(sllError,'Open('+utf8+') error '+sqlite3_resultToErrorText(result));
-    {$else}
-    fLog.Log(sllError,'open ("%") failed with error % (%)',
-      [utf8,sqlite3_resultToErrorText(result),result]);
-    {$endif}
+    if Log<>nil then
+      {$ifdef DELPHI5OROLDER}
+      Log.Log(sllError,'Open('+utf8+') error '+sqlite3_resultToErrorText(result));
+      {$else}
+      Log.Log(sllError,'open ("%") failed with error % (%)',
+        [utf8,sqlite3_resultToErrorText(result),result]);
+      {$endif}
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
@@ -3887,11 +3883,12 @@ begin
   if self=nil then
     exit;
   {$ifdef WITHLOG}
-  {$ifdef DELPHI5OROLDER}
-  fLog.Log(sllDB,'SetBusyTimeout='+Int32ToUTF8(ms),self);
-  {$else}
-  fLog.Log(sllDB,'SetBusyTimeout=%',ms,self);
-  {$endif}
+  if fLog<>nil then
+    {$ifdef DELPHI5OROLDER}
+    fLog.Add.Log(sllDB,'SetBusyTimeout='+Int32ToUTF8(ms),self);
+    {$else}
+    fLog.Add.Log(sllDB,'SetBusyTimeout=%',ms,self);
+    {$endif}
   {$endif}
   sqlite3.busy_timeout(DB,ms);
   fBusyTimeout := ms;
@@ -3918,7 +3915,8 @@ begin
     inc(InternalState^);
   if fCache.Reset then
   {$ifdef WITHLOG}
-    fLog.Log(sllCache,'cache flushed',self);
+    if fLog<>nil then
+      fLog.Add.Log(sllCache,'cache flushed',self);
   {$endif}
 end;
 
@@ -3935,7 +3933,8 @@ begin
       exit; // already registered with the same name and parameters count
     end;
   {$ifdef WITHLOG}
-  fLog.Log(sllDB,'RegisterSQLFunction '+aFunction.FunctionName,self);
+  if fLog<>nil then
+    fLog.Add.Log(sllDB,'RegisterSQLFunction '+aFunction.FunctionName,self);
   {$endif}
   fSQLFunctions.Add(aFunction);
   if DB<>0 then
@@ -4605,9 +4604,9 @@ begin
   if self<>nil then begin
     result := sqlite3.create_function_v2(DB,pointer(fSQLName),
       FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil,nil);
-    {$ifdef WITHLOG}
-    if result<>SQLITE_OK then 
-      SynSQLite3Log.Add.Log(sllError,'register SQL function failed: '+FunctionName,self);
+    {$ifdef WITHLOGSQLFUNCTION}
+    if (result<>SQLITE_OK) and (fLog<>nil) then
+      fLog.Add.Log(sllError,'register SQL function failed: '+FunctionName,self);
     {$endif}
   end else
     result := SQLITE_ERROR;

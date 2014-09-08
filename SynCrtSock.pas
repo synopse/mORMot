@@ -1762,7 +1762,12 @@ end;
 
 const
   ENGLISH_LANGID = $0409;
-  
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
+  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
+  ERROR_WINHTTP_TIMEOUT = 12002;
+  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
+
+
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 var tmpLen: DWORD;
     err: PChar;
@@ -1781,8 +1786,17 @@ begin
   finally
     LocalFree(HLOCAL(err));
   end;
-  if result='' then
+  if result='' then begin
     result := SysErrorMessage(Code);
+    if result='' then
+      if Code=ERROR_WINHTTP_CANNOT_CONNECT then
+        result := 'cannot connect' else
+      if Code=ERROR_WINHTTP_TIMEOUT then
+        result := 'timeout' else
+      if Code=ERROR_WINHTTP_INVALID_SERVER_RESPONSE then
+        result := 'invalid server response' else
+        result := IntToHex(Code,8);
+  end;
 end;
 
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
@@ -5794,11 +5808,6 @@ begin
   if fRequest=nil then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
-
-const // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
-  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
-  ERROR_WINHTTP_TIMEOUT = 12002;
-  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
 
 procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
 var L: integer;

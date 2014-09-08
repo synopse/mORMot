@@ -119,6 +119,7 @@ unit mORMotHttpServer;
       - renamed SQLite3HttpServer.pas unit to mORMotHttpServer.pas
       - classes TSQLHttpServer* renamed as TSQLHttpServer*
       - added TSQLHttpServer.RemoveServer() and Shutdown methods
+      - added TSQLHttpServer.Port and DomainName properties
       - added TSQLHttpServer.AccessControlAllowOrigin property to handle
         cross-site AJAX requests via cross-origin resource sharing (CORS)
       - TSQLHttpServer now handles sub-domains generic matching (via
@@ -136,6 +137,7 @@ unit mORMotHttpServer;
         be used e.g. to registry an URI to server static file content in addition
         to TSQLRestServer instances - need to override TSQLHttpServer.Request()
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
+      - added TSQLHTTPRemoteLogServer class for easy remote log serving
 
 }
 
@@ -205,7 +207,11 @@ type
   // ! THttpApiServer.AddUrlAuthorize('root','888',false,'+'))
   // - useHttpApiRegisteringURI will first registry the given URI, then use
   // kernel-mode HTTP.SYS server (THttpApiServer) - will need Administrator
-  // execution rights at least one time (e.g. during setup)
+  // execution rights at least one time (e.g. during setup); note that if
+  // the URI is already registered, the server will still be launched, even if
+  // the program does not run as Administrator - it is therefore sufficient
+  // to run such a program once as Administrator to register the URI, when this
+  // useHttpApiRegisteringURI option is set
   // - useHttpSocket will use the standard Sockets library (e.g. WinSock) - it
   // will trigger the Windows firewall popup UAC window at first run
   TSQLHttpServerOptions =
@@ -234,6 +240,9 @@ type
   private
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
+    {$ifdef WITHLOG}
+    fLog: TSynLogClass;
+    {$endif}
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
   protected
     fOnlyJSONRequests: boolean;
@@ -305,8 +314,8 @@ type
     /// you can call this method to prepare the HTTP server for shutting down
     // - it will call all associated TSQLRestServer.Shutdown methods
     // - note that Destroy won't call this method on its own, since the
-    // TSQLRestServer instances may have a life-time uncoupled from HTTP process 
-    procedure Shutdown; 
+    // TSQLRestServer instances may have a life-time uncoupled from HTTP process
+    procedure Shutdown;
     /// try to register another TSQLRestServer instance to the HTTP server
     // - each TSQLRestServer class must have an unique Model.Root value, to
     // identify which instance must handle a particular request from its URI
@@ -328,6 +337,10 @@ type
     /// the associated running HTTP server instance
     // - either THttpApiServer, either THttpServer
     property HttpServer: THttpServerGeneric read fHttpServer;
+    /// the TCP/IP port on which this server is listening to
+    property Port: AnsiString read fPort;
+    /// the URLprefix used for internal HttpAddUrl API call
+    property DomainName: AnsiString read fDomainName;
     /// read-only access to the number of registered internal servers
     property DBServerCount: integer read GetDBServerCount;
     /// read-only access to all internal servers
@@ -349,6 +362,35 @@ type
     property AccessControlAllowOrigin: RawUTF8 read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
   end;
 
+  /// callback expected by TSQLHTTPRemoteLogServer to notify about a received log
+  TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
+
+  /// limited HTTP server which is will receive remote log notifications
+  // - this will create a simple in-memory mORMot server, which will trigger
+  // a supplied callback when a remote log is received
+  // - see TSQLHttpClientWinGeneric.CreateForRemoteLogging() for the client side
+  // - used e.g. by the LogView tool
+  TSQLHTTPRemoteLogServer = class(TSQLHttpServer)
+  protected
+    fServer: TSQLRestServerFullMemory;
+    fEvent: TRemoteLogReceivedOne;
+  public
+    /// initialize the HTTP server and an internal mORMot server
+    // - you can share several HTTP log servers on the same port, if you use
+    // a dedicated root URI and use the http.sys server (which is the default)
+    constructor Create(const aRoot: RawUTF8; aPort: integer;
+      const aEvent: TRemoteLogReceivedOne);
+    /// release the HTTP server and its internal mORMot server
+    destructor Destroy; override;
+    /// the associated mORMot server instance running with this HTTP server
+    property Server: TSQLRestServerFullMemory read fServer;
+  published
+    /// this HTTP server will publish a 'RemoteLog' method-based service
+    // - expecting PUT with text as body, at http://server/root/RemoteLog
+    procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
+  end;
+
+
 
 implementation
 
@@ -358,17 +400,14 @@ implementation
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
 var i, n: integer;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   result := False;
+  if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
+    exit;
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
+  aServer.LogClass.Enter(self);
   try
 {$endif}
-    if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
-      exit;
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
@@ -384,11 +423,12 @@ begin
       aRestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
     fDBServers[n].RestAccessRights := aRestAccessRights;
     result := true;
-  {$ifdef WITHLOG}
+{$ifdef WITHLOG}
   finally
-    Log.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
+    aServer.LogFamily.SynLog.Log(sllDebug,'result=% for Root=%',
+      [JSON_BOOLEAN[Result],aServer.Model.Root]);
   end;
-  {$endif}
+{$endif}
 end;
 
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
@@ -401,7 +441,7 @@ begin
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
+  Log := aServer.LogClass.Enter(self);
   try
 {$endif}
   n := high(fDBServers);
@@ -446,13 +486,13 @@ end;
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: string;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
-{$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
-{$endif}
+  {$ifdef WITHLOG}
+  if high(aServers)<0 then
+    fLog := TSQLLog else
+    fLog := aServers[0].LogClass;
+  fLog.Enter(self);
+  {$endif}
   inherited Create;
   fDomainName := aDomainName;
   fPort := aPort;
@@ -490,7 +530,7 @@ begin
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
-      Log.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
+      fLog.Add.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
       {$endif}
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
@@ -520,7 +560,7 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$ifdef WITHLOG}
-  Log.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
+  fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
 {$endif}
 end;
 
@@ -539,7 +579,7 @@ end;
 destructor TSQLHttpServer.Destroy;
 begin
 {$ifdef WITHLOG}
-  TSQLLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
+  fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
 {$endif}
   FreeAndNil(fHttpServer);
   inherited;
@@ -650,6 +690,37 @@ begin
       // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
       #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
+end;
+
+{ TSQLHTTPRemoteLogServer }
+
+constructor TSQLHTTPRemoteLogServer.Create(const aRoot: RawUTF8;
+  aPort: integer; const aEvent: TRemoteLogReceivedOne);
+var aModel: TSQLModel;
+begin
+  aModel := TSQLModel.Create([],aRoot);
+  fServer := TSQLRestServerFullMemory.Create(aModel);
+  aModel.Owner := fServer;
+  fServer.ServiceMethodRegisterPublishedMethods('',self);
+  inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
+  fEvent := aEvent;
+end;
+
+destructor TSQLHTTPRemoteLogServer.Destroy;
+begin
+  try
+    inherited;
+  finally
+    fServer.Free;
+  end;
+end;
+
+procedure TSQLHTTPRemoteLogServer.RemoteLog(Ctxt: TSQLRestServerURIContext);
+begin
+  if Assigned(fEvent) and (Ctxt.Method=mPUT) then begin
+    fEvent(Ctxt.Call^.InBody);
+    Ctxt.Success;
+  end;
 end;
 
 end.

@@ -1296,7 +1296,7 @@ function IsBlob(PropInfo: TRTTIPropInfo): boolean;
 begin // we only handle plain TByteDynArray properties without getter/setter
 {$ifdef FPC}
   result := (PropInfo^.PropType=TypeInfo(TByteDynArray)) and
-            ((PropInfo^.PropProcs) and 3=0);
+            ((PropInfo^.PropProcs) and 3=ptField);
 {$else}
   result := (PropInfo^.PropType^=TypeInfo(TByteDynArray)) and
             (PropWrap(PropInfo^.GetProc).Kind=$FF);
@@ -1306,7 +1306,8 @@ end;
 function GetTByteDynArrayProp(Instance: TObject; PropInfo: TRTTIPropInfo): PByteDynArray;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := Pointer(NativeUInt(Instance)+NativeUInt(PropInfo^.GetProc) and $00FFFFFF);
+  result := Pointer(NativeUInt(Instance)+
+    (NativeUInt(PropInfo^.GetProc){$ifndef FPC} and $00FFFFFF{$endif}));
 end;
 
 function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;

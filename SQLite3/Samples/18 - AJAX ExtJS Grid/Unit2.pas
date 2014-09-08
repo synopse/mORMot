@@ -15,7 +15,8 @@ type
     fTimeD: TDateTime;
   public
     /// overridden to populate a blank database with some data
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    class procedure InitializeTable(Server: TSQLRestServer;
+      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
   published
     /// underscored names, as defined in our ExtJS scripts
     property TimeD: TDateTime read fTimeD write fTimeD;
@@ -85,7 +86,7 @@ end;
 { TSQLSampleRecord }
 
 class procedure TSQLSampleRecord.InitializeTable(Server: TSQLRestServer;
-  const FieldName: RawUTF8);
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var Rec: TSQLSampleRecord;
 begin
   inherited;

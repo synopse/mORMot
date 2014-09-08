@@ -14,7 +14,7 @@ unit mORMotClient;
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit would work on Smart Mobile Studio 2.1 and later.
+  This unit would work on Smart Mobile Studio 2.1.1 and later.
 }
 
 interface

@@ -145,6 +145,20 @@ object MainLogView: TMainLogView
       Transparent = True
       OnClick = ImageLogoClick
     end
+    object lblServerRoot: TLabel
+      Left = 16
+      Top = 48
+      Width = 62
+      Height = 13
+      Caption = 'Server Root:'
+    end
+    object lblServerPort: TLabel
+      Left = 16
+      Top = 90
+      Width = 59
+      Height = 13
+      Caption = 'Server Port:'
+    end
     object BtnBrowse: TButton
       Left = 16
       Top = 8
@@ -270,6 +284,35 @@ object MainLogView: TMainLogView
       ShowHint = True
       TabOrder = 9
       OnClick = BtnSearchPreviousClick
+    end
+    object btnServerLaunch: TButton
+      Left = 16
+      Top = 132
+      Width = 107
+      Height = 25
+      Hint = 'Lauch a HTTP server  for remote logging'
+      Anchors = [akTop, akRight]
+      Caption = 'Server Launch'
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 10
+      OnClick = btnServerLaunchClick
+    end
+    object edtServerRoot: TEdit
+      Left = 16
+      Top = 64
+      Width = 121
+      Height = 21
+      TabOrder = 11
+      Text = 'LogService'
+    end
+    object edtServerPort: TEdit
+      Left = 16
+      Top = 106
+      Width = 121
+      Height = 21
+      TabOrder = 12
+      Text = '888'
     end
   end
   object MemoBottom: TMemo

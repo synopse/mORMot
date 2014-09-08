@@ -87,6 +87,7 @@ begin
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
     EchoToConsole := LOG_VERBOSE; // log all events to the console
+    PerThreadLog := ptIdentifiedInOnFile; 
   end;
   // manual switch to console mode
   AllocConsole;

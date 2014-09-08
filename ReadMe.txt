@@ -10,7 +10,7 @@ An Open Source Client-Server ORM/SOA framework
 
   
 Synopse mORMot is a Client-Server ORM and Service Oriented Architecture framework
-for Delphi 6 up to XE6, targeting Win32 and Win64 platforms.
+for Delphi 6 up to XE7, targeting Win32 and Win64 platforms.
 
 The main two features of mORMot are therefore:
  - Client-Server ORM/ODM: objects persistence and remote access;

@@ -185,7 +185,7 @@ begin
   AllocConsole;
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
   TSQLLog.Family.Level := LOG_STACKTRACE; // log errors by default
-  if false then // "if not false then" will create around 500 MB of log file
+  if false then // "if not false then" will create around 550 MB of log file
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
     PerThreadLog := ptIdentifiedInOnFile;

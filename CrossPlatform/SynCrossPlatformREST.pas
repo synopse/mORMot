@@ -48,7 +48,7 @@ unit SynCrossPlatformREST;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
 
 }
 
@@ -712,21 +712,8 @@ type
     // let all BATCH process be executed on the server side within an unique
     // transaction grouped by the given number of rows
     function BatchStart(aTable: TSQLRecordClass;
-    {$ifdef ISSMS}
-      AutomaticTransactionPerRow: cardinal=10000): boolean;
-    /// begin a BATCH sequence to speed up huge database change
-    // - this method includes a BatchOptions parameter, which could be set
-    // to tune the SQL execution on server
-    // - this specific method is needed to circumvent current SMS limitations:
-    // SMS does not let [] compile as a set, nor handle sets as parameter types
-    // for overloaded methods
-    function BatchStartWithOptions(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal;
-      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
-    {$else}
       AutomaticTransactionPerRow: cardinal=10000;
       BatchOptions: TSQLRestBatchOptions=[]): boolean; virtual;
-    {$endif}
     /// create a new member in current BATCH sequence
     // - similar to Add(), but in BATCH mode: nothing is sent until BatchSend()
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -1414,7 +1401,7 @@ constructor TSQLRecord.Create(aClient: TSQLRest;
 begin
   Create;
   if aClient<>nil then
-    aClient.Retrieve(SQLWhere,FieldNames,BoundsSQLWhere,self);
+    aClient.Retrieve(FieldNames,SQLWhere,BoundsSQLWhere,self);
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
@@ -2026,28 +2013,8 @@ begin
     Value.fInternalState := InternalState;
 end;
 
-{$ifdef ISSMS}
-function TSQLRest.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal): boolean;
-begin
-  result := BatchStartWithOptions(aTable,AutomaticTransactionPerRow,[]);
-end;
-
-function TSQLRestBatchOptionsToInteger(value: TSQLRestBatchOptions): integer;
-begin
-  asm @result = @value[0]; end;
-end;
-
-function TSQLRest.BatchStartWithOptions(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
-{$else}
-
-type
-  TSQLRestBatchOptionsToInteger = byte;
-
 function TSQLRest.BatchStart(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal; BatchOptions: TSQLRestBatchOptions): boolean;
-{$endif}
 begin
   if (fBatchCount<>0) or (fBatch<>'') or (AutomaticTransactionPerRow<=0) then begin
     result := false; // already opened BATCH sequence
@@ -2056,7 +2023,7 @@ begin
   if aTable<>nil then // sent as '{"Table":["cmd",values,...]}'
     fBatch := '{"'+Model.InfoExisting(aTable).Name+'":';
   fBatch := Format('%s,["automaticTransactionPerRow",%d,"options",%d,',
-    [fBatch,AutomaticTransactionPerRow,TSQLRestBatchOptionsToInteger(BatchOptions)]);
+    [fBatch,AutomaticTransactionPerRow,byte(BatchOptions)]);
   fBatchTable := aTable;
   result := true;
 end;
@@ -2228,13 +2195,16 @@ end;
 
 function FindHeader(const Headers, Name: string): string;
 {$ifdef ISSMS} // dedicated function using faster JavaScript library
+var search,nameValue: string;
+    searchLen: integer;
 begin
   if Headers='' then
     exit '';
-  var search := UpperCase(Name);
-  for var nameValue in Headers.Split(#13#10) do
-    if uppercase(copy(nameValue,1,length(search)))=search then
-      exit copy(nameValue,length(search)+1,length(nameValue));
+  search := UpperCase(Name);
+  searchLen := Length(search);
+  for nameValue in Headers.Split(#13#10) do
+    if uppercase(copy(nameValue,1,searchLen))=search then
+      exit copy(nameValue,searchLen+1,length(nameValue));
 end;
 {$else}
 var i: integer;
@@ -2244,10 +2214,11 @@ begin
   i := 1;
   while GetNextCSV(Headers,i,line,#10) do
     if StartWithPropName(line,Name) then begin
-      result := copy(line,length(Name)+1,length(line)-length(Name)-1);
+      delete(line,1,length(Name));
+      result := trim(line); // will work if EOL is CRLF or LF only
       exit;
     end;
-end;
+end;                    
 {$endif}
 
 function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string;

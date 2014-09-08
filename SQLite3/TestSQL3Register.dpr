@@ -32,6 +32,8 @@ begin
   Call('root');
   for i := 0 to 2 do
     Call('root'+UInt32ToUtf8(i));
+  // for LogView tool in Remote Logging server mode:
+  Call('LogService');
   // we're done
   WriteLn('Done - Press ENTER to Exit');
   ReadLn;
