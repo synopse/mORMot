@@ -52,6 +52,7 @@ type
     edtServerRoot: TEdit;
     lblServerPort: TLabel;
     edtServerPort: TEdit;
+    tmrRefresh: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -87,6 +88,7 @@ type
     procedure ListMenuCopyClick(Sender: TObject);
     procedure BtnSearchPreviousClick(Sender: TObject);
     procedure btnServerLaunchClick(Sender: TObject);
+    procedure tmrRefreshTimer(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -128,13 +130,14 @@ resourcestring
   sStats = #13#10'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10'Size: %s'#13#10#13#10+
     'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10+
     'Date: %s'#13#10#13#10'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
-    'User: %s'#13#10'CPU: %s'#13#10'OS: Windows %s (service pack %d)'#13#10+
+    'User: %s'#13#10'CPU: %s'#13#10'OS: %s'#13#10+
     'Wow64: %d'#13#10#13#10'Log content'#13#10'-----------'#13#10#13#10+
     'Log started at: %s'#13#10'Events count: %d'#13#10'Methods count: %d'#13#10+
     'Threads count: %d'#13#10'Time elapsed: %s'#13#10#13#10+
     'Per event stats'#13#10'---------------'#13#10#13#10;
   sNoFile = 'No File';
   sRemoteLog = 'Remote Log';
+  sUnknown = 'Unknown';
 
 const
   LOG_FILTER: array[TLogFilter] of TSynLogInfos = (
@@ -736,7 +739,7 @@ end;
 procedure TMainLogView.BtnStatsClick(Sender: TObject);
 var M: TMemo;
     F: TForm;
-    s: string;
+    s,win: string;
     sets: array[TSynLogInfo] of integer;
     i: integer;
     P: PUTF8Char;
@@ -761,12 +764,15 @@ begin
       with FLog do begin
         if InstanceName<>'' then
           s := ' / '+UTF8ToString(InstanceName);
+        if OS=wUnknown then
+          win := sUnknown else
+          win := format('Windows %s (service pack %d)',
+            [GetCaptionFromEnum(TypeInfo(TWindowsVersion),ord(OS)),ServicePack]);
         s := format(sStats,
           [FileName,Ansi7ToString(KB(Map.Size)),
            UTF8ToString(ExecutableName),s,Ansi7ToString(ExecutableVersion),
            DateTimeToStr(ExecutableDate),UTF8ToString(ComputerHost),
-           UTF8ToString(RunningUser),Ansi7ToString(CPU),
-           GetCaptionFromEnum(TypeInfo(TWindowsVersion),ord(OS)),ServicePack,
+           UTF8ToString(RunningUser),Ansi7ToString(CPU),win,
            Integer(Wow64),DateTimeToStr(StartDateTime),Count,LogProcCount,
            ThreadsCount,FormatDateTime('hh:mm:ss',EventDateTime(Count-1)-StartDateTime)]);
         fillchar(sets,sizeof(sets),0);
@@ -1008,17 +1014,25 @@ begin
       continue;
     withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
-    if withoutThreads and (FLog.EventThread<>nil) then begin
-      List.ColCount := 4;
-      List.ColWidths[2] := 30;
-      List.ColWidths[3] := 2000;
-    end;
+    if withoutThreads and (FLog.EventThread<>nil) then
+      tmrRefresh.Tag := 1; 
     AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
+  tmrRefresh.Enabled := true; // MUCH faster than Synchronize() to use a timer
+end;
+
+procedure TMainLogView.tmrRefreshTimer(Sender: TObject);
+begin
+  tmrRefresh.Enabled := false;
+  if tmrRefresh.Tag=1 then begin
+    tmrRefresh.Tag := 0;
+    List.ColCount := 4;
+    List.ColWidths[2] := 30;
+    List.ColWidths[3] := 2000;
+  end;
   List.RowCount := FLog.Count;
   List.TopRow := FLog.Count-List.VisibleRowCount;
   List.Invalidate;
 end;
-
 
 end.

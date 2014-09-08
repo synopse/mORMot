@@ -702,6 +702,7 @@ begin
   fServer := TSQLRestServerFullMemory.Create(aModel);
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('',self);
+  fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
   inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
   fEvent := aEvent;
 end;

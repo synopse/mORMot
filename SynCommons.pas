@@ -4955,7 +4955,7 @@ type
     sllServiceCall, sllServiceReturn, sllUserAuth,
     sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
 
-  /// used to define a logging level
+  /// used to define a set of logging level abilities
   // - i.e. a combination of none or several logging event
   // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
   // to log all errors and exceptions

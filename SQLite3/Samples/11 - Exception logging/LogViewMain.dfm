@@ -449,4 +449,11 @@ object MainLogView: TMainLogView
       OnClick = ListMenuCopyClick
     end
   end
+  object tmrRefresh: TTimer
+    Enabled = False
+    Interval = 500
+    OnTimer = tmrRefreshTimer
+    Left = 241
+    Top = 424
+  end
 end

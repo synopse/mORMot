@@ -23384,7 +23384,8 @@ end;
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(Level,Text,self);
+  if Level in fLogFamily.Level then
+    fLogFamily.SynLog.Log(Level,Text,self);
   {$endif}
 end;
 
