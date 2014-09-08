@@ -10,22 +10,9 @@ uses
 {$WARN UNIT_PLATFORM OFF}
   FileCtrl,
 {$WARN UNIT_PLATFORM ON}
-  SynCommons, mORMot, mORMotHttpServer;
+  SynCommons, mORMotHttpServer;
 
 type
-  TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
-  
-  THTTPRemoteLogServer = class(TSQLHttpServer)
-  protected
-    fServer: TSQLRestServerFullMemory;
-    fEvent: TRemoteLogReceivedOne;
-  published
-    constructor Create(const aRoot: RawUTF8; aPort: integer;
-      aEvent: TRemoteLogReceivedOne);
-    destructor Destroy; override;
-    procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
-  end;
-
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
     BtnBrowse: TButton;
@@ -111,7 +98,7 @@ type
     FThreadSelected: TByteDynArray;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
-    FRemoteLogService: THTTPRemoteLogServer;
+    FRemoteLogService: TSQLHTTPRemoteLogServer; // from mORMotHTTPServer
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
     procedure BtnFilterMenu(Sender: TObject);
@@ -978,7 +965,7 @@ begin
   if (FRemoteLogService<>nil) or (FLog<>nil) then
     exit;
   try
-    FRemoteLogService := THTTPRemoteLogServer.Create(
+    FRemoteLogService := TSQLHTTPRemoteLogServer.Create(
       StringToUTF8(edtServerRoot.Text),StrToInt(edtServerPort.Text),ReceivedOne);
   except
     on E: Exception do begin
@@ -1004,7 +991,7 @@ begin
   BtnSearchPrevious.Show;
   ReceivedOne(FormatUTF8(
     '%00 info  Remote Logging Server started on port % with root name "%"',
-    [NowToString(false),FRemoteLogService.Port,FRemoteLogService.fServer.Model.Root]));
+    [NowToString(false),FRemoteLogService.Port,FRemoteLogService.Server.Model.Root]));
   List.Show;
 end;
 
@@ -1014,7 +1001,7 @@ var withoutThreads: boolean;
     line: RawUTF8;
 begin
   P := pointer(Text);
-  repeat // handle multiple log rows in the incoming text 
+  repeat // handle multiple log rows in the incoming text
     line := GetNextLine(P,P);
     if length(line)<24 then
       continue;
@@ -1032,36 +1019,5 @@ begin
   List.Invalidate;
 end;
 
-
-{ THTTPRemoteLogServer }
-
-constructor THTTPRemoteLogServer.Create(const aRoot: RawUTF8;
-  aPort: integer; aEvent: TRemoteLogReceivedOne);
-var aModel: TSQLModel;
-begin
-  aModel := TSQLModel.Create([],aRoot);
-  fServer := TSQLRestServerFullMemory.Create(aModel);
-  aModel.Owner := fServer;
-  fServer.ServiceMethodRegisterPublishedMethods('',self);
-  inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
-  fEvent := aEvent;
-end;
-
-destructor THTTPRemoteLogServer.Destroy;
-begin
-  try
-    inherited;
-  finally
-    fServer.Free;
-  end;
-end;
-
-procedure THTTPRemoteLogServer.RemoteLog(Ctxt: TSQLRestServerURIContext);
-begin
-  if Assigned(fEvent) and (Ctxt.Method=mPUT) then begin
-    fEvent(Ctxt.Call^.InBody);
-    Ctxt.Success;
-  end;
-end;
 
 end.

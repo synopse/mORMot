@@ -137,6 +137,7 @@ unit mORMotHttpServer;
         be used e.g. to registry an URI to server static file content in addition
         to TSQLRestServer instances - need to override TSQLHttpServer.Request()
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
+      - added TSQLHTTPRemoteLogServer class for easy remote log serving
 
 }
 
@@ -357,6 +358,35 @@ type
     // "Origin: " header value
     property AccessControlAllowOrigin: RawUTF8 read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
   end;
+
+  /// callback expected by TSQLHTTPRemoteLogServer to notify about a received log
+  TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
+
+  /// limited HTTP server which is will receive remote log notifications
+  // - this will create a simple in-memory mORMot server, which will trigger
+  // a supplied callback when a remote log is received
+  // - see TSQLHttpClientWinGeneric.CreateForRemoteLogging() for the client side
+  // - used e.g. by the LogView tool
+  TSQLHTTPRemoteLogServer = class(TSQLHttpServer)
+  protected
+    fServer: TSQLRestServerFullMemory;
+    fEvent: TRemoteLogReceivedOne;
+  public
+    /// initialize the HTTP server and an internal mORMot server
+    // - you can share several HTTP log servers on the same port, if you use
+    // a dedicated root URI and use the http.sys server (which is the default)
+    constructor Create(const aRoot: RawUTF8; aPort: integer;
+      const aEvent: TRemoteLogReceivedOne);
+    /// release the HTTP server and its internal mORMot server
+    destructor Destroy; override;
+    /// the associated mORMot server instance running with this HTTP server
+    property Server: TSQLRestServerFullMemory read fServer;
+  published
+    /// this HTTP server will publish a 'RemoteLog' method-based service
+    // - expecting PUT with text as body, at http://server/root/RemoteLog
+    procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
+  end;
+
 
 
 implementation
@@ -659,6 +689,37 @@ begin
       // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
       #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
+end;
+
+{ TSQLHTTPRemoteLogServer }
+
+constructor TSQLHTTPRemoteLogServer.Create(const aRoot: RawUTF8;
+  aPort: integer; const aEvent: TRemoteLogReceivedOne);
+var aModel: TSQLModel;
+begin
+  aModel := TSQLModel.Create([],aRoot);
+  fServer := TSQLRestServerFullMemory.Create(aModel);
+  aModel.Owner := fServer;
+  fServer.ServiceMethodRegisterPublishedMethods('',self);
+  inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
+  fEvent := aEvent;
+end;
+
+destructor TSQLHTTPRemoteLogServer.Destroy;
+begin
+  try
+    inherited;
+  finally
+    fServer.Free;
+  end;
+end;
+
+procedure TSQLHTTPRemoteLogServer.RemoteLog(Ctxt: TSQLRestServerURIContext);
+begin
+  if Assigned(fEvent) and (Ctxt.Method=mPUT) then begin
+    fEvent(Ctxt.Call^.InBody);
+    Ctxt.Success;
+  end;
 end;
 
 end.
