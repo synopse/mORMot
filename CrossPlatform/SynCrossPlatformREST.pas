@@ -2195,13 +2195,16 @@ end;
 
 function FindHeader(const Headers, Name: string): string;
 {$ifdef ISSMS} // dedicated function using faster JavaScript library
+var search,nameValue: string;
+    searchLen: integer;
 begin
   if Headers='' then
     exit '';
-  var search := UpperCase(Name);
-  for var nameValue in Headers.Split(#13#10) do
-    if uppercase(copy(nameValue,1,length(search)))=search then
-      exit copy(nameValue,length(search)+1,length(nameValue));
+  search := UpperCase(Name);
+  searchLen := Length(search);
+  for nameValue in Headers.Split(#13#10) do
+    if uppercase(copy(nameValue,1,searchLen))=search then
+      exit copy(nameValue,searchLen+1,length(nameValue));
 end;
 {$else}
 var i: integer;
@@ -2211,10 +2214,11 @@ begin
   i := 1;
   while GetNextCSV(Headers,i,line,#10) do
     if StartWithPropName(line,Name) then begin
-      result := copy(line,length(Name)+1,length(line)-length(Name)-1);
+      delete(line,1,length(Name));
+      result := trim(line); // will work if EOL is CRLF or LF only
       exit;
     end;
-end;
+end;                    
 {$endif}
 
 function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string;
