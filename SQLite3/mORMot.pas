@@ -829,6 +829,7 @@ unit mORMot;
     - completed HTML_* constant list and messages - feature request [d8de3eb76a]
     - handle HTML_NOTMODIFIED as successful status - as expected by [5d2634e8a3]
     - enhanced sllAuth session creation/deletion logged information
+    - introducing TSQLRest.LogClass property, allowing to set a custom log class
     - added TAuthSession.SentHeaders, RemoteIP and ConnectionID properties
     - added process of Variant and WideString types in TSQLRecord properties,
       including any custom type, like TDocVariant or TBSONVariant (for MongoDB
@@ -3977,7 +3978,7 @@ type
     /// optional error message which will be transmitted as JSON error (if set)
     CustomErrorMsg: RawUTF8;
     {$ifdef WITHLOG}
-    /// associated logging instance
+    /// associated logging instance for the current thread on the server
     // - you can use it to log some process on the server side
     Log: TSynLog;
     {$endif}
@@ -8869,6 +8870,11 @@ type
     fBatch: TJSONSerializer;
     fBatchTable, fBatchTablePreviousSendData: TSQLRecordClass;
     fBatchCount: integer;
+    {$ifdef WITHLOG}
+    fLogClass: TSynLogClass;   // =SQLite3Log by default
+    fLogFamily: TSynLogFamily; // =SQLite3Log.Family by default
+    procedure SetLogClass(aClass: TSynLogClass); virtual;
+    {$endif}
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
       {$ifdef HASINLINE}inline;{$endif}
@@ -9021,6 +9027,15 @@ type
     destructor Destroy; override;
     /// the Database Model associated with this REST Client or Server
     property Model: TSQLModel read fModel;
+    {$ifdef WITHLOG}
+    /// the logging class used for this instance
+    // - is set by default to SQLite3Log, but could be set to a custom class
+    property LogClass: TSynLogClass read fLogClass write SetLogClass;
+    /// the logging family used for this instance
+    // - is set by default to SQLite3Log.Family, but could be set to something
+    // else by setting a custom class to the LogClass property
+    property LogFamily: TSynLogFamily read fLogFamily;
+    {$endif}
   public
     /// get the row count of a specified table
     // - return -1 on error
@@ -13413,7 +13428,10 @@ type
 {$ifdef WITHLOG}
 var
   /// TSQLLog class is used for logging for all our ORM related functions
-  // - this global variable can be used to customize it
+  // - this global variable can be used to customize it for the whole process
+  // - each TSQLRest.LogClass property is set by default to this SQLite3Log
+  // - you can override the TSQLRest.LogClass property value to customize it
+  // for a given REST instance
   SQLite3Log: TSynLogClass = TSQLLog;
 {$endif}
 
@@ -23333,6 +23351,9 @@ begin
   fRoutingClass := TSQLRestRoutingREST;
   for cmd := Low(cmd) to high(cmd) do
     InitializeCriticalSection(fAcquireExecution[cmd].Lock);
+  {$ifdef WITHLOG}
+  SetLogClass(SQLite3Log); // by default
+  {$endif}
 end;
 
 destructor TSQLRest.Destroy;
@@ -23353,9 +23374,17 @@ end;
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(Level,Text,self);
+  fLogFamily.SynLog.Log(Level,Text,self);
   {$endif}
 end;
+
+{$ifdef WITHLOG}
+procedure TSQLRest.SetLogClass(aClass: TSynLogClass);
+begin
+  fLogClass := aClass;
+  fLogFamily := fLogClass.Family;
+end;
+{$endif}
 
 procedure TSQLRest.SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
 begin
@@ -25297,7 +25326,7 @@ begin
   if self=nil then
     result := HTML_UNAVAILABLE else begin
 {$ifdef WITHLOG}
-    SQLite3Log.Enter(Self,pointer(aMethodName),true);
+    fLogClass.Enter(Self,pointer(aMethodName),true);
 {$endif}
     url := Model.getURICallBack(aMethodName,aTable,aID)+
       UrlEncode(aNameValueParameters);
@@ -25305,12 +25334,12 @@ begin
     if aResponseHead<>nil then
       aResponseHead^ := header;
 {$ifdef WITHLOG}
-    if aResponse<>'' then
-    with SQLite3Log.Family do
-      if sllServiceReturn in Level then
+    if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
         if IsHTMLContentTypeTextual(pointer(header)) then
-          SynLog.Log(sllServiceReturn,aResponse,nil,MAX_SIZE_RESPONSE_LOG) else
-          SynLog.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header]);
+          fLogFamily.SynLog.Log(sllServiceReturn,
+            aResponse,nil,MAX_SIZE_RESPONSE_LOG) else
+          fLogFamily.SynLog.Log(sllServiceReturn,
+            '% bytes "%"',[length(aResponse),header]);
 {$endif}
   end;
 end;
@@ -25437,7 +25466,7 @@ DoRetry:
     if (Call.OutStatus=HTML_TIMEOUT) and aRetryOnceOnTimeout then begin
       aRetryOnceOnTimeout := false;
 {$ifdef WITHLOG}
-      SQLite3Log.Add.Log(sllError,'% % returned "408 Request Timeout" -> RETRY',
+      fLogFamily.SynLog.Log(sllError,'% % returned "408 Request Timeout" -> RETRY',
         [method,url],self);
 {$endif}
       goto DoRetry;
@@ -25448,7 +25477,7 @@ DoRetry:
         fLastErrorMessage := StatusMsg else
         fLastErrorMessage := Call.OutBody;
 {$ifdef WITHLOG}
-      SQLite3Log.Add.Log(sllError,'% % returned % % with message  %',
+      fLogFamily.SynLog.Log(sllError,'% % returned % % with message  %',
         [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],self);
 {$endif}
     end;
@@ -25483,12 +25512,12 @@ begin
   if self=nil then
     result := HTML_UNAVAILABLE else begin
 {$ifdef WITHLOG}
-    SQLite3Log.Enter(self,pointer(aMethodName),true);
+    fLogClass.Enter(self,pointer(aMethodName),true);
 {$endif}
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
       'PUT',@aResponse,aResponseHead,@aSentData).Lo;
 {$ifdef WITHLOG}
-    SQLite3Log.Add.Log(sllServiceReturn,'result=% resplen=%',
+    fLogFamily.SynLog.Log(sllServiceReturn,'result=% resplen=%',
       [result,length(aResponse)]);
 {$endif}
   end;
@@ -26040,7 +26069,7 @@ begin
   DeleteCriticalSection(fSessionCriticalSection);
   inherited Destroy; // calls fServices.Free which will update fStats
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
+  fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
   for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
   try
@@ -26055,7 +26084,7 @@ end;
 procedure TSQLRestServer.Shutdown;
 begin
   {$ifdef WITHLOG}
-  SQLite3Log.Enter(self,'Shutdown').
+  fLogClass.Enter(self,'Shutdown').
     Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
   {$endif}
   EnterCriticalSection(fSessionCriticalSection);
@@ -27737,8 +27766,7 @@ begin
   try
     InterlockedIncrement(fStats.fCurrentRequestCount);
     {$ifdef WITHLOG}
-    Ctxt.Log := SQLite3Log.Add;
-    Ctxt.Log.Enter(Self,pointer(Ctxt.URIWithoutSignature),true);
+    Ctxt.Log := fLogClass.Enter(Self,pointer(Ctxt.URIWithoutSignature),true).Instance;
     {$endif}
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTML_UNAVAILABLE) else
@@ -27921,7 +27949,7 @@ begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     {$ifdef WITHLOG}
-    SQLite3Log.Add.Log(sllUserAuth,'Deleted session %/% from %/%',
+    fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
       [User.LogonName,IDCardinal,RemoteIP,ConnectionID],self);
     {$endif}
     if Assigned(OnSessionClosed) then
@@ -27998,7 +28026,7 @@ begin
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
+  fLogFamily.SynLog.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
     [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
   {$endif}
   if Sender.ThreadID<>CurrentThreadId then
@@ -28030,7 +28058,7 @@ begin
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
+  fLogFamily.SynLog.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
     [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
   {$endif}
   if Sender.ThreadID<>CurrentThreadId then
@@ -28349,7 +28377,7 @@ var HistBlob: TSQLRecordHistory;
     ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
 begin
   {$ifdef WITHLOG}
-  SQLite3Log.Enter;
+  fLogClass.Enter;
   {$endif}
   EnterCriticalSection(fAcquireExecution[execORMWrite].Lock); // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
@@ -29266,7 +29294,7 @@ begin
 end;
 begin
 {$ifdef WITHLOG}
-  Log := SQLite3Log.Enter;
+  Log := fLogClass.Enter;
 {$endif}
 {$ifdef ANONYMOUSNAMEDPIPE}
   if not ImpersonateAnonymousToken(GetCurrentThread) then
@@ -29343,7 +29371,7 @@ var Card: cardinal;
 {$endif}
 begin
 {$ifdef WITHLOG}
-  Log := SQLite3Log.Enter(self,nil,true);
+  Log := fLogClass.Enter(self,nil,true);
 {$endif}
   Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
   EnterCriticalSection(fMutex);
@@ -30649,7 +30677,7 @@ begin
     StorageUnLock;
   end;
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllDB,'UpdateFile(%) done in %',
+  fLogFamily.SynLog.Log(sllDB,'UpdateFile(%) done in %',
     [fStoredClassRecordProps.SQLTableName,Timer.Stop],self);
   {$endif}
 end;
@@ -31075,7 +31103,7 @@ begin
     S.Free;
   end;
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllDB,'UpdateToFile done in %',[Timer.Stop],self);
+  fLogFamily.SynLog.Log(sllDB,'UpdateToFile done in %',[Timer.Stop],self);
   {$endif}
 end;
 
@@ -32861,7 +32889,7 @@ var Msg: RawUTF8;
 {$endif}
 begin
 {$ifdef WITHLOG}
-  Log := SQLite3Log.Enter(self,nil,true);
+  Log := fLogClass.Enter(self,nil,true);
 {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
@@ -35065,7 +35093,7 @@ begin
   result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
   if result.fID=0 then begin
     {$ifdef WITHLOG}
-    SQLite3Log.Add.Log(sllUserAuth,
+    fServer.fLogFamily.SynLog.Log(sllUserAuth,
       'User.LogonName=% not found in AuthUser table',[aUserName],self);
     {$endif}
     FreeAndNil(result);
@@ -35508,9 +35536,8 @@ begin
   // 2nd call: user was authenticated -> release used context
   ServerSSPIAuthUser(fSSPIAuthContexts[SecCtxIdx],UserName);
   {$ifdef WITHLOG}
-  with SQLite3Log.Family do
-  if sllUserAuth in Level then
-    SynLog.Log(sllUserAuth,'% Authentication success for %',
+  if sllUserAuth in fServer.fLogFamily.Level then
+    fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
       [SecPackageName(fSSPIAuthContexts[SecCtxIdx]),UserName],self);
   {$endif}
   // now client is authenticated -> create a session for aUserName
@@ -37927,7 +37954,7 @@ begin
   if Inst.Instance=nil then
     exit;
   {$ifdef WITHLOG}
-  SQLite3Log.Add.Log(sllServiceCall,'Adding % instance (id=%)',
+  fRest.fLogFamily.SynLog.Log(sllServiceCall,'Adding % instance (id=%)',
     [fInterfaceURI,Inst.InstanceID],self);
   {$endif}
   P := pointer(fInstances);
@@ -37954,7 +37981,7 @@ begin
       if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
         // deprecated -> mark this entry as empty
         {$ifdef WITHLOG}
-        SQLite3Log.Add.Log(sllServiceCall,
+        fRest.fLogFamily.SynLog.Log(sllServiceCall,
           'Deleted % instance (id=%) after % ms timeout (max % ms)',
           [fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],self);
         {$endif}
@@ -38944,9 +38971,6 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   aClientDrivenID: PCardinal=nil; aServiceCustomAnswer: PServiceCustomAnswer=nil): boolean;
 var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
-    {$ifdef WITHLOG}
-    LogLevel: TSynLogInfos; // faster execution if logging is not enabled
-    {$endif}
 begin
   result := false;
   if Self=nil then
@@ -38954,9 +38978,8 @@ begin
   if fClient=nil then
     fClient := fRest as TSQLRestClientURI;
   {$ifdef WITHLOG}
-  LogLevel := SQLite3Log.Family.Level;
-  if sllEnter in LogLevel then
-    SQLite3Log.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
+  if sllEnter in fRest.fLogFamily.Level then
+    fRest.LogClass.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
   {$endif}
   // compute URI according to current routing scheme
   if fRest.Services.ExpectMangledURI then
@@ -38974,8 +38997,8 @@ begin
   // decode result
   if aServiceCustomAnswer=nil then begin // decode JSON object
     {$ifdef WITHLOG}
-    if (sllServiceReturn in LogLevel) and (resp<>'') then
-        SQLite3Log.Add.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
+    if (sllServiceReturn in fRest.fLogFamily.Level) and (resp<>'') then
+      fRest.fLogFamily.SynLog.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
     {$endif}
     JSONDecode(resp,['result','id'],Values,True);
     if Values[0]=nil then begin // assume ID=0 if no "id":... value 
@@ -38989,9 +39012,9 @@ begin
       aClientDrivenID^ := GetCardinal(Values[1]);
   end else begin // free answer returned in TServiceCustomAnswer 
     {$ifdef WITHLOG}
-    if sllServiceReturn in LogLevel then
-      SQLite3Log.Add.Log(sllServiceReturn,'TServiceCustomAnswer(%) returned len=%',
-        [head,length(resp)]);
+    if sllServiceReturn in fRest.fLogFamily.Level then
+      fRest.fLogFamily.SynLog.Log(sllServiceReturn,
+        'TServiceCustomAnswer(%) returned len=%',[head,length(resp)]);
     {$endif}
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;

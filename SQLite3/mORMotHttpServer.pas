@@ -240,6 +240,9 @@ type
   private
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
+    {$ifdef WITHLOG}
+    fLog: TSynLogClass;
+    {$endif}
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
   protected
     fOnlyJSONRequests: boolean;
@@ -397,17 +400,14 @@ implementation
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
 var i, n: integer;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   result := False;
+  if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
+    exit;
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
+  aServer.LogClass.Enter(self);
   try
 {$endif}
-    if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
-      exit;
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
@@ -423,11 +423,12 @@ begin
       aRestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
     fDBServers[n].RestAccessRights := aRestAccessRights;
     result := true;
-  {$ifdef WITHLOG}
+{$ifdef WITHLOG}
   finally
-    Log.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
+    aServer.LogFamily.SynLog.Log(sllDebug,'result=% for Root=%',
+      [JSON_BOOLEAN[Result],aServer.Model.Root]);
   end;
-  {$endif}
+{$endif}
 end;
 
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
@@ -440,7 +441,7 @@ begin
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
+  Log := aServer.LogClass.Enter(self);
   try
 {$endif}
   n := high(fDBServers);
@@ -485,13 +486,13 @@ end;
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: string;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
-{$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self);
-{$endif}
+  {$ifdef WITHLOG}
+  if high(aServers)<0 then
+    fLog := TSQLLog else
+    fLog := aServers[0].LogClass;
+  fLog.Enter(self);
+  {$endif}
   inherited Create;
   fDomainName := aDomainName;
   fPort := aPort;
@@ -529,7 +530,7 @@ begin
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
-      Log.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
+      fLog.Add.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
       {$endif}
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
@@ -559,7 +560,7 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$ifdef WITHLOG}
-  Log.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
+  fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
 {$endif}
 end;
 
@@ -578,7 +579,7 @@ end;
 destructor TSQLHttpServer.Destroy;
 begin
 {$ifdef WITHLOG}
-  TSQLLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
+  fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
 {$endif}
   FreeAndNil(fHttpServer);
   inherited;

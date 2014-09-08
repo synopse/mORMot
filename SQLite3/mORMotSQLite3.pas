@@ -348,6 +348,10 @@ type
     function GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean): PSQLRequest;
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
+    {$ifdef WITHLOG}
+    /// overriden method which will also set the DB.LogClass
+    procedure SetLogClass(aClass: TSynLogClass); override;
+    {$endif}
     /// overridden methods for direct sqlite3 database engine call:
     function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
     function MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
@@ -648,12 +652,12 @@ begin
     result := @fStaticStatement;
     result^.Prepare(DB.DB,SQL);
     {$ifdef WITHLOG}
-    DB.Log.Log(sllSQL,'% is no prepared statement',SQL,self);
+    fLogFamily.SynLog.Log(sllSQL,'% is no prepared statement',SQL,self);
     {$endif}
     exit;
   end;
   {$ifdef WITHLOG}
-  DB.Log.Log(sllSQL,'% prepared with % param%',[SQL,maxParam,PLURAL_FORM[maxParam>1]],self);
+  fLogFamily.SynLog.Log(sllSQL,'% prepared with % param%',[SQL,maxParam,PLURAL_FORM[maxParam>1]],self);
   {$endif}
   result := fStatementCache.Prepare(GenericSQL);
   // bind parameters
@@ -692,7 +696,7 @@ begin
     result := 0; // indicates error
     if SentData='' then begin
       {$ifdef WITHLOG}
-      DB.Log.Log(sllError,'BATCH with MainEngineAdd(%,SentData="") -> '+
+      fLogFamily.SynLog.Log(sllError,'BATCH with MainEngineAdd(%,SentData="") -> '+
         'DEFAULT VALUES not implemented',[SQL],self);
       {$endif}
     end else
@@ -753,6 +757,15 @@ begin
   inherited Create(aModel,aHandleUserAuthentication);
   InitializeEngine;
 end;
+
+{$ifdef WITHLOG}
+procedure TSQLRestServerDB.SetLogClass(aClass: TSynLogClass);
+begin
+  inherited;
+  if DB<>nil then
+    DB.Log := aClass; // ensure low-level SQLite3 engine will share the same log
+end;
+{$endif}
 
 procedure TSQLRestServerDB.InitializeEngine;
 var i,m: integer;
@@ -966,7 +979,7 @@ begin
   except
     on E: ESQLite3Exception do begin
       {$ifdef WITHLOG}
-      DB.Log.Log(sllError,'% for %',[E,aSQL],self);
+      fLogFamily.SynLog.Log(sllError,'% for %',[E,aSQL],self);
       {$else}
       LogToTextFile('TSQLRestServerDB.InternalExecute: '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}
@@ -1004,7 +1017,7 @@ begin
   except
     on E: ESQLite3Exception do begin
       {$ifdef WITHLOG}
-      DB.Log.Log(sllError,'% for %',[E,aSQL],self);
+      fLogFamily.SynLog.Log(sllError,'% for %',[E,aSQL],self);
       {$else}
       LogToTextFile(ClassName+'.StoredProcExecute Error: '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}

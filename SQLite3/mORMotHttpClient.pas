@@ -328,12 +328,9 @@ implementation
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P: PUTF8Char;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self,nil,true);
+  fLogClass.Enter(self,nil,true);
 {$endif}
   Head := Call.InHead;
   Content := Call.InBody;
@@ -367,7 +364,8 @@ begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
 {$ifdef WITHLOG}
   with Call do
-    Log.Log(sllClient,'% % status=% state=%',[method,url,OutStatus,OutInternalState],self);
+    fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',
+      [method,url,OutStatus,OutInternalState],self);
 {$endif}
 end;
 
