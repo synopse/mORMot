@@ -1401,7 +1401,7 @@ constructor TSQLRecord.Create(aClient: TSQLRest;
 begin
   Create;
   if aClient<>nil then
-    aClient.Retrieve(SQLWhere,FieldNames,BoundsSQLWhere,self);
+    aClient.Retrieve(FieldNames,SQLWhere,BoundsSQLWhere,self);
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
