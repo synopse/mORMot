@@ -975,6 +975,7 @@ begin
   end;
   Caption := FMainCaption+sRemoteLog;
   FLog := TSynLogFile.Create;
+  List.DoubleBuffered := true;
   List.ColCount := 3;
   List.ColWidths[0] := 70;
   List.ColWidths[1] := 60;

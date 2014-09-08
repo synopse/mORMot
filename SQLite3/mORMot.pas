@@ -973,7 +973,8 @@ unit mORMot;
     - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
     - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
       synchronization with the server - can be handy to test the connection
-    - added TSQLRestClientURI.ServerRemoteLog wrapper to method-based service
+    - added TSQLRestClientURI.ServerRemoteLog wrapper to method-based service,
+      and corresponding ServerRemoteLogStart and ServerRemoteLogStop methods
     - added TSQLRest.TableHasRows/TableRowCount methods, and overridden direct
       implementation for TSQLRestServer/TSQLRestStorageInMemory (including
       SQL pattern recognition for TSQLRestStorageInMemory)
@@ -12179,7 +12180,7 @@ type
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
-    fRemoteLogActive: boolean;
+    fRemoteLogClass: TSynLog;
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -12319,7 +12320,21 @@ type
     // - map TOnTextWriterEcho signature, so that you would be able to set e.g.:
     // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
     function ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
-      const Text: RawUTF8): boolean; virtual;
+      const Text: RawUTF8): boolean; overload; virtual;
+    /// internal method able to emulate a call to TSynLog.Add.Log()
+    // - will compute timestamp and event text, than call the overloaded
+    // ServerRemoteLog() method
+    function ServerRemoteLog(Level: TSynLogInfo; FormatMsg: PUTF8Char;
+      const Args: array of const): boolean; overload;
+    /// start to send all logs to the server 'RemoteLog' method-based service
+    // - will associate the EchoCustom callback of the running log class to the
+    // ServerRemoteLog() method
+    // - warning: current implementation will disable all logging during call
+    // to 'RemoteLog', also for any other concurrent thread - to be used only
+    // for simple client debugging running in the main thread   
+    procedure ServerRemoteLogStart(aLogClass: TSynLogClass);
+    /// stop sending all logs to the server 'RemoteLog' method-based service
+    procedure ServerRemoteLogStop;
 
     {/ begin a transaction
      - implements REST BEGIN collection
@@ -25023,16 +25038,49 @@ end;
 
 function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
+var state: TSynLogInfos;
 begin
-  if fRemoteLogActive then
-    result := false else
-    try // direct call of URI() to avoid nested logging
-      fRemoteLogActive := true;
-      result := URI(Model.getURICallBack('RemoteLog',nil,0),
-        'PUT',nil,nil,@Text).Lo=HTML_SUCCESS;
-    finally
-      fRemoteLogActive := false;
+  try
+    if fRemoteLogClass<>nil then begin // avoid nested logging
+      state := fRemoteLogClass.Family.Level; 
+      fRemoteLogClass.Family.Level := LOG_STACKTRACE; // log only errors
     end;
+    result := URI(Model.getURICallBack('RemoteLog',nil,0),'PUT',nil,nil,@Text).
+      Lo=HTML_SUCCESS;
+  finally
+    if fRemoteLogClass<>nil then
+      fRemoteLogClass.Family.Level := state;
+  end;
+end;
+
+function TSQLRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
+  FormatMsg: PUTF8Char; const Args: array of const): boolean;
+begin
+  result := ServerRemoteLog(nil,Level,
+    FormatUTF8('%00%    %',[NowToString(false),LOG_LEVEL_TEXT[Level],
+      FormatUTF8(FormatMsg,Args)]));
+end;
+
+procedure TSQLRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass);
+begin
+  if (fRemoteLogClass<>nil) or (aLogClass=nil) then
+    exit;
+  if not ServerRemoteLog(sllClient,
+    'Remote Client %(%) Connected',[self,pointer(self)]) then
+    raise ECommunicationException.CreateUTF8(
+      'Connection to RemoteLog server impossible'#13#10'%',[LastErrorMessage]);
+  fRemoteLogClass := aLogClass.Add;
+  fRemoteLogClass.Writer.EchoAdd(ServerRemoteLog);
+end;
+
+procedure TSQLRestClientURI.ServerRemoteLogStop;
+begin
+  if fRemoteLogClass=nil then
+    exit;
+  fRemoteLogClass.Log(sllTrace,'End Echoing to remote server');
+  fRemoteLogClass.Writer.EchoRemove(ServerRemoteLog);
+  ServerRemoteLog(sllClient,'Remote Client %(%) Disconnected',[self,pointer(self)]);
+  fRemoteLogClass := nil;
 end;
 
 function TSQLRestClientURI.UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
@@ -25165,6 +25213,11 @@ var t,i,aID: integer;
     Table: TSQLRecordClass;
 begin
   fBatch.Free;
+  try
+    ServerRemoteLogStop;
+  except
+    on Exception do;
+  end;
   try
     // unlock all still locked records by this client
     if Model<>nil then
@@ -25435,7 +25488,8 @@ begin
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
       'PUT',@aResponse,aResponseHead,@aSentData).Lo;
 {$ifdef WITHLOG}
-    SQLite3Log.Add.Log(sllServiceReturn,'result=% resplen=%',[result,length(aResponse)]);
+    SQLite3Log.Add.Log(sllServiceReturn,'result=% resplen=%',
+      [result,length(aResponse)]);
 {$endif}
   end;
 end;
