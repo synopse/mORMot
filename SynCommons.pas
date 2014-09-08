@@ -41858,6 +41858,10 @@ var aSynLog: TSynLog;
     aStackFrame: PtrUInt;
 begin
   // inlined aSynLog := Family.SynLog
+  if PtrInt(self)=0 then begin
+    result := nil;
+    exit;
+  end;
   aFamily := PPointer(PtrInt(Self)+vmtAutoTable)^;
   if aFamily=nil then
     aSynLog := FamilyCreate.SynLog else
