@@ -324,6 +324,16 @@ object MainLogView: TMainLogView
       Visible = False
       OnClick = btnListClearClick
     end
+    object btnListSave: TButton
+      Left = 16
+      Top = 192
+      Width = 105
+      Height = 25
+      Caption = 'Save List'
+      TabOrder = 14
+      Visible = False
+      OnClick = btnListSaveClick
+    end
   end
   object MemoBottom: TMemo
     Left = 0
@@ -465,5 +475,12 @@ object MainLogView: TMainLogView
     OnTimer = tmrRefreshTimer
     Left = 241
     Top = 424
+  end
+  object dlgSaveList: TSaveDialog
+    DefaultExt = '.log'
+    Filter = 'log|*.log|txt|*.txt|synlz|*.synlz'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    Left = 345
+    Top = 200
   end
 end

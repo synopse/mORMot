@@ -54,6 +54,8 @@ type
     edtServerPort: TEdit;
     tmrRefresh: TTimer;
     btnListClear: TButton;
+    btnListSave: TButton;
+    dlgSaveList: TSaveDialog;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -91,6 +93,7 @@ type
     procedure btnServerLaunchClick(Sender: TObject);
     procedure tmrRefreshTimer(Sender: TObject);
     procedure btnListClearClick(Sender: TObject);
+    procedure btnListSaveClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -267,6 +270,7 @@ begin
   edtServerPort.Visible := FLog=nil;
   btnServerLaunch.Visible := FLog=nil;
   btnListClear.Hide;
+  btnListSave.Hide;
   List.Visible := FLog<>nil;
   EventsListClickCheck(nil);
 end;
@@ -997,6 +1001,7 @@ begin
   edtServerPort.Hide;
   btnServerLaunch.Hide;
   btnListClear.Show;
+  btnListSave.Show;
   EditSearch.Show;
   EditSearch.SetFocus;
   BtnSearchNext.Show;
@@ -1044,6 +1049,20 @@ procedure TMainLogView.btnListClearClick(Sender: TObject);
 begin
   FreeAndNil(FLog);
   btnServerLaunchClick(nil);
+end;
+
+procedure TMainLogView.btnListSaveClick(Sender: TObject);
+begin
+  dlgSaveList.FileName := 'Remote '+DateTimeToIso8601(Now,false,' ');
+  if not dlgSaveList.Execute then
+    exit;
+  fLog.SaveToFile('temp~.log',
+    StringToUTF8(paramstr(0))+' 0.0.0.0 ('+NowToString+')'#13+
+    'Host=Remote User=Unknown CPU=Unknown OS=0.0=0.0.0 Wow64=0 Freq=1'#13+
+    'LogView '+SYNOPSE_FRAMEWORK_VERSION+' Remote '+NowToString+#13#13);
+  if dlgSaveList.FilterIndex=3 then
+    FileSynLZ('temp~.log',dlgSaveList.FileName,LOG_MAGIC) else
+    RenameFile('temp~.log',dlgSaveList.FileName);
 end;
 
 end.
