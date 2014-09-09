@@ -539,8 +539,9 @@ unit SynCommons;
   - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
     a new column will be added for each logged row - LogViewer has been updated
     to allow easy and efficient multi-thread process logging
-  - introducing TSynLogFamily.RotateFileCount and RotateFileSizeKB properties,
-    to enable log file rotation and SynLZ compression - request [72feb66d45]
+  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB
+    and RotateFileDailyAtHour properties, to enable log file rotation or SynLZ
+    compression, by size or at given hour - request [72feb66d45] + [b3e8cc8424]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
   - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
   - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
@@ -8027,7 +8028,8 @@ function CreateInternalWindow(const aWindowName: string; aObject: TObject): HWND
 function ReleaseInternalWindow(var aWindowName: string; var aWindow: HWND): boolean;
 
 var
-  /// compatibility function, to be implemented according to the running OS
+  /// the number of milliseconds that have elapsed since the system was started
+  // - compatibility function, to be implemented according to the running OS
   // - will use the corresponding native API function under Vista+, or
   // will emulate it for older Windows versions
   GetTickCount64: function: Int64; stdcall;
@@ -10736,6 +10738,7 @@ type
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
+    fRotateFileAtHour: integer;
     function CreateSynLog: TSynLog;
     {$ifdef MSWINDOWS}
     procedure SetAutoFlush(TimeOut: cardinal);
@@ -10811,16 +10814,17 @@ type
     // - by default, ptMergedInOneFile will indicate that all threads are logged
     // in the same file, in occurence order (so multi-thread process on server
     // side may be difficult to interpret)
-    // - will be ignored if RotateFileCount and RotateFileSizeKB are set
-    // (the internal thread list shall be defined within the same process)
+    // - if RotateFileCount and RotateFileSizeKB/RotateFileDailyAtHour are set,
+    // will be ignored (internal thread list shall be defined for one process)
     property PerThreadLog: TSynLogPerThreadMode read fPerThreadLog write fPerThreadLog;
     /// if TRUE, the log file name will contain the Computer name - as '(MyComputer)'
     property IncludeComputerNameInFileName: boolean read fIncludeComputerNameInFileName write fIncludeComputerNameInFileName;
     /// if TRUE, will log high-resolution time stamp instead of ISO 8601 date and time
     // - this is less human readable, but allows performance profiling of your
     // application on the customer side (using TSynLog.Enter methods)
-    // - set to FALSE by default, or if RotateFileCount and RotateFileSizeKB are
-    // set (the high resolution frequency is set in the log file header) 
+    // - set to FALSE by default, or if RotateFileCount and RotateFileSizeKB /
+    // RotateFileDailyAtHour are set (the high resolution frequency is set
+    // in the log file header, so expects a single file) 
     property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
@@ -10843,9 +10847,11 @@ type
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     // - can be set to a number of rotating files: rotation and compression will 
-    // happen, and main file size will be up to RotateFileSizeKB number of bytes
+    // happen, and main file size will be up to RotateFileSizeKB number of bytes,
+    // or when RotateFileDailyAtHour time is reached
     // - if set to 1, no .synlz backup will be created, so the main log file will
-    // be restarted from scratch when it reaches RotateFileSizeKB size
+    // be restarted from scratch when it reaches RotateFileSizeKB size or when
+    // RotateFileDailyAtHour time is reached
     // - if set to a number > 1, some rotated files will be compressed using the
     // SynLZ algorithm, and will be named e.g. as MainLogFileName.0.synlz ..
     // MainLogFileName.7.synlz for RotateFileCount=9 (total count = 9, including
@@ -10855,6 +10861,12 @@ type
     // - specify the maximum file size upon which .synlz rotation takes place
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileSizeKB: cardinal read fRotateFileSize write fRotateFileSize;
+    /// fixed hour of the day where logging files rotation should be performed
+    // - by default, equals -1, meaning no rotation
+    // - you can set a time value between 0 and 23 to force the rotation at this
+    // specified hour 
+    // - is not used if RotateFileCount is left to its default 0
+    property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 20, maximum is 255
@@ -10952,6 +10964,7 @@ type
     {$endif}
     fFileName: TFileName;
     fFileRotationSize: cardinal;
+    fFileRotationNextHour: Int64;
     fThreadHash: TWordDynArray;
     fThreadContexts: array of TSynLogThreadContext;
     fThreadContextCount: integer;
@@ -31995,8 +32008,8 @@ begin
     Flush;
   inc(B);
   Ticks := GetTickCount; // this call is very fast (just one integer mul)
-  if GlobalClock<>Ticks then begin
-    GlobalClock := Ticks; // typically in range of 10-16 ms
+  if GlobalClock<>Ticks then begin // typically in range of 10-16 ms
+    GlobalClock := Ticks;
     GetLocalTime(GlobalTime); // avoid slower API call
   end;
   YearToPChar(GlobalTime.wYear,B);
@@ -41475,6 +41488,7 @@ begin
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
+  fRotateFileAtHour := -1;
   fBufferSize := 4096;
   fStackTraceLevel := 20;
   {$ifndef FPC}
@@ -41495,9 +41509,12 @@ begin
   try
     result := fSynLogClass.Create(self);
     i := SynLogFileList.Add(result);
-    if (fPerThreadLog=ptOneFilePerThread) and
-       (fRotateFileCount=0) and (fRotateFileSize=0) then
-      SynLogFileIndexThreadVar[fIdent] := i+1 else
+    if fPerThreadLog=ptOneFilePerThread then 
+      if (fRotateFileCount=0) and (fRotateFileSize=0) and (fRotateFileAtHour<0) then 
+        SynLogFileIndexThreadVar[fIdent] := i+1 else begin
+        fPerThreadLog := ptIdentifiedInOnFile; // excluded by rotation
+        fGlobalLog := result;
+      end else
       fGlobalLog := result;
   finally
     SynLogFileList.UnLock;
@@ -41616,8 +41633,8 @@ end;
 function TSynLogFamily.SynLog: TSynLog;
 var ndx: integer;
 begin
-  if (fRotateFileCount=0) and (fRotateFileSize=0) and
-     (fPerThreadLog=ptOneFilePerThread) then begin
+  if (fRotateFileCount=0) and (fPerThreadLog=ptOneFilePerThread) and
+     (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
     ndx := SynLogFileIndexThreadVar[fIdent]-1;
     if ndx>=0 then // SynLogFileList.Lock/Unlock is not mandatory here
       result := SynLogFileList.List[ndx] else
@@ -41818,10 +41835,8 @@ begin
   try
     CloseLogFile;
     SynLogFileList.Remove(self);
-    with fFamily do
-      if (fPerThreadLog=ptOneFilePerThread) and
-         (fRotateFileCount=0) and (fRotateFileSize=0) then
-        SynLogFileIndexThreadVar[fIdent] := 0;
+    if fFamily.fPerThreadLog=ptOneFilePerThread then
+      SynLogFileIndexThreadVar[fFamily.fIdent] := 0;
   finally
     SynLogFileList.Unlock;
   end;
@@ -42136,7 +42151,7 @@ begin
     fFrequencyTimeStamp := 0;
   end else
   {$endif}
-    if fFileRotationSize>0 then
+    if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
       fFamily.HighResolutionTimeStamp := false;
   {$ifdef MSWINDOWS}
   ExeVersionRetrieve;
@@ -42263,8 +42278,7 @@ begin
          AddRecursion(i,sllNone);
        end;
     LogCurrentTime;
-    if (fFamily.PerThreadLog=ptIdentifiedInOnFile) and
-       (fFamily.fRotateFileCount=0) and (fFamily.fRotateFileSize=0) then
+    if fFamily.fPerThreadLog=ptIdentifiedInOnFile then
       fWriter.AddInt18ToChars3(fThreadIndex);
     fCurrentLevel := Level;
     fWriter.AddShort(LOG_LEVEL_TEXT[Level]);
@@ -42314,6 +42328,10 @@ begin
     if Level in fFamily.fLevelStackTrace then
       AddStackTrace(nil);
     fWriter.AddEndOfLine(fCurrentLevel);
+    if (fFileRotationNextHour<>0) and (GetTickCount64>=fFileRotationNextHour) then begin
+      inc(fFileRotationNextHour,(1000*60*60));
+      PerformRotation;
+    end else
     if (fFileRotationSize>0) and (fWriter.fTotalFileSize>fFileRotationSize) then
       PerformRotation;
   finally
@@ -42393,6 +42411,7 @@ procedure TSynLog.CreateLogWriter;
 {$ifndef MSWINDOWS}
 var i: integer;
 {$endif}
+var timeNow,hourRotate,timeBeforeRotate: TDateTime;
 begin
   if fWriterStream=nil then begin
     {$ifdef MSWINDOWS}
@@ -42406,18 +42425,27 @@ begin
     if i>0 then
       SetLength(fFileName,i-1);
     {$endif}
-    if (fFamily.fRotateFileCount>0) and (fFamily.fRotateFileSize>0) then begin
-      fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
-    end else begin
-      fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
-      fFileRotationSize := 0;
+    fFileRotationSize := 0;
+    if fFamily.fRotateFileCount>0 then begin
+      if fFamily.fRotateFileSize>0 then
+        fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
+      if fFamily.fRotateFileAtHour in [0..23] then begin
+        hourRotate := EncodeTime(fFamily.fRotateFileAtHour,0,0,0);
+        timeNow := Time;
+        if hourRotate<timeNow then
+          hourRotate := hourRotate+1; // trigger will be tomorrow
+        timeBeforeRotate := hourRotate-timeNow;
+        fFileRotationNextHour := GetTickCount64+trunc(timeBeforeRotate*MSecsPerDay);
+      end;
     end;
-    {$ifdef MSWINDOWS}
+    if (fFileRotationSize=0) and (fFileRotationNextHour=0) then
+      fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
+     {$ifdef MSWINDOWS}
     if IsLibrary then
       fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
     {$endif}
-    if fFamily.PerThreadLog=ptOneFilePerThread then
-        fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
+    if fFamily.fPerThreadLog=ptOneFilePerThread then
+      fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
     fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
     if fFamily.NoFile then
       fWriterStream := TFakeWriterStream.Create else begin
