@@ -365,6 +365,7 @@ type
   /// callback expected by TSQLHTTPRemoteLogServer to notify about a received log
   TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
 
+  {$M+}
   /// limited HTTP server which is will receive remote log notifications
   // - this will create a simple in-memory mORMot server, which will trigger
   // a supplied callback when a remote log is received
@@ -389,6 +390,7 @@ type
     // - expecting PUT with text as body, at http://server/root/RemoteLog
     procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
   end;
+  {$M-}
 
 
 
@@ -703,7 +705,7 @@ begin
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('',self);
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
-  inherited Create(UInt32ToUtf8(aPort),fServer,'+',useHttpApiRegisteringURI,nil,1);
+  inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',useHttpApiRegisteringURI,nil,1);
   fEvent := aEvent;
   AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS 
 end;
