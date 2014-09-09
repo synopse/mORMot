@@ -42435,7 +42435,7 @@ begin
       AddStackTrace(nil);
     fWriter.AddEndOfLine(fCurrentLevel);
     if (fFileRotationNextHour<>0) and (GetTickCount64>=fFileRotationNextHour) then begin
-      inc(fFileRotationNextHour,(1000*60*60));
+      inc(fFileRotationNextHour,MSecsPerDay);
       PerformRotation;
     end else
     if (fFileRotationSize>0) and (fWriter.fTotalFileSize>fFileRotationSize) then
