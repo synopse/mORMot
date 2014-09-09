@@ -12194,6 +12194,7 @@ type
     /// used to make the internal client-side process reintrant
     fMutex: TRTLCriticalSection;
     fRemoteLogClass: TSynLog;
+    fRemoteLogOwnedByFamily: boolean;
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
@@ -12351,14 +12352,20 @@ type
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
     // ServerRemoteLog() method
+    // - if aClientOwnedByFamily is TRUE, this TSQLRestClientURI instance
+    // lifetime will be managed by TSynLogFamily - which is mostly wished
+    // - if aClientOwnedByFamily is FALSE, you should manage this instance
+    // life time, and may call ServerRemoteLogStop to stop remote logging
     // - warning: current implementation will disable all logging for this
     // TSQLRestClientURI instance, to avoid any potential concern (e.g. for
     // multi-threaded process, or in case of communication error): you should
     // therefore use this TSQLRestClientURI connection only for the remote log
     // server, e.g. via TSQLHttpClientGeneric.CreateForRemoteLogging() - do
-    // not call ServerRemoteLogStart() from a high-level business client!    
-    procedure ServerRemoteLogStart(aLogClass: TSynLogClass);
+    // not call ServerRemoteLogStart() from a high-level business client!
+    procedure ServerRemoteLogStart(aLogClass: TSynLogClass;
+      aClientOwnedByFamily: boolean);
     /// stop sending all logs to the server 'RemoteLog' method-based service
+    // - do nothing if aClientOwnedByFamily was TRUE for ServerRemoteLogStart
     procedure ServerRemoteLogStop;
 
     {/ begin a transaction
@@ -25201,39 +25208,35 @@ begin
       FormatUTF8(FormatMsg,Args)]));
 end;
 
-type
-  TRemoteLogVoid = class(TSQLLog);
-
-procedure TSQLRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass);
+procedure TSQLRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass;
+  aClientOwnedByFamily: boolean);
 begin
   if (fRemoteLogClass<>nil) or (aLogClass=nil) then
     exit;
-  if not ServerRemoteLog(sllClient,'Remote Client %(%) Connected',
-      [self,pointer(self)]) then // first test server without threading
+  {$ifdef WITHLOG}
+  SetLogClass(TSynLog.Void); // this client won't log anything
+  {$endif}
+  if not ServerRemoteLog(sllClient,'Remote Client % Connected',[self]) then
+    // first test server without threading
     raise ECommunicationException.CreateUTF8(
       'Connection to RemoteLog server impossible'#13#10'%',[LastErrorMessage]);
-  {$ifdef WITHLOG}
-  TRemoteLogVoid.Family.Level := [];
-  SetLogClass(TRemoteLogVoid); // this client won't log anything
-  {$endif}
   {$ifndef LVCL}
   assert(fRemoteLogThread=nil);
   fRemoteLogThread := TRemoteLogThread.Create(self);
   {$endif}
   fRemoteLogClass := aLogClass.Add;
-  fRemoteLogClass.Writer.EchoAdd(ServerRemoteLog);
+  aLogClass.Family.EchoRemoteStart(self,ServerRemoteLog,aClientOwnedByFamily);
+  fRemoteLogOwnedByFamily := aClientOwnedByFamily;
 end;
 
 procedure TSQLRestClientURI.ServerRemoteLogStop;
 begin
   if fRemoteLogClass=nil then
     exit;
-  fRemoteLogClass.Log(sllTrace,'End Echoing to remote server');
-  fRemoteLogClass.Writer.EchoRemove(ServerRemoteLog);
-  ServerRemoteLog(sllClient,'Remote Client %(%) Disconnected',[self,pointer(self)]);
-  {$ifndef LVCL}
-  FreeAndNil(fRemoteLogThread);
-  {$endif}
+  if not fRemoteLogOwnedByFamily then begin
+    fRemoteLogClass.Log(sllTrace,'End Echoing to remote server');
+    fRemoteLogClass.Family.EchoRemoteStop;
+  end;
   fRemoteLogClass := nil;
 end;
 
@@ -25366,12 +25369,9 @@ destructor TSQLRestClientURI.Destroy;
 var t,i,aID: integer;
     Table: TSQLRecordClass;
 begin
+  if GarbageCollectorFreeing then // may be owned by a TSynLogFamily
+    SetLogClass(nil);
   fBatch.Free;
-  try
-    ServerRemoteLogStop;
-  except
-    on Exception do;
-  end;
   try
     // unlock all still locked records by this client
     if Model<>nil then
@@ -25387,6 +25387,12 @@ begin
     SessionClose; // if not already notified
   finally
     // release memory and associated classes
+    if fRemoteLogClass<>nil then begin
+      {$ifndef LVCL}
+      FreeAndNil(fRemoteLogThread);
+      {$endif}
+      ServerRemoteLogStop;
+    end;
     fSessionUser.Free;
     try
       inherited Destroy; // fModel.Free if owned by this TSQLRest instance
