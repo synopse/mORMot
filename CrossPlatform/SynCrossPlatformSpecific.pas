@@ -132,13 +132,17 @@ type
   {$endif ISDWS}
 
   /// used to store the request of a REST call
+  {$ifdef USESYNCRT}
+  TSQLRestURIParams = object
+  {$else}
   TSQLRestURIParams = record
+  {$endif}
     /// input parameter containing the caller URI
     Url: string;
     /// caller URI, without any appended signature
     UrlWithoutSignature: string;
     /// input parameter containing the caller method
-    {$ifdef ISDWS}&Method{$else}Method{$endif}: string;
+    Verb: string;
     /// input parameter containing the caller message headers
     InHead: string;
     /// input parameter containing the caller message body
@@ -157,6 +161,10 @@ type
     OnSuccess: TProcedureRef;
     OnError: TProcedureRef;
     {$endif}
+    /// set the caller content
+    procedure Init(const aUrl,aVerb,aUTF8Body: string);
+    /// get the response message body as UTF-8
+    function OutBodyUtf8: string;
   end;
 
   /// the connection parameters, as stored and used by TAbstractHttpConnection
@@ -467,7 +475,7 @@ begin
   try
     fConnection.RequestHeaders.Text := Call.InHead;
     fConnection.RequestBody := InStr;
-    fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
+    fConnection.HTTPMethod(Call.Verb,fURL+Call.Url,OutStr,[]);
     Call.OutStatus := fConnection.ResponseStatusCode;
     Call.OutHead := fConnection.ResponseHeaders.Text;
     Call.OutBody := OutStr.Bytes;
@@ -554,15 +562,15 @@ begin
       InStr.Seek(0,soBeginning);
       fConnection.Request.Source := InStr;
     end;
-    if Call.Method='GET' then // allow 404 as valid Call.OutStatus
+    if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
       fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_NOTFOUND]) else
-    if Call.Method='POST' then
+    if Call.Verb='POST' then
       fConnection.Post(fURL+Call.Url,InStr,OutStr) else
-    if Call.Method='PUT' then
+    if Call.Verb='PUT' then
       fConnection.Put(fURL+Call.Url,InStr) else
-    if Call.Method='DELETE' then
+    if Call.Verb='DELETE' then
       fConnection.Delete(fURL+Call.Url) else
-      raise Exception.CreateFmt('Indy does not know method %s',[Call.Method]);
+      raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
     Call.OutStatus := fConnection.Response.ResponseCode;
     Call.OutHead := fConnection.Response.RawHeaders.Text;
     OutLen := OutStr.Size;
@@ -628,7 +636,7 @@ begin
   try
     SetString(inb,PAnsiChar(Call.InBody),length(Call.InBody));
     Call.OutStatus := fConnection.Request(RawByteString(Call.Url),
-      RawByteString(Call.Method),KeepAlive,RawByteString(Call.InHead),
+      RawByteString(Call.Verb),KeepAlive,RawByteString(Call.InHead),
       inb,RawByteString(InDataType),outh,outb);
     Call.OutHead := string(outh);
     n := length(outb);
@@ -880,9 +888,9 @@ begin
       end;
     end;
     Call.XHR.onerror := Call.OnError;
-    Call.XHR.open(Call.Method,fURL+Call.Url,true);  // true for asynch call
+    Call.XHR.open(Call.Verb,fURL+Call.Url,true);  // true for asynch call
   end else
-    Call.XHR.open(Call.Method,fURL+Call.Url,false); // false for synch call
+    Call.XHR.open(Call.Verb,fURL+Call.Url,false); // false for synch call
   if Call.InHead<>'' then begin
     var i = 1;
     var line: string;
@@ -913,4 +921,30 @@ begin
 end;
 
 {$endif ISDWS}
+
+
+{ TSQLRestURIParams }
+
+procedure TSQLRestURIParams.Init(const aUrl,aVerb,aUTF8Body: string);
+begin
+  Url := aUrl;
+  Verb := aVerb;
+  if aUTF8Body='' then
+    exit;
+  {$ifdef ISSMS}
+  InBody := aUTF8Body;
+  {$else}
+  InBody := TextToHttpBody(aUTF8Body);
+  {$endif}
+end;
+
+function TSQLRestURIParams.OutBodyUtf8: String;
+begin
+  {$ifdef ISSMS}
+  result := OutBody; // XMLHttpRequest did convert UTF-8 into DomString
+  {$else}
+  HttpBodyToText(OutBody,result);
+  {$endif}
+end;
+
 end.

@@ -2362,9 +2362,7 @@ var Call: TSQLRestURIParams;
 begin
   if fLogClient=nil then
     exit;
-  Call.Url := fLogClient.getURICallBack('RemoteLog',nil,0);
-  Call.Method := 'PUT';
-  Call.InBody := TextToHttpBody(Text);
+  Call.Init(fLogClient.getURICallBack('RemoteLog',nil,0),'PUT',Text);
   fLogClient.URI(Call);
 end;
 
@@ -2464,15 +2462,10 @@ begin
   Log(sllSQL,SQL);
   // strict HTTP does not allow any body content -> encode SQL at URL
   // so we expect reUrlEncodedSQL to be defined in AllowRemoteExecute
-  Call.Url := Model.Root+UrlEncode(['sql',sql]);
-  Call.Method := 'GET';
+  Call.Init(Model.Root+UrlEncode(['sql',sql]),'GET','');
   URI(Call);
   if Call.OutStatus=HTML_SUCCESS then begin
-    {$ifdef ISSMS}
-    json := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
-    {$else}
-    HttpBodyToText(Call.OutBody,json);
-    {$endif}
+    json := Call.OutBodyUtf8;
     result := TSQLTableJSON.Create(json);
     result.fInternalState := fInternalState;
   end else
@@ -2488,16 +2481,12 @@ begin
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
   Call.Url := getURIID(tableIndex,aID);
   if ForUpdate then
-     Call.Method := 'LOCK' else
-     Call.Method := 'GET';
+     Call.Verb := 'LOCK' else
+     Call.Verb := 'GET';
   URI(Call);
   result := Call.OutStatus=HTML_SUCCESS;
   if result then begin
-    {$ifdef ISSMS}
-    json := Call.OutBody; // XMLHttpRequest did convert UTF-8 into DomString
-    {$else}
-    HttpBodyToText(Call.OutBody,json);
-    {$endif}
+    json := Call.OutBodyUtf8;
     Value.FromJSON(json);
     Value.fInternalState := fInternalState;
   end;
@@ -2553,7 +2542,7 @@ begin
     fInternalState := receivedState;
   if sllTrace in fLogLevel then
     Log(sllTrace,'%s %s status=%d state=%d in=%d out=%d',
-      [Call.Method,Call.UrlWithoutSignature,Call.OutStatus,fInternalState,
+      [Call.Verb,Call.UrlWithoutSignature,Call.OutStatus,fInternalState,
        length(Call.InBody),length(Call.OutBody)]);
 end;
 
@@ -2577,19 +2566,13 @@ end;
 
 procedure TSQLRestClientURI.InternalServiceCheck(const aMethodName: string;
   const Call: TSQLRestURIParams);
-var jsonres: string;
 begin
   {$ifdef ISSMS}
   if Assigned(Call.OnSuccess) then
     exit; // asynchronous call do not have a result yet
-  if Call.OutStatus<>HTML_SUCCESS then begin
-    jsonres := Call.OutBody;
-  {$else}
-  if Call.OutStatus<>HTML_SUCCESS then begin
-    HttpBodyToText(Call.OutBody,jsonres);
   {$endif}
-    Log(sllError,'Service %s returned %s',[aMethodName,jsonres]);;
-  end else
+  if Call.OutStatus<>HTML_SUCCESS then
+    Log(sllError,'Service %s returned %s',[aMethodName,Call.OutBodyUtf8]) else
     Log(sllServiceReturn,'%s success',[aMethodName]);
 end;
 
@@ -2598,9 +2581,8 @@ procedure TSQLRestClientURI.CallBackGet(const aMethodName: string;
   aTable: TSQLRecordClass; aID: integer);
 begin
   Log(sllServiceCall,'Method-based service %s',[aMethodName]);
-  Call.Url := getURICallBack(aMethodName,aTable,aID)+
-    UrlEncode(aNameValueParameters);
-  Call.Method := 'GET';
+  Call.Url := getURICallBack(aMethodName,aTable,aID)+UrlEncode(aNameValueParameters);
+  Call.Verb := 'GET';
   URI(Call);
   InternalServiceCheck(aMethodName,Call);
 end;
@@ -2619,13 +2601,7 @@ var {$ifdef ISSMS}
 begin
   start := Now;
   Log(sllServiceCall,'BATCH with %d rows',[fBatchCount]);
-  Call.Url := getURICallBack('Batch',Table,0);
-  Call.Method := 'POST';
-  {$ifdef ISSMS}
-  Call.InBody := Data;
-  {$else}
-  Call.InBody := TextToHttpBody(Data);
-  {$endif}
+  Call.Init(getURICallBack('Batch',Table,0),'POST',Data);
   URI(Call);
   result := Call.OutStatus;
   if result<>HTML_SUCCESS then begin
@@ -2704,13 +2680,7 @@ begin
   if aCaller.fInstanceImplementation=sicClientDriven then
     clientDrivenID := (aCaller as TServiceClientAbstractClientDriven).ClientID;
   ServicesRouting.ClientSideInvoke(url,aMethod,aParams,clientDrivenID,sent);
-  Call.Url := url;
-  {$ifdef ISSMS}
-  Call.InBody := sent;
-  {$else}
-  Call.InBody := TextToHttpBody(sent);
-  {$endif}
-  Call.Method := 'POST';
+  Call.Init(url,'POST',sent);
   URI(Call); // asynchronous or synchronous call
   InternalServiceCheck(methodName,Call); // will log only for synchronous call
 end;
@@ -2741,18 +2711,20 @@ begin
           onSuccess(self) else
           if assigned(onError) then
             onError(self);
-      dec(fAsynchCount);
+      if fAsynchCount>0 then
+        dec(fAsynchCount);
       if fAsynchCount=0 then
         CallAsynchText; // send any pending asynchronous task
     end;
   end;
-  if Assigned(onError) then
-    Call.OnError := lambda
+  Call.OnError := lambda
+    if Assigned(onError) then
       onError(Self);
+    if fAsynchCount>0 then
       dec(fAsynchCount);
-      if fAsynchCount=0 then
-        CallAsynchText; // send any pending asynchronous task, even on error
-    end;
+    if fAsynchCount=0 then
+      CallAsynchText; // send any pending asynchronous task, even on error
+  end;
 end;
 
 procedure TSQLRestClientURI.SetAsynchText(const Text: string);
@@ -2767,9 +2739,8 @@ var Call: TSQLRestURIParams;
 begin
   if length(fAsynchPendingText)=0 then
     exit; // nothing to send
-  Call.Url := getURICallBack('RemoteLog',nil,0);
-  Call.Method := 'PUT';
-  Call.InBody := fAsynchPendingText.Join(#13#10); // all rows sent at once
+  Call.Init(getURICallBack('RemoteLog',nil,0),'PUT',
+    fAsynchPendingText.Join(#13#10)); // all rows sent at once
   fAsynchPendingText.Clear;
   SetAsynch(Call,lambda end,nil,nil); // asynchronous call without error check
   URI(Call);
@@ -2847,15 +2818,13 @@ end;
 
 function TSQLRestClientURI.Connect: boolean;
 var Call: TSQLRestURIParams;
-    tmp: string;
 begin
   Log(sllInfo,'Connect',self);
   CallBackGet('TimeStamp',[],Call);
   result := Call.OutStatus=HTML_SUCCESS;
   if not result then
     exit;
-  HttpBodyToText(Call.OutBody,tmp);
-  result := SetServerTimeStamp(tmp);
+  result := SetServerTimeStamp(Call.OutBodyUtf8);
 end;
 
 procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
@@ -2896,13 +2865,7 @@ var Call: TSQLRestURIParams;
     i: integer;
 begin
   result := 0;
-  Call.Url := getURIID(tableIndex,0);
-  Call.Method := 'POST';
-  {$ifdef ISSMS}
-  Call.InBody := json; // XMLHttpRequest will convert the DomString into UTF-8
-  {$else}
-  Call.InBody := TextToHttpBody(json);
-  {$endif}
+  Call.Init(getURIID(tableIndex,0),'POST',json);
   URI(Call);
   if Call.OutStatus<>HTML_CREATED then begin
     Log(sllError,'Error creating %s with %s',[Model.Info[tableIndex].Name,json]);
@@ -2926,8 +2889,7 @@ begin
   if ID<=0 then
     exit;
   tableIndex := Model.GetTableIndexExisting(Table);
-  Call.Url := getURIID(tableIndex,ID);
-  Call.Method := 'DELETE';
+  Call.Init(getURIID(tableIndex,ID),'DELETE','');
   URI(Call);
   if Call.OutStatus=HTML_SUCCESS then
     result := true;
@@ -2938,13 +2900,7 @@ function TSQLRestClientURI.ExecuteUpdate(tableIndex,ID: integer;
   const json: string): boolean; 
 var Call: TSQLRestURIParams;
 begin
-  Call.Url := getURIID(tableIndex,ID);
-  Call.Method := 'PUT';
-  {$ifdef ISSMS}
-  Call.InBody := json;
-  {$else}
-  Call.InBody := TextToHttpBody(json);
-  {$endif}
+  Call.Init(getURIID(tableIndex,ID),'PUT',json);
   URI(Call);
   result := Call.OutStatus=HTML_SUCCESS;
   Log(LOGLEVELDB[result],'Update %s.ID=%d with %s',[Model.Info[tableIndex].Name,ID,json]);
