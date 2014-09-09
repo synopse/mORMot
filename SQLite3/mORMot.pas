@@ -27711,7 +27711,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     Par := Parameters;
     if Par<>nil then
       while Par^='+' do inc(Par); // ignore trailing spaces
-    if IdemPChar(Par, '[') or IdemPChar(Par,'%5B') then
+    if (Par^='[') or IdemPChar(Par,'%5B') then
       // either as JSON array (input is e.g. '+%5B...' for ' [...')
       JSON := UrlDecode(Parameters) else begin
       // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
