@@ -542,7 +542,7 @@ unit SynCommons;
     a new column will be added for each logged row - LogViewer has been updated
     to allow easy and efficient multi-thread process logging
   - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
-    RotateFileDailyAtHour and OnRotateproperties, to enable log file rotation 
+    RotateFileDailyAtHour and OnRotate properties, to enable log file rotation 
     by size or at given hour - request [72feb66d45] + [b3e8cc8424]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
   - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
