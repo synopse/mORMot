@@ -410,6 +410,7 @@ unit SynCommons;
   - added TSynLogFile.Freq read-only property
   - added TMemoryMapText.AddInMemoryLine method to allow runtime appending of
     new lines of text - used e.g. by TSynLogFile for life update of remote logs
+  - added TMemoryMapText.SaveToFile() and TMemoryMapText.SaveToStream() methods
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
     variable, and ESynException.CustomLog() method to customize how raised
     exception are logged when intercepted - feature request [495720e0b9]
@@ -5984,6 +5985,13 @@ type
     constructor Create(aFileContent: PUTF8Char; aFileSize: integer); overload;
     /// release the memory map and internal LinePointers[]
     destructor Destroy; override;
+    /// save the whole content into a specified stream
+    // - including any runtime appended values via AddInMemoryLine()
+    procedure SaveToStream(Dest: TStream; const Header: RawUTF8);
+    /// save the whole content into a specified file
+    // - including any runtime appended values via AddInMemoryLine()
+    // - an optional header text can be added to the beginning of the file
+    procedure SaveToFile(FileName: TFileName; const Header: RawUTF8='');
     /// add a new line to the already parsed content
     // - this line won't be stored in the memory mapped file, but stay in memory
     // and appended to the existing lines, until this instance is released 
@@ -42694,6 +42702,42 @@ begin
   Freemem(fLines);
   fMap.UnMap;
   inherited;
+end;
+
+procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUTF8);
+var i: integer;
+    W: TTextWriter;
+begin
+  i := length(Header);
+  if i>0 then
+    Dest.Write(pointer(Header)^,i);
+  if fMap.Size>0 then
+    Dest.Write(fMap.Buffer^,fMap.Size);
+  if fAppendedLinesCount=0 then
+    exit;
+  W := TTextWriter.Create(Dest);
+  try
+    if (fMap.Size>0) and (fMap.Buffer[fMap.Size-1]>=' ') then
+      W.Add(#13);
+    for i := 0 to fAppendedLinesCount-1 do begin
+      W.AddString(fAppendedLines[i]);
+      W.Add(#13);
+    end;
+    W.Flush;
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TMemoryMapText.SaveToFile(FileName: TFileName; const Header: RawUTF8);
+var FS: TFileStream;
+begin
+  FS := TFileStream.Create(FileName,fmCreate);
+  try
+    SaveToStream(FS,Header);
+  finally
+    FS.Free;
+  end;
 end;
 
 function TMemoryMapText.GetLine(aIndex: integer): RawUTF8;
