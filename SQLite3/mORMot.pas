@@ -34354,7 +34354,7 @@ begin
              not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
             if (IsObj in [oSQLRecord,oPersistent,oSQLMany]) and
                (P^.PropType^^.ClassSQLFieldType=sftID) and
-               not TSQLRecord(Value).fFill.JoinedFields then begin
+               not ((Value is TSQLRecord) and TSQLRecord(Value).fFill.JoinedFields) then begin
               HR(P);
               Add(PtrInt(Obj)); // not true instances, but ID
             end else
