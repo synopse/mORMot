@@ -2,7 +2,7 @@ program RemoteLoggingTest;
 
 uses
   Forms,
-  RemoteLogMain in 'RemoteLogMain.dpr' {MainForm};
+  RemoteLogMain in 'RemoteLogMain.pas' {MainForm};
 
 {$R *.res}
 
