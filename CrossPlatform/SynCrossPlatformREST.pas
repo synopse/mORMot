@@ -2273,14 +2273,13 @@ begin
     line := line+Text;
     // ensure no CR/LF in the output row
     {$ifdef ISSMS}
-    line.Replace(#10,' ');
-    line.Replace(#13,' ');
+    line := line.Replace(#10,' ').Replace(#13,' ');
     {$else}
     for i := 1 to length(line) do
       if ord(line[i])<32 then
         line[i] := ' ';
     {$endif}
-    // line output 
+    // line output
     fOnLog(line);
   end;
 end;
@@ -2301,7 +2300,11 @@ end;
 procedure TSQLRest.Log(E: Exception);
 begin
   if Assigned(fOnLog) and (sllException in fLogLevel) then
+   {$ifdef ISSMS}
+   Log(sllException,'%s raised with message "%s" %s',[E.ClassName,E.Message,E.StackTrace]);
+   {$else}
    Log(sllException,'%s raised with message "%s"',[E.ClassName,E.Message]);
+   {$endif}
 end;
 
 {$ifdef ISSMS}
