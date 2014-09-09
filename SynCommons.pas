@@ -539,9 +539,9 @@ unit SynCommons;
   - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
     a new column will be added for each logged row - LogViewer has been updated
     to allow easy and efficient multi-thread process logging
-  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB
-    and RotateFileDailyAtHour properties, to enable log file rotation or SynLZ
-    compression, by size or at given hour - request [72feb66d45] + [b3e8cc8424]
+  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
+    RotateFileDailyAtHour and OnRotateproperties, to enable log file rotation 
+    by size or at given hour - request [72feb66d45] + [b3e8cc8424]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
   - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
   - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
@@ -10658,7 +10658,7 @@ type
     function Instance: TSynLog;
   end;
 
-  /// this event can be set for TSynLogFamily to archive any deprecated log
+  /// this event can be set for a TSynLogFamily to archive any deprecated log
   // into a custom compressed format
   // - will be called by TSynLogFamily when TSynLogFamily.Destroy identify
   // some outdated files
@@ -10671,6 +10671,13 @@ type
   // then one last time with aOldLogFileName='' in order to close any pending
   // archive (used e.g. by EventArchiveZip to open the .zip only once)
   TSynLogArchiveEvent = function(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
+  /// this event can be set for a TSynLogFamily to customize the file rotation
+  // - will be called by TSynLog.PerformRotation
+  // - should return TRUE if the function did process the file name
+  // - should return FALSE if the function did not do anything, so that the
+  // caller should perform the rotation as usual  
+  TSynLogRotateEvent = function(aLog: TSynLog; const aOldLogFileName: TFileName): boolean;
 
   /// how threading is handled by the TSynLogFamily
   // - by default, ptMergedInOneFile will indicate that all threads are logged
@@ -10706,12 +10713,12 @@ type
      !   ILog.Log(sllInfo,'method called');
      ! end; }
   TSynLogFamily = class
-  private
+  protected
+    fLevel, fLevelStackTrace: TSynLogInfos;
     fArchiveAfterDays: Integer;
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
-  protected
-    fLevel, fLevelStackTrace: TSynLogInfos;
+    fOnRotate: TSynLogRotateEvent;
     fPerThreadLog: TSynLogPerThreadMode;
     fIncludeComputerNameInFileName: boolean;
     fGlobalLog: TSynLog;
@@ -10773,6 +10780,10 @@ type
     // then one last time with aOldLogFileName='' in order to close any pending
     // archive (used e.g. by EventArchiveZip to open the .zip only once)
     property OnArchive: TSynLogArchiveEvent read fOnArchive write fOnArchive;
+    /// event called to perform a custom file rotation
+    // - will be checked by TSynLog.PerformRotation to customize the rotation
+    // process and do not perform the default step, if the callback returns TRUE
+    property OnRotate: TSynLogRotateEvent read fOnRotate write fOnRotate;
   published
     /// the associated TSynLog class
     property SynLogClass: TSynLogClass read fSynLogClass;
@@ -42304,19 +42315,20 @@ begin
   FreeAndNil(fWriter);
   FreeAndNil(fWriterStream);
   currentMaxSynLZ := 0;
-  if fFamily.fRotateFileCount>1 then begin
-    SetLength(FN,fFamily.fRotateFileCount-1);
-    for i := fFamily.fRotateFileCount-1 downto 1 do begin
-      FN[i-1] := ChangeFileExt(fFileName,'.'+IntToStr(i)+'.synlz');
-      if (currentMaxSynLZ=0) and FileExists(FN[i-1]) then
-        currentMaxSynLZ := i;
+  if not (assigned(fFamily.fOnRotate) and fFamily.fOnRotate(self,fFileName)) then
+    if fFamily.fRotateFileCount>1 then begin
+      SetLength(FN,fFamily.fRotateFileCount-1);
+      for i := fFamily.fRotateFileCount-1 downto 1 do begin
+        FN[i-1] := ChangeFileExt(fFileName,'.'+IntToStr(i)+'.synlz');
+        if (currentMaxSynLZ=0) and FileExists(FN[i-1]) then
+          currentMaxSynLZ := i;
+      end;
+      if currentMaxSynLZ=fFamily.fRotateFileCount-1 then
+        DeleteFile(FN[currentMaxSynLZ-1]); // delete e.g. '9.synlz'
+      for i := fFamily.fRotateFileCount-2 downto 1 do
+        RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
+      FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
     end;
-    if currentMaxSynLZ=fFamily.fRotateFileCount-1 then
-      DeleteFile(FN[currentMaxSynLZ-1]); // delete e.g. '9.synlz'
-    for i := fFamily.fRotateFileCount-2 downto 1 do
-      RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
-    FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
-  end;
   DeleteFile(fFileName);
   CreateLogWriter;
   LogFileHeader;
