@@ -726,8 +726,8 @@ unit mORMot;
       URI parameters sets for request paging (in addition to YUI syntax),
       and an optional "total":... field within the JSON result (calling
       "SELECT count()" may be slow, especially on external databases)
-    - added TSQLRestServer.PrivateGarbageCollector property, to manage lifetime
-      of user class instances linked to a given TSQLRestServer
+    - added TSQLRest.PrivateGarbageCollector property, to manage lifetime
+      of user class instances linked to a given TSQLRest
     - deep code refactoring, introducing TSQLPropInfo* classes in order to
       decouple the ORM definitions from the RTTI - will allow definition of
       any class members, even if there is no RTTI generated or via custom
@@ -8859,6 +8859,7 @@ type
     fServerTimeStampCacheTix: cardinal;
     fServerTimeStampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
+    fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of record
       Mode: TSQLRestServerAcquireMode;
@@ -9037,6 +9038,10 @@ type
     // else by setting a custom class to the LogClass property
     property LogFamily: TSynLogFamily read fLogFamily;
     {$endif}
+    /// a local "Garbage collector" list, for some classes instances which must
+    // live during the whole TSQLRestServer process
+    // - is used internally by the class, but can be used for business code
+    property PrivateGarbageCollector: TObjectList read fPrivateGarbageCollector;
   public
     /// get the row count of a specified table
     // - return -1 on error
@@ -10777,7 +10782,6 @@ type
     fNoAJAXJSON: boolean;
     fHandleAuthentication: boolean;
     fAfterCreation: boolean;
-    fPrivateGarbageCollector: TObjectList;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
     fSQLAuthGroupClass: TSQLAuthGroupClass;
@@ -11320,10 +11324,6 @@ type
     // the VirtualTableExternalRegister() global function
     property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
       read GetVirtualTable;
-    /// a local "Garbage collector" list, for some classes instances which must
-    // live during the whole TSQLRestServer process
-    // - is used internally by the class, but can be used for business code
-    property PrivateGarbageCollector: TObjectList read fPrivateGarbageCollector;
   published 
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
@@ -23355,6 +23355,7 @@ end;
 constructor TSQLRest.Create(aModel: TSQLModel);
 var cmd: TSQLRestServerURIContextCommand;
 begin
+  fPrivateGarbageCollector := TObjectList.Create;
   fModel := aModel;
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 2000; // default 2 seconds
@@ -23368,6 +23369,7 @@ end;
 
 destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
+    i: integer;
 begin
   if (fModel<>nil) and (fModel.fRestOwner=self) then
     // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
@@ -23378,6 +23380,17 @@ begin
     DeleteCriticalSection(fAcquireExecution[cmd].Lock);
     fAcquireExecution[cmd].Thread.Free;
   end;
+  {$ifdef WITHLOG}
+  fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
+  {$endif}
+  for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
+  try
+    fPrivateGarbageCollector.Delete(i); // will call fPrivate...[i].Free
+  except
+    on Exception do
+      ; // just ignore exceptions in such destructors
+  end;
+  fPrivateGarbageCollector.Free;
   inherited Destroy;
 end;
 
@@ -26116,7 +26129,6 @@ end;
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
 var t,n: integer;
 begin
-  fPrivateGarbageCollector := TObjectList.Create;
   // specific server initialization
   fVirtualTableDirect := true; // faster direct Static call by default
   // needed by AuthenticationRegister() below
@@ -26180,17 +26192,6 @@ begin
   fSessions.Free;
   DeleteCriticalSection(fSessionCriticalSection);
   inherited Destroy; // calls fServices.Free which will update fStats
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
-  {$endif}
-  for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
-  try
-    fPrivateGarbageCollector.Delete(i); // will call fPrivate...[i].Free
-  except
-    on Exception do
-      ; // just ignore exceptions in such destructors
-  end;
-  fPrivateGarbageCollector.Free;
 end;
 
 procedure TSQLRestServer.Shutdown;
