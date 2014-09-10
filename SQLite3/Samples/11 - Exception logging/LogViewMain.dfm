@@ -1,6 +1,6 @@
 object MainLogView: TMainLogView
-  Left = 228
-  Top = 210
+  Left = 199
+  Top = 166
   Width = 860
   Height = 639
   Caption = ' Synopse LogView - '
@@ -312,7 +312,7 @@ object MainLogView: TMainLogView
       Width = 121
       Height = 21
       TabOrder = 12
-      Text = '888'
+      Text = '8091'
     end
     object btnListClear: TButton
       Left = 16
@@ -471,7 +471,7 @@ object MainLogView: TMainLogView
   end
   object tmrRefresh: TTimer
     Enabled = False
-    Interval = 500
+    Interval = 200
     OnTimer = tmrRefreshTimer
     Left = 241
     Top = 424

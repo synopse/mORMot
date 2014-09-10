@@ -691,15 +691,15 @@ begin
                fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else begin
             UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
-            if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-              P.AsString := UTF8ToString(tmp) else
-              P.Value := UTF8ToWideString(tmp);
+            if fForceUseWideString then
+              P.Value := UTF8ToWideString(tmp) else
+              P.AsString := UTF8ToString(tmp);
           end else
             if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else    
-            if (not fForceUseWideString) or IsAnsiCompatible(VData) then
-              P.AsString := UTF8ToString(VData) else
-              P.Value := UTF8ToWideString(VData);
+            if fForceUseWideString then
+              P.Value := UTF8ToWideString(VData) else
+              P.AsString := UTF8ToString(VData);
         SynCommons.ftBlob:
           {$ifdef UNICODE}
           if aArrayIndex>=0 then

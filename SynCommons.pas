@@ -536,12 +536,14 @@ unit SynCommons;
     (set to stManualAndAPI by default, but stOnlyAPI within the Delphi IDE)
   - introducing TSynLogFamily.EchoToConsole: TSynLogInfos property, able to
     optionally echo the process log to the current console window, using colors
+  - added TSynLogFamily.EchoRemoteStart() and EchoRemoteStop methods
+  - added TSynLog.Void class function
   - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
     a new column will be added for each logged row - LogViewer has been updated
     to allow easy and efficient multi-thread process logging
-  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB
-    and RotateFileDailyAtHour properties, to enable log file rotation or SynLZ
-    compression, by size or at given hour - request [72feb66d45] + [b3e8cc8424]
+  - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
+    RotateFileDailyAtHour and OnRotate properties, to enable log file rotation 
+    by size or at given hour - request [72feb66d45] + [b3e8cc8424]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
   - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
   - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
@@ -1902,9 +1904,9 @@ function DoubleToStr(Value: Double): RawUTF8;
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 
 /// a non case-sensitive RawUTF8 version of Pos()
-// - substr is expected to be already in upper case
+// - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
-function PosI(substr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
 
 /// a non case-sensitive RawUTF8 version of Pos()
 // - substr is expected to be already in upper case
@@ -5713,6 +5715,7 @@ type
     fLock: TRTLCriticalSection;
   public
     /// initialize the list instance
+    // - the stored TObject instances will be owned by this TObjectListLocked 
     constructor Create;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
@@ -7429,7 +7432,7 @@ type
 // !   for i := 0 to length(fEchos)-1 do
 // !     fEchos[i](self,fEchoBuf);
 // - use MultiEventRemove() to un-register a callback from the list
-procedure MultiEventAdd(var EventList; const Event: TMethod);
+function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 
 /// low-level wrapper to remove a callback from a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -8122,6 +8125,9 @@ var
   // !  Version := TFileVersion.Create(InstanceFileName,DefaultVersion);
   // !  GarbageCollector.Add(Version);
   GarbageCollector: TObjectList;
+
+  /// set to TRUE when the global "Garbage collector" are beeing freed
+  GarbageCollectorFreeing: boolean;
 
 /// a global "Garbage collector" for some TObject global variables which must
 // live during whole main executable process
@@ -10658,7 +10664,7 @@ type
     function Instance: TSynLog;
   end;
 
-  /// this event can be set for TSynLogFamily to archive any deprecated log
+  /// this event can be set for a TSynLogFamily to archive any deprecated log
   // into a custom compressed format
   // - will be called by TSynLogFamily when TSynLogFamily.Destroy identify
   // some outdated files
@@ -10671,6 +10677,13 @@ type
   // then one last time with aOldLogFileName='' in order to close any pending
   // archive (used e.g. by EventArchiveZip to open the .zip only once)
   TSynLogArchiveEvent = function(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
+  /// this event can be set for a TSynLogFamily to customize the file rotation
+  // - will be called by TSynLog.PerformRotation
+  // - should return TRUE if the function did process the file name
+  // - should return FALSE if the function did not do anything, so that the
+  // caller should perform the rotation as usual  
+  TSynLogRotateEvent = function(aLog: TSynLog; const aOldLogFileName: TFileName): boolean;
 
   /// how threading is handled by the TSynLogFamily
   // - by default, ptMergedInOneFile will indicate that all threads are logged
@@ -10706,12 +10719,12 @@ type
      !   ILog.Log(sllInfo,'method called');
      ! end; }
   TSynLogFamily = class
-  private
+  protected
+    fLevel, fLevelStackTrace: TSynLogInfos;
     fArchiveAfterDays: Integer;
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
-  protected
-    fLevel, fLevelStackTrace: TSynLogInfos;
+    fOnRotate: TSynLogRotateEvent;
     fPerThreadLog: TSynLogPerThreadMode;
     fIncludeComputerNameInFileName: boolean;
     fGlobalLog: TSynLog;
@@ -10734,7 +10747,11 @@ type
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
     fEchoCustom: TOnTextWriterEcho;
+    fEchoRemoteClient: TObject;
+    fEchoRemoteClientOwned: boolean;
+    fEchoRemoteEvent: TOnTextWriterEcho;
     fEndOfLineCRLF: boolean;
+    fDestroying: boolean;
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
@@ -10753,9 +10770,23 @@ type
     // - will archive older DestinationPath\*.log files, according to
     // ArchiveAfterDays value and ArchivePath
     destructor Destroy; override;
+
     /// retrieve the corresponding log file of this thread and family
     // - creates the TSynLog if not already existing for this current thread
     function SynLog: TSynLog;
+    /// register one object and one echo callback for remote logging
+    // - aClient is typically a mORMot's TSQLHttpClient
+    // - if aClientOwnedByFamily is TRUE, its life time will be manage by this
+    // TSynLogFamily: it will staty alive until this TSynLogFamily is destroyed,
+    // or the EchoRemoteStop() method called
+    // - aClientEvent should be able to send the log row to the remote server
+    // - typical use may be:
+    procedure EchoRemoteStart(aClient: TObject; const aClientEvent: TOnTextWriterEcho;
+      aClientOwnedByFamily: boolean);
+    /// stop echo remote logging
+    // - will free the aClient instance supplied to EchoRemoteStart
+    procedure EchoRemoteStop;
+
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list
     property ExceptionIgnore: TList read fExceptionIgnore;
@@ -10773,10 +10804,28 @@ type
     // then one last time with aOldLogFileName='' in order to close any pending
     // archive (used e.g. by EventArchiveZip to open the .zip only once)
     property OnArchive: TSynLogArchiveEvent read fOnArchive write fOnArchive;
+    /// event called to perform a custom file rotation
+    // - will be checked by TSynLog.PerformRotation to customize the rotation
+    // process and do not perform the default step, if the callback returns TRUE
+    property OnRotate: TSynLogRotateEvent read fOnRotate write fOnRotate;
+    /// if the some kind of events shall be echoed to the console
+    // - note that it will slow down the logging process a lot (console output
+    // is slow by nature under Windows, but may be convenient for interactive
+    // debugging of services, for instance
+    // - this property shall be set before any actual logging, otherwise it
+    // will have no effect
+    // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
+    // - EchoCustom or EchoService can be activated separately
+    property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
+    /// can be set to a callback which will be called for each log line
+    // - could be used with a third-party logging system
+    // - EchoToConsole or EchoService can be activated separately
+    // - you may even disable the integrated file output, via NoFile := true
+    property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
   published
     /// the associated TSynLog class
     property SynLogClass: TSynLogClass read fSynLogClass;
-    /// index in global SynLogFileFamily[] and threadvar SynLogFileIndex[] lists
+    /// index in global SynLogFileFamily[] and SynLogFileIndexThreadVar[] lists
     property Ident: integer read fIdent;
     /// the current level of logging information for this family
     // - can be set e.g. to LOG_VERBOSE in order to log every kind of events
@@ -10883,20 +10932,6 @@ type
     // perform a manual stack walk if the API returned no address (or <3); but
     // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
     property StackTraceUse: TSynLogStackTraceUse read fStackTraceUse write fStackTraceUse;
-    /// if the some kind of events shall be echoed to the console
-    // - note that it will slow down the logging process a lot (console output
-    // is slow by nature under Windows, but may be convenient for interactive
-    // debugging of services, for instance
-    // - this property shall be set before any actual logging, otherwise it
-    // will have no effect
-    // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
-    // - EchoCustom or EchoService can be activated separately
-    property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
-    /// can be set to a callback which will be called for each log line
-    // - could be used with a third-party logging system
-    // - EchoToConsole or EchoService can be activated separately
-    // - you may even disable the integrated file output, via NoFile := true
-    property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
     /// define how the logger will emit its line feed
     // - by default (FALSE), a single CR (#13) char will be written, to save
     // storage space
@@ -11096,6 +11131,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the family of this TSynLog class type
     class function Family: TSynLogFamily; overload;
+    /// returns a logging class which will never log anything
+    // - i.e. a TSynLog sub-class with Family.Level := []
+    class function Void: TSynLogClass;
 {$ifndef DELPHI5OROLDER}
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
@@ -11167,9 +11205,6 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject=nil;
       const IgnoreWhenStartWith: PAnsiChar=nil);
-    /// access to the low-level text writer class
-    // - should not be used usually, since it would not be thread safe to do so
-    property Writer: TTextWriter read fWriter;
   published
     /// the associated logging family
     property GenericFamily: TSynLogFamily read fFamily;
@@ -15625,14 +15660,14 @@ begin
   until false;
 end;
 
-function PosI(substr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
 var C: AnsiChar;
 begin
-  if substr<>nil then begin
-    C := substr^;
+  if uppersubstr<>nil then begin
+    C := uppersubstr^;
     for result := 1 to Length(str) do
       if NormToUpperAnsi7[str[result]]=C then
-        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(substr)+1) then
+        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
           exit;
   end;
   result := 0;
@@ -33632,14 +33667,16 @@ end;
 
 procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
 begin
-  if fEchos=nil then
-    fEchoStart := B-fTempBuf+1; // ignore any previous buffer
-  MultiEventAdd(fEchos,TMethod(aEcho));
+  if self<>nil then
+    if MultiEventAdd(fEchos,TMethod(aEcho)) then
+      if fEchos=nil then
+        fEchoStart := B-fTempBuf+1; // ignore any previous buffer
 end;
 
 procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
 begin
-  MultiEventRemove(fEchos,TMethod(aEcho));
+  if self<>nil then
+    MultiEventRemove(fEchos,TMethod(aEcho));
 end;
 
 function TTextWriter.EchoFlush: integer;
@@ -41096,7 +41133,9 @@ var
 
 threadvar
   /// each thread can access to its own TSynLogFile
-  // - TSynLogFile instance is SynLogFileList[SynLogFileIndex[TSynLogFamily.Ident]-1]
+  // - is used to implement TSynLogFamily.PerThreadLog=ptOneFilePerThread option
+  // - the current TSynLogFile instance of the living thread is
+  // ! SynLogFileList[SynLogFileIndexThreadVar[TSynLogFamily.Ident]-1]
   SynLogFileIndexThreadVar: TSynLogFileIndex;
 
 
@@ -41186,7 +41225,7 @@ begin
   if (result<>nil) and result.fFamily.fHandleExceptions then
     exit;
   if SynLogFileList=nil then begin
-    // we are here is no previous log content was triggered
+    // we are here if no log content was generated yet (i.e. no log file yet)
     for i := 0 to SynLogFamily.Count-1 do
       with TSynLogFamily(SynLogFamily.List[i]) do
       if fHandleExceptions then begin
@@ -41531,9 +41570,11 @@ procedure AutoFlushProc(P: pointer); stdcall;  // TThread not needed here
 var i: integer;
 begin
   repeat
-    Sleep(1000); // thread will awake every second to check of pending data
-    if AutoFlushThread=0 then
-      break; // avoid GPF
+    for i := 1 to 10 do begin // check every second for pending data
+      Sleep(100);
+      if AutoFlushThread=0 then
+        exit; // avoid GPF
+    end;
     if SynLogFileList=nil then
       continue; // nothing to flush
     inc(AutoFlushSecondElapsed);
@@ -41578,11 +41619,11 @@ var SR: TSearchRec;
     aOldLogFileName, aPath: TFileName;
     tmp: array[0..11] of AnsiChar;
 begin
+  fDestroying := true;
+  EchoRemoteStop;
   {$ifdef MSWINDOWS}
-  if AutoFlushThread<>0 then begin
+  if AutoFlushThread<>0 then
     AutoFlushThread := 0; // mark thread released to avoid GPF in AutoFlushProc
-    CloseHandle(AutoFlushThread); // release background thread once for all
-  end;
   {$endif}
   ExceptionIgnore.Free;
   try
@@ -41626,6 +41667,10 @@ begin
       end;
     end;
   finally
+    {$ifdef MSWINDOWS}
+    if AutoFlushThread<>0 then
+      CloseHandle(AutoFlushThread); // release background thread once for all
+    {$endif}
     inherited;
   end;
 end;
@@ -41633,22 +41678,78 @@ end;
 function TSynLogFamily.SynLog: TSynLog;
 var ndx: integer;
 begin
-  if (fRotateFileCount=0) and (fPerThreadLog=ptOneFilePerThread) and
-     (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
-    ndx := SynLogFileIndexThreadVar[fIdent]-1;
-    if ndx>=0 then // SynLogFileList.Lock/Unlock is not mandatory here
-      result := SynLogFileList.List[ndx] else
-      result := CreateSynLog;
-  end else // for ptMergedInOneFile and ptIdentifiedInOnFile
-    if fGlobalLog<>nil then
-      result := fGlobalLog else
-      result := CreateSynLog;
+  if self=nil then
+    result := nil else begin
+    if (fPerThreadLog=ptOneFilePerThread) and (fRotateFileCount=0) and
+       (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
+      ndx := SynLogFileIndexThreadVar[fIdent]-1;
+      if ndx>=0 then // SynLogFileList.Lock/Unlock is not mandatory here
+        result := SynLogFileList.List[ndx] else
+        result := CreateSynLog;
+    end else // for ptMergedInOneFile and ptIdentifiedInOnFile
+      if fGlobalLog<>nil then
+        result := fGlobalLog else
+        result := CreateSynLog;
 {$ifndef NOEXCEPTIONINTERCEPT}
-  if fHandleExceptions and (CurrentHandleExceptionSynLog<>result) then
-    CurrentHandleExceptionSynLog := result;
+    if fHandleExceptions and (CurrentHandleExceptionSynLog<>result) then
+      CurrentHandleExceptionSynLog := result;
 {$endif}
+  end;
 end;
 
+procedure TSynLogFamily.EchoRemoteStart(aClient: TObject;
+  const aClientEvent: TOnTextWriterEcho; aClientOwnedByFamily: boolean);
+var i: integer;
+begin
+  EchoRemoteStop;
+  fEchoRemoteClient := aClient;
+  fEchoRemoteEvent := aClientEvent;
+  fEchoRemoteClientOwned := aClientOwnedByFamily;
+  SynLogFileList.Lock;
+  try
+    for i := 0 to SynLogFileList.Count-1 do
+      if TSynLog(SynLogFileList.List[i]).fFamily=self then
+        TSynLog(SynLogFileList.List[i]).fWriter.EchoAdd(fEchoRemoteEvent);
+  finally
+    SynLogFileList.Unlock;
+  end;
+end;
+
+procedure TSynLogFamily.EchoRemoteStop;
+var i: integer;
+begin
+  if fEchoRemoteClient=nil then
+    exit;
+  if fEchoRemoteClientOwned then
+    try
+      try
+        fEchoRemoteEvent(nil,sllClient,
+        {$ifdef DELPHI5OROLDER}
+          NowToString(false)+'00'+LOG_LEVEL_TEXT[sllClient]+
+          '    Remote Client Disconnected');
+        {$else}
+          FormatUTF8('%00%    Remote Client % Disconnected',
+          [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
+        {$endif}
+      finally
+        FreeAndNil(fEchoRemoteClient);
+      end;
+    except
+      on Exception do ;
+    end else
+    fEchoRemoteClient := nil;
+  if SynLogFileList<>nil then begin
+    SynLogFileList.Lock;
+    try
+      for i := 0 to SynLogFileList.Count-1 do
+        if TSynLog(SynLogFileList.List[i]).fFamily=self then
+          TSynLog(SynLogFileList.List[i]).fWriter.EchoRemove(fEchoRemoteEvent);
+    finally
+      SynLogFileList.Unlock;
+    end;
+  end;
+  fEchoRemoteEvent := nil;
+end;
 
 
 { TSynLog }
@@ -41975,6 +42076,15 @@ asm
 @null:
 end;
 {$endif}
+
+type
+  TSynLogVoid = class(TSynLog);
+
+class function TSynLog.Void: TSynLogClass;
+begin
+  TSynLogVoid.Family.Level := [];
+  result := TSynLogVoid;
+end;
 
 function TSynLog.Instance: TSynLog;
 begin
@@ -42304,19 +42414,20 @@ begin
   FreeAndNil(fWriter);
   FreeAndNil(fWriterStream);
   currentMaxSynLZ := 0;
-  if fFamily.fRotateFileCount>1 then begin
-    SetLength(FN,fFamily.fRotateFileCount-1);
-    for i := fFamily.fRotateFileCount-1 downto 1 do begin
-      FN[i-1] := ChangeFileExt(fFileName,'.'+IntToStr(i)+'.synlz');
-      if (currentMaxSynLZ=0) and FileExists(FN[i-1]) then
-        currentMaxSynLZ := i;
+  if not (assigned(fFamily.fOnRotate) and fFamily.fOnRotate(self,fFileName)) then
+    if fFamily.fRotateFileCount>1 then begin
+      SetLength(FN,fFamily.fRotateFileCount-1);
+      for i := fFamily.fRotateFileCount-1 downto 1 do begin
+        FN[i-1] := ChangeFileExt(fFileName,'.'+IntToStr(i)+'.synlz');
+        if (currentMaxSynLZ=0) and FileExists(FN[i-1]) then
+          currentMaxSynLZ := i;
+      end;
+      if currentMaxSynLZ=fFamily.fRotateFileCount-1 then
+        DeleteFile(FN[currentMaxSynLZ-1]); // delete e.g. '9.synlz'
+      for i := fFamily.fRotateFileCount-2 downto 1 do
+        RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
+      FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
     end;
-    if currentMaxSynLZ=fFamily.fRotateFileCount-1 then
-      DeleteFile(FN[currentMaxSynLZ-1]); // delete e.g. '9.synlz'
-    for i := fFamily.fRotateFileCount-2 downto 1 do
-      RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
-    FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
-  end;
   DeleteFile(fFileName);
   CreateLogWriter;
   LogFileHeader;
@@ -42329,7 +42440,7 @@ begin
       AddStackTrace(nil);
     fWriter.AddEndOfLine(fCurrentLevel);
     if (fFileRotationNextHour<>0) and (GetTickCount64>=fFileRotationNextHour) then begin
-      inc(fFileRotationNextHour,(1000*60*60));
+      inc(fFileRotationNextHour,MSecsPerDay);
       PerformRotation;
     end else
     if (fFileRotationSize>0) and (fWriter.fTotalFileSize>fFileRotationSize) then
@@ -42466,6 +42577,8 @@ begin
     fWriter.EchoAdd(ConsoleEcho);
   if Assigned(fFamily.EchoCustom) then
     fWriter.EchoAdd(fFamily.EchoCustom);
+  if Assigned(fFamily.fEchoRemoteClient) then
+    fWriter.EchoAdd(fFamily.fEchoRemoteEvent);
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
@@ -43844,15 +43957,17 @@ begin
   result := -1;
 end;
 
-procedure MultiEventAdd(var EventList; const Event: TMethod);
+function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 var Events: TMethodDynArray absolute EventList;
     n: integer;
 begin
+  result := false;
   if Event.Code=nil then
     exit; // callback not assigned
   n := MultiEventFind(EventList,Event);
   if n>=0 then
     exit; // already registered
+  result := true;
   n := length(Events);
   SetLength(Events,n+1);
   Events[n] := Event;
@@ -43963,6 +44078,7 @@ procedure GarbageCollectorFree;
 type PObject = ^TObject;
 var i: integer;
 begin
+  GarbageCollectorFreeing := true;
   for i := GarbageCollector.Count-1 downto 0 do // last in, first out
   try
     GarbageCollector.Delete(i); // will call GarbageCollector[i].Free

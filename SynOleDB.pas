@@ -106,6 +106,7 @@ unit SynOleDB;
   - fixed issue in TOleDBConnectionProperties.ColumnTypeNativeToDB() about
     unrecognized column type when table schema is retrieved from SQL
   - fixed issue when running TOleDBStatement.Step(true)
+  - fixed issue [e8c211062e] when binding NULL values in multi INSERT statements
 
 }
 
@@ -804,6 +805,8 @@ type
     /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
     VInt64: Int64;
     /// storage used for the OleDB status field
+    // - if VStatus=ord(stIsNull), then it will bind a NULL with the type
+    // as set by VType (to avoid conversion error like in [e8c211062e])
     VStatus: integer;
     /// the column/parameter Value type
     VType: TSQLDBFieldType;
@@ -883,8 +886,11 @@ type
 
     {{ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1
+     - OleDB during MULTI INSERT statements expect BoundType to be set in
+       TOleDBStatementParam, and its VStatus set to ord(stIsNull)
      - raise an EOleDBException on any error }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); override;
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); override;
     {{ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1
      - raise an EOleDBException on any error }
@@ -1141,9 +1147,9 @@ begin
 end;
 
 procedure TOleDBStatement.BindNull(Param: Integer;
-  IO: TSQLDBParamInOutType);
+  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
-  CheckParam(Param,ftNull,IO);
+  CheckParam(Param,BoundType,IO)^.VStatus := ord(stIsNull);
 end;
 
 function TOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldType;
@@ -1157,6 +1163,7 @@ begin
   result := @fParams[Param-1];
   result^.VType := NewType;
   result^.VInOut := IO;
+  result^.VStatus := 0;
 end;
 
 constructor TOleDBStatement.Create(aConnection: TSQLDBConnection);

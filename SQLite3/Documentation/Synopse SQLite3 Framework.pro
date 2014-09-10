@@ -1770,7 +1770,8 @@ Here are some of its features:
 - Optional rotation when main log reaches a specified size, with compression of the rotated logs;
 - Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
 - Optional colored echo to a console window, for interactive debugging;
-- Fast log viewer tool available, including thread filtering and customer-side execution profiling.
+- Fast log viewer tool available, including thread filtering and customer-side execution profiling;
+- Optional remote logging via HTTP - the log viewer can be used as server.
 :  Setup logging
 Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
 For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
@@ -1933,9 +1934,19 @@ The {\f1\fs20 EchoToConsole} property enable you to select which events are to b
 !  end;
 Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
 Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and writing to the console under {\i Windows} is much slower than writing to a file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
+:104  Remote logging
+By default, {\f1\fs20 TSynLog} writes its activity to a local file, and/or to the console. The log file can be transmitted later on (once compressed) to support, for further review and debugging.\line But sometimes, it may be handy to see the logging in real-time, on a remote computer.
+You can enable such remote monitoring for a given {\f1\fs20 TSynLog} class, by adding the {\f1\fs20 mORMotHTTPClient.pas} unit in your use clause, then calling the following constructor:
+! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15',SQLite3Log,'8091','LogService');
+This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:8091/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
+A {\f1\fs20 TSQLHttpClient} instance will be created, and will be managed by the {\f1\fs20 SQLite3Log} instance. It will be released when the application will be closed, or when the {\f1\fs20 SQLite3Log.Family.EchoRemoteStop} method will be called.
+In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (8091 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
+Implementation of this remote logging has been tuned on both client and server side.\line On client side, log events are gathered and sent in a dedicated background thread: if a lot of events are generated, they will be transferred in chunks of several rows, to minimize resource and bandwidth. On server side, incoming events are stored in memory, and indexed on the fly, with a periodic refresh rate of 500 ms: even a very active client logger would just let the {\i Log View} tool be responsive and efficient.\line Thanks to the nature of the {\f1\fs20 http.sys} based server, several {\i Server Root} URI can be accessed in parallel with several {\i Log View} tool instance, on the same HTTP port: it will ease the IT policy of your network, since a single forwarded port would be able to handle several incoming connections.
+See the "{\f1\fs20 RemoteLoggingTest.dpr}" sample from "{\f1\fs20 11 - Exception logging}", in conjunction with the {\f1\fs20 LogView.dpr} tool available in the same folder, for a running example of remote logging.
+Note that our cross-platform clients - see @86@ - are able to log to a remote server, with the same exact format as used by our {\f1\fs20 TSynLog} class.
 :  Log to third-party libraries
-Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
-It could be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs. Those loggers also provide multiple options, including some possibilities not yet available with {\f1\fs20 TSynLog}, like live remote logging, or statistics extraction.
+Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console or a remote log server (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
+It may be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs.
 You can define the {\f1\fs20 TSynLogFamily.EchoCustom} property to specify a simple event to be triggered for each log operation: the application can then decide to log to a third party logger application.
 Note that there is also the {\f1\fs20 TSynLogFamily.NoFile} property, which allows to disable completely the built-in file logging mechanism.
 For instance, you may write:
@@ -1975,13 +1986,20 @@ You can set {\f1\fs20 TSynLogFamily.RotateFileCount} and {\f1\fs20 RotateFileSiz
 Log file rotation is as easy as:
 !  with TSQLLog.Family do begin
 !    Level := LOG_VERBOSE;
-!    RotateFileCount := 5;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
 !    RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
 !  end;
 Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
-- {\f1\fs20 TestSQL3.log} which will be the latest log file, uncompressed;
-- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i LogViewer} tool is able to uncompress those {\f1\fs20 .synlz} files directly.
-Note that in this case, {\f1\fs20 PerThreadLog} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single process to run.
+- {\f1\fs20 TestSQL3.log} which will be the latest (current) log file, uncompressed;
+- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i Log Viewer} tool - see @103@ - is able to uncompress those {\f1\fs20 .synlz} files directly.
+Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
+As an alternative, or in addition to this {\i by-size} rotation pattern, you could specify a fixed time of the day to perform the rotation.\line For instance, the following will perform automatic rotation of the log files, whatever their size, at {\f1\fs20 23:00} each evening:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
+!    RotateFileDailyAtHour := 23; // rotate at 11:00 PM
+!  end;
+If the default behavior - which is to compress all rotated files into {\f1\fs20 .synlz} format, and delete the older files - does not fit your needs, you can set a custom event to the {\f1\fs20 TSynLogFamily.OnRotate} property, which would take care of the file rotation process.
 :  Integration within tests
 Logging is integrated within the unit @*test@ing classes, so that any failure will create an entry in the log with the source line, and stack trace:
 $C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-13)
@@ -2004,8 +2022,8 @@ You can optionally redirect the following global variable at program initializat
 !    Level := LOG_VERBOSE;
 !!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
 !  end;
-:  Log Viewer
-Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 14,000,000 test cases do create a huge log file), a log viewer was definitively in need.
+:103  Log Viewer
+Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 17,000,000 test cases do create a huge log file of about 550 MB), a log viewer was definitively in need.
 The log-viewer application is available as source code in the "{\i Samples}" folder, in the "{\i 11 - Exception logging}" sub-folder.
 :   Open log files
 You can run it with a specified log file on the command line, or use the "{\i Browse}" button to browse for a file. That is, you can associate this tool with your {\f1\fs20 .log} files, for instance, and you'll open it just by double-clicking on such files.
@@ -2030,6 +2048,9 @@ I'm quite sure that the first time you'll use this profiling feature on a huge e
 :   Per-thread inspection
 If the {\f1\fs20 TSynLog} family has specified {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} property, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} of the logged action.
 The log-viewer application will identify this column, and show a "{\i Thread}" group below the left-side commands. It will allow to go to the next thread, or toggle the optional {\i Thread view} list. By checking / un-checking any thread of this list, you are able to inspect the execution log for a given process, very easily. A right-click on this thread list will display a pop-up menu, allowing to select all threads or no thread in one command.
+:   Server for remote logging
+As was stated above, @104@ can use our {\i Log View} tool as server and real-time viewer for any remote client, either using {\f1\fs20 TSynLog}, or any cross-platform client - see @86@.
+Using a remote logging is specially useful from mobile applications (written with {\i Delphi} / @*FireMonkey@ or with @*Smart Mobile Studio@ / @*AJAX@). Our viewer tool allows efficient live debugging of such platforms.
 :3Object-Relational Mapping
 %cartoon02.png
 The @**ORM@ part of the framework - see @13@ - is implemented in @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
@@ -6687,7 +6708,7 @@ Due to security restriction of newer versions of Windows (i.e. starting with Vis
 \page
 : Network and Internet access via HTTP
 For publishing a server via @*HTTP@/1.1 over TCP/IP, creates a {\f1\fs20 TSQLHttpServer} instance, and associate your running {\f1\fs20 TSQLRestServerDB} to it.
-In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate firewall settings.
+In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate @*firewall@ settings.
 :  HTTP server(s)
 \graph HTTPServers THttpServerGeneric classes hierarchy
 \THttpApiServer\THttpServerGeneric
@@ -6745,6 +6766,7 @@ Here is a sample program which can be launched to allow our {\f1\fs20 TestSQL3.d
 !!  THttpApiServer.AddUrlAuthorize('root','888',false,'+'));
 !end.
 Take also a look at the {\f1\fs20 Project04ServerRegister.dpr} sample, in the context of a whole client/server RESTful solution over HTTP.
+Note that you still need to open the IP port for incoming TCP traffic, in the Windows @**firewall@, if you want your server to be accessible to the outer world, as usual.
 :    Automatic authorization
 An easier possibility could be to run the server application at least once as system Administrator.
 The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} parameter. By default, it will be set to {\f1\fs20 @*useHttpApi@}. If you specify {\f1\fs20 useHttpApiRegisteringURI}, the class will register the URI before launching the server process.
@@ -9405,7 +9427,7 @@ Here, the same rules applies than in {\f1\fs20 TSQLRestRoutingREST} mode:
 - Unexpected parameters will just be ignored.
 Note that by definition, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is not able to handle URI-encoded parameters. In fact, the JSON-RPC mode expects the URI to be used only for identifying the service, and have the whole execution context transmitted as body.
 :    REST mode or JSON-RPC mode?
-For a standard {\i mORMot} Delphi client, or any supported {\i Cross-Platform} client - see @86@ - {\f1\fs20 TSQLRestRoutingREST} is preferred. The supplied libraries, even for {\i SmartMobileStudio}, fully implement this routing scheme. It is the faster, safer and most modular mode available.\line In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. Since the method name will be part of the URI, the signature will have a bigger extent than in JSON-RPC mode, so it will be more secure. Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
+For a standard {\i mORMot} Delphi client, or any supported {\i Cross-Platform} client - see @86@ - {\f1\fs20 TSQLRestRoutingREST} is preferred. The supplied libraries, even for {\i @*Smart Mobile Studio@}, fully implement this routing scheme. It is the faster, safer and most modular mode available.\line In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. Since the method name will be part of the URI, the signature will have a bigger extent than in JSON-RPC mode, so it will be more secure. Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
 Of course, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode may be used as an alternative, depending on the client expectations, and technology limitations, e.g. if your client expect a JSON-RPC compatible communication.\line It's up to you to select the right routing scheme to be used, depending on your needs.
 :   Response format
 :    Standard answer as JSON object
@@ -9714,6 +9736,7 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - @63@ with parameters marshaling and instance-life time;
 - Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
+- Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server, e.g. our @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
 In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
 In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client source file for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially for targeting Java or C# clients.
@@ -9820,6 +9843,20 @@ Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is i
 It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With {\i Delphi}, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and {\i @*Lazarus@}). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
 We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with {\i Delphi}. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
+:105   Local or remote logging
+You can use the {\f1\fs20 TSQLRest.Log()} overloaded methods to log any content into a file or a remote server.
+All ORM and SOA functions of the {\f1\fs20 TSQLRest} instance will create the expected log, just with the main {\i mORMot} units running on Win32/Win64 - see @104@.\line For instance, here are some log entries created during the {\f1\fs20 RegressionTest.dpr} process:
+$16:47:15 Trace  POST root/People status=201 state=847 in=92 out=0
+$16:47:15 DB  People.ID=200 created from {"FirstName":"First200","LastName":"Last200","YearOfBirth":2000,"YearOfDeath":2025,"Sexe":0}
+$16:47:15 SQL  select RowID,FirstName,LastName,YearOfBirth,YearOfDeath,Sexe from People
+$16:47:15 Trace  GET root?sql=select+RowID%2CFirstName%2CLastName%2CYearOfBirth%2CYearOfDeath%2CSexe+from+People status=200 state=847 in=0 out=21078
+$16:47:15 SQL  select RowID,YearOfBirth,YearOfDeath from People
+$16:47:15 Trace  GET root?sql=select+RowID%2CYearOfBirth%2CYearOfDeath+from+People status=200 state=847 in=0 out=10694
+$16:47:15 SQL  select RowID,FirstName,LastName,YearOfBirth,YearOfDeath,Sexe from People where yearofbirth=:(1900):
+$16:47:15 Trace  GET root?sql=select+RowID%2CFirstName%2CLastName%2CYearOfBirth%2CYearOfDeath%2CSexe+from+People+where+yearofbirth%3D%3A%281900%29%3A status=200 state=847 in=0 out=107
+$16:47:15 Trace  DELETE root/People/16 status=200 state=848 in=0 out=0
+$16:47:15 DB  Delete People.ID=16
+Then, our {\i Log View} tool is able to run as a remote log server, and display the incoming events in real-time - see @103@.\line Having such logs available would be pretty convenient, especially when debugging applications on a mobile device, or a remote computer.
 :90  Smart Mobile Studio support
 {\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} (in a modern dialect call {\i @*SmartPascal@}) into highly optimized and raw {\i @*JavaScript@}.
 There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
@@ -9843,6 +9880,10 @@ $xcopy SynCrossPlatformCrypto.pas "c:\ProgramData\Optimale Systemer AS\Smart Mob
 $xcopy SynCrossPlatformREST.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
 You can find a corresponding BATCH file in the {\f1\fs20 CrossPlatform} folder, and in {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client\\CopySynCrossPlatformUnits.bat}.
 In fact, the {\f1\fs20 SynCrossPlatformJSON.pas} unit is not used under {\i Smart Mobile Studio}: we use the built-in JSON serialization features of {\i JavaScript}, using {\f1\fs20 variant} dynamic type, and the standard {\f1\fs20 JSON.Stringify()} and {\f1\fs20 JSON.Parse()} functions.
+:  Remote logging
+Since there is no true file system API available under a HTML5 sand-boxed application, logging to a local file is not an option. Even when packaged with {\i PhoneGap}, local log files are not convenient to work with.
+Generated logs will have the same methods and format as with {\i Delphi} or {\i FreePascal} - see @105@. {\f1\fs20 TSQLRest.Log(E: Exception)} method will also log the stack trace of the exception!  And our @103@ tool is able to run as efficient remote server.
+A dedicated {\i asynchronous} implementation has been refined for {\i Smart Mobile Studio} clients, so that several events would be gathered and sent at once to the remote server, to maximize bandwidth use and let the application be still responsive.\line It allows even complex mobile applications to be debugged with ease, on any device, even over WiFi or 3G/4G networks. Your support could ask your customer to enable logging for a particular case, then see in real time what is wrong with your application.
 \page
 : Generating client wrappers
 Even if it is feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and a set of {\i @*Mustache@}-based templates - see @81@.
@@ -10602,7 +10643,7 @@ If authentication is enabled for the Client-Server process (i.e. if the {\f1\fs2
 - On the Server side, a dedicated service, accessible via the {\f1\fs20 ModelRoot/Auth} URI is to be called to register an User, and create an in-memory session;
 - Client {\i should} open a session to access to the Server, and after authentication validation (e.g. via {\f1\fs20 UserName / Password} pair, or Windows credentials);
 - Each @*CRUD@ statement is checked against the authenticated User security group, via the {\f1\fs20 AccessRights} column and its {\f1\fs20 GET / POST / PUT / DELETE} per-table bit sets;
-- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing {\f1\fs20 AllowRemoteExecute=true};
+- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing a {\f1\fs20 reSQL} flag in its {\f1\fs20 AllowRemoteExecute};
 - Each REST request will expect an additional parameter, named {\f1\fs20 session_signature}, to every URL. Using the URI instead of {\i cookies} allows the signature process to work with all communication protocols, not only @*HTTP@;
 - Of course, you have the opportunity to tune or even by-pass the security for a given service (method-based or interface-based), on need: e.g. to allow some methods only to your system administrators, or to serve public HTML content.
 :   Per-User authentication
@@ -10626,16 +10667,17 @@ struct1:f0 -> struct2;
 \
 Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a SHA-256 hash of its registered password. A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
 By default, the following security groups are created on a void database:
-|%20%16%16%16%16%16
-|\b AuthGroup|POST SQL|Auth Read|Auth Write|Tables R|Tables W\b0
-|Admin|Yes|Yes|Yes|Yes|Yes
-|Supervisor|No|Yes|No|Yes|Yes
-|User|No|No|No|Yes|Yes
-|Guest|No|No|No|Yes|No
+|%14%12%14%11%11%12%12%12
+|\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
+|Admin|Yes|Yes|Yes|Yes|Yes|Yes|Yes
+|Supervisor|Yes|No|Yes|No|Yes|Yes|Yes
+|User|No|No|No|No|Yes|Yes|Yes
+|Guest|No|No|No|No|Yes|No|No
 |%
+'{\i Admin}' will be the only able to execute remote not SELECT SQL statements for POST commands ({\f1\fs20 reSQL} flag in {\f1\fs20 TSQLAccessRights. AllowRemoteExecute}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}).\line  '{\i Admin}' and '{\i Supervisor}' will allow any SELECT SQL statements to be executed, even if the table can't be retrieved and checked (corresponding to the {\f1\fs20 reSQLSelectWithoutTable} flag).\line '{\i User}' won't have the {\f1\fs20 reSQLSelectWithoutTable} flag, nor the right to retrieve the {\f1\fs20 Auth*} tables data for other users.\line '{\i Guest}' won't have access to the interface-based remote JSON-RPC service (no {\f1\fs20 reService} flag), nor perform any modification to a table: in short, this is an ORM read-only limited user.
+Please see @19@ and the {\f1\fs20 TSQLAccessRights} documentation for all available options and use cases.
 Then the corresponding '{\i Admin}', '{\i Supervisor}' and '{\i User}' {\f1\fs20 AuthUser} accounts are created, with the default '{\i synopse}' password.
 {\b You MUST override those default '{\i synopse}' passwords for each {\f1\fs20 AuthUser} record to a custom genuine value.}
-'{\i Admin}' will be the only group able to execute remote not SELECT SQL statements for POST commands (i.e. to have {\f1\fs20 TSQLAccessRights. AllowRemoteExecute = true}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}) content.
 A typical JSON representation of the default security user/group definitions are the following:
 $[{"AuthUser": [
 ${"RowID":1, "LogonName":"Admin", "DisplayName":"Admin", "PasswordHashHexa":"67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd", "GroupRights":1, "Data":null},
@@ -10825,21 +10867,23 @@ This will allow checking of access right for all @*CRUD@ operations, according t
 !!        Call.OutStatus := HTML_FORBIDDEN else
 !      (...)
 Making access rights a parameter allows this method to be handled as pure stateless, @*thread-safe@ and @*session@-free, from the bottom-most level of the framework.
-On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to {\f1\fs20 true}.
+On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to all possible flags.
 The light session process, as implemented by @18@, is used to override the access rights with the one defined in the {\f1\fs20 TSQLAuthGroup.AccessRights} field.
 Be aware than this per-table access rights depend on the table order as defined in the associated {\f1\fs20 TSQLModel}. So if you add some tables to your database model, please take care to add the new tables {\i after} the existing. If you insert the new tables within current tables, you will need to update the access rights values.
 :19  Additional safety
-A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user.
-It adds some options to tune the security policy.
+A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user, and the group he/she is part of.
+This field adds some flags to tune the security policy, for both @*SQL@ or @*SOA@ dimensions.
 :   SQL remote execution
-In our RESTful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly.
-This special command should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
-By default, for security reasons, this {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include {\f1\fs20 reSQL}. It means that no remote call will be allowed but for safe read-only SELECT statements.
-Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} option is used to enable or disable this feature.
+In our @*REST@ful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly. A GET command could also be used, either with the SQL statement transmitted as body (which is convenient, but not supported by all HTTP clients, since it is not standard), or inlined at URI level.
+These special commands should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
+By default, for security reasons, the {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include the {\f1\fs20 reSQL} flag. It means that no remote call will be allowed but for safe read-only SELECT statements.
+When SELECT statements are sent, the server will always check for the table name specified in their FROM clause. If there is a single table appearing, its security policy will be checked against the {\f1\fs20 GET[]} flags of the corresponding table. If the SELECT statement is more complex (e.g. is a JOINed statement), then the {\f1\fs20 reSQLSelectWithoutTable} will be checked to ensure that the user has the right to execute such statements.
+Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} flag is used to enable or disable this feature.
 Last but not least, a {\f1\fs20 WhereClause=...} inline parameter can be added to a DELETE request. The {\f1\fs20 reUrlEncodedDelete} option is used to enable or disable this feature.
-You can change the default safe policy by including {\f1\fs20 reSQL}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} in the {\f1\fs20 TSQLAuthGroup.AccessRights} field if an authentication user session. But since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements.
+You can change the default safe policy by including or excluding {\f1\fs20 reSQL}, {\f1\fs20 reSQLSelectWithoutTable}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} flags in the {\f1\fs20 TSQLAuthGroup.} {\f1\fs20 AccessRights}. {\f1\fs20 AllowRemoteExecute} field of an authentication user session.
+If security is a real concern, you should enable @98@ and URI signature on your server, so that only trusted clients may access to the server. This is the main security rule of the framework - in practice, those {\i per table} access right or {\i SQL remote execution flags} are more a design rule than a strong security feature. Since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements instead, and disallow remote SQL execution; then clients can safely use those dedicated safe services, and/or @*ORM@ @*CRUD@ operations for simple data requests. It would also help your project to be not tied to SQL, so that a switch to a {\i @*NoSQL@} persistence engine would still be possible, without changing the client code.
 :   Service execution
-The {\f1\fs20 reService} option can be used to enable or unable the @63@ feature of {\i mORMot}.
+The {\f1\fs20 reService} flag of {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} can be used to enable or unable the @63@ feature of {\i mORMot}.
 In addition to this global parameter, you can set per-service and per-method @77@.
 For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
 For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
@@ -10850,7 +10894,7 @@ Do not forget to remove authentication for the services for which you want to en
 As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the {\i Delphi} source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a {\i Delphi} IDE installed (and paid), and know the {\i Delphi} language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
 If your business model is to publish a core domain expertise (e.g. accounting, peripheral driving, database model, domain objects, communication, AJAX clients...) among several clients, you will sooner or later need to adapt your application to one or several of your customers. There is no "one {\f1\fs20 exe} to rule them all". Maintaining several executables could become a "branch-hell". Scripting is welcome here: speed and memory critical functionality (in which {\i mORMot} excels) will be hard-coded within the main executable, then everything else could be defined in script.
-There are plenty of script languages available.\line We considered @http://code.google.com/p/dwscript which is well maintained and expressive (it is the code of our beloved {\i SmartMobileStudio}), but is not very commonly used. We still want to include it in the close future.\line Then @http://www.lua.org defines a light and versatile general-purpose language, dedicated to be embedded in any application. Sounds like a viable solution: if you can help with it, your contribution is welcome!\line We did also take into consideration @http://www.python.org and @http://www.ruby-lang.org but both are now far from light, and are not meant to be embedded, since they are general-purpose languages, with a huge set of full-featured packages.
+There are plenty of script languages available.\line We considered @http://code.google.com/p/dwscript which is well maintained and expressive (it is the code of our beloved {\i @*Smart Mobile Studio@}), but is not very commonly used. We still want to include it in the close future.\line Then @http://www.lua.org defines a light and versatile general-purpose language, dedicated to be embedded in any application. Sounds like a viable solution: if you can help with it, your contribution is welcome!\line We did also take into consideration @http://www.python.org and @http://www.ruby-lang.org but both are now far from light, and are not meant to be embedded, since they are general-purpose languages, with a huge set of full-featured packages.
 Then, there is {\i JavaScript}:
 - This is the {\i World Wide Web} assembler. Every programmer in one way or another knows {\i JavaScript};
 - {\i JavaScript} can be a very powerful language - see Crockford's book "{\i JavaScript - The Good Parts}";

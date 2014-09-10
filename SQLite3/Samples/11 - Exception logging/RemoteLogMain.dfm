@@ -12,7 +12,7 @@ object MainForm: TMainForm
   Font.Name = 'Tahoma'
   Font.Style = []
   OldCreateOrder = False
-  OnDestroy = FormDestroy
+  OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 13
   object grpEvent: TGroupBox
@@ -55,6 +55,15 @@ object MainForm: TMainForm
       Caption = 'Send'
       TabOrder = 2
       OnClick = btnEventSendClick
+    end
+    object btnDisconnect: TButton
+      Left = 222
+      Top = 88
+      Width = 75
+      Height = 25
+      Caption = 'Disconnect'
+      TabOrder = 3
+      OnClick = btnDisconnectClick
     end
   end
   object grpConnection: TGroupBox
@@ -107,7 +116,7 @@ object MainForm: TMainForm
       Width = 121
       Height = 21
       TabOrder = 2
-      Text = '888'
+      Text = '8091'
     end
     object btnConnect: TButton
       Left = 222

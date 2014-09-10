@@ -186,8 +186,10 @@ type
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; virtual;
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
-    constructor CreateForRemoteLogging(const aServer, aPort: AnsiString;
-      aLogClass: TSynLogClass; const aRoot: RawUTF8='LogService');
+    // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
+    // life time, until application is closed or Family.EchoRemoteStop is called 
+    constructor CreateForRemoteLogging(const aServer: AnsiString; 
+      aLogClass: TSynLogClass; aPort: Integer=8091; const aRoot: RawUTF8='LogService');
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -391,16 +393,16 @@ begin
   fCompression := [hcSynLZ];
 end;
 
-constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer,
-  aPort: AnsiString; aLogClass: TSynLogClass; const aRoot: RawUTF8);
+constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
+  aLogClass: TSynLogClass; aPort: Integer; const aRoot: RawUTF8);
 var aModel: TSQLModel;
 begin
   if not Assigned(aLogClass) then
-    raise ECommunicationException.Create('No LogClass');
+    raise ECommunicationException.CreateUTF8('%.CreateForRemoteLogging(LogClass=nil)',[self]);
   aModel := TSQLModel.Create([],aRoot);
-  Create(aServer,aPort,aModel);
+  Create(aServer,AnsiString(UInt32ToUtf8(aPort)),aModel);
   aModel.Owner := self;
-  ServerRemoteLogStart(aLogClass);
+  ServerRemoteLogStart(aLogClass,true);
   fRemoteLogClass.Log(sllTrace,
     'Echoing to remote server http://%/%/RemoteLog:%',[aServer,aRoot,aPort]);
 end;
@@ -497,7 +499,7 @@ begin
     try
       InternalSetClass;
       if fWinAPIClass=nil then
-        raise ECommunicationException.CreateFmt('fWinAPIClass=nil for %s',[ClassName]);
+        raise ECommunicationException.CreateUTF8('fWinAPIClass=nil for %',[self]);
       fWinAPI := fWinAPIClass.Create(fServer,fPort,fHttps,fProxyName,fProxyByPass,
         fSendTimeout,fReceiveTimeout);
       // note that first registered algo will be the prefered one

@@ -175,7 +175,6 @@ begin
   FileFromString(Ini,ChangeFileExt(paramstr(0),'.ini'));
   LogMemo.Clear;
 {  FreeAndNil(sqlite3); sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll'); }
-//    Test(TODBCConnectionProperties,'','DRIVER=SQLite3 ODBC Driver','','',' SQLite3',true);
   // if false then
   try
     // -------- SQlite3
@@ -449,7 +448,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
       err := FormatUTF8('%Value.LastChange>=Start %>=%',
         [err,Value.LastChange,Start]);
     if Value.FirstName<>ValueFirstName[i] then
-      err := FormatUTF8('%Value.FirstName=ValueFirstName[i] "%"<>"%"',
+      err := FormatUTF8('%Value.FirstName="%" <> ValueFirstName[i]="%"',
         [err,Value.FirstName,ValueFirstName[i]]);
     assert(err='',string(Stat.fEngine+' read failure: '+err));
     Value.ClearProperties;
@@ -579,7 +578,10 @@ begin
         SetLength(ValueFirstName,Stat.fNumberOfElements);
         for i := 0 to Stat.fNumberOfElements-1 do begin
           ValueLastName[i] := Int32ToUtf8(i+1);
-          ValueFirstName[i] := U+ValueLastName[i];
+          {$ifndef UNIK}
+          if i<>100 then // test http://synopse.info/fossil/info/e8c211062e
+          {$endif}
+            ValueFirstName[i] := U+ValueLastName[i];
         end;
         Timer.Start;
         if aUseTransactions then

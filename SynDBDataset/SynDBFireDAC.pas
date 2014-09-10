@@ -601,9 +601,9 @@ begin
               {$ifdef UNICODE} // for FireDAC: TADWideString=UnicodeString
               P.AsWideStrings[i] := UTF8ToString(tmp);
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-                P.AsStrings[i] := UTF8ToString(tmp) else
-                P.AsWideStrings[i] := UTF8ToWideString(tmp);
+              if fForceUseWideString then
+                P.AsWideStrings[i] := UTF8ToWideString(tmp) else
+                P.AsStrings[i] := UTF8ToString(tmp);
               {$endif}
             end
           end else
@@ -616,17 +616,17 @@ begin
               {$ifdef UNICODE}
               P.AsWideString := UTF8ToString(tmp); // TADWideString=string
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-                P.AsString := UTF8ToString(tmp) else
-                P.AsWideString := UTF8ToWideString(tmp);
+              if fForceUseWideString then
+                P.AsWideString := UTF8ToWideString(tmp) else
+                P.AsString := UTF8ToString(tmp);
               {$endif}
           end else
-            if (VData=#39#39) and fConnection.Properties.StoreVoidStringAsNull then
+            if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else 
               {$ifdef UNICODE}
               P.AsWideString := UTF8ToString(VData); // TADWideString=string
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(VData) then
+              if (not fForceUseWideString) {or IsAnsiCompatible(VData)} then
                 P.AsString := UTF8ToString(VData) else
                 P.AsWideString := UTF8ToWideString(VData);
               {$endif}
