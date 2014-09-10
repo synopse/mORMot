@@ -10642,7 +10642,7 @@ If authentication is enabled for the Client-Server process (i.e. if the {\f1\fs2
 - On the Server side, a dedicated service, accessible via the {\f1\fs20 ModelRoot/Auth} URI is to be called to register an User, and create an in-memory session;
 - Client {\i should} open a session to access to the Server, and after authentication validation (e.g. via {\f1\fs20 UserName / Password} pair, or Windows credentials);
 - Each @*CRUD@ statement is checked against the authenticated User security group, via the {\f1\fs20 AccessRights} column and its {\f1\fs20 GET / POST / PUT / DELETE} per-table bit sets;
-- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing {\f1\fs20 AllowRemoteExecute=true};
+- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing a {\f1\fs20 reSQL} flag in its {\f1\fs20 AllowRemoteExecute};
 - Each REST request will expect an additional parameter, named {\f1\fs20 session_signature}, to every URL. Using the URI instead of {\i cookies} allows the signature process to work with all communication protocols, not only @*HTTP@;
 - Of course, you have the opportunity to tune or even by-pass the security for a given service (method-based or interface-based), on need: e.g. to allow some methods only to your system administrators, or to serve public HTML content.
 :   Per-User authentication
@@ -10666,16 +10666,17 @@ struct1:f0 -> struct2;
 \
 Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a SHA-256 hash of its registered password. A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
 By default, the following security groups are created on a void database:
-|%20%16%16%16%16%16
-|\b AuthGroup|POST SQL|Auth Read|Auth Write|Tables R|Tables W\b0
-|Admin|Yes|Yes|Yes|Yes|Yes
-|Supervisor|No|Yes|No|Yes|Yes
-|User|No|No|No|Yes|Yes
-|Guest|No|No|No|Yes|No
+|%14%12%14%11%11%12%12%12
+|\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
+|Admin|Yes|Yes|Yes|Yes|Yes|Yes|Yes
+|Supervisor|Yes|No|Yes|No|Yes|Yes|Yes
+|User|No|No|No|No|Yes|Yes|Yes
+|Guest|No|No|No|No|Yes|No|No
 |%
+'{\i Admin}' will be the only able to execute remote not SELECT SQL statements for POST commands ({\f1\fs20 reSQL} flag in {\f1\fs20 TSQLAccessRights. AllowRemoteExecute}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}).\line  '{\i Admin}' and '{\i Supervisor}' will allow any SELECT SQL statements to be executed, even if the table can't be retrieved and checked (corresponding to the {\f1\fs20 reSQLSelectWithoutTable} flag).\line '{\i User}' won't have the {\f1\fs20 reSQLSelectWithoutTable} flag, nor the right to retrieve the {\f1\fs20 Auth*} tables data for other users.\line '{\i Guest}' won't have access to the interface-based remote JSON-RPC service (no {\f1\fs20 reService} flag), nor perform any modification to a table: in short, this is an ORM read-only limited user.
+Please see @19@ and the {\f1\fs20 TSQLAccessRights} documentation for all available options and use cases.
 Then the corresponding '{\i Admin}', '{\i Supervisor}' and '{\i User}' {\f1\fs20 AuthUser} accounts are created, with the default '{\i synopse}' password.
 {\b You MUST override those default '{\i synopse}' passwords for each {\f1\fs20 AuthUser} record to a custom genuine value.}
-'{\i Admin}' will be the only group able to execute remote not SELECT SQL statements for POST commands (i.e. to have {\f1\fs20 TSQLAccessRights. AllowRemoteExecute = true}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}) content.
 A typical JSON representation of the default security user/group definitions are the following:
 $[{"AuthUser": [
 ${"RowID":1, "LogonName":"Admin", "DisplayName":"Admin", "PasswordHashHexa":"67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd", "GroupRights":1, "Data":null},
@@ -10865,21 +10866,23 @@ This will allow checking of access right for all @*CRUD@ operations, according t
 !!        Call.OutStatus := HTML_FORBIDDEN else
 !      (...)
 Making access rights a parameter allows this method to be handled as pure stateless, @*thread-safe@ and @*session@-free, from the bottom-most level of the framework.
-On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to {\f1\fs20 true}.
+On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to all possible flags.
 The light session process, as implemented by @18@, is used to override the access rights with the one defined in the {\f1\fs20 TSQLAuthGroup.AccessRights} field.
 Be aware than this per-table access rights depend on the table order as defined in the associated {\f1\fs20 TSQLModel}. So if you add some tables to your database model, please take care to add the new tables {\i after} the existing. If you insert the new tables within current tables, you will need to update the access rights values.
 :19  Additional safety
-A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user.
-It adds some options to tune the security policy.
+A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user, and the group he/she is part of.
+This field adds some flags to tune the security policy, for both @*SQL@ or @*SOA@ dimensions.
 :   SQL remote execution
-In our RESTful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly.
-This special command should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
-By default, for security reasons, this {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include {\f1\fs20 reSQL}. It means that no remote call will be allowed but for safe read-only SELECT statements.
-Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} option is used to enable or disable this feature.
+In our @*REST@ful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly. A GET command could also be used, either with the SQL statement transmitted as body (which is convenient, but not supported by all HTTP clients, since it is not standard), or inlined at URI level.
+These special commands should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
+By default, for security reasons, the {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include the {\f1\fs20 reSQL} flag. It means that no remote call will be allowed but for safe read-only SELECT statements.
+When SELECT statements are sent, the server will always check for the table name specified in their FROM clause. If there is a single table appearing, its security policy will be checked against the {\f1\fs20 GET[]} flags of the corresponding table. If the SELECT statement is more complex (e.g. is a JOINed statement), then the {\f1\fs20 reSQLSelectWithoutTable} will be checked to ensure that the user has the right to execute such statements.
+Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} flag is used to enable or disable this feature.
 Last but not least, a {\f1\fs20 WhereClause=...} inline parameter can be added to a DELETE request. The {\f1\fs20 reUrlEncodedDelete} option is used to enable or disable this feature.
-You can change the default safe policy by including {\f1\fs20 reSQL}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} in the {\f1\fs20 TSQLAuthGroup.AccessRights} field if an authentication user session. But since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements.
+You can change the default safe policy by including or excluding {\f1\fs20 reSQL}, {\f1\fs20 reSQLSelectWithoutTable}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} flags in the {\f1\fs20 TSQLAuthGroup.} {\f1\fs20 AccessRights}. {\f1\fs20 AllowRemoteExecute} field of an authentication user session.
+If security is a real concern, you should enable @98@ and URI signature on your server, so that only trusted clients may access to the server. This is the main security rule of the framework - in practice, those {\i per table} access right or {\i SQL remote execution flags} are more a design rule than a strong security feature. Since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements instead, and disallow remote SQL execution; then clients can safely use those dedicated safe services, and/or @*ORM@ @*CRUD@ operations for simple data requests. It would also help your project to be not tied to SQL, so that a switch to a {\i @*NoSQL@} persistence engine would still be possible, without changing the client code.
 :   Service execution
-The {\f1\fs20 reService} option can be used to enable or unable the @63@ feature of {\i mORMot}.
+The {\f1\fs20 reService} flag of {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} can be used to enable or unable the @63@ feature of {\i mORMot}.
 In addition to this global parameter, you can set per-service and per-method @77@.
 For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
 For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.

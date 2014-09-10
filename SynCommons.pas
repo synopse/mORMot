@@ -1904,9 +1904,9 @@ function DoubleToStr(Value: Double): RawUTF8;
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 
 /// a non case-sensitive RawUTF8 version of Pos()
-// - substr is expected to be already in upper case
+// - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
-function PosI(substr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
 
 /// a non case-sensitive RawUTF8 version of Pos()
 // - substr is expected to be already in upper case
@@ -15660,14 +15660,14 @@ begin
   until false;
 end;
 
-function PosI(substr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
 var C: AnsiChar;
 begin
-  if substr<>nil then begin
-    C := substr^;
+  if uppersubstr<>nil then begin
+    C := uppersubstr^;
     for result := 1 to Length(str) do
       if NormToUpperAnsi7[str[result]]=C then
-        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(substr)+1) then
+        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
           exit;
   end;
   result := 0;
@@ -41723,9 +41723,14 @@ begin
   if fEchoRemoteClientOwned then
     try
       try
-        fEchoRemoteEvent(nil,sllClient,FormatUTF8(
-          '%00%    Remote Client % Disconnected',
+        fEchoRemoteEvent(nil,sllClient,
+        {$ifdef DELPHI5OROLDER}
+          NowToString(false)+'00'+LOG_LEVEL_TEXT[sllClient]+
+          '    Remote Client Disconnected');
+        {$else}
+          FormatUTF8('%00%    Remote Client % Disconnected',
           [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
+        {$endif}
       finally
         FreeAndNil(fEchoRemoteClient);
       end;
