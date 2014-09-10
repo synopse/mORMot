@@ -2299,12 +2299,15 @@ end;
 
 procedure TSQLRest.Log(E: Exception);
 begin
-  if Assigned(self) and Assigned(fOnLog) and (sllException in fLogLevel) then
+  if Assigned(self) and Assigned(fOnLog) and (sllException in fLogLevel) then begin
    {$ifdef ISSMS}
-   Log(sllException,'%s raised with message "%s" %s',[E.ClassName,E.Message,E.StackTrace]);
+   var msg: string;
+   asm @msg = new Error().stack; end;
+   Log(sllException,'%s raised with message "%s" %s',[E.ClassName,E.Message,msg]);
    {$else}
    Log(sllException,'%s raised with message "%s"',[E.ClassName,E.Message]);
    {$endif}
+  end;
 end;
 
 {$ifdef ISSMS}
