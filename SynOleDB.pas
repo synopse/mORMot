@@ -1163,6 +1163,7 @@ begin
   result := @fParams[Param-1];
   result^.VType := NewType;
   result^.VInOut := IO;
+  result^.VStatus := 0;
 end;
 
 constructor TOleDBStatement.Create(aConnection: TSQLDBConnection);
