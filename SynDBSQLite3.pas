@@ -212,7 +212,8 @@ type
 
     {{ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1 }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); override;
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); override;
     {{ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1 }
     procedure Bind(Param: Integer; Value: Int64;
@@ -508,7 +509,7 @@ begin
 end;
 
 procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
-  IO: TSQLDBParamInOutType);
+  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then
     fBindValues[Param-1] := 'NULL';

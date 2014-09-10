@@ -218,6 +218,9 @@ unit SynDB;
   - TSQLDBFieldType is now defined in SynCommons, and used by TSQLVar and all
     database-related process (i.e. in mORMot and SynDB units)
   - added Bind(TSQLVar) overloaded method to ISQLDBStatement/TSQLDBStatement
+  - added optional BoundType parameter to BindNull() method since some providers
+    (e.g. OleDB during MULTI INSERT statements - see ticket [e8c211062e581])
+    expect the column type to be set in BoundType, even for NULL values
   - added missing ColumnToSQLVar() method to ISQLDBRows interface
   - added TSQLDBStatement.ColumnsToBinary() method
   - method TSQLDBStatement.ColumnTypeNativeToDB() is now public, and will
@@ -658,8 +661,11 @@ type
   ISQLDBStatement = interface(ISQLDBRows)
   ['{EC27B81C-BD57-47D4-9711-ACFA27B583D7}']
     {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn);
+     - the leftmost SQL parameter has an index of 1 
+     - some providers (e.g. OleDB during MULTI INSERT statements) expect the
+       proper column type to be set in BoundType, even for NULL values }
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull);
     {/ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1 }
     procedure Bind(Param: Integer; Value: Int64;
@@ -1516,8 +1522,11 @@ type
     constructor Create(aConnection: TSQLDBConnection); virtual;
 
     {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); virtual; abstract;
+     - the leftmost SQL parameter has an index of 1
+     - some providers (e.g. OleDB during MULTI INSERT statements) expect the
+       proper column type to be set in BoundType, even for NULL values }
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); virtual; abstract;
     {/ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1 }
     procedure Bind(Param: Integer; Value: Int64;
@@ -2088,8 +2097,11 @@ type
     constructor Create(aConnection: TSQLDBConnection); override;
     {/ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); override;
+     - raise an Exception on any error 
+     - some providers (only OleDB during MULTI INSERT statements, so never used
+       in this class) expect the  proper column type to be set in BoundType }
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); override;
     {/ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1
      - raise an Exception on any error }
@@ -4704,7 +4716,7 @@ begin
   currentRow := 0;
   repeat
     if RowCount-currentRow>batchRowCount then
-      ComputeSQL(batchRowCount,currentRow) // low number of params may be re-used -> try cache
+      ComputeSQL(batchRowCount,currentRow) // max number of params -> try cache
     else begin
       ComputeSQL(RowCount-currentRow,currentRow);
       SQLCached := false; // truncate number of parameters should not be unique
@@ -4714,7 +4726,7 @@ begin
       Stmt := Props.NewThreadSafeStatement;
       try
         Stmt.Prepare(SQL,false);
-        Query := Stmt;
+        Query := Stmt; // Stmt will be released by Query := nil below
       except
         on Exception do
           Stmt.Free; // avoid memory leak in case of invalid SQL statement
@@ -4734,7 +4746,7 @@ begin
       end;
       Query.ExecutePrepared;
     finally
-      Query := nil;
+      Query := nil; // will release the uncached local Stmt, if applying
     end;
   until currentRow=RowCount;
 end;
@@ -5145,9 +5157,10 @@ begin
         BindDateTime(Param,Iso8601ToDateTime(tmp),IO);
       end;
       ftUTF8:
-        if ((Value='') or (Value=#39#39)) and
-            fConnection.fProperties.StoreVoidStringAsNull then
-          BindNull(Param,IO) else begin
+        if fConnection.fProperties.StoreVoidStringAsNull and
+           ((Value='') or // check if '' or '""' should be stored as null
+           ((PInteger(Value)^ and $ffffff=$2727) and not ValueAlreadyUnquoted)) then
+          BindNull(Param,IO,ftUTF8) else begin
           if ValueAlreadyUnquoted then
             tmp := Value else
             UnQuoteSQLStringVar(pointer(Value),tmp);
@@ -6178,7 +6191,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindNull(Param: Integer;
-  IO: TSQLDBParamInOutType);
+  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   CheckParam(Param,ftNull,IO);
 end;
