@@ -27460,7 +27460,7 @@ end;
 function TSQLRestServerURIContext.GetInputHexaOrVoid(const ParamName: RawUTF8): cardinal;
 var value: RawUTF8;
 begin
-  value := GetInputUTF8(ParamName);
+  value := GetInputUTF8OrVoid(ParamName);
   if (length(value)<>8) or not HexDisplayToCardinal(Pointer(value),result) then
     result := 0;
 end;
