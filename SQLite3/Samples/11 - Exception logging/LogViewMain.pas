@@ -1053,7 +1053,7 @@ end;
 
 procedure TMainLogView.btnListSaveClick(Sender: TObject);
 begin
-  dlgSaveList.FileName := 'Remote '+DateTimeToIso8601(Now,false,' ');
+  dlgSaveList.FileName := 'Remote '+Utf8ToString(DateTimeToIso8601(Now,false,' '));
   if not dlgSaveList.Execute then
     exit;
   fLog.SaveToFile('temp~.log',

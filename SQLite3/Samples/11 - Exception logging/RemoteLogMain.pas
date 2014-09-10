@@ -51,7 +51,7 @@ begin
     Screen.Cursor := crHourGlass;
     try
       TSQLHttpClient.CreateForRemoteLogging(
-        AnsiString(edtServer.Text),AnsiString(edtPort.Text),SQLite3Log);
+        AnsiString(edtServer.Text),SQLite3Log,StrToInt(edtPort.Text));
     finally
       Screen.Cursor := crDefault;
     end;

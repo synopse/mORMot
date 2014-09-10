@@ -116,7 +116,7 @@ object MainForm: TMainForm
       Width = 121
       Height = 21
       TabOrder = 2
-      Text = '888'
+      Text = '8091'
     end
     object btnConnect: TButton
       Left = 222

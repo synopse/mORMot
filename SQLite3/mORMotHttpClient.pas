@@ -188,8 +188,8 @@ type
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
     // life time, until application is closed or Family.EchoRemoteStop is called 
-    constructor CreateForRemoteLogging(const aServer, aPort: AnsiString;
-      aLogClass: TSynLogClass; const aRoot: RawUTF8='LogService');
+    constructor CreateForRemoteLogging(const aServer: AnsiString; 
+      aLogClass: TSynLogClass; aPort: Integer=8091; const aRoot: RawUTF8='LogService');
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -393,14 +393,14 @@ begin
   fCompression := [hcSynLZ];
 end;
 
-constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer,
-  aPort: AnsiString; aLogClass: TSynLogClass; const aRoot: RawUTF8);
+constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
+  aLogClass: TSynLogClass; aPort: Integer; const aRoot: RawUTF8);
 var aModel: TSQLModel;
 begin
   if not Assigned(aLogClass) then
     raise ECommunicationException.CreateUTF8('%.CreateForRemoteLogging(LogClass=nil)',[self]);
   aModel := TSQLModel.Create([],aRoot);
-  Create(aServer,aPort,aModel);
+  Create(aServer,AnsiString(UInt32ToUtf8(aPort)),aModel);
   aModel.Owner := self;
   ServerRemoteLogStart(aLogClass,true);
   fRemoteLogClass.Log(sllTrace,

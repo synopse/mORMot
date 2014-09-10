@@ -835,7 +835,7 @@ type
     // - if Instance is set, it will log the corresponding class name and address
     // - will compute the text line in the very same format as TSynLog class
     // - use LogToFile() or LogToRemoteServer() to set the OnLog callback
-    procedure Log(Level: TSynLogInfo; const Text: string; Instance: TObject=nil); overload; virtual;
+    procedure Log(Level: TSynLogInfo; const Text: string; Instance: TObject=nil); overload; 
     /// call this method to add some information to the log at a specified level
     // - overloaded method which will call Format() to render the text
     // - here the Fmt layout is e.g. '%s %d %g', as standard Format(), and not
@@ -857,7 +857,7 @@ type
     /// start the logging process into a remote log server
     // - the server could be for instance a LogView tool running in server mode
     procedure LogToRemoteServer(LogLevel: TSynLogInfos;
-      const aServer: string; aPort: integer=888; aRoot: string='LogService');
+      const aServer: string; aPort: integer=8091; aRoot: string='LogService');
     {$else}
     /// start the logging process into a file
     // - if no directory is specified, will use the current one
@@ -868,7 +868,7 @@ type
     /// start the logging process into a remote log server
     // - the server could be for instance a LogView tool running in server mode
     procedure LogToRemoteServer(LogLevel: TSynLogInfos;
-      const aServer: string; aPort: integer=888; const aRoot: string='LogService');
+      const aServer: string; aPort: integer=8091; const aRoot: string='LogService');
     {$endif}
 
     /// the associated data model
@@ -2260,7 +2260,7 @@ var line: string;
     i: integer;
     {$endif}
 begin
-  if Assigned(fOnLog) and (Level in fLogLevel) then begin
+  if Assigned(self) and Assigned(fOnLog) and (Level in fLogLevel) then begin
     // compute the line as expected by TSynLog / LogView
     line := copy(FormatDateTime(
       {$ifdef ISSMS}'yyyymmdd hhnnsszzz'{$else}'yyyymmdd" "hhnnsszzz'{$endif},
@@ -2293,13 +2293,13 @@ end;
 
 procedure TSQLRest.Log(Level: TSynLogInfo; Instance: TObject);
 begin
-  if Assigned(fOnLog) and (Level in fLogLevel) then
+  if Assigned(self) and Assigned(fOnLog) and (Level in fLogLevel) then
     Log(Level,'',Instance);
 end;
 
 procedure TSQLRest.Log(E: Exception);
 begin
-  if Assigned(fOnLog) and (sllException in fLogLevel) then
+  if Assigned(self) and Assigned(fOnLog) and (sllException in fLogLevel) then
    {$ifdef ISSMS}
    Log(sllException,'%s raised with message "%s" %s',[E.ClassName,E.Message,E.StackTrace]);
    {$else}

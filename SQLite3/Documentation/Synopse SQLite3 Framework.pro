@@ -1937,10 +1937,10 @@ Note that this echoing process slow down the logging process a lot, since it is 
 :104  Remote logging
 By default, {\f1\fs20 TSynLog} writes its activity to a local file, and/or to the console. The log file can be transmitted later on (once compressed) to support, for further review and debugging.\line But sometimes, it may be handy to see the logging in real-time, on a remote computer.
 You can enable such remote monitoring for a given {\f1\fs20 TSynLog} class, by adding the {\f1\fs20 mORMotHTTPClient.pas} unit in your use clause, then calling the following constructor:
-! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15','888',SQLite3Log,'LogService');
-This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:888/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
+! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15',SQLite3Log,'8091','LogService');
+This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:8091/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
 A {\f1\fs20 TSQLHttpClient} instance will be created, and will be managed by the {\f1\fs20 SQLite3Log} instance. It will be released when the application will be closed, or when the {\f1\fs20 SQLite3Log.Family.EchoRemoteStop} method will be called.
-In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (888 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
+In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (8091 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
 Implementation of this remote logging has been tuned on both client and server side.\line On client side, log events are gathered and sent in a dedicated background thread: if a lot of events are generated, they will be transferred in chunks of several rows, to minimize resource and bandwidth. On server side, incoming events are stored in memory, and indexed on the fly, with a periodic refresh rate of 500 ms: even a very active client logger would just let the {\i Log View} tool be responsive and efficient.\line Thanks to the nature of the {\f1\fs20 http.sys} based server, several {\i Server Root} URI can be accessed in parallel with several {\i Log View} tool instance, on the same HTTP port: it will ease the IT policy of your network, since a single forwarded port would be able to handle several incoming connections.
 See the "{\f1\fs20 RemoteLoggingTest.dpr}" sample from "{\f1\fs20 11 - Exception logging}", in conjunction with the {\f1\fs20 LogView.dpr} tool available in the same folder, for a running example of remote logging.
 Note that our cross-platform clients - see @86@ - are able to log to a remote server, with the same exact format as used by our {\f1\fs20 TSynLog} class.
@@ -6708,7 +6708,7 @@ Due to security restriction of newer versions of Windows (i.e. starting with Vis
 \page
 : Network and Internet access via HTTP
 For publishing a server via @*HTTP@/1.1 over TCP/IP, creates a {\f1\fs20 TSQLHttpServer} instance, and associate your running {\f1\fs20 TSQLRestServerDB} to it.
-In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate firewall settings.
+In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate @*firewall@ settings.
 :  HTTP server(s)
 \graph HTTPServers THttpServerGeneric classes hierarchy
 \THttpApiServer\THttpServerGeneric
@@ -6766,6 +6766,7 @@ Here is a sample program which can be launched to allow our {\f1\fs20 TestSQL3.d
 !!  THttpApiServer.AddUrlAuthorize('root','888',false,'+'));
 !end.
 Take also a look at the {\f1\fs20 Project04ServerRegister.dpr} sample, in the context of a whole client/server RESTful solution over HTTP.
+Note that you still need to open the IP port for incoming TCP traffic, in the Windows @**firewall@, if you want your server to be accessible to the outer world, as usual.
 :    Automatic authorization
 An easier possibility could be to run the server application at least once as system Administrator.
 The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} parameter. By default, it will be set to {\f1\fs20 @*useHttpApi@}. If you specify {\f1\fs20 useHttpApiRegisteringURI}, the class will register the URI before launching the server process.
