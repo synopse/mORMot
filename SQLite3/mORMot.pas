@@ -1,4 +1,4 @@
-/// Common ORM and SOA classes for mORMot
+﻿/// Common ORM and SOA classes for mORMot
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMot;
@@ -34429,10 +34429,14 @@ begin
           Obj := pointer(GetOrdProp(Value,pointer(P)));  // works also for CPU64
           case IsObj of
           oPersistent:
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
+            if (P^.PropType^^.ClassSQLFieldType=sftID) then begin
+              HR(P);
+              Add(PtrInt(Obj)); // not true instances, but ID
+            end else
+            if Obj<>nil then begin
+              HR(P);
+              WriteObject(Obj,Options);
+            end;
           oSQLRecord,oSQLMany: // TSQLRecord or inherited
           if (IsObj<>oSQLMany) or
              not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
