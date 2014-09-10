@@ -30,6 +30,7 @@ unit mORMotHttpServer;
 
   Contributor(s):
   - DigDiver (for HTTPS support)
+  - cheemeng
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -138,6 +139,7 @@ unit mORMotHttpServer;
         to TSQLRestServer instances - need to override TSQLHttpServer.Request()
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
       - added TSQLHTTPRemoteLogServer class for easy remote log serving
+      - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
 
 }
 
@@ -237,13 +239,6 @@ type
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAJAXJSON := false;
   TSQLHttpServer = class
-  private
-    fAccessControlAllowOrigin: RawUTF8;
-    fAccessControlAllowOriginHeader: RawUTF8;
-    {$ifdef WITHLOG}
-    fLog: TSynLogClass;
-    {$endif}
-    procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
   protected
     fOnlyJSONRequests: boolean;
     fHttpServer: THttpServerGeneric;
@@ -253,6 +248,13 @@ type
       Server: TSQLRestServer;
       RestAccessRights: PSQLAccessRights;
     end;
+    fAccessControlAllowOrigin: RawUTF8;
+    fAccessControlAllowOriginHeader: RawUTF8;
+    fHttpServerKind: TSQLHttpServerOptions;
+    {$ifdef WITHLOG}
+    fLog: TSynLogClass;
+    {$endif}
+    procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread);
     procedure HttpThreadTerminate(Sender: TThread);
@@ -401,7 +403,7 @@ implementation
 
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
-var i, n: integer;
+var i,n,err: integer;
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
@@ -413,11 +415,17 @@ begin
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
-    if fHttpServer.InheritsFrom(THttpApiServer) then
+    if fHttpServer.InheritsFrom(THttpApiServer) then begin
       // try to register the URL to http.sys
-      if THttpApiServer(fHttpServer).AddUrl(
-        aServer.Model.Root,fPort,(aHttpServerSecurity=secSSL),fDomainName)<>NO_ERROR then
+      err := THttpApiServer(fHttpServer).AddUrl(aServer.Model.Root,fPort,
+        (aHttpServerSecurity=secSSL),fDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
+      if err<>NO_ERROR then begin
+        {$ifdef WITHLOG}
+        aServer.LogFamily.SynLog.Log(sllLastError,'http.sys error %',[err]);
+        {$endif}
         exit;
+      end;
+    end;
     n := length(fDBServers);
     SetLength(fDBServers,n+1);
     fDBServers[n].Server := aServer;
@@ -427,8 +435,8 @@ begin
     result := true;
 {$ifdef WITHLOG}
   finally
-    aServer.LogFamily.SynLog.Log(sllDebug,'result=% for Root=%',
-      [JSON_BOOLEAN[Result],aServer.Model.Root]);
+    aServer.LogFamily.SynLog.Log(sllDebug,'result=% for Root=% Port=%',
+      [JSON_BOOLEAN[Result],aServer.Model.Root,fPort]);
   end;
 {$endif}
 end;
@@ -474,20 +482,20 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString);
 procedure RegURL(const URI: RawByteString);
 var err: integer;
-    ErrMsg: string;
+    ErrMsg: RawUTF8;
 begin
   err := THttpApiServer(fHttpServer).AddUrl(URI,aPort,
-    (aHttpServerSecurity=secSSL),aDomainName,(aHttpServerKind=useHttpApiRegisteringURI));
+    (aHttpServerSecurity=secSSL),aDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
   if err=NO_ERROR then
     exit;
   ErrMsg := 'Impossible to register URL';
   if err=ERROR_ACCESS_DENIED then
     ErrMsg := ErrMsg+' (administrator rights needed)';
-  raise ECommunicationException.CreateFmt('%s.Create: %s for %s',[ClassName,ErrMsg,URI]);
+  raise ECommunicationException.CreateUTF8('%.Create: % for %',[self,ErrMsg,URI]);
 end;
 var i,j: integer;
     ServersRoot: RawUTF8;
-    ErrMsg: string;
+    ErrMsg: RawUTF8;
 begin
   {$ifdef WITHLOG}
   if high(aServers)<0 then
@@ -498,6 +506,7 @@ begin
   inherited Create;
   fDomainName := aDomainName;
   fPort := aPort;
+  fHttpServerKind := aHttpServerKind;
   if high(aServers)<0 then
     ErrMsg := 'No TSQLRestServer' else
   for i := 0 to high(aServers) do
@@ -509,10 +518,10 @@ begin
       ServersRoot := ServersRoot+' '+Root;
       for j := i+1 to high(aServers) do
         if aServers[j].Model.URIMatch(Root) then
-          ErrMsg:= Format('Duplicated Root URI: %s and %s',[Root,aServers[j].Model.Root]);
+          ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
     end;
   if ErrMsg<>'' then
-     raise EModelException.CreateFmt('%s.Create(%s ): %s',[ClassName,ServersRoot,ErrMsg]);
+     raise EModelException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
   SetAccessControlAllowOrigin(''); // deny CORS by default
   SetLength(fDBServers,length(aServers));
   for i := 0 to high(aServers) do
@@ -584,7 +593,7 @@ begin
   fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
 {$endif}
   FreeAndNil(fHttpServer);
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TSQLHttpServer.Shutdown;
@@ -694,6 +703,7 @@ begin
       #13#10'Access-Control-Allow-Origin: '+Value;
 end;
 
+
 { TSQLHTTPRemoteLogServer }
 
 constructor TSQLHTTPRemoteLogServer.Create(const aRoot: RawUTF8;
@@ -713,7 +723,7 @@ end;
 destructor TSQLHTTPRemoteLogServer.Destroy;
 begin
   try
-    inherited;
+    inherited Destroy;
   finally
     fServer.Free;
   end;

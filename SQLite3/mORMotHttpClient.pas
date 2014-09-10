@@ -398,7 +398,7 @@ constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer,
 var aModel: TSQLModel;
 begin
   if not Assigned(aLogClass) then
-    raise ECommunicationException.Create('No LogClass');
+    raise ECommunicationException.CreateUTF8('%.CreateForRemoteLogging(LogClass=nil)',[self]);
   aModel := TSQLModel.Create([],aRoot);
   Create(aServer,aPort,aModel);
   aModel.Owner := self;
@@ -499,7 +499,7 @@ begin
     try
       InternalSetClass;
       if fWinAPIClass=nil then
-        raise ECommunicationException.CreateFmt('fWinAPIClass=nil for %s',[ClassName]);
+        raise ECommunicationException.CreateUTF8('fWinAPIClass=nil for %',[self]);
       fWinAPI := fWinAPIClass.Create(fServer,fPort,fHttps,fProxyName,fProxyByPass,
         fSendTimeout,fReceiveTimeout);
       // note that first registered algo will be the prefered one
