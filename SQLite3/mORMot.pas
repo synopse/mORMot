@@ -34372,10 +34372,16 @@ begin
         {$endif}
         tkClass: begin
           Obj := pointer(GetOrdProp(Value,pointer(P)));  // works also for CPU64
+          case IsObj of
+          oPersistent: 
+          if Obj<>nil then begin
+            HR(P);
+            WriteObject(Obj,Options);
+          end;
+          oSQLRecord,oSQLMany: // TSQLRecord or inherited
           if (IsObj<>oSQLMany) or
              not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
-            if (IsObj in [oSQLRecord,oPersistent,oSQLMany]) and
-               (P^.PropType^^.ClassSQLFieldType=sftID) and
+            if (P^.PropType^^.ClassSQLFieldType=sftID) and
                not TSQLRecord(Value).fFill.JoinedFields then begin
               HR(P);
               Add(PtrInt(Obj)); // not true instances, but ID
@@ -34384,6 +34390,7 @@ begin
               HR(P);
               WriteObject(Obj,Options);
             end;
+          end;
         end;
         // tkString (shortstring) is not handled
       end;
