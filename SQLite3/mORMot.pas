@@ -701,6 +701,12 @@ unit mORMot;
       set - therefore, TJSONSerializerCustomWriter callback signature changed
     - BREAKING CHANGE of TJSONSerializerCustomReader callback signature, which
       now has an additional aOptions: TJSONToObjectOptions parameter
+    - BREAKING CHANGE with newly added reSQLSelectWithoutTable security policy
+      flags in TSQLAccessRight.AllowRemoteExecute - older applications which
+      expected any SELECT statement to be executed on the server may break:
+      you need to explicitely set this flag for the User's TSQLAuthGroup - note
+      that SELECT with a simple table name in its FROM clause will now be
+      checked againsts TSQLAccessRight.GET[] access rights
     - remove some unused TPropInfo methods, which were duplicates of the
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
@@ -930,7 +936,7 @@ unit mORMot;
     - changed TSQLAccessRights and TSQLAuthGroup.SQLAccessRights CSV format
       to use 'first-last,' pattern to regroup set bits (reduce storage size)
     - added overloaded TSQLAccessRights.Edit() method using TSQLOccasions set
-    - added reOneSessionPerUser kind of remote execution in TSQLAccessRight
+    - added reOneSessionPerUser flag in TSQLAccessRight.AllowRemoteExecute
     - enabled reUrlEncodedSQL by default for TSQLAccessRights (needed e.g. for
       plain HTTP GET request, without any body)
     - introducing TSQLRestClientURI.InternalCheckOpen/InternalClose methods to
@@ -6330,10 +6336,10 @@ type
     // - raise an EModelException if the table is not in the model
     function GetTableIndexExisting(aTable: TSQLRecordClass): integer;
     /// get the index of a table in Tables[]
-    // - expects SQLTableName to be SQL-like formated (i.e. without TSQL[Record])
+    // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
     function GetTableIndex(const SQLTableName: RawUTF8): integer; overload;
     /// get the index of a table in Tables[]
-    // - expects SQLTableName to be SQL-like formated (i.e. without TSQL[Record])
+    // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
     function GetTableIndex(SQLTableName: PUTF8Char): integer; overload;
     /// return the UTF-8 encoded SQL source to create the table
     function GetSQLCreate(aTableIndex: integer): RawUTF8;
@@ -10091,6 +10097,9 @@ type
   /// a set of potential actions to be executed from the server
   // - reSQL will indicate the right to execute any POST SQL statement (not only
   // SELECT statements)
+  // - reSQLSelectWithoutTable will allow executing a SELECT statement with
+  // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
+  // against TSQLAccessRights.GET[] per-table right
   // - reService will indicate the right to execute the interface-based JSON-RPC
   // service implementation
   // - reUrlEncodedSQL will indicate the right to execute a SQL query encoded
@@ -10101,9 +10110,13 @@ type
   // - reOneSessionPerUser will force that only one session may be created
   // for one user, even if connection comes from the same IP: in this case,
   // you may have to set the SessionTimeOut to a small value, in case the
-  // session is not closed gracefully 
+  // session is not closed gracefully
+  // - order of this set does matter, since it will be stored as a byte value
+  // e.g. by TSQLAccessRights.ToString: ensure that new items would always be
+  // appended to the list, not inserted within
   TSQLAllowRemoteExecute = set of (
-    reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser);
+    reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser,
+    reSQLSelectWithoutTable);
 
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
@@ -10118,7 +10131,8 @@ type
     /// GET method (retrieve record) table access bits
     // - note that a GET request with a SQL statement without a table (i.e.
     // on 'ModelRoot' URI with a SQL statement as SentData, as used in
-    // TSQLRestClientURI.UpdateFromServer) is always valid, whatever the bits
+    // TSQLRestClientURI.UpdateFromServer) will be checked for simple cases
+    // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
     // here are: since TSQLRestClientURI.UpdateFromServer() is called only
     // for refreshing a direct statement, it will be OK; you can improve this
     // by overriding the TSQLRestServer.URI() method
@@ -10139,6 +10153,14 @@ type
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - use TSQLOccasion set as parameter
     procedure Edit(aTableIndex: integer; aRights: TSQLOccasions); overload;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - will raise an EModelException if the supplied table is incorrect
+    // - C=Create, R=Read, U=Update, D=Delete rights
+    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; C, R, U, D: Boolean); overload;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - will raise an EModelException if the supplied table is incorrect
+    // - use TSQLOccasion set as parameter
+    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; aRights: TSQLOccasions); overload;
     /// serialize the content as TEXT
     // - use the TSQLAuthGroup.AccessRights CSV format
     function ToString: RawUTF8;
@@ -10180,19 +10202,26 @@ type
     // and 'User' rows in the AuthUser table (with 'synopse' as default password),
     // and associated 'Admin', 'Supervisor', 'User' and 'Guest' groups, with the
     // following access rights to the AuthGroup table:
-    // $           POST SQL  Service  Auth R  Auth W  Tables R  Tables W
-    // $ Admin        Yes      Yes     Yes     Yes      Yes      Yes
-    // $ Supervisor   No       Yes     Yes     No       Yes      Yes
-    // $ User         No       Yes     No      No       Yes      Yes
-    // $ Guest        No       No      No      No       Yes      No
-    // 'Admin' will be the only able to execute remote not SELECT SQL statements
-    // for POST commands (reSQL in TSQLAccessRights.AllowRemoteExecute) and
-    // modify the Auth tables (i.e. AuthUser and AuthGroup), and Guest won't have
-    // access to the interface-based remote JSON-RPC service (no reService)
-    // - you MUST override those default 'synopse' password to a custom value
+    // $            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
+    // $ Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
+    // $ Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
+    // $ User         No      No        Yes    No    No     Yes    Yes
+    // $ Guest        No      No        No     No    No     Yes    No
+    // - 'Admin' will be the only able to execute remote not SELECT SQL statements
+    // for POST commands (reSQL flag in TSQLAccessRights.AllowRemoteExecute) and
+    // modify the Auth tables (i.e. AuthUser and AuthGroup)
+    // - 'Admin' and 'Supervisor' will allow any SELECT SQL statements to be
+    // executed, even if the table can't be retrieved and checked (corresponding
+    // to the reSQLSelectWithoutTable flag)
+    // - 'User' won't have the reSQLSelectWithoutTable flag, nor the right
+    // to retrieve the Auth tables data for other users
+    // - 'Guest' won't have access to the interface-based remote JSON-RPC service
+    // (no reService flag), nor perform any modification to a table: in short,
+    // this is an ORM read-only limited user
+    // - you MUST override the default 'synopse' password to a custom value
     // - of course, you can change and tune the settings of the AuthGroup and
-    // AuthUser tables, but only 'Admin' group users will be able to remotly
-    // modify the content of those table
+    // AuthUser tables, but only 'Admin' group users will be able to remotely
+    // modify the content of those two tables
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
     /// corresponding TSQLAccessRights for this authentication group
@@ -13258,18 +13287,23 @@ const
   /// Supervisor Table access right, i.e. alllmighty over all fields
   ALL_ACCESS_RIGHTS = [0..MAX_SQLTABLES-1];
 
-  /// Supervisor Database access right, i.e. allmighty over all Tables
-  SUPERVISOR_ACCESS_RIGHTS: TSQLAccessRights =
-    (AllowRemoteExecute: [reService,reUrlEncodedSQL,reUrlEncodedDelete];
+  /// Complete Database access right, i.e. allmighty over all Tables
+  // - WITH the possibility to remotely execute any SQL statement (reSQL right)
+  // - is used by default by TSQLRestClientDB.URI() method, i.e. for direct
+  // local/in-process access
+  // - is used as reference to create TSQLAuthUser 'Admin' access policy
+  FULL_ACCESS_RIGHTS: TSQLAccessRights =
+    (AllowRemoteExecute:
+      [reSQL,reSQLSelectWithoutTable,reService,reUrlEncodedSQL,reUrlEncodedDelete];
      GET: ALL_ACCESS_RIGHTS; POST: ALL_ACCESS_RIGHTS;
      PUT: ALL_ACCESS_RIGHTS; DELETE: ALL_ACCESS_RIGHTS);
 
   /// Supervisor Database access right, i.e. allmighty over all Tables
-  // - this constant will set AllowRemoteExecute field to true
-  // - is used by default only TSQLRestClientDB.URI() method, for direct
-  // local access right
-  FULL_ACCESS_RIGHTS: TSQLAccessRights =
-    (AllowRemoteExecute: [reSQL,reService,reUrlEncodedSQL,reUrlEncodedDelete];
+  // - but WITHOUT the possibility to remotely execute any SQL statement (reSQL)
+  // - is used as reference to create TSQLAuthUser 'Supervisor' access policy
+  SUPERVISOR_ACCESS_RIGHTS: TSQLAccessRights =
+    (AllowRemoteExecute:
+      [reSQLSelectWithoutTable,reService,reUrlEncodedSQL,reUrlEncodedDelete];
      GET: ALL_ACCESS_RIGHTS; POST: ALL_ACCESS_RIGHTS;
      PUT: ALL_ACCESS_RIGHTS; DELETE: ALL_ACCESS_RIGHTS);
 
@@ -22961,10 +22995,10 @@ begin
     while SQL[i] in [#1..' '] do inc(i);
     j := 0;
     while ord(SQL[i+j]) in IsIdentifier do inc(j);
-    if j>0 then begin
+    if cardinal(j-1)<64 then begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
-      if (not EnsureUniqueTableInFrom) or (SQL[k]<>',') then begin 
+      if (not EnsureUniqueTableInFrom) or (SQL[k]<>',') then begin
         SetString(TableName,PAnsiChar(PtrInt(SQL)+i-1),j);
         result := GetTableIndex(TableName);
         exit;
@@ -23024,11 +23058,14 @@ end;
 
 function TSQLModel.GetTableIndexExisting(aTable: TSQLRecordClass): integer;
 begin
+  if self=nil then
+    raise EModelException.Create('nil.GetTableIndexExisting');
   if aTable=nil then
-    raise EModelException.Create('TSQLRecordClass=nil');
+    raise EModelException.CreateUTF8('aTable=nil for % with root=%',[self,Root]);
   result := GetTableIndex(aTable);
   if result<0 then
-    raise EModelException.CreateUTF8('% should be part of the %',[aTable,self]);
+    raise EModelException.CreateUTF8('% should be part of the % with root=%',
+      [aTable,self,Root]);
 end;
 
 function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): integer;
@@ -23039,8 +23076,8 @@ begin
   for result := 0 to fTablesMax do
     if Tables[result]<>nil then // avoid GPF
     if IdemPropName(
-       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
-       // vmtClassName = UTF-8 encoded text stored in a shortstring
+       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code
+       // using vmtClassName = UTF-8 encoded text stored as shortstring
        PShortString(PPointer(PtrInt(Tables[result])+vmtClassName)^)^,
        pointer(TableName),L) then
       exit;  // case insensitive search
@@ -23052,7 +23089,8 @@ function TSQLModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
 begin
   if (self<>nil) and (SQLTableName<>'') then begin
     // fast binary search
-    result := FastFindPUTF8CharSorted(pointer(fSortedTablesName),fTablesMax,pointer(SQLTableName),@StrIComp);
+    result := FastFindPUTF8CharSorted(pointer(fSortedTablesName),fTablesMax,
+      pointer(SQLTableName),@StrIComp);
     if result>=0 then
       result := fSortedTablesNameIndex[result];
   end else
@@ -27091,24 +27129,41 @@ begin
           while not UrlDecodeValue(Parameters,'SQL=',SQL,@Parameters) do
             if Parameters=nil then break;
         end else
-          // GET with a SQL statement sent as UTF-8 body
+          // GET with a SQL statement sent as UTF-8 body (not 100% HTTP compatible)
           SQL := Call.InBody;
-        SQLisSelect := isSelect(pointer(SQL));
-        if (SQL<>'') and
-          (SQLisSelect or (reSQL in Call.RestAccessRights^.AllowRemoteExecute)) then begin
-          // no user check for SELECT: see TSQLAccessRights.GET comment
-          Static := Server.InternalAdaptSQL(
-            Server.Model.GetTableIndexFromSQLSelect(SQL,false),SQL);
-          if Static<>nil then  begin
-            TableEngine := Static;
-            Call.OutBody := TableEngine.EngineList(SQL);
-          end else
-            Call.OutBody := Server.MainEngineList(SQL,false,nil);
-          // security note: only first statement is run by EngineList()
-          if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
-            Call.OutStatus := HTML_SUCCESS;  // 200 OK
-            if not SQLisSelect then
-              inc(Server.fStats.fModified);
+        if SQL<>'' then begin
+          SQLisSelect := isSelect(pointer(SQL));
+          if SQLisSelect or
+             (reSQL in Call.RestAccessRights^.AllowRemoteExecute) then begin
+            Static := nil;
+            if SQLisSelect then begin
+              TableIndex := Server.Model.GetTableIndexFromSQLSelect(SQL,false);
+              if TableIndex<0 then begin
+                // check for SELECT without table
+                if not (reSQLSelectWithoutTable in
+                   Call.RestAccessRights^.AllowRemoteExecute) then begin
+                  Call.OutStatus := HTML_NOTALLOWED;
+                  exit;
+                end;
+              end else
+                // check for SELECT with table
+                if not (TableIndex in Call.RestAccessRights^.GET) then begin
+                  Call.OutStatus := HTML_NOTALLOWED;
+                  exit;
+                end else
+                Static := Server.InternalAdaptSQL(TableIndex,SQL);
+            end;
+            if Static<>nil then  begin
+              TableEngine := Static;
+              Call.OutBody := TableEngine.EngineList(SQL);
+            end else
+              Call.OutBody := Server.MainEngineList(SQL,false,nil);
+            // security note: only first statement is run by EngineList()
+            if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
+              Call.OutStatus := HTML_SUCCESS;  // 200 OK
+              if not SQLisSelect then
+                inc(Server.fStats.fModified);
+            end;
           end;
         end;
       end;
@@ -35079,6 +35134,18 @@ begin
     Exclude(DELETE,aTableindex);
 end;
 
+procedure TSQLAccessRights.Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
+  C, R, U, D: Boolean);
+begin
+  Edit(aModel.GetTableIndexExisting(aTable),C,R,U,D);
+end;
+
+procedure TSQLAccessRights.Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
+  aRights: TSQLOccasions);
+begin
+  Edit(aModel.GetTableIndexExisting(aTable),aRights);
+end;
+
 procedure TSQLAccessRights.FromString(P: PUTF8Char);
 begin
   fillchar(self,sizeof(self),0);
@@ -35125,11 +35192,11 @@ begin
       AuthUserIndex := Server.Model.GetTableIndexExisting(Server.fSQLAuthGroupClass);
       G := Server.fSQLAuthGroupClass.Create;
       try
-        //            POST SQL  Service Auth R  Auth W  Tables R  Tables W
-        // Admin        Yes       Yes    Yes     Yes      Yes      Yes
-        // Supervisor   No        Yes    Yes     No       Yes      Yes
-        // User         No        Yes    No      No       Yes      Yes
-        // Guest        No        No     No      No       Yes      No
+        //            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
+        // Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
+        // Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
+        // User         No      No        Yes    No    No     Yes    Yes
+        // Guest        No      No        No     No    No     Yes    No
         A := FULL_ACCESS_RIGHTS;
         G.Ident := 'Admin';
         G.SQLAccessRights := A;
@@ -35143,6 +35210,7 @@ begin
         G.SessionTimeout := 60;
         SupervisorID := Server.Add(G,true);
         G.Ident := 'User';
+        Exclude(A.AllowRemoteExecute,reSQLSelectWithoutTable);
         Exclude(A.GET,AuthUserIndex); // no Auth R
         Exclude(A.GET,AuthGroupIndex);
         G.SQLAccessRights := A;
