@@ -3820,6 +3820,7 @@ type
     function GetInputDouble(const ParamName: RawUTF8): Double;
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
     function GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
+    function GetInputHexaOrVoid(const ParamName: RawUTF8): cardinal;
     function GetInputDoubleOrVoid(const ParamName: RawUTF8): Double;
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
@@ -3995,6 +3996,9 @@ type
     /// retrieve one input parameter from its URI name as Int64
     // - returns 0 if the parameter is not found
     property InputIntOrVoid[const ParamName: RawUTF8]: Int64 read GetInputIntOrVoid;
+    /// retrieve one hexadecimal input parameter from its URI name as cardinal
+    // - returns 0 if the parameter is not found
+    property InputHexaOrVoid[const ParamName: RawUTF8]: cardinal read GetInputHexaOrVoid;
     /// retrieve one input parameter from its URI name as double
     // - returns 0 if the parameter is not found
     property InputDoubleOrVoid[const ParamName: RawUTF8]: double read GetInputDoubleOrVoid;
@@ -27416,6 +27420,9 @@ begin
   max := 0;
   repeat
     if n>=max then begin
+      if n>=96 then // avoid DOS - see MAX_METHOD_ARGS for TInterfacedObjectFake
+        raise EParsingException.CreateUTF8(
+          'Security Policy: Accept up to 48 parameters for %.FillInput',[self]);
       inc(max,16);
       SetLength(fInput,max);
     end;
@@ -27448,6 +27455,14 @@ end;
 function TSQLRestServerURIContext.GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
 begin
   result := GetInt64(pointer(GetInputUTF8OrVoid(ParamName)));
+end;
+
+function TSQLRestServerURIContext.GetInputHexaOrVoid(const ParamName: RawUTF8): cardinal;
+var value: RawUTF8;
+begin
+  value := GetInputUTF8(ParamName);
+  if (length(value)<>8) or not HexDisplayToCardinal(Pointer(value),result) then
+    result := 0;
 end;
 
 function TSQLRestServerURIContext.GetInputDoubleOrVoid(const ParamName: RawUTF8): double;
@@ -35189,6 +35204,8 @@ var aUserName: RawUTF8;
 begin
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
   aSessionID := Ctxt.InputIntOrVoid['Session'];
+  if aSessionID=0 then
+    aSessionID := Ctxt.InputHexaOrVoid['SessionHex'];
   if (aUserName<>'') and (aSessionID<>0) then begin
     // GET ModelRoot/auth?UserName=...&Session=... -> release session
   if (fServer.fSessions<>nil) and
