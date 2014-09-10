@@ -33101,9 +33101,9 @@ begin
   CodePage := StringCodePage(s);
   case CodePage of
   CP_UTF8:
-    Add(pointer(s),0,Escape);  // direct write of RawUTF8 content
+    Add(pointer(s),L,Escape);  // direct write of RawUTF8 content
   CP_UTF16:
-    AddW(pointer(s),0,Escape); // direct write of UTF-16 content
+    AddW(pointer(s),L,Escape); // direct write of UTF-16 content
   else begin
     if L>=SizeOf(tmpU8)div 3 then
       Getmem(U8,L*3+1) else
@@ -33200,14 +33200,15 @@ begin
     while i<Len do begin
       c := PByteArray(P)[i];
       case c of
-      0:  exit;
+      //0:  exit;
       8:  Add('\','b');
       9:  Add('\','t');
       10: Add('\','n');
       12: Add('\','f');
       13: Add('\','r');
       ord('\'),ord('"'): Add('\',AnsiChar(c));
-      1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
+      0..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
+        if Len = MaxInt then exit;
         AddShort('\u00');
         Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
       end;
