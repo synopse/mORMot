@@ -27031,10 +27031,6 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       end;
     end;
   begin
-    if ServiceParameters=nil then begin
-      Error('Parameters required');
-      exit;
-    end;
     ForceServiceResultAsXMLObject := ForceServiceResultAsXMLObject or
       Service.ResultAsXMLObject;
     ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
@@ -27085,7 +27081,11 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
     if (xml='application/xml') or (xml='text/xml') then
       ForceServiceResultAsXMLObject := true;
   end;
-  ComputeResult;
+  try
+    ComputeResult;
+  finally
+    ServiceParameters := nil; // ensure no GPF later if points to some local data
+  end;
   if ForceServiceResultAsXMLObject and (Call.OutBody<>'') and (Call.OutHead<>'') and
      CompareMem(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
     delete(Call.OutHead,15,31);
@@ -27773,42 +27773,43 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     ServiceParameters := pointer(Call.InBody) else begin
     // or parameters were URI-encoded (the HTML way)
     Par := Parameters;
-    if Par<>nil then
+    if Par<>nil then begin
       while Par^='+' do inc(Par); // ignore trailing spaces
-    if (Par^='[') or IdemPChar(Par,'%5B') then
-      // either as JSON array (input is e.g. '+%5B...' for ' [...')
-      JSON := UrlDecode(Parameters) else begin
-      // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
-      FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
-      if fInput<>nil then begin
-        meth := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
-        if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
-          WR := TTextWriter.CreateOwnedStream;
-          try // convert URI parameters into the expected ordered JSON array
-            WR.Add('[');
-            with Service.InterfaceFactory.fMethods[meth] do begin
-              iLow := 0;
-              for a := ArgsInFirst to ArgsInLast do
-              with Args[a] do
-              if ValueDirection<>smdOut then begin
-                argDone := false;
-                for i := iLow to high(fInput)shr 1 do // search argument in URI
-                  if IdemPropName(ParamName^,pointer(fInput[i*2]),length(fInput[i*2])) then begin
-                    AddValueJSON(WR,fInput[i*2+1]); // will add "" if needed
-                    if i=iLow then
-                      inc(iLow); // optimistic in-order search, but allow any order
-                    argDone := true;
-                    break;
-                  end;
-                if not argDone then
-                  AddDefaultJSON(WR); // allow missing argument (and add ',')
+      if (Par^='[') or IdemPChar(Par,'%5B') then
+        // either as JSON array (input is e.g. '+%5B...' for ' [...')
+        JSON := UrlDecode(Parameters) else begin
+        // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
+        FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
+        if fInput<>nil then begin
+          meth := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
+          if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
+            WR := TTextWriter.CreateOwnedStream;
+            try // convert URI parameters into the expected ordered JSON array
+              WR.Add('[');
+              with Service.InterfaceFactory.fMethods[meth] do begin
+                iLow := 0;
+                for a := ArgsInFirst to ArgsInLast do
+                with Args[a] do
+                if ValueDirection<>smdOut then begin
+                  argDone := false;
+                  for i := iLow to high(fInput)shr 1 do // search argument in URI
+                    if IdemPropName(ParamName^,pointer(fInput[i*2]),length(fInput[i*2])) then begin
+                      AddValueJSON(WR,fInput[i*2+1]); // will add "" if needed
+                      if i=iLow then
+                        inc(iLow); // optimistic in-order search, but allow any order
+                      argDone := true;
+                      break;
+                    end;
+                  if not argDone then
+                    AddDefaultJSON(WR); // allow missing argument (and add ',')
+                end;
               end;
+              WR.CancelLastComma;
+              WR.Add(']');
+              WR.SetText(JSON);
+            finally
+              WR.Free;
             end;
-            WR.CancelLastComma;
-            WR.Add(']');
-            WR.SetText(JSON);
-          finally
-            WR.Free;
           end;
         end;
       end;
@@ -27820,7 +27821,6 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     ServiceInstanceID := TableID;
   // now Service, ServiceParameters, ServiceMethodIndex are set
   InternalExecuteSOAByInterface;
-  ServiceParameters := nil; // ensure no GPF later if = pointer(JSON)
 end;
 
 class procedure TSQLRestRoutingREST.ClientSideInvoke(var uri: RawUTF8;
@@ -38871,7 +38871,7 @@ begin
     fillchar(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
   try
     // 1. validate input parameters
-    if ArgsInputValuesCount<>0 then begin // ignore if there is no in parameter
+    if (ArgsInputValuesCount<>0) and (Par<>nil) then begin 
       if Par^ in [#1..' '] then repeat inc(Par) until not(Par^ in [#1..' ']);
       case Par^ of
       '[': // input arguments as a JSON array , e.g. '[1,2,"three"]' (default)
@@ -38920,66 +38920,68 @@ begin
       {$endif}
       end;
     // 3. decode input parameters (if any)
-    for a := ArgsInFirst to ArgsInLast do
-    with Args[a] do
-    if ValueDirection<>smdOut then begin
-      if ParObjValues<>nil then
-        if ParObjValues[a]=nil then // ignore missing parameter in input JSON
-          continue else
-          Par := ParObjValues[a]; // value is to be retrieved from JSON object
-      case ValueType of
-      smvObject: begin
-        Par := JSONToObject(Objects[IndexVar],Par,valid);
-        if not valid then
-          exit;
-        IgnoreComma(Par);
-      end;
-      smvRawJSON: begin
-        Val := Par;
-        Par := GotoNextJSONItem(Par);
-        if Par<=Val then
-          exit;
-        SetString(RawUTF8s[IndexVar],PAnsiChar(Val),Par-Val);
-      end;
-      smvDynArray: begin
-        Par := DynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
-        IgnoreComma(Par);
-      end;
-      smvRecord:
-        Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
-      {$ifndef NOVARIANTS}
-      smvVariant:
-        Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
-          @JSON_OPTIONS[optVariantCopiedByReference in Options]);
-      {$endif}
-      smvBoolean..smvWideString: begin
-        Val := GetJSONField(Par,Par,@wasString);
-        if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
-          exit;
+    if (Par=nil) and (ParObjValues=nil) then // set default if no input parameter
+      fillchar(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0) else
+      for a := ArgsInFirst to ArgsInLast do
+      with Args[a] do
+      if ValueDirection<>smdOut then begin
+        if ParObjValues<>nil then
+          if ParObjValues[a]=nil then // ignore missing parameter in input JSON
+            continue else
+            Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
-        smvBoolean:
-          Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
-        smvEnum..smvInt64:
-          SetInt64(Val,Int64s[IndexVar]);
-        smvDouble,smvDateTime:
-          PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
-        smvCurrency:
-          Int64s[IndexVar] := StrToCurr64(Val);
-        smvRawUTF8:
-          RawUTF8s[IndexVar] := Val;
-        smvString:
-          UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
-        smvWideString:
-          UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
-        else exit; // should not happen
+        smvObject: begin
+          Par := JSONToObject(Objects[IndexVar],Par,valid);
+          if not valid then
+            exit;
+          IgnoreComma(Par);
         end;
-        continue; // here Par=nil is correct
+        smvRawJSON: begin
+          Val := Par;
+          Par := GotoNextJSONItem(Par);
+          if Par<=Val then
+            exit;
+          SetString(RawUTF8s[IndexVar],PAnsiChar(Val),Par-Val);
+        end;
+        smvDynArray: begin
+          Par := DynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
+          IgnoreComma(Par);
+        end;
+        smvRecord:
+          Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
+        {$ifndef NOVARIANTS}
+        smvVariant:
+          Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
+            @JSON_OPTIONS[optVariantCopiedByReference in Options]);
+        {$endif}
+        smvBoolean..smvWideString: begin
+          Val := GetJSONField(Par,Par,@wasString);
+          if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
+            exit;
+          case ValueType of
+          smvBoolean:
+            Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
+          smvEnum..smvInt64:
+            SetInt64(Val,Int64s[IndexVar]);
+          smvDouble,smvDateTime:
+            PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
+          smvCurrency:
+            Int64s[IndexVar] := StrToCurr64(Val);
+          smvRawUTF8:
+            RawUTF8s[IndexVar] := Val;
+          smvString:
+            UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
+          smvWideString:
+            UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
+          else exit; // should not happen
+          end;
+          continue; // here Par=nil is correct
+        end;
+        else continue;
+        end;
+        if Par=nil then
+          exit;
       end;
-      else continue;
-      end;
-      if Par=nil then
-        exit;
-    end;
     // 4. create the stack content
     call.StackAddr := PtrInt(@Stack);
     call.StackSize := ArgsSizeInStack;
