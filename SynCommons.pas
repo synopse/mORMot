@@ -5157,7 +5157,9 @@ type
     procedure AddString(const Text: RawUTF8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append several UTF-8 strings
-    procedure AddStrings(const Text: array of RawUTF8);
+    procedure AddStrings(const Text: array of RawUTF8); overload;
+    /// append an UTF-8 string several times
+    procedure AddStrings(const Text: RawUTF8; count: integer); overload;
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
@@ -33487,6 +33489,22 @@ var i: integer;
 begin
   for i := 0 to high(Text) do
     AddString(Text[i]);
+end;
+
+procedure TTextWriter.AddStrings(const Text: RawUTF8; count: integer);
+var i,L: integer;
+begin
+  L := length(Text);
+  if L*count>fTempBufSize then
+    for i := 1 to count do
+      AddString(Text) else begin
+    if B+L*count>BEnd then
+      Flush;
+    for i := 1 to count do begin
+      move(pointer(Text)^,B[1],L);
+      inc(B,L);
+    end;
+  end;
 end;
 
 procedure TTextWriter.CancelAll;
