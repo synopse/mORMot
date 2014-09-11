@@ -851,7 +851,7 @@ unit mORMot;
     - fix and enhance boolean values parsing from JSON content ("Yes"=true)
     - implement woHumanReadableFullSetsAsStar and woHumanReadableEnumSetAsComment
       option for JSON serialization and TEnumType.GetEnumNameTrimedAll()
-    - fixed potential buffer overflow in TJSONObjectDecoder.EncodeAsSQLPrepared()
+    - fixed ticket [139a846ce88] about TJSONObjectDecoder.EncodeAsSQLPrepared()
     - use GetTickCount64() to fix any issue in case of GetTickCount() overflow -
       some *: cardinal properties are renamed *64: Int64 for consistency
     - added ClassInstanceCreate() function calling any known virtual constructor
@@ -1484,13 +1484,10 @@ type
     // - after a successfull call to Decode()
     // - FieldValues[] content will be ignored
     // - Occasion can be only soInsert or soUpdate
-    // - for soInsert, it will create an INSERT with multiple VALUES if
-    //  MultipleInsertCount>1, like 'INSERT ... VALUES (?,?), (?,?), ....'
     // - for soUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
     // - you can specify some options, e.g. boInsertOrIgnore for soInsert
     function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TSQLOccasion;
-      const UpdateIDFieldName: RawUTF8; BatchOptions: TSQLRestBatchOptions;
-      MultipleInsertCount: integer=0): RawUTF8;
+      const UpdateIDFieldName: RawUTF8; BatchOptions: TSQLRestBatchOptions): RawUTF8;
     /// set the specified array to the fields names
     // - after a successfull call to Decode()
     procedure AssignFieldNamesTo(var Fields: TRawUTF8DynArray);
@@ -19297,65 +19294,55 @@ end;
 
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
-  BatchOptions: TSQLRestBatchOptions; MultipleInsertCount: integer): RawUTF8;
+  BatchOptions: TSQLRestBatchOptions): RawUTF8;
 var F: integer;
-    P,SQL: PUTF8Char;
-    tmp: RawUTF8;
+    W: TTextWriter;
 begin
-  SQL := nil;
-  result := '';
-  if FieldCount<>0 then begin
-    if (Occasion<>soInsert) or (MultipleInsertCount<=0) then
-      MultipleInsertCount := 1;
-    SetLength(tmp,FieldNameLen+4*FieldCount*MultipleInsertCount+24); // max length
-    P := pointer(tmp);
+  W := TTextWriter.CreateOwnedStream(1024);
+  try
     case Occasion of
     soUpdate: begin
-      // returns 'COL1=?,COL2=?' (UPDATE SET format)
-      for F := 0 to FieldCount-1 do begin
-        P := AppendRawUTF8ToBuffer(P,DecodedFieldNames[F]);
-        PInteger(P)^ := Ord('=')+Ord('?')shl 8+Ord(',')shl 16;
-        inc(P,3);
+      if FieldCount=0 then
+        raise EORMException.Create('Invalid EncodeAsSQLPrepared(0)');
+      W.AddShort('update ');
+      W.AddString(TableName);
+      W.AddShort(' set ');
+      for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
+        W.AddString(DecodedFieldNames[F]);
+        W.AddShort('=?,');
       end;
-      dec(P);
-      SQL := 'update % set % where %=?';
+      W.CancelLastComma;
+      W.AddShort(' where ');
+      W.AddString(UpdateIDFieldName);
+      W.Add('=','?');
+      W.SetText(result);
     end;
     soInsert: begin
-      // returns ' (COL1,COL2) VALUES (?,?)' (INSERT format)
-      PWord(P)^ := Ord(' ')+ord('(')shl 8;
-      inc(P,2);
-      for F := 0 to FieldCount-1 do begin
-        P := AppendRawUTF8ToBuffer(P,DecodedFieldNames[F]);
-        P^ := ',';
-        inc(P);
-      end;
-      P := AppendRawUTF8ToBuffer(P-1,') VALUES (');
-      repeat
-        for F := 1 to FieldCount do begin
-          PWord(P)^ := Ord('?')+Ord(',')shl 8;
-          inc(P,2);
-        end;
-        P[-1] := ')';
-        dec(MultipleInsertCount);
-        if MultipleInsertCount=0 then
-          break;
-        PWord(P)^ := Ord(',')+Ord('(')shl 8;
-        inc(P,2);
-      until false;
       if boInsertOrIgnore in BatchOptions then
-        SQL := 'insert or ignore into %%' else
-        SQL := 'insert into %%';
+        W.AddShort('insert or ignore into ') else
+        W.AddShort('insert into ');
+      W.AddString(TableName);
+      if FieldCount=0 then
+        W.AddShort(' default values') else begin
+        W.Add(' ','(');
+        for F := 0 to FieldCount-1 do begin // append 'COL1,COL2'
+          W.AddString(DecodedFieldNames[F]);
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+        W.AddShort(') values (');
+        W.AddStrings('?,',FieldCount);
+        W.CancelLastComma;
+        W.Add(')');
+      end;
+      W.SetText(result);
     end;
     else
       raise EORMException.Create('Invalid EncodeAsSQLPrepared() call');
     end;
-    assert(P-pointer(tmp)<length(tmp));
-    SetLength(tmp,P-pointer(tmp));
-  end else
-    if Occasion=soUpdate then
-      exit else
-      tmp := ' default values';
-  result := FormatUTF8(SQL,[TableName,tmp,UpdateIDFieldName]);
+  finally
+    W.Free;
+  end;
 end;
 
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
