@@ -73,12 +73,22 @@ interface
    Then the patch will be applied at runtime. Nothing to recompile!
 
   WARNING:
-      -----------------------------------------------------------------
-      USING THIS UNIT WILL BREAK COMPATIBILITY WITH OLE/COM LIBRARIES !
-      -----------------------------------------------------------------
-   You won't be able to share WideString/BSTR variables with a dll, e.g. an
+
+   ------------------------------------------------------------------
+    USING THIS UNIT MAY BREAK COMPATIBILITY WITH OLE/COM LIBRARIES !
+   ------------------------------------------------------------------
+   You won't be able to retrieve and release WideString/BSTR variables from an
    OleDB / ADO database provider, or any COM object.
    Do not use this unit if you are calling such external call!
+
+   In practice, if you only SEND some BSTR content to the provider (e.g. if
+   you use our SynOleDB unit without stored procedure call, or if you use
+   TWideString fields for most SynDBDataSet classes), it will work.
+   You would have issues only if you *retrieve* a BSTR from the COM object,
+   or expect the COM object to *change* the BSTR size, e.g. with a "var"
+   WideString parameter or a COM method returning a WideString. In this case,
+   you could use the WideStringFree() procedure to release such an instance.
+
    It is for educational purpose only, and/or if you are 100% sure that your
    code will stay self-contained, under Delphi 7 or Delphi 2007, and need use
    of WideString instead of string=AnsiString.
@@ -87,11 +97,51 @@ interface
 
 }
 
+/// this low-level helper can be used to free a WideString returned by COM/OLE
+// - WideString instances created with this unit can be safely sent to any
+// COM/OLE object, as soon as they are constant parameters, but not a "var"
+// parameter or a function result
+// - any WideString instance returned by a COM object should NOT be released
+// by Delphi automatically, since the following would create a memory error:
+// ! TrueBSTRWideStringVariable := '';
+// - if you are using SynFastWideString, you should use this procedure to
+// release true BSTR WideString instance, as such:
+// ! type
+// !  _Catalog = interface(IDispatch)
+// !    // this method will be safe to use with our unit
+// !    function Create(const ConnectString: WideString): OleVariant; safecall;
+// !    // this method won't be safe, since it returns a true BSTR as WideString
+// !    function GetObjectOwner(const ObjectName: WideString; ObjectType: OleVariant;
+// !                            ObjectTypeId: OleVariant): WideString; safecall;
+// ! end;
+// !...
+// !function CheckCatalogOwner(const catalog: _Catalog): string;
+// !var bstr: WideString;
+// !begin
+// !  try // force manual handling of this true BSTR instance lifetime
+// !   bstr := catalog.GetObjectOwner('name',null,null);
+// !   result := bstr; // conversion to string will work
+// !  finally
+// !    WideStringFree(bstr); // manual release, and set bstr := nil
+// !  end;
+// !end;
+// - do a regular TrueBSTRWideStringVariable := '' since Delphi 2009, or
+// call the low-level oleaut32.dll API for older versions, as expected by COM
+procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
+
 
 implementation
 
-{$ifndef UNICODE}
+{$ifdef UNICODE}
 // since Delphi 2009, use string=UnicodeString type, which features CopyOnWrite
+// -> do not patch anything
+
+procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
+begin
+  TrueBSTRWideStringVariable := ''; // regular handling via System.pas
+end;
+
+{$else}
 
 uses
   Windows;
@@ -125,16 +175,16 @@ end;
 procedure PatchAPI(source,dest: pointer);
 var RestoreProtection,Ignore: DWORD;
 begin
-  while PByte(source)^<>$e8 do // search first CALL within the function code
+  while PByte(source)^<>$e8 do  // search first CALL within the function code
     inc(PByte(source));
   inc(PByte(source));
-  source := pointer(integer(source)+SizeOf(pointer)+PInteger(source)^);
-  if PWord(source)^<>$25ff then // "jmp dword ptr []" API redirection
+  inc(PByte(source),PInteger(source)^+SizeOf(integer)); // go to the CALL stub
+  if PWord(source)^<>$25ff then // expect "jmp dword ptr []" asm
     halt;
   inc(PWord(source));
-  source := PPointer(source)^;  // get address from dword ptr 
+  source := PPointer(source)^;  // get "dword ptr []" address of API redirection  
   if VirtualProtect(source,SizeOf(source),PAGE_EXECUTE_READWRITE,RestoreProtection) then begin
-    PPointer(source)^ := dest;
+    PPointer(source)^ := dest;  // replace oleaut32.dll API with our own function
     VirtualProtect(source,SizeOf(source),RestoreProtection,Ignore);
     FlushInstructionCache(GetCurrentProcess,source,SizeOf(source));
   end;
@@ -164,6 +214,15 @@ begin
   AnsiString(S) := '';
 end;
 
+procedure OleAut32SysFreeString(S: pointer); stdcall; external 'oleaut32.dll';
+
+procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
+begin
+  if pointer(TrueBSTRWideStringVariable)<>nil then begin
+    OleAut32SysFreeString(pointer(TrueBSTRWideStringVariable));
+    pointer(TrueBSTRWideStringVariable) := nil;
+  end;
+end;
 
 initialization
   PatchAPI(_SysAllocStringLen,@SysAllocStringLen);

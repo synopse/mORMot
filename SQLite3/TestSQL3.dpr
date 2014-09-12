@@ -88,6 +88,7 @@ uses
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   {$endif}
+  //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   mORMotSelfTests in 'mORMotSelfTests.pas',
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',

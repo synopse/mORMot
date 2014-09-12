@@ -2184,6 +2184,8 @@ type
     function Get_Groups: OleVariant; safecall;
     function Get_Users: OleVariant; safecall;
     function Create(const ConnectString: WideString): OleVariant; safecall;
+    // warning: the following method won't work if you use SynFastWideString.pas
+    // but we don't call it in this unit, you we can stay cool for now :)
     function GetObjectOwner(const ObjectName: WideString; ObjectType: OleVariant;
                             ObjectTypeId: OleVariant): WideString; safecall;
     procedure SetObjectOwner(const ObjectName: WideString; ObjectType: OleVariant;
