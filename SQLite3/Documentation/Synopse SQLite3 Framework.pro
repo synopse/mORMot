@@ -718,6 +718,7 @@ Due to its modular design, you can integrate some framework bricks to your exist
 - You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migration to @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
 - Make your application ready to offer a RESTful interface, e.g. for consuming JSON content via AJAX or mobile clients - see @86@;
 - New tables may be defined via the ORM/ODM features of {\i mORMot}, still hosted in your external SQL server - see @27@, as any previous data; in particular, mixed pure-ORM and regular-SQL requests may coexist; or {\i mORMot}'s data modeling may balance your storage among several servers (and technologies, like NoSQL);
+- Sharing the same tables between legacy code SQL and {\i mORMot} ORM is possible, but to avoid consistency problems, you should better follow some rules detailed @106@;
 - You may benefit from our very fast in-memory engine, a dedicated {\i @*SQLite3@}-based consolidation database or even the caching features - see @38@, shared on the server side, when performance is needed - it may help integrating some @*CQRS@ pattern ({\i Command Query Responsibility Segregation}) into your application via a @*REST@ful interface, and delegate some queries from your main database;
 - If you are still using an old version of {\i Delphi}, and can't easily move up due to some third party components or existing code base, {\i mORMot} will offer all the needed features to start ORM, N-Tier and SOA, starting with a {\i Delphi} 6 edition.
 {\i mORMot} implements the needed techniques for introducing what Michael Feathers calls, in his book {\i Working Effectively With Legacy Code}, a @**seam@. A seam is an area where you can start to cleave off some legacy code and begin to introduce changes. Even mocking abilities of {\i mORMot} - see @62@ - will help you in this delicate task - see @http://www.infoq.com/articles/Utilizing-Logging
@@ -1306,7 +1307,7 @@ Some string types have been defined, and used in the code for best cross-compile
 - Generic {\f1\fs20 string} for {\i @*i18n@} (e.g. in unit {\f1\fs20 mORMoti18n}), i.e. text ready to be used within the VCL, as either {\f1\fs20 AnsiString} (for {\i Delphi} 2 to 2007) or {\f1\fs20 UnicodeString} (for {\i Delphi} 2009 and later);
 - {\f1\fs20 RawUnicode} in some technical places (e.g. direct Win32 *W() API call in {\i Delphi} 7) - note: this type is NOT compatible with {\i Delphi} 2009 and later {\f1\fs20 UnicodeString};
 - {\f1\fs20 @**RawByteString@} for byte storage (e.g. for {\f1\fs20 FileFromString()} function);
-- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @*WideString@} before {\i Delphi} 2009, and {\f1\fs20 UnicodeString} since);
+- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @**WideString@} before {\i Delphi} 2009, and {\f1\fs20 UnicodeString} since);
 - Some special conversion functions to be used for {\i Delphi} 2009+ {\f1 UnicodeString} (defined inside {\f1\fs20 \{$ifdef UNICODE\}...\{$endif\}} blocks);
 - Never use {\f1\fs20 AnsiString} directly, but one of the types above.
 Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used in our framework when defining textual properties in a {\f1\fs20 @*TSQLRecord@} and for all internal data processing. It is only when you're reaching the User Interface layer that you may convert explicitly the {\f1\fs20 RawUTF8} content into the generic VCL {\f1\fs20 string} type, using either the {\f1\fs20 Language. UTF8ToString} method (from {\f1\fs20 mORMoti18n.pas} unit) or the following function from {\f1\fs20 SynCommons.pas}:
@@ -1320,6 +1321,7 @@ Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used 
 !function UTF8ToString(const Text: RawUTF8): string;
 Of course, the {\f1\fs20 StringToUTF8} method or function are available to send back some text to the @*ORM@ layer.\line A lot of dedicated conversion functions (including to/from numerical values) are included in {\f1\fs20 SynCommons.pas}. Those were optimized for speed and multi-thread capabilities, and to avoid implicit conversions involving a temporary {\f1\fs20 string} variable.
 Warning during the compilation process are not allowed, especially under Unicode version of {\i Delphi} (e.g. {\i Delphi} 2010): all string conversion from the types above are made explicitly in the framework's code, to avoid any unattended data loss.
+If you are using older version of Delphi, and have an existing code base involving a lot of {\f1\fs20 @*WideString@} variables, you may take a look at the {\f1\fs20 @*SynFastWideString@.pas} unit. Adding this unit in the top of your {\f1\fs20 .dpr} uses clauses would let all {\f1\fs20 WideString} process use the Delphi heap and its very efficient {\i @*FastMM4@} memory manager, instead of the much slower BSTR Windows API. Performance gain can be more than 50 times, if you existinc code use a lot of {\f1\fs20 WideString} variables. Note that using this unit would break the compatibility with BSTR/COM/OLE kind of string, so is not to be used with COM objects. In all cases, if you need {\i Unicode} support with older versions of Delphi, consider using our {\f1\fs20 RawUTF8} type instead, which is much better integrated with our framework.
 :33 Currency handling
 Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly to map the variables to their internal {\f1\fs20 Int64} binary representation, as such:
 !function CompCurrency(var A,B: currency): Int64;
@@ -4889,7 +4891,7 @@ The {\f1\fs20 @**SynDB@} units have the following features:
 - Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
 - Could be safely used in a multi-threaded application/server (with dedicated thread-safe methods, usable even if the database client is not officially multi-thread);
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
-- Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / WideString};
+- Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
 - @*Late-binding@ column access, via a custom variant type;
 - Direct @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
@@ -5451,20 +5453,20 @@ struct1:yod -> struct2:yod;
 \
 Note that only the {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} column names were customized.
 Due to the design of {\i SQLite3} virtual tables, and mORMot internals in its current state, the database primary key must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM.
-:  Legacy code still modifying the database
+:106  Sharing the database with legacy code
 It is pretty much possible that you would have to maintain and evolve a legacy project, based on an existing database, with a lot of already written SQL statements - see @66@. For instance, you would like to use {\i mORMot} for new features, and/or add mobile or HTML clients - see @86@.\line In this case, the @*ORM@ advanced features - like @38@ or BATCH process, see @28@ - may conflict with the legacy code, for the tables which may have to be shared. Here are some guidelines when working on such a project.
-To be exhaustive about your question, we need to consider each ORM @*CRUD@ operation. We may have to divide them in three kinds: read queries, insertions, and modifications of existing data.
-About ORM {\f1\fs20 Retrieve()} methods, the ORM cache can be tuned per table, and you will definitively lack of some cache, but remember :
+To be exhaustive about this question, we need to consider each ORM @*CRUD@ operation. We may have to divide them in three kinds: read queries, insertions, and modifications of existing data.
+About {\b ORM read queries}, i.e. {\f1\fs20 Retrieve()} methods, the ORM cache can be tuned per table, and you will definitively lack of some cache, but remember :
 - That you can set a "time out" period for this cache, so that you may still benefit of it in most cases;
 - That you have a cache at server level and another at client level, so you can tune it to be less aggressive on the client, for instance;
 - That you can tune the ORM cache {\i per ID}, so some items which are not likely to change can still be cached.
-About ORM {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, when using the external engine, if any external process is likely to INSERT new rows, ensure you set the {\f1\fs20 TSQLRestStorageExternal} {\f1\fs20 EngineAddUseSelectMaxID} property to TRUE, so that it will compute the next maximum ID by hand.\line But it still may be an issue, since the external process may do an INSERT {\i during} the ORM insertion.\line So the best is perhaps to NOT use the ORM {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, but rely on dedicated INSERT SQL statement, e.g. hosted in an interface-based service on the server side.
-About ORM {\f1\fs20 Update() Delete() BatchUpdate() BatchDelete()} methods, they sound safe to be used in conjunction with external process modifying the DB, as soon as you use transactions to let the modifications be atomic, and won't conflict any concurrent modifications in the legacy code.
-Perhaps the safer pattern, when working with external tables which are to be modified in the background by some legacy code, may be to use server-side {\i interface-based services} - see @63@ - for any process involving external tables which may be modified by another process, with manual SQL, instead of using the ORM "magic". But it will depend on your business logic, and you will fail to benefit from the ORM features of the framework.\line Nevertheless, introducing @17@ into your application would be very beneficial: ORM is not mandatory, especially if you are "fluent" in SQL queries, know how to make them as standard as possible, and have a lot of legacy code, perhaps with already tuned SQL statements.
-Introducing @*SOA@ is mandatory to introduce new kind of clients to your applications, like mobile apps or AJAX modern sites: you could not access directly the database any more, as you did with your legacy Delphi application, and RAD DB components.\line All new features, involving new tables to store new data, would still benefit of the {\i mORMot}'s ORM, and could still be hosted in the very same external database, shared by your existing code.\line Then, you will be able to identify {\i seams} - see @66@ - in your legacy code, and move them to your new {\i mORMot} services, then let your application evolve into a newer SOA/MVC architecture, without breaking anything, nor starting from scratch.
+About {\b ORM insertions}, i.e. {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, when using the external engine, if any external process is likely to INSERT new rows, ensure you set the {\f1\fs20 TSQLRestStorageExternal} {\f1\fs20 EngineAddUseSelectMaxID} property to TRUE, so that it will compute the next maximum ID by hand.\line But it still may be an issue, since the external process may do an INSERT {\i during} the ORM insertion.\line So the best is perhaps to NOT use the ORM {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, but rely on dedicated INSERT SQL statement, e.g. hosted in an interface-based service on the server side.
+About {\b ORM modifications}, i.e. {\f1\fs20 Update() Delete() BatchUpdate() BatchDelete()} methods, they sound safe to be used in conjunction with external process modifying the DB, as soon as you use transactions to let the modifications be atomic, and won't conflict any concurrent modifications in the legacy code.
+Perhaps the safer pattern, when working with external tables which are to be modified in the background by some legacy code, may be to by-pass those ORM methods, and define server-side {\i interface-based services} - see @63@. Those services may contain manual SQL, instead of using the ORM "magic". But it will depend on your business logic, and you will fail to benefit from the ORM features of the framework.\line Nevertheless, introducing @17@ into your application would be very beneficial: ORM is not mandatory, especially if you are "fluent" in SQL queries, know how to make them as standard as possible, and have a lot of legacy code, perhaps with already tuned SQL statements.
+Introducing @*SOA@ is mandatory to interface new kind of clients to your applications, like mobile apps or AJAX modern sites. To be fair, you should not access directly the database any more, as you did with your legacy Delphi application and @*RAD@ DB components.\line All new features, involving new tables to store new data, would still benefit of the {\i mORMot}'s ORM, and could still be hosted in the very same external database, shared by your existing code.\line Then, you will be able to identify {\i seams} - see @66@ - in your legacy code, and move them to your new {\i mORMot} services, then let your application evolve into a newer SOA/MVC architecture, without breaking anything, nor starting from scratch.
 :30  External database ORM internals
 The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@}-based external database for the framework.
-In fact, the {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes will implement this feature:
+In fact, this feature will use {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes, defined as such:
 \graph HierExternalTables External Databases classes hierarchy
 \TSQLRecordVirtual\TSQLRecord
 \TSQLRecordVirtualTableAutoID\TSQLRecordVirtual
@@ -6266,7 +6268,7 @@ The following types are handled by this feature:
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Serialized as JSON boolean
 |{\f1\fs20 byte word integer cardinal Int64 single double}|Serialized as JSON number
-|{\f1\fs20 string RawUTF8 SynUnicode WideString}|Serialized as JSON string
+|{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
 |{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
 |{\f1\fs20 RawJSON}|Stored as un-serialized raw JSON content\line (e.g. any value, object or array)
@@ -8108,7 +8110,7 @@ The memory allocation model of the {\i Delphi} {\f1\fs20 interface} type uses so
 By default in {\i Delphi}, all references are defined:
 - as {\i weak references} for pointer and class instances;
 - with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, currency, double} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
-- via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, widestring, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
+- via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, @*widestring@, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
 - as {\i strong reference} with {\i reference counting} for {\f1\fs20 interface} instances.
 The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and will not be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
 See the following {\f1\fs20 interface} definition for instance:
@@ -12240,6 +12242,7 @@ You perhaps did notice that textual constant were defined as {\f1\fs20 @*resourc
 !  sPictureN = '%s Picture';
 The @!Lib\SQLite3\mORMoti18n.pas@ unit is able to parse all those {\f1\fs20 resourcestring} from a running executable, via its {\f1\fs20 ExtractAllResources} function, and create a reference text file to be translated into any handled language.
 Creating a report from code does make sense in an ORM. Since we have most useful data at hand as {\i Delphi} classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
+Note that the {\f1\fs20 mORMotReport.pas} unit uses UTF-16 encoded string, i.e. our {\f1\fs20 SynUnicode} type, which is either {\f1\fs20 UnicodeString} since Delphi 2009, or {\f1\fs20 WideString} for older versions. {\f1\fs20 WideString} is known to have performance issues, due to use of slow BSTR API calls - so if you want to create huge reports with pre-Unicode versions of Delphi and our report engine, consider adding a reference to our {\f1\fs20 @*SynFastWideString@.pas} unit at first place of your {\f1\fs20 .dpr} uses clause, for potential huge speed enhancement. See @32@ for more details, especially the restriction of use, since it would break any attempt to use BSTR parameters with any OLE/COM object.
 \page
 : Application i18n and L10n
 In computing, internationalization and localization (also spelled internationalisation and localisation) are means of adapting computer software to different languages, regional differences and technical requirements of a target market:
@@ -13256,7 +13259,7 @@ So, how does the variant type used by {\i Ole Automation} and our custom variant
 Behind the scene, the {\i Delphi} compiler calls the {\f1\fs20 DispInvoke} function, as defined in the {\i Variant.pas} unit.
 The default implementation of this {\f1\fs20 DispInvoke} is some kind of slow:
 - It uses a {\f1\fs20 TMultiReadExclusiveWriteSynchronizer} under {\i Delphi} 6, which is a bit over-sized for its purpose: since {\i Delphi} 7, it uses a lighter critical section;
-- It makes use of {\f1\fs20 WideString} for string handling (not at all the better for speed), and tends to define a lot of temporary string variables;
+- It makes use of {\f1\fs20 @*WideString@} for string handling (not at all the better for speed), and tends to define a lot of temporary string variables;
 - For the getter method, it always makes a temporary local copy during process, which is not useful for our classes.
 : Fast and furious
 So we rewrite the {\f1\fs20 DispInvoke} function with some enhancements in mind:
@@ -13354,7 +13357,7 @@ As you can see, the returned variant content is computed with the following meth
 !    end;
 !    end;
 !end;
-This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 WideString} variant for pre-Unicode version of {\i Delphi}, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since {\i Delphi} 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
+This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 @*WideString@} variant for pre-Unicode version of {\i Delphi}, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since {\i Delphi} 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
 : Hacking the VCL
 In order to enable this speed-up, we'll need to change each call to {\f1\fs20 DispInvoke} into a call to our custom {\f1\fs20 SynVarDispProc} function.
 With {\i Delphi} 6, we can do that by using {\f1\fs20 GetVariantManager   /SetVariantManager} functions, and the following code:

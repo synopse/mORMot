@@ -74,7 +74,7 @@ interface
 
   WARNING:
       -----------------------------------------------------------------
-        USING THIS UNIT WILL BREAK COMPATIBILITY WITH OLE/COM LIBRARIES !
+      USING THIS UNIT WILL BREAK COMPATIBILITY WITH OLE/COM LIBRARIES !
       -----------------------------------------------------------------
    You won't be able to share WideString/BSTR variables with a dll, e.g. an
    OleDB / ADO database provider, or any COM object.
