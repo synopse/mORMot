@@ -137,7 +137,7 @@ uses
   SynCommons,
   mORMot,
   SynDB;
-
+             
 type
   /// REST server with direct access to a SynDB-based external database
   // - handle all REST commands, using the external SQL database connection,
@@ -168,7 +168,7 @@ type
     fFieldsInternalToExternal: TIntegerDynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
-    fBatchCapacity, fBatchCount, fBatchAddedID: integer;
+    fBatchCapacity, fBatchCount, fBatchFirstAddedID: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchValues: TRawUTF8DynArray;
     fBatchIDs: TIntegerDynArray;
@@ -915,8 +915,8 @@ begin
         raise EORMException.CreateUTF8('Missing previous %.InternalBatchStop(%)',
           [self,StoredClass]);
       if Method=mPOST then
-        fBatchAddedID := EngineLockedNextID else
-        fBatchAddedID := 0;
+        fBatchFirstAddedID := EngineLockedNextID else
+        fBatchFirstAddedID := 0;
       fBatchMethod := Method;
       fBatchCount := 0;
       result := true; // means BATCH mode is supported
@@ -1054,8 +1054,9 @@ begin
       Owner.FlushInternalDBCache;
     end;
   finally
-    if fBatchMethod=mPost then
-      fEngineLockedLastID := fBatchAddedID+fBatchCount;
+    if (fBatchMethod=mPost) and (fBatchCount>1) then
+      // -1 since fBatchFirstAddedID := EngineLockedNextID did already a +1
+      inc(fEngineLockedLastID,fBatchCount-1);
     SetLength(fBatchValues,0);
     SetLength(fBatchIDs,0);
     fBatchCount := 0;
@@ -1068,7 +1069,7 @@ end;
 function TSQLRestStorageExternal.InternalBatchAdd(
   const aValue: RawUTF8; aID: integer): integer;
 begin
-  result := fBatchAddedID+fBatchCount;
+  result := fBatchFirstAddedID+fBatchCount;
   if fBatchCount>=fBatchCapacity then begin
     fBatchCapacity := fBatchCapacity+64+fBatchCount shr 3;
     SetLength(fBatchIDs,fBatchCapacity);
@@ -1092,7 +1093,8 @@ begin
     if fBatchMethod<>mPOST then
       result := 0 else
       result := InternalBatchAdd(SentData,0) else begin
-    result := ExecuteFromJSON(SentData,soInsert,0); // UpdatedID=0 -> insert with EngineLockedNextID
+    result := ExecuteFromJSON(SentData,soInsert,0);
+    // UpdatedID=0 -> insert with EngineLockedNextID
     if (result>0) and (Owner<>nil) then begin
       Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
       Owner.FlushInternalDBCache;
