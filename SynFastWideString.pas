@@ -55,7 +55,9 @@ interface
    of the slow BSTR Windows API.
 
    It will speed up the WideString process a lot, especially when a lot of
-   content is allocated, since FastMM4 is much aggresive.
+   content is allocated, since FastMM4 is much more aggressive than Windows'
+   global heap and the BSTR slow API. It could be more than 50 times faster,
+   especially when releasing the used memory.
 
    The WideString implementation pattern does NOT feature Copy-On-Write, so is
    slower than the string=UnicodeString type as implemented since Delphi 2009.
@@ -65,9 +67,9 @@ interface
   HOW TO USE:
 
    Just add the unit at the TOP of your .dpr uses clause, just after FastMM4
-   (if you use it, and you should!) i.e. before all other units useed by your
+   (if you use it, and you should!) i.e. before all other units used by your
    program. It should be initialized before any WideString is allocated.
-   
+
    Then the patch will be applied at runtime. Nothing to recompile!
 
   WARNING:
@@ -80,7 +82,7 @@ interface
    It is for educational purpose only, and/or if you are 100% sure that your
    code will stay self-contained, under Delphi 7 or Delphi 2007, and need use
    of WideString instead of string=AnsiString.
-   
+
    YOU HAVE BEEN WARNED - USE AT YOUR OWN RISK !   :)
 
 }
@@ -141,25 +143,25 @@ end;
 
 // those are the 3 redirected API calls -> just use AnsiString for allocation
 
-function SysAllocStringLen(P: pointer; Len: integer): pointer; stdcall;
+function SysAllocStringLen(P: PAnsiChar; Len: integer): pointer; stdcall;
 begin
   result := nil;
   Len := Len*2;
-  SetString(AnsiString(result),PAnsiChar(P),Len);
+  SetString(AnsiString(result),P,Len);
   PByteArray(result)[Len+1] := 0; // ensure finishes with a #0 WideChar
 end;
 
-function SysReAllocStringLen(var S: pointer; P: PWideChar; Len: integer): LongBool; stdcall;
+function SysReAllocStringLen(var S: AnsiString; P: PAnsiChar; Len: integer): LongBool; stdcall;
 begin
   Len := Len*2;
-  SetString(AnsiString(S),PAnsiChar(P),Len);
+  SetString(S,P,Len);
   PByteArray(S)[Len+1] := 0; // ensure finishes with a #0 WideChar
   result := true;
 end;
 
 procedure SysFreeString(S: pointer); stdcall;
 begin
-  AnsiString(s) := '';
+  AnsiString(S) := '';
 end;
 
 
