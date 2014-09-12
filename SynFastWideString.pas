@@ -214,7 +214,8 @@ begin
   AnsiString(S) := '';
 end;
 
-procedure OleAut32SysFreeString(S: pointer); stdcall; external 'oleaut32.dll';
+procedure OleAut32SysFreeString(S: pointer); stdcall;
+  external 'oleaut32.dll' name 'SysFreeString'
 
 procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
 begin
