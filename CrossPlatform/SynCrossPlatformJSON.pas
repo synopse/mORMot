@@ -1240,7 +1240,7 @@ begin
       x := ord(JSONString[i]); // inlined Base64One(JSONString[i])
       if x>127 then
         break;
-      x := BASE64DECODE[x];
+      x := cardinal(BASE64DECODE[x]);
       if integer(x)<0 then
         break;
       value := value*64+x;
@@ -1702,7 +1702,7 @@ var i: cardinal;
 begin
   VarClear(result);
   if (@self<>nil) and (VType=JSONVariantType.VarType) and (VKind=jvObject) then begin
-    i := NameIndex(aName);
+    i := cardinal(NameIndex(aName));
     if i<cardinal(length(Values)) then
       result := Values[i];
   end;
@@ -1727,7 +1727,7 @@ function TJSONVariantData.GetVarData(const aName: string;
   var Dest: TVarData): boolean;
 var i: cardinal;
 begin
-  i := NameIndex(aName);
+  i := cardinal(NameIndex(aName));
   if i<cardinal(length(Values)) then begin
     Dest.VType := varVariant or varByRef;
     Dest.VPointer := @Values[i];

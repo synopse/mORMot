@@ -56,6 +56,8 @@
 
   {$define HASINLINE}
   {$define USEOBJECTINSTEADOFRECORD}
+  {$Q-} // disable overflow checking
+  {$R-} // disable range checking
 
 {$else}
 
@@ -101,6 +103,8 @@
     {$define USEOBJECTINSTEADOFRECORD}
   {$endif CONDITIONALEXPRESSIONS}
   {$endif NEXTGEN}
+  {$Q-} // disable overflow checking
+  {$R-} // disable range checking
 {$endif DELPHIWEBSCRIPT}
 
 {$endif FPC}
