@@ -584,7 +584,7 @@ const
     'firebird-2.5:','','postgresql-9:','');
 begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   result := ZEOS_PROVIDER[aServer];
-  if (result='') or (aLibraryLocation='') then
+  if result='' then
     exit;
   if aServerName<>'' then
     result := result+'//'+aServerName;

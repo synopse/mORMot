@@ -1272,7 +1272,7 @@ const
   OCI_OBJECTFREE_NONULL: ub2 = $0002;
   OCI_OBJECTFREE_HEADER: ub2 = $0004;
 
-const
+type
   /// Oracle native number low-level representation
   OCINumber = packed record
     OCINumberPart: array [0..OCI_NUMBER_SIZE-1] of ub1;
