@@ -4544,12 +4544,12 @@ end;
 
 function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUTF8): boolean;
-begin
+begin // see more complete list in feature request [f024266c0839]
   case fDBMS of
   dOracle:
-    result := IdemPCharArray(pointer(aMessage),
-      ['ORA-03113','ORA-03114','ORA-12154','ORA-12157',
-       'ORA-12514','ORA-12537','TNS-12545'])>=0;
+    result := IdemPCharArray(PosChar(pointer(aMessage),'-'),
+      ['-00028','-01033','-02396','-03113','-03114','-03135',
+       '-12152','-12154','-12157','-12514','-12537','-12545','-12560','-12571'])>=0;
   else
     result := PosI(' CONNE',aMessage)>0;
   end;
