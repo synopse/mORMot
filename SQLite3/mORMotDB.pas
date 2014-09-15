@@ -110,6 +110,7 @@ unit mORMotDB;
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
   - fix TSQLRestStorageExternal.CreateSQLMultiIndex() to set ColumnIndexed=TRUE,
     and fixed ticket [929cb6fc3047c5f78b95] by ignoring BLOB fields
+  - ensure duplicated indexs are not created on ID primary key column 
   - fixed TSQLRestStorageExternal.UpdateBlobFields() to return true
     if no BLOB field is defined, and to proper handle multi-field update
   - fixed ticket [21c2d5ae96] when inserting/updating blob-only table content
@@ -1564,8 +1565,9 @@ begin
   if n=1 then begin // handle case of index over a single column
     if IntFieldIndex[0]<0 then // ID/RowID?
       case fProperties.DBMS of
-      dSQLite: begin
-        result := true; // SQLite3 always generates an index for ID/RowID
+      dSQLite, // SQLite3 always generates an index for ID/RowID
+      dPostgreSQL,dMSSQL,dMySQL,dOracle,dNexusDB: begin // as most DB on primary key
+        result := true;
         exit;
       end;
       dFirebird:  // see http://www.firebirdfaq.org/faq205
