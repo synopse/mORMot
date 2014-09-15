@@ -5156,7 +5156,7 @@ See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further informat
 For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
 {\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
-Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection. We noted also that our implementation is 10 times faster than the one provided with ZEOS/ZDBC, which is far from optimized (it retrieves the rows one by one from OCI, for instance).
+Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection.
 You can use the latest version of the {\i Oracle Instant Client} (OIC) provided by Oracle - see @http://www.oracle.com/technetwork/database/features/instant-client - which allows to run client applications without installing the standard (huge) Oracle client or having an {\f1\fs20 ORACLE_HOME}. Just deliver the few {\f1\fs20 dll} files in the same directory than the application (probably a {\i mORMot} server), and it will work at amazing speed, with all features of Oracle (other stand-alone direct Oracle access library rely on deprecated Oracle 8 protocol).
 \graph SynDBOCIdirect Oracle Connectivity with SynDBOracle
 \RAD Application\DBExpress¤or BDE
@@ -5179,8 +5179,9 @@ Here are the main features of this unit:
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
 - Use {\i Rows Array} and {\i BLOB fetching}, for best performance (ZEOS/ZDBC did not handle this, for instance);
-- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once - see @59@;
 - Handle {\i Prepared Statements} - on both client and server side, if available;
+- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once - see @59@;
+- Implements binding of a {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} as parameter, e.g. within a {\f1\fs20 SELECT .. IN} where clause;
 - Native {\i export to @*JSON@} methods, which will be the main entry point for our @*ORM@ framework;
 - {\i Cursor support}, which is pretty common when working with stored procedures and legacy code.
 :  SQLite3
@@ -7389,6 +7390,7 @@ Of course, {\i mORMot} can do better than that. Its ORM will automatically use t
 Both methods will group all the transmitted data in chunks, as much as possible. Performance will therefore increase, reaching 50,000-60,000 writes per second, depending on the database abilities.
 Those features are enabled by default, and the fastest method will always be selected by the ORM core, as soon as it is available on the database back-end. You do not have to worry about configuring your application. Just enjoy its speed.
 :78   Array binding
+:    For faster BATCH mode
 When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature. By now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
 Our {\f1\fs20 SynDB} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
@@ -7396,6 +7398,28 @@ The great maintainers of the {\i ZEOS Open Source} library did especially tune i
 The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
 In practice, when accessing {\i Oracle}, our own direct implementation in {\f1\fs20 SynDBOracle} still gives better performance results than the {\i ZDBC} / {\i FireDAC} implementation.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure executing individual statements within a loop.
+:    For faster IN clause
+Sometimes, you want to write {\f1\fs20 SELECT} statements with a huge {\f1\fs20 IN} clause. If the number of the items in the {\f1\fs20 IN} expression is stable, you may benefit for a prepared statement, e.g.
+$ SELECT * FROM MyTable WHERE ID IN [?,?,?,?,?]
+But if the IDs are not fixed, you should have to create an expression without any parameter, or use a temporary table:
+$ SELECT * FROM MyTable WHERE ID IN [1,4,8,12,24,27]
+As an alternative, {\f1\fs20 SynDBOracle} provides the ability to bind an array of parameters which may be cast to an {\i Oracle} Object, so that you could use it as a single parameter.\line Current implementation support either {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} values, as such:
+!var
+!  arr: TInt64DynArray = [1, 2, 3];
+!Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+!  'select * from table where table.id in'+
+!    '(select column_value from table(cast(? as SYS.ODCINUMBERLIST)))');
+!Query.BindArray(1, arr);
+!Query.ExecutePrepared;
+{\f1\fs20 RawUTF8} arrays are also supported (which can be used as fall back in case {\f1\fs20 Int64} arrays are not supported by the client, e.g. with {\i Oracle} 10):
+!var
+!  arr: TRawUTF8DynArray = ['123123423452345', '3124234454351324', '53567568578867867'];
+!Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+!  'select * from table where table.id in'+
+!    '(select column_value from table(cast(? as SYS.ODCIVARCHAR2LIST)))');
+!Query.BindArray(1, arr);
+!Query.ExecutePrepared;
+From tests on production, this implementation is 2-100 times faster (depending on array and table size) and also simpler, compared to temporary table solution.\line Drawback is that it is supported by {\f1\fs20 SynDBOracle} only by now.
 :99   Optimized SQL for bulk insert
 Sadly, array binding is not available for all databases or libraries.\line In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once. It induces a noticeable speed increase when saving several objects into an external database.
 Automatic multi-INSERT statement generation is available for:

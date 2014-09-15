@@ -92,6 +92,8 @@ unit SynDBOracle;
   Version 1.18
   - implements Oracle server-side statement caching for a major performance
     improvement e.g. for one row queries
+  - implements array binding of values as OCI_OBJECT, e.g. for an IN clause -
+    thanks mpv for the patch!
   - avoid integer overflow in TOracleDate.ToIso8601() method in some cases
   - now "" date/time values are not bound as null but as TOracleDate(0)
     for array DML binding statements
@@ -251,6 +253,8 @@ type
     fSession: pointer;
     fTrans: pointer;
     fOCICharSet: cardinal;
+    fType_numList: pointer;
+    fType_strList: pointer;
     // match DB charset for CHAR/NVARCHAR2, nil for OCI_UTF8/OCI_AL32UTF8
     fAnsiConvert: TSynAnsiConvert;
     function DateTimeToDescriptor(aDateTime: TDateTime): pointer;
@@ -308,6 +312,15 @@ type
   // enabled the OCI-side statement cache, not to reinvent the wheel this time
   // - note that bound OUT ftUTF8 parameters will need to be pre-allocated
   // before calling - e.g. via BindTextU(StringOfChar(3000),paramOut)
+  // - you can also bind an TInt64DynArray or TRawUTF8DynArray as parameter to
+  // be assigned later as an OCI_OBJECT so that you may write such statements:
+  // ! var arr: TInt64DynArray = [1, 2, 3];
+  // ! Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+  // !   'select * from table where table.id in '+
+  // !     '(select column_value from table(cast(? as SYS.ODCINUMBERLIST)))');
+  // ! Query.BindArray(1,arr);
+  // ! Query.ExecutePrepared;
+  // (use SYS.ODCIVARCHAR2LIST type cast for TRawUTF8DynArray values)
   TSQLDBOracleStatement = class(TSQLDBStatementWithParamsAndColumns)
   protected
     fStatement: pointer;
@@ -575,6 +588,7 @@ type
   ub1     = Byte;
   dvoid   = Pointer;
   text    = PAnsiChar;
+  OraText = PAnsiChar;
   size_T  = Integer;
 
   pub1 = ^ub1;
@@ -583,6 +597,7 @@ type
   psb2 = ^sb2;
   pub4 = ^ub4;
   psb4 = ^sb4;
+  pdvoid = ^dvoid;
 
   { Handle Types }
   POCIHandle = Pointer;
@@ -612,11 +627,32 @@ type
   POCIAQAgent = POCIDescriptor;
   POCIDate = POCIDescriptor;
   POCIDateTime = POCIDescriptor;
-  POCINumber = POCIDescriptor;
   POCIString = POCIDescriptor;
+  POCIType = POCIDescriptor;
+  POCIArray = POCIDescriptor;
+  POCIColl = POCIDescriptor;
 
+  /// OCIDuration - OCI object duration
+  // - A client can specify the duration of which an object is pinned (pin
+  // duration) and the duration of which the object is in memory (allocation
+  // duration).  If the objects are still pinned at the end of the pin duration,
+  // the object cache manager will automatically unpin the objects for the
+  // client. If the objects still exist at the end of the allocation duration,
+  // the object cache manager will automatically free the objects for the client.
+  // - Objects that are pinned with the option OCI_DURATION_TRANS will get unpinned
+  // automatically at the end of the current transaction.
+  // - Objects that are pinned with the option OCI_DURATION_SESSION will get
+  // unpinned automatically at the end of the current session (connection).
+  // - The option OCI_DURATION_NULL is used when the client does not want to set
+  // the pin duration.  If the object is already loaded into the cache, then the
+  // pin duration will remain the same.  If the object is not yet loaded, the
+  // pin duration of the object will be set to OCI_DURATION_DEFAULT.
   OCIDuration = ub2;
+  /// The OCITypeCode type is interchangeable with the existing SQLT type which is a ub2
+  OCITypeCode = ub2;
 
+  OCITypeGetOpt = (OCI_TYPEGET_HEADER, OCI_TYPEGET_ALL);
+  
 const
   { OCI Handle Types }
   OCI_HTYPE_FIRST               = 1;
@@ -1116,11 +1152,136 @@ const
   SQLCS_FLEXIBLE = 4;     // for PL/SQL "flexible" parameters
   SQLCS_LIT_NULL = 5;     // for typecheck of NULL and empty_clob() lits
 
+  { OCI_NUMBER }
+  OCI_NUMBER_SIZE     = 22;
+  OCI_NUMBER_UNSIGNED = 0;
+  OCI_NUMBER_SIGNED   = 2;
+
+  { OBJECT Duration }
+  OCI_DURATION_BEGIN_                     = 10;
+  OCI_DURATION_CALLOUT_                   = OCI_DURATION_BEGIN_ + 4;
+
+  OCI_DURATION_INVALID: OCIDuration       = $FFFF;                   // Invalid duration
+  OCI_DURATION_BEGIN: OCIDuration         = OCI_DURATION_BEGIN_;     // beginning sequence of duration
+  OCI_DURATION_NULL: OCIDuration          = OCI_DURATION_BEGIN_ - 1; // null duration
+  OCI_DURATION_DEFAULT: OCIDuration       = OCI_DURATION_BEGIN_ - 2; // default
+  OCI_DURATION_USER_CALLBACK: OCIDuration = OCI_DURATION_BEGIN_ - 3;
+  OCI_DURATION_NEXT: OCIDuration          = OCI_DURATION_BEGIN_ - 4; // next special duration
+  OCI_DURATION_SESSION: OCIDuration       = OCI_DURATION_BEGIN_;     // the end of user session
+  OCI_DURATION_TRANS: OCIDuration         = OCI_DURATION_BEGIN_ + 1; // the end of user transaction
+  // DO NOT USE OCI_DURATION_CALL. IT  IS UNSUPPORTED
+  // WILL BE REMOVED/CHANGED IN A FUTURE RELEASE
+  OCI_DURATION_CALL: OCIDuration          = OCI_DURATION_BEGIN_ + 2; // the end of user client/server call
+  OCI_DURATION_STATEMENT: OCIDuration     = OCI_DURATION_BEGIN_ + 3;
+  // This is to be used only during callouts.  It is similar to that
+  // of OCI_DURATION_CALL, but lasts only for the duration of a callout.
+  // Its heap is from PGA
+  OCI_DURATION_CALLOUT: OCIDuration       = OCI_DURATION_CALLOUT_;
+  OCI_DURATION_LAST: OCIDuration          = OCI_DURATION_CALLOUT_;   // last of predefined durations
+  // This is not being treated as other predefined durations such as
+  // SESSION, CALL etc, because this would not have an entry in the duration
+  // table and its functionality is primitive such that only allocate, free,
+  // resize memory are allowed, but one cannot create subduration out of this
+  OCI_DURATION_PROCESS: OCIDuration       = OCI_DURATION_BEGIN_ - 5; // next special duration
+
+  { TYPE CODE }
+  /// Type manager typecodes
+  // - These are typecodes designed to be used with the type manager;
+  // they also include longer, more readable versions of existing SQLT names
+  // - Those types that are directly related to existing SQLT types are #define'd
+  // to their SQLT equivalents
+  // - The type manager typecodes are designed to be useable for all OCI calls.
+  // They are in the range from 192 to 320 for typecodes, so as not to conflict
+  // with existing OCI SQLT typecodes (see ocidfn.h)
+  OCI_TYPECODE_REF             = SQLT_REF;      // SQL/OTS OBJECT REFERENCE
+  OCI_TYPECODE_DATE            = SQLT_DAT;      // SQL DATE  OTS DATE
+  OCI_TYPECODE_SIGNED8         = 27;            // SQL SIGNED INTEGER(8)  OTS SINT8
+  OCI_TYPECODE_SIGNED16        = 28;            // SQL SIGNED INTEGER(16)  OTS SINT16
+  OCI_TYPECODE_SIGNED32        = 29;            // SQL SIGNED INTEGER(32)  OTS SINT32
+  OCI_TYPECODE_REAL            = 21;            // SQL REAL  OTS SQL_REAL
+  OCI_TYPECODE_DOUBLE          = 22;            // SQL DOUBLE PRECISION  OTS SQL_DOUBLE
+  OCI_TYPECODE_BFLOAT          = SQLT_IBFLOAT;  // Binary float
+  OCI_TYPECODE_BDOUBLE         = SQLT_IBDOUBLE; // Binary double
+  OCI_TYPECODE_FLOAT           = SQLT_FLT;      // SQL FLOAT(P)  OTS FLOAT(P)
+  OCI_TYPECODE_NUMBER          = SQLT_NUM;      // SQL NUMBER(P S)  OTS NUMBER(P S)
+  OCI_TYPECODE_DECIMAL         = SQLT_PDN;      // SQL DECIMAL(P S)  OTS DECIMAL(P S)
+  OCI_TYPECODE_UNSIGNED8       = SQLT_BIN;      // SQL UNSIGNED INTEGER(8)  OTS UINT8
+  OCI_TYPECODE_UNSIGNED16      = 25;            // SQL UNSIGNED INTEGER(16)  OTS UINT16
+  OCI_TYPECODE_UNSIGNED32      = 26;            // SQL UNSIGNED INTEGER(32)  OTS UINT32
+  OCI_TYPECODE_OCTET           = 245;           // SQL ???  OTS OCTET
+  OCI_TYPECODE_SMALLINT        = 246;           // SQL SMALLINT  OTS SMALLINT
+  OCI_TYPECODE_INTEGER         = SQLT_INT;      // SQL INTEGER  OTS INTEGER
+  OCI_TYPECODE_RAW             = SQLT_LVB;      // SQL RAW(N)  OTS RAW(N)
+  OCI_TYPECODE_PTR             = 32;            // SQL POINTER  OTS POINTER
+  OCI_TYPECODE_VARCHAR2        = SQLT_VCS;      // SQL VARCHAR2(N)  OTS SQL_VARCHAR2(N)
+  OCI_TYPECODE_CHAR            = SQLT_AFC;      // SQL CHAR(N)  OTS SQL_CHAR(N)
+  OCI_TYPECODE_VARCHAR         = SQLT_CHR;      // SQL VARCHAR(N)  OTS SQL_VARCHAR(N)
+  OCI_TYPECODE_MLSLABEL        = SQLT_LAB;      // OTS MLSLABEL
+  OCI_TYPECODE_VARRAY          = 247;           // SQL VARRAY  OTS PAGED VARRAY
+  OCI_TYPECODE_TABLE           = 248;           // SQL TABLE  OTS MULTISET
+  OCI_TYPECODE_OBJECT          = SQLT_NTY;      // SQL/OTS NAMED OBJECT TYPE
+  OCI_TYPECODE_OPAQUE          = 58;            //  SQL/OTS Opaque Types
+  OCI_TYPECODE_NAMEDCOLLECTION = SQLT_NCO;      // SQL/OTS NAMED COLLECTION TYPE
+  OCI_TYPECODE_BLOB            = SQLT_BLOB;     // SQL/OTS BINARY LARGE OBJECT
+  OCI_TYPECODE_BFILE           = SQLT_BFILEE;   // SQL/OTS BINARY FILE OBJECT
+  OCI_TYPECODE_CLOB            = SQLT_CLOB;     // SQL/OTS CHARACTER LARGE OBJECT
+  OCI_TYPECODE_CFILE           = SQLT_CFILEE;   // SQL/OTS CHARACTER FILE OBJECT
+
+  // the following are ANSI datetime datatypes added in 8.1
+  OCI_TYPECODE_TIME            = SQLT_TIME;          // SQL/OTS TIME
+  OCI_TYPECODE_TIME_TZ         = SQLT_TIME_TZ;       // SQL/OTS TIME_TZ
+  OCI_TYPECODE_TIMESTAMP       = SQLT_TIMESTAMP;     // SQL/OTS TIMESTAMP
+  OCI_TYPECODE_TIMESTAMP_TZ    = SQLT_TIMESTAMP_TZ;  // SQL/OTS TIMESTAMP_TZ
+
+  OCI_TYPECODE_TIMESTAMP_LTZ   = SQLT_TIMESTAMP_LTZ; // TIMESTAMP_LTZ
+
+  OCI_TYPECODE_INTERVAL_YM     = SQLT_INTERVAL_YM;   // SQL/OTS INTRVL YR-MON
+  OCI_TYPECODE_INTERVAL_DS     = SQLT_INTERVAL_DS;   // SQL/OTS INTRVL DAY-SEC
+  OCI_TYPECODE_UROWID          = SQLT_RDD;           // Urowid type
+
+  OCI_TYPECODE_OTMFIRST        = 228;     // first Open Type Manager typecode
+  OCI_TYPECODE_OTMLAST         = 320;     // last OTM typecode
+  OCI_TYPECODE_SYSFIRST        = 228;     // first OTM system type (internal)
+  OCI_TYPECODE_SYSLAST         = 235;     // last OTM system type (internal)
+  OCI_TYPECODE_PLS_INTEGER     = 266;     // type code for PLS_INTEGER
+
+  //// the following are PL/SQL-only internal. They should not be used
+  //  OCI_TYPECODE_ITABLE          = SQLT_TAB;    // PLSQL indexed table
+  //  OCI_TYPECODE_RECORD          = SQLT_REC;    // PLSQL record
+  //  OCI_TYPECODE_BOOLEAN         = SQLT_BOL;    // PLSQL boolean
+
+  // NOTE : The following NCHAR related codes are just short forms for saying
+  // OCI_TYPECODE_VARCHAR2 with a charset form of SQLCS_NCHAR. These codes are
+  // intended for use in the OCIAnyData API only and nowhere else.
+  OCI_TYPECODE_NCHAR           = 286;
+  OCI_TYPECODE_NVARCHAR2       = 287;
+  OCI_TYPECODE_NCLOB           = 288;
+
+  // To indicate absence of typecode being specified
+  OCI_TYPECODE_NONE            = 0;
+  // To indicate error has to be taken from error handle - reserved for sqlplus use
+  OCI_TYPECODE_ERRHP           = 283;
+
+  { OBJECT FREE OPTION }
+  /// OCIObjectFreeFlag - Object free flag
+  // - If OCI_OBJECTCOPY_FORCE is specified when freeing an instance, the instance
+  // is freed regardless it is pinned or diritied.
+  // If OCI_OBJECTCOPY_NONULL is specified when freeing an instance, the null
+  // structure is not freed.
+  OCI_OBJECTFREE_FORCE : ub2 = $0001;
+  OCI_OBJECTFREE_NONULL: ub2 = $0002;
+  OCI_OBJECTFREE_HEADER: ub2 = $0004;
+
+const
+  /// Oracle native number low-level representation
+  OCINumber = packed record
+    OCINumberPart: array [0..OCI_NUMBER_SIZE-1] of ub1;
+  end;
 
 { TSQLDBOracleLib }
 
 const
-  OCI_ENTRIES: array[0..30] of PChar = (
+  OCI_ENTRIES: array[0..37] of PChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate', 'OCIHandleAlloc', 'OCIHandleFree',
     'OCIServerAttach', 'OCIServerDetach', 'OCIAttrGet', 'OCIAttrSet',
     'OCISessionBegin', 'OCISessionEnd', 'OCIErrorGet', 'OCIStmtPrepare',
@@ -1128,7 +1289,9 @@ const
     'OCITransStart', 'OCITransRollback', 'OCITransCommit', 'OCIDescriptorAlloc',
     'OCIDescriptorFree', 'OCIDateTimeConstruct', 'OCIDateTimeGetDate',
     'OCIDefineByPos', 'OCILobGetLength', 'OCILobOpen', 'OCILobRead',
-    'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2', 'OCIStmtRelease');
+    'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2', 'OCIStmtRelease',
+    'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
+    'OCINumberFromInt','OCIStringAssignText', 'OCICollAppend', 'OCIBindObject');
 
 type
   /// direct access to the native Oracle Client Interface (OCI)
@@ -1209,6 +1372,20 @@ type
       language:ub4; mode: ub4): sword; cdecl;
     StmtRelease: function(stmtp: POCIStmt; errhp: POCIError; key: text; key_len: ub4;
       mode: ub4):sword; cdecl;
+    TypeByName: function(env: POCIEnv; errhp: POCIError; svchp: POCISvcCtx;
+      schema_name: text; s_length: ub4; type_name: text; t_length: ub4; version_name: text; v_length: ub4;
+      pin_duration: OCIDuration; get_option: OCITypeGetOpt; var tdo: POCIType):sword; cdecl;
+    ObjectNew: function(env: POCIEnv; errhp: POCIError; svchp: POCISvcCtx; typecode: OCITypeCode;
+      tdo: POCIType; table: dvoid; duration: OCIDuration; value: boolean; var instance: dvoid):sword; cdecl;
+    ObjectFree: function(env: POCIEnv; errhp: POCIError; instance: dvoid; flag: ub2):sword; cdecl;
+    NumberFromInt: function(errhp: POCIError; inum: dvoid; inum_length: uword; inum_s_flag: uword;
+      var number: OCINumber):sword; cdecl;
+    StringAssignText : function(env: POCIEnv; errhp: POCIError; rhs: OraText; rhs_len: ub4;
+      var lhs: POCIString):sword; cdecl;
+    CollAppend: function(env: POCIEnv; errhp: POCIError; elem: dvoid; elemind: dvoid;
+      coll: POCIColl):sword; cdecl;
+    BindObject: function(bindp: POCIBind; errhp: POCIError; type_: POCIType; var pgvpp: dvoid;
+      pvszsp: pub4; indpp: pdvoid; indszp: pub4):sword; cdecl;
   public
     // the client verion numbers
     major_version, minor_version, update_num, patch_num, port_update_num: sword;
@@ -1559,7 +1736,7 @@ begin
   fRowsPrefetchSize := 128*1024;
   fStatementCacheSize := 30; // default is 20
   fInternalBufferSize := 128*1024; // 128 KB
-  fEnvironmentInitializationMode := OCI_EVENTS or OCI_THREADED;
+  fEnvironmentInitializationMode := OCI_EVENTS or OCI_THREADED or OCI_OBJECT;
 end;
 
 function TSQLDBOracleConnectionProperties.GetClientVersion: RawUTF8;
@@ -1600,6 +1777,10 @@ procedure TSQLDBOracleConnection.Connect;
 var Log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
+const
+    type_owner_name: RawUTF8 = 'SYS';
+    type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
+    type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
 begin
   Log := SynDBLog.Enter(self);
   Disconnect; // force fTrans=fError=fServer=fContext=nil
@@ -1635,6 +1816,12 @@ begin
     end else
       mode := OCI_DEFAULT;
     Check(SessionBegin(fContext,fError,fSession,OCI_CRED_RDBMS,mode),fError);
+    Check(TypeByName(fEnv,fError,fContext,Pointer(type_owner_name),length(type_owner_name),
+      Pointer(type_NymberListName),length(type_NymberListName),nil,0,OCI_DURATION_SESSION,OCI_TYPEGET_HEADER,
+      fType_numList),fError);
+    Check(TypeByName(fEnv,fError,fContext,Pointer(type_owner_name),length(type_owner_name),
+      Pointer(type_Varchar2ListName),length(type_Varchar2ListName),nil,0,OCI_DURATION_SESSION,OCI_TYPEGET_HEADER,
+      fType_strList),fError);
     if fOCICharSet=0 then begin
       // retrieve the charset to be used for inlined CHAR / VARCHAR2 fields
       with NewStatement do
@@ -2307,6 +2494,8 @@ const
 procedure TSQLDBOracleStatement.ExecutePrepared;
 var i,j: integer;
     Env: POCIEnv;
+    Context: POCISvcCtx;
+    Type_List: POCIType;
     oData: pointer;
     oDataDAT: ^TOracleDateArray absolute oData;
     oDataINT: ^TInt64Array absolute oData;
@@ -2319,6 +2508,10 @@ var i,j: integer;
     Status, L: integer;
     mode: cardinal;
     Int32: set of 0..127;
+    arr: POCIArray;
+    num_val: OCINumber;
+    tmp: RawUTF8;
+    str_val: POCIString;
 label txt;
 begin
   if (fStatement=nil) then
@@ -2332,6 +2525,7 @@ begin
   Status := OCI_ERROR;
   try
     Env := (Connection as TSQLDBOracleConnection).fEnv;
+    Context := (Connection as TSQLDBOracleConnection).fContext;
     fRowFetchedEnded := false;
     // 1. bind parameters
     if fPreparedParamsCount<>fParamCount then
@@ -2339,8 +2533,9 @@ begin
         [self,fPreparedParamsCount,fParamCount]);
     if not fExpectResults then
       fRowCount := 1; // to avoid ORA-24333 error
-    if fParamCount>0 then
-    if fParamsArrayCount>0 then begin
+    arr := nil;
+    if (fParamCount>0) then
+    if (fParamsArrayCount>0) and (not fExpectResults) then begin
       // 1.1. Array DML binding
       SetLength(aIndicator,fParamCount);
       for i := 0 to fParamCount-1 do
@@ -2437,6 +2632,41 @@ begin
       fillchar(Int32,sizeof(Int32),0);
       SetLength(oIndicator,fParamCount);
       for i := 0 to fParamCount-1 do
+      if Length(fParams[i].VArray)>0 then begin
+        // 1.2.1. Bind an array as one object
+        case fParams[i].VType of
+        ftInt64:
+          Type_List := (Connection as TSQLDBOracleConnection).fType_numList;
+        ftUTF8:
+          Type_List := (Connection as TSQLDBOracleConnection).fType_strList;
+        else
+          raise ESQLDBOracle.CreateUTF8(
+            '%.ExecutePrepared: Unsupported array parameter type #%',[self,i+1]);
+        end;
+        OCI.Check(OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY, Type_List, nil,
+          OCI_DURATION_SESSION, True, arr), fError);
+        SetString(fParams[i].VData,nil,fParamsArrayCount*sizeof(Int64));
+        oData := pointer(fParams[i].VData);
+        for j := 0 to fParamsArrayCount-1 do
+          case fParams[i].VType of
+          ftInt64: begin
+            SetInt64(pointer(fParams[i].Varray[j]),oDataINT^[j]);
+            OCI.Check(OCI.NumberFromInt(fError, @oDataINT[j], sizeof(Int64), OCI_NUMBER_SIGNED, num_val), fError);
+            OCI.Check(OCI.CollAppend(Env, fError, @num_val, nil, arr),fError);
+          end;
+          ftUTF8: begin
+            str_val := nil;
+            SynCommons.UnQuoteSQLStringVar(pointer(fParams[i].VArray[j]),tmp);
+            OCI.Check(OCI.StringAssignText(Env, fError, pointer(tmp), length(tmp), str_val), fError);
+            OCI.Check(OCI.CollAppend(Env, fError, str_val, nil, arr),fError);
+          end;
+          end;
+        oBind := nil;
+        OCI.Check(OCI.BindByPos(fStatement,oBind,fError,i+1,nil,0,SQLT_NTY,
+          nil,nil,nil,0,nil,OCI_DEFAULT),fError);
+        OCI.BindObject(oBind,fError,Type_List, arr, nil, nil, nil);
+      end else
+      // 1.2.2. Bind one simple parameter value
       with fParams[i] do begin
         if VType=ftNull then begin
           oIndicator[i] := -1; // assign a NULL to the column, ignoring input value
@@ -2539,6 +2769,8 @@ begin
     FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
     Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
   finally
+    if Assigned(arr) then
+      OCI.Check(OCI.ObjectFree(Env, fError, arr, OCI_OBJECTFREE_FORCE), fError);
     // 3. release and/or retrieve OUT bound parameters
     if fParamsArrayCount>0 then
     for i := 0 to fParamCount-1 do
