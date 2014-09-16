@@ -149,6 +149,7 @@ uses
 {$RANGECHECKS OFF}
 {$STACKFRAMES OFF}
 {$OPTIMIZATION ON}
+{$DEBUGINFO OFF}
 
 type // some types here since we do not want any dependency on any other units
   PByteArray = ^TByteArray;
