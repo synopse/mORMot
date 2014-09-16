@@ -4537,7 +4537,7 @@ begin
   except
     on E: Exception do
       raise EMongoException.CreateUTF8(
-        '%.Open: unable to connect to MongoDB server: %',[self,E.Message]);
+        '%.Open unable to connect to MongoDB server: % "%"',[self,E,E.Message]);
   end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice

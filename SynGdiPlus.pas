@@ -107,6 +107,7 @@ unit SynGdiPlus;
 
    Version 1.18
    - ensure all created TBitmap are DIB (device-independent bitmap)
+   - added TSynPicture.CreateFromFile() constructor
    - fixed ticket [ebbce6be8b] about Win64 initialization
    - fixed ticket [84dae0a2da] about EMR_BITBLT, thanks to Pierre le Riche
    - implemented clipping - ticket [ba90f15370] - thanks to Pierre le Riche
@@ -366,8 +367,8 @@ type
     evFrameDimensionPage);
 
   /// GIF, PNG, TIFF and JPG pictures support using GDI+ library
-  // - cf @http://msdn.microsoft.com/en-us/library/ms536393(VS.85).aspx
-  // for all available image formats
+  // - cf @http://msdn.microsoft.com/en-us/library/ms536393
+  // for available image formats
   TSynPicture = class(TGraphic)
   protected
     fHasContent: boolean;
@@ -387,7 +388,7 @@ type
     procedure fImageSet;
     procedure BitmapSetResolution(DPI: single);
   public
-    constructor Create; override;
+    constructor CreateFromFile(const FileName: string);
     destructor Destroy; override;
     procedure Assign(Source: TPersistent); override;
     procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
@@ -906,7 +907,7 @@ asm // to avoid widestring usage + compatibility with Delphi 2009/2010/XE
         JZ      @Exit2  // Str1=''
         OR      EDX,EDX
         JE      @min
-@1:     MOV     AL,[ECX] // Ansi compare value of PWideChar
+@1:     MOV     AL,[ECX] // rough Ansi compare value of PWideChar
         ADD     ECX,2
         MOV     AH,[EDX]
         INC     EDX
@@ -1144,9 +1145,10 @@ begin
   fGlobalLen := 0;
 end;
 
-constructor TSynPicture.Create;
+constructor TSynPicture.CreateFromFile(const FileName: string);
 begin
-  inherited;
+  inherited Create;
+  LoadFromFile(FileName);
 end;
 
 destructor TSynPicture.Destroy;

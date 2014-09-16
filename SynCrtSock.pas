@@ -883,6 +883,7 @@ type
     fRegisteredUnicodeUrl: array of SynUnicode;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
+    fExecuteFinished: boolean;
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal;
@@ -4926,33 +4927,42 @@ end;
 destructor THttpApiServer.Destroy;
 var i: integer;
 begin
-  if (fClones<>nil) and (Http.Module<>0) then begin  // fClones=nil for clone threads
-    if fReqQueue<>0 then begin
-      if Http.Version.MajorVersion>1 then begin
-       if fUrlGroupID<>0 then begin
-         Http.RemoveUrlFromUrlGroup(fUrlGroupID,nil,HTTP_URL_FLAG_REMOVE_ALL);
-         Http.CloseUrlGroup(fUrlGroupID);
-         fUrlGroupID := 0;
-       end;
-       CloseHandle(FReqQueue);
-       if fServerSessionID<>0 then begin
-         Http.CloseServerSession(fServerSessionID);
-         fServerSessionID := 0;
-       end;
-      end else begin
-        for i := 0 to high(fRegisteredUnicodeUrl) do
-          Http.RemoveUrl(fReqQueue,pointer(fRegisteredUnicodeUrl[i]));
-        CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
+  {$ifdef LVCL}
+  Terminate; // for Execute to be notified about end of process
+  {$endif}
+  try
+    if (fClones<>nil) and (Http.Module<>0) then begin  // fClones=nil for clone threads
+      if fReqQueue<>0 then begin
+        if Http.Version.MajorVersion>1 then begin
+         if fUrlGroupID<>0 then begin
+           Http.RemoveUrlFromUrlGroup(fUrlGroupID,nil,HTTP_URL_FLAG_REMOVE_ALL);
+           Http.CloseUrlGroup(fUrlGroupID);
+           fUrlGroupID := 0;
+         end;
+         CloseHandle(FReqQueue);
+         if fServerSessionID<>0 then begin
+           Http.CloseServerSession(fServerSessionID);
+           fServerSessionID := 0;
+         end;
+        end else begin
+          for i := 0 to high(fRegisteredUnicodeUrl) do
+            Http.RemoveUrl(fReqQueue,pointer(fRegisteredUnicodeUrl[i]));
+          CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
+        end;
+        fReqQueue := 0;
+        FreeAndNil(fClones);
+        Http.Terminate(HTTP_INITIALIZE_SERVER);
       end;
-      fReqQueue := 0;
-      FreeAndNil(fClones);
-      Http.Terminate(HTTP_INITIALIZE_SERVER);
     end;
     {$ifdef LVCL}
-    Sleep(500); // LVCL TThread does not wait for its completion -> do it now
+    for i := 1 to 500 do
+      if fExecuteFinished then
+        break else
+        sleep(10);
     {$endif}
+  finally
+    inherited Destroy;
   end;
-  inherited Destroy;
 end;
 
 const
@@ -5173,6 +5183,7 @@ begin
     until Terminated;
   finally
     Context.Free;
+    fExecuteFinished := true;
   end;
 end;
 
