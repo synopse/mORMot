@@ -3748,6 +3748,8 @@ type
     // - you can use e.g.
     // ! FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER)
     // to retrieve the incoming message body content type
+    // - or to retrieve the remote IP
+    // ! FindIniNameValue(pointer(Call.InHead),'REMOTEIP: ')
     InHead: RawUTF8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
@@ -3828,6 +3830,7 @@ type
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
+    function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: integer); virtual;
@@ -4035,6 +4038,9 @@ type
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
+    /// compute the file name corresponding to the URI
+    // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
+    property ResourceFileName: TFileName read GetResourceFileName;
     /// use this method to send back directly a result value to the caller
     // - expects Status to be either HTML_SUCCESS, HTML_NOTMODIFIED or
     // HTML_CREATED, and will return as answer the supplied Result content
@@ -4061,11 +4067,14 @@ type
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
-    // that the file content will be sent back to the server only if it changed 
+    // that the file content will be sent back to the server only if it changed
     // - if ContentType is left to default '', method will guess the expected
-    // mime-type from the file name extension 
+    // mime-type from the file name extension
     procedure ReturnFile(const FileName: TFileName;
       Handle304NotModified: boolean=false; const ContentType: RawUTF8='');
+    /// use this method notify the caller that the resource URI has changed
+    // - returns a HTML_MOVEDPERMANENTLY status with the specified location
+    procedure Redirect(const NewLocation: RawUTF8);
     /// use this method to send back a JSON object with a "result" field
     // - this method will encode the supplied values as a {"result":"...}
     // JSON object, as such for one value:
@@ -27597,6 +27606,11 @@ begin
   fOutSetCookie := aOutSetCookie;
 end;
 
+function TSQLRestServerURIContext.GetResourceFileName: TFileName;
+begin
+  result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/','\'));
+end;
+
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
   Status: integer; const CustomHeader: RawUTF8; Handle304NotModified: boolean);
 var clientHash, serverHash: RawUTF8;
@@ -27637,9 +27651,8 @@ begin
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
       serverHash := '"'+DateTimeToIso8601(FileTime,false)+'"';
-      if clientHash<>serverHash then
-        Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
-        Call.OutBody := ''; // save bandwidth for "304 Not Modified"
+      Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash;
+      if clientHash=serverHash then begin
         Call.OutStatus := HTML_NOTMODIFIED;
         exit;
       end;
@@ -27648,6 +27661,12 @@ begin
     Call.OutHead := STATICFILE_CONTENT_TYPE_HEADER+#13#10+Call.OutHead;
     StringToUTF8(FileName,Call.OutBody);
   end;
+end;
+
+procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8);
+begin
+  Call.OutStatus := HTML_MOVEDPERMANENTLY;
+  Call.OutHead := 'Location: '+NewLocation; 
 end;
 
 procedure TSQLRestServerURIContext.Returns(const NameValuePairs: array of const;
