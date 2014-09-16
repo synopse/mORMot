@@ -584,9 +584,6 @@ var SQL: RawUTF8;
 begin
   inherited Create(aClass,aServer);
   // initialize external DB properties
-  if fStoredClassProps=nil then
-    raise EBusinessLayerException.CreateUTF8(
-      '%.Create: StoredClassProps needed for %',[self,StoredClass]);
   fTableName := StoredClassProps.ExternalDB.TableName;
   fProperties := StoredClassProps.ExternalDB.ConnectionProperties as TSQLDBConnectionProperties;
   if fProperties=nil then

@@ -191,6 +191,7 @@ var Coll: TMongoCollection;
     i: integer;
     jsonArray: RawUTF8;
     bytes: Int64;
+    docs: TVariantDynArray;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
@@ -206,6 +207,10 @@ begin
   jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
+  Coll.FindDocs('{Number:{$gt:?}}',[COLL_COUNT shr 1],docs,null);
+  Check(length(docs)=COLL_COUNT-(COLL_COUNT shr 1)-1);
+  for i := 1 to high(docs) do
+    Check(docs[i].number>COLL_COUNT shr 1);
 end;
 
 procedure TTestDirect.DropCollection;

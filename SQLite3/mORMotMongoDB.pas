@@ -224,8 +224,7 @@ end;
 
 constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer);
 begin
-  if fStoredClassProps=nil then
-    raise EORMMongoDBException.CreateUTF8('StoredClassProps needed for %',[aClass]);
+  inherited Create(aClass,aServer);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
@@ -316,7 +315,9 @@ begin
   inherited;
   FreeAndNil(fBatchWriter);
   {$ifdef WITHLOG}
-  fOwner.LogFamily.SynLog.Log(sllInfo,'Destroy for % using %',[fStoredClass,Collection],self);
+  if fOwner<>nil then
+    fOwner.LogFamily.SynLog.Log(sllInfo,
+      'Destroy for % using %',[fStoredClass,Collection],self);
   {$endif}
 end;
 

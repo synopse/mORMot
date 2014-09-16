@@ -23419,14 +23419,16 @@ begin
   {$ifdef WITHLOG}
   fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
-  for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
-  try
-    fPrivateGarbageCollector.Delete(i); // will call fPrivate...[i].Free
-  except
-    on Exception do
-      ; // just ignore exceptions in such destructors
+  if fPrivateGarbageCollector<>nil then begin
+    for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
+    try
+      fPrivateGarbageCollector.Delete(i); // will call fPrivate...[i].Free
+    except
+      on Exception do
+        ; // just ignore exceptions in such destructors
+    end;
+    fPrivateGarbageCollector.Free;
   end;
-  fPrivateGarbageCollector.Free;
   inherited Destroy;
 end;
 
@@ -31033,7 +31035,7 @@ constructor TSQLRestStorage.Create(aClass: TSQLRecordClass;
 begin
   inherited Create(nil);
   if aClass=nil then
-    raise EBusinessLayerException.CreateUTF8('%.Create(nil)',[self]);
+    raise EBusinessLayerException.CreateUTF8('%.Create(aClass=nil)',[self]);
   InitializeCriticalSection(fStorageCriticalSection);
   fStoredClass := aClass;
   fStoredClassRecordProps := aClass.RecordProps;
