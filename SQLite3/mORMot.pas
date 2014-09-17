@@ -27109,7 +27109,7 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
 end;
 
 procedure TSQLRestServerURIContext.ExecuteORMGet;
-var SQLSelect, SQLWhere, SQLSort, SQLDir, SQL: RawUTF8;
+var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     SQLStartIndex, SQLResults, SQLTotalRowsCount: integer;
     NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
     SQLisSelect: boolean;
@@ -27233,6 +27233,7 @@ begin
             until Parameters=nil;
           end;
           // let SQLite3 do the sort and the paging (will be ignored by Static)
+          SQLWhereCount := SQLWhere; // "select count(*)" won't expect any ORDER  
           if (SQLSort<>'') and
              not ContainsUTF8(pointer(SQLWhere),'ORDER BY') then begin
             if SameTextU(SQLDir,'DESC') then
@@ -27242,10 +27243,17 @@ begin
           SQLWhere := trim(SQLWhere);
           if (SQLResults<>0) and not ContainsUTF8(pointer(SQLWhere),'LIMIT ') then begin
             if (Server.URIPagingParameters.SendTotalRowsCountFmt<>nil) then begin
+              if SQLWhere=SQLWhereCount then begin
+                i := PosEx('ORDER BY ',UpperCase(SQLWhereCount));
+                if i>0 then // if ORDER BY already in the SQLWhere clause
+                  SetLength(SQLWhereCount,i-1);
+              end;
               ResultList := Server.ExecuteList([Table],
-                Server.Model.TableProps[TableIndex].SQLFromSelectWhere('Count(*)',SQLWhere));
-              if ResultList<>nil then begin
+                Server.Model.TableProps[TableIndex].SQLFromSelectWhere('Count(*)',SQLWhereCount));
+              if ResultList<>nil then
+              try
                 SQLTotalRowsCount := ResultList.GetAsInteger(1,0);
+              finally
                 ResultList.Free;
               end;
             end;
