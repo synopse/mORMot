@@ -2522,10 +2522,11 @@ begin
   {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
   {$endif}
+  arr := nil;
+  Env := (Connection as TSQLDBOracleConnection).fEnv;
+  Context := TSQLDBOracleConnection(Connection).fContext;
   Status := OCI_ERROR;
   try
-    Env := (Connection as TSQLDBOracleConnection).fEnv;
-    Context := (Connection as TSQLDBOracleConnection).fContext;
     fRowFetchedEnded := false;
     // 1. bind parameters
     if fPreparedParamsCount<>fParamCount then
@@ -2533,7 +2534,6 @@ begin
         [self,fPreparedParamsCount,fParamCount]);
     if not fExpectResults then
       fRowCount := 1; // to avoid ORA-24333 error
-    arr := nil;
     if (fParamCount>0) then
     if (fParamsArrayCount>0) and (not fExpectResults) then begin
       // 1.1. Array DML binding
