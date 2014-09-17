@@ -23967,21 +23967,27 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     end;
   if (Result='') and (FileName<>'') then begin
     Result := LowerCase(StringToAnsi7(ExtractFileExt(FileName)));
-    case PosEx(copy(Result,2,3),
-        'png,gif,tif,jpg,jpe,bmp,doc,htm,css,js,ico,wof,txt') of
-      // 1   5   9   13  17  21  25  29  33  37 40  44  48
+    case PosEx(copy(Result,2,4),
+        'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
+      // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
+        'atom,rdf,rss,webp,appc,mani,docx') of
+      // 63   68  72  76   81   86   91
       1:  Result := 'image/png';
       5:  Result := 'image/gif';
       9:  Result := 'image/tiff';
-      13,17: Result := 'image/jpeg';
-      21: Result := 'image/bmp';
-      25: Result := 'application/msword';
-      29: Result := 'text/html';
-      33: Result := 'text/css';
-      37: Result := 'application/x-javascript';
-      40: Result := 'image/x-icon';
-      44: Result := 'application/font-woff';
-      48: Result := 'text/plain';
+      14,18: Result := 'image/jpeg';
+      23: Result := 'image/bmp';
+      27,91: Result := 'application/msword';
+      31,35: Result := 'text/html';
+      40: Result := 'text/css';
+      44: Result := 'application/x-javascript';
+      47: Result := 'image/x-icon';
+      51: Result := 'application/font-woff';
+      55: Result := 'text/plain';
+      59: Result := 'image/svg+xml';
+      63,68,72: Result := 'application/xml';
+      76: Result := 'image/webp';
+      81,86: Result := 'text/cache-manifest';
       else
         if Result<>'' then
           Result := 'application/'+copy(result,2,10);

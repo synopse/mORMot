@@ -3248,7 +3248,7 @@ end;
 
 procedure TTestLowLevelCommon.MimeTypes;
 const
-  MIMES: array[0..39] of TFileName = (
+  MIMES: array[0..45] of TFileName = (
    'png','image/png',
    'PNg','image/png',
    'gif','image/gif',
@@ -3268,7 +3268,10 @@ const
    'ico','image/x-icon',
    'pdf','application/pdf',
    'PDF','application/pdf',
-   'Json','application/json');
+   'Json','application/json',
+   'webp','image/webp',
+   'manifest','text/cache-manifest',
+   'appcache','text/cache-manifest');
 var i: integer;
 begin
   for i := 0 to high(MIMES)shr 1 do
