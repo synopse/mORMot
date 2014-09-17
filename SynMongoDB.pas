@@ -1902,7 +1902,7 @@ type
       Flags: TMongoQueryFlags=[]); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
-    // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res);
+    // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res,null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators

@@ -769,8 +769,9 @@ unit mORMot;
     - added TSQLRestServerURIContext.ReturnFile() method, for direct fast
       transmission to a HTTP client, handling "304 Not Modified" and mime type
     - added TSQLRestServerURIContext.Input*OrVoid[] properties
-    - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID and
-      SessionUserName properties
+    - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID,
+      SessionUserName and ResourceFileName properties
+    - added TSQLRestServerURIContext.Redirect() method for HTTP 301 commands
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be available also within

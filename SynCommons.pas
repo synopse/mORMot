@@ -28178,7 +28178,7 @@ begin
     result := Data.VTable;
 end;
 
-{$ifndef FPC}         // better not try it with FPC - rely on the current implementation
+{$ifndef FPC} // better not try it with FPC - rely on the current implementation
 
 function ParseParamPointer(P: pointer; aType: cardinal; var Value: TVarData): pointer;
 var Size: Cardinal;
