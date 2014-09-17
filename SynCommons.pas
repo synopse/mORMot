@@ -23941,6 +23941,10 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     $474E5089: Result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
     $38464947: Result := 'image/gif'; // 47 49 46 38
     $46464F77: Result := 'application/font-woff'; // wOFF in BigEndian
+    $46464952: if Len>16 then // RIFF
+      case PCardinalArray(Content)^[2] of
+      $50424557: Result := 'image/webp';
+      end;
     $002A4949, $2A004D4D, $2B004D4D:
       Result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
     $E011CFD0: // Microsoft Office applications D0 CF 11 E0 = DOCFILE
@@ -24011,6 +24015,13 @@ begin
     $46464F77, // 'application/font-woff' = wOFF in BigEndian
     $002A4949, $2A004D4D, $2B004D4D: // 'image/tiff'
       result := true;
+    $46464952: if Len>16 then // RIFF
+      case PCardinalArray(Content)^[2] of
+      $50424557: // 'image/webp'
+        result := true;
+      else result := False;
+      end else
+      result := false;
     else
       case PCardinal(Content)^ and $00ffffff of
         $685A42, // 'application/bzip2' = 42 5A 68
@@ -44154,5 +44165,3 @@ finalization
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
 end.
-
-
