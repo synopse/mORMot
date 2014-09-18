@@ -7,6 +7,9 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, Clipbrd;
 
+const
+  VERSION = '1.18';
+
 type
   TMainForm = class(TForm)
     mmoStatus: TMemo;
@@ -21,6 +24,7 @@ type
     btnFossilShell: TButton;
     btnTests: TButton;
     btnCopyLink: TButton;
+    btnGitAll: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -33,6 +37,7 @@ type
   private
     fBatPath: TFileName;
     fFossilRepository: TFileName;
+    fDevPath: TFileName;
     fGitExe: TFileName;
     fGitRepository: TFileName;
     procedure ReadStatus;
@@ -81,6 +86,7 @@ begin
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
   if not FileExists(fBatPath+'FossilStatus.bat') then
     ShowMessage('Missing .bat files');
+  fDevPath := 'd:\dev\lib';
   fFossilRepository := 'c:\progs\fossil\lib';
   fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
   fGitRepository := 'd:\dev\github\mORMot';
@@ -100,6 +106,8 @@ end;
 procedure TMainForm.btnFossilSynchClick(Sender: TObject);
 var Desc: string;
     DescFile: TFileName;
+    VersionNumber: integer;
+    VersionText: RawUTF8;
 begin
   Desc := trim(mmoDescription.Text);
   if Desc='' then begin
@@ -107,15 +115,22 @@ begin
     mmoDescription.SetFocus;
     exit;
   end;
+  VersionText := UnQuoteSQLString(StringFromFile(fDevPath+'\SynopseCommit.inc'));
+  VersionText := GetCSVItem(pointer(VersionText),2,'.');
+  VersionNumber := GetCardinalDef(pointer(VersionText),255);
+  inc(VersionNumber);
+  VersionText := ''''+VERSION+'.'+UInt32ToUtf8(VersionNumber)+'''';
+  FileFromString(VersionText,fDevPath+'\SynopseCommit.inc');
+  FileFromString(VersionText,fFossilRepository+'\SynopseCommit.inc');
   DescFile := fBatPath+'desc.txt';
-  FileFromString(Desc,DescFile);
+  FileFromString('{'+IntToStr(VersionNumber)+'} '+Desc,DescFile);
   WinExecAndWait32(fBatPath+'FossilCommit.bat "'+DescFile+'"',fFossilRepository,SW_SHOWNORMAL,INFINITE);
   ReadStatus;
 end;
 
 procedure TMainForm.btnGitSynchClick(Sender: TObject);
 var Desc,status: string;
-    DescFile: TFileName;
+    DescFile, BatchFile: TFileName;
     i: integer;
 begin
   Desc := trim(mmoDescription.Text);
@@ -138,6 +153,9 @@ begin
       i := pos('(user: ',status);
       if i>0 then
         SetLength(status,i-1);
+      i := pos('} ',status);
+      if (i>0) and (i<10) then
+        delete(status,1,i+1); // trim left '{256} '
       mmoDescription.Text := trim(status);
     end else begin
       ShowMessage('Missing description');
@@ -155,8 +173,11 @@ begin
   end;
   DescFile := fBatPath+'desc.txt';
   FileFromString(Desc,DescFile);
-  WinExecAndWait32(format('%sGitCommit.bat "%s" "%s" "%s" "%s"',
-      [fBatPath,fFossilRepository,fGitRepository,fGitExe,DescFile]),
+  if Sender=btnGitAll then
+    BatchFile := 'GitCommitAll.bat' else
+    BatchFile := 'GitCommit.bat';
+  WinExecAndWait32(format('%s%s "%s" "%s" "%s" "%s"',
+      [fBatPath,BatchFile,fFossilRepository,fGitRepository,fGitExe,DescFile]),
      fGitRepository,SW_SHOWNORMAL,INFINITE);
 end;
 
@@ -180,7 +201,7 @@ end;
 
 procedure TMainForm.btnTestsClick(Sender: TObject);
 begin
-  WinExecAndWait32('d:\dev\lib\compilpil.bat','d:\dev\lib',SW_SHOWNORMAL,INFINITE);
+  WinExecAndWait32(fDevPath+'\compilpil.bat',fDevPath,SW_SHOWNORMAL,INFINITE);
 end;
 
 procedure TMainForm.btnCopyLinkClick(Sender: TObject);
@@ -195,5 +216,6 @@ begin
   while (i<length(status)) and (status[i]<=' ') do inc(i);
   Clipboard.AsText := 'http://synopse.info/fossil/info/'+copy(status,i,10);
 end;
+
 
 end.

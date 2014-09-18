@@ -112,7 +112,7 @@ object MainForm: TMainForm
     OnClick = btnRefreshStatusClick
   end
   object btnGitShell: TButton
-    Left = 336
+    Left = 304
     Top = 473
     Width = 75
     Height = 25
@@ -150,5 +150,19 @@ object MainForm: TMainForm
     Caption = 'Copy Link'
     TabOrder = 9
     OnClick = btnCopyLinkClick
+  end
+  object btnGitAll: TButton
+    Left = 384
+    Top = 472
+    Width = 73
+    Height = 25
+    Hint = 
+      'Git Commit mORMot + SynPDF + SynMustache + LVCL + SynProject rep' +
+      'ositories'
+    Caption = 'Git ALL'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 10
+    OnClick = btnGitSynchClick
   end
 end

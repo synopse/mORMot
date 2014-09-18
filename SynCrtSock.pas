@@ -231,7 +231,7 @@ uses
 const
   /// the current version number of the freeware Synopse framework
   // - match the value defined in SynCommons.pas
-  SYNOPSE_FRAMEWORK_VERSION = '1.18'{$ifdef LVCL}+' LVCL'{$endif};
+  SYNOPSE_FRAMEWORK_VERSION = {$I SynopseCommit.inc}{$ifdef LVCL}+' LVCL'{$endif};
 
   /// the full text of the current Synopse mORMot framework version
   XPOWEREDPROGRAM = 'Synopse mORMot '+SYNOPSE_FRAMEWORK_VERSION;
