@@ -21,7 +21,7 @@ unit SynFPCTypInfo;
 
   The Original Code is Synopse mORMot framework.
 
-  The Initial Developer of the Original Code is Alfred Glänzer.
+  The Initial Developer of the Original Code is Alfred Glaenzer.
 
   Portions created by the Initial Developer are Copyright (C) 2014
   the Initial Developer. All Rights Reserved.

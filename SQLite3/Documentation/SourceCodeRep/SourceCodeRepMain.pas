@@ -119,7 +119,7 @@ begin
   VersionText := GetCSVItem(pointer(VersionText),2,'.');
   VersionNumber := GetCardinalDef(pointer(VersionText),255);
   inc(VersionNumber);
-  VersionText := ''''+VERSION+'.'+UInt32ToUtf8(VersionNumber)+'''';
+  VersionText := ''''+VERSION+'.'+UInt32ToUtf8(VersionNumber)+''''#13#10;
   FileFromString(VersionText,fDevPath+'\SynopseCommit.inc');
   FileFromString(VersionText,fFossilRepository+'\SynopseCommit.inc');
   DescFile := fBatPath+'desc.txt';

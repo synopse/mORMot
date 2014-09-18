@@ -30,7 +30,7 @@ unit SynCommons;
 
   Contributor(s):
    Aleksandr (sha)
-   Alfred Glänzer
+   Alfred Glaenzer
    Sanyin
    Pavel (mpv)
 
