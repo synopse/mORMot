@@ -726,7 +726,7 @@ unit mORMot;
     - added optional CustomFields parameter to TSQLRest.Update() - and in case
       of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
-      properties, able to define execution plan for all ORM/SOA operations
+      properties, able to define threading execution plan for ORM/SOA operations
     - changed RESTful URI to ModelRoot/Table?where=WhereClause to delete members
     - added TSQLRestServer.URIPagingParameters property, to support alternate
       URI parameters sets for request paging (in addition to YUI syntax),
@@ -8857,7 +8857,7 @@ type
   // - used e.g. for TSQLRestServer.AcquireWriteMode or
   // TSQLRestServer.AcquireExecutionMode/AcquireExecutionLockedTimeOut
   TSQLRestServerAcquireMode = (
-    amUnlocked, amLocked, amBackgroundThread
+    amUnlocked, amLocked, amBackgroundThread, amBackgroundORMSharedThread
     {$ifndef LVCL}, amMainThread{$endif});
 
   TSQLRestClass = class of TSQLRest;
@@ -9808,7 +9808,7 @@ type
     // ! aServer.AcquireExecutionMode[execORMGet] := am***;
     // ! aServer.AcquireExecutionMode[execORMWrite] := am***;
     // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
-    // amLocked, amBackgroundThread or amMainThread
+    // amLocked, amBackgroundThread, amBackgroundORMSharedThread or amMainThread
     property AcquireExecutionMode[Cmd: TSQLRestServerURIContextCommand]: TSQLRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
@@ -9825,6 +9825,9 @@ type
     // - amBackgroundThread will execute the write methods in a queue, in a
     // dedicated unique thread (which can be convenient, especially for
     // external database transaction process)
+    // - amBackgroundORMSharedThread will execute all ORM methods in a queue, in
+    // a dedicated unique thread, shared for both execORMWrite and execORMGet,
+    // but still dedicated for execSOAByMethod and execSOAByInterface
     // - a slower alternative to amBackgroundThread may be amMainThread
     // - you can set amUnlocked for a concurrent write access, but be aware
     // that it may lead into multi-thread race condition issues, depending on
@@ -9842,15 +9845,15 @@ type
     // a "408 Request Time-out" status error 
     property AcquireWriteTimeOut: cardinal index execORMWrite
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
-    /// the current Date and Time, as retrieved from the server
+    /// the current UTC Date and Time, as retrieved from the server
     // - this property will return the timestamp as TTimeLog / Int64
     // after correction from the Server returned time-stamp (if any)
     // - is used e.g. by TSQLRecord.ComputeFieldsBeforeWrite to update TModTime
     // and TCreateTime published fields
-    // - default implementation will return the executable time, i.e. TimeLogNow
-    // - you can set the server-side time offset by setting a value to this
-    // property (e.g. using TSQLDBConnection.ServerTimeStamp property for
-    // Oracle, MSSQL, MySQL, PostgreSQL, JET or even SQLite3 external databases)
+    // - default implementation will return the executable UTC time, i.e. NowUTC
+    // so that any GUI code should convert this UTC value into local time
+    // - on TSQLRestServer, if you use an external database, the TSQLDBConnection
+    // ServerTimeStamp value will be set to this property  
     // - you can use this value in a WHERE clause for a query, as such:
     // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
     // - or you could use ServerTimeStamp everywhere in your code, when you need
@@ -26943,6 +26946,12 @@ begin
       else raise EORMException.CreateUTF8('Unexpected Command=% in %.Execute',
         [ord(Command),self]);
     end;
+    if Mode=amBackgroundORMSharedThread then
+      if (Command=execORMWrite) and
+         (Server.fAcquireExecution[execORMGet].Mode=amBackgroundORMSharedThread) then
+        Command := execORMGet; // for share same thread for ORM read/write
+  end;
+  with Server.fAcquireExecution[Command] do
     case Mode of
     amUnlocked:
       Method;
@@ -26978,13 +26987,12 @@ begin
         TThread.Synchronize(nil,Method);
         {$endif}
     {$endif}
-    amBackgroundThread: begin
+    amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
         Thread := TSynBackgroundThreadSQLRestServerMethod.Create(Server);
       Thread.RunAndWait(Method);
     end;
     end;
-  end;
 end;
 
 procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
