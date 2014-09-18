@@ -2831,7 +2831,7 @@ begin
 end;  
 
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
-  Mode: TMongoJSONMode): RawUTF8; overload;
+  Mode: TMongoJSONMode): RawUTF8; 
 var W: TTextWriter;
 begin
   BSONParseLength(BSON,ExpectedBSONLen);

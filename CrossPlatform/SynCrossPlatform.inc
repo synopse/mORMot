@@ -48,7 +48,7 @@
 
 {$ifdef FPC}
 
-  {$MODE DELPHI} // will do integer=longint, even on 64 bits CPU and include objpas
+  {$MODE DELPHI} // we need e.g. auto-dereferenced pointers, as in Delphi
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKSET 1}

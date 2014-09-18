@@ -24,6 +24,7 @@
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+   Alfred (Alf from Consulab)
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -69,7 +70,8 @@
   - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     http://synopse.info/forum/viewtopic.php?id=1394
-  - now handles Delphi XE3, XE4, XE5 and XE6 (32 and 64 bit)
+  - enhanced FPC compatibility
+  - now handles Delphi XE3, XE4, XE5, XE6 and XE7 (32 and 64 bit)
 
 }
 
@@ -169,13 +171,13 @@
 
 {$ifdef FPC}
 
-  {$MODE DELPHI} // will do integer=longint, even on 64 bits CPU and include objpas
+  {$MODE DELPHI} // e.g. for asm syntax
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKSET 1}
   {$PACKENUM 1}
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
-  {.$define USETYPEINFO}  // FPC's RTTI differs from Delphi's  :(
+  {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define NODELPHIASM}   // need some low-level System.@LStrFromPCharLen calls
   {$define NOX64PATCHRTL} // official FPC's RTL already includes this x64 asm
@@ -194,6 +196,7 @@
 
   {$ifdef CPUX64}
     {$define CPU64} // Delphi compiler for 64 bit CPU
+    {$define CPU64DELPHI}
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
     {$define USETYPEINFO}  // in x64 we rely on official typeinfo structures

@@ -85,31 +85,29 @@ uses
   SynBigTable,
   SynSQLite3,
   SynSQLite3Static,
-{$ifndef FPC}
   mORMot,
   mORMotSQLite3,
-  mORMotFastCgiServer,
   mORMotHttpClient,
   mORMotHttpServer,
+{$ifndef FPC}
   mORMotService,
+  mORMotFastCgiServer,
   //mORMotBigTable,
 {$endif}
 {$endif}
-{$ifndef FPC}
 {$ifndef LVCL}
-  SynPdf,
   Contnrs,
-  SynGdiPlus,
   SynDB,
   SynOleDB,
   SynDBOracle,
   SynDBODBC,
   SynDBSQLite3,
 {$ifndef FPC}
+  SynPdf,
+  SynGdiPlus,
 {$ifndef DELPHI5OROLDER}
   mORMotDB,
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 {$endif LVCL}
 {$endif FPC}
   SynZip,

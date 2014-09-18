@@ -30,6 +30,7 @@ unit SynCommons;
 
   Contributor(s):
    Aleksandr (sha)
+   Alfred (Alf from Consulab)
    Sanyin
    Pavel (mpv)
 
@@ -3563,7 +3564,7 @@ type
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndDelete(var Elem; aIndex: PIntegerDynArray=nil;
       aCompare: TDynArraySortCompare=nil): integer;
-    /// search for an element value, then update it if match
+    /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function
     // - if Elem content matches, this item will be updated with the supplied
@@ -7183,10 +7184,10 @@ var
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$ifdef PUREPASCAL}
-{$ifdef CPU64}
+{$ifdef CPU64DELPHI}
 function SupportSSE42: boolean;
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$endif}
+{$endif CPU64DELPHI}
 {$else}
 /// returns TRUE if Intel Streaming SIMD Extensions 4.2 is available
 function SupportSSE42: boolean;
@@ -11572,6 +11573,11 @@ resourcestring
 
 implementation
 
+{$ifdef FPC}
+uses
+  SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
+{$endif}
+
 
 { ************ some fast UTF-8 / Unicode / Ansi conversion routines }
 
@@ -13487,11 +13493,9 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-{$ifdef CPU64}
+{$ifdef CPU64DELPHI}
 asm // rcx=P, rdx=val
-    {$ifdef CPUX64}
     .NOFRAME
-    {$endif}
     mov r10,rdx
     sar r10,63                  // r10=0 if val>=0 or -1 if val<0
     xor rdx,r10
@@ -13591,11 +13595,9 @@ end;
 {$endif PUREPASCAL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef CPU64}
+{$ifdef CPU64DELPHI}
 asm // rcx=P, rdx=val
-    {$ifdef CPUX64}
     .NOFRAME
-    {$endif}
     cmp rdx,10; jb @3           // direct process of common val<10
     mov rax,rdx
     lea r8,TwoDigitLookupW
@@ -13759,15 +13761,17 @@ end;
 type
   /// available type families for Free Pascal RTTI values
   // - values differs from Delphi, and are taken from FPC typinfo.pp unit
+  // - here below, we defined tkLString instead of FPC tkAString to match
+  // Delphi - see http://lists.freepascal.org/fpc-devel/2013-June/032233.html
   TTypeKind = (tkUnknown,tkInteger,tkChar,tkEnumeration,tkFloat,
-    tkSet,tkMethod,tkSString,tkLString,tkAString,
+    tkSet,tkMethod,tkSString,tkLStringOld,tkLString,
     tkWString,tkVariant,tkArray,tkRecord,tkInterface,
     tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
     tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,tkHelper);
 
 const
    // all potentially managed types
-   tkManagedTypes = [tkAstring,tkWstring,tkUstring,tkArray,
+   tkManagedTypes = [tkLStringOld,tkLString,tkWstring,tkUstring,tkArray,
                      tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
 
 function aligntoptr(p : pointer): pointer; inline;
@@ -14059,6 +14063,17 @@ begin
     result := FieldTable^.Size;
 end;
 
+function TypeInfoSize(aTypeInfo: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  if aTypeInfo=nil then
+    result := 0 else begin
+    inc(PtrUInt(aTypeInfo),PFieldTable(aTypeInfo)^.NameLen);
+    {$ifdef FPC}aTypeInfo := AlignToPtr(aTypeInfo);{$endif}
+    result := PFieldTable(aTypeInfo)^.Size;
+  end;
+end;
+
 
 { note: those VariantToInteger*() functions are expected to be there }
 
@@ -14233,7 +14248,7 @@ begin
   V := pointer(Value);
   pointer(Value) := nil;
   if p^.refCnt>1 then begin
-    InterlockedDecrement(p^.refCnt);
+    InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
     exit;
   end;
   if (V^.VType>varNativeString) and
@@ -14354,7 +14369,7 @@ end;
 {$endif UNICODE}
 
 {$ifdef CPU64}
-function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe;{$endif}
+function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
   {$ifdef FPC} // see function SwapEndian() in x86_64.inc
   {$ifdef win64}
@@ -16561,11 +16576,9 @@ begin
 end;
 
 function StrLen(S: pointer): PtrInt;
-{$ifdef CPU64}
+{$ifdef CPU64DELPHI}
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
-        {$ifdef CPUX64}
         .NOFRAME
-        {$endif}
         mov      rax,rcx             // get pointer to string from rcx
         or       rax,rax
         mov      r8,rcx              // copy pointer
@@ -22215,12 +22228,10 @@ asm // eax=crc, edx=buf, ecx=len
 end;
 {$endif}
 
-{$ifdef CPU64}
+{$ifdef CPU64DELPHI}
 function SupportSSE42: boolean;
 asm
-    {$ifdef CPUX64}
     .NOFRAME
-    {$endif}
     push rbx
     mov eax,1
     cpuid
@@ -22233,9 +22244,6 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // ecx=crc, rdx=buf, r8=len
-    {$ifdef CPUX64}
-    .NOFRAME
-    {$endif}
     mov eax,ecx
     not eax
     test r8,r8;   jz @0
@@ -22266,7 +22274,7 @@ asm // ecx=crc, rdx=buf, r8=len
     crc32 dword ptr eax,byte ptr [rdx+2]
 @0: not eax
 end;
-{$endif CPU64}
+{$endif CPU64DELPHI}
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
@@ -23244,6 +23252,7 @@ begin
   AppendToTextFile(Msg,ChangeFileExt(paramstr(0),'.log'));
 end;
 
+{$ifndef FPC}
 function GetEnumBaseTypeList(aTypeInfo: pointer; out MaxValue: Integer): PShortString;
 begin
   if aTypeInfo=nil then
@@ -23257,8 +23266,13 @@ begin
     result := pointer(PtrUInt(aTypeInfo)+sizeof(longint)+sizeof(pointer));
   end;
 end;
+{$endif}
 
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+{$ifdef FPC}
+begin
+  result := GetNewEnumName(aTypeInfo, aIndex); // from SynFPCTypInfo
+{$else}
 var MaxValue: integer;
 const NULL_SHORTSTRING: string[1] = '';
 begin
@@ -23270,9 +23284,14 @@ begin
         inc(PByte(result),ord(result^[0])+1); // next short string
         dec(aIndex);
       end;
+{$endif}
 end;
 
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
+{$ifdef FPC}
+begin
+  result := GetNewEnumValue(aTypeInfo, aValue); // from SynFPCTypInfo
+{$else}
 var List: PShortString;
     MaxValue: integer;
 begin
@@ -23283,6 +23302,7 @@ begin
         exit else
         inc(PByte(List),ord(List^[0])+1); // next short string
   result := -1;
+{$endif}
 end;
 
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
@@ -25029,6 +25049,98 @@ end;
 
 { ************ low-level RTTI types and conversion routines }
 
+
+{$ifdef FPC}
+
+function RTTIArraySize(typeInfo: Pointer): SizeInt;
+type
+  PArrayInfo=^TArrayInfo;
+  TArrayInfo=packed record
+    ElSize: SizeInt;
+    ElCount: SizeInt;
+    ElInfo: Pointer;
+  end;
+begin
+  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
+  result := PArrayInfo(typeInfo)^.ElSize * PArrayInfo(typeInfo)^.ElCount;
+end;
+
+function RTTIRecordSize(typeInfo: Pointer): SizeInt; inline;
+type
+  PRecordInfo=^TRecordInfo;
+  TRecordInfo=packed record
+    Size: Longint;
+    Count: Longint;
+    { Elements: array[count] of TRecordElement }
+  end;
+begin
+  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
+  result := PRecordInfo(typeInfo)^.Size;
+end;
+
+function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
+begin
+  case TTypeKind(PByte(typeinfo)^) of
+    tkLString,tkLStringOld,tkWString,tkUString,
+    tkInterface,tkDynarray:
+      result:=sizeof(Pointer);
+{$ifdef FPC_HAS_FEATURE_VARIANTS}
+    tkVariant:
+      result:=sizeof(TVarData);
+{$endif FPC_HAS_FEATURE_VARIANTS}
+    tkArray:
+      result:=RTTIArraySize(typeinfo);
+    tkObject,tkRecord:
+      result:=RTTIRecordSize(typeinfo);
+  else
+    raise ESynException.CreateFmt('RTTIManagedSize(%d)',[PByte(typeinfo)^]);
+  end;
+end;
+
+procedure RecordClear(var Dest; TypeInfo: pointer);
+  [external name 'FPC_FINALIZE'];
+
+procedure RecordAddRef(var Data; TypeInfo : pointer);
+  [external name 'FPC_ADDREF'];
+
+procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
+begin // external name 'FPC_COPY' does not work as we need
+  RecordClear(Dest,TypeInfo);
+  move(Source,Dest,RTTIManagedSize(TypeInfo));
+  RecordAddRef(Dest,TypeInfo);
+end;
+
+procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
+var i, size: SizeInt;
+begin
+  size := RTTIManagedSize(typeInfo);
+  if size>0 then
+    for i := 1 to cnt do begin
+      RecordClear(dest^,TypeInfo); // inlined RecordCopy()
+      move(source^,dest^,size);
+      RecordAddRef(dest^,TypeInfo);
+      inc(PByte(source),size);
+      inc(PByte(dest),size);
+    end;
+end;
+
+{$else}
+
+procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
+asm
+{$ifdef CPU64}
+  {$ifdef CPUX64}
+  .NOFRAME
+  {$endif}
+  jmp System.@CopyArray
+{$else}
+  push dword ptr [EBP+8]
+  call System.@CopyArray
+{$endif}
+end;
+
+{$endif FPC}
+
 function RecordEquals(const RecA, RecB; TypeInfo: pointer): boolean;
 var FieldTable: PFieldTable absolute TypeInfo;
     F: integer;
@@ -25059,27 +25171,43 @@ begin
     end;
     case Field^.TypeInfo^.Kind of
       tkLString:
-        if PAnsiString(A)^<>PAnsiString(B)^ then
+        if PAnsiString(A)^=PAnsiString(B)^ then
+          Diff := sizeof(pointer) else
           exit;
       tkWString:
-        if PWideString(A)^<>PWideString(B)^ then
+        if PWideString(A)^=PWideString(B)^ then
+          Diff := sizeof(pointer) else
           exit;
       {$ifdef UNICODE}
       tkUString:
-        if PUnicodeString(A)^<>PUnicodeString(B)^ then
+        if PUnicodeString(A)^=PUnicodeString(B)^ then
+          Diff := sizeof(pointer) else
           exit;
       {$endif}
       tkRecord:
-        if not RecordEquals(A^,B^,Field^.TypeInfo{$ifndef FPC}^{$endif}) then
+        if RecordEquals(A^,B^,Field^.TypeInfo{$ifndef FPC}^{$endif}) then
+          Diff := RecordTypeInfoSize(Field^.TypeInfo{$ifndef FPC}^{$endif}) else
           exit;
       {$ifndef NOVARIANTS}
       tkVariant:
-        if PVariant(A)^<>PVariant(B)^ then
+        if PVariant(A)^=PVariant(B)^ then
+          Diff := sizeof(variant) else
           exit;
       {$endif}
+      {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+      else
+        if Field^.TypeInfo^.Kind in tkManagedTypes then
+          raise ESynException.CreateUTF8('RecordEquals(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
+          if F=FieldTable^.ManagedCount then
+            Diff := FieldTable.Size-Field^.Offset else
+            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          if not CompareMem(A,B,Diff) then
+            exit; // binary block not equal
+        end;
+      {$else}
       else exit; // kind of field not handled
+      {$endif}
     end;
-    Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     inc(A,Diff);
     inc(B,Diff);
     inc(Diff,Field^.Offset);
@@ -25146,10 +25274,12 @@ begin
         inc(result,Len-sizeof(variant));
       end;
       {$endif}
+      {$ifndef FPC} // FPC does include RTTI for unmanaged fields! :)
       else begin
         result := 0;
         exit; // invalid/unhandled record content
       end;
+      {$endif}
     end;
     inc(Field);
   end;
@@ -25224,16 +25354,30 @@ begin
       Diff := sizeof(Variant); // size of tkVariant in record
     end;
     {$endif}
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+      else
+        if Field^.TypeInfo^.Kind in tkManagedTypes then
+          raise ESynException.CreateUTF8('RecordSave(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
+          if F=FieldTable^.ManagedCount then
+            Diff := FieldTable.Size-Field^.Offset else
+            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          move(R^,Dest^,Diff);
+          inc(Dest,Diff);
+        end;
+    {$else}
     else begin
-      result := nil; // invalid/unhandled record content
-      exit;
+      result := nil;
+      exit; // invalid/unhandled record content
     end;
+    {$endif}
     end;
     inc(R,Diff);
     inc(Diff,Field.Offset);
     inc(Field);
   end;
   Diff := FieldTable^.Size-Diff;
+  if integer(Diff)<0 then
+    raise ESynException.Create('RecordSave diff') else
   if Diff<>0 then begin
     move(R^,Dest^,Diff);
     result := Dest+Diff;
@@ -25377,16 +25521,30 @@ begin
       Diff := sizeof(Variant); // size of tkVariant in record
     end;
     {$endif}
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+      else
+        if Field^.TypeInfo^.Kind in tkManagedTypes then
+          raise ESynException.CreateUTF8('RecordLoad(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
+          if F=FieldTable^.ManagedCount then
+            Diff := FieldTable.Size-Field^.Offset else
+            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          move(Source^,R^,Diff);
+          inc(Source,Diff);
+        end;
+    {$else}
     else begin
       result := nil;
-      exit; // invalid record content
+      exit; // invalid/unhandled record content
     end;
+    {$endif}
     end;
     inc(R,Diff);
     inc(Diff,Field.Offset);
     inc(Field);
   end;
   Diff := FieldTable^.Size-Diff;
+  if integer(Diff)<0 then
+    raise ESynException.Create('RecordLoad diff') else
   if Diff<>0 then begin
     move(Source^,R^,Diff);
     result := Source+Diff;
@@ -25433,18 +25591,8 @@ asm // our enhanced RTL already has the faster version
   jmp System.@FinalizeRecord
 end;
 {$else ENHANCEDRTL}
-{$ifdef FPC}
-function fpc_Copy_internal(Src, Dest, TypeInfo : Pointer) : SizeInt; [external name 'FPC_COPY'];
+{$ifndef FPC}
 
-procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
-begin
-  fpc_Copy_internal(@Source,@Dest,TypeInfo);
-end;
-
-procedure RecordClear(var Dest; TypeInfo: pointer);
-  [external name 'FPC_FINALIZE'];
-
-{$else FPC}
 {$ifdef PUREPASCAL}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
@@ -29487,88 +29635,13 @@ end;
 
 {$endif}
 
-{$ifdef FPC}
-
-function RTTIArraySize(typeInfo: Pointer): SizeInt;
-type
-  PArrayInfo=^TArrayInfo;
-  TArrayInfo=packed record
-    ElSize: SizeInt;
-    ElCount: SizeInt;
-    ElInfo: Pointer;
-  end;
-begin
-  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
-  result := PArrayInfo(typeInfo)^.ElSize * PArrayInfo(typeInfo)^.ElCount;
-end;
-
-function RTTIRecordSize(typeInfo: Pointer): SizeInt;
-type
-  PRecordInfo=^TRecordInfo;
-  TRecordInfo=packed record
-    Size: Longint;
-    Count: Longint;
-    { Elements: array[count] of TRecordElement }
-  end;
-begin
-  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
-  result := PRecordInfo(typeInfo)^.Size;
-end;
-
-function RTTISize(typeInfo: Pointer): SizeInt;
-begin
-  case TTypeKind(PByte(typeinfo)^) of
-    tkAString,tkWString,tkUString,
-    tkInterface,tkDynarray:
-      result:=sizeof(Pointer);
-{$ifdef FPC_HAS_FEATURE_VARIANTS}
-    tkVariant:
-      result:=sizeof(TVarData);
-{$endif FPC_HAS_FEATURE_VARIANTS}
-    tkArray:
-      result:=RTTIArraySize(typeinfo);
-    tkObject,tkRecord:
-      result:=RTTIRecordSize(typeinfo);
-  else
-    result:=-1;
-  end;
-end;
-
-procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
-var i, size: SizeInt;
-begin
-  size := RTTISize(typeInfo);
-  if size>0 then
-    for i := 0 to cnt-1 do
-      fpc_copy_internal(source+size*i,dest+size*i,typeInfo);
-end;
-
-{$else}
-procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
-asm
-{$ifdef CPU64}     
-  {$ifdef CPUX64}
-  .NOFRAME
-  {$endif}
-  jmp System.@CopyArray
-{$else}
-  push dword ptr [EBP+8]
-  call System.@CopyArray
-{$endif}
-end;
-{$endif}
-
 function TDynArray.Add(const Elem): integer;
-var P: pointer;
 begin
   result := Count;
   if Value=nil then
     exit; // avoid GPF if void
   SetCount(result+1);
-  P := pointer(PtrUInt(Value^)+PtrUInt(result)*ElemSize);
-  if ElemType=nil then
-    move(Elem,P^,ElemSize) else
-    CopyArray(P,@Elem,ElemType,1);
+  ElemCopy(Elem,pointer(PtrUInt(Value^)+PtrUInt(result)*ElemSize)^);
 end;
 
 function TDynArray.New: integer;
@@ -29591,13 +29664,11 @@ begin
     P := pointer(PtrUInt(Value^)+PtrUInt(Index)*ElemSize);
     Move(P[0],P[ElemSize],cardinal(n-Index)*ElemSize);
     if ElemType<>nil then
-      fillchar(P[0],ElemSize,0); // avoid GPF
+      fillchar(P[0],ElemSize,0); // avoid GPF in ElemCopy() below
   end else
     // Index>=Count -> add at the end
     P := pointer(PtrUInt(Value^)+PtrUInt(n)*ElemSize);
-  if ElemType=nil then
-    move(Elem,P^,ElemSize) else
-    CopyArray(P,@Elem,ElemType,1);
+  ElemCopy(Elem,P^);
 end;
 
 procedure TDynArray.Clear;
@@ -29636,7 +29707,11 @@ begin
     if cardinal(aIndex)>=PCardinal(fCountP)^ then
       exit;
   end else
+    {$ifdef FPC}
+    if cardinal(aIndex)>=cardinal(DynArrayLength(Value^)) then
+    {$else}
     if cardinal(aIndex)>=PCardinal(PtrUInt(Value^)-sizeof(PtrInt))^ then
+    {$endif}
       exit;
   result := pointer(PtrUInt(Value^)+PtrUInt(aIndex)*ElemSize);
 end;
@@ -29646,7 +29721,11 @@ begin
   if Value<>nil then
     if fCountP=nil then
       if PtrInt(Value^)<>0 then
+        {$ifdef FPC}
+        result := DynArrayLength(Value^) else
+        {$else}
         result := PInteger(PtrUInt(Value^)-sizeof(PtrInt))^ else
+        {$endif}
         result := 0 else
       result := fCountP^ else
     result := 0; // avoid GPF if void
@@ -30014,35 +30093,49 @@ Bin:  case ElemSize of
       tkRecord: begin
         FieldTable := ElemType;
 Rec:    inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+        {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
         if FieldTable^.ManagedCount=0 then // only binary content -> full content
-          goto Bin else
-          with FieldTable^.ManagedFields[0] do
-          case Offset of
-          0: case TypeInfo^.Kind of
-              tkLString: fKnownType := djRawUTF8;
-              tkWString: fKnownType := djWideString;
-              {$ifdef UNICODE}
-              tkUString: fKnownType := djString;
+          goto Bin;
+        with FieldTable^.ManagedFields[0] do
+        case Offset of
+        0: case TypeInfo^.Kind of
+            tkLString: fKnownType := djRawUTF8;
+            tkWString: fKnownType := djWideString;
+            {$ifdef UNICODE}
+            tkUString: fKnownType := djString;
+            {$endif}
+            tkRecord: begin
+              FieldTable := pointer(TypeInfo{$ifndef FPC}^{$endif});
+              goto Rec;
+            end;
+            {$ifndef NOVARIANTS}
+            tkVariant: fKnownType := djVariant;
+            {$endif}
+            else begin
+              {$ifdef FPC} // unmanaged fields have RTTI in newest FPC! :)
+              if (FieldTable^.ManagedCount<>1) and // emulate Delphi behavior
+                 (FieldTable^.ManagedFields[1].TypeInfo^.Kind in tkManagedTypes) then
+              case FieldTable^.ManagedFields[1].Offset of
+                1: fKnownType := djByte;
+                2: fKnownType := djWord;
+                4: fKnownType := djInteger;
+                8: fKnownType := djInt64;
+                else fKnownSize := FieldTable^.ManagedFields[1].Offset;
+              end else
               {$endif}
-              tkRecord: begin
-                FieldTable := pointer(TypeInfo{$ifndef FPC}^{$endif});
-                goto Rec;
-              end;
-              {$ifndef NOVARIANTS}
-              tkVariant: fKnownType := djVariant;
-              {$endif}
-             end;
-          1: fKnownType := djByte;
-          2: fKnownType := djWord;
-          4: fKnownType := djInteger;
-          8: fKnownType := djInt64;
-          else fKnownSize := Offset;
-          end;
-      end;
-      {$ifndef NOVARIANTS}
-      tkVariant: fKnownType := djVariant;
-      {$endif}
+              goto bin;
+            end;
+           end;
+        1: fKnownType := djByte;
+        2: fKnownType := djWord;
+        4: fKnownType := djInteger;
+        8: fKnownType := djInt64;
+        else fKnownSize := Offset;
+        end;
+    end;
+    {$ifndef NOVARIANTS}
+    tkVariant: fKnownType := djVariant;
+    {$endif}
     end;
   end;
   if KNOWNTYPE_SIZE[fKnownType]<>0 then
@@ -30342,17 +30435,11 @@ begin
 end;
 
 function TDynArray.FindAndFill(var Elem; aIndex: PIntegerDynArray=nil;
-      aCompare: TDynArraySortCompare=nil): integer;
-var P: PAnsiChar;
+  aCompare: TDynArraySortCompare=nil): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
-  if result<0 then
-    exit;
-  P := PAnsiChar(Value^)+cardinal(result)*ElemSize;
-  // if found, fill Elem with the matching item
-  if ElemType=nil then
-    move(P^,Elem,ElemSize) else
-    CopyArray(@Elem,P,ElemType,1);
+  if result>=0 then // if found, fill Elem with the matching item
+    ElemCopy(PAnsiChar(Value^)[cardinal(result)*ElemSize],Elem);
 end;
 
 function TDynArray.FindAndDelete(var Elem; aIndex: PIntegerDynArray=nil;
@@ -30365,16 +30452,10 @@ end;
 
 function TDynArray.FindAndUpdate(const Elem; aIndex: PIntegerDynArray=nil;
   aCompare: TDynArraySortCompare=nil): integer;
-var P: PAnsiChar;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
-  if result<0 then
-    exit;
-  P := PAnsiChar(Value^)+cardinal(result)*ElemSize;
-  // if found, fill Elem with the matching item
-  if ElemType=nil then
-    move(Elem,P^,ElemSize) else
-    CopyArray(P,@Elem,ElemType,1);
+  if result>=0 then // if found, fill Elem with the matching item
+    ElemCopy(Elem,PAnsiChar(Value^)[cardinal(result)*ElemSize]);
 end;
 
 function TDynArray.FindAndAddIfNotExisting(const Elem; aIndex: PIntegerDynArray=nil;
@@ -30798,7 +30879,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength);
     ReallocMem(p,neededSize);
   end else begin
-    InterlockedDecrement(p^.refCnt); 
+    InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
     GetMem(p,neededSize);
     minLength := oldLength;
     if minLength>newLength then
@@ -30974,8 +31055,15 @@ end;
 procedure TDynArray.ElemCopy(const A; var B);
 begin
   if ElemType=nil then
-    move(A,B,ElemSize) else
+    move(A,B,ElemSize) else begin
+    {$ifdef FPC}
+    RecordClear(B,ElemType); // inlined CopyArray()
+    move(A,B,RTTIManagedSize(ElemType));
+    RecordAddRef(B,ElemType);
+    {$else}
     CopyArray(@B,@A,ElemType,1);
+    {$endif}
+  end;
 end;
 
 function TDynArray.ElemLoad(Source: PAnsiChar): RawByteString;

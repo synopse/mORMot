@@ -104,11 +104,11 @@ uses
   mORMot;
 
 
-{{ publishes a HTTP/1.1 RESTFUL JSON mORMot Server, using FASTCGI
- - will raise an exception if the executable was not used as a FastCGI
-   process, but a normal CGI process
- - call this procedure in your main block of your program: it is up to
-   the HTTP server to implement the request handling }
+/// publishes a HTTP/1.1 RESTFUL JSON mORMot Server, using FASTCGI
+// - will raise an exception if the executable was not used as a FastCGI
+// process, but a normal CGI process
+// - call this procedure in your main block of your program: it is up to
+// the HTTP server to implement the request handling
 procedure mORMotFastCGIMainProc(Server: TSQLRestServer);
 
 

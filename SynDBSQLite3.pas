@@ -328,7 +328,7 @@ implementation
 
 
 function RowsToSQLite3(const Dest: TFileName; const TableName: RawUTF8;
-  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer; overload;
+  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer;
 var DB: TSQLDBSQLite3ConnectionProperties;
     Conn: TSQLDBSQLite3Connection;
 begin

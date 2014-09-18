@@ -29,6 +29,8 @@ program TestSQL3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -112,34 +114,32 @@ uses
   SynBigTable in '..\SynBigTable.pas',
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
-  {$ifndef FPC}
   mORMot in 'mORMot.pas',
   mORMotSQLite3 in 'mORMotSQLite3.pas',
-  mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
   mORMotHttpClient in 'mORMotHttpClient.pas',
   mORMotHttpServer in 'mORMotHttpServer.pas',
+  {$ifndef FPC}
+  mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
   mORMotService in 'mORMotService.pas',
   //mORMotBigTable,
   {$endif FPC}
 {$endif DELPHI5OROLDER}
-{$ifndef FPC}
 {$ifndef LVCL}
+{$ifndef FPC}
   SynPdf in '..\SynPdf.pas',
   SynGdiPlus in '..\SynGdiPlus.pas',
+{$endif FPC}
   SynDB in '..\SynDB.pas',
   SynOleDB in '..\SynOleDB.pas',
   SynDBOracle in '..\SynDBOracle.pas',
   SynDBODBC in '..\SynDBODBC.pas',
   SynDBSQLite3 in '..\SynDBSQLite3.pas',
-{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
   mORMotDB in 'mORMotDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
   SynZipFiles in '..\SynZipFiles.pas',
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 {$endif LVCL}
-{$endif FPC}
   SynZip in '..\SynZip.pas',
   SynSelfTests in '..\SynSelfTests.pas';
 

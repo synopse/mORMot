@@ -291,22 +291,22 @@ type
     procedure InternalSetClass; override;
   end;                
 
-  {{ HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
-   - has a common behavior as THttpClientSocket() but seems to be faster
-     over a network and is able to retrieve the current proxy settings
-     (if available) and handle secure HTTPS connection - so it seems to be used
-     in your client programs: TSQLHttpClient will therefore map to this class
-   - WinHTTP does not share directly any proxy settings with Internet Explorer.
-     The default WinHTTP proxy configuration is set by either
-     proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
-     netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
-     you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
-     the current user's proxy settings for Internet Explorer (under 64 bit
-     Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-     call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
-   - you can optionaly specify manual Proxy settings at constructor level
-   - by design, the WinHTTP API can be used from a service or a server
-   - is implemented by creating a TWinHTTP internal class instance }
+  /// HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
+  // - has a common behavior as THttpClientSocket() but seems to be faster
+  // over a network and is able to retrieve the current proxy settings
+  // (if available) and handle secure HTTPS connection - so it seems to be used
+  // in your client programs: TSQLHttpClient will therefore map to this class
+  // - WinHTTP does not share directly any proxy settings with Internet Explorer.
+  // The default WinHTTP proxy configuration is set by either
+  // proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
+  // netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
+  // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
+  // the current user's proxy settings for Internet Explorer (under 64 bit
+  // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // - you can optionaly specify manual Proxy settings at constructor level
+  // - by design, the WinHTTP API can be used from a service or a server
+  // - is implemented by creating a TWinHTTP internal class instance
   TSQLHttpClientWinHTTP = class(TSQLHttpClientWinGeneric)
   protected
     procedure InternalSetClass; override;

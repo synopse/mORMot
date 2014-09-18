@@ -348,16 +348,16 @@ type
     // called by Step and CreateFromExistingStatement
     procedure FetchRows;
   public
-    {{ create an OCI statement instance, from an existing OCI connection
-     - the Execute method can be called once per TSQLDBOracleStatement instance,
-       but you can use the Prepare once followed by several  ExecutePrepared methods
-     - if the supplied connection is not of TOleDBConnection type, will raise
-       an exception }
+    /// create an OCI statement instance, from an existing OCI connection
+    // - the Execute method can be called once per TSQLDBOracleStatement instance,
+    // but you can use the Prepare once followed by several  ExecutePrepared methods
+    // - if the supplied connection is not of TOleDBConnection type, will raise
+    //   an exception
     constructor Create(aConnection: TSQLDBConnection); override;
-    {{ initialize the class from an existing OCI statement (and connection)
-      - to be called e.g. by ColumnCursor() for SQLT_RSET kind of column }
+    /// initialize the class from an existing OCI statement (and connection)
+    // - to be called e.g. by ColumnCursor() for SQLT_RSET kind of column }
     constructor CreateFromExistingStatement(aConnection: TSQLDBConnection; aStatement: pointer);
-    {{ release all associated memory and OCI handles }
+    /// release all associated memory and OCI handles
     destructor Destroy; override;
 
     {{ Prepare an UTF-8 encoded SQL statement
@@ -1677,7 +1677,7 @@ begin
   fHandle := SafeLoadLibrary(fLibraryPath);
   if fHandle=0 then begin
     if fHandle=0 then begin
-      i := GetEnvironmentVariable('ORACLE_HOME',orhome,sizeof(orhome));
+      i := Windows.GetEnvironmentVariable(PChar('ORACLE_HOME'),orhome,sizeof(orhome));
       if i<>0 then begin
         if orhome[i-1]<>'\' then begin
           orhome[i] := '\';

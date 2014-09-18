@@ -1458,15 +1458,15 @@ begin
 end;
 procedure TestAF2;
 var i: integer;
-    F: TFV;
+    F1,F2: TFV;
 begin
   for i := 0 to AFP.Count-1 do begin
-    Fill(F,i*2);
-    Check(RecordEquals(F,AF2[i].V1,TypeInfo(TFV)));
     Check(AF2[i].Value=i);
-    Fill(F,i*2+1);
-    Check(RecordEquals(F,AF2[i].V2,TypeInfo(TFV)));
     Check(AF2[i].Text=IntToString(i));
+    Fill(F1,i*2);
+    Fill(F2,i*2+1);
+    Check(RecordEquals(F1,AF2[i].V1,TypeInfo(TFV)));
+    Check(RecordEquals(F2,AF2[i].V2,TypeInfo(TFV)));
   end;
 end;
 procedure Test64K;
@@ -1624,7 +1624,9 @@ begin
     Check(AUP.IndexOf(U)=i);
   end;
   Test := AUP.SaveTo;
+  {$ifndef FPC} // low-level elType.Kind does not match
   Check(Hash32(@Test[2],length(Test)-1)=$D9359F89); // trim Test[1]=ElemSize
+  {$endif}
   for i := 0 to 1000 do begin
     U := Int32ToUtf8(i+1000);
     Check(RawUTF8DynArrayLoadFromContains(pointer(Test),pointer(U),length(U),false)=i);
@@ -1648,6 +1650,8 @@ begin
   for i := 0 to 1000 do begin
     Check(P^='"'); inc(P);
     Check(GetNextItemCardinal(P)=cardinal(i+1000));
+    if P=nil then
+      break;
   end;
   Check(P=nil);
   AUP.Clear;
@@ -1785,8 +1789,10 @@ begin
     Check(AFP.IndexOf(F)=i);
   end;
   Test := AFP.SaveTo;
+  {$ifndef FPC} // low-level elType.Kind does not match
   Check(Hash32(Test)={$ifdef CPU64}$A29C10E{$else}
     {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif});
+  {$endif}
   for i := 0 to 1000 do begin
     Fill(F,i);
     AFP.ElemCopy(F,F1);
@@ -2270,7 +2276,7 @@ begin
   end;
   Test(crc32cpas,'pas');
   Test(crc32cfast,'fast');
-  {$ifdef CPU64}
+  {$ifdef CPU64DELPHI}
   if SupportSSE42 then
     Test(crc32csse42,'sse42');
   {$else}
