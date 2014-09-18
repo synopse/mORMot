@@ -30,7 +30,7 @@ unit SynCommons;
 
   Contributor(s):
    Aleksandr (sha)
-   Alfred (Alf from Consulab)
+   Alfred Glänzer
    Sanyin
    Pavel (mpv)
 

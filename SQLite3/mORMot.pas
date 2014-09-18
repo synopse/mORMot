@@ -30,7 +30,7 @@ unit mORMot;
 
   Contributor(s):
     Alexander (chaa)
-    Alfred (Alf from Consulab)
+    Alfred Glänzer
     DigDiver
     Esmond
     Pavel (mpv)
