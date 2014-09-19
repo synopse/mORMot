@@ -7296,6 +7296,12 @@ type
   /// state machine statuses of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
 
+  {$ifndef LVCL}
+  /// event prototype used e.g. by TSynBackgroundThreadAbstract callbacks
+  // - a similar signature is defined in SynCrtSock and LVCL.Classes
+  TNotifyThreadEvent = procedure(Sender: TThread) of object;
+  {$endif}
+
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
@@ -7313,6 +7319,10 @@ type
     fCallerThreadID: cardinal;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
+    fOnBeforeExecute: TNotifyThreadEvent;
+    fOnAfterExecute: TNotifyThreadEvent;
+    fOnBeforeProcess: TNotifyThreadEvent;
+    fOnAfterProcess: TNotifyThreadEvent;
     function GetOnIdleBackgroundThreadActive: boolean;
     procedure Execute; override;
     /// called by Execute method when fProcessParams<>nil and fEvent is notified
@@ -7322,7 +7332,7 @@ type
   public
     /// initialize the thread
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
-    // the background process to finish until RunAndWait() will return 
+    // the background process to finish until RunAndWait() will return
     constructor Create(aOnIdle: TOnIdleSynBackgroundThread); reintroduce;
     /// release used resources
     destructor Destroy; override;
@@ -7355,6 +7365,16 @@ type
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
+    /// optional callback event triggered in Execute before main process loop
+    // - could be assigned e.g. to TSQLRestServer.BeginCurrentThread
+    property OnBeforeExecute: TNotifyThreadEvent read fOnBeforeExecute write fOnBeforeExecute;
+    /// optional callback event triggered in Execute after main process loop
+    // - could be assigned e.g. to TSQLRestServer.EndCurrentThread
+    property OnAfterExecute: TNotifyThreadEvent read fOnAfterExecute write fOnAfterExecute;
+    /// optional callback event triggered in Execute before each Process
+    property OnBeforeProcess: TNotifyThreadEvent read fOnBeforeProcess write fOnBeforeProcess;
+    /// optional callback event triggered in Execute after each Process
+    property OnAfterProcess: TNotifyThreadEvent read fOnAfterProcess write fOnAfterProcess;
   end;
 
   /// background process method called by TSynBackgroundThreadEvent
@@ -43918,34 +43938,48 @@ end;
 
 procedure TSynBackgroundThreadAbstract.Execute;
 begin
-  while not Terminated do
-    case fProcessEvent.WaitFor(INFINITE) of
-      wrSignaled:
-        case GetPendingProcess of
-        flagDestroying: begin
-          fCallerEvent.SetEvent;
-          break;
-        end;
-        flagStarted:
-        try
-          fBackgroundException := nil;
-          try
-            Process;
-          except
-            {$ifdef DELPHI5OROLDER}
-            on E: Exception do
-              fBackgroundException := ESynException.CreateUTF8(
-                'Redirected %: "%"',[E,E.Message]);
-            {$else}
-            fBackgroundException := AcquireExceptionObject;
-            {$endif}
+  if Assigned(fOnBeforeExecute) then
+    fOnBeforeExecute(self);
+  try
+    while not Terminated do
+      case fProcessEvent.WaitFor(INFINITE) of
+        wrSignaled:
+          case GetPendingProcess of
+          flagDestroying: begin
+            fCallerEvent.SetEvent;
+            break;
           end;
-        finally
-          SetPendingProcess(flagFinished);
-          fCallerEvent.SetEvent;
-        end;
-       end;
-    end;
+          flagStarted:
+          try
+            fBackgroundException := nil;
+            try
+              if Assigned(fOnBeforeProcess) then
+                fOnBeforeProcess(self);
+              try
+                Process;
+              finally
+                if Assigned(fOnAfterProcess) then
+                  fOnAfterProcess(self);
+              end;
+            except
+              {$ifdef DELPHI5OROLDER}
+              on E: Exception do
+                fBackgroundException := ESynException.CreateUTF8(
+                  'Redirected %: "%"',[E,E.Message]);
+              {$else}
+              fBackgroundException := AcquireExceptionObject;
+              {$endif}
+            end;
+          finally
+            SetPendingProcess(flagFinished);
+            fCallerEvent.SetEvent;
+          end;
+         end;
+      end;
+  finally
+    if Assigned(fOnAfterExecute) then
+      fOnAfterExecute(self);
+  end;
 end;
 
 function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
@@ -44071,6 +44105,8 @@ begin
   fOnProcess(fParam);
 end;
 
+
+{ MultiEvent* functions }
 
 function MultiEventFind(var EventList; const Event: TMethod): integer;
 var Events: TMethodDynArray absolute EventList;
