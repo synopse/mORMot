@@ -304,6 +304,9 @@ type
       Unhook: TGDIPlusUnhookProc;
     end;
     fStartupHookToken: THandle;
+    {$ifdef USEENCODERS}
+    function GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): integer;
+    {$endif}
   public
     /// load the GDI+ library and all needed procedures
     // - returns TRUE on success
@@ -895,6 +898,8 @@ type
   end;
   TImageCodecInfo = ImageCodecInfo;
   PImageCodecInfo = ^TImageCodecInfo;
+  TImageCodecInfoArray = array[byte] of TImageCodecInfo;
+
 
 function StrWCompAnsi(Str1: PWideChar; Str2: PAnsiChar): integer; assembler;
 asm // to avoid widestring usage + compatibility with Delphi 2009/2010/XE
@@ -922,28 +927,25 @@ asm // to avoid widestring usage + compatibility with Delphi 2009/2010/XE
 @min:   OR      EAX,-1
 end;
 
-function GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): integer;
+function TGDIPlus.GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): integer;
 var num, size: cardinal;
     ImageCodecInfo: AnsiString;
-    P: PImageCodecInfo;
+    P: ^TImageCodecInfoArray;
 begin
   num  := 0; // number of image encoders
   size := 0; // size of the image encoder array in bytes
   result := -1;
-  if not Gdip.Exists then
-    exit;
-  if (Gdip.GetImageEncodersSize(num, size)<>stOk) or (size=0) then
+  if (GetImageEncodersSize(num, size)<>stOk) or (size=0) then
     exit;
   SetLength(ImageCodecInfo, size);
   P := pointer(ImageCodecInfo);
-  if Gdip.GetImageEncoders(num, size, P))<>stOk then
+  if GetImageEncoders(num, size, P)<>stOk then
     exit;
   for result := 0 to num-1 do
-    if StrWCompAnsi(P^.MimeType,format)=0 then begin
-      pClsid := P^.Clsid;
+    if StrWCompAnsi(P^[result].MimeType,format)=0 then begin
+      pClsid := P^[result].Clsid;
       exit;
-    end else
-      inc(P);
+    end;
   result := -1;
 end;
 
@@ -963,11 +965,12 @@ const
     '{557CF401-1A04-11D3-9A73-0000F81EF32E}',
     '{557CF400-1A04-11D3-9A73-0000F81EF32E}',
     '{557CF405-1A04-11D3-9A73-0000F81EF32E}');
-  FrameDimensionPage: TGUID = '{7462dc86-6180-4c7e-8e3f-ee7333a7a483}';
-
 {$endif}
 
-const GdiPProcNames: array[0..18{$ifdef USEDPI}+1{$endif}
+const
+  FrameDimensionPage: TGUID = '{7462dc86-6180-4c7e-8e3f-ee7333a7a483}';
+
+  GdiPProcNames: array[0..18{$ifdef USEDPI}+1{$endif}
       {$ifdef USEENCODERS}+2{$endif}] of PChar =
     ('GdiplusStartup','GdiplusShutdown',
      'GdipDeleteGraphics','GdipCreateFromHDC',
