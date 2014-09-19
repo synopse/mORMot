@@ -6884,7 +6884,7 @@ We tried to make {\i mORMot} at the same time fast and safe, and able to scale w
 As a result, on the Server side, our framework was designed to be @**thread-safe@.
 On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This @*KISS@ design ensure better test coverage.
 On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex (critical section), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
-:  By design
+:  Thread safe design
 We will now focus on the server side, which is the main strategic point (and potential bottleneck or point of failure) of any {\i Client-Server} architecture.
 In order to achieve this thread-safety without sacrificing performance, the following rules were applied in {\f1\fs20 TSQLRestServer.URI}:
 - Most of this method's logic is to process the URI and parameters of the incoming request (in {\f1\fs20 TSQLRestServerURIContext.URIDecode*} methods), so is thread-safe by design (e.g. {\f1\fs20 Model} and {\f1\fs20 RecordProps} access do not change during process);
@@ -6897,7 +6897,11 @@ In order to achieve this thread-safety without sacrificing performance, the foll
 - Remote external tables - see @27@ - use thread-safe connections and statements when accessing the databases via SQL;
 - Access to {\f1\fs20 fStats} was not made thread-safe, since this data is indicative only: a {\i mutex} was not used to protect this resource.
 We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
-This default behavior can be tuned, using {\f1\fs20 TSQLRestServerURI.AcquireExecutionMode[]} property and {\f1\fs20 AcquireExecutionLockedTimeOut[]} when {\f1\fs20 amLocked} is set:
+At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
+From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
+:  Advanced threading settings
+You can use {\f1\fs20 TSQLRestServerURI.AcquireExecutionMode[]} property to refine the server-side threading mode. When {\f1\fs20 amLocked} is set, you can also set the {\f1\fs20 AcquireExecutionLockedTimeOut[]} property to specify a wait time to acquire the lock.
+The default threading behavior is the following:
 |%25%50%25
 |\b Command|Description|Default\b0
 |{\f1\fs20 execSOAByMethod}|for method-based services|{\f1\fs20 amUnlocked}
@@ -6905,7 +6909,7 @@ This default behavior can be tuned, using {\f1\fs20 TSQLRestServerURI.AcquireExe
 |{\f1\fs20 execORMGet}|for ORM reads i.e. {\i Retrieve*} methods|{\f1\fs20 amUnlocked}
 |{\f1\fs20 execORMWrite}|for ORM writes i.e. {\i Add Update Delete TransactionBegin Commit Rollback} methods|{\f1\fs20 amLocked} +\line timeout of 2000 ms
 |%
-For instance, some external databases (like @*MS SQL@) expect any transaction to be executed within the same connection, so in the same thread context for {\f1\fs20 SynOleDB.pas}, since it uses a per-thread connection pool. When the server is remotely access via HTTP, the incoming requests will be executed from any thread of the HTTP server thread pool. As a result, you won't be able to manage a transaction over MS SQL from the client-side with the default settings.\line To fix it, you can ensure all ORM write operations will be executed in a dedicated background thread, by setting either:
+On need, you can change those settings, to define a particular execution scheme.\line For instance, some external databases (like @*MS SQL@) expect any transaction to be executed within the same connection, so in the same thread context for {\f1\fs20 SynOleDB.pas}, since it uses a per-thread connection pool. When the server is remotely access via HTTP, the incoming requests will be executed from any thread of the HTTP server thread pool. As a result, you won't be able to manage a transaction over MS SQL from the client-side with the default settings.\line To fix it, you can ensure all ORM write operations will be executed in a dedicated background thread, by setting either:
 ! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread;
 ! aServer.AcquireWriteMode := amBackgroundThread; // same as previous
 The same level of thread-safety can be defined for all kind of commands, even if you should better know what you are doing when changing the default settings, since it may create some {\i giant locks} on the server side, therefore voiding any attempt to performance scaling via multi-threading - which is what {\i mORMot} excels in.
@@ -6916,10 +6920,9 @@ The above commands will create one thread for all read operations ({\f1\fs20 exe
 ! aServer.AcquireExecutionMode[execORMGet] := amBackgroundORMSharedThread;
 ! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundORMSharedThread;
 For instance, this sounds mandatory when using @*Jet/MSAccess@ as external database, since its implementation seems not thread-safe: if you write in one thread, then read immedially in another thread, the Jet engine is not able to find the just written data from the 2nd thread. This is clearly a bug of the Jet engine - but setting {\f1\fs20 amBackgroundORMSharedThread} option to circumvent the issue.
+During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 ServiceContext threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
 In practice, {\f1\fs20 execSOAByMethod} may benefit of a per-method locking, {\f1\fs20 execSOAByInterface} of using its own execution options - see @72@, and {\f1\fs20 execORMGet} to be let unlocked to allow concurrent reads of all connected clients.
-At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
-From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
-:  By proof
+:  Proven behavior
 When we are talking about thread-safety, nothing compares to a dedicated stress test program. An average human brain (like ours) is not good enough to ensure proper design of such a complex process. So we have to prove the abilities of our little {\i mORMot}.
 In the supplied regression tests, we designed a whole class of multi-thread testing, named {\f1\fs20 TTestMultiThreadProcess}. Its methods will run every and each Client-Server protocols available (direct access via {\f1\fs20 TSQLRestServerDB} or {\f1\fs20 TSQLRestCLientDB}, Windows Messages, named pipes, and both HTTP servers - i.e. {\f1\fs20 http.sys} based or WinSock-based)- see @35@.
 Each protocol will execute in parallel a list of INSERTs - i.e. {\f1\fs20 TSQLRest.Add()} - followed by a list of SELECTs - i.e. {\f1\fs20 TSQLRest.Retrieve()}. Those requests will be performed in 1 thread, then 2, 5, 10, 30 and 50 concurrent threads. The very same {\i SQLite3} database (in {\f1\fs20 lmExclusive} locking mode) is accessed at once by all those clients. Then the IDs generated by each thread are compared together, to ensure no cross-insertion did occur during the process.
@@ -8884,7 +8887,7 @@ This interface is implemented on the server side by the following class:
 This interface is registered on the server side as such:
 ! Server.ServiceRegister(TServiceComplexNumber,[TypeInfo(IComplexNumber)],sicClientDriven);
 Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven garbage collector will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
-:  Accessing low-level execution context
+:107  Accessing low-level execution context
 When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
 You will have access to the following information, which could be useful for {\f1\fs20 sicPerSession, sicPerUser} and {\f1\fs20 sicPerGroup} instance life time modes:
 !  TServiceRunningContext = record

@@ -775,8 +775,8 @@ unit mORMot;
     - added TSQLRestServerURIContext.Redirect() method for HTTP 301 commands
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
-    - ServiceContext threadvar will now be available also within
-      optExecInMainThread and optExecInPerInterfaceThread execution context
+    - ServiceContext threadvar will now be set in all ORM and SOA process, to
+      allow access to the execution context
     - to make the implicit explicit, TSQLRestServerURIContext.ID has been
       renamed TableID, and a new ServiceInstanceID instance has been added
     - fixed TSQLRestServer.BeginCurrentThread/EndCurrentThread process to be
@@ -3271,6 +3271,14 @@ const
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
 
+type
+  /// the available HTTP methods transmitted between client and server
+  // - some custom verbs are available in addition to standard REST commands
+  TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
+                   mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE);
+
+/// convert a string HTTP verb into its TSQLURIMethod enumerate
+function StringToMethod(const method: RawUTF8): TSQLURIMethod;
 
 
 { ************ main ORM / SOA classes and types }
@@ -3766,11 +3774,6 @@ type
   TServiceFactoryServer = class;
   PSQLAccessRights = ^TSQLAccessRights;
 
-  /// the available THTTP methods transmitted between client and server
-  // - some custom verbs are available in addition to standard REST commands
-  TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
-                   mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE);
-
   /// store all parameters for a TSQLRestServer.URI() method call
   // - see TSQLRestClient to check how data is expected in our RESTful format
   TSQLRestURIParams = packed record
@@ -3815,6 +3818,35 @@ type
   /// used to map set of parameters for a TSQLRestServer.URI() method
   PSQLRestURIParams = ^TSQLRestURIParams;
 
+  /// points to the currently running service on the server side
+  // - your code may use such a local pointer to retrieve the ServiceContext
+  // threadvar once in a method, since threadvar access does cost some CPU
+  // !var context: PServiceRunningContext;
+  // !begin
+  // !  context := @ServiceContext; // threadvar access once
+  // !  ...
+  PServiceRunningContext = ^TServiceRunningContext;
+
+  TSQLRestServerURIContext = class;
+  
+  /// will identify the currently running service on the server side
+  // - is the type of the global ServiceContext threadvar
+  TServiceRunningContext = record
+    /// the currently running service factory
+    // - it can be used within server-side implementation to retrieve the
+    // associated TSQLRestServer instance
+    Factory: TServiceFactoryServer;
+    /// the currently runnning context which launched the method
+    // - make available e.g. current session or authentication parameters
+    // (including e.g. user details via Factory.RestServer.SessionGetUser)
+    // - low-level RESTful context is also available in its Call member
+    Request: TSQLRestServerURIContext;
+    /// the thread which launched the request
+    // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
+    // handlers - e.g. TSQLite3HttpServer or TSQLRestServerNamedPipeResponse
+    RunningThread: TThread;
+  end;
+
   /// all commands which may be executed by TSQLRestServer.URI() method
   // - execSOAByMethod for method-based services
   // - execSOAByInterface for interface-based services
@@ -3849,6 +3881,8 @@ type
     fInputCookiesRetrieved: boolean;
     fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
     fOutSetCookie: RawUTF8;
+    // just a wrapper over @ServiceContext threadvar
+    fThreadServer: PServiceRunningContext;
     procedure FillInput;
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
@@ -4025,6 +4059,8 @@ type
     // - you can use it to log some process on the server side
     Log: TSynLog;
     {$endif}
+    /// finalize the execution context
+    destructor Destroy; override;
     /// retrieve one input parameter from its URI name as Int64
     // - raise an EParsingException if the parameter is not found
     property InputInt[const ParamName: RawUTF8]: Int64 read GetInputInt;
@@ -7281,7 +7317,7 @@ type
     function InternalExecute(Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
       Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-      BackgroundExecutionThread: TSynBackgroundThreadProcedure): boolean;
+      BackgroundExecutionThread: TSynBackgroundThreadMethod): boolean;
     /// retrieve a var / out / result argument index in Args[] from its name
     // - search is case insensitive
     // - returns -1 if not found
@@ -8257,37 +8293,6 @@ type
   TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
   TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
 
-  /// a procedure-based background thread associated to a TSQLRestServer instance
-  // - in addition to standard TSynBackgroundThreadProcedure behavior, this
-  // inherited class will also notify the Server of this thread, calling
-  // BeginCurrentThread and EndCurrentThread methods as required
-  // - used e.g. when opt*InPerInterfaceThread is defined in
-  // TServiceFactoryServer options
-  TSynBackgroundThreadSQLRestServerProcedure = class(TSynBackgroundThreadProcedure)
-  protected
-    fServer: TSQLRestServer;
-    // will call BeginCurrentThread / EndCurrentThread
-    procedure Execute; override;
-  public
-    /// create the thread, ready to execute background process
-    constructor Create(aServer: TSQLRestServer);
-  end;
-
-  /// a method-based background thread associated to a TSQLRestServer instance
-  // - in addition to standard TSynBackgroundThreadMethod behavior, this
-  // inherited class will also notify the Server of this thread, calling
-  // BeginCurrentThread and EndCurrentThread methods as required
-  // - used e.g. for TSQLRestServer.AcquireExecutionMode[] := amBackgroundThread
-  TSynBackgroundThreadSQLRestServerMethod = class(TSynBackgroundThreadMethod)
-  protected
-    fServer: TSQLRestServer;
-    // will call BeginCurrentThread / EndCurrentThread
-    procedure Execute; override;
-  public
-    /// create the thread, ready to execute background process
-    constructor Create(aServer: TSQLRestServer);
-  end;
-
   /// a service provider implemented on the server side
   // - each registered interface has its own TServiceFactoryServer instance,
   // available as one TSQLServiceContainerServer item from TSQLRest.Services property
@@ -8311,7 +8316,7 @@ type
     fResultAsXMLObject: boolean;
     fResultAsJSONObjectIfAccept: boolean;
     fResultAsXMLObjectNameSpace: RawUTF8;
-    fBackgroundThread: TSynBackgroundThreadProcedure;
+    fBackgroundThread: TSynBackgroundThreadMethod;
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
     procedure SetTimeoutSecInt(value: cardinal);
@@ -8915,7 +8920,7 @@ type
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of record
       Mode: TSQLRestServerAcquireMode;
       LockedTimeOut: cardinal;
-      Thread: TSynBackgroundThreadSQLRestServerMethod;
+      Thread: TSynBackgroundThreadMethod;
       Lock: TRTLCriticalSection;
       // see http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
       PaddingForLock: array[0..95-sizeof(cardinal)*2-sizeof(pointer)-sizeof(TRTLCriticalSection)] of byte;
@@ -10905,6 +10910,7 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
+    function CreateBackgroundThread: TSynBackgroundThreadMethod;
     function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -13452,34 +13458,6 @@ function URIRequest(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): I
 {$endif}
 
 
-type
-  /// points to the currently running service on the server side
-  // - your code may use such a local pointer to retrieve the ServiceContext
-  // threadvar once in a method, since threadvar access does cost some CPU
-  // !var context: PServiceRunningContext;
-  // !begin
-  // !  context := @ServiceContext; // threadvar access once
-  // !  ...
-  PServiceRunningContext = ^TServiceRunningContext;
-
-  /// will identify the currently running service on the server side
-  // - is the type of the global ServiceContext threadvar
-  TServiceRunningContext = record
-    /// the currently running service factory
-    // - it can be used within server-side implementation to retrieve the
-    // associated TSQLRestServer instance
-    Factory: TServiceFactoryServer;
-    /// the currently runnning context which launched the method
-    // - make available e.g. current session or authentication parameters
-    // (including e.g. user details via Factory.RestServer.SessionGetUser)
-    // - low-level RESTful context is also available in its Call member
-    Request: TSQLRestServerURIContext;
-    /// the thread which launched the request
-    // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
-    // handlers - e.g. TSQLite3HttpServer or TSQLRestServerNamedPipeResponse
-    RunningThread: TThread;
-  end;
-
 threadvar
   /// this thread-specific variable will be set with the currently running
   // service context (on the server side)
@@ -14541,6 +14519,55 @@ begin
   if (aTypeInfo=nil) or (aTypeInfo^.Kind<>tkEnumeration) then
     result := '' else
     result := aTypeInfo^.EnumBaseType^.GetEnumNameTrimed(aIndex);
+end;
+
+
+procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
+begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+  case Code of
+    HTML_CONTINUE:            result := 'Continue';
+    HTML_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
+    HTML_SUCCESS:             result := 'OK';
+    HTML_CREATED:             result := 'Created';
+    HTML_ACCEPTED:            result := 'Accepted';
+    HTML_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
+    HTML_NOCONTENT:           result := 'No Content';
+    HTML_MULTIPLECHOICES:     result := 'Multiple Choices';
+    HTML_MOVEDPERMANENTLY:    result := 'Moved Permanently';
+    HTML_FOUND:               result := 'Found';
+    HTML_SEEOTHER:            result := 'See Other';
+    HTML_NOTMODIFIED:         result := 'Not Modified';
+    HTML_USEPROXY:            result := 'Use Proxy';
+    HTML_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
+    HTML_BADREQUEST:          result := 'Bad Request';
+    HTML_UNAUTHORIZED:        result := 'Unauthorized';
+    HTML_FORBIDDEN:           result := 'Forbidden';
+    HTML_NOTFOUND:            result := 'Not Found';
+    HTML_NOTALLOWED:          result := 'Method Not Allowed';
+    HTML_NOTACCEPTABLE:       result := 'Not Acceptable';
+    HTML_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
+    HTML_TIMEOUT:             result := 'Request Timeout';
+    HTML_SERVERERROR:         result := 'Internal Server Error';
+    HTML_BADGATEWAY:          result := 'Bad Gateway';
+    HTML_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
+    HTML_UNAVAILABLE:         result := 'Service Unavailable';
+    HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
+    else                      result := 'Invalid Request';
+  end;
+end;
+
+function StringToMethod(const method: RawUTF8): TSQLURIMethod;
+const NAME: array[mGET..high(TSQLURIMethod)] of string[7] = ( // sorted by occurence
+  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+var URIMethodUp: string[7];
+begin
+  if Length(method)<7 then begin
+    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
+    for result := low(NAME) to high(NAME) do
+      if URIMethodUp=NAME[result] then
+        exit;
+  end;
+  result := mNone;
 end;
 
 
@@ -26623,6 +26650,13 @@ begin
      result := false;
 end;
 
+function TSQLRestServer.CreateBackgroundThread: TSynBackgroundThreadMethod;
+begin
+  result := TSynBackgroundThreadMethod.Create(nil);
+  result.OnBeforeExecute := BeginCurrentThread;
+  result.OnAfterExecute := EndCurrentThread;
+end;
+
 function TSQLRestServer.GetAuthenticationSchemesCount: integer;
 begin
   result := fSessionAuthentications.Count;
@@ -26708,53 +26742,82 @@ begin
     fPublishedMethod[i].ByPassAuthentication := true;
 end;
 
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
-begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-  case Code of
-    HTML_CONTINUE:            result := 'Continue';
-    HTML_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
-    HTML_SUCCESS:             result := 'OK';
-    HTML_CREATED:             result := 'Created';
-    HTML_ACCEPTED:            result := 'Accepted';
-    HTML_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
-    HTML_NOCONTENT:           result := 'No Content';
-    HTML_MULTIPLECHOICES:     result := 'Multiple Choices';
-    HTML_MOVEDPERMANENTLY:    result := 'Moved Permanently';
-    HTML_FOUND:               result := 'Found';
-    HTML_SEEOTHER:            result := 'See Other';
-    HTML_NOTMODIFIED:         result := 'Not Modified';
-    HTML_USEPROXY:            result := 'Use Proxy';
-    HTML_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
-    HTML_BADREQUEST:          result := 'Bad Request';
-    HTML_UNAUTHORIZED:        result := 'Unauthorized';
-    HTML_FORBIDDEN:           result := 'Forbidden';
-    HTML_NOTFOUND:            result := 'Not Found';
-    HTML_NOTALLOWED:          result := 'Method Not Allowed';
-    HTML_NOTACCEPTABLE:       result := 'Not Acceptable';
-    HTML_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
-    HTML_TIMEOUT:             result := 'Request Timeout';
-    HTML_SERVERERROR:         result := 'Internal Server Error';
-    HTML_BADGATEWAY:          result := 'Bad Gateway';
-    HTML_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
-    HTML_UNAVAILABLE:         result := 'Service Unavailable';
-    HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
-    else                      result := 'Invalid Request';
+
+{ Low-level background execution functions }
+
+type
+  TBackgroundLauncherAction = (
+    doCallMethod, doInstanceRelease, doThreadMethod);
+
+  PBackgroundLauncher = ^TBackgroundLauncher;
+  TBackgroundLauncher = record
+    Context: PServiceRunningContext;
+    case Action: TBackgroundLauncherAction of
+    doCallMethod:
+      (CallMethodArgs: pointer); // PCallMethodArgs
+    doInstanceRelease:
+      (Instance: TInterfacedObjectWithCustomCreate);
+    doThreadMethod:
+      (ThreadMethod: TThreadMethod)
   end;
+
+  {$ifndef LVCL}
+  TThreadHook = class(TThread);
+  {$endif}
+
+procedure BackgroundExecuteProc(Call: pointer); forward;
+
+procedure BackGroundExecute(var synch: TBackgroundLauncher;
+  backgroundThread: TSynBackgroundThreadMethod);
+var event: TThreadMethod;
+begin
+  synch.Context := @ServiceContext;
+  TMethod(event).Code := @BackgroundExecuteProc;
+  TMethod(event).Data := @synch;
+  if backgroundThread=nil then
+    if GetCurrentThreadID=MainThreadID then
+      event else
+      {$ifdef LVCL}
+      raise EServiceException.Create('BackGroundExecute(thread=nil)')
+      {$else}
+      {$ifdef DELPHI6OROLDER}
+      TThreadHook(synch.Context^.RunningThread).Synchronize(event)
+      {$else}
+      TThread.Synchronize(synch.Context^.RunningThread,event)
+      {$endif DELPHI6OROLDER}
+      {$endif LVCL} else
+    backgroundThread.RunAndWait(event);
 end;
 
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
-const NAME: array[mGET..high(TSQLURIMethod)] of string[7] = ( // sorted by occurence
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
-var URIMethodUp: string[7];
+procedure BackgroundExecuteCallMethod(args: pointer;
+  backgroundThread: TSynBackgroundThreadMethod);
+var synch: TBackgroundLauncher;
 begin
-  if Length(method)<7 then begin
-    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
-    for result := low(NAME) to high(NAME) do
-      if URIMethodUp=NAME[result] then
-        exit;
-  end;
-  result := mNone;
+  synch.Action := doCallMethod;
+  synch.CallMethodArgs := args;
+  BackGroundExecute(synch,backgroundThread);
 end;
+
+procedure BackgroundExecuteInstanceRelease(instance: TObject;
+  backgroundThread: TSynBackgroundThreadMethod);
+var synch: TBackgroundLauncher;
+begin
+  synch.Action := doInstanceRelease;
+  synch.Instance := TInterfacedObjectWithCustomCreate(instance);
+  BackGroundExecute(synch,backgroundThread);
+end;
+
+procedure BackgroundExecuteThreadMethod(const method: TThreadMethod;
+  backgroundThread: TSynBackgroundThreadMethod);
+var synch: TBackgroundLauncher;
+begin
+  synch.Action := doThreadMethod;
+  synch.ThreadMethod := method;
+  BackGroundExecute(synch,backgroundThread);
+end;
+
+
+{ TSQLRestServerURIContext }
 
 constructor TSQLRestServerURIContext.Create(aServer: TSQLRestServer;
   const aCall: TSQLRestURIParams);
@@ -26762,6 +26825,14 @@ begin
   Server := aServer;
   Call := @aCall;
   Method := StringToMethod(aCall.method);;
+  fThreadServer := @ServiceContext;
+  fThreadServer^.Request := self;
+end;
+
+destructor TSQLRestServerURIContext.Destroy;
+begin
+  fThreadServer^.Request := nil;
+  inherited Destroy;
 end;
 
 procedure TSQLRestServerURIContext.InternalSetTableFromTableName(const TableName: RawUTF8);
@@ -26871,7 +26942,7 @@ begin
     finally
       LeaveCriticalSection(Server.fSessionCriticalSection);
     end;
-    if aSession=nil then 
+    if aSession=nil then
       if (Service=nil) or not Service.ByPassAuthentication then
         // /auth + /timestamp are e.g. allowed services without signature
         if (MethodIndex<0) or not Server.fPublishedMethod[MethodIndex].ByPassAuthentication then begin
@@ -26882,18 +26953,6 @@ begin
     Session := CONST_AUTHENTICATION_NOT_USED;
   result := true;
 end;
-
-{$ifndef LVCL}
-type
-  TThreadHook = class(TThread);
-{$endif}
-
-type
-  TCallMethodSynchro = record
-    Action: (syncCallMethod, syncInstanceRelease);
-    CallMethodArgs: pointer;
-    InstanceToRelease: TInterfacedObjectWithCustomCreate;
-  end;
 
 procedure TSQLRestServerURIContext.Execute(Command: TSQLRestServerURIContextCommand);
 procedure TimeOut;
@@ -26978,17 +27037,12 @@ begin
     end;
     {$ifndef LVCL}
     amMainThread:
-      if GetCurrentThreadID=MainThreadID then
-        Method else
-        {$ifdef DELPHI6OROLDER}
-        TThreadHook(nil).Synchronize(Method); {$else}
-        TThread.Synchronize(nil,Method);
-        {$endif}
+      BackgroundExecuteThreadMethod(Method,nil);
     {$endif}
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
-        Thread := TSynBackgroundThreadSQLRestServerMethod.Create(Server);
-      Thread.RunAndWait(Method);
+        Thread := Server.CreateBackgroundThread;
+      BackgroundExecuteThreadMethod(Method,Thread);
     end;
     end;
 end;
@@ -38039,6 +38093,113 @@ end;
 
 { TServiceFactoryServer }
 
+type
+  PCallMethodArgs = ^TCallMethodArgs;
+  TCallMethodArgs = record
+    StackSize, StackAddr, method: PtrInt;
+    Regs: array[REG_FIRST..REG_LAST] of PtrInt;
+    res64: Int64Rec;
+    resKind: TServiceMethodValueType;
+  end;
+
+procedure CallMethod(var Args: TCallMethodArgs);
+{$ifdef CPU64}
+asm
+    .params 64    // size for 64 parameters
+    .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
+    mov r12,Args
+    // copy stack content (if any)
+    mov rcx,[r12].TCallMethodArgs.StackAddr
+    lea rdx,[rsp+$20]
+    mov r8, [r12].TCallMethodArgs.StackSize
+    call Move
+    // call method
+    mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
+    mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]
+    mov r8, [r12+TCallMethodArgs.Regs+REGR8 *8-8]
+    mov r9, [r12+TCallMethodArgs.Regs+REGR9 *8-8]
+    movsd xmm0,[r12+TCallMethodArgs.Regs+REGXMM0*8-8]
+    movsd xmm1,[r12+TCallMethodArgs.Regs+REGXMM1*8-8]
+    movsd xmm2,[r12+TCallMethodArgs.Regs+REGXMM2*8-8]
+    movsd xmm3,[r12+TCallMethodArgs.Regs+REGXMM3*8-8]
+    call [r12].TCallMethodArgs.method
+    // retrieve result
+    mov [r12].TCallMethodArgs.res64,rax
+    mov cl,[r12].TCallMethodArgs.resKind
+    cmp cl,smvDouble
+    je @d
+    cmp cl,smvDateTime
+    je @d
+    cmp cl,smvCurrency
+    jne @e
+@d: movsd [r12].TCallMethodArgs.res64,xmm0
+@e:
+end;
+{$else}
+asm
+    push esi
+    push ebp
+    mov ebp,esp
+    mov esi,Args
+    // copy stack content (if any)
+    mov eax,[esi].TCallMethodArgs.StackSize
+    mov edx,dword ptr [esi].TCallMethodArgs.StackAddr
+    add edx,eax // pascal/register convention = left-to-right
+    shr eax,2
+    jz @z
+@n: sub edx,4
+    mov ecx,[edx]
+    push ecx
+    dec eax
+    jnz @n
+    // call method
+@z: mov eax,[esi+TCallMethodArgs.Regs+REGEAX*4-4]
+    mov edx,[esi+TCallMethodArgs.Regs+REGEDX*4-4]
+    mov ecx,[esi+TCallMethodArgs.Regs+REGECX*4-4]
+    call [esi].TCallMethodArgs.method
+    // retrieve result
+    mov cl,[esi].TCallMethodArgs.resKind
+    cmp cl,smvDouble
+    je @d
+    cmp cl,smvDateTime
+    je @d
+    cmp cl,smvCurrency
+    jne @i
+    fistp qword [esi].TCallMethodArgs.res64
+    jmp @e
+@d: fstp qword [esi].TCallMethodArgs.res64
+    jmp @e
+@i: mov [esi].TCallMethodArgs.res64.Lo,eax
+    mov [esi].TCallMethodArgs.res64.Hi,edx
+@e: mov esp,ebp
+    pop ebp
+    pop esi
+end;
+{$endif CPU64}
+
+procedure BackgroundExecuteProc(Call: pointer);
+var synch: PBackgroundLauncher absolute Call;
+    threadContext: PServiceRunningContext;
+    backup: TServiceRunningContext;
+begin
+  threadContext := @ServiceContext; // faster to use a pointer than GetTls()
+  backup := threadContext^;
+  threadContext^.Factory := synch^.Context^.Factory;
+  threadContext^.Request := synch^.Context^.Request;
+  try
+    case synch^.Action of
+    doCallMethod:
+      CallMethod(PCallMethodArgs(synch^.CallMethodArgs)^);
+    doInstanceRelease:
+      synch^.Instance.InternalRelease;
+    doThreadMethod:
+      synch^.ThreadMethod;
+    end;
+  finally
+    threadContext^ := backup;
+  end;
+end;
+
 constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer; aInterface: PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUTF8;
@@ -38161,7 +38322,6 @@ end;
 
 procedure TServiceFactoryServerInstance.SafeFreeInstance(Factory: TServiceFactoryServer);
 var Obj: TInterfacedObject;
-    Synch: TCallMethodSynchro;
 begin
   InstanceID := 0;
   Obj := Instance;
@@ -38169,16 +38329,11 @@ begin
   {$ifndef LVCL}
   if (optFreeInMainThread in Factory.fAnyOptions) and
      (GetCurrentThreadID<>MainThreadID) then
-    {$ifdef DELPHI6OROLDER}TThreadHook(nil).Synchronize(
-    {$else}                TThread.Synchronize(nil,
-    {$endif}  TInterfacedObjectWithCustomCreate(Obj).InternalRelease) else
+    BackgroundExecuteInstanceRelease(Obj,nil) else
   {$endif}
   if (optFreeInPerInterfaceThread in Factory.fAnyOptions) and
-     Assigned(Factory.fBackgroundThread) then begin
-    Synch.Action := syncInstanceRelease;
-    Synch.InstanceToRelease := TInterfacedObjectWithCustomCreate(Obj);
-    Factory.fBackgroundThread.RunAndWait(@Synch);
-  end else
+     Assigned(Factory.fBackgroundThread) then
+    BackgroundExecuteInstanceRelease(Obj,Factory.fBackgroundThread) else
     IInterface(Obj)._Release;
 end;
 
@@ -38286,7 +38441,6 @@ end;
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
     entry: PInterfaceEntry;
-    ThreadServer: PServiceRunningContext;
 begin
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
@@ -38335,14 +38489,10 @@ begin
       exit;
     if optExecInPerInterfaceThread in fExecution[Ctxt.ServiceMethodIndex].Options then
       if fBackgroundThread=nil then
-        fBackgroundThread := TSynBackgroundThreadSQLRestServerProcedure.Create(RestServer);
-    ThreadServer := @ServiceContext;
+        fBackgroundThread := RestServer.CreateBackgroundThread;
     WR := TJSONSerializer.CreateOwnedStream;
     try
-      with ThreadServer^ do begin
-        Factory := self;
-        Request := Ctxt;
-      end; // RunningThread is already set at thread initialization
+      Ctxt.fThreadServer^.Factory := self;
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
       try
@@ -38368,10 +38518,7 @@ begin
       end;
       WR.SetText(Ctxt.Call.OutBody);
     finally
-      with ThreadServer^ do begin
-        Factory := nil;
-        Request := nil;
-      end;
+      Ctxt.fThreadServer^.Factory := nil;
       WR.Free;
     end;
   finally
@@ -38722,120 +38869,6 @@ type
     Wrapper: TDynArray;
     Value: Pointer;
   end;
-  TCallMethodArgs = record
-    StackSize, StackAddr, method: PtrInt;
-    Regs: array[REG_FIRST..REG_LAST] of PtrInt;
-    res64: Int64Rec;
-    resKind: TServiceMethodValueType;
-    callContext: PServiceRunningContext;
-  end;
-
-procedure CallMethod(var Args: TCallMethodArgs);
-{$ifdef CPU64}
-asm
-    .params 64    // size for 64 parameters
-    .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
-    mov r12,Args
-    // copy stack content (if any)
-    mov rcx,[r12].TCallMethodArgs.StackAddr
-    lea rdx,[rsp+$20]
-    mov r8, [r12].TCallMethodArgs.StackSize
-    call Move
-    // call method
-    mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
-    mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]
-    mov r8, [r12+TCallMethodArgs.Regs+REGR8 *8-8]
-    mov r9, [r12+TCallMethodArgs.Regs+REGR9 *8-8]
-    movsd xmm0,[r12+TCallMethodArgs.Regs+REGXMM0*8-8]
-    movsd xmm1,[r12+TCallMethodArgs.Regs+REGXMM1*8-8]
-    movsd xmm2,[r12+TCallMethodArgs.Regs+REGXMM2*8-8]
-    movsd xmm3,[r12+TCallMethodArgs.Regs+REGXMM3*8-8]
-    call [r12].TCallMethodArgs.method
-    // retrieve result
-    mov [r12].TCallMethodArgs.res64,rax
-    mov cl,[r12].TCallMethodArgs.resKind
-    cmp cl,smvDouble
-    je @d
-    cmp cl,smvDateTime
-    je @d
-    cmp cl,smvCurrency
-    jne @e
-@d: movsd [r12].TCallMethodArgs.res64,xmm0
-@e:
-end;
-{$else}
-asm
-    push esi
-    push ebp
-    mov ebp,esp
-    mov esi,Args
-    // copy stack content (if any)
-    mov eax,[esi].TCallMethodArgs.StackSize
-    mov edx,dword ptr [esi].TCallMethodArgs.StackAddr
-    add edx,eax // pascal/register convention = left-to-right
-    shr eax,2
-    jz @z
-@n: sub edx,4
-    mov ecx,[edx]
-    push ecx
-    dec eax
-    jnz @n
-    // call method
-@z: mov eax,[esi+TCallMethodArgs.Regs+REGEAX*4-4]
-    mov edx,[esi+TCallMethodArgs.Regs+REGEDX*4-4]
-    mov ecx,[esi+TCallMethodArgs.Regs+REGECX*4-4]
-    call [esi].TCallMethodArgs.method
-    // retrieve result
-    mov cl,[esi].TCallMethodArgs.resKind
-    cmp cl,smvDouble
-    je @d
-    cmp cl,smvDateTime
-    je @d
-    cmp cl,smvCurrency
-    jne @i
-    fistp qword [esi].TCallMethodArgs.res64
-    jmp @e
-@d: fstp qword [esi].TCallMethodArgs.res64
-    jmp @e
-@i: mov [esi].TCallMethodArgs.res64.Lo,eax
-    mov [esi].TCallMethodArgs.res64.Hi,edx
-@e: mov esp,ebp
-    pop ebp
-    pop esi
-end;
-{$endif CPU64}
-
-procedure BackgroundExecuteProc(Call: Pointer);
-var Synch: ^TCallMethodSynchro absolute Call;
-    ThreadServer: PServiceRunningContext;
-    backup: TServiceRunningContext;
-begin
-  case Synch.Action of
-  syncCallMethod: begin
-    ThreadServer := @ServiceContext; // faster to use a pointer than GetTls()
-    backup := ThreadServer^;
-    try
-      with TCallMethodArgs(Synch.CallMethodArgs^).callContext^ do begin
-        ThreadServer^.Factory := Factory;
-        ThreadServer^.Request := Request;
-      end;
-      CallMethod(TCallMethodArgs(Synch.CallMethodArgs^));
-    finally
-      ThreadServer^ := backup;
-    end;
-  end;
-  syncInstanceRelease:
-    Synch.InstanceToRelease.InternalRelease;
-  end;
-end;
-
-procedure CallMethodSynch(Args: pointer);
-var Synch: TCallMethodSynchro;
-begin
-  Synch.Action := syncCallMethod;
-  Synch.CallMethodArgs := Args;
-  BackgroundExecuteProc(@Synch);
-end;
 
 {$ifndef LVCL}
 
@@ -38870,7 +38903,7 @@ end;
 function TServiceMethod.InternalExecute(Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
   Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-  BackgroundExecutionThread: TSynBackgroundThreadProcedure): boolean;
+  BackgroundExecutionThread: TSynBackgroundThreadMethod): boolean;
 var RawUTF8s: TRawUTF8DynArray;
     Strings: TStringDynArray;
     WideStrings: TWideStringDynArray;
@@ -38880,10 +38913,6 @@ var RawUTF8s: TRawUTF8DynArray;
     wasString, valid: boolean;
     Val: PUTF8Char;
     call: TCallMethodArgs;
-    {$ifndef LVCL}
-    SyncMethod: TMethod;
-    {$endif}
-    Synch: TCallMethodSynchro;
     Name: PUTF8Char;
     NameLen: integer;
     EndOfObject: AnsiChar;
@@ -39066,24 +39095,14 @@ begin
       // 5.2 launch the asm stub in the expected execution context
       {$ifndef LVCL}
       if (optExecInMainThread in Options) and
-         (GetCurrentThreadID<>MainThreadID) then begin
-        call.callContext := @ServiceContext; // to be copied into main threadvar
-        SyncMethod.Code := @CallMethodSynch;
-        SyncMethod.Data := @call; // fake call: PCallMethodArgs(self)^=Params
-        {$ifdef DELPHI6OROLDER}TThreadHook(call.callContext^.RunningThread).Synchronize(
-        {$else}                TThread.Synchronize(call.callContext^.RunningThread,
-        {$endif}  TThreadMethod(SyncMethod));
-      end else
+         (GetCurrentThreadID<>MainThreadID) then
+        BackgroundExecuteCallMethod(@call,nil) else
       {$endif}
       if optExecInPerInterfaceThread in Options then
         if not Assigned(BackgroundExecutionThread) then
           raise EInterfaceFactoryException.Create(
-            'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else begin
-        call.callContext := @ServiceContext; // to be copied into background threadvar
-        Synch.Action := syncCallMethod;
-        Synch.CallMethodArgs := @call;
-        BackgroundExecutionThread.RunAndWait(@Synch);
-      end else
+            'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else
+          BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
         CallMethod(call);
     end;
     // 6. send back any result
@@ -39138,44 +39157,6 @@ begin
           end;
       end;
     end;
-  end;
-end;
-
-
-{ TSynBackgroundThreadSQLRestServerProcedure }
-
-constructor TSynBackgroundThreadSQLRestServerProcedure.Create(aServer: TSQLRestServer);
-begin
-  inherited Create(BackgroundExecuteProc,nil);
-  fServer := aServer;
-end;
-
-procedure TSynBackgroundThreadSQLRestServerProcedure.Execute;
-begin
-  fServer.BeginCurrentThread(self);
-  try
-    inherited Execute;
-  finally
-    fServer.EndCurrentThread(self);
-  end;
-end;
-
-
-{ TSynBackgroundThreadSQLRestServerMethod }
-
-constructor TSynBackgroundThreadSQLRestServerMethod.Create(aServer: TSQLRestServer);
-begin
-  inherited Create(nil);
-  fServer := aServer;
-end;
-
-procedure TSynBackgroundThreadSQLRestServerMethod.Execute;
-begin
-  fServer.BeginCurrentThread(self);
-  try
-    inherited Execute;
-  finally
-    fServer.EndCurrentThread(self);
   end;
 end;
 
