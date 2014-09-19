@@ -588,8 +588,8 @@ type
   // LastError property
   TSMEngine = class
   protected
-    frt: PJSRuntime;
-    fcx: PJSContext;
+    fRt: PJSRuntime;
+    fCx: PJSContext;
     fcomp: PJSCompartment;
     fNativeMethod: TSMEngineMethodEventDynArray;
     fNativeMethods: TDynArrayHashed;
@@ -1070,7 +1070,11 @@ begin
 
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
   // ION is disabled without these options
+  {$ifdef FIXBUGXE3}
+  fCx.SetOptions([jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$else}
   fCx.Options := [jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs];
+  {$endif}
 
   fStringFinalizer.finalize := ExternalStringFinalizer;
   JS_SetContextPrivate(cx, self);
@@ -1814,7 +1818,7 @@ end;
 procedure TSMValue.SetDateTime(cx: PJSContext; const Value: TDateTime);
 var dmsec: double;
     unixTime: Int64;
-{$ifdef CONSIDER_TIME_IN_Z} // as defined in SynSM.inc
+  {$ifdef CONSIDER_TIME_IN_Z} // as defined in SynSM.inc
     oDate: PJSObject;
 {$else}
     // this realisation is buggy - it ignores timezone rules change history

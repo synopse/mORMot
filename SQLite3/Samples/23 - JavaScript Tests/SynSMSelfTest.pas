@@ -52,6 +52,8 @@ unit SynSMSelfTest;
 interface
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I SynSM.inc}   // define SM_DEBUG JS_THREADSAFE CONSIDER_TIME_IN_Z
+
 uses
   SysUtils,
   Math,
@@ -222,8 +224,13 @@ begin
 
 //  You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
 //  ION is disabled without this options
+  {$ifdef FIXBUGXE3}
+  cx.SetOptions([jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  Check(cx.GetOptions=[jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$else}
   cx.Options := [jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs];
   Check(cx.Options=[jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$endif}
   Check(JS_GetOptions(cx) =  JSOPTION_VAROBJFIX or JSOPTION_BASELINE or JSOPTION_TYPE_INFERENCE or JSOPTION_ION or JSOPTION_ASMJS);
 
   global := JS_NewGlobalObject(cx, @jsglobal_class, nil, @Opt);
@@ -1738,7 +1745,11 @@ begin
     Check (engine.LastErrorMsg = '[JSError 109] script (1): missing ; before statement');
 
     //check strict mode
-    engine.cx.Options := engine.cx.Options - [jsoExtraWarning ];
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions - [jsoExtraWarning]);
+    {$else}
+    engine.cx.Options := engine.cx.Options - [jsoExtraWarning];
+    {$endif}
     try
       engine.Evaluate('function sum(a, a, c){ return a + b + c; }');
     except
@@ -1753,14 +1764,22 @@ begin
     end;
     CheckNot( engine.ErrorExist );
 
-    engine.cx.Options := engine.cx.Options - [jsoExtraWarning ];
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions - [jsoExtraWarning]);
+    {$else}
+    engine.cx.Options := engine.cx.Options - [jsoExtraWarning];
+    {$endif}
     try
       engine.Evaluate(ScriptJSTYPE_NUMBER_WithNaN);
     except
     end;
     CheckNot( engine.ErrorExist );
 
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions + [jsoExtraWarning, jsoWError]);
+    {$else}
     engine.cx.Options := engine.cx.Options + [jsoExtraWarning, jsoWError];
+    {$endif}
     engine.NewObject(obj);
     try
       obj.Evaluate('mistypedVariable = 17;','',111,smv);
@@ -1771,13 +1790,21 @@ begin
   end;
 
   // check JSOPTION_VAROBJFIX
-  engine.cx.Options := engine.cx.Options - [ jsoVarObjFix ];
+  {$ifdef FIXBUGXE3}
+  engine.cx.SetOptions(engine.cx.GetOptions - [jsoVarObjFix]);
+  {$else}
+  engine.cx.Options := engine.cx.Options - [jsoVarObjFix];
+  {$endif}
   engine.NewObject(obj);
   obj.Evaluate('var objProp = 1;','',0,smv);
   CheckNot( engine.GlobalObject.HasOwnProperty('objProp'), 'global has OWN property globalProp');
   Check(    obj.HasOwnProperty('objProp'), 'obj has OWN property objProp');
 
-  engine.cx.Options := engine.cx.Options + [ jsoVarObjFix ];
+  {$ifdef FIXBUGXE3}
+  engine.cx.SetOptions(engine.cx.GetOptions + [jsoVarObjFix]);
+  {$else}
+  engine.cx.Options := engine.cx.Options + [jsoVarObjFix];
+  {$endif}
   obj.Evaluate('var objPropWFix = 2;','',0,smv);
   //TODO WHY it not work??????
   //Check( engine.globalObject.HasOwnProperty('PropWFix'), 'global has OWN property globalPropWFix');
