@@ -27689,7 +27689,9 @@ end;
 
 function TSQLRestServerURIContext.GetResourceFileName: TFileName;
 begin
-  result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/','\'));
+  if (URIBlobFieldName='') or (PosEx('..',URIBlobFieldName)>0) then
+    result := '' else // for security, disallow .. in the supplied file path
+    result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/','\'));
 end;
 
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
