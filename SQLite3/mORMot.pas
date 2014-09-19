@@ -2119,8 +2119,8 @@ type
     NameIndex: SmallInt;
 {$ifdef FPC}
     /// contains the type of the Get/Set/Storedproc, see also ptxxx
-    // bit 0..1 GetProc
-    //     2..3 SetProc
+    // bit 0..1 GetProc     e.g. PropProcs and 3=ptField
+    //     2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
     //     4..5 StoredProc
     //     6 : true, constant index property
     PropProcs : Byte;
@@ -2212,6 +2212,18 @@ type
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
     function GetDynArray(Instance: TObject): TDynArray;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the the property has no getter but direct field read
+    function GetterIsField: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the the property has no setter but direct field write
+    function SetterIsField: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the low-level field read address, if GetterIsField is TRUE
+    function GetterAddr(Instance: pointer): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the low-level field write address, if SetterIsField is TRUE
+    function SetterAddr(Instance: pointer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the field value memory pointer
     // - return NIL if both getter and setter are methods
@@ -13530,7 +13542,8 @@ begin
   result := p;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
-{$endif}
+
+{$else}
 
 type
   /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
@@ -13543,6 +13556,7 @@ type
 const
   NO_INDEX = Integer($80000000);
 
+{$endif FPC}
 
 function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
 {$ifdef USETYPEINFO}
@@ -13553,6 +13567,9 @@ var value: PtrInt;
     Call: TMethod;
     P: pointer;
 begin
+  {$ifdef FPC}
+  result := GetFPCOrdProp(Instance,pointer(PropInfo));
+  {$else}
   if PropInfo^.GetProc=0 then  // no read attribute -> use write offset
     if PropWrap(PropInfo^.SetProc).Kind<>$FF then begin
       result := 0;
@@ -13582,6 +13599,7 @@ begin
     otULong: result := PCardinal(P)^;
     else result := 0; // should not happen
     end;
+  {$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -13646,6 +13664,9 @@ type // procedure(Instance: TObject) trick does not work with CPU64 :(
 var P: pointer;
     Call: TMethod;
 begin
+  {$ifdef FPC}
+  SetFPCOrdProp(Instance,pointer(PropInfo),Value);
+  {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
@@ -13669,6 +13690,7 @@ begin
     otSWord,otUWord: PWord(P)^ := Value;
     otSLong,otULong: PInteger(P)^ := Value;
     end;
+  {$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -13732,6 +13754,9 @@ type // function(Instance: TObject) trick does not work with CPU64 :(
   TIndexedGetProc = function(Index: Integer): Int64 of object;
 var Call: TMethod;
 begin 
+  {$ifdef FPC}
+  result := GetFPCInt64Prop(Instance,pointer(PropInfo));
+  {$else}
   if PropWrap(PropInfo^.GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
     result := PInt64(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
@@ -13744,6 +13769,7 @@ begin
       result := TGetProc(Call) else
       result := TIndexedGetProc(Call)(PropInfo^.Index);
   end;
+  {$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -13774,6 +13800,10 @@ end;
 {$ifndef NOVARIANTS}
 
 procedure GetVariantProp(Instance: TObject; PropInfo: PPropInfo; var result: Variant);
+{$ifdef FPC}
+begin
+  result := GetFPCVariantProp(Instance,pointer(PropInfo));
+{$else}
 procedure ByMethod; // sub proc for faster execution of simple types
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: Variant of object;
@@ -13794,9 +13824,14 @@ begin
     result := PVariant(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
   else
     ByMethod;
+{$endif}
 end;
 
 procedure SetVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: variant);
+{$ifdef FPC}
+begin
+  SetFPCVariantProp(Instance,pointer(PropInfo),Value);
+{$else}
 procedure ByMethod; // sub proc for faster execution of simple types
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(const Value: Variant) of object;
@@ -13819,6 +13854,7 @@ begin
     if PropWrap(PropInfo^.SetProc).Kind=$FF then
       PVariant(PtrInt(Instance)+PropInfo^.SetProc and $00FFFFFF)^ := Value else
       ByMethod;
+{$endif}
 end;
 
 {$endif NOVARIANTS}
@@ -13831,6 +13867,9 @@ type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TIndexedProp = procedure(Index: integer; const Value: Int64) of object;
 var Call: TMethod;
 begin
+  {$ifdef FPC}
+  SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
+  {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
@@ -13845,6 +13884,7 @@ begin
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(PropInfo^.Index,Value);
   end;
+  {$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -13883,6 +13923,10 @@ end;
 
 procedure GetLongStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
 {$ifdef USETYPEINFO}
+{$ifdef FPC}
+begin
+  GetFPCStrProp(Instance,pointer(PropInfo),Value);
+{$else}
 procedure CallMethod(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TAStringGetProc = function: RawByteString of object;
@@ -13904,6 +13948,7 @@ begin // caller must check that PropInfo^.PropType^.Kind = tkWString
     // field - Getter is the field offset in the instance data
     Value := PRawByteString(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^ else
     CallMethod(Instance,PropInfo,Value);
+{$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -13947,6 +13992,9 @@ type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TIndexedProp = procedure(Index: integer; const Value: RawByteString) of object;
 var Call: TMethod;
 begin // caller must check that PropInfo^.PropType^.Kind = tkLString
+  {$ifdef FPC}
+  SetFPCStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
   if PropInfo^.SetProc=0 then  // no setter ?
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else  // we only allow setting if we know the field address
@@ -13962,6 +14010,7 @@ begin // caller must check that PropInfo^.PropType^.Kind = tkLString
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(PropInfo^.Index,Value);
   end;
+  {$endif}
 end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
@@ -14009,7 +14058,7 @@ end;
 procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString); overload;
 {$ifdef HASINLINE}inline;{$endif}
 begin
-  Value := GetWideStrProp(Instance,pointer(PropInfo));
+  GetWideStrProp(Instance,pointer(PropInfo),Value);
 end;
 {$else}
 
@@ -14179,6 +14228,7 @@ begin
 end;
 
 {$else}
+
 function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended;
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: extended of object;
@@ -14260,8 +14310,10 @@ begin // faster code by AB
       result := TIndexedGetProc(Call)(PropInfo^.Index);
   end;
 end;
+
 {$endif}
 
+{$ifndef FPC}
 procedure UseImplGetter(Instance: TObject; ImplGetter: PtrInt; var result: IInterface);
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: IInterface of object;
@@ -14273,6 +14325,7 @@ begin // sub-procedure to avoid try..finally for TGetProc(): Interface result
   Call.Data := Instance;
   result := TGetProc(Call);
 end;
+{$endif}
 
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry; out Obj): boolean;
 begin
@@ -15219,7 +15272,9 @@ end;
 
 procedure TSQLPropInfoRTTIDouble.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  W.Add(GetDoubleProp(Instance,pointer(fPropInfo)));
+  if fPropInfo.GetterIsField then
+    W.Add(PDouble(fPropInfo.GetterAddr(Instance))^) else
+    W.Add(GetDoubleProp(Instance,pointer(fPropInfo)));
 end;
 
 procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject;
@@ -15241,16 +15296,17 @@ begin
 end;
 
 procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
-var V: extended;
+var V: double;
     err: integer;
 begin
-  if Value=nil then begin
-    V := 0;
-    err := 1;
-  end else
+  if Value=nil then
+    V := 0 else begin
     V := GetExtended(pointer(Value),err);
-  if err<>0 then
-    SetInt64Prop(Instance,pointer(fPropInfo),0) else
+    if err<>0 then
+      V := 0;
+  end;
+  if fPropInfo.SetterIsField then
+    PDouble(fPropInfo.SetterAddr(Instance))^ := V else
     SetFloatProp(Instance,pointer(fPropInfo),V);
 end;
 
@@ -15263,8 +15319,13 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    V1 := GetFloatProp(Item1,pointer(fPropInfo));
-    V2 := GetFloatProp(Item2,pointer(fPropInfo));
+    if fPropInfo.GetterIsField then begin
+      V1 := PDouble(fPropInfo.GetterAddr(Item1))^;
+      V2 := PDouble(fPropInfo.GetterAddr(Item2))^;
+    end else begin
+      V1 := GetFloatProp(Item1,pointer(fPropInfo));
+      V2 := GetFloatProp(Item2,pointer(fPropInfo));
+    end;
     if SynCommons.SameValue(V1,V2) then
       result := 0 else
     if V1>V2 then
@@ -15288,7 +15349,9 @@ begin
     exit;
   end;
   end;
-  SetFloatProp(Instance,pointer(fPropInfo),V);
+  if fPropInfo.SetterIsField then
+    PDouble(fPropInfo.SetterAddr(Instance))^ := V else
+    SetFloatProp(Instance,pointer(fPropInfo),V);
   result := true;
 end;
 
@@ -15296,7 +15359,9 @@ procedure TSQLPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject; var aValue: T
   var temp: RawByteString);
 begin
   aValue.VType := ftDouble;
-  aValue.VDouble := GetFloatProp(Instance,pointer(fPropInfo));
+  if fPropInfo.GetterIsField then
+    aValue.VDouble := PDouble(fPropInfo.GetterAddr(Instance))^ else
+    aValue.VDouble := GetFloatProp(Instance,pointer(fPropInfo));
 end;
 
 
@@ -15304,7 +15369,9 @@ end;
 
 procedure TSQLPropInfoRTTICurrency.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  W.AddCurr64(GetCurrencyProp(Instance,pointer(fPropInfo)));
+  if fPropInfo.GetterIsField then
+    W.AddCurr64(PInt64(fPropInfo.GetterAddr(Instance))^) else
+    W.AddCurr64(GetCurrencyProp(Instance,pointer(fPropInfo)));
 end;
 
 procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject;
@@ -15312,7 +15379,9 @@ procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject;
 begin
   if wasSQLString<>nil then
     wasSQLString^ := false;
-  result := CurrencyToStr(GetCurrencyProp(Instance,pointer(fPropInfo)));
+  if fPropInfo.GetterIsField then
+    result := Curr64ToStr(PInt64(fPropInfo.GetterAddr(Instance))^) else
+    result := CurrencyToStr(GetCurrencyProp(Instance,pointer(fPropInfo)));
 end;
 
 procedure TSQLPropInfoRTTICurrency.NormalizeValue(var Value: RawUTF8);
@@ -15322,8 +15391,8 @@ end;
 
 procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
 begin
-  if PropWrap(fPropInfo^.SetProc).Kind=$ff then
-    SetInt64Prop(Instance,pointer(fPropInfo),StrToCurr64(Value)) else
+  if fPropInfo.SetterIsField then
+    PInt64(fPropInfo.SetterAddr(Instance))^ := StrToCurr64(Value) else
     inherited SetValue(Instance,Value,wasString);
 end;
 
@@ -15336,8 +15405,13 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    V1 := GetCurrencyProp(Item1,pointer(fPropInfo));
-    V2 := GetCurrencyProp(Item2,pointer(fPropInfo));
+    if fPropInfo.GetterIsField then begin
+      V1 := PCurrency(fPropInfo.GetterAddr(Item1))^;
+      V2 := PCurrency(fPropInfo.GetterAddr(Item1))^;
+    end else begin
+      V1 := GetCurrencyProp(Item1,pointer(fPropInfo));
+      V2 := GetCurrencyProp(Item2,pointer(fPropInfo));
+    end;
     Result := PInt64(@V1)^-PInt64(@V2)^;
   end;
 end;
@@ -15346,7 +15420,9 @@ procedure TSQLPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject; var aValue:
   var temp: RawByteString);
 begin
   aValue.VType := ftCurrency;
-  aValue.VCurrency := GetCurrencyProp(Instance,pointer(fPropInfo));
+  if fPropInfo.GetterIsField then
+    aValue.VInt64 := PInt64(fPropInfo.GetterAddr(Instance))^ else
+    aValue.VCurrency := GetCurrencyProp(Instance,pointer(fPropInfo));
 end;
 
 
@@ -15355,7 +15431,9 @@ end;
 procedure TSQLPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.Add('"');
-  W.AddDateTime(GetDoubleProp(Instance,pointer(fPropInfo)));
+  if fPropInfo.GetterIsField then
+    W.AddDateTime(PDouble(fPropInfo.GetterAddr(Instance))^) else
+    W.AddDateTime(GetDoubleProp(Instance,pointer(fPropInfo)));
   W.Add('"');
 end;
 
@@ -20010,9 +20088,10 @@ begin
   result := nil;
   if (@self=nil) or (PropType^.Kind<>tkClass) or (Instance=nil) then
     exit;
-  if PropWrap(SetProc).Kind=$FF then
+  if SetterIsField then
     // setter to field -> direct in-memory access
-    Field := Pointer(PtrInt(Instance)+SetProc and $00FFFFFF) else
+    Field := SetterAddr(Instance) else
+  {$ifndef FPC}
   if SetProc<>0  then begin
     // it is a setter method -> create a temporary object
     tmp := PropType^.ClassCreate;
@@ -20027,9 +20106,10 @@ begin
     end;
     exit;
   end else
-  if PropWrap(GetProc).Kind=$FF then
+  {$endif}
+  if GetterIsField then
     // no setter -> use direct in-memory access from getter (if available)
-    Field := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF) else
+    Field := GetterAddr(Instance) else
     // no setter, nor direct field offset -> impossible to set the instance
     exit;
   result := JSONToObject(Field^,From,Valid,nil,Options);
@@ -20240,7 +20320,7 @@ obj:    S := pointer(GetOrdProp(Source,pointer(@self)));
 i64:  SetInt64Prop(Dest,pointer(@self),GetInt64Prop(Source,pointer(@self)));
     tkFloat:
     if (PropType^.FloatType in [ftDoub,ftCurr]) and
-       (PropWrap(GetProc).Kind=$FF) and (PropWrap(SetProc).Kind=$FF) then
+       GetterIsField and SetterIsField then
       goto I64 else
       SetFloatProp(Dest,pointer(@self),GetFloatProp(Source,pointer(@self)));
     {$ifdef FPC}tkAString,{$endif}
@@ -20271,15 +20351,14 @@ end;
 
 function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
 begin
-  if PropWrap(GetProc).Kind<>$FF then
-    // getter method -> check setter
-    if PropWrap(SetProc).Kind<>$FF then
-       // both are methods -> returns nil
+  if not GetterIsField then
+    if not SetterIsField then
+      // both are methods -> returns nil
       result := nil else
       //  field - Setter is the field offset in the instance data
-      result := Pointer(PtrInt(Instance)+SetProc and $00FFFFFF) else
+      result := SetterAddr(Instance) else
     // field - Getter is the field offset in the instance data
-    result := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF);
+    result := GetterAddr(Instance);
 end;
 
 function TPropInfo.IsBlob: boolean;
@@ -20313,6 +20392,34 @@ begin
     result := TStoredProc(Call);
   end;
 {$endif}
+end;
+
+function TPropInfo.GetterIsField: boolean;
+begin
+  {$ifdef FPC}
+  result := PropProcs and 3=ptField;
+  {$else}
+  result := PropWrap(GetProc).Kind=$FF;
+  {$endif}
+end;
+
+function TPropInfo.SetterIsField: boolean;
+begin
+  {$ifdef FPC}
+  result := (PropProcs shr 2) and 3=ptField;
+  {$else}
+  result := PropWrap(SetProc).Kind=$FF;
+  {$endif}
+end;
+
+function TPropInfo.GetterAddr(Instance: pointer): pointer;
+begin
+  result := Pointer(PtrInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
+end;
+
+function TPropInfo.SetterAddr(Instance: pointer): pointer;
+begin
+  result := Pointer(PtrInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
 
 {$ifdef FPC}
@@ -20407,7 +20514,7 @@ end;
 function TTypeInfo.EnumBaseType: PEnumType;
 begin
   {$ifdef FPC}
-  result := pointer(GetNewTypeData(@Self));
+  result := pointer(GetFPCTypeData(@Self));
   {$else}
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];
@@ -30185,9 +30292,9 @@ begin
       with TSQLPropInfoRTTI(P).PropInfo^ do
       if (PropType^.Kind=tkClass) or
          ((PropType^.Kind=tkInteger)and(PropType^.OrdType=otSLong)) then
-        if PropWrap(GetProc).Kind=$FF then begin
+        if GetterIsField then begin
           // optimized version for fast retrieval of signed Int32 field value
-          Offs := GetProc and $00FFFFFF; // no getter -> use PPtrInt()
+          Offs := GetProc{$ifndef FPC} and $00FFFFFF{$endif}; // no getter -> use PPtrInt()
           for i := 0 to fValue.Count-1 do
             if PInteger(PtrInt(fValue.List[i])+Offs)^=aValue then begin
               if FoundOffset>0 then begin // omit first FoundOffset rows
@@ -32967,8 +33074,9 @@ begin
             exit else
         if wasString then
           exit else
-        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and (PropWrap(P^.SetProc).Kind=$ff) then
-          SetInt64Prop(Value,pointer(P),StrToCurr64(PropValue)) else begin
+        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
+           P^.SetterIsField then
+          PInt64(P^.SetterAddr(Value))^ := StrToCurr64(PropValue) else begin
           E := GetExtended(pointer(PropValue),err);
           if err<>0 then
             exit else // invalid JSON content
@@ -33050,8 +33158,9 @@ begin
       end;
       tkFloat:
       if U<>'' then
-        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and (PropWrap(P^.SetProc).Kind=$ff) then
-          SetInt64Prop(Value,pointer(P),StrToCurr64(pointer(U))) else begin
+        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
+           P^.SetterIsField then
+          PInt64(P^.SetterAddr(Value))^ := StrToCurr64(pointer(U)) else begin
           E := GetExtended(pointer(U),err);
           if err=0 then
             SetFloatProp(Value,pointer(P),E);
@@ -34479,8 +34588,9 @@ begin
         end;
         tkFloat: begin
           HR(P);
-          if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and (PropWrap(P^.GetProc).Kind=$FF) then
-            AddCurr64(PInt64(PtrInt(Value)+P^.GetProc and $00FFFFFF)^) else
+          if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
+             P^.GetterIsField then
+            AddCurr64(PInt64(P^.GetterAddr(Value))^) else
           if P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then begin
             Add('"');
             AddDateTime(GetDoubleProp(Value,pointer(P)));

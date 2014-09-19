@@ -1296,7 +1296,7 @@ function IsBlob(PropInfo: TRTTIPropInfo): boolean;
 begin // we only handle plain TByteDynArray properties without getter/setter
 {$ifdef FPC}
   result := (PropInfo^.PropType=TypeInfo(TByteDynArray)) and
-            ((PropInfo^.PropProcs) and 3=ptField);
+            (PropInfo^.PropProcs and 3=ptField);
 {$else}
   result := (PropInfo^.PropType^=TypeInfo(TByteDynArray)) and
             (PropWrap(PropInfo^.GetProc).Kind=$FF);

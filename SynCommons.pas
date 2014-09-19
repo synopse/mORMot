@@ -23291,7 +23291,7 @@ end;
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 {$ifdef FPC}
 begin
-  result := GetNewEnumName(aTypeInfo, aIndex); // from SynFPCTypInfo
+  result := GetFPCEnumName(aTypeInfo, aIndex); // from SynFPCTypInfo
 {$else}
 var MaxValue: integer;
 const NULL_SHORTSTRING: string[1] = '';
@@ -23310,7 +23310,7 @@ end;
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
 {$ifdef FPC}
 begin
-  result := GetNewEnumValue(aTypeInfo, aValue); // from SynFPCTypInfo
+  result := GetFPCEnumValue(aTypeInfo, aValue); // from SynFPCTypInfo
 {$else}
 var List: PShortString;
     MaxValue: integer;
