@@ -12280,7 +12280,7 @@ type
     fRemoteLogOwnedByFamily: boolean;
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
-    fOnIdle: TOnIdleSynBackgroundThread;
+    fOnIdle: TOnIdleSynBackgroundThread;                 
     fRemoteLogThread: TObject; // private TRemoteLogThread
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
@@ -26761,15 +26761,18 @@ type
       (ThreadMethod: TThreadMethod)
   end;
 
-  {$ifndef LVCL}
-  TThreadHook = class(TThread);
-  {$endif}
-
 procedure BackgroundExecuteProc(Call: pointer); forward;
+
+{$ifdef DELPHI6OROLDER} {$ifndef LVCL}
+type TThreadHook = class(TThread);
+{$endif} {$endif}
 
 procedure BackGroundExecute(var synch: TBackgroundLauncher;
   backgroundThread: TSynBackgroundThreadMethod);
 var event: TThreadMethod;
+{$ifdef DELPHI6OROLDER} {$ifndef LVCL}
+    tempThread: TThread;
+{$endif} {$endif}
 begin
   synch.Context := @ServiceContext;
   TMethod(event).Code := @BackgroundExecuteProc;
@@ -26781,7 +26784,16 @@ begin
       raise EServiceException.Create('BackGroundExecute(thread=nil)')
       {$else}
       {$ifdef DELPHI6OROLDER}
-      TThreadHook(synch.Context^.RunningThread).Synchronize(event)
+      if synch.Context^.RunningThread=nil then begin
+        // circumvent Delphi 6 limitation by using a temporary TThread
+        tempThread := TThread.Create(true);
+        try
+          TThreadHook(tempThread).Synchronize(event)
+        finally
+          tempThread.Free; // slightly slower, but working 
+        end;
+      end else
+        TThreadHook(synch.Context^.RunningThread).Synchronize(event)
       {$else}
       TThread.Synchronize(synch.Context^.RunningThread,event)
       {$endif DELPHI6OROLDER}
