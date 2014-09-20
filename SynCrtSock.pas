@@ -3664,6 +3664,10 @@ end;
 {$MINENUMSIZE 4}
 {$A+}
 
+{$ifdef FPC}
+{$PACKRECORDS C}
+{$endif}
+
 type
   // HTTP version used
   HTTP_VERSION = packed record
