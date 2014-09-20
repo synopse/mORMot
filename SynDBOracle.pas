@@ -2508,7 +2508,8 @@ var i,j: integer;
     Status, L: integer;
     mode: cardinal;
     Int32: set of 0..127;
-    arr: POCIArray;
+    ociArrays: array of POCIArray;
+    ociArraysCount: byte;
     num_val: OCINumber;
     tmp: RawUTF8;
     str_val: POCIString;
@@ -2522,7 +2523,7 @@ begin
   {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
   {$endif}
-  arr := nil;
+  ociArraysCount := 0;
   Env := (Connection as TSQLDBOracleConnection).fEnv;
   Context := TSQLDBOracleConnection(Connection).fContext;
   Status := OCI_ERROR;
@@ -2631,6 +2632,7 @@ begin
       // 1.2. One row DML optimized binding
       fillchar(Int32,sizeof(Int32),0);
       SetLength(oIndicator,fParamCount);
+      SetLength(ociArrays,fParamCount);
       for i := 0 to fParamCount-1 do
       if Length(fParams[i].VArray)>0 then begin
         // 1.2.1. Bind an array as one object
@@ -2643,28 +2645,30 @@ begin
           raise ESQLDBOracle.CreateUTF8(
             '%.ExecutePrepared: Unsupported array parameter type #%',[self,i+1]);
         end;
+        ociArrays[ociArraysCount] := nil;
         OCI.Check(OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY, Type_List, nil,
-          OCI_DURATION_SESSION, True, arr), fError);
-        SetString(fParams[i].VData,nil,fParamsArrayCount*sizeof(Int64));
+          OCI_DURATION_SESSION, True, ociArrays[ociArraysCount]), fError);
+        inc(ociArraysCount);
+        SetString(fParams[i].VData,nil,Length(fParams[i].VArray)*sizeof(Int64));
         oData := pointer(fParams[i].VData);
-        for j := 0 to fParamsArrayCount-1 do
+        for j := 0 to Length(fParams[i].VArray)-1 do
           case fParams[i].VType of
           ftInt64: begin
             SetInt64(pointer(fParams[i].Varray[j]),oDataINT^[j]);
             OCI.Check(OCI.NumberFromInt(fError, @oDataINT[j], sizeof(Int64), OCI_NUMBER_SIGNED, num_val), fError);
-            OCI.Check(OCI.CollAppend(Env, fError, @num_val, nil, arr),fError);
+            OCI.Check(OCI.CollAppend(Env, fError, @num_val, nil, ociArrays[ociArraysCount-1]),fError);
           end;
           ftUTF8: begin
             str_val := nil;
             SynCommons.UnQuoteSQLStringVar(pointer(fParams[i].VArray[j]),tmp);
             OCI.Check(OCI.StringAssignText(Env, fError, pointer(tmp), length(tmp), str_val), fError);
-            OCI.Check(OCI.CollAppend(Env, fError, str_val, nil, arr),fError);
+            OCI.Check(OCI.CollAppend(Env, fError, str_val, nil, ociArrays[ociArraysCount-1]),fError);
           end;
           end;
         oBind := nil;
         OCI.Check(OCI.BindByPos(fStatement,oBind,fError,i+1,nil,0,SQLT_NTY,
           nil,nil,nil,0,nil,OCI_DEFAULT),fError);
-        OCI.BindObject(oBind,fError,Type_List, arr, nil, nil, nil);
+        OCI.BindObject(oBind,fError,Type_List, ociArrays[ociArraysCount-1], nil, nil, nil);
       end else
       // 1.2.2. Bind one simple parameter value
       with fParams[i] do begin
@@ -2769,8 +2773,8 @@ begin
     FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
     Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
   finally
-    if Assigned(arr) then
-      OCI.Check(OCI.ObjectFree(Env, fError, arr, OCI_OBJECTFREE_FORCE), fError);
+    for i := 0 to ociArraysCount-1 do
+      OCI.Check(OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError);
     // 3. release and/or retrieve OUT bound parameters
     if fParamsArrayCount>0 then
     for i := 0 to fParamCount-1 do
