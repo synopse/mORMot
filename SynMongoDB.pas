@@ -3292,25 +3292,29 @@ begin
     Start := BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
     ndx := 0;
-    repeat
-      UInt32ToUtf8(ndx,Name);
-      BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
-      if JSON=nil then
-        exit; // invalid content
-      inc(ndx);
-    until EndOfObject=']';
+    if JSON^=']' then
+      inc(JSON) else
+      repeat
+        UInt32ToUtf8(ndx,Name);
+        BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
+        if JSON=nil then
+          exit; // invalid content
+        inc(ndx);
+      until EndOfObject=']';
   end;
   '{': begin
     Kind := betDoc;
     Start := BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    repeat
-      // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
-      Name := GetJSONPropName(JSON); // BSON/JSON accepts "" as key name
-      BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
-      if (JSON=nil) or (EndOfObject=#0) then
-        exit; // invalid content
-    until EndOfObject='}';
+      if JSON^='}' then
+        inc(JSON) else
+        repeat
+          // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
+          Name := GetJSONPropName(JSON); // BSON/JSON accepts "" as key name
+          BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
+          if (JSON=nil) or (EndOfObject=#0) then
+            exit; // invalid content
+        until EndOfObject='}';
   end;
   'n','N': 
     if IdemPChar(JSON+1,'ULL') then begin
