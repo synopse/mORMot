@@ -399,7 +399,7 @@ unit SynCommons;
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
   - faster x86/x64 asm versions of StrUInt32() StrInt32() StrInt64() functions
-  - new StrUInt64() and SetRawUTF8() functions
+  - new StrUInt64(), UniqueRawUTF8() and SetRawUTF8() functions
   - recognize 8.1 and upcoming "Threshold" 9 in TWindowsVersion
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
@@ -1280,6 +1280,13 @@ const
 // ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetRawUTF8 245.64ms
 // ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetString  136.39ms
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
+
+/// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
+// - will ensure that the string refcount is 1, and return a pointer to the text
+// - under FPC, @UTF8[1] does not call UniqueString() as it does with Delphi
+// - if UTF8 is a constant (refcount=-1), will create a temporary copy in heap
+function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
@@ -14015,6 +14022,14 @@ asm // eax=@Dest text=edx len=ecx
     pop ebx
 end;
 {$endif}
+
+function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
+begin
+  {$ifdef FPC}
+  UniqueString(UTF8); // @UTF8[1] won't call UniqueString() under FPC :(
+  {$endif}
+  result := @UTF8[1];
+end;
 
 {$ifdef FPC}
 function TDynArrayRec.GetLength: sizeint;
@@ -34026,8 +34041,8 @@ end;
 procedure JSONDecode(var JSON: RawUTF8;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false);
-begin // @JSON[1] will call UniqueString()
-  JSONDecode(@JSON[1],Names,Values,HandleValuesAsObjectOrArray);
+begin
+  JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
 function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
@@ -40362,8 +40377,8 @@ begin
   CheckVTableInitialized;
   if (aField.FieldSize>0) and (VValue<>'') then begin
     // fixed size content: fast in-place update
-    Move(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize);
-    // VValue[F.Offset+1] above will call UniqueString(VValue)
+    Move(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
+    // VValue[F.Offset+1] above will call UniqueString(VValue), even under FPC
   end else begin
     // variable-length update
     VTable.UpdateFieldData(pointer(VValue),length(VValue),
@@ -40379,6 +40394,7 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
+
 
 { TSynMapFile }
 

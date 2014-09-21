@@ -29,7 +29,8 @@ unit SynCrtSock;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - pavel (mpv)
+  - Alfred Glaenzer (alf)
+  - Pavel (mpv)
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1906,11 +1907,7 @@ begin
   SetLength(Compress,n+1);
   with Compress[n] do begin
     Name := aName;
-    {$ifdef FPC}
-    Func := aFunction;
-    {$else}
     @Func := @aFunction;
-    {$endif}
     CompressMinSize := aCompressMinSize;
   end;
   if aAcceptEncoding='' then
@@ -4726,11 +4723,7 @@ begin
       Http.Version.MajorVersion := 2; // API 2.0 if all functions are available
       if Http.Module<=255 then
         raise Exception.CreateFmt('Unable to find %s',[HTTPAPI_DLL]);
-      {$ifdef FPC}
-      P := @Http.Initialize;
-      {$else}
       P := @@Http.Initialize;
-      {$endif}
       for api := low(api) to high(api) do begin
         P^ := GetProcAddress(Http.Module,HttpNames[api]);
         if P^=nil then

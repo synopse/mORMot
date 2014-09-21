@@ -469,7 +469,7 @@ begin
 
   InBuf[1].BufferType := SECBUFFER_DATA;
   InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := @EncBuffer[1]; // call UniqueString
+  InBuf[1].pvBuffer := UniqueRawUTF8(RawUTF8(EncBuffer)); 
 
   InDesc.ulVersion := SECBUFFER_VERSION;
   InDesc.cBuffers := 2;

@@ -4076,7 +4076,7 @@ begin
   try
     CA.Str := TStringList.Create;
     tmp := J;
-    Check(JSONToObject(CA,@tmp[1],Valid)=nil);
+    Check(JSONToObject(CA,UniqueRawUTF8(RawUTF8(tmp)),Valid)=nil);
     Check(Valid);
     Check(CA.Str.Count=10000);
     for i := 1 to CA.Str.Count do
@@ -4218,7 +4218,7 @@ begin
   FillChar(git,sizeof(git),0);
   FillChar(git2,sizeof(git2),0);
   U := zendframeworkJson; // need unique string for procedure re-entrance
-  Check(DynArrayLoadJSON(git,@U[1],TypeInfo(TTestCustomJSONGitHubs))<>nil);
+  Check(DynArrayLoadJSON(git,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
   U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
   if soWriteHumanReadable in Options then
     FileFromString(U,'zendframeworkSaved.json');
@@ -4325,7 +4325,7 @@ begin
   RecordLoadJSON(JA,pointer(J),TypeInfo(TTestCustomJSONArray));
   Check(RecordSave(JA,TypeInfo(TTestCustomJSONArray))=RecordSave(JA2,TypeInfo(TTestCustomJSONArray)));
   J := '{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}';
-  RecordLoadJSON(JA,@J[1],TypeInfo(TTestCustomJSONArray));
+  RecordLoadJSON(JA,UniqueRawUTF8(J),TypeInfo(TTestCustomJSONArray));
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArray));
   Check(length(JA.E)=1);
   Check(U='{"A":0,"B":0,"C":0,"D":null,"E":[{"E1":2,"E2":"3"}],"F":""}');
@@ -4355,7 +4355,7 @@ begin
     '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
   Check(Hash32(u)=$E3AC9C44);
   Check(RecordSaveJSON(agg,TypeInfo(TAggregate))=u);
-  RecordLoadJSON(agg2,@u[1],TypeInfo(TAggregate));
+  RecordLoadJSON(agg2,UniqueRawUTF8(u),TypeInfo(TAggregate));
   j := RecordSaveJSON(agg2,TypeInfo(TAggregate));
   Check(Hash32(j)=$E3AC9C44);
 
@@ -4366,7 +4366,7 @@ begin
   U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
     '"3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"d":"4","e":[{"f":"f","g":["g1","g2"]}],"h":"h"}';
   J := U;
-  RecordLoadJSON(JAS,@U[1],TypeInfo(TTestCustomJSONArraySimple));
+  RecordLoadJSON(JAS,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArraySimple));
   Check(JAS.A=1);
   Check(JAS.B=2);
   Check(length(JAS.C)=2);
@@ -4389,7 +4389,7 @@ begin
   Check(U='{"A":0,"B":0,"C":[],"D":""}');
   assert(DocVariantType<>nil);
   U := '{"a":1,"b":2,"c":["one",2,2.5,{four:[1,2,3,4]}],"d":"4"}';
-  RecordLoadJSON(JAV,@U[1],TypeInfo(TTestCustomJSONArrayVariant));
+  RecordLoadJSON(JAV,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONArrayVariant));
   Check(JAV.A=1);
   Check(JAV.B=2);
   if not CheckFailed(length(JAV.C)=4) then begin
@@ -4428,7 +4428,7 @@ begin
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
   Check(U='{"ID":10,"JSON":"test","TimeStamp64":200}');
   U := '{"ID":210,"TimeStamp64":2200,"JSON":"test2"}';
-  RecordLoadJSON(Cache,@U[1],TypeInfo(TSQLRestCacheEntryValue));
+  RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=210);
   Check(Cache.TimeStamp64=2200);
   Check(Cache.JSON='test2');
@@ -4443,7 +4443,7 @@ begin
   U := RecordSaveJSON(nav,TypeInfo(TConsultaNav));
   J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
   Check(U<>J);
-  RecordLoadJSON(nav2,@U[1],TypeInfo(TConsultaNav));
+  RecordLoadJSON(nav2,UniqueRawUTF8(U),TypeInfo(TConsultaNav));
   Check(nav2.MaxRows=0);
   check(not nav2.EOF);
   J := RecordSaveJSON(nav2,TypeInfo(TConsultaNav));
@@ -4480,7 +4480,7 @@ begin
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
   check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
   U :='{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
-  RecordLoadJSON(Book,@U[1],TypeInfo(TBookRecord));
+  RecordLoadJSON(Book,UniqueRawUTF8(U),TypeInfo(TBookRecord));
   check(Book.name='Book the First');
   check(Book.author.first_name='Bob');
   Check(Book.author.last_name='White');
@@ -4604,7 +4604,7 @@ begin
       AddVariantJSON(U);
       J := Text;
       Check(J=U+','+DoubleToStr(r)+','+DoubleToStr(c)+',"'+U+'"');
-      P := @J[1];
+      P := UniqueRawUTF8(J);
       P := VariantLoadJSON(Va,P);
       Check(P<>nil);
       Check(Va=a);
@@ -4643,12 +4643,12 @@ begin
   Delete(U,3,3);
   J := '{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10+
     '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
-  RemoveCommentsFromJSON(@J[1]);
+  RemoveCommentsFromJSON(UniqueRawUTF8(J));
   J := GetJSONObjectAsSQL(J,false,true);
   Check(J=U);
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10+
     '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
-  RemoveCommentsFromJSON(@J[1]);
+  RemoveCommentsFromJSON(UniqueRawUTF8(J));
   J := GetJSONObjectAsSQL(J,false,true,1,True);
   Check(J=U);
   O := TPersistentToJSON.Create;
@@ -4693,7 +4693,7 @@ begin
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
-    RemoveCommentsFromJSON(@J[1]);
+    RemoveCommentsFromJSON(UniqueRawUTF8(J));
     JSONToObject(O2,pointer(J),valid);
     Check(Valid);
     Check(O.Name=O2.Name);
@@ -4743,7 +4743,7 @@ begin
      Check(Hash32(U)=$36B02F0E);
      TJSONSerializer.RegisterClassForJSON([TComplexNumber,TCollTst]);
      J := '{"ClassName":"TComplexNumber", "Real": 10.3, "Imaginary": 7.92 }';
-     P := @J[1]; // make local copy of constant
+     P := UniqueRawUTF8(J); // make local copy of constant
      Comp := TComplexNumber(JSONToNewObject(P,Valid));
      if not CheckFailed(Comp<>nil) then begin
        Check(Valid);
@@ -4819,25 +4819,25 @@ begin
      C2.One.Color := 0;
      C2.One.Name := '';
      U := '{"One":{"Color":1,"Length":0,"Name":"test","Unknown":123},"Coll":[]}';
-     Check(JSONToObject(C2,@U[1],Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
      Check(Valid);
      Check(C2.One.Color=1);
      Check(C2.One.Name='test');
      C2.One.Color := 0;
      C2.One.Name := '';
      U := '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
-     Check(JSONToObject(C2,@U[1],Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
      Check(Valid);
      Check(C2.One.Color=1);
      Check(C2.One.Name='test');
      U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2},"Coll":[]}';
-     Check(IdemPChar(JSONToObject(C2,@U[1],Valid),'"TEST'),'invalid JSON');
+     Check(IdemPChar(JSONToObject(C2,UniqueRawUTF8(U),Valid),'"TEST'),'invalid JSON');
      Check(not Valid);
      U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-     Check(JSONToObject(C2,@U[1],Valid)<>nil);
+     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil);
      Check(not Valid);
      U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-     Check(IdemPChar(JSONToObject(C2,@U[1],Valid),',"LENGTH'),'invalid JSON');
+     Check(IdemPChar(JSONToObject(C2,UniqueRawUTF8(U),Valid),',"LENGTH'),'invalid JSON');
      Check(not Valid);
   finally
     C2.Free;
@@ -4977,14 +4977,14 @@ begin
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
   Check(U='{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0}}');
   U := '{"B":0,"C":0,"A":10,"D":"**","E":{"E1":0,"E2":20}}';
-  RecordLoadJSON(JR2,@U[1],TypeInfo(TTestCustomJSONRecord));
+  RecordLoadJSON(JR2,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONRecord));
   Check(JR2.A=10);
   Check(JR2.D='**');
   Check(JR2.E.E2=20);
   Parser.Options := [soReadIgnoreUnknownFields];
   U := '{ "A" : 1 , "B" : 2 , "C" : 3 , "D" : "A" , "tobeignored":null,"E": '#13#10+
     '{ "E1" : 4, "E2" : 5 } , "tbi" : { "b" : 0 } }';
-  RecordLoadJSON(JR2,@U[1],TypeInfo(TTestCustomJSONRecord));
+  RecordLoadJSON(JR2,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONRecord));
   Check(JR2.A=1);
   Check(JR2.D='A');
   Check(JR2.E.E1=4);
@@ -5042,7 +5042,7 @@ begin
      '"TRCAT3":{"TITYPE":"C3","TIID":"3","TICID":"","TIDSC30":"description3","TIORDER":"0","TIDEL":"false"},'+
      '"TRRMK":"Remark",'+
      '"TRACID":{"TITYPE":"AC","TIID":"4","TICID":"","TIDSC30":"account1","TIORDER":"0","TIDEL":"false"}}]}';
-    RecordLoadJSON(Trans,@U[1],TypeInfo(TTestCustomJSON2));
+    RecordLoadJSON(Trans,UniqueRawUTF8(U),TypeInfo(TTestCustomJSON2));
     Check(length(Trans.Transactions)=1);
     Check(Trans.Transactions[0].TRTYPE='INCOME');
     Check(Trans.Transactions[0].TRACID.TIDEL='false');
@@ -5077,7 +5077,7 @@ begin
   Finalize(Disco);
   fillchar(Disco,sizeof(Disco),0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
-  RecordLoadJSON(Disco,@U[1],TypeInfo(TTestCustomDiscogs));
+  RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=1);
   Check(Disco.pagination.page=0);
   if not CheckFailed(length(Disco.releases)=1) then begin
@@ -5087,7 +5087,7 @@ begin
   Finalize(Disco);
   fillchar(Disco,sizeof(Disco),0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
-  RecordLoadJSON(Disco,@U[1],TypeInfo(TTestCustomDiscogs));
+  RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=0);
   Check(Disco.pagination.page=0);
   if not CheckFailed(length(Disco.releases)=2) then begin
@@ -5097,7 +5097,7 @@ begin
     Check(Disco.releases[1].id=0);
   end;
   U := '{"pagination":{"page":1},"releases":[{"title":"abc","id":2}]}';
-  RecordLoadJSON(Disco,@U[1],TypeInfo(TTestCustomDiscogs));
+  RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=0);
   Check(Disco.pagination.page=1);
   if not CheckFailed(length(Disco.releases)=1) then begin
@@ -6588,7 +6588,7 @@ begin
   SetLength(orig,MAX);
   SetLength(crypted,MAX+256);
   st := '1234essai';
-  pInteger(@st[1])^ := Random(MaxInt);
+  pInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
   for k := 0 to 2 do begin
     ks := 128+k*64; // test keysize of 128, 192 and 256 bits
     for i := 1 to 100 do begin

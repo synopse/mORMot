@@ -30,7 +30,7 @@ unit mORMot;
 
   Contributor(s):
     Alexander (chaa)
-    Alfred Glaenzer
+    Alfred Glaenzer (alf)
     DigDiver
     Esmond
     Pavel (mpv)
@@ -16430,7 +16430,7 @@ procedure TSQLPropInfoCustom.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
   wasSQLString: PBoolean);
 begin
   if Assigned(fData2Text) then 
-    fData2Text(@Value[1],length(Value),Value) else
+    fData2Text(UniqueRawUTF8(Value),length(Value),Value) else
     inherited BinaryToText(Value,ToSQL,wasSQLString);
 end;
 
@@ -19408,7 +19408,7 @@ var P: PUTF8Char;
 begin
   if JSON='' then
     P := nil else begin
-    P := @JSON[1]; // call UniqueString(JSON)
+    P := UniqueRawUTF8(JSON);
     while P^ in [#1..' ','{','['] do inc(P);
   end;
   Decode(P,Fields,Params,RowID,ReplaceRowIDWithID);
@@ -21358,7 +21358,7 @@ var Table: TSQLTableJSON;
     PrivateCopy: RawUTF8;
 begin
   PrivateCopy := JSONTable;
-  Table := TSQLTableJSON.Create('',@PrivateCopy[1],length(PrivateCopy));
+  Table := TSQLTableJSON.Create('',UniqueRawUTF8(PrivateCopy),length(PrivateCopy));
   try
     FillFrom(Table,Row);
   finally
