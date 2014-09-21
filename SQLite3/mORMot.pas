@@ -8970,6 +8970,7 @@ type
     /// handle Client or Server side fast in-memory cache
     // - creates the internal fCache instance, if necessary
     function GetCache: TSQLRestCache;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     // - this default implementation always returns TRUE (always allow cache)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
@@ -24903,7 +24904,7 @@ begin
   EnterCriticalSection(Mutex);
   try
     result := false;
-    i := Value.Find(aID); // search by first ID field
+    i := Value.Find(aID); // fast binary search by first ID field
     if i>=0 then
       with Values[i] do
       if TimeStamp64<>0 then // 0 when there is no JSON value cached
@@ -24938,10 +24939,13 @@ begin
   if self<>nil then
     for i := 0 to high(fCache) do
       with fCache[i] do
-      if CacheEnable then
-      for j := 0 to Count-1 do
-        if Values[j].TimeStamp64<>0 then
-          inc(result);
+      if CacheEnable then begin
+        EnterCriticalSection(Mutex);
+        for j := 0 to Count-1 do
+          if Values[j].TimeStamp64<>0 then
+            inc(result);
+        LeaveCriticalSection(Mutex);
+      end;
 end;
 
 function TSQLRestCache.CachedMemory: cardinal;
@@ -24951,10 +24955,13 @@ begin
   if self<>nil then
     for i := 0 to high(fCache) do
       with fCache[i] do
-      if CacheEnable then
-      for j := 0 to Count-1 do
-        if Values[j].TimeStamp64<>0 then
-          inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
+      if CacheEnable then begin
+        EnterCriticalSection(Mutex);
+        for j := 0 to Count-1 do
+          if Values[j].TimeStamp64<>0 then
+            inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
+        LeaveCriticalSection(Mutex);
+      end;
 end;
 
 function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: Cardinal): boolean;
@@ -25103,7 +25110,6 @@ begin
       end;
     end;
 end;
-
 
 procedure TSQLRestCache.Notify(aTable: TSQLRecordClass; aID: integer;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
