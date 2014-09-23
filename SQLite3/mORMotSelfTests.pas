@@ -125,13 +125,11 @@ type
     // - low level functions and classes, cryptographic or compression routines,
     // PDF generation
     procedure SynopseLibraries;
-{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
     /// test the freeware Synopse mORMot framework
     // - access to SQLite3 or external engines, ORM features, Client/Server
     procedure _mORMot;
 {$endif DELPHI5OROLDER}
-{$endif FPC}
   end;
 
 
@@ -141,8 +139,8 @@ procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
   // exit;
   AddCase([TTestLowLevelCommon,
-{$ifndef FPC}
     TTestLowLevelTypes,
+{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
     TTestBigTable,
 {$endif}
@@ -154,10 +152,6 @@ begin
    ]);
 end;
 
-{$ifdef FPC}
-type // mORMot.pas unit doesn't compile with FPC yet
-  TSQLLog = TSynLog;
-{$else}
 {$ifdef DELPHI5OROLDER}
 type // mORMot.pas unit doesn't compile with Delphi 5 yet
   TSQLLog = TSynLog;
@@ -176,7 +170,6 @@ begin
   //exit; // *)
 end;
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 
 procedure SQLite3ConsoleTests;
 begin

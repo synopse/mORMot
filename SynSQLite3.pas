@@ -4666,8 +4666,10 @@ end;
 
 function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8): PSQLRequest;
 var added: boolean;
+    ndx: integer;
 begin
-  with Cache[Caches.FindHashedForAdding(GenericSQL,added)] do begin
+  ndx := Caches.FindHashedForAdding(GenericSQL,added);
+  with Cache[ndx] do begin
     if added then begin
       StatementSQL := GenericSQL;
       Statement.Prepare(DB,GenericSQL);

@@ -128,10 +128,11 @@ uses
   Generics.Collections,
 {$endif}
   SysUtils,
-{$ifndef FPC}
 {$ifndef LVCL}
   Contnrs,
+{$ifndef FPC}
   SynPdf,
+{$endif FPC}
   SynOleDB,
 {$endif LVCL}
   SynDB,
@@ -145,7 +146,6 @@ uses
   mORMotHttpServer,
   mORMotHttpClient,
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
@@ -155,10 +155,60 @@ uses
 
 { ************ Unit-Testing classes and functions }
 
+{$ifndef DELPHI5OROLDER}
+type
+  // a record mapping used in the test classes of the framework
+  // - this class can be used for debugging purposes, with the database
+  // created by TTestFileBased in mORMotSQLite3.pas
+  // - this class will use 'People' as a table name
+  TSQLRecordPeople = class(TSQLRecord)
+  private
+    fData: TSQLRawBlob;
+    fFirstName: RawUTF8;
+    fLastName: RawUTF8;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property FirstName: RawUTF8 read fFirstName write fFirstName;
+    property LastName: RawUTF8 read fLastName write fLastName;
+    property Data: TSQLRawBlob read fData write fData;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  public
+    {/ method used to test the Client-Side
+       ModelRoot/TableName/ID/MethodName RESTful request, i.e.
+       ModelRoot/People/ID/DataAsHex in this case
+     - this method calls the supplied TSQLRestClient to retrieve its results,
+       with the ID taken from the current TSQLRecordPeole instance ID field
+     - parameters and result types depends on the purpose of the function
+     - TSQLRestServerTest.DataAsHex published method implements the result
+       calculation on the Server-Side }
+    function DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
+    {/ method used to test the Client-Side
+       ModelRoot/MethodName RESTful request, i.e. ModelRoot/Sum in this case
+     - this method calls the supplied TSQLRestClient to retrieve its results
+     - parameters and result types depends on the purpose of the function
+     - TSQLRestServerTest.Sum published method implements the result calculation
+       on the Server-Side
+     - this method doesn't expect any ID to be supplied, therefore will be
+       called as class function - normally, it should be implement in a
+       TSQLRestClient descendant, and not as a TSQLRecord, since it does't depend
+       on TSQLRecordPeople at all
+     - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
+       but it won't make any difference) }
+    class function Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
+  end;
+{$endif}
+
 type
   /// this test case will test most functions, classes and types defined and
   // implemented in the SynCommons unit
   TTestLowLevelCommon = class(TSynTestCase)
+  protected
+    {$ifndef DELPHI5OROLDER}
+    da: IObjectDynArray; // force the interface to be defined BEFORE the array
+    a: array of TSQLRecordPeople;
+    {$endif}
   published
     /// the faster CopyRecord function, enhancing the system.pas unit
     procedure SystemCopyRecord;
@@ -172,10 +222,8 @@ type
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
     /// test TObjectDynArrayWrapper class
     procedure _TObjectDynArrayWrapper;
-{$endif}
 {$endif}
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
@@ -229,8 +277,10 @@ type
   // defined and implemented in the mORMot.pas unit
   TTestLowLevelTypes = class(TSynTestCase)
 {$ifndef NOVARIANTS}
+{$ifndef FPC}
   protected
     procedure MustacheTranslate(var English: string);
+{$endif}
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
@@ -245,13 +295,11 @@ type
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
 {$ifndef NOVARIANTS}
-    {$ifndef FPC}
     /// some low-level variant process
     procedure Variants;
-    {$endif FPC}
+{$ifndef FPC}
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
-{$endif}
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
     /// variant-based JSON/BSON document process
@@ -260,10 +308,11 @@ type
     procedure _BSON;
 {$endif}
 {$endif}
+{$endif}
+{$endif}
   end;
 
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
 
 /// this test case will test some generic classes
   // defined and implemented in the mORMot.pas unit
@@ -281,49 +330,6 @@ type
     procedure _TSQLRestServerFullMemory;
   end;
 
-  // a record mapping used in the test classes of the framework
-  // - this class can be used for debugging purposes, with the database
-  // created by TTestFileBased in mORMotSQLite3.pas
-  // - this class will use 'People' as a table name
-  TSQLRecordPeople = class(TSQLRecord)
-  private
-    fData: TSQLRawBlob;
-    fFirstName: RawUTF8;
-    fLastName: RawUTF8;
-    fYearOfBirth: integer;
-    fYearOfDeath: word;
-  published
-    property FirstName: RawUTF8 read fFirstName write fFirstName;
-    property LastName: RawUTF8 read fLastName write fLastName;
-    property Data: TSQLRawBlob read fData write fData;
-    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
-    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
-  public
-    {/ method used to test the Client-Side
-       ModelRoot/TableName/ID/MethodName RESTful request, i.e.
-       ModelRoot/People/ID/DataAsHex in this case
-     - this method calls the supplied TSQLRestClient to retrieve its results,
-       with the ID taken from the current TSQLRecordPeole instance ID field
-     - parameters and result types depends on the purpose of the function
-     - TSQLRestServerTest.DataAsHex published method implements the result
-       calculation on the Server-Side }
-    function DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
-    {/ method used to test the Client-Side
-       ModelRoot/MethodName RESTful request, i.e. ModelRoot/Sum in this case
-     - this method calls the supplied TSQLRestClient to retrieve its results
-     - parameters and result types depends on the purpose of the function
-     - TSQLRestServerTest.Sum published method implements the result calculation
-       on the Server-Side
-     - this method doesn't expect any ID to be supplied, therefore will be
-       called as class function - normally, it should be implement in a
-       TSQLRestClient descendant, and not as a TSQLRecord, since it does't depend
-       on TSQLRecordPeople at all
-     - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
-       but it won't make any difference) }
-    class function Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
-  end;
-
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 
   /// this test case will test most functions, classes and types defined and
@@ -391,7 +397,6 @@ type
 {$endif}
 {$endif}
 
-{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
 
 {$ifndef LVCL}
@@ -933,7 +938,6 @@ type
   end;
 
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 
 
 implementation
@@ -3363,7 +3367,6 @@ end;
 
 
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
 
 function TSQLRecordPeopleCompareByFirstName(const A,B): integer;
 begin
@@ -3374,8 +3377,6 @@ end;
 procedure TTestLowLevelCommon._TObjectDynArrayWrapper;
 const MAX = 10000;
 var i,j: integer;
-    a: array of TSQLRecordPeople;
-    da: IObjectDynArray;
     s: RawUTF8;
 procedure CheckItem(p: TSQLRecordPeople; i: integer);
 var s: RawUTF8;
@@ -3477,12 +3478,9 @@ begin
     METHOD[Method2],['a',a,'b',b])),err);
 end;
 
-{$endif FPC}
-
 
 {$ifndef NOVARIANTS}
 
-{$ifndef FPC}
 
 procedure TTestLowLevelTypes.Variants;
 var v: Variant;
@@ -3499,7 +3497,7 @@ begin
   Check(boolean(v));
 end;
 
-{$endif FPC}
+{$ifndef FPC}
 
 type
   TMustacheTest = packed record
@@ -3687,6 +3685,8 @@ begin
     English := 'Vous venez de gagner';
 end;
 
+{$endif FPC}
+
 {$endif NOVARIANTS}
 
 {$endif DELPHI5OROLDER}
@@ -3698,7 +3698,6 @@ end;
 
 {$ifndef LVCL}
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
 
 type
   TCollTests = class(TInterfacedCollection)
@@ -3872,7 +3871,6 @@ begin
   fColl := Value;
 end;
 
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
 
@@ -3884,9 +3882,9 @@ type
     fEnum: TSynBackgroundThreadProcessStep;
     fSets: TSynBackgroundThreadProcessSteps;
   published
-    property Name: RawUTF8 read fName;
-    property Enum: TSynBackgroundThreadProcessStep read fEnum default flagIdle;
-    property Sets: TSynBackgroundThreadProcessSteps read fSets default [];
+    property Name: RawUTF8 read fName write fName;
+    property Enum: TSynBackgroundThreadProcessStep read fEnum write fEnum default flagIdle;
+    property Sets: TSynBackgroundThreadProcessSteps read fSets write fSets default [];
   end;
   {$M-}
 
@@ -4040,14 +4038,11 @@ var J,U: RawUTF8;
 {$endif}
     Trans: TTestCustomJSON2;
     Disco: TTestCustomDiscogs;
-{$ifndef FPC}
     Cache: TSQLRestCacheEntryValue;
-{$endif}
 {$ifndef DELPHI5OROLDER}
     K: RawUTF8;
     Valid: boolean;
 {$ifndef LVCL}
-{$ifndef FPC}
     Coll, C2: TCollTst;
     MyItem: TCollTest;
     Comp: TComplexNumber;
@@ -4183,7 +4178,6 @@ begin
 end;
 {$endif}
 {$endif}
-{$endif}
 procedure ABCD;
 begin
   Check(Parser.Root.NestedProperty[0].PropertyName='A');
@@ -4227,7 +4221,6 @@ begin
   if git[0].id=8079771 then begin
     Check(git[0].name='Component_ZendAuthentication');
     Check(git[0].description='Authentication component from Zend Framework 2');
-    Check(git[0].fork=true);
     Check(git[0].owner.login='zendframework');
     Check(git[0].owner.id=296074);
   end;
@@ -4417,7 +4410,6 @@ begin
   Check(JAV.D='4');
 {$endif}
 
-  {$ifndef FPC}
   Finalize(Cache);
   FillChar(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
@@ -4432,7 +4424,6 @@ begin
   Check(Cache.ID=210);
   Check(Cache.TimeStamp64=2200);
   Check(Cache.JSON='test2');
-  {$endif}
 
   {$ifdef ISDELPHI2010}
   fillchar(nav,sizeof(nav),0);
@@ -4584,7 +4575,6 @@ begin
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff=JSON_BASE64_MAGIC);
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
     check(BlobToTSQLRawBlob(pointer(J))=U);
     Base64MagicToBlob(@J[4],K);
     check(BlobToTSQLRawBlob(pointer(K))=U);
@@ -4624,10 +4614,8 @@ begin
     end;
     {$endif}
 {$endif}
-{$endif}
   end;
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
   J := GetJSONObjectAsSQL('{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null,'+
     '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true);
   U := ' (ID,Name,Role,Last Login,First Login,Department) VALUES '+
@@ -4858,7 +4846,6 @@ begin
   TFileVersionTest(true);
   TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
   TFileVersionTest(false);
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   // test TJSONCustomParserFromTextDefinition parsing
@@ -4944,15 +4931,11 @@ begin
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArrayVariant),__TTestCustomJSONArrayVariant);
   {$endif}
-  {$ifndef FPC}
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TSQLRestCacheEntryValue),__TSQLRestCacheEntryValue);
-  {$endif}
   TestJSONSerialization;
   TestJSONSerialization; // test twice for safety
-  {$ifndef FPC}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSQLRestCacheEntryValue),'');
-  {$endif}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),'');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),'');
@@ -5110,6 +5093,7 @@ end;
 
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
+{$ifndef FPC}
 
 procedure TTestLowLevelTypes._BSON;
 const BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
@@ -5695,6 +5679,8 @@ begin
   Check(V.result.data.Value('1001')='D2');
 end;
 
+{$endif FPC}
+
 {$endif LVCL}
 
 {$ifndef FPC}
@@ -5754,18 +5740,15 @@ begin
     t := UrlEncode(s);
     Check(UrlDecode(t)=s);
     {$ifndef DELPHI5OROLDER}
-    {$ifndef FPC}
     d := 'seleCT='+t+'&where='+
       {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(i);
     Check(UrlEncode(['seleCT',s,'where',i])='?'+d);
-    {$endif FPC}
     {$endif DELPHI5OROLDER}
   end;
 end;
 
 
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
 
 { TTestBasicClasses }
 
@@ -6234,7 +6217,6 @@ begin
   end;
 end;
 
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 
 {$ifdef UNICODE}
@@ -7037,7 +7019,6 @@ end;
 {$endif}
 {$endif}
 
-{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
 
 
@@ -7076,6 +7057,13 @@ end;
 
 {$ifdef UNICODE}
 {$WARNINGS OFF} // don't care about implicit string cast in tests
+{$endif}
+
+{$ifdef CPU64}  // under Win64 e.g. this unit will do nothing, but compile
+  {$define NOSTATIC}
+{$endif}
+{$ifdef FPC}  // under FPC, .obj format is not the same -> use external
+  {$define NOSTATIC}
 {$endif}
 
 const // BLOBs are stored as array of byte to avoid any charset conflict
@@ -7196,7 +7184,7 @@ begin
   JS := Demo.ExecuteJSON(Req); // get result in JSON format
   FileFromString(JS,'Test1.json');
   Check(Hash32(JS)=$40C1649A,'Expected ExecuteJSON result not retrieved');
-  {$ifdef CPU32}
+  {$ifndef NOSTATIC}
   if password<>'' then begin // check file encryption password change
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
     ChangeSQLEncryptTablePassWord(TempFileName,'password1','');
@@ -8224,7 +8212,7 @@ begin
     Check(R.YearOfDeath=R2.YearOfDeath);
   end;
 end;
-{$ifdef CPU32}
+{$ifndef NOSTATIC}
 const password = 'pass';
 {$else}
 const password = '';
@@ -8288,7 +8276,7 @@ begin
         end;
         Check(IsSQLite3File('testpass.db3'));
         Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''));
-        {$ifdef CPU32}
+        {$ifndef NOSTATIC}
         // now read it after uncypher
         ChangeSQLEncryptTablePassWord('testpass.db3',password,'');
         Check(IsSQLite3File('testpass.db3'));
@@ -8589,7 +8577,7 @@ begin
         RInt.ClearProperties;
         Check(aExternalClient.Retrieve(1,RInt));
         Check(RInt.fID=1);
-        {$ifndef CPU64}
+        {$ifndef NOSTATIC}
         RInt.YearOfBirth := 1972;
         Check(aExternalClient.Update(RInt)); // for RestoreGZ() below
         Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
@@ -8679,7 +8667,7 @@ begin
       Check(aExternalClient.TableRowCount(TSQLRecordOnlyBlob)=1000);
       Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
       RInt.ClearProperties;
-      {$ifndef CPU64}
+      {$ifndef NOSTATIC}
       aExternalClient.Retrieve(1,RInt);
       Check(RInt.fID=1);
       Check(RInt.FirstName='Salvador1');
@@ -9479,7 +9467,7 @@ begin
 {$endif}
     FreeAndNil(Demo);
   end;
-  {$ifdef CPU32}
+  {$ifndef NOSTATIC}
   if EncryptedFile then begin
     ChangeSQLEncryptTablePassWord(TempFileName,'NewPass',''); // uncrypt file
     Check(IsSQLite3File(TempFileName));
@@ -11194,7 +11182,9 @@ begin
   {$endif}
   Check(I.Subtract(10,20)=3,'Explicit result');
   {$WARN SYMBOL_PLATFORM OFF}
+  {$ifndef FPC}
   if DebugHook<>0 then
+  {$endif}
     exit; // avoid exceptions in IDE
   {$WARN SYMBOL_PLATFORM ON}
   with TSynLog.Family.ExceptionIgnore do begin
@@ -11223,11 +11213,9 @@ end;
 
 
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 
 
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
 
 { TTestMultiThreadProcess }
 
@@ -11434,7 +11422,11 @@ end;
 procedure TTestMultiThreadProcess._TSQLHttpClientWinSock_WinSock;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
+  {$ifdef FPC}
+  exit;
+  {$else}
   if DebugHook=0 then
+  {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
 end;
@@ -11549,7 +11541,6 @@ begin
   Sleep(0); // is expected for proper process
 end;
 
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 
 end.

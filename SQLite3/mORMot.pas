@@ -4523,7 +4523,7 @@ type
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
     // including 64 bit target)
     class function RecordProps: TSQLRecordProperties;
-      {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef FPC_OR_PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {/ the Table name in the database, associated with this TSQLRecord class
      - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
      - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
@@ -13986,16 +13986,17 @@ end;
 {$endif}
 
 procedure SetLongStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: RawByteString);
-// AB: use the getter field address if no setter (no write attribute) exists
+{$ifdef FPC} inline;
+begin
+  SetFPCStrProp(Instance,pointer(PropInfo),Value);
+{$else}
+  // AB: use the getter field address if no setter (no write attribute) exists
 {$ifdef USETYPEINFO}
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(const Value: RawByteString) of object;
   TIndexedProp = procedure(Index: integer; const Value: RawByteString) of object;
 var Call: TMethod;
 begin // caller must check that PropInfo^.PropType^.Kind = tkLString
-  {$ifdef FPC}
-  SetFPCStrProp(Instance,pointer(PropInfo),Value);
-  {$else}
   if PropInfo^.SetProc=0 then  // no setter ?
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else  // we only allow setting if we know the field address
@@ -14011,8 +14012,6 @@ begin // caller must check that PropInfo^.PropType^.Kind = tkLString
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(PropInfo^.Index,Value);
   end;
-  {$endif}
-end;
 {$else}
 asm     { ->    EAX Pointer to instance         }
         {       EDX Pointer to property info    }
@@ -14049,8 +14048,9 @@ asm     { ->    EAX Pointer to instance         }
         CALL    System.@LStrLAsg // copy local string(EDX) into string(EAX)
 @@exit: POP     EDI
         POP     ESI
-end;
 {$endif}
+{$endif}
+end;
 
 {$ifdef USETYPEINFO}
 // this pure pascal version must handle the 64-bits ordinal values and
@@ -14407,8 +14407,13 @@ begin
         inc(PtrUInt(result),result^.Len);
         {$endif}
     end;
+    {$ifdef FPC}
+    aClassType := aClassType.ClassParent;
+    if aClassType=nil then
+    {$else}
     if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
       aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
+    {$endif}
       break;
   end;
   result := nil;
@@ -14448,8 +14453,13 @@ begin
   {$endif}
 end;
 
-{$ifdef PUREPASCAL}
 function InternalClassProp(ClassType: TClass): PClassProp;
+{$ifdef FPC}
+begin
+  with GetFPCTypeData(ClassType.ClassInfo)^ do
+    result := PClassProp(@UnitName[ord(UnitName[0])+1]);
+{$else}
+{$ifdef PUREPASCAL}
 var PTI: PTypeInfo;
 begin // code is a bit abstract, but compiles very well
   PTI := PPointer(PtrInt(ClassType)+vmtTypeInfo)^;
@@ -14457,9 +14467,7 @@ begin // code is a bit abstract, but compiles very well
     with PTI^, PClassType(@Name[ord(Name[0])+1])^ do
       result := PClassProp(@UnitName[ord(UnitName[0])+1]) else
     result := nil;
-end;
 {$else}
-function InternalClassProp(ClassType: TClass): PClassProp;
 asm // this code is the fastest possible
   mov eax,[eax+vmtTypeInfo]
   or eax,eax; jz @z // avoid GPF if no RTTI available for this class
@@ -14468,8 +14476,9 @@ asm // this code is the fastest possible
   movzx edx,byte ptr [eax].TClassType.UnitName
   lea eax,[eax+edx].TClassType.UnitName[1].TClassProp
 @z:
+{$endif PUREPASCAL}
+{$endif FPC}
 end;
-{$endif}
 
 function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
 var P: PPropInfo;
@@ -15050,7 +15059,15 @@ end;
 
 procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
 begin
+{$ifdef FPC}
+  if fPropInfo.SetterIsField then
+    PInteger(fPropInfo.SetterAddr(Instance))^ := GetInteger(Value) else
+  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
+    PInteger(fPropInfo.GetterAddr(Instance))^ := GetInteger(Value) else
+    SetFPCOrdProp(Instance,pointer(fPropInfo),GetInteger(Value));
+{$else}
   SetOrdProp(Instance,pointer(fPropInfo),GetInteger(Value));
+{$endif}
 end;
 
 function TSQLPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -15521,7 +15538,15 @@ end;
 
 procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
 begin
-  SetOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
+  {$ifdef FPC}
+  if fPropInfo.SetterIsField then
+    PPointer(fPropInfo.SetterAddr(Instance))^ := Value else
+  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
+    PPointer(fPropInfo.GetterAddr(Instance))^ := Value else
+    SetFPCOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
+  {$else}
+    SetOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
+  {$endif}
 end;
 
 { TSQLPropInfoRTTIID }
@@ -20198,7 +20223,7 @@ begin
   if (Instance<>nil) and (@self<>nil) and
      (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then
   if (Value='') or (PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUTF8)) then
-    SetLongStrProp(Instance,pointer(@self),Value) else 
+    SetLongStrProp(Instance,pointer(@self),Value) else
   if PropType{$ifndef FPC}^{$endif}=TypeInfo(WinAnsiString) then
     SetLongStrProp(Instance,pointer(@self),UTF8ToWinAnsi(Value)) else
   if PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUnicode) then
@@ -20511,35 +20536,33 @@ begin
   result := sftUnknown;
 end;
 
-{$ifdef PUREPASCAL}
 function TTypeInfo.EnumBaseType: PEnumType;
+{$ifdef FPC}
 begin
-  {$ifdef FPC}
   result := pointer(GetFPCTypeData(@Self));
-  {$else}
+{$else}
+{$ifdef PUREPASCAL}
+begin
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];
-  {$endif}
-end;
 {$else}
-function TTypeInfo.EnumBaseType: PEnumType;
 asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
   mov eax,[eax+edx].TTypeInfo.Name[1].TEnumType.BaseType
   mov eax,[eax]
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
+{$endif}
+{$endif FPC}
 end;
 
-{$endif}
-
-{$ifdef PUREPASCAL}
 function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
+{$ifdef FPC_OR_PUREPASCAL}
 var CT: PClassType;
 begin
   CT := ClassType;
   while CT<>nil do begin
-    if CT^.ClassType={$ifndef fpc}pointer{$endif}(AClass) then begin
+    if CT^.ClassType={$ifndef FPC}pointer{$endif}(AClass) then begin
       result := true;
       exit;
     end;
@@ -20550,7 +20573,6 @@ begin
   result := false;
 end;
 {$else}
-function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
 asm // eax=PClassType edx=AClass
 @1:movzx ecx,byte ptr [eax].TTypeInfo.Name
    lea eax,[eax+ecx].TTypeInfo.Name[1]
@@ -22450,7 +22472,7 @@ end;
 // AutoTable, a relic from Delphi 2 that is generally not used anymore) - see
 // http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
 
-{$ifdef PUREPASCAL}
+{$ifdef FPC_OR_PUREPASCAL}
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 begin
   if Self<>nil then begin
@@ -26247,7 +26269,7 @@ begin
         inc(pmr);
       end;
     end;
-    vmt := PClass(pointer(vmt)+vmtParent)^;
+    vmt := vmt.ClassParent;
   end;
 end;
 {$else}
@@ -26559,13 +26581,13 @@ end;
 
 function TSQLRestServer.InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
 var aSQL: RawUTF8;
-    Static: TSQLRest;
+    Rest: TSQLRest;
 begin
   aSQL := SQL;
-  Static := InternalAdaptSQL(TableIndex,aSQL);
-  if Static<>nil then
+  Rest := InternalAdaptSQL(TableIndex,aSQL);
+  if Rest<>nil then
      // this SQL statement is handled by direct connection, faster adaptation
-    result := Static.EngineList(aSQL) else
+    result := Rest.EngineList(aSQL) else
     // complex TSQLVirtualTableJSON/External queries will rely on virtual table
     result := MainEngineList(SQL,false,nil);
   if result='[]'#$A then
@@ -26612,43 +26634,43 @@ begin
 end;
 
 function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): integer;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(Table);
-  if Static<>nil then // faster direct call
-    result := Static.TableRowCount(Table) else
+  Rest := GetStaticDataServerOrVirtualTable(Table);
+  if Rest<>nil then // faster direct call
+    result := Rest.TableRowCount(Table) else
     result := inherited TableRowCount(Table);
 end;
 
 function TSQLRestServer.TableHasRows(Table: TSQLRecordClass): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(Table);
-  if Static<>nil then // faster direct call
-    result := Static.TableHasRows(Table) else
+  Rest := GetStaticDataServerOrVirtualTable(Table);
+  if Rest<>nil then // faster direct call
+    result := Rest.TableHasRows(Table) else
     result := inherited TableHasRows(Table);
 end;
 
 function TSQLRestServer.UpdateBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin // overridden method to update all BLOB fields at once
   if (Value=nil) or (Value.fID<=0) then
     result := false else begin
-    Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
-    if Static<>nil then // faster direct call
-      result := Static.UpdateBlobFields(Value) else
+    Rest := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+    if Rest<>nil then // faster direct call
+      result := Rest.UpdateBlobFields(Value) else
       result := inherited UpdateBlobFields(Value);
   end;
 end;
 
 function TSQLRestServer.RetrieveBlobFields(Value: TSQLRecord): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin // overridden method to update all BLOB fields at once
   if Value=nil then
     result := false else begin
-    Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
-    if Static<>nil then // faster direct call
-      result := Static.RetrieveBlobFields(Value) else
+    Rest := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+    if Rest<>nil then // faster direct call
+      result := Rest.RetrieveBlobFields(Value) else
       result := inherited RetrieveBlobFields(Value);
   end;
 end;
@@ -26659,7 +26681,7 @@ var T: integer;
     Tab: TSQLRecordClass;
     Where: PtrUInt;
     RecRef: TRecordReference;
-    Static: TSQLRest;
+    Rest: TSQLRest;
     ToDo: (toVoidField, toDeleteRecord);
     W: RawUTF8;
 begin
@@ -26690,9 +26712,9 @@ begin
     Tab := Model.Tables[TableIndex];
     case ToDo of
     toVoidField: begin
-      Static := GetStaticDataServerOrVirtualTable(Tab);
-      if Static<>nil then // fast direct call
-        result := Static.EngineUpdateField(TableIndex,
+      Rest := GetStaticDataServerOrVirtualTable(Tab);
+      if Rest<>nil then // fast direct call
+        result := Rest.EngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W) else
         result := MainEngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W);
@@ -26708,18 +26730,18 @@ function TSQLRestServer.CreateSQLMultiIndex(Table: TSQLRecordClass;
 var SQL: RawUTF8;
     i, TableIndex: integer;
     Props: TSQLRecordProperties;
-    Static: TSQLRest;
+    Rest: TSQLRest;
 begin
   result := false;
   if high(FieldNames)<0 then
     exit; // avoid endless loop for TSQLRestStorage with no overridden method
   TableIndex := Model.GetTableIndexExisting(Table);
   if fStaticVirtualTable<>nil then begin
-    Static := fStaticVirtualTable[TableIndex];
-    if Static<>nil then begin
-      if Static.InheritsFrom(TSQLRestStorage) then
+    Rest := fStaticVirtualTable[TableIndex];
+    if Rest<>nil then begin
+      if Rest.InheritsFrom(TSQLRestStorage) then
          // will try to create an index on the static table (e.g. for external DB)
-         result := TSQLRestStorage(Static).
+         result := TSQLRestStorage(Rest).
            CreateSQLMultiIndex(Table,FieldNames,Unique,IndexName);
       exit;
     end;
@@ -28974,93 +28996,93 @@ begin
 end;
 
 function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineAdd(TableModelIndex,SentData) else
-    result := Static.EngineAdd(TableModelIndex,SentData);
+    result := Rest.EngineAdd(TableModelIndex,SentData);
 end;
 
 function TSQLRestServer.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineRetrieve(TableModelIndex,ID) else
-    result := Static.EngineRetrieve(TableModelIndex,ID);
+    result := Rest.EngineRetrieve(TableModelIndex,ID);
 end;
 
 function TSQLRestServer.EngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
-var Static: TSQLRest;
+var Rest: TSQLRest;
     StaticSQL: RawUTF8;
 begin
   StaticSQL := SQL;
-  Static := InternalAdaptSQL(Model.GetTableIndexFromSQLSelect(SQL,false),StaticSQL);
-  if Static=nil then
+  Rest := InternalAdaptSQL(Model.GetTableIndexFromSQLSelect(SQL,false),StaticSQL);
+  if Rest=nil then
     result := MainEngineList(SQL,ForceAJAX,ReturnedRowCount) else
-    result := Static.EngineList(StaticSQL,ForceAJAX,ReturnedRowCount);
+    result := Rest.EngineList(StaticSQL,ForceAJAX,ReturnedRowCount);
 end;
 
 function TSQLRestServer.EngineUpdate(TableModelIndex, ID: integer;
   const SentData: RawUTF8): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineUpdate(TableModelIndex,ID,SentData) else
-    result := Static.EngineUpdate(TableModelIndex,ID,SentData);
+    result := Rest.EngineUpdate(TableModelIndex,ID,SentData);
 end;
 
 function TSQLRestServer.EngineDelete(TableModelIndex, ID: integer): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineDelete(TableModelIndex,ID) else
-    result := Static.EngineDelete(TableModelIndex,ID);
+    result := Rest.EngineDelete(TableModelIndex,ID);
 end;
 
 function TSQLRestServer.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineDeleteWhere(TableModelIndex,SQLWhere,IDs) else
-    result := Static.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+    result := Rest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
 end;
 
 function TSQLRestServer.EngineRetrieveBlob(TableModelIndex, aID: integer;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData) else
-    result := Static.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := Rest.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
 function TSQLRestServer.EngineUpdateBlob(TableModelIndex, aID: integer;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData) else
-    result := Static.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
+    result := Rest.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
 function TSQLRestServer.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var Static: TSQLRest;
+var Rest: TSQLRest;
 begin
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Static=nil then
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
     result := MainEngineUpdateField(TableModelIndex,SetFieldName,SetValue,
       WhereFieldName,WhereValue) else
-    result := Static.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,
+    result := Rest.EngineUpdateField(TableModelIndex,SetFieldName,SetValue,
       WhereFieldName,WhereValue);
 end;
 
@@ -32564,8 +32586,13 @@ begin // guess constructor to be used (faster than multiple InheritsFrom calls)
     if C<>TInterfacedCollection then
     if C<>TCollection then
   {$endif}
+  {$ifdef FPC}
+    if C.ClassParent<>nil then begin
+      C := C.ClassParent;
+  {$else}
     if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
       C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
+  {$endif}
       if C<>nil then
         continue else
         result := aClass.Create;
@@ -32648,13 +32675,19 @@ begin
 {$endif} begin
       aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
       if aCustomIndex<0 then
+        {$ifdef FPC} begin
+        aClassType := aClassType.ClassParent;
+        {$else}
         if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then begin
           aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^;
+        {$endif}
           if aClassType<>nil then
             continue else
             break;
         end else
+        {$ifndef FPC}
         break else
+        {$endif}
       result := oCustom;
     end else
 {$ifndef LVCL}
