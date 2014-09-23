@@ -24187,7 +24187,7 @@ begin
   result := EngineAdd(TableIndex,JSONValues); // will call static
   // on success, Value.ID is updated with the new ROWID
   Value.fID := result;
-  if SendData then
+  if SendData and (result<>0) then
     fCache.Notify(PSQLRecordClass(Value)^,result,JSONValues,soInsert);
 end;
 
@@ -27385,7 +27385,9 @@ begin
                 Call.OutBody := Static.EngineRetrieve(TableIndex,TableID) else
                 Call.OutBody := Server.MainEngineRetrieve(TableIndex,TableID);
               // cache if expected
-              Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
+              if Call.OutBody='' then
+                Server.fCache.NotifyDeletion(TableIndex,TableID) else
+                Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
             end;
             if Call.OutBody<>'' then // if something was found
               Call.OutStatus := HTML_SUCCESS else // 200 OK
@@ -29222,7 +29224,8 @@ begin
             [self,ErrMsg]);
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
-        fCache.Notify(RunTable,ID,Value,soInsert);
+        if ID<>0 then
+          fCache.Notify(RunTable,ID,Value,soInsert);
       end;
       mPUT: begin // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
         Value := JSONGetObject(Sent,@ID,EndOfObject);
