@@ -42681,10 +42681,8 @@ begin
 end;
 
 procedure TSynLog.CreateLogWriter;
-{$ifndef MSWINDOWS}
-var i: integer;
-{$endif}
-var timeNow,hourRotate,timeBeforeRotate: TDateTime;
+var i,retry: integer;
+    timeNow,hourRotate,timeBeforeRotate: TDateTime;
 begin
   if fWriterStream=nil then begin
     {$ifdef MSWINDOWS}
@@ -42721,12 +42719,25 @@ begin
       fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
     fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
     if fFamily.NoFile then
-      fWriterStream := TFakeWriterStream.Create else begin
-      if (fFileRotationSize=0) or not FileExists(fFileName) then
-        TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
-      fWriterStream := TFileStream.Create(fFileName, // open with read sharing
-        fmOpenReadWrite or fmShareDenyWrite);
-    end;
+      fWriterStream := TFakeWriterStream.Create else
+      for retry := 0 to 2 do begin
+        for i := 1 to 10 do
+        try
+          if (fFileRotationSize=0) or not FileExists(fFileName) then
+            TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
+          fWriterStream := TFileStream.Create(fFileName,
+            fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
+          break;
+        except
+          on Exception do
+            Sleep(100);
+        end;
+        if fWriterStream<>nil then
+          break;
+        fFileName := ChangeFileExt(fFileName,'-'+fFamily.fDefaultExtension);
+      end;
+    if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
+      fWriterStream := TFakeWriterStream.Create;
     if fFileRotationSize>0 then
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
