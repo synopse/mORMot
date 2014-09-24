@@ -7060,10 +7060,10 @@ end;
 {$endif}
 
 {$ifdef CPU64}  // under Win64 e.g. this unit will do nothing, but compile
-  {$define NOSTATIC}
+  {$define NOSQLITE3ENCRYPT}
 {$endif}
-{$ifdef FPC}  // under FPC, .obj format is not the same -> use external
-  {$define NOSTATIC}
+{$ifdef FPC}  // FPC is not compatible with our custom encryption yet
+  {$define NOSQLITE3ENCRYPT}
 {$endif}
 
 const // BLOBs are stored as array of byte to avoid any charset conflict
@@ -7119,8 +7119,10 @@ begin
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';
     DeleteFile(TempFileName); // use a temporary file
+    {$ifndef NOSQLITE3ENCRYPT}
     if ClassType<>TTestFileBasedMemoryMap then
       password := 'password1';
+    {$endif}
   end;
   EncryptedFile := (password<>'');
   Demo := TSQLDataBase.Create(TempFileName,password);
@@ -7184,7 +7186,7 @@ begin
   JS := Demo.ExecuteJSON(Req); // get result in JSON format
   FileFromString(JS,'Test1.json');
   Check(Hash32(JS)=$40C1649A,'Expected ExecuteJSON result not retrieved');
-  {$ifndef NOSTATIC}
+  {$ifndef NOSQLITE3ENCRYPT}
   if password<>'' then begin // check file encryption password change
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
     ChangeSQLEncryptTablePassWord(TempFileName,'password1','');
@@ -8212,7 +8214,7 @@ begin
     Check(R.YearOfDeath=R2.YearOfDeath);
   end;
 end;
-{$ifndef NOSTATIC}
+{$ifndef NOSQLITE3ENCRYPT}
 const password = 'pass';
 {$else}
 const password = '';
@@ -8276,7 +8278,7 @@ begin
         end;
         Check(IsSQLite3File('testpass.db3'));
         Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''));
-        {$ifndef NOSTATIC}
+        {$ifndef NOSQLITE3ENCRYPT}
         // now read it after uncypher
         ChangeSQLEncryptTablePassWord('testpass.db3',password,'');
         Check(IsSQLite3File('testpass.db3'));
@@ -8577,7 +8579,7 @@ begin
         RInt.ClearProperties;
         Check(aExternalClient.Retrieve(1,RInt));
         Check(RInt.fID=1);
-        {$ifndef NOSTATIC}
+        {$ifndef NOSQLITE3ENCRYPT}
         RInt.YearOfBirth := 1972;
         Check(aExternalClient.Update(RInt)); // for RestoreGZ() below
         Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
@@ -8667,7 +8669,7 @@ begin
       Check(aExternalClient.TableRowCount(TSQLRecordOnlyBlob)=1000);
       Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
       RInt.ClearProperties;
-      {$ifndef NOSTATIC}
+      {$ifndef NOSQLITE3ENCRYPT}
       aExternalClient.Retrieve(1,RInt);
       Check(RInt.fID=1);
       Check(RInt.FirstName='Salvador1');
@@ -9467,7 +9469,7 @@ begin
 {$endif}
     FreeAndNil(Demo);
   end;
-  {$ifndef NOSTATIC}
+  {$ifndef NOSQLITE3ENCRYPT}
   if EncryptedFile then begin
     ChangeSQLEncryptTablePassWord(TempFileName,'NewPass',''); // uncrypt file
     Check(IsSQLite3File(TempFileName));

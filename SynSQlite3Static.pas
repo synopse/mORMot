@@ -29,7 +29,8 @@ unit SynSQLite3Static;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+   Alfred Glaenzer (alf)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -81,8 +82,8 @@ interface
   {$define NOSTATIC}
 {$endif}
 
-{$ifdef FPC}  // under FPC, .obj format is not the same -> use external
-  {$define NOSTATIC}
+{$ifdef FPC}  // FPC expects coff32 .o -> use external
+  {.$define NOSTATIC}
 {$endif}
 
 {$ifdef NOSTATIC}
@@ -226,15 +227,22 @@ extern int winWrite(
 
 }
 
+{$ifdef FPC}  // FPC expects coff32 .o
+{$L sqlite3.o}
+{$linklib c:\progs\mingw\lib\libkernel32.a}
+{$linklib c:\progs\mingw\lib\libmsvcrt.a}
+{$linklib c:\progs\mingw\lib\gcc\mingw32\4.8.1\libgcc.a}
+{$else}
 {$ifdef INCLUDE_FTS3}
 {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
 {$else}
 {$L sqlite3.obj}       // link SQlite3 database engine
 {$endif}
-
+{$endif}
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
+{$ifndef FPC}
 function _ftol: Int64;
 // Borland C++ float to integer (Int64) conversion
 asm
@@ -246,6 +254,7 @@ function _ftoul: Int64;
 asm
   jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
+{$endif}
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
 // the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
@@ -940,7 +949,11 @@ end;
 
 type
 {$ifndef DELPHI5OROLDER} // Delphi 5 is already aligning records by 4 bytes
+{$ifdef FPC}
+{$PACKRECORDS C}
+{$else}
 {$A4} // bcc32 default alignment is 4 bytes
+{$endif}
 {$endif}
   TSQLFile = record // called winFile (expand sqlite3.file) in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
@@ -1007,6 +1020,9 @@ function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$
 var Cyph: TSQLCypher;
     pass, buf: RawByteString;
 begin
+  {$ifdef FPC}  // FPC is not compatible with our custom encryption yet
+  raise ESQLite3Exception.Create('sqlite3_key() not compatible yet with FPC');
+  {$endif}
   result := SQLITE_OK;
   if (DB=0) or (key=nil) or (keyLen<=0) then
     exit;
@@ -1044,7 +1060,9 @@ end;
 
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 
-function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  {$ifdef FPC}alias : '_winWrite';{$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
 // or some other error code on failure
 var n, i: integer;
@@ -1114,7 +1132,9 @@ const
   SQLITE_IOERR_READ       = $010A;
   SQLITE_IOERR_SHORT_READ = $020A;
 
-function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  {$ifdef FPC}alias : '_winRead';{$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
 var offset: Int64Rec absolute off;
