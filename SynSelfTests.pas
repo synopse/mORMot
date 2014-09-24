@@ -7199,6 +7199,7 @@ begin
     Check(Demo.WALMode=InheritsFrom(TTestFileBasedWAL));
     Check(Hash32(Demo.ExecuteJSON(Req))=$40C1649A,'ExecuteJSON crypted');
   end else
+  {$endif}
   if ClassType=TTestFileBasedMemoryMap then begin // force re-open to test reading
     FreeAndNil(Demo); 
     Demo := TSQLDataBase.Create(TempFileName,password);
@@ -7207,7 +7208,6 @@ begin
     Demo.MemoryMappedMB := 256; 
     Demo.UseCache := true; 
   end;
-  {$endif}
   Demo.GetTableNames(Names);
   Check(length(Names)=1);
   Check(Names[0]='People');

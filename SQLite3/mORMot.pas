@@ -13756,7 +13756,9 @@ type // function(Instance: TObject) trick does not work with CPU64 :(
 var Call: TMethod;
 begin 
   {$ifdef FPC}
-  result := GetFPCInt64Prop(Instance,pointer(PropInfo));
+  if PropInfo.GetterIsField then
+    result := PInt64(PropInfo.GetterAddr(Instance))^ else
+    result := GetFPCInt64Prop(Instance,pointer(PropInfo));
   {$else}
   if PropWrap(PropInfo^.GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
@@ -13869,7 +13871,9 @@ type // procedure(Instance: TObject) trick does not work with CPU64 :(
 var Call: TMethod;
 begin
   {$ifdef FPC}
-  SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
+  if PropInfo.SetterIsField then
+    PInt64(PropInfo.SetterAddr(Instance))^ := Value else
+    SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
   {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
@@ -15217,7 +15221,9 @@ end;
 function TSQLPropInfoRTTIInt64.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var I64: Int64;
 begin
-  I64 := GetInt64Prop(Instance,pointer(fPropInfo));
+  if fPropInfo.GetterIsField then
+    I64 := PInt64(fPropInfo.GetterAddr(Instance))^ else
+    I64 := GetInt64Prop(Instance,pointer(fPropInfo));
   result := Int64Rec(I64).Lo xor Int64Rec(I64).Hi;
 end;
 
