@@ -2249,7 +2249,7 @@ type
   TCallingConvention = (ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
 
   /// the available kind of method parameters
-  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut, pfResult);
+  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut {$ifndef FPC}, pfResult{$endif});
 
   /// a set of kind of method parameters
   TParamFlags = set of TParamFlag;
@@ -20485,6 +20485,12 @@ end;
 
 { TTypeInfo }
 
+{$ifdef FPC}
+function TTypeInfo.ClassType: PClassType;
+begin
+  result := PClassType(GetFPCTypeData(@self));
+end;
+{$else}
 {$ifdef PUREPASCAL}
 function TTypeInfo.ClassType: PClassType;
 begin
@@ -20496,6 +20502,7 @@ asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
 end;
+{$endif}
 {$endif}
 
 function TTypeInfo.ClassCreate: TObject;
@@ -36091,7 +36098,7 @@ type
   PInterfaceTypeData = ^TInterfaceTypeData;
   TInterfaceTypeData = packed record
     IntfParent : PPTypeInfo; // ancestor
-    IntfFlags : set of (ifHasGuid, ifDispInterface, ifDispatch);
+    IntfFlags : set of (ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC}, ifHasStrGUID{$endif});
     IntfGuid : TGUID;
     IntfUnit : ShortString;
   end;
@@ -36996,8 +37003,8 @@ end;
 {$endif}
 
 procedure TInterfaceFactory.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
-var P: Pointer absolute aInterface;
-    PB: PByte absolute aInterface;
+var P: Pointer;
+    PB: PByte absolute P;
     PI: PInterfaceTypeData absolute P;
     PW: PWord absolute P;
     PS: PShortString absolute P;
@@ -37027,6 +37034,9 @@ begin
     AddMethodsFromTypeInfo(Ancestor);
   P := @PI^.IntfUnit[ord(PI^.IntfUnit[0])+1];
   // retrieve methods for this interface level
+  {$ifdef FPC}
+  PS := @PS^[ord(PS^[0])+1]; // ignore iidstr
+  {$endif}
   n := PW^; inc(PW);
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
@@ -39510,11 +39520,11 @@ type
 begin
   if aValue=nil then
     result := nil else
-    {$ifdef CPU64}
-    result := aValue as TObject;
-    {$else}
     {$ifdef ISDELPHI2010}
     result := aValue as TObject; // slower but always working
+    {$else}
+    {$ifdef FPC}
+    result := aValue as TObject;
     {$else}
     with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
     case Stub of // address of VMT[0] entry, i.e. QueryInterface
