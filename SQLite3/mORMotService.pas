@@ -67,7 +67,8 @@ unit mORMotService;
       TServer which does not work as expected)
     - added logging to the Service registration and command process
     - added TServiceController.CheckParameters() generic method to control
-      a service from the command line 
+      a service from the command line
+    - check the executable file in TServiceController.CreateNewService()
 
 }
 
@@ -208,23 +209,23 @@ type
     function Start(const Args: array of PChar): boolean;
     {{ this method will check the command line parameters, and will let
        control the service according to it
-      - MyService.exe /install will install the service
-      - MyService.exe /start   will start the service
-      - MyService.exe /stop    will stop the service
-      - MyService.exe /uninstall will uninstall the service
+      - MyServiceSetup.exe /install will install the service
+      - MyServiceSetup.exe /start   will start the service
+      - MyServiceSetup.exe /stop    will stop the service
+      - MyServiceSetup.exe /uninstall will uninstall the service
       - so that you can write in the main block of your .dpr:
       !begin
       ! if ParamCount<>0 then
       !   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
       !   try
-      !     CheckParameters(HTTPSERVICEDISPLAYNAME);
+      !     CheckParameters('MyService.exe',HTTPSERVICEDISPLAYNAME);
       !   finally
       !     Free;
       !   end else
       !   ...
       !end;
     }
-    procedure CheckParameters(const DisplayName: string); virtual;
+    procedure CheckParameters(const ExeFileName,DisplayName: string); virtual;
   end;
 
   TService = class;
@@ -406,6 +407,13 @@ constructor TServiceController.CreateNewService(const TargetComputer,
   ErrorControl: DWORD);
 begin
   inherited Create;
+  if not FileExists(Path) then begin
+    {$ifndef NOMORMOTKERNEL}
+    TSQLLog.Add.Log(sllError,'OpenSCManager(%,%) executable "%" not found',
+      [TargetComputer,DatabaseName,Path]);
+    {$endif}
+    Exit;
+  end;
   StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     SC_MANAGER_ALL_ACCESS);
@@ -521,7 +529,7 @@ begin
   Result := ControlService(FHandle, SERVICE_CONTROL_STOP, FStatus);
 end;
 
-procedure TServiceController.CheckParameters(const DisplayName: string);
+procedure TServiceController.CheckParameters(const ExeFileName,DisplayName: string);
 procedure ShowError(const Msg: RawUTF8);
 begin
   {$ifndef NOMORMOTKERNEL}
@@ -540,7 +548,7 @@ begin
     {$endif}
     if param='/install' then
       TServiceController.CreateNewService('','',UTF8ToString(FName),
-          DisplayName, paramstr(0),'','','','',
+          DisplayName,ExeFileName,'','','','',
           SERVICE_ALL_ACCESS,
           SERVICE_WIN32_OWN_PROCESS
             {$ifdef USEMESSAGES}or SERVICE_INTERACTIVE_PROCESS{$endif},

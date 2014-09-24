@@ -107,9 +107,9 @@ begin
   FreeAndNil(Model);
 end;
 
-procedure CheckParameters;
 begin
-  if SameText(ParamStr(1),'-c') or SameText(ParamStr(1),'/c') then
+  if (ParamCount<>0) and
+     (SameText(ParamStr(1),'-c') or SameText(ParamStr(1),'/c')) then
     with TSQLite3HttpService.CreateAsConsole do
     try
       DoStart(nil);
@@ -120,26 +120,7 @@ begin
       exit;
     finally
       Free;
-    end;
-  TSQLLog.Family.Level := LOG_VERBOSE;
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  try
-    CheckParameters(HTTPSERVICEDISPLAYNAME);
-  finally
-    Free;
-  end;
-  TSQLLog.Add.Log(sllTrace,'Quitting command line');
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  try
-    State; // just to log the service state after handling the /parameters
-  finally
-    Free;
-  end;
-end;
-
-begin
-  if ParamCount<>0 then
-    CheckParameters else
+    end else
     with TSQLite3HttpService.Create do
     try
       // launches the registered Services execution = do all the magic
