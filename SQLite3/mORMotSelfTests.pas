@@ -164,7 +164,9 @@ begin
   AddCase(TTestBasicClasses);
   // *)
   AddCase(TTestClientServerAccess); // (*
+  {$ifndef FPC}
   AddCase(TTestServiceOrientedArchitecture);
+  {$endif}
   AddCase(TTestExternalDatabase);
   AddCase(TTestMultiThreadProcess);
   //exit; // *)

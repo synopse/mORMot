@@ -38388,6 +38388,8 @@ constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer; aInterface
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
 begin
   // extract RTTI from the interface
+  if aInstanceCreation<>sicPerThread then
+    InitializeCriticalSection(fInstanceLock);
   inherited Create(aRestServer,aInterface,aInstanceCreation,aContractExpected);
   if fRest.MethodAddress(ShortString(InterfaceURI))<>nil then
     raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
@@ -38401,8 +38403,6 @@ begin
     raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
       [self,fImplementationClass,fInterfaceURI]) else
   // initialize the shared instance or client driven parameters
-  if InstanceCreation<>sicPerThread then
-    InitializeCriticalSection(fInstanceLock);
   case InstanceCreation of
   sicShared: begin
     if aSharedInstance=nil then
