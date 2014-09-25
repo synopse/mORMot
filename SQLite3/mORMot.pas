@@ -4380,6 +4380,7 @@ type
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
+  // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference);
@@ -11420,7 +11421,11 @@ type
     // the VirtualTableExternalRegister() global function
     property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
       read GetVirtualTable;
-  published 
+    /// the options specified to TSQLRestServer.CreateMissingTables
+    // - as expected by TSQLRecord.InitializeTable methods
+    property CreateMissingTablesOptions: TSQLInitializeTableOptions
+      read fCreateMissingTablesOptions;
+  published
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
     // used in AJAX environnement (like in TSQLite3HttpServer)
@@ -12469,7 +12474,7 @@ type
      - in aClient-Server environment with multiple Clients connected at the
       same time, you should better use BATCH process, specifying a positive
       AutomaticTransactionPerRow parameter to BatchStart()
-     - may be used to speed up some SQL statements as Add/Update/Delete methods 
+     - may be used to speed up some SQL statements as Add/Update/Delete methods
      - must be ended with Commit on success
      - in the current implementation, the aTable parameter is not used yet
      - must be aborted with Rollback if any SQL statement failed
@@ -13384,7 +13389,7 @@ const
   WM_TIMER_REFRESH_REPORT = 2;
 
   /// the default URI parameters for query paging
-  // - those values are the one expected by YUI components 
+  // - those values are the one expected by YUI components
   PAGINGPARAMETERS_YAHOO: TSQLRestServerURIPagingParameters = (
     Sort: 'SORT=';
     Dir: 'DIR=';
@@ -13393,6 +13398,11 @@ const
     Select: 'SELECT=';
     Where: 'WHERE=';
     SendTotalRowsCountFmt: nil);
+
+  /// options to specify no index createon for TSQLRestServer.CreateMissingTables
+  // and TSQLRecord.InitializeTable methods
+  INITIALIZETABLE_NOINDEX: TSQLInitializeTableOptions =
+    [itoNoIndex4ID..itoNoIndex4RecordReference];
 
 
 /// create a TRecordReference with the corresponding parameters

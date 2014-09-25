@@ -142,6 +142,7 @@ type
     // - you should not use this, but rather call StaticMongoDBRegister()
     // - in practice, just call the other reintroduced constructor, supplying
     // a TMongoDatabase instance
+    // - will create the indexes and call aClass.InitializeTable()
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); override;
     /// release used memory
     destructor Destroy; override;
@@ -181,6 +182,7 @@ type
 // - by default, the collection name will match TSQLRecord.SQLTableName, but
 // you can customize it with the corresponding parameter
 // - the TSQLRecord.ID (RowID) field is always mapped to MongoDB's _id field
+// - will call aClass.InitializeTable and create needed indexes
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 // (just a regular external DB as defined in mORMotDB.pas unit) - it may be
@@ -235,8 +237,10 @@ begin
   BSONProjectionSet(fBSONProjectionBlobFields,false,
     fStoredClassRecordProps.BlobFieldsBits,@fBSONProjectionBlobFieldsNames);
   CreateIndexes;
+  if not TableHasRows(StoredClass) then
+    StoredClass.InitializeTable(aServer,'',INITIALIZETABLE_NOINDEX);
 end;
-
+    
 procedure TSQLRestStorageMongoDB.CreateIndexes;
 var F: integer;
 begin
