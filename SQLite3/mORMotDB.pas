@@ -87,7 +87,8 @@ unit mORMotDB;
   - TSQLRestStorageExternal.AdaptSQLForEngineList() will now accept
     'select count(*) from TableName [where...]' statements directly (virtual
     behavior for count(*) is to loop through all records, which may be slow),
-    and 'IN (...)' or 'IS NULL' / 'IS NOT NULL' where clauses
+    and 'IN (...)' or 'IS NULL' / 'IS NOT NULL' where clauses, and several
+    fields or ASC/DESC attributes in 'ORDER BY' clause - see [e48f87b3db]
   - now TSQLRestStorageExternal will call TSQLRestServer.OnUpdateEvent and
     OnBlobUpdateEvent callbacks, if defined (even in BATCH mode)
   - BatchDelete() will now split its batch statement executed following
@@ -790,13 +791,22 @@ Order:GetFieldProp;
       if W.LastChar<>' ' then
         W.Add(' ');
       W.AddShort('order by ');
-      if not NextPropHandleField then
-        exit; // unknown field name in 'ORDER BY' clause
+      repeat
+        if not NextPropHandleField then
+          exit; // unknown field name in 'ORDER BY' clause
+        if P^=',' then begin // handle several fields in 'ORDER BY' clause
+          W.Add(',');
+          inc(P);
+        end else
+        break;
+      until false;
       GetFieldProp;
       if Prop='DESC' then begin
         W.AddShort(' desc');
         GetFieldProp;
-      end;
+      end else
+      if Prop='ASC' then // will just ignore ASC attribute (is default order)
+        GetFieldProp;
       if Prop='LIMIT' then begin
 Limit:  Pos.Limit := W.TextLength+1;
         GetFieldProp; // do not write LIMIT now

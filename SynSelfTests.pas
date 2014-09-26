@@ -8023,8 +8023,14 @@ begin
         'select id,firstname from SampleRecord where id=2 and not lastname like ?');
   Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
         'select id,firstname from SampleRecord where id=2 order by ID');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DESC',
+  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
         'select id,firstname from SampleRecord where id=2 order by ID desc');
+  Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
+        'select id,firstname from SampleRecord order by ID,firstname desc');
+  Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
+        'select id,firstname from SampleRecord order by ID,firstname');
+  Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
+        'select id,firstname from SampleRecord order by ID,firstname');
   Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
         'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
   Test2('   select    COUNT(*)  from   PeopleExt   ',

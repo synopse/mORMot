@@ -35604,15 +35604,14 @@ begin
   if result.fID=0 then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      '% User.LogonName=% not found in AuthUser table',[self,aUserName],self);
+      '%.LogonName=% not found in table',[result.ClassType,aUserName],self);
     {$endif}
     FreeAndNil(result);
   end else
   if not result.CanUserLog(Ctxt) then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      '% %.CanUserLog(User.LogonName=%) returned FALSE -> rejected',
-      [self,result,aUserName],self);
+      '%.CanUserLog(%) returned FALSE -> rejected',[result,aUserName],self);
     {$endif}
     FreeAndNil(result);
   end;
