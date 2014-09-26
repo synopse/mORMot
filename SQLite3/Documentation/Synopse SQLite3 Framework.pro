@@ -5818,7 +5818,7 @@ The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} c
 As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
 This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
 From the client point of view, there is no difference between a ORM or an @*ODM@: you may use a SQL engine as a storage for ODM - via @29@ - or even a NoSQL database as a regular ORM, with @*denormalization@ (even if it may void most advantages of NoSQL).
-:   Register the TSQLRecord class
+:   Define the TSQLRecord class
 In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !  TSQLORM = class(TSQLRecord)
 !  private
@@ -5879,6 +5879,8 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID})
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} to produce true JSON
 |%
+You can share the same {\f1\fs20 TSQLRecord} definition with {\i MongoDB} and other storage means, like external SQL databases. Unused information (like the {\f1\fs20 index} attribute) will just be ignored.
+:   Register the TSQLRecord class
 On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
 !  DB := MongoClient.Database['dbname'];
@@ -5887,6 +5889,8 @@ On the server side (there won't be any difference for the client), you define a 
 !!  if StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'collectionname')=nil then
 !    raise Exception.Create('Error');
 And... that's all!
+If you want {\f1\fs20 TSQLRecord.InitializeTable} method to be called for void tables (and for instance create {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} default content), you can execute the following command:
+! Client.Server.InitializeTables(INITIALIZETABLE_NOINDEX);
 You can then use any ORM command, as usual:
 !  writeln(Client.TableRowCount(TSQLORM)=0);
 As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using for instance:

@@ -728,6 +728,7 @@ unit mORMot;
       of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
       properties, able to define threading execution plan for ORM/SOA operations
+    - added TSQLRestServer.InitializeTables() method to initialize void tables
     - changed RESTful URI to ModelRoot/Table?where=WhereClause to delete members
     - added TSQLRestServer.URIPagingParameters property, to support alternate
       URI parameters sets for request paging (in addition to YUI syntax),
@@ -11206,6 +11207,10 @@ type
     // virtual methods, e.g. to avoid the automatic create of indexes
     procedure CreateMissingTables(user_version: cardinal=0;
       options: TSQLInitializeTableOptions=[]); virtual;
+    /// run the TSQLRecord.InitializeTable methods for all void tables of the model
+    // - can be used instead of CreateMissingTables e.g. for MongoDB storage
+    // - you can specify the creation options, e.g. INITIALIZETABLE_NOINDEX
+    procedure InitializeTables(Options: TSQLInitializeTableOptions);
     /// create an external static in-memory database for a specific class
     // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
     // warning: if you don't call this method before CreateMissingTable method
@@ -26404,6 +26409,15 @@ procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0;
   Options: TSQLInitializeTableOptions=[]);
 begin 
   fCreateMissingTablesOptions := Options;
+end;
+
+procedure TSQLRestServer.InitializeTables(Options: TSQLInitializeTableOptions);
+var t: integer;
+begin
+  if (Self<>nil) and (Model<>nil) then
+    for t := 0 to Model.TablesMax do
+      if not TableHasRows(Model.Tables[t]) then
+        Model.Tables[t].InitializeTable(self,'',Options);
 end;
 
 destructor TSQLRestServer.Destroy;
