@@ -793,6 +793,10 @@ Order:GetFieldProp;
       if not NextPropHandleField then
         exit; // unknown field name in 'ORDER BY' clause
       GetFieldProp;
+      if Prop='DESC' then begin
+        W.AddShort(' desc');
+        GetFieldProp;
+      end;
       if Prop='LIMIT' then begin
 Limit:  Pos.Limit := W.TextLength+1;
         GetFieldProp; // do not write LIMIT now
