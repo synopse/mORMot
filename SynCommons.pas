@@ -42576,7 +42576,8 @@ begin
   FreeAndNil(fWriter);
   FreeAndNil(fWriterStream);
   currentMaxSynLZ := 0;
-  if not (assigned(fFamily.fOnRotate) and fFamily.fOnRotate(self,fFileName)) then
+  if not (assigned(fFamily.fOnRotate) and
+          fFamily.fOnRotate(self,fFileName)) then begin
     if fFamily.fRotateFileCount>1 then begin
       SetLength(FN,fFamily.fRotateFileCount-1);
       for i := fFamily.fRotateFileCount-1 downto 1 do begin
@@ -42590,7 +42591,8 @@ begin
         RenameFile(FN[i-1],FN[i]); // e.g. '8.synlz' -> '9.synlz'
       FileSynLZ(fFileName,FN[0],LOG_MAGIC); // main -> '1.synlz'
     end;
-  DeleteFile(fFileName);
+    DeleteFile(fFileName);
+  end;
   CreateLogWriter;
   LogFileHeader;
 end;
