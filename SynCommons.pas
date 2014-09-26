@@ -545,6 +545,8 @@ unit SynCommons;
   - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
     RotateFileDailyAtHour and OnRotate properties, to enable log file rotation 
     by size or at given hour - request [72feb66d45] + [b3e8cc8424]
+  - added TSynLog.ComputeFileName virtual method and TSynLogFamily.FileExistsAction
+    property for feature request [d029051dcb]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
   - added optional TextTruncateAtLength parameter for TSynLog/ISynLog.Log()
   - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
@@ -10730,8 +10732,11 @@ type
   TSynLogPerThreadMode = (
     ptMergedInOneFile, ptOneFilePerThread, ptIdentifiedInOnFile);
 
-  /// how stack trace shall be computed
+  /// how stack trace shall be computed during logging
   TSynLogStackTraceUse = (stManualAndAPI,stOnlyAPI,stOnlyManual);
+
+  /// how file existing shall be handled during logging
+  TSynLogExistsAction = (acOverwrite, acAppend, acAppendWithHeader);
 
   {/ regroup several logs under an unique family name
    - you should usualy use one family per application or per architectural
@@ -10777,6 +10782,7 @@ type
     {$endif}
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
+    fFileExistsAction: TSynLogExistsAction;
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
     fEchoCustom: TOnTextWriterEcho;
@@ -10965,6 +10971,8 @@ type
     // perform a manual stack walk if the API returned no address (or <3); but
     // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
     property StackTraceUse: TSynLogStackTraceUse read fStackTraceUse write fStackTraceUse;
+    /// /// how file existing shall be handled during logging
+    property FileExistsAction: TSynLogExistsAction read fFileExistsAction write fFileExistsAction;
     /// define how the logger will emit its line feed
     // - by default (FALSE), a single CR (#13) char will be written, to save
     // storage space
@@ -11068,7 +11076,8 @@ type
 {$endif}
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
-    procedure PerformRotation;
+    procedure ComputeFileName; virtual;
+    procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
     procedure LockAndGetThreadContextInternal(ID: DWORD);
@@ -42682,46 +42691,61 @@ begin
   end;
 end;
 
+procedure TSynLog.ComputeFileName;
+var timeNow,hourRotate,timeBeforeRotate: TDateTime;
+    {$ifndef MSWINDOWS}
+    i: integer;
+    {$endif}
+begin
+  {$ifdef MSWINDOWS}
+  ExeVersionRetrieve;
+  fFileName := Ansi7ToString(ExeVersion.ProgramName);
+  if fFamily.IncludeComputerNameInFileName then
+    fFileName := fFileName+' ('+Ansi7ToString(ExeVersion.Host)+')';
+  {$else}
+  fFileName := ExtractFileName(ParamStr(0));
+  i := Pos('.',fFileName);
+  if i>0 then
+    SetLength(fFileName,i-1);
+  {$endif}
+  fFileRotationSize := 0;
+  if fFamily.fRotateFileCount>0 then begin
+    if fFamily.fRotateFileSize>0 then
+      fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
+    if fFamily.fRotateFileAtHour in [0..23] then begin
+      hourRotate := EncodeTime(fFamily.fRotateFileAtHour,0,0,0);
+      timeNow := Time;
+      if hourRotate<timeNow then
+        hourRotate := hourRotate+1; // trigger will be tomorrow
+      timeBeforeRotate := hourRotate-timeNow;
+      fFileRotationNextHour := GetTickCount64+trunc(timeBeforeRotate*MSecsPerDay);
+    end;
+  end;
+  if (fFileRotationSize=0) and (fFileRotationNextHour=0) then
+    fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
+   {$ifdef MSWINDOWS}
+  if IsLibrary then
+    fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
+  {$endif}
+  if fFamily.fPerThreadLog=ptOneFilePerThread then
+    fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
+  fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
+end;
+
 procedure TSynLog.CreateLogWriter;
 var i,retry: integer;
-    timeNow,hourRotate,timeBeforeRotate: TDateTime;
 begin
   if fWriterStream=nil then begin
-    {$ifdef MSWINDOWS}
-    ExeVersionRetrieve;
-    fFileName := Ansi7ToString(ExeVersion.ProgramName);
-    if fFamily.IncludeComputerNameInFileName then
-      fFileName := fFileName+' ('+Ansi7ToString(ExeVersion.Host)+')';
-    {$else}
-    fFileName := ExtractFileName(ParamStr(0));
-    i := Pos('.',fFileName);
-    if i>0 then
-      SetLength(fFileName,i-1);
-    {$endif}
-    fFileRotationSize := 0;
-    if fFamily.fRotateFileCount>0 then begin
-      if fFamily.fRotateFileSize>0 then
-        fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
-      if fFamily.fRotateFileAtHour in [0..23] then begin
-        hourRotate := EncodeTime(fFamily.fRotateFileAtHour,0,0,0);
-        timeNow := Time;
-        if hourRotate<timeNow then
-          hourRotate := hourRotate+1; // trigger will be tomorrow
-        timeBeforeRotate := hourRotate-timeNow;
-        fFileRotationNextHour := GetTickCount64+trunc(timeBeforeRotate*MSecsPerDay);
-      end;
-    end;
-    if (fFileRotationSize=0) and (fFileRotationNextHour=0) then
-      fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
-     {$ifdef MSWINDOWS}
-    if IsLibrary then
-      fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
-    {$endif}
-    if fFamily.fPerThreadLog=ptOneFilePerThread then
-      fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
-    fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
+    ComputeFileName;
     if fFamily.NoFile then
-      fWriterStream := TFakeWriterStream.Create else
+      fWriterStream := TFakeWriterStream.Create else begin
+      if FileExists(fFileName) then
+        case fFamily.FileExistsAction of
+        acOverwrite:
+          DeleteFile(fFileName);
+        acAppend:
+          Include(fInternalFlags,logHeaderWritten);
+        end;
       for retry := 0 to 2 do begin
         for i := 1 to 10 do
         try
@@ -42738,6 +42762,7 @@ begin
           break;
         fFileName := ChangeFileExt(fFileName,'-'+fFamily.fDefaultExtension);
       end;
+    end;
     if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
       fWriterStream := TFakeWriterStream.Create;
     if fFileRotationSize>0 then
