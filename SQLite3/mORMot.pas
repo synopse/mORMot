@@ -822,6 +822,8 @@ unit mORMot;
       information: TSQLRestServer will search for any table inheriting from
       TSQLAuthUser/TSQLAuthGroup in the TSQLModel - see also corresponding
       TSQLRestServer.SQLAuthUserClass/SQLAuthGroupClass new properties
+    - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
+      as requested by feature request [842906425928]
     - added TSQLRestServer.OnSessionCreate / OnSessionClosed methods
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
@@ -10325,6 +10327,13 @@ type
     fGroup: TSQLAuthGroup;
     fData: TSQLRawBlob;
     procedure SetPasswordPlain(const Value: RawUTF8);
+    /// check if the user can authenticate in its current state
+    // - called by TSQLRestServerAuthentication.GetUser() method
+    // - this default implementation will return TRUE, i.e. allow the user
+    // to log on
+    // - override this method to disable user authentication, e.g. if the
+    // user is disabled via a custom ORM boolean and date/time field
+    function CanUserLog(Ctxt: TSQLRestServerURIContext): boolean; virtual;
   public
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
@@ -10452,14 +10461,15 @@ type
     function AuthSessionRelease(Ctxt: TSQLRestServerURIContext): boolean;
     /// retrieve an User instance from its logon name
     // - should return nil if not found
-    // - this default implementation will retrieve it from ORM
+    // - this default implementation will retrieve it from ORM, and
+    // call TSQLAuthUser.CanUserLog() to ensure authentication is allowed
     // - you can override this method and return an on-the-fly created value
     // as a TSQLRestServer.SQLAuthUserClass instance (i.e. not persisted
     // in database nor retrieved by ORM), but the resulting TSQLAuthUser
     // must have its ID and LogonName properties set with unique values (which
     // will be used to identify it for a later call and session owner
     // identification), and its GroupRights property must contain a REAL
-    // TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI 
+    // TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
     function GetUser(Ctxt: TSQLRestServerURIContext;
       const aUserName: RawUTF8): TSQLAuthUser; virtual;
     /// create a session on the server for a given user
@@ -35547,6 +35557,11 @@ begin
     PasswordHashHexa := SHA256('salt'+Value);
 end;
 
+function TSQLAuthUser.CanUserLog(Ctxt: TSQLRestServerURIContext): boolean;
+begin
+  result := true; // any existing TSQLAuthUser is allowed by default
+end;
+
 
 { TSQLRestServerAuthentication }
 
@@ -35589,7 +35604,15 @@ begin
   if result.fID=0 then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      'User.LogonName=% not found in AuthUser table',[aUserName],self);
+      '% User.LogonName=% not found in AuthUser table',[self,aUserName],self);
+    {$endif}
+    FreeAndNil(result);
+  end else
+  if not result.CanUserLog(Ctxt) then begin
+    {$ifdef WITHLOG}
+    fServer.fLogFamily.SynLog.Log(sllUserAuth,
+      '% %.CanUserLog(User.LogonName=%) returned FALSE -> rejected',
+      [self,result,aUserName],self);
     {$endif}
     FreeAndNil(result);
   end;
