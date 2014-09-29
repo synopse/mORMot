@@ -140,6 +140,7 @@ unit mORMotHttpServer;
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
       - added TSQLHTTPRemoteLogServer class for easy remote log serving
       - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
+      - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
 
 }
 
@@ -256,8 +257,8 @@ type
     {$endif}
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
-    procedure HttpThreadStart(Sender: TThread);
-    procedure HttpThreadTerminate(Sender: TThread);
+    procedure HttpThreadStart(Sender: TThread); virtual;
+    procedure HttpThreadTerminate(Sender: TThread); virtual;
     /// implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
     function GetDBServerCount: integer;
