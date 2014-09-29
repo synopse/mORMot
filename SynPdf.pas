@@ -256,8 +256,10 @@ unit SynPdf;
     UseSetTextJustification property: now you can force exact font kerning
     positioning for each character, via tpExactTextCharacterPositining; this
     parameter has been also added to TPdfCanvas.RenderMetaFile() - it will
-    produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]  
+    produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]
   - fixed text clipping - thanks Pierre for the patch!
+  - added TPdfDocumentGDI.DisableMetaFileTextClipping property and corresponding
+    optional parameter to TPdfCanvas.RenderMetaFile()
   - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
     thanks MChaos for the proposal!
 
@@ -1661,6 +1663,7 @@ type
 {$endif}
     /// parameters taken from RenderMetaFile() call
     fUseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
+    fDisableMetaFileTextClipping: boolean;
     fKerningHScaleBottom: Single;
     fKerningHScaleTop: Single;
     // some cache
@@ -2034,10 +2037,12 @@ type
     // if the EMF content used SetTextJustification() API call to justify text
     // - KerningHScaleBottom/KerningHScaleTop are limits below which and over
     // which Font Kerning is transformed into PDF Horizontal Scaling commands
+    // - DisableTextClipping can be set to fix some issues e.g. when using Wine
     procedure RenderMetaFile(MF: TMetaFile; Scale: Single=1.0;
       XOff: single=0.0; YOff: single=0.0;
       TextPositioning: TPdfCanvasRenderMetaFileTextPositioning=tpSetTextJustification;
-      KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0);
+      KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0;
+      DisableTextClipping: boolean=false);
   public
     /// retrieve the current Canvas content stream, i.e. where the PDF
     // commands are to be written to
@@ -2493,6 +2498,7 @@ type
     fUseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
     fKerningHScaleTop: Single;
     fKerningHScaleBottom: Single;
+    fDisableTextClipping: boolean;
     function GetVCLCanvas: TCanvas;   {$ifdef HASINLINE}inline;{$endif}
     function GetVCLCanvasSize: TSize; {$ifdef HASINLINE}inline;{$endif}
   public
@@ -2553,6 +2559,10 @@ type
     // - replace deprecated property UseSetTextJustification
     property UseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning
       read fUseMetaFileTextPositioning write fUseMetaFileTextPositioning;
+    /// defines if TMetaFile text clipping should be disabled
+    // - has been reported to work better e.g. when app is running on Wine
+    property DisableMetaFileTextClipping: boolean
+      read fDisableTextClipping write fDisableTextClipping;
     /// the % limit below which Font Kerning is transformed into PDF Horizontal
     // Scaling commands (when text positioning is tpKerningFromAveragePosition)
     // - set to 99.0 by default
@@ -8163,7 +8173,8 @@ begin
       try
         FCanvas.SetPage(P);
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
-          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom);
+          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom,
+          fDisableTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
       end;
@@ -8185,7 +8196,8 @@ begin
       try
         FCanvas.FContents.FSaveAtTheEnd := false; // force flush NOW
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
-          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom);
+          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom,
+          fDisableTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
       end;
@@ -8874,7 +8886,7 @@ end;
 
 procedure TPdfCanvas.RenderMetaFile(MF: TMetaFile; Scale, XOff, YOff: single;
   TextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
-  KerningHScaleBottom, KerningHScaleTop: single);
+  KerningHScaleBottom, KerningHScaleTop: single; DisableTextClipping: boolean);
 var E: TPdfEnum;
     R: TRect;
 begin
@@ -8889,6 +8901,7 @@ begin
     FDevScale := Scale * FFactor;
     FEmfBounds := R; // keep device rect
     fUseMetaFileTextPositioning := TextPositioning;
+    fDisableMetaFileTextClipping := DisableTextClipping;
     fKerningHScaleBottom := KerningHScaleBottom;
     fKerningHScaleTop := KerningHScaleTop;
     if FDoc.FPrinterPxPerInch.X=0 then
@@ -9627,8 +9640,10 @@ begin
       Posi := Position else
       Posi := R.emrtext.ptlReference;
     // detect clipping
-    with R.emrtext.rcl do
-      WithClip := (Right>Left) and (Bottom>Top);
+    if Canvas.fDisableMetaFileTextClipping then
+      WithClip := False else
+      with R.emrtext.rcl do
+        WithClip := (Right>Left) and (Bottom>Top);
     bOpaque := (not brush.null) and (brush.Color<>clWhite) and
        ((R.emrtext.fOptions and ETO_OPAQUE<>0) or
         ((font.BkMode=OPAQUE) and (font.BkColor=brush.color)));
