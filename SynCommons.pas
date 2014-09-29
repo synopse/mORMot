@@ -42734,6 +42734,7 @@ end;
 
 procedure TSynLog.CreateLogWriter;
 var i,retry: integer;
+    exists: boolean;
 begin
   if fWriterStream=nil then begin
     ComputeFileName;
@@ -42749,7 +42750,12 @@ begin
       for retry := 0 to 2 do begin
         for i := 1 to 10 do
         try
-          if (fFileRotationSize=0) or not FileExists(fFileName) then
+          exists := FileExists(fFileName);
+          if exists and (fFamily.FileExistsAction<>acOverwrite) then begin
+            if fFamily.FileExistsAction=acAppend then
+              Include(fInternalFlags,logHeaderWritten);
+          end else
+          if (fFileRotationSize=0) or not exists then
             TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
           fWriterStream := TFileStream.Create(fFileName,
             fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
@@ -42765,7 +42771,7 @@ begin
     end;
     if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
       fWriterStream := TFakeWriterStream.Create;
-    if fFileRotationSize>0 then
+    if (fFileRotationSize>0) or (fFamily.FileExistsAction<>acOverwrite) then
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
