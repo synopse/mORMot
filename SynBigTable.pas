@@ -208,7 +208,9 @@ unit SynBigTable;
     - new sbtBeforeWrite step available (e.g. to safely update indexes)
 
   Version 1.18
-  - unit fixed and tested with Delphi XE2/XE3 64-bit compiler
+  - unit fixed and tested with Delphi XE2/XE7 64-bit compiler
+  - fixed ticket [b9320499ae] about TBigTableRecord saving updated tables with
+    indexed fields
 
 *)
 
@@ -2408,8 +2410,8 @@ var i, ndx, Di,Si,Ni,nCount,oneBuf,firstDel,nNewIndexs: integer;
     buf: RawByteString;
     index, NewIndexs: TIntegerDynArray;
 begin
-  if (self=nil) or ((fDeletedCount=0) and (fAliasCount=0)) or (fCount=0) or 
-     (fFile=0) then
+  if (self=nil) or ((fDeletedCount=0) and (fAliasCount=0) and (fInMemoryCount=0)) or
+     (fCount=0) or (fFile=0) then
     exit; // nothing to pack
 {$ifdef THREADSAFE}
   fLock.BeginWrite;
@@ -3285,7 +3287,7 @@ begin
     fInt := T.Table['int'];
     rec.Init(T.Table);
     for i := 0 to n-1 do begin
-      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1])); 
+      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1]));
       rec.SetFieldSBFValue(fInt,fInt.SBF(i));
       if DoRecord then
         Check(TRec.RecordAdd(rec)<>0) else
@@ -3299,6 +3301,15 @@ begin
           Check(TMeta.RecordAdd(By8[i],rec)=0);
       end;
     if CheckFailed(TRTest) then exit;
+    T.UpdateToFile;
+    T.Free;
+    if DoRecord then
+      T := TSynBigTableRecord.Create(FN,'test') else
+      T := TSynBigTableMetaData.Create(FN,'test');
+    rec := T.RecordGet(1);
+    if checkFailed(rec.ID=1) then exit;
+    rec.SetFieldSBFValue(fInt,fInt.SBF(0)); // fake update
+    if CheckFailed(T.RecordUpdate(rec)) then exit;
     T.UpdateToFile;
     T.Free;
     if DoRecord then
@@ -3445,7 +3456,7 @@ end;
 
 procedure TTestBigTable._TSynBigTableRecord;
 begin
-  Check(DoFieldTest(true,15000));
+  Check(DoFieldTest(true,10000));
 end;
 
 procedure TTestBigTable._TSynBigTableString;

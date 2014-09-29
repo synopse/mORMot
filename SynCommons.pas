@@ -3170,7 +3170,7 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 
 /// copy an integer array, then sort it, low values first
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
-  var Dest: TIntegerDynArray);  
+  var Dest: TIntegerDynArray);
 
 /// fast binary search of an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -3216,6 +3216,14 @@ procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
 /// delete any integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+
+/// find the maximum integer in Values[]
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
+  MaxStart: integer=-1): Integer;
+
+/// fill already allocated Reversed[] so that Reversed[Values[i]]=i
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
+  Reversed: PIntegerArray);
 
 /// fill some values with i,i+1,i+2...i+Count-1
 procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
@@ -19665,6 +19673,23 @@ begin
   if n>0 then
     move(Values[Index+1],Values[Index],n*sizeof(Integer));
   dec(ValuesCount);
+end;
+
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
+var i: integer;
+begin
+  result := MaxStart;
+  for i := 0 to ValuesCount-1 do
+    if Values[i]>result then
+      result := Values[i];
+end;
+
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
+  Reversed: PIntegerArray);
+var i: integer;
+begin
+  for i := 0 to ValuesCount-1 do
+    Reversed[Values[i]] := i;
 end;
 
 procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
@@ -38863,7 +38888,6 @@ end;
 { TSynTableFieldProperties }
 
 constructor TSynTableFieldProperties.CreateFrom(var RD: TFileBufferReader);
-var i: integer;
 begin
   fOrderedIndexFindAdd := -1;
   RD.Read(Name);
@@ -38876,11 +38900,9 @@ begin
   OrderedIndexCount := RD.ReadVarUInt32Array(OrderedIndex);
   if OrderedIndexCount>0 then begin
     if tfoIndex in Options then begin
-      SetLength(OrderedIndexReverse,OrderedIndexCount);
-      for i := 0 to OrderedIndexCount-1 do
-        if OrderedIndex[i]>=OrderedIndexCount then
-          RD.ErrorInvalidContent else
-          OrderedIndexReverse[OrderedIndex[i]] := i;
+      SetLength(OrderedIndexReverse,
+        MaxInteger(OrderedIndex,OrderedIndexCount,OrderedIndexCount)+1);
+      Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
     end else
       RD.ErrorInvalidContent;
   end;
