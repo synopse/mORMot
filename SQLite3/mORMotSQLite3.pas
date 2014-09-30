@@ -252,7 +252,9 @@ interface
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 WITHLOG SQLITE3_FASTCALL
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
   Classes,
 {$ifndef LVCL}
@@ -609,6 +611,11 @@ procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
 
 
 implementation
+
+{$ifdef Linux}
+uses
+  SynFPCLinux, FileUtil;
+{$endif}
 
 
 { TSQLTableDB }
@@ -1459,7 +1466,11 @@ begin
       BackupFileName := ChangeFileExt(DB.FileName,'.bak');
       DeleteFile(BackupFileName);
       try
+        {$ifdef MSWINDOWS}
         if MoveFile(pointer(DB.FileName),pointer(BackupFileName)) then
+        {$else}
+        if RenameFile(DB.FileName,BackupFileName) then
+        {$endif}
           if FileFromString(ContentToRestore,DB.FileName,true) and
              (StringFromFile(DB.FileName)=ContentToRestore) then
             result := (DB.DBOpen=SQLITE_OK);
@@ -1468,7 +1479,11 @@ begin
           DeleteFile(BackupFileName) else begin
           // on error, restore previous db file
           DeleteFile(DB.FileName);
+          {$ifdef MSWINDOWS}
           MoveFile(pointer(BackupFileName),pointer(DB.FileName));
+          {$else}
+          RenameFile(BackupFileName,DB.FileName);
+          {$endif}
           DB.DBOpen; // always reopen the database
         end;
         // force register modules

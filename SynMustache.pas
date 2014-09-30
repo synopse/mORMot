@@ -57,7 +57,7 @@ interface
 
 uses
   {$ifdef HASINLINE}
-  Windows, // for Lock/UnLock inlining
+  {$ifdef MSWINDOWS}Windows,{$endif} // for Lock/UnLock inlining
   {$endif}
   Variants,
   SysUtils,

@@ -82,8 +82,8 @@ interface
   {$define NOSTATIC}
 {$endif}
 
-{$ifdef FPC}  // FPC expects coff32 .o -> use external
-  {.$define NOSTATIC}
+{$ifndef MSWINDOWS}  // Only Win32 supports static by now
+  {$define NOSTATIC}
 {$endif}
 
 {$ifdef NOSTATIC}
@@ -97,11 +97,20 @@ implementation
 initialization
   FreeAndNil(sqlite3);
   try
+    {$ifdef MSWINDOWS}
     {$ifdef CPU64}
     // see http://synopse.info/files/SQLite3-64.7z
     sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3-64.dll');
     {$else}
     sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll');
+    {$endif}
+    {$else}
+    {$ifdef Linux}
+    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.so');
+    {$else}
+    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib');
+    {$endif}
+    //{$LINK libsqlite3}
     {$endif}
   except
   end;

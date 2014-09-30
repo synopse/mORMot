@@ -2020,9 +2020,9 @@ var A,B,C: TR;
 begin
   if PosEx('Synopse framework',RawUTF8(Owner.CustomVersions),1)=0 then
     Owner.CustomVersions := Owner.CustomVersions+#13#10'Synopse framework used: '+
-      SYNOPSE_FRAMEWORK_VERSION{$ifdef MSWINDOWS}+
-      #13#10'Running on '+GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^+
-      ' with code page '+UInt32ToUTF8(GetACP){$endif};
+      SYNOPSE_FRAMEWORK_VERSION{$ifdef MSWINDOWS}+#13#10'Running on '+
+      string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
+      ' with code page '+IntToString(GetACP){$endif};
   fillchar(A,sizeof(A),0);
   A.S1 := 'one';
   A.S2 := 'two';

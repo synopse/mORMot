@@ -2949,7 +2949,7 @@ var Call: TSQLRestURIParams;
 begin
   if (self<>nil) and (fAuthentication<>nil) then
     try // notify Server to end of session
-      CallBackGet('auth',['UserName',fAuthentication.User.LogonName,
+      CallBackGet('Auth',['UserName',fAuthentication.User.LogonName,
         'Session',fAuthentication.SessionID],Call);
     finally
       fAuthentication.Free;
@@ -3149,14 +3149,14 @@ var aServerNonce, aClientNonce, aPassHash: string;
 begin
   if fUser.LogonName='' then
     exit;
-  aServerNonce := Sender.CallBackGetResult('auth',
+  aServerNonce := Sender.CallBackGetResult('Auth',
     ['UserName',User.LogonName]);
   if aServerNonce='' then
     exit;
   aClientNonce := SHA256Compute([Copy(NowToIso8601,1,16)]);
   aPassHash := Sha256Compute([Sender.Model.Root,aServerNonce,aClientNonce,
     User.LogonName,User.PasswordHashHexa]);
-  result := Sender.CallBackGetResult('auth',
+  result := Sender.CallBackGetResult('Auth',
      ['UserName',User.LogonName,'Password',aPassHash,'ClientNonce',aClientNonce]);
   fSessionPrivateKey := crc32ascii(crc32ascii(0,result),fUser.fPasswordHashHexa);
 end;
@@ -3175,7 +3175,7 @@ end;
 function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
   Sender: TSQLRestClientURI): string;
 begin
-  result := Sender.CallBackGetResult('auth',['UserName',User.LogonName]);
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
 end;
 
 function TSQLRestServerAuthenticationNone.ClientSessionComputeSignature(

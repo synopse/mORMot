@@ -1125,7 +1125,6 @@ uses
   Messages,
 {$endif}
 {$ifdef LINUX} // for Kylix
-  Libc,
   Types,
 {$endif}
 {$ifdef UNICODE}
@@ -13554,7 +13553,13 @@ var
 implementation
 
 uses
-  SynCrypto; // for TSQLRecordSigned
+  SynCrypto // for TSQLRecordSigned
+  {$ifndef MSWINDOWS}
+  ,SynFPCLinux
+  ,BaseUnix, Unix
+  ,dynlibs
+  {$endif}
+  ;
 
 
 // ************ some RTTI and SQL mapping routines
@@ -19036,6 +19041,7 @@ begin
       inc(Result);
     end;
   end else
+  {$ifdef MSWINDOWS}
   if UnicodeComparison then begin
     // slowest but always accurate Unicode comparison
     UpperUnicode := UTF8DecodeToRawUnicodeUI(RawUTF8(Search),@UpperUnicodeLen);
@@ -19047,6 +19053,7 @@ begin
       inc(Result);
     end
   end else
+  {$endif}
     // default fast Win1252 search
     while cardinal(result)<=cardinal(RowCount) do
     if FindUTF8(U^,Search) then
@@ -22385,16 +22392,25 @@ end;
 
 function TSQLRecord.GetID: integer;
 begin
+  {$ifdef MSWINDOWS}
   if PtrUInt(self)<PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
     // was called from a TSQLRecord property (sftID type)
     // (will return 0 if current instance is nil)
     result := PtrUInt(self) else
-    // was called from a real TSQLRecord instance
     result := fID;
+    // was called from a real TSQLRecord instance
+  {$else}
+  try
+    result := fID;
+  except
+    result := PtrUInt(self);
+  end;
+  {$endif}
 end;
 
 function TSQLRecord.GetIDAsPointer: pointer;
 begin
+  {$ifdef MSWINDOWS}
   if PtrUInt(self)<PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
     // was called from a TSQLRecord property (sftID type)
     // (will return 0 if current instance is nil)
@@ -22405,6 +22421,17 @@ begin
     {$else}
     result := pointer(fID);
     {$endif}
+  {$else}
+  try
+    {$ifdef CPU64}
+    PtrInt(result) := fId;
+    {$else}
+    result := pointer(fID);
+    {$endif}
+  except
+    result := self;
+  end;
+  {$endif}
 end;
 
 class procedure TSQLRecord.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
@@ -25548,7 +25575,7 @@ begin
      (fSessionID<>CONST_AUTHENTICATION_SESSION_NOT_STARTED) then
   try
     // notify session closed to server
-    CallBackGet('auth',['UserName',fSessionUser.LogonName,'Session',fSessionID],tmp);
+    CallBackGet('Auth',['UserName',fSessionUser.LogonName,'Session',fSessionID],tmp);
   finally
     fSessionID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     fSessionIDHexa8 := '';
@@ -25585,8 +25612,10 @@ destructor TSQLRestClientURI.Destroy;
 var t,i,aID: integer;
     Table: TSQLRecordClass;
 begin
+  {$ifdef WITHLOG}
   if GarbageCollectorFreeing then // may be owned by a TSynLogFamily
     SetLogClass(nil);
+  {$endif}
   fBatch.Free;
   try
     // unlock all still locked records by this client
@@ -27174,7 +27203,7 @@ begin
         Method := ExecuteORMWrite;
         Start64 := GetTickCount64;
         repeat
-          if TryEnterCriticalSection(Lock) then
+          if TryEnterCriticalSection(Lock){$ifndef MSWINDOWS}<>0{$endif} then
           try
             if (Server.fTransactionActiveSession=0) or // avoid transaction mixups
                (Server.fTransactionActiveSession=Session) then begin
@@ -27217,7 +27246,7 @@ begin
       end else begin
       Start64 := GetTickCount64;
       repeat
-        if TryEnterCriticalSection(Lock) then
+        if TryEnterCriticalSection(Lock){$ifndef MSWINDOWS}<>0{$endif} then
         try
           Method;
         finally
@@ -29570,7 +29599,6 @@ end;
 destructor TSQLRestServerNamedPipe.Destroy;
 var i: integer;
 begin
-  //writeln('TSQLRestServerNamedPipe.Destroy');
   for i := 0 to fChild.Count-1 do // close any still opened pipe
     if fChild[i]<>nil then begin
       {writeln('fChildCount=',fChildCount,' TSQLRestServerNamedPipeResponse=',
@@ -33270,7 +33298,7 @@ begin
 {$endif PUBLISHRECORD}
       tkClass: begin
         Obj := pointer(GetOrdProp(Value,pointer(P))); // GetOrdProp() is OK for CPU64
-        if (PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and
+        if {$ifdef MSWINDOWS}(PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and{$endif}
            Obj.InheritsFrom(TPersistent) then
           ReadObject(Obj,From,SubCompName+RawUTF8(P^.Name)+'.');
       end;
@@ -35793,11 +35821,11 @@ begin
   result := '';
   if User.LogonName='' then
     exit;
-  aServerNonce := Sender.CallBackGetResult('auth',['UserName',User.LogonName]);
+  aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
   if aServerNonce='' then
     exit;
   aClientNonce := Nonce(false);
-  result := Sender.CallBackGetResult('auth',['UserName',User.LogonName,'Password',
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);
 end;
@@ -35824,7 +35852,7 @@ end;
 class function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 begin
-  result := Sender.CallBackGetResult('auth',['UserName',User.LogonName]);
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
 end;
 
 
@@ -35857,7 +35885,7 @@ begin
   try // inherited ClientSetUser() won't fit with Auth() method below
     ClientSetUserHttpOnly(Sender,aUserName,aPassword);
     Sender.fSessionAuthentication := self; // to enable ClientSessionSign()
-    res := Sender.CallBackGetResult('auth',[]);
+    res := Sender.CallBackGetResult('Auth',[]);
     if res<>'' then begin
       U := TSQLAuthUser.Create;
       try
@@ -36103,7 +36131,7 @@ begin // User.PasswordHashHexa = SPN registration for Kerberos
       if result<>'' then
         break;
       // 1st call will return data, 2nd call SessionKey
-      if Sender.CallBackGet('auth',['UserName','',
+      if Sender.CallBackGet('Auth',['UserName','',
           'data',BinToBase64(OutData)],Response,nil,0)<>HTML_SUCCESS then
         exit;
       JSONDecode(Response,['result','data','logonname'],Values);
@@ -37273,12 +37301,21 @@ var
 
 constructor TFakeStubBuffer.Create;
 begin
+  {$ifdef MSWINDOWS}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
+  {$else}
+  // (STUB_SIZE DIV $1000) because of mmap2
+  fStub := fpmmap(nil,(STUB_SIZE DIV $1000),PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_ANONYMOUS,-1,0);
+  {$endif}
 end;
 
 destructor TFakeStubBuffer.Destroy;
 begin
+  {$ifdef MSWINDOWS}
   VirtualFree(fStub,0,MEM_RELEASE);
+  {$else}
+  Fpmunmap(fStub,0);
+  {$endif}
   inherited;
 end;
 
@@ -39784,7 +39821,9 @@ initialization
 {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
 {$endif}
+  {$ifdef MSWINDOWS}
   ExeVersionRetrieve; // the sooner the better
+  {$endif}
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
 end.

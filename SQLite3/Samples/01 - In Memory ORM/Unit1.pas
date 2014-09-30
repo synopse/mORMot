@@ -3,7 +3,10 @@ unit Unit1;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  {$ifdef MSWINDOWS}
+  Windows,
+  {$endif}
+  Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
   SynCommons, mORMot,
   SampleData;

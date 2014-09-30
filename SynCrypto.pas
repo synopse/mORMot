@@ -230,7 +230,7 @@ interface
 
 {$ifdef Linux} // padlock is dedibox linux tested only, but may be OK on Windows
   {$undef USETHREADSFORBIGAESBLOCKS}
-  {$define USEPADLOCK}
+  {.$define USEPADLOCK}
 {$else}
   {$ifdef CONDITIONALEXPRESSIONS}
     // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
@@ -905,10 +905,6 @@ var
 implementation
 
 {$ifdef USEPADLOCK}
-{$ifdef Linux}
-uses
-  LibC;
-{$endif}
 
 const
   AES_SUCCEEDED = 0;

@@ -221,7 +221,9 @@ uses
   {$ifdef CONDITIONALEXPRESSIONS}
     Types,
   {$endif}
-  LibC,
+  Sockets,
+  synsock,
+  SynFPCLinux,
 {$endif}
 {$ifndef LVCL}
   Contnrs,
@@ -856,6 +858,8 @@ type
     property APIVersion: string read GetAPIVersion;
   end;
 
+  {$ifdef MSWINDOWS}
+
   ULONGLONG = Int64;
   HTTP_OPAQUE_ID = ULONGLONG;
   HTTP_URL_GROUP_ID = HTTP_OPAQUE_ID;
@@ -997,6 +1001,8 @@ type
     // under Windows XP or Server 2003)
     property MaxConnections: Cardinal read GetMaxConnections write SetMaxConnections;
   end;
+  {$endif MSWINDOWS}
+
 
   /// main HTTP server Thread using the standard Sockets library (e.g. WinSock)
   // - bind to a port and listen to incoming requests
@@ -1778,6 +1784,7 @@ begin
     result := '';
     exit;
   end;
+  {$ifdef MSWINDOWS}
   tmpLen := FormatMessage(
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
     pointer(GetModuleHandle(ModuleName)),Code,ENGLISH_LANGID,@err,0,nil);
@@ -1788,6 +1795,7 @@ begin
   finally
     LocalFree(HLOCAL(err));
   end;
+  {$endif}
   if result='' then begin
     result := SysErrorMessage(Code);
     if result='' then
@@ -2118,11 +2126,10 @@ begin
         exit;
       if doBind then begin
         fillchar(serveraddr,sizeof(serveraddr),0);
-http://publib.boulder.ibm.com/infocenter/iseries/v5r3/index.jsp?topic=/rzab6/rzab6uafunix.htm
-        serveraddr.
-        if (bind(result,@serveraddr,sizeof(serveraddr))<0) or
-           (listen(result,SOMAXCONN)<0) then begin
-          close(sd);
+        //http://publib.boulder.ibm.com/infocenter/iseries/v5r3/index.jsp?topic=/rzab6/rzab6uafunix.htm
+        if (fpbind(result,@serveraddr,sizeof(serveraddr))<0) or
+           (fplisten(result,SOMAXCONN)<0) then begin
+          //close(sd);
           result := -1;
         end;
       end;
@@ -2278,10 +2285,20 @@ begin
 end;
 
 procedure TCrtSocket.SetInt32OptionByIndex(OptName, OptVal: integer);
+{$ifndef MSWINDOWS}
+var
+  timeval: TTimeval;
+{$endif}
 begin
   if (self=nil) or (Sock<=0) then
     raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
-  if SetSockOpt(Sock,SOL_SOCKET,OptName,PAnsiChar(@OptVal),sizeof(OptVal))<>0 then
+  {$ifndef MSWINDOWS}
+  timeval.tv_sec:=OptVal div 1000;
+  timeval.tv_usec:=(OptVal mod 1000) * 1000;
+  if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))<>0 then
+  {$else}
+  if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))<>0 then
+  {$endif}
     raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
       [WSAGetLastError,OptName,OptVal]);
 end;
@@ -2893,7 +2910,7 @@ begin
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
 {$endif}
 {$ifdef LINUX}
-  pthread_detach(ThreadID); // manualy do it here
+  KillThread(ThreadID);  // manualy do it here
 {$endif}
   FreeAndNil(Sock);
   inherited Destroy;         // direct Thread abort, no wait till ended
@@ -3842,6 +3859,8 @@ type
     // Known headers
     KnownHeaders: array[low(THttpHeader)..reqUserAgent] of HTTP_KNOWN_HEADER;
   end;
+
+  {$ifdef MSWINDOWS}
 
   HTTP_BYTE_RANGE = record
     StartingOffset: ULARGE_INTEGER;
@@ -5421,6 +5440,7 @@ begin
   pReason := pointer(OutStatus);
 end;
 
+{$endif MSWINDOWS}
 
 { ************ WinHttp / WinINet HTTP clients }
 
@@ -5843,33 +5863,40 @@ initialization
     (ord(reqUserAgent)=40) and
     (ord(respLocation)=23) and (sizeof(THttpHeader)=4));
   {$else}
-  Assert((sizeof(HTTP_REQUEST)=472) and
+  Assert(
+    {$ifdef MSWINDOWS}
+    (sizeof(HTTP_REQUEST)=472) and
     (sizeof(HTTP_SSL_INFO)=28) and
     (sizeof(HTTP_DATA_CHUNK_INMEMORY)=24) and
     (sizeof(HTTP_DATA_CHUNK_FILEHANDLE)=32) and
+    (sizeof(HTTP_RESPONSE)=288) and
+    {$endif}
     (sizeof(HTTP_REQUEST_HEADERS)=344) and
     (sizeof(HTTP_RESPONSE_HEADERS)=256) and
     (sizeof(HTTP_COOKED_URL)=24) and
-    (sizeof(HTTP_RESPONSE)=288) and
     (ord(reqUserAgent)=40) and
     (ord(respLocation)=23) and (sizeof(THttpHeader)=4));
-  {$endif}
-  if InitSocketInterface then
+    {$endif}
+  if InitSocketInterface{$ifndef MSWINDOWS}(''){$endif} then
     WSAStartup(WinsockLevel, WsaDataOnce) else
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
 
 finalization
   if WsaDataOnce.wVersion<>0 then
   try
+    {$ifdef MSWINDOWS}
     if Assigned(WSACleanup) then
       WSACleanup;
+    {$endif}
   finally
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
   end;
+  {$ifdef MSWINDOWS}
   if Http.Module<>0 then begin
     FreeLibrary(Http.Module);
     Http.Module := 0;
   end;
+  {$endif}
   DestroySocketInterface;
 end.
 

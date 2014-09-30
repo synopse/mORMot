@@ -184,7 +184,9 @@ unit SynSQLite3;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
   Classes,
 {$ifndef LVCL}
@@ -2893,6 +2895,15 @@ function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 
 implementation
 
+{$ifdef Linux}
+uses
+  SynFPCLinux,
+  FileUtil,
+  DynLibs
+  //,BaseUnix
+  ;
+{$endif}
+
 
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
@@ -2990,7 +3001,11 @@ begin
     s1 := nil;
   if s2Len=0 then
     s2 := nil;
+  {$ifdef MSWINDOWS}
   result := CompareStringW(GetThreadLocale, 0, S1, S1len, S2, S2Len) - 2;
+  {$else}
+  result := WideCompareStr(Pwidechar(S1),Pwidechar(S2))-2;
+  {$endif}
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3000,7 +3015,11 @@ begin
     s1 := nil;
   if s2Len=0 then
     s2 := nil;
+  {$ifdef MSWINDOWS}
   result := CompareStringW(GetThreadLocale, NORM_IGNORECASE, S1, S1len, S2, S2Len) - 2;
+  {$else}
+  result := WideCompareText(Pwidechar(S1),Pwidechar(S2))-2;
+  {$endif}
 end;
 
 function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3639,7 +3658,7 @@ begin
       if Log<>nil then
         Log.Log(sllTrace,'copy file',self);
       {$endif}
-      result := CopyFile(pointer(fFileName),pointer(BackupFileName),false);
+      result := CopyFile({$ifdef MSWINDOWS}pointer{$endif}(fFileName),{$ifdef MSWINDOWS}pointer{$endif}(BackupFileName),false);
     finally
       {$ifdef WITHLOG}
       if Log<>nil then

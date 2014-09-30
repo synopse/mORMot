@@ -174,15 +174,22 @@ interface
   - will work only with our THttpServer pure Delphi code, of course
   - not defined by default - should be set globally to the project conditionals,
   to be defined in both mORMotHttpClient and mORMotHttpServer units }
-
+{$ifdef MSWINDOWS}
 {$define USETHREADPOOL}
+{$endif}
 // define this to use TSynThreadPool for faster multi-connection
 // shall match SynCrtSock.pas definition
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
 
+{$ifndef MSWINDOWS}
+{$define ONLYUSEHTTPSOCKET}
+{$undef USETHREADPOOL}
+{$endif}
+
+
 uses
-  Windows,
+  {$ifdef MSWINDOWS}Windows,{$endif}
   SysUtils,
   Classes,
 {$ifdef COMPRESSDEFLATE}
@@ -218,7 +225,7 @@ type
   // - useHttpSocket will use the standard Sockets library (e.g. WinSock) - it
   // will trigger the Windows firewall popup UAC window at first run
   TSQLHttpServerOptions =
-    (useHttpApi, useHttpApiRegisteringURI, useHttpSocket);
+    ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}useHttpSocket);
 
   /// available security options for TSQLHttpServer.Create() constructor
   // - default secNone will use plain HTTP connection
@@ -293,7 +300,7 @@ type
     // to server static file content, by overriding TSQLHttpServer.Request 
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
-      aHttpServerKind: TSQLHttpServerOptions=useHttpApi; ServerThreadPoolCount: Integer=32;
+      aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; ServerThreadPoolCount: Integer=32;
       aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''); reintroduce; overload;
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
@@ -309,7 +316,7 @@ type
     // to server static file content, by overriding TSQLHttpServer.Request
     constructor Create(const aPort: AnsiString; aServer: TSQLRestServer;
       const aDomainName: AnsiString='+';
-      aHttpServerKind: TSQLHttpServerOptions=useHttpApi; aRestAccessRights: PSQLAccessRights=nil;
+      aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; aRestAccessRights: PSQLAccessRights=nil;
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
@@ -416,6 +423,7 @@ begin
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
+    {$ifndef ONLYUSEHTTPSOCKET}
     if fHttpServer.InheritsFrom(THttpApiServer) then begin
       // try to register the URL to http.sys
       err := THttpApiServer(fHttpServer).AddUrl(aServer.Model.Root,fPort,
@@ -427,6 +435,7 @@ begin
         exit;
       end;
     end;
+    {$endif}
     n := length(fDBServers);
     SetLength(fDBServers,n+1);
     fDBServers[n].Server := aServer;
@@ -458,6 +467,7 @@ begin
   n := high(fDBServers);
   for i := 0 to n do
     if fDBServers[i].Server=aServer then begin
+      {$ifdef MSWINDOWS}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).
             RemoveUrl(aServer.Model.Root,fPort,false,fDomainName)<>NO_ERROR then begin
@@ -465,6 +475,7 @@ begin
          Log.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
          {$endif}
         end;
+      {$endif}
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
       SetLength(fDBServers,n);
@@ -485,6 +496,7 @@ procedure RegURL(const URI: RawByteString);
 var err: integer;
     ErrMsg: RawUTF8;
 begin
+  {$ifndef ONLYUSEHTTPSOCKET}
   err := THttpApiServer(fHttpServer).AddUrl(URI,aPort,
     (aHttpServerSecurity=secSSL),aDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
   if err=NO_ERROR then
@@ -493,6 +505,7 @@ begin
   if err=ERROR_ACCESS_DENIED then
     ErrMsg := ErrMsg+' (administrator rights needed)';
   raise ECommunicationException.CreateUTF8('%.Create: % for %',[self,ErrMsg,URI]);
+  {$endif}
 end;
 var i,j: integer;
     ServersRoot: RawUTF8;
@@ -531,6 +544,7 @@ begin
     RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
   end;
   {$ifndef USETCPPREFIX}
+  {$ifndef ONLYUSEHTTPSOCKET}
   if aHttpServerKind in [useHttpApi,useHttpApiRegisteringURI] then
   try
     // first try to use fastest http.sys
@@ -547,6 +561,7 @@ begin
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
   end;
+  {$endif}
   {$endif}
   if fHttpServer=nil then begin
     // http.sys failed -> create one instance of our pure Delphi server
@@ -567,10 +582,12 @@ begin
 {$ifdef COMPRESSDEFLATE}
   fHttpServer.RegisterCompress(CompressGZip);
 {$endif}
+ {$ifdef MSWINDOWS}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
+ {$endif}
 {$ifdef WITHLOG}
   fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
 {$endif}
@@ -716,7 +733,7 @@ begin
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('',self);
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
-  inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',useHttpApiRegisteringURI,nil,1);
+  inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',{$ifndef ONLYUSEHTTPSOCKET}useHttpApiRegisteringURI{$else}useHttpSocket{$endif},nil,1);
   fEvent := aEvent;
   AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS 
 end;

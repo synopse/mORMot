@@ -687,7 +687,6 @@ uses
   Messages,
 {$endif}
 {$ifdef LINUX} // for Kylix
-  Libc,
   Types,
 {$endif}
   Classes,
@@ -715,12 +714,27 @@ const
 
 { ************ common types used for compatibility between compilers and CPU }
 
+const
+  /// internal Code Page for UTF-16 Unicode encoding
+  // - used e.g. for Delphi 2009+ UnicodeString=String type
+  CP_UTF16 = 1200;
+
+  /// US English Windows Code Page, i.e. WinAnsi standard character encoding
+  CODEPAGE_US = 1252;
+
+{$ifndef MSWINDOWS}
+  /// estimate the system code page is WinAnsi
+  GetACP = CODEPAGE_US;
+  /// internal Code Page for UTF-8 Unicode encoding
+  CP_UTF8 = 65001;
+{$endif}
+
+
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 type
   PBoolean = ^Boolean;
 
 {$else}
-
 type
   /// a CPU-dependent unsigned integer type cast of a pointer / register
   // - used for 64 bits compatibility, native under Free Pascal Compiler
@@ -795,11 +809,6 @@ type
             1: (VLongs: array[0..2] of LongInt); );
   end;
 {$endif}
-
-const
-  /// internal Code Page for Unicode encoding
-  // - used e.g. for Delphi 2009+ UnicodeString=String type
-  CP_UTF16 = 1200;
 
 type
   /// a pointer to a PtrUInt array
@@ -1271,8 +1280,6 @@ const
   /// HTTP header for MIME content type used for UTF-8 encoded XML
   XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+XML_CONTENT_TYPE;
 
-  /// US English Windows Code Page, i.e. WinAnsi standard character encoding
-  CODEPAGE_US = 1252;
 
 
 /// faster equivalence to SetString() function for a RawUTF8
@@ -8082,10 +8089,6 @@ var
 
 {$else}
 
-/// compatibility function, to be implemented according to the running OS
-// - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64;
-
 /// compatibility function for Linux
 function GetCurrentThreadID: LongWord; cdecl;
   external 'libpthread.so.0' name 'pthread_self';
@@ -10120,9 +10123,7 @@ type
   TPrecisionTimer = {$ifndef UNICODE}object{$else}record{$endif}
   private
     iStart,iStop,iResume: Int64;
-    {$ifdef MSWINDOWS}
     iFreq: Int64;
-    {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
     iTime: Int64;
   public
@@ -11619,7 +11620,10 @@ implementation
 
 {$ifdef FPC}
 uses
-  SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
+  SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
+  {$ifdef Linux}
+  , SynFPCLinux,BaseUnix, Unix,dynlibs
+{$endif} ;
 {$endif}
 
 
@@ -11836,12 +11840,6 @@ function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := (aCodePage>=1250) and (aCodePage<=1258);
 end;
-
-{$ifndef MSWINDOWS}
-const
-  GetACP = CODEPAGE_US;
-  CP_UTF8 = 65001;
-{$endif}
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 var i: integer;
@@ -22607,15 +22605,8 @@ begin
               EncodeTime(wHour,wMinute,wSecond,wMilliseconds);
 end;
 {$else}
-var T: TTime_T;
-    TV: TTimeVal;
-    UT: TUnixTime;
 begin
-  gettimeofday(TV, nil);
-  T := TV.tv_sec;
-  gmtime_r(@T, UT);
-  Result := EncodeDate(UT.tm_year + 1900, UT.tm_mon + 1, UT.tm_mday) +
-    EncodeTime(UT.tm_hour, UT.tm_min, UT.tm_sec, TV.tv_usec div 1000);
+  Result := FPCNowUTC;
 end;
 {$endif}
 
@@ -23973,11 +23964,11 @@ const
   EASTEUROPE_CHARSET = 238;
   RUSSIAN_CHARSET = 204;
   BALTIC_CHARSET = 186;
-{$endif}
-
+{$else}
 {$ifdef FPC}
 const
   VIETNAMESE_CHARSET = 163;
+{$endif}
 {$endif}
 
 function CharSetToCodePage(CharSet: integer): cardinal;
@@ -24573,11 +24564,6 @@ begin
   Readln;
 end;
 
-function GetTickCount64: Int64;
-begin
-  result := (Int64(clock)*1000) div CLOCKS_PER_SEC; // ms result
-end;
-
 {$endif MSWINDOWS}
 
 
@@ -24607,12 +24593,14 @@ begin
   if Backup<>nil then
     for i := 0 to Size-1 do  // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-  SysPageSize := getpagesize;
+  SysPageSize := $1000;
   PageSize := SysPageSize;
   AlignedAddr := PtrInt(Old) and not (PageSize - 1);
   while PtrInt(Old) + Size >= AlignedAddr + PageSize do
     Inc(PageSize, SysPageSize);
+  {$ifndef FPC}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
+  {$endif}
     try
       for i := 0 to Size-1 do    // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
@@ -32209,8 +32197,6 @@ begin
   B^ := ',';
 end;
 
-{$ifdef MSWINDOWS}
-
 var // can be safely made global since timing is multi-thread safe
   GlobalTime: TSystemTime;
   GlobalClock: cardinal;
@@ -32226,46 +32212,19 @@ begin
     GlobalClock := Ticks;
     GetLocalTime(GlobalTime); // avoid slower API call
   end;
-  YearToPChar(GlobalTime.wYear,B);
+  YearToPChar({$ifdef MSWINDOWS}GlobalTime.wYear{$else}GlobalTime.Year{$endif},B);
   with GlobalTime do begin
-    PWord(B+4)^ := TwoDigitLookupW[wMonth];
-    PWord(B+6)^ := TwoDigitLookupW[wDay];
+    PWord(B+4)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMonth{$else}Month{$endif}];
+    PWord(B+6)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wDay{$else}Day{$endif}];
     B[8] := ' ';
-    PWord(B+9)^ := TwoDigitLookupW[wHour];
-    PWord(B+11)^ := TwoDigitLookupW[wMinute];
-    PWord(B+13)^ := TwoDigitLookupW[wSecond];
-    PWord(B+15)^ := TwoDigitLookupW[wMilliseconds shr 4]; // range 0..62 = 16 ms
+    PWord(B+9)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wHour{$else}Hour{$endif}];
+    PWord(B+11)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMinute{$else}Minute{$endif}];
+    PWord(B+13)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wSecond{$else}Second{$endif}];
+    PWord(B+15)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMilliseconds shr 4{$else}Millisecond shr 4{$endif}]; // range 0..62 = 16 ms
     B[17] := ' ';
   end;
   inc(B,16);
 end;
-
-{$else} // LibC version
-
-procedure TTextWriter.AddCurrentLogTime;
-var T: TTime_T;
-    TV: TTimeVal;
-    UT: TUnixTime;
-begin
-  if B+17>=BEnd then
-    Flush;
-  inc(B);
-  gettimeofday(TV, nil);
-  T := TV.tv_sec;
-  localtime_r(@T, UT);
-  YearToPChar(UT.tm_year+1900,B);
-  PWord(B+4)^ := TwoDigitLookupW[UT.tm_mon+1];
-  PWord(B+6)^ := TwoDigitLookupW[UT.tm_mday];
-  B[8] := ' ';
-  PWord(B+9)^ := TwoDigitLookupW[UT.tm_hour];
-  PWord(B+11)^ := TwoDigitLookupW[UT.tm_min];
-  PWord(B+13)^ := TwoDigitLookupW[UT.tm_sec];
-  PWord(B+15)^ := TwoDigitLookupW[TV.tv_usec div 10000]; // 10 ms precision
-  B[17] := ' ';
-  inc(B,16);
-end;
-
-{$endif}
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
 function Value3Digits(V: Cardinal; P: PUTF8Char): Cardinal;
@@ -35329,38 +35288,22 @@ begin
   FillChar(self,sizeof(self),0);
 end;
 
-{$ifndef MSWINDOWS}
-procedure QueryPerformanceCounter(var Value: Int64);
-begin
-  Value := clock;
-end;
-{$endif}
-
 procedure TPrecisionTimer.Start;
 begin
   iResume := 0;
-  {$ifdef MSWINDOWS}
   if QueryPerformanceFrequency(iFreq) then
     QueryPerformanceCounter(iStart) else
     iFreq := 0;
-  {$else}
-  iStart := clock;
-  {$endif}
 end;
 
 function TPrecisionTimer.Stop: RawUTF8;
 begin
-  {$ifdef MSWINDOWS}
   QueryPerformanceCounter(iStop);
   if iFreq=0 then
     QueryPerformanceFrequency(iFreq);
   if iFreq=0 then
     iTime := 0 else
     iTime := ((iStop-iStart)*(1000*1000))div iFreq;
-  {$else}
-  iStop := clock;
-  iTime := (iStop-iStart); // CLOCKS_PER_SEC=1000000=1000*1000 -> uS resolution
-  {$endif}
   result := MicroSecToString(iTime);
 end;
 
@@ -36940,7 +36883,7 @@ begin
   end else
     result := true;
   {$else}
-  fBuf := mmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0);
+  fBuf := fpmmap(nil,(fBufSize DIV $1000),PROT_READ,MAP_SHARED,fFile,0);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
     exit;
@@ -36983,7 +36926,7 @@ begin
   end;
   {$else}
   if fBuf<>nil then 
-    munmap(fBuf,fBufSize);
+    fpmunmap(fBuf,fBufSize DIV $1000);
   {$endif}
   fBuf := nil;
   if fFile<>0 then begin
@@ -41027,7 +40970,11 @@ begin
   // 1. search for an external .map file matching the running .exe/.dll name
   if aExeName='' then begin
     fMapFile := GetModuleName(hInstance);
-    fGetModuleHandle := GetModuleHandle(pointer(ExtractFileName(fMapFile)))+CODE_SECTION;
+    {$ifdef MSWINDOWS}
+    //fGetModuleHandle := GetModuleHandle(pointer(ExtractFileName(fMapFile)))+CODE_SECTION;
+    {$else}
+    fGetModuleHandle := LoadLibrary(PChar(ExtractFileName(fMapFile)))+CODE_SECTION;
+    {$endif}
   end else
     fMapFile := aExeName;
   fMapFile := ChangeFileExt(fMapFile,'.map');

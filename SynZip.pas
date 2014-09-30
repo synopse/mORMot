@@ -166,15 +166,19 @@ unit SynZip;
 interface
 
 uses
-  SysUtils, Classes,
+  SysUtils, Classes
 {$ifdef USEZLIB}
-  ZLib,
+  ,ZLib
 {$endif}
 {$ifdef MSWINDOWS}
-  Windows;
+  ,Windows
 {$else}
-  LibC;
+  //,LibC;
+  //,FileUtil
+  //,baseunix, unix
+  ,clocale,Types
 {$endif}
+  ;
 
 type
   /// the format used for storing data
@@ -654,7 +658,9 @@ type
     // - warning: AddStored/AddDeflated() won't check for duplicate zip entries
     // - this method is very fast, and will increase the .zip file in-place
     // (the old content is not copied, new data is appended at the file end)
+    {$ifndef Linux}
     constructor CreateFrom(const aFileName: TFileName);
+    {$endif}
     /// compress (using the deflate method) a memory buffer, and add it to the zip file
     // - by default, the 1st of January, 2010 is used if not date is supplied
     procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
@@ -681,10 +687,17 @@ type
 // into .zip archive files
 // - resulting file will be named YYYYMM.zip and will be located in the
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
+{$ifndef Linux}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+{$endif}
 
 
 implementation
+
+{$ifdef Linux}
+uses
+  SynFPCLinux,BaseUnix;
+{$endif}
 
 const
   FIRSTHEADER_SIGNATURE = $04034b50;  // PK#3#4
@@ -696,6 +709,7 @@ const
 var
   EventArchiveZipWrite: TZipWrite = nil;
 
+{$ifndef Linux}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var n: integer;
 begin
@@ -709,10 +723,11 @@ begin
         copy(aDestinationPath,1,length(aDestinationPath)-1)+'.zip');
     n := EventArchiveZipWrite.Count;
     EventArchiveZipWrite.AddDeflated(aOldLogFileName,True);
-    if (EventArchiveZipWrite.Count=n+1) and DeleteFile(pointer(aOldLogFileName)) then
+    if (EventArchiveZipWrite.Count=n+1) and DeleteFile({$ifndef Linux}pointer{$endif}(aOldLogFileName)) then
       result := True;
   end;
 end;
+{$endif}
 
 procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
       CompressLevel: integer=6);
@@ -731,9 +746,11 @@ begin
     if RemovePath then
       ZipName := ExtractFileName(aFileName) else
       ZipName := aFileName;
+    {$ifndef Linux}
     GetFileTime(S.Handle,nil,nil,@Time);
     FileTimeToLocalFileTime(Time,Time);
     FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
+    {$endif}
     Size := S.Size;
     if Size64.Hi<>0 then
       raise ESynZipException.CreateFmt('%s file too big for .zip',[aFileName]);
@@ -752,7 +769,11 @@ begin
           zfullSize := Z.SizeIn;
           zzipSize := Z.SizeOut;
           zzipMethod := Z_DEFLATED;
+          {$ifndef Linux}
           zlastMod := integer(FileTime);
+          {$else}
+          zlastMod := FileAge(ZipName);
+          {$endif}
         end;
         OffsEnd := D.Position;
         D.Position := OffsHead+sizeof(fMagic);
@@ -790,7 +811,7 @@ begin
     dec(fHr.signature); // +1 to avoid finding it in the exe
     fHr.madeBy := $14;
     fHr.fileInfo.neededVersion := $14;
-    result := SetFilePointer(Handle,0,nil,FILE_CURRENT);
+    result := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif});
     fHr.localHeadOff := result-fAppendOffset;
     {$ifndef DELPHI5OROLDER}
     // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
@@ -888,6 +909,7 @@ begin
     Handle := FileCreate(aFileName);
 end;
 
+{$ifndef Linux}
 constructor TZipWrite.CreateFrom(const aFileName: TFileName);
 var R: TZipRead;
     i: Integer;
@@ -915,6 +937,7 @@ begin
     R.Free;
   end;
 end;
+{$endif}
 
 destructor TZipWrite.Destroy;
 var lhr: TLastHeader;
@@ -925,7 +948,7 @@ begin
   dec(lhr.signature); // +1 to avoid finding it in the exe
   lhr.thisFiles := Count;
   lhr.totalFiles := Count;
-  lhr.headerOffset := SetFilePointer(Handle,0,nil,FILE_CURRENT)-fAppendOffset;
+  lhr.headerOffset := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif})-fAppendOffset;
   for i := 0 to Count-1 do
   with Entry[i] do begin
     assert(fhr.fileInfo.nameLen=length(intName));
@@ -4521,16 +4544,16 @@ end;
 
 {$endif USEZLIB}
 
+procedure TZStream.Init;
+begin
+  fillchar(Self,sizeof(Self),0);
+end;
+
 {$endif LINUX}
  
 function compressBound(sourceLen: cardinal): cardinal;
 begin
   result := sourceLen + (sourceLen shr 12) + (sourceLen shr 14) + 11;
-end;
-
-procedure TZStream.Init;
-begin
-  fillchar(Self,sizeof(Self),0);
 end;
 
 function zcalloc(AppData: Pointer; Items, Size: cardinal): Pointer;
