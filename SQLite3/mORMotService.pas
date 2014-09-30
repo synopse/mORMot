@@ -405,21 +405,26 @@ constructor TServiceController.CreateNewService(const TargetComputer,
   DatabaseName, Name, DisplayName, Path, OrderGroup, Dependances, Username,
   Password: String; DesiredAccess, ServiceType, StartType,
   ErrorControl: DWORD);
+{$ifndef NOMORMOTKERNEL}
+var backupError: cardinal;
+{$endif}
 begin
   inherited Create;
-  if not FileExists(Path) then begin
+  if Path='' then begin
     {$ifndef NOMORMOTKERNEL}
-    TSQLLog.Add.Log(sllError,'OpenSCManager(%,%) executable "%" not found',
-      [TargetComputer,DatabaseName,Path]);
+    TSQLLog.Add.Log(sllError,'OpenSCManager(%,%) with Path=""',
+      [TargetComputer,DatabaseName]);
     {$endif}
     Exit;
   end;
   StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     SC_MANAGER_ALL_ACCESS);
-  if FSCHandle = 0 then begin
+  if FSCHandle=0 then begin
     {$ifndef NOMORMOTKERNEL}
+    backupError := GetLastError;
     TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SetLastError(backupError);
     {$endif}
     Exit;
   end;
@@ -428,13 +433,19 @@ begin
                pointer(OrderGroup), nil, pointer(Dependances),
                pointer(Username), pointer(Password));
   {$ifndef NOMORMOTKERNEL}
-  if FHandle=0 then
+  if FHandle=0 then begin
+    backupError := GetLastError;
     TSQLLog.Add.Log(sllLastError,'CreateService("%","%")',[Name,DisplayName]);
+    SetLastError(backupError);
+  end;
   {$endif}
 end;
 
 constructor TServiceController.CreateOpenService(const TargetComputer,
   DataBaseName, Name: String; DesiredAccess: DWORD);
+{$ifndef NOMORMOTKERNEL}
+var backupError: cardinal;
+{$endif}
 begin
   inherited Create;
   StringToUTF8(Name,FName);
@@ -442,14 +453,19 @@ begin
     GENERIC_READ);
   if FSCHandle = 0 then begin
     {$ifndef NOMORMOTKERNEL}
+    backupError := GetLastError;
     TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SetLastError(backupError);
     {$endif}
     Exit;
   end;
   FHandle := OpenService(FSCHandle, pointer(Name), DesiredAccess);
   {$ifndef NOMORMOTKERNEL}
-  if FHandle=0 then
+  if FHandle=0 then begin
+    backupError := GetLastError;
     TSQLLog.Add.Log(sllLastError,'OpenService("%")',[Name]);
+    SetLastError(backupError);
+  end;
   {$endif}
 end;
 
