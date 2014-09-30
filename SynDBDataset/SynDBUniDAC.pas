@@ -29,10 +29,11 @@ unit SynDBUniDAC;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - delphinium (louisyeow)
   - alexpirate
+  - delphinium (louisyeow)
+  - itSDS
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -49,9 +50,6 @@ unit SynDBUniDAC;
 
   Version 1.18
   - first public release, corresponding to mORMot framework 1.18
-
-
-  Todo:
 
 }
 
@@ -71,7 +69,7 @@ uses
   Uni,
   UniProvider,
   UniScript;
-  
+
 
 { -------------- UniDAC database access }
 
@@ -408,7 +406,7 @@ end;
 
 constructor TSQLDBUniDACConnection.Create(aProperties: TSQLDBConnectionProperties);
 var options: TStrings;
-    PortNumber : Integer;
+    PortNumber, i: Integer;
 begin
   inherited Create(aProperties);
   fDatabase := TUniConnection.Create(nil);
@@ -424,11 +422,14 @@ begin
     fDatabase.Server := options.Values['Server'];
   if fDatabase.Database='' then
     fDatabase.Database := options.Values['Database'];
-  if (fDatabase.Port=0) and TryStrToInt(options.Values['Port'], PortNumber) then
+  if (fDatabase.Port=0) and TryStrToInt(options.Values['Port'],PortNumber) then
     fDatabase.Port := PortNumber;
   fDatabase.Username := UTF8ToString(fProperties.UserID);
   fDatabase.Password := UTF8ToString(fProperties.PassWord);
-  fDatabase.SpecificOptions.AddStrings(options);
+  for i := 0 to options.Count-1 do
+    if FindRawUTF8(['Server','Database','Port'],
+        StringToUTF8(options.Names[i]),false)<0 then
+      fDatabase.SpecificOptions.Add(options[i]);
 end;
 
 procedure TSQLDBUniDACConnection.Connect;
