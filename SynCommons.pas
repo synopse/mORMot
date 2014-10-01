@@ -31015,6 +31015,7 @@ begin
           aCount := fCountP^ else
           aCount := capa;
       end else
+      if aCount>0 then // aCount=0 should release memory (e.g. for TDynArray.Clear)
         // size-down -> only if worth it (for faster Delete)
         if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
           exit;
