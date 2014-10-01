@@ -72,7 +72,7 @@ uses
 { -------------- DB.pas TDataSet (TQuery like) abstract connection }
 
 type
-  {$ifndef UNICODE}
+  {$ifndef ISDELPHIXE4}
   TValueBuffer = Pointer;
   {$endif}
 
