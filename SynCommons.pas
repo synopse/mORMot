@@ -29,10 +29,11 @@ unit SynCommons;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-   Aleksandr (sha)
-   Alfred Glaenzer
-   Sanyin
-   Pavel (mpv)
+   - Aleksandr (sha)
+   - Alfred Glaenzer
+   - RalfS
+   - Sanyin
+   - Pavel (mpv)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -44299,10 +44300,10 @@ initialization
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
   {$ifndef FPC}
-  {$ifndef DOPATCHTRTL}
+  {$ifdef DOPATCHTRTL}
   if DebugHook=0 then // patch VCL/RTL only outside debugging
-  {$endif}
     InitRedirectCode;
+  {$endif}
   {$endif}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}
