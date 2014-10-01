@@ -214,15 +214,15 @@ uses
   Windows,
   SynWinSock,
   {$ifdef USEWININET}
-    WinInet,
+  WinInet,
   {$endif}
 {$else}
   {$undef USEWININET}
   {$ifdef CONDITIONALEXPRESSIONS}
-    Types,
+  Types,
   {$endif}
   Sockets,
-  synsock,
+  synsock, // needs ssfpc.inc , synafpc.pas and synsock (from Ararat Synapse) 
   SynFPCLinux,
 {$endif}
 {$ifndef LVCL}

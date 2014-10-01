@@ -13816,13 +13816,15 @@ const
    // all potentially managed types
    tkManagedTypes = [tkLStringOld,tkLString,tkWstring,tkUstring,tkArray,
                      tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
+   // maps record or object types
+   tkRecordTypes = [tkObject,tkRecord];
 
-function aligntoptr(p : pointer): pointer; inline;
+function AlignToPtr(p : pointer): pointer; inline;
 begin
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
- result := align(p,sizeof(p));
+  result := align(p,sizeof(p));
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
- result := p;
+  result := p;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
@@ -13833,6 +13835,10 @@ type  /// available type families for Delphi 6 and up, similar to typinfo.pas
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
     {$ifdef UNICODE}, tkUString, tkClassRef, tkPointer, tkProcedure{$endif});
+
+const
+  // maps record or object types
+  tkRecordTypes = [tkRecord];
 
 {$endif}
 
@@ -14096,7 +14102,7 @@ function RecordTypeInfoFieldTable(aRecordTypeInfo: Pointer): PFieldTable;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   result := aRecordTypeInfo;
-  if (result=nil) or (result^.Kind<>tkRecord) then begin
+  if (result=nil) or not(result^.Kind in tkRecordTypes) then begin
     result := nil;
     exit;
   end;
@@ -25141,15 +25147,15 @@ begin
   case TTypeKind(PByte(typeinfo)^) of
     tkLString,tkLStringOld,tkWString,tkUString,
     tkInterface,tkDynarray:
-      result:=sizeof(Pointer);
+      result := sizeof(Pointer);
 {$ifdef FPC_HAS_FEATURE_VARIANTS}
     tkVariant:
-      result:=sizeof(TVarData);
+      result := sizeof(TVarData);
 {$endif FPC_HAS_FEATURE_VARIANTS}
     tkArray:
-      result:=RTTIArraySize(typeinfo);
+      result := RTTIArraySize(typeinfo);
     tkObject,tkRecord:
-      result:=RTTIRecordSize(typeinfo);
+      result := RTTIRecordSize(typeinfo);
   else
     raise ESynException.CreateFmt('RTTIManagedSize(%d)',[PByte(typeinfo)^]);
   end;
@@ -25213,7 +25219,7 @@ begin
     exit;
   end;
   result := false;
-  if FieldTable^.Kind<>tkRecord then
+  if  not (FieldTable^.Kind in tkRecordTypes) then
     exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
   {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
@@ -25242,7 +25248,7 @@ begin
           Diff := sizeof(pointer) else
           exit;
       {$endif}
-      tkRecord:
+      tkRecord{$ifdef FPC},tkObject{$endif}:
         if RecordEquals(A^,B^,Field^.TypeInfo{$ifndef FPC}^{$endif}) then
           Diff := RecordTypeInfoSize(Field^.TypeInfo{$ifndef FPC}^{$endif}) else
           exit;
@@ -25285,7 +25291,7 @@ var FieldTable: PFieldTable absolute TypeInfo;
     IntFieldTable: PFieldTable;
 begin
   R := @Rec;
-  if (FieldTable^.Kind<>tkRecord) or (R=nil) then begin
+  if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
     result := 0; // should have been checked before
     exit; // raise Exception.CreateFmt('%s is not a record',[FieldTable^.NameLen]);
   end;
@@ -25310,7 +25316,7 @@ begin
           dec(result,sizeof(PtrUInt)-1) else
           inc(result,ToVarUInt32LengthWithData(PInteger(P^-sizeof(integer))^*2)-sizeof(PtrUInt));
       {$endif}
-      tkRecord: begin
+      tkRecord{$ifdef FPC},tkObject{$endif}: begin
         Len := RecordSaveLength(P^,Field.TypeInfo{$ifndef FPC}^{$endif});
         if Len=0 then begin
           result := 0;
@@ -25391,7 +25397,7 @@ begin
       end;
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       Dest := RecordSave(R^,Dest,Field.TypeInfo{$ifndef FPC}^{$endif});
       if Dest=nil then begin
         result := nil; // invalid/unhandled record content
@@ -25514,7 +25520,7 @@ var FieldTable: PFieldTable absolute TypeInfo;
     IntFieldTable: PFieldTable;
 begin
   R := @Rec;
-  if (FieldTable^.Kind<>tkRecord) or (R=nil) then begin
+  if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
     result := nil; // should have been checked before
     exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
   end;
@@ -25566,7 +25572,7 @@ begin
       inc(Source,LenBytes);
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       Source := RecordLoad(R^,Source,Field.TypeInfo{$ifndef FPC}^{$endif});
       IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
       inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
@@ -26229,7 +26235,7 @@ begin
     Reg.RecordTypeInfo := TypeInfoToRecordInfo(aTypeInfo);
     result := DynArraySearch(Reg.DynArrayTypeInfo,Reg.RecordTypeInfo,false);
   end;
-  tkRecord: begin
+  tkRecord{$ifdef FPC},tkObject{$endif}: begin
     Reg.DynArrayTypeInfo := nil;
     Reg.RecordTypeInfo := aTypeInfo;
     result := RecordSearch(Reg.RecordTypeInfo,false);
@@ -26322,7 +26328,7 @@ begin // code below must match TTextWriter.AddRecordJSON
     raise ESynException.CreateUTF8('Invalid RecordLoadJSON(%) call',[TypeInfo]);
   if JSON^=' ' then repeat inc(JSON); if JSON^=#0 then exit; until JSON^<>' ';
   if PCardinal(JSON)^=JSON_BASE64_MAGIC_QUOTE then begin
-    if PDynArrayTypeInfo(TypeInfo)^.kind<>tkRecord then
+    if not (PDynArrayTypeInfo(TypeInfo)^.kind in tkRecordTypes) then
       raise ESynException.CreateUTF8('RecordLoadJSON(%) kind=%',
         [TypeInfo,ord(PDynArrayTypeInfo(TypeInfo)^.kind)]);
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
@@ -26401,6 +26407,7 @@ begin
     TypeInfoToName(fCustomTypeInfo,fCustomTypeName,aCustomTypeName);
     with PDynArrayTypeInfo(fCustomTypeInfo)^ do
       fTypeData := pointer(PtrUInt(@elSize)+NameLen);
+   {$ifdef FPC}fTypeData := AlignToPtr(fTypeData);{$endif}
     case PTypeKind(fCustomTypeInfo)^ of
     tkEnumeration: begin
       fKnownType := ktEnumeration;
@@ -26478,6 +26485,7 @@ var PropValue: PUTF8Char;
     V,i: integer;
     wasString: boolean;
     Val: PByte;
+    Typ: ^TOrdType;
 begin
   result := nil;
   case fKnownType of
@@ -26514,14 +26522,16 @@ begin
       if V<0 then
         exit;
       with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-        case TOrdType(PByte(PtrUInt(@elSize)+NameLen)^) of
-        otSByte,otUByte: byte(aValue) := V;
-        otSWord,otUWord: word(aValue) := V;
-        otSLong,otULong: integer(aValue) := V;
-        else exit;
-        end;
+        Typ := pointer(PtrUInt(@elSize)+NameLen);
+      {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+      case Typ^ of
+      otSByte,otUByte: byte(aValue) := V;
+      otSWord,otUWord: word(aValue) := V;
+      otSLong,otULong: integer(aValue) := V;
+      else exit;
+      end;
       result := P;
-    end;
+    end;                     
     ktFixedArray:
       if wasString and (StrLen(PropValue)=fFixedSize*2) and
          HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
@@ -26716,6 +26726,7 @@ class function TJSONCustomParserRTTI.CreateFromRTTI(
 var Item: PDynArrayTypeInfo absolute Info;
     ItemType: TJSONCustomParserRTTIType;
     ItemTypeName: RawUTF8;
+    Typ: PByte;
     ndx: integer;
 begin
   if Item=nil then begin // no RTTI -> stored as hexa string
@@ -26744,13 +26755,16 @@ begin
       {$endif}
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
-      tkInteger, tkSet:
-        case TOrdType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
+      tkInteger, tkSet: begin
+        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+        case TOrdType(Typ^) of
         otSByte,otUByte: ItemType := ptByte;
         otSWord,otUWord: ItemType := ptWord;
         otSLong: ItemType := ptInteger;
         otULong: ItemType := ptCardinal;
         end;
+      end;
       tkInt64: ItemType := ptInt64;
       {$ifdef FPC}
       tkBool: ItemType := ptBoolean;
@@ -26760,13 +26774,16 @@ begin
           ItemType := ptBoolean;
           // other enumerates will use TJSONCustomParserCustomSimple below
       {$endif}
-      tkFloat:
-        case TFloatType(PByte(PtrUInt(@Item.elSize)+Item.NameLen)^) of
+      tkFloat: begin
+        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+        case TFloatType(Typ^) of
         ftSingle: ItemType := ptSingle;
         ftDoub:   ItemType := ptDouble;
         ftCurr:   ItemType := ptCurrency;
         // ftExtended, ftComp: not implemented yet
         end;
+      end;
       end;
     end;
     if ItemType=ptCustom then
@@ -29944,7 +29961,7 @@ begin
           break; // invalid/unhandled variant content
       end;
     {$endif}
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
       {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
@@ -30012,7 +30029,7 @@ begin
         inc(result,L);
       end;
     {$endif}
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       for i := 1 to n do begin
         L := RecordSaveLength(P^,ElemType);
         if L=0 then
@@ -30148,7 +30165,7 @@ Bin:  case ElemSize of
       {$ifdef UNICODE}
       tkUString: fKnownType := djString;
       {$endif}
-      tkRecord: begin
+      tkRecord{$ifdef FPC},tkObject{$endif}: begin
         FieldTable := ElemType;
 Rec:    inc(PtrUInt(FieldTable),FieldTable^.NameLen);
         {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
@@ -30162,7 +30179,7 @@ Rec:    inc(PtrUInt(FieldTable),FieldTable^.NameLen);
             {$ifdef UNICODE}
             tkUString: fKnownType := djString;
             {$endif}
-            tkRecord: begin
+            tkRecord{$ifdef FPC},tkObject{$endif}: begin
               FieldTable := pointer(TypeInfo{$ifndef FPC}^{$endif});
               goto Rec;
             end;
@@ -30415,7 +30432,7 @@ begin
       inc(Source,LenBytes);
       inc(P,sizeof(PtrUInt));
     end;
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
       {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
@@ -30699,14 +30716,19 @@ begin
       else result := CompareMem(@A,@B,ElemSize); // generic comparison
       end else
     case PTypeKind(ElemType)^ of
-    tkRecord:  result := RecordEquals(A,B,ElemType);
-    tkLString: result := AnsiString(A)=AnsiString(B);
-    tkWString: result := WideString(A)=WideString(B);
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      result := RecordEquals(A,B,ElemType);
+    tkLString:
+      result := AnsiString(A)=AnsiString(B);
+    tkWString:
+      result := WideString(A)=WideString(B);
     {$ifdef UNICODE}
-    tkUString: result := UnicodeString(A)=UnicodeString(B);
+    tkUString:
+      result := UnicodeString(A)=UnicodeString(B);
     {$endif}
     {$ifndef NOVARIANTS}
-    tkVariant: result := Variant(A)=Variant(B);
+    tkVariant:
+      result := Variant(A)=Variant(B);
     {$endif}
     else result := false;
     end;
@@ -30739,7 +30761,7 @@ begin
     exit;
   end else
   case PTypeKind(ElemType)^ of
-  tkRecord:
+  tkRecord{$ifdef FPC},tkObject{$endif}:
     for i := 1 to n do
       if not RecordEquals(P1^,P2^,ElemType) then
         exit else begin
@@ -30817,7 +30839,8 @@ begin
     for result := 0 to max do
       if PVariantArray(P)^[result]=variant(Elem) then exit;
   {$endif}
-  tkRecord: // work with packed records containing binary and string types
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    // RecordEquals() works with packed records containing binary and string types
     for result := 0 to max do
       if RecordEquals(P^,Elem,ElemType) then
         exit else
@@ -31098,12 +31121,16 @@ procedure TDynArray.ElemClear(var Elem);
 begin
   if ElemType<>nil then
     case PTypeKind(ElemType)^ of // release reference counted
-      tkLString: RawByteString(Elem) := '';
-      tkWString: WideString(Elem) := '';
+      tkLString:
+        RawByteString(Elem) := '';
+      tkWString:
+        WideString(Elem) := '';
       {$ifdef UNICODE}tkUString: UnicodeString(Elem) := ''; {$endif}
-      tkRecord:  RecordClear(Elem,ElemType);
+      tkRecord{$ifdef FPC},tkObject{$endif}:
+        RecordClear(Elem,ElemType);
       {$ifndef NOVARIANTS}
-      tkVariant: VarClear(Variant(Elem));
+      tkVariant:
+        VarClear(Variant(Elem));
       {$endif}
       else exit; 
     end;
@@ -31160,7 +31187,7 @@ begin
     tkVariant:
       VariantLoad(variant(Elem),Source);
     {$endif}
-    tkRecord:
+    tkRecord{$ifdef FPC},tkObject{$endif}:
       RecordLoad(Elem,Source,ElemType);
     end;
 end;
@@ -31169,15 +31196,20 @@ procedure TDynArray.ElemLoadClear(var ElemLoaded: RawByteString);
 begin
   if (ElemType<>nil) and (length(ElemLoaded)=integer(ElemSize)) then
   case PTypeKind(ElemType)^ of
-    tkLString: PRawByteString(pointer(ElemLoaded))^ := '';
-    tkWString: PWideString(pointer(ElemLoaded))^ := '';
+    tkLString:
+      PRawByteString(pointer(ElemLoaded))^ := '';
+    tkWString:
+      PWideString(pointer(ElemLoaded))^ := '';
     {$ifdef UNICODE}
-    tkUString: PUnicodeString(pointer(ElemLoaded))^ := '';
+    tkUString:
+      PUnicodeString(pointer(ElemLoaded))^ := '';
     {$endif}
     {$ifndef NOVARIANTS}
-    tkVariant: VarClear(PVariant(pointer(ElemLoaded))^);
+    tkVariant:
+      VarClear(PVariant(pointer(ElemLoaded))^);
     {$endif}
-    tkRecord: RecordClear(pointer(ElemLoaded)^,ElemType);
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      RecordClear(pointer(ElemLoaded)^,ElemType);
   end;
   ElemLoaded := '';
 end;
@@ -31203,7 +31235,7 @@ begin
       tkVariant:
         result := VariantSave(variant(Elem));
       {$endif}
-      tkRecord:
+      tkRecord{$ifdef FPC},tkObject{$endif}:
         result := RecordSave(Elem,ElemType);
       else result := '';
     end;
@@ -32404,7 +32436,7 @@ begin
   if aTypeInfo=nil then
     exit;
   case PFieldTable(aTypeInfo)^.kind of
-  tkRecord:
+  tkRecord{$ifdef FPC},tkObject{$endif}:
     ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
   tkDynArray:
     ndx := GlobalJSONCustomParsers.DynArraySearch(aTypeInfo,nil,aAddIfNotExisting);
@@ -32426,7 +32458,7 @@ begin
   if aTypeInfo=nil then
     exit;
   case PFieldTable(aTypeInfo)^.kind of
-  tkRecord:
+  tkRecord{$ifdef FPC},tkObject{$endif}:
     ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
   tkDynArray:
     ndx := GlobalJSONCustomParsers.DynArraySearch(aTypeInfo,nil,aAddIfNotExisting);
@@ -32449,7 +32481,7 @@ procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
 var customWriter: TDynArrayJSONCustomWriter;
 begin
   if (self=nil) or (@Rec=nil) or (TypeInfo=nil) or
-     (PDynArrayTypeInfo(TypeInfo)^.kind<>tkRecord) then
+     not(PDynArrayTypeInfo(TypeInfo)^.kind in tkRecordTypes) then
     raise ESynException.CreateUTF8('Invalid %.AddRecordJSON(%)',[self,TypeInfo]);
   if GlobalJSONCustomParsers.RecordSearch(TypeInfo,customWriter,nil) then
     customWriter(self,Rec) else
@@ -32461,7 +32493,7 @@ var tmp: TBytes;
     typ: PDynArrayTypeInfo;
 begin
   typ := TypeInfo;
-  if (self=nil) or (typ=nil) or (typ^.kind<>tkRecord) then
+  if (self=nil) or (typ=nil) or not(typ^.kind in tkRecordTypes) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
   inc(PtrUInt(typ),typ^.NameLen);
   {$ifdef FPC}
@@ -32541,7 +32573,7 @@ begin
       AddShort(GetEnumName(aTypeInfo,byte(aValue))^);
       Add('"');
     end;
-    tkRecord:
+    tkRecord{$ifdef FPC},tkObject{$endif}:
       AddRecordJSON(aValue,aTypeInfo);
     tkDynArray:
       AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
@@ -36884,7 +36916,7 @@ begin
   end else
     result := true;
   {$else}
-  fBuf := fpmmap(nil,(fBufSize DIV $1000),PROT_READ,MAP_SHARED,fFile,0);
+  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
     exit;
@@ -36927,7 +36959,7 @@ begin
   end;
   {$else}
   if fBuf<>nil then 
-    fpmunmap(fBuf,fBufSize DIV $1000);
+    fpmunmap(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
   if fFile<>0 then begin
@@ -40972,10 +41004,11 @@ begin
   if aExeName='' then begin
     fMapFile := GetModuleName(hInstance);
     {$ifdef MSWINDOWS}
-    //fGetModuleHandle := GetModuleHandle(pointer(ExtractFileName(fMapFile)))+CODE_SECTION;
+    fGetModuleHandle := GetModuleHandle(pointer(
     {$else}
-    fGetModuleHandle := LoadLibrary(PChar(ExtractFileName(fMapFile)))+CODE_SECTION;
+    fGetModuleHandle := LoadLibrary(PChar(
     {$endif}
+      ExtractFileName(fMapFile)))+CODE_SECTION;
   end else
     fMapFile := aExeName;
   fMapFile := ChangeFileExt(fMapFile,'.map');

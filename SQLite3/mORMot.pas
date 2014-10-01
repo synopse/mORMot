@@ -1795,14 +1795,21 @@ type
     tkWString,tkVariant,tkArray,tkRecord,tkInterface,
     tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
     tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,tkHelper);
+const
+  // maps record or object types
+  tkRecordTypes = [tkObject,tkRecord];
 {$else}
   /// available type families for Delphi 6 and up 
   TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
     {$ifdef UNICODE}, tkUString{$endif});
+const
+  // maps record or object types
+  tkRecordTypes = [tkRecord];
 {$endif}
 
+type
   /// specify ordinal (tkInteger and tkEnumeration) storage size and sign
   // - note: Int64 is stored as its own TTypeKind, not as tkInteger
   TOrdType = (otSByte, otUByte, otSWord, otUWord, otSLong, otULong);
@@ -13565,16 +13572,18 @@ uses
 // ************ some RTTI and SQL mapping routines
 
 {$ifdef FPC}
-function aligntoptr(p : pointer): pointer; inline;
-begin
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := align(p,sizeof(p));
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := p;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-end;
 
-{$else}
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+function AlignToPtr(p : pointer): pointer; inline;
+begin
+  result := align(p,sizeof(p));
+end;
+{$else FPC_REQUIRES_PROPER_ALIGNMENT}
+type
+  AlignToPtr = pointer;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+{$else FPC}
 
 type
   /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
@@ -13583,6 +13592,8 @@ type
     /// = $ff for a field address, or =$fe for a virtual method
     Kind: byte;
   end;
+  /// no Rtti alignment under Delphi
+  AlignToPtr = pointer;
 
 const
   NO_INDEX = Integer($80000000);
@@ -13903,6 +13914,8 @@ begin
   {$ifdef FPC}
   if PropInfo.SetterIsField then
     PInt64(PropInfo.SetterAddr(Instance))^ := Value else
+  if (PropInfo.SetProc=0) and PropInfo.GetterIsField then
+    PInt64(PropInfo.GetterAddr(Instance))^ := Value else
     SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
   {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
@@ -14481,7 +14494,7 @@ end;
 
 function TParamInfo.Next: PParamInfo;
 begin
-  result := {$ifdef FPC}aligntoptr{$endif}(@Name[ord(Name[0])+1]);
+  result := AlignToPtr(@Name[ord(Name[0])+1]);
   {$ifdef ISDELPHI2010}
   Inc(PByte(result),PWord(result)^); // attributes
   {$endif}
@@ -14491,7 +14504,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 {$ifdef FPC}
 begin
   with GetFPCTypeData(ClassType.ClassInfo)^ do
-    result := PClassProp(@UnitName[ord(UnitName[0])+1]);
+    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]);
 {$else}
 {$ifdef PUREPASCAL}
 var PTI: PTypeInfo;
@@ -14569,7 +14582,7 @@ begin
     for i := 1 to CP^.PropCount do
       if IdemPropName(result^.Name,PropName,L) then
         exit else
-        result := @result^.Name[ord(result^.Name[0])+1]; // inlined result^.Next
+        result := result^.Next;
     aClassType := aClassType.ClassParent;
   end;
   result := nil;
@@ -16515,7 +16528,7 @@ constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PTypeInfo;
   aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  if (aRecordInfo=nil) or (aRecordInfo^.Kind<>tkRecord) then
+  if (aRecordInfo=nil) or not(aRecordInfo^.Kind in tkRecordTypes) then
     raise EORMException.CreateUTF8('%.Create: Invalid type information for %',[self,aName]);
   inherited Create(aName,sftBlobCustom,aAttributes,aFieldWidth,aPropertyIndex,
     aPropertyPointer,aData2Text,aText2Data);
@@ -18989,6 +19002,7 @@ begin
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then 
         include(EnumValues,Value);
       inc(PtrUInt(P),ord(P^[0])+1);
+     {$ifdef FPC}P := AlignToPtr(P);{$endif}
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
@@ -20063,7 +20077,7 @@ begin
           Add(#13);
         end;
         {$ifdef PUBLISHRECORD}
-        tkRecord:
+        tkRecord{$ifdef FPC},tkObject{$endif}:
           Add(sWriteObject2,[SubCompName,P^.Name,BinToBase64WithMagic(
             RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
         {$endif}
@@ -20402,7 +20416,7 @@ i64:  SetInt64Prop(Dest,pointer(@self),GetInt64Prop(Source,pointer(@self)));
     end;
     tkDynArray:
       GetDynArray(Dest).Copy(GetDynArray(Source));
-    tkRecord:
+    tkRecord{$ifdef FPC},tkObject{$endif}:
       RecordCopy(GetFieldAddr(Dest)^,GetFieldAddr(Source)^,PropType{$ifndef FPC}^{$endif});
     {$ifndef NOVARIANTS}
     tkVariant: begin // do not handle getter/setter yet
@@ -20486,20 +20500,13 @@ begin
   result := Pointer(PtrInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
 
-{$ifdef FPC}
-
+{$ifdef FPC_OR_PUREPASCAL}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := aligntoptr(@Name[ord(Name[0])+1]);
+  result := AlignToPtr(@Name[ord(Name[0])+1]);
 end;
 {$else}
 {$ifdef HASINLINE}
-function TPropInfo.Next: PPropInfo;
-begin
-  result := @Name[ord(Name[0])+1];
-end;
-{$else}
-{$ifdef PUREPASCAL}
 function TPropInfo.Next: PPropInfo;
 begin
   result := @Name[ord(Name[0])+1];
@@ -20510,23 +20517,16 @@ asm // very fast code
   movzx edx,byte ptr [eax].TPropInfo.Name
   lea eax,[eax+edx].TPropInfo.Name[1]
 end;
-{$endif}
-{$endif}
-{$endif}
+{$endif HASINLINE}
+{$endif FPC_OR_PUREPASCAL}
 
 
 { TTypeInfo }
 
-{$ifdef FPC}
+{$ifdef FPC_OR_PUREPASCAL}
 function TTypeInfo.ClassType: PClassType;
 begin
-  result := PClassType(GetFPCTypeData(@self));
-end;
-{$else}
-{$ifdef PUREPASCAL}
-function TTypeInfo.ClassType: PClassType;
-begin
-  result := @Name[ord(Name[0])+1];
+  result := AlignToPtr(@Name[ord(Name[0])+1]);
 end;
 {$else}
 function TTypeInfo.ClassType: PClassType;
@@ -20535,17 +20535,16 @@ asm // very fast code
   lea eax,[eax+edx].TTypeInfo.Name[1]
 end;
 {$endif}
-{$endif}
 
 function TTypeInfo.ClassCreate: TObject;
 begin
   result := ClassInstanceCreate(ClassType^.ClassType);
 end;
 
-{$ifdef PUREPASCAL}
+{$ifdef FPC_OR_PUREPASCAL}
 function TTypeInfo.RecordType: PRecordType; 
 begin
-  result := @Name[ord(Name[0])+1];
+  result := AlignToPtr(@Name[ord(Name[0])+1]);
 end;
 {$else}
 function TTypeInfo.RecordType: PRecordType;
@@ -20558,7 +20557,7 @@ end;
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
 begin
-  CT := PClassType(@Name[ord(Name[0])+1]);
+  CT := AlignToPtr(@Name[ord(Name[0])+1]);
   while true do // unrolled three InheritsFrom() calls
     if CT^.ClassType<>TSQLRecordMany then
     if CT^.ClassType<>TSQLRecord then
@@ -20566,7 +20565,7 @@ begin
        (CT^.ClassType<>TObjectList) then
       if CT^.ParentInfo<>nil then
         with CT^.ParentInfo^{$ifndef FPC}^{$endif} do
-          CT := @Name[ord(Name[0])+1] // get parent ClassType
+          CT := AlignToPtr(@Name[ord(Name[0])+1]) // get parent ClassType
       else break
     else begin
       result := sftObject; // published properties, TStrings TRawUTF8List TCollection
@@ -20715,7 +20714,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       exit;
     end;
     {$ifdef PUBLISHRECORD}
-    tkRecord: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}: begin
       result := sftUTF8Custom;
       exit;
     end;
@@ -20740,17 +20739,18 @@ end;
 
 function TTypeInfo.FloatType: TFloatType;
 begin
-  result := TFloatType(Name[ord(Name[0])+1]);
+  result := TFloatType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^);
 end;
 
 function TTypeInfo.OrdType: TOrdType;
 begin
-  result := TOrdType(Name[ord(Name[0])+1]);
+  result := TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^);
 end;
 
 function TTypeInfo.SetEnumType: PEnumType;
 begin
-  result := PPTypeInfo(PPointer(@Name[ord(Name[0])+(1+sizeof(TOrdType))])^)^.EnumBaseType;
+  result := PPTypeInfo(PPointer(PtrUInt(AlignToPtr(@Name[ord(Name[0])+1]))+
+    sizeof(TOrdType))^)^.EnumBaseType;
 end;
 
 
@@ -20786,13 +20786,14 @@ begin
   result := nil;
 end;
 
+
 { TClassType }
 
 {$ifdef FPC}
 function TClassType.ClassProp: PClassProp;
 begin
   if pointer(@self)<>nil then
-    result := aligntoptr(@UnitName[ord(UnitName[0])+1]) else
+    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
     result := nil; // avoid GPF
 end;
 {$else}
@@ -33082,7 +33083,7 @@ begin
         end;
         SetOrdProp(Value,pointer(P),V);
       end else
-      if (Kind=tkRecord) and (From^='{') then begin // from Delphi XE5+
+      if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+
         From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,P^.PropType{$ifndef FPC}^{$endif});
         if From=nil then
           exit; // invalid '{record}' content
@@ -33167,7 +33168,7 @@ begin
           SetWideStrProp(Value,pointer(P),WS);
         end;
       {$ifdef PUBLISHRECORD}
-      tkRecord:
+      tkRecord{$ifdef FPC},tkObject{$endif}:
         if not wasString then
           exit else
           RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.PropType^);
@@ -33293,7 +33294,7 @@ begin
       tkDynArray:
         P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
 {$ifdef PUBLISHRECORD}
-      tkRecord:
+      tkRecord{$ifdef FPC},tkObject{$endif}:
         RecordLoadJSON(P^.GetFieldAddr(Value)^,pointer(U),P^.PropType^);
 {$endif PUBLISHRECORD}
       tkClass: begin
@@ -34735,7 +34736,7 @@ begin
           AddDynArrayJSON(P^.GetDynArray(Value));
         end;
         {$ifdef PUBLISHRECORD}
-        tkRecord: begin
+        tkRecord{$ifdef FPC},tkObject{$endif}: begin
           HR(P);
           AddRecordJSON(P^.GetFieldAddr(Value)^,P^.PropType^);
         end;
@@ -36814,7 +36815,8 @@ begin
        [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
         oSQLRecord,oSQLMany,oPersistent,oCustom] then
       result := smvObject; // JSONToObject/ObjectToJSON types
-  tkRecord:   // Base64 encoding of our RecordLoad / RecordSave binary format
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    // Base64 encoding of our RecordLoad / RecordSave binary format
     result := smvRecord;
   {$ifndef NOVARIANTS}
   tkVariant:
@@ -37304,8 +37306,7 @@ begin
   {$ifdef MSWINDOWS}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
   {$else}
-  // (STUB_SIZE DIV $1000) because of mmap2
-  fStub := fpmmap(nil,(STUB_SIZE DIV $1000),PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_ANONYMOUS,-1,0);
+  fStub := fpmmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_ANONYMOUS,-1,0);
   {$endif}
 end;
 

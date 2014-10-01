@@ -182,14 +182,16 @@ interface
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
 
-{$ifndef MSWINDOWS}
-{$define ONLYUSEHTTPSOCKET}
-{$undef USETHREADPOOL}
+{$ifndef MSWINDOWS} // e.g. for FPC
+  {$define ONLYUSEHTTPSOCKET}
+  {$undef USETHREADPOOL}
 {$endif}
 
 
 uses
-  {$ifdef MSWINDOWS}Windows,{$endif}
+{$ifdef MSWINDOWS}
+  Windows,
+{$endif}
   SysUtils,
   Classes,
 {$ifdef COMPRESSDEFLATE}
@@ -467,7 +469,7 @@ begin
   n := high(fDBServers);
   for i := 0 to n do
     if fDBServers[i].Server=aServer then begin
-      {$ifdef MSWINDOWS}
+      {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).
             RemoveUrl(aServer.Model.Root,fPort,false,fDomainName)<>NO_ERROR then begin
@@ -582,12 +584,12 @@ begin
 {$ifdef COMPRESSDEFLATE}
   fHttpServer.RegisterCompress(CompressGZip);
 {$endif}
- {$ifdef MSWINDOWS}
+{$ifndef ONLYUSEHTTPSOCKET}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
- {$endif}
+{$endif}
 {$ifdef WITHLOG}
   fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
 {$endif}
