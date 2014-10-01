@@ -29443,8 +29443,8 @@ begin
     if VType=DocVariantType.VarType then
       result := @DocVariant else
     if VType=varByRef or varVariant then
-      result := DocVariantData(PVariant(VPointer)^) else
-      Result := @DocVariantDataFake;
+      result := DocVariantDataSafe(PVariant(VPointer)^) else
+      result := @DocVariantDataFake;
 end;
 
 function _Obj(const NameValuePairs: array of const;
