@@ -7068,6 +7068,11 @@ end;
   {$define NOSQLITE3ENCRYPT}
 {$endif}
 
+{.$define WITHUNSAFEBACKUP}
+{ define this if you really need the old blocking TSQLRestServerDB backup methods
+  - those methods are deprecated - you should use DB.BackupBackground() instead
+  - should match mORMotSQLite3.pas unit }
+
 const // BLOBs are stored as array of byte to avoid any charset conflict
   BlobDali: array[0..3] of byte = (97,233,224,231);
   BlobMonet: array[0..13] of byte = (224,233,231,ord('d'),ord('s'),ord('j'),
@@ -8323,7 +8328,7 @@ end;
 
 procedure TTestExternalDatabase.Test(StaticVirtualTableDirect, TrackChanges: boolean);
 const BLOB_MAX = 1000;
-var RInt: TSQLRecordPeople;
+var RInt,RInt1: TSQLRecordPeople;
     RExt: TSQLRecordPeopleExt;
     RBlob: TSQLRecordOnlyBlob;
     RJoin: TSQLRecordTestJoin;
@@ -8424,6 +8429,7 @@ begin
     InternalTestMany(self,aExternalClient);
     assert(fPeopleData<>nil);
     RInt := TSQLRecordPeople.Create;
+    RInt1 := TSQLRecordPeople.Create;
     try
       RInt.FillPrepare(fPeopleData);
       Check(RInt.FillTable<>nil);
@@ -8476,6 +8482,8 @@ begin
           end;
           inc(n);
         end;
+        Check(aExternalClient.Retrieve(1,RInt1));
+        Check(RInt1.fID=1);
         Check(n=fPeopleData.RowCount);
         Check(aExternalClient.BatchSend(BatchID)=HTML_SUCCESS);
         Check(length(BatchID)=n-99);
@@ -8555,10 +8563,12 @@ begin
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordPeople]=nil);
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordPeopleExt]<>nil);
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordOnlyBlob]<>nil);
+        {$ifdef WITHUNSAFEBACKUP}
         aExternalClient.Server.BackupGZ(aExternalClient.Server.DB.FileName+'.gz');
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordPeople]=nil);
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordPeopleExt]<>nil);
         Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordOnlyBlob]<>nil);
+        {$endif}
         for i := 1 to BatchID[high(BatchID)] do begin
           RExt.fLastChange := 0;
           RExt.CreatedAt := 0;
@@ -8586,12 +8596,12 @@ begin
         Check(RExt.FirstName='Franz36');
         Check(RExt.YearOfBirth=1828);
         aExternalClient.UpdateField(TSQLRecordPeopleExt,400,'YearOfBirth',[1515]);
-        RInt.ClearProperties;
-        Check(aExternalClient.Retrieve(1,RInt));
-        Check(RInt.fID=1);
-        {$ifndef NOSQLITE3ENCRYPT}
-        RInt.YearOfBirth := 1972;
-        Check(aExternalClient.Update(RInt)); // for RestoreGZ() below
+        RInt1.ClearProperties;
+        Check(aExternalClient.Retrieve(1,RInt1));
+        Check(RInt1.fID=1);
+        {$ifdef WITHUNSAFEBACKUP}
+        RInt1.YearOfBirth := 1972;
+        Check(aExternalClient.Update(RInt1)); // for RestoreGZ() below
         Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
         {$endif} // life backup/restore does not work with current sqlite3-64.dll
       finally
@@ -8678,12 +8688,12 @@ begin
       Check(aExternalClient.TableHasRows(TSQLRecordOnlyBlob));
       Check(aExternalClient.TableRowCount(TSQLRecordOnlyBlob)=1000);
       Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
-      RInt.ClearProperties;
-      {$ifndef NOSQLITE3ENCRYPT}
-      aExternalClient.Retrieve(1,RInt);
-      Check(RInt.fID=1);
-      Check(RInt.FirstName='Salvador1');
-      Check(RInt.YearOfBirth=1972);
+      RInt1.ClearProperties;
+      {$ifdef WITHUNSAFEBACKUP}
+      aExternalClient.Retrieve(1,RInt1);
+      Check(RInt1.fID=1);
+      Check(RInt1.FirstName='Salvador1');
+      Check(RInt1.YearOfBirth=1972);
       Check(aExternalClient.Server.RestoreGZ(aExternalClient.Server.DB.FileName+'.gz'));
       {$endif} // life backup/restore does not work with current sqlite3-64.dll
       Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordPeople]=nil);
@@ -8691,13 +8701,14 @@ begin
       Check(aExternalClient.Server.StaticVirtualTable[TSQLRecordOnlyBlob]<>nil);
       Check(aExternalClient.TableHasRows(TSQLRecordPeople));
       Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
-      RInt.ClearProperties;
-      aExternalClient.Retrieve(1,RInt);
-      Check(RInt.fID=1);
-      Check(RInt.FirstName='Salvador1');
-      Check(RInt.YearOfBirth=1904);
+      RInt1.ClearProperties;
+      aExternalClient.Retrieve(1,RInt1);
+      Check(RInt1.fID=1);
+      Check(RInt1.FirstName='Salvador1');
+      Check(RInt1.YearOfBirth=1904);
     finally
       RInt.Free;
+      RInt1.Free;
     end;
     if TrackChanges then begin
       RExt := TSQLRecordPeopleExt.Create;
