@@ -239,7 +239,6 @@ extern int winWrite(
 {$ifdef FPC}  // FPC expects coff32 .o
 {$L sqlite3.o}
 {$linklib c:\progs\mingw\lib\libkernel32.a}
-{$linklib c:\progs\mingw\lib\libmsvcrt.a}
 {$linklib c:\progs\mingw\lib\gcc\mingw32\4.8.1\libgcc.a}
 {$else}
 {$ifdef INCLUDE_FTS3}
@@ -263,21 +262,24 @@ function _ftoul: Int64;
 asm
   jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
-{$endif}
+{$endif FPC}
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_malloc';{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_free';{$endif}
 // the SQLite3 database engine will use the FastMM4 very fast heap manager
 begin
   FreeMem(P);
 end;
 
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_realloc';{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM very fast heap manager
 begin
   result := P;
@@ -285,6 +287,7 @@ begin
 end;
 
 function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memset';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   result := P;
@@ -292,16 +295,20 @@ begin
 end;
 
 procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memmove';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   Move(source^, dest^, count); // move() is overlapping-friendly
 end;
 
 procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memcpy';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   Move(source^, dest^, count);
 end;
+
+{$ifndef FPC}
 
 var __turbofloat: word; { not used, but must be present for linking }
 
@@ -309,327 +316,32 @@ var __turbofloat: word; { not used, but must be present for linking }
 
 procedure _lldiv;
 asm
-{$ifdef FPC}
-  push    ebx                {save used registers}
-  push    esi
-  push    edi
-  mov     ebx, [esp+16]      {divisor-lo}
-  mov     ecx, [esp+20]      {divisor-hi}
-  mov     esi, edx
-  mov     edi, ecx
-  sar     esi, 31
-  xor     eax, esi
-  xor     edx, esi
-  sub     eax, esi
-  sbb     edx, esi           {edx:eax = abs(Dividend)}
-  sar     edi, 31
-  xor     esi, edi           {0 if Dividend and Divisor have same sign else -1}
-  xor     ebx, edi
-  xor     ecx, edi
-  sub     ebx, edi
-  sbb     ecx, edi           {ecx:ebx = abs(Divisor)}
-  jnz     @@BigDivisor       {jump if divisor >= 2^32}
-  cmp     edx, ebx           {divisor-hi = 0, dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     edx, ecx           {edx = quotient-hi}
-  @SetSign:                    {quotient in edx:eax}
-  xor     eax, esi           {if quotient < 0}
-  xor     edx, esi           { compute 1's complement of result}
-  sub     eax, esi           {if quotient < 0}
-  sbb     edx, esi           { compute 2's complement of result}
-  @Done:
-  pop     edi                {restore used registers}
-  pop     esi
-  pop     ebx
-  ret     8
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @BigDiv            {yes, big division needed}
-  xor     eax, eax           {no, result = 0}
-  xor     edx, edx
-  jmp     @Done
-  @BigDiv:
-  push    edx                {save dividend-hi}
-  push    eax                {save dividend-lo}
-  push    ebx                {save divisor-lo}
-  mov     edi, ecx           {with divisor (ecx:ebx) and dividend (edx:eax)}
-  shr     edx, 1             { shift both}
-  rcr     eax, 1             {  dividend and}
-  ror     edi, 1             {   divisor}
-  rcr     ebx, 1             {    right by 1 bit}
-  bsr     ecx, ecx           {get number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       { dividend such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  pop     ebx                {divisor-lo}
-  mul     ebx                {quotient * divisor-lo}
-  pop     ebx                {dividend-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {get quotient}
-  pop     ecx                {dividend-hi}
-  sbb     ecx, edx           {dividend - divisor * quotient}
-  sbb     eax, 0             {adjust quotient if remainder is negative}
-  xor     edx, edx           {clear hi-word of quotient}
-  jmp     @SetSign           {quotient in edx:eax}
-{$else}
   jmp System.@_lldiv
-{$endif}
 end;
 
 procedure _lludiv;
 asm
-{$ifdef FPC}
-  push    ebx
-  mov     ecx, [esp+12]      {divisor-hi}
-  mov     ebx, [esp+8]       {divisor-lo}
-  test    ecx, ecx           {divisor >= 2^32?}
-  jnz     @@BigDivisor       {yes, big divisor}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     edx, ecx           {edx = quotient-hi}
-  pop     ebx
-  ret     8                  {quotient in edx:eax}
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @@BigDiv           {yes, big division needed}
-  xor     eax, eax           {no, result = 0}
-  xor     edx, edx
-  pop     ebx
-  ret     8
-  @@BigDiv:
-  push    edi
-  push    edx                {dividend-hi}
-  push    eax                {dividend-lo}
-  mov     edi, ecx           {divisor-hi}
-  shr     edx, 1             {Shift both divisor and dividend right 1 bit}
-  rcr     eax, 1
-  ror     edi, 1
-  rcr     ebx, 1
-  bsr     ecx, ecx           {ecx = number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       { dividend such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  mul     dword ptr [esp+20] {quotient * divisor-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  pop     ebx                {dividend-lo}
-  pop     edi                {dividend-hi}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {Get quotient}
-  sbb     edi, edx           {dividend - (divisor * quotient)}
-  sbb     eax, 0             {adjust quotient if remainder negative}
-  xor     edx, edx           {Clear hi-word of quotient}
-  pop     edi
-  pop     ebx
-  ret     8
-{$else}
   jmp System.@_lludiv
-{$endif}
 end;
 
 procedure _llmod;
 asm
-{$ifdef FPC}
-  push    ebx                {save used registers}
-  push    esi
-  push    edi
-  mov     ebx, [esp+16]      {divisor-lo}
-  mov     ecx, [esp+20]      {divisor-hi}
-  mov     esi, edx
-  sar     esi, 31            {0 if Dividend < 0 else -1}
-  mov     edi, edx
-  sar     edi, 31
-  xor     eax, edi
-  xor     edx, edi
-  sub     eax, edi
-  sbb     edx, edi           {edx:eax = abs(Dividend)}
-  mov     edi, ecx
-  sar     edi, 31
-  xor     ebx, edi
-  xor     ecx, edi
-  sub     ebx, edi
-  sbb     ecx, edi           {ecx:ebx = abs(Divisor)}
-  jnz     @@BigDivisor       {jump if divisor >= 2^32}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  mov     eax, ecx           {eax = dividend-lo}
-  @@OneDiv:
-  div     ebx
-  mov     eax, edx           {eax = quotient-lo}
-  xor     edx, edx           {edx = quotient-hi = 0}
-  @@SetSign:                   {remainder in edx:eax}
-  xor     eax, esi           {if (remainder < 0)}
-  xor     edx, esi           {  compute 1's complement of result}
-  sub     eax, esi           {if (remainder < 0)}
-  sbb     edx, esi           {  compute 2's complement of result}
-  pop     edi                {restore used registers}
-  pop     esi
-  pop     ebx
-  ret     8
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi < divisor-hi?}
-  jb      @@SetSign          {yes, result = dividend}
-  @@BigDiv:
-  push    edx                {save dividend-hi}
-  push    eax                {save dividend-lo}
-  push    ebx                {save divisor-lo}
-  mov     edi, ecx           {with divisor (ecx:ebx) and dividend (edx:eax)}
-  shr     edx, 1             { shift both}
-  rcr     eax, 1             {  dividend and}
-  ror     edi, 1             {   divisor}
-  rcr     ebx, 1             {    right by 1 bit}
-  bsr     ecx, ecx           {get number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       {  dividend such that divisor}
-  shr     edx, cl            {    is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  pop     ebx                {divisor-lo}
-  mul     ebx                {quotient * divisor-lo}
-  pop     ebx                {dividend-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {get quotient}
-  pop     ecx                {dividend-hi}
-  sbb     ecx, edx           {divisor * quotient from dividend}
-  sbb     eax, eax           {if remainder < 0 then -1 else 0}
-  mov     edx, [esp+20]      {divisor-hi}
-  and     edx, eax           {if remainder < 0 then divisor-hi else 0}
-  and     eax, [esp+16]      {if remainder < 0 then divisor-lo else 0}
-  add     eax, ebx           {remainder-lo}
-  add     edx, ecx           {remainder-hi}
-  jmp @@SetSign
-{$else}
   jmp System.@_llmod
-{$endif}
 end;
 
 procedure _llmul;
 asm
-{$ifdef FPC}
-  mov     ecx, [esp+8]
-  imul    edx, [esp+4]
-  imul    ecx, eax
-  add     ecx, edx
-  mul     dword ptr [esp+4]
-  add     edx, ecx
-  ret     8
-{$else}
   jmp System.@_llmul
-{$endif}
 end;
 
 procedure _llumod;
 asm
-{$ifdef FPC}
-  push    ebx
-  mov     ecx, [esp+12]      {divisor-hi}
-  mov     ebx, [esp+8]       {divisor-lo}
-  test    ecx, ecx           {divisor >= 2^32?}
-  jnz     @@BigDivisor       {yes, big divisor}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     eax, edx           {eax = remainder_lo}
-  xor     edx, edx           {edx = remainder_hi = 0}
-  pop     ebx
-  ret     8                  {result in edx:eax}
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @@BigDiv           {yes, big division needed}
-  pop     ebx
-  ret     8                  {result in edx:eax}
-  @@BigDiv:
-  push    edi
-  push    esi
-  push    edx                {dividend-hi}
-  push    ebx                {divisor-lo}
-  mov     edi, ecx           {divisor-hi}
-  mov     esi, eax           {dividend-lo}
-  shr     edx, 1             {Shift both divisor and dividend right 1 bit}
-  rcr     eax, 1
-  ror     edi, 1
-  rcr     ebx, 1
-  bsr     ecx, ecx           {number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and dividend}
-  shrd    eax, edx, cl       { such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, edi           {divisor-hi}
-  pop     ebx                {divisor-lo}
-  imul    ecx, eax           {quotient * divisor-hi}
-  mul     ebx                {quotient * divisor-lo}
-  add     edx, ecx           {edx:eax = quotient * divisor}
-  sub     esi, eax           {dividend-lo - (quotient*divisor-lo)}
-  pop     ecx                {dividend-hi}
-  mov     eax, ebx           {divisor-lo}
-  sbb     ecx, edx           {dividend - (divisor * quotient)}
-  sbb     edx, edx           {-1 if remainder < 0 else 0}
-  and     eax, edx           {divisor-lo if remainder < 0 else 0}
-  and     edx, edi           {divisor-hi if remainder < 0 else 0}
-  add     eax, esi           {add ecx:esi to edx:eax}
-  adc     edx, ecx
-  pop     esi
-  pop     edi
-  pop     ebx
-  ret     8
-{$else}
   jmp System.@_llumod
-{$endif}
 end;
 
 procedure _llshl;
 asm
-  {$ifdef FPC}
-  shld    edx, eax, cl
-  shl     eax, cl
-  cmp     cl, 32
-  jl      @@Done
-  cmp     cl, 64
-  sbb     edx, edx
-  and     edx, eax
-  xor     eax, eax
-  {$ifndef NOAMD}ret{$endif}
-  @@Done:
-  {$ifndef NOAMD}db $f3{$endif} // rep ret AMD trick here
-{$else}
   jmp System.@_llshl
-{$endif}
 end;
 
 procedure _llshr;
@@ -656,30 +368,27 @@ end;
 
 procedure _llushr;
 asm
-{$ifdef FPC}
-  shrd    eax, edx, cl
-  shr     edx, cl
-  cmp     cl, 32
-  jl      @@Done
-  cmp     cl, 64
-  sbb     eax, eax
-  and     eax, edx
-  xor     edx, edx
-{$ifndef NOAMD}ret{$endif}
-@@Done:
-{$ifndef NOAMD}db $f3{$endif} // rep ret AMD trick here
-{$else}
   jmp System.@_llushr
-{$endif}
 end;
 
+{$endif FPC}
+
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strlen';{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrLen(pointer(p));
 end;
 
+function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strcmp';{$endif}
+// a fast full pascal version of the standard C library function
+begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
+  result := SynCommons.StrComp(p1,p2);
+end;
+
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memcmp';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -702,6 +411,7 @@ begin
 end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strncmp';{$endif}
 // a fast full pascal version of the standard C library function
 var i: integer;
 begin
@@ -794,6 +504,7 @@ end;
 
 procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func);
   cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_qsort';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
@@ -821,13 +532,14 @@ var
     __tm_zone: ^Char;           { Timezone abbreviation.}
   end;
 
-function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
+function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '__localtime64';{$endif}
 // a fast full pascal version of the standard C library function
 var uTm: TFileTime;
     lTm: TFileTime;
     S: TSystemTime;
 begin
-  Int64(uTm) := (Int64(t^) + 11644473600)*10000000; // unix time to dos file time
+  Int64(uTm) := (t+11644473600)*10000000; // unix time to dos file time
   FileTimeToLocalFileTime(uTM,lTM);
   FileTimeToSystemTime(lTM,S);
   with atm do begin
@@ -842,12 +554,18 @@ begin
   result := @atm;
 end;
 
+function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_localtime';{$endif}
+begin
+  result := localtime64(t^);
+end;
+
 
 procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
 // very fast table (private key) computation from a given password
 // - use a simple prime-based random generator, strong enough for common use
-// - execution speed and code size was the goal here
-// - SynCrypto proposes SHA-256 and AES-256 for most secure encryption
+// - execution speed and code size was the goal here: can be easily broken
+// - SynCrypto proposes SHA-256 and AES-256 for more secure encryption
 var i, j, k, L: integer;
 begin
   L := length(Password)-1;
