@@ -29,6 +29,7 @@ unit SynMongoDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Sabbiolina
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -156,8 +157,8 @@ type
   // - betBinary kind will store a BLOB content as RawByteString
   // - betDoc and betArray kind will store a BSON document, in its original
   // binary format as RawByteString (TBSONDocument)
-  // - betDeprecatedDbptr, betJSScope and betRegEx will store the raw original
-  // BSON content as RawByteString
+  // - betDeprecatedDbptr, betJSScope, betTimeStamp and betRegEx will store the
+  // raw original BSON content as RawByteString
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUTF8
   // - betDeprecatedUndefined or betMinKey/betMaxKey do not contain any data
@@ -174,7 +175,7 @@ type
       {$HINTS ON}
       VObjectID: TBSONObjectID
     );
-    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr,
+    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
     betJSScope: (
       /// store the raw binary content as a RawByteString (or TBSONDocument for
       // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
@@ -186,7 +187,7 @@ type
       /// store here a RawUTF8 with the associated text
       // - you have to use RawUF8(VText) when accessing this field
       VText: pointer;
-    )
+    );
   end;
   {$A+}
 
@@ -321,7 +322,7 @@ type
     // - not all Kind are handled here, only the complex data
     Data: record
     case TBSONElementType of
-    betFloat, betBoolean, betInt32, betDateTime, betTimeStamp, betInt64: (
+    betFloat, betBoolean, betInt32, betDateTime, betInt64: (
       /// this variable is not to be used directly, but for some internal
       // temporary storage, e.g. with FromVariant()
       // - use P*(Element)^ typecast instead
@@ -356,6 +357,11 @@ type
       JavaScriptLen: integer;
       ScopeDocument: PByte;
     );
+    betTimeStamp: (
+      { map InternalStorage: Int64 }
+      time_t: cardinal;
+      ordinal: cardinal;
+    )
     end;
     /// fill a BSON Element structure from a variant content and associated name
     // - perform the reverse conversion as made with ToVariant()
@@ -611,7 +617,7 @@ const
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
   BSON_ELEMENTVARIANTMANAGED =
-   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr,
+   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
     betJSScope, betJS, betDeprecatedSymbol];
 
   /// by definition, maximum MongoDB document size is 16 MB
@@ -2334,7 +2340,7 @@ var
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
     //betJSScope, betInt32, betTimeStamp, betInt64
-    varUnknown, varInteger, varWord64, varInt64);
+    varUnknown, varInteger, varUnknown, varInt64);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
 begin
@@ -2362,7 +2368,7 @@ begin
       BSONItemsToDocVariant(Kind,Data.DocList,TDocVariantData(result),DocArrayConversion);
       exit;
     end;
-  betBinary, betRegEx, betDeprecatedDbptr, betJSScope:
+  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimeStamp:
     SetString(RawByteString(resBSON.VBlob),PAnsiChar(Element),ElementBytes);
   betObjectID:
     resBSON.VObjectID := PBSONObjectID(Element)^;
@@ -2512,6 +2518,8 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     goto bin; // no specific JSON construct for this deprecated item
   betJSScope:
     goto bin; // no specific JSON construct for this item yet
+  betTimeStamp:
+    goto bin; // internal content will always be written as raw binary
   betBoolean:
     W.AddString(JSON_BOOLEAN[PBoolean(Element)^]);
   betDateTime: begin
@@ -2681,7 +2689,7 @@ begin // see http://bsonspec.org/#/specification
   else
     if Kind>high(BSON_ELEMENTSIZE) then // e.g. betMinKey betMaxKey
       ElementBytes := 0 else
-      ElementBytes := BSON_ELEMENTSIZE[Kind];
+      ElementBytes := BSON_ELEMENTSIZE[Kind]; // fixed size storage
   end;
 end;
 
