@@ -29,6 +29,7 @@ unit SynDBDataset;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - itSDS
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -71,6 +72,9 @@ uses
 { -------------- DB.pas TDataSet (TQuery like) abstract connection }
 
 type
+  {$ifndef UNICODE}
+  TValueBuffer = Pointer;
+  {$endif}
 
   /// Exception type associated to generic TDataSet / DB.pas unit Dataset connection
   ESQLDBDataset = class(ESynException);
@@ -349,7 +353,7 @@ begin
       end;
     end else begin
       SetLength(result,TField(ColumnAttr).DataSize);
-      TField(ColumnAttr).GetData(pointer(result));
+      TField(ColumnAttr).GetData(TValueBuffer(result));
     end;
 end;
 
@@ -703,8 +707,8 @@ begin
         SynCommons.ftBlob:
           {$ifdef UNICODE}
           if aArrayIndex>=0 then
-            P.SetBlobData(pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
-            P.SetBlobData(pointer(VData),Length(VData));
+            P.SetBlobData(TValueBuffer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
+            P.SetBlobData(TValueBuffer(VData),Length(VData));
           {$else}
           if aArrayIndex>=0 then
             P.AsString := VArray[aArrayIndex] else
