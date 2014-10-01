@@ -69,6 +69,7 @@ unit mORMotService;
     - added TServiceController.CheckParameters() generic method to control
       a service from the command line
     - check the executable file in TServiceController.CreateNewService()
+    - use SQLite3Log instead of TSQLLog - see [779d773e966]
 
 }
 
@@ -412,7 +413,7 @@ begin
   inherited Create;
   if Path='' then begin
     {$ifndef NOMORMOTKERNEL}
-    TSQLLog.Add.Log(sllError,'OpenSCManager(%,%) with Path=""',
+    SQLite3Log.Add.Log(sllError,'OpenSCManager(%,%) with Path=""',
       [TargetComputer,DatabaseName]);
     {$endif}
     Exit;
@@ -423,7 +424,7 @@ begin
   if FSCHandle=0 then begin
     {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SQLite3Log.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
     SetLastError(backupError);
     {$endif}
     Exit;
@@ -435,7 +436,7 @@ begin
   {$ifndef NOMORMOTKERNEL}
   if FHandle=0 then begin
     backupError := GetLastError;
-    TSQLLog.Add.Log(sllLastError,'CreateService("%","%")',[Name,DisplayName]);
+    SQLite3Log.Add.Log(sllLastError,'CreateService("%","%")',[Name,DisplayName]);
     SetLastError(backupError);
   end;
   {$endif}
@@ -454,7 +455,7 @@ begin
   if FSCHandle = 0 then begin
     {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    TSQLLog.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SQLite3Log.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
     SetLastError(backupError);
     {$endif}
     Exit;
@@ -463,7 +464,7 @@ begin
   {$ifndef NOMORMOTKERNEL}
   if FHandle=0 then begin
     backupError := GetLastError;
-    TSQLLog.Add.Log(sllLastError,'OpenService("%")',[Name]);
+    SQLite3Log.Add.Log(sllLastError,'OpenService("%")',[Name]);
     SetLastError(backupError);
   end;
   {$endif}
@@ -479,7 +480,7 @@ begin
     end
     {$ifndef NOMORMOTKERNEL}
     else
-      TSQLLog.Add.Log(sllLastError,'DeleteService(%)',[FName]);
+      SQLite3Log.Add.Log(sllLastError,'DeleteService(%)',[FName]);
     {$endif}
 end;
 
@@ -500,7 +501,7 @@ begin
     result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
   {$ifndef NOMORMOTKERNEL}
-  TSQLLog.Add.Log(sllTrace,pointer(FName),TypeInfo(TServiceState),result);
+  SQLite3Log.Add.Log(sllTrace,pointer(FName),TypeInfo(TServiceState),result);
   {$endif}
 end;
 
@@ -549,7 +550,7 @@ procedure TServiceController.CheckParameters(const ExeFileName,DisplayName: stri
 procedure ShowError(const Msg: RawUTF8);
 begin
   {$ifndef NOMORMOTKERNEL}
-  TSQLLog.Add.Log(sllLastError,Msg,self);
+  SQLite3Log.Add.Log(sllLastError,Msg,self);
   {$endif}
 end;
 var param: string;
@@ -560,7 +561,7 @@ begin
   for i := 1 to ParamCount do begin
     param := SysUtils.LowerCase(paramstr(i));
     {$ifndef NOMORMOTKERNEL}
-    TSQLLog.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
+    SQLite3Log.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
     {$endif}
     if param='/install' then
       TServiceController.CreateNewService('','',UTF8ToString(FName),
@@ -639,7 +640,7 @@ begin
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
   {$ifndef NOMORMOTKERNEL}
-  TSQLLog.Add.Log(sllInfo,'% (%) running as "%"',
+  SQLite3Log.Add.Log(sllInfo,'% (%) running as "%"',
     [ServiceName,aDisplayName,ParamStr(0)],self);
   {$endif}
 end;
@@ -667,8 +668,8 @@ end;
 procedure TService.DoCtrlHandle(Code: DWORD);
 begin
   {$ifndef NOMORMOTKERNEL}
-  TSQLLog.Enter(self);
-  TSQLLog.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
+  SQLite3Log.Enter(self);
+  SQLite3Log.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
   {$endif}
    case Code of
      SERVICE_CONTROL_STOP: begin
@@ -800,7 +801,7 @@ function TService.ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
 var status: string;
 begin
   status := ServiceStateText(CurrentStateToServiceState(dwState));
-  TSQLLog.Add.Log(sllInfo,'% ReportStatus(%,%,%)',
+  SQLite3Log.Add.Log(sllInfo,'% ReportStatus(%,%,%)',
     [ServiceName,status,dwExitCode,dwWait],self);
 {$else}
 begin
@@ -817,7 +818,7 @@ begin
   result := SetServiceStatus(FStatusHandle, fStatusRec);
   if not result then
     {$ifndef NOMORMOTKERNEL}
-    TSQLLog.Add.Log(sllLastError,'% ReportStatus(%,%,%)',
+    SQLite3Log.Add.Log(sllLastError,'% ReportStatus(%,%,%)',
       [ServiceName,status,dwExitCode,dwWait],self);
     {$endif}
 end;
