@@ -239,6 +239,7 @@
     {$ifend}
     {$if CompilerVersion = 20}
       {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
+      // for Delphi 2009 and up, use UNICODE conditional :)
     {$ifend}
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI

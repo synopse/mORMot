@@ -1990,11 +1990,19 @@ type
 {$A-}
 {$endif}
  { Delphi and FPC compiler use packed storage for this internal type }
-  TRecordField = packed record
+  TRecordField =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     TypeInfo: PPTypeInfo;
     Offset: Cardinal;
   end;
-  TRecordType = packed record
+  TRecordType =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     Size: cardinal;
     Count: integer;
     Fields: array[word] of TRecordField;
@@ -3199,9 +3207,7 @@ function GetEnumNameTrimed(aTypeInfo: PTypeInfo; const aIndex): RawUTF8;
 
 
 {$ifdef MSWINDOWS}
-{$ifdef CONDITIONALEXPRESSIONS}
-{$ifndef FPC}
-{$if CompilerVersion >= 22.0} // fix Delphi XE imcompatilibility
+{$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
 type
   TSecurityAttributes = packed record
     nLength: DWORD;
@@ -3212,10 +3218,8 @@ type
 const
   SECURITY_DESCRIPTOR_REVISION = 1;
   SECURITY_DESCRIPTOR_MIN_LENGTH = 20;
-{$ifend}
-{$endif}
-{$endif}
-{$endif}
+{$endif ISDELPHIXE}
+{$endif MSWINDOWS}
 
 const
   /// HTML Status Code for "Continue"
@@ -4508,13 +4512,6 @@ type
   protected
     fInternalState: cardinal;
     fID: integer;
-  {$ifdef HASINLINE}public{$endif}
-    /// trick to get the ID even in case of a sftID published property
-    function GetID: integer;
-     {$ifdef HASINLINE}inline;{$endif}
-    /// trick to typecast the ID on 64 bit platform
-    function GetIDAsPointer: pointer;
-      {$ifdef HASINLINE}inline;{$endif}
     /// virtual method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
     // properties, by adding some TSQLPropInfo instances to Props.Fields list,
@@ -4523,6 +4520,15 @@ type
     // - can also be used to specify a custom text collation, by calling
     // Props.SetCustomCollationForAllRawUTF8() or SetCustomCollation() methods
     class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); virtual;
+  {$ifdef MSWINDOWS}{$ifdef HASINLINE}
+  public
+  {$endif}{$endif}
+    /// trick to get the ID even in case of a sftID published property
+    function GetID: integer;
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    /// trick to typecast the ID on 64 bit platform
+    function GetIDAsPointer: pointer;
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
   public
     /// direct access to the TSQLRecord properties from RTTI
     // - TSQLRecordProperties is faster than e.g. the class function FieldProp()
@@ -13571,19 +13577,7 @@ uses
 
 // ************ some RTTI and SQL mapping routines
 
-{$ifdef FPC}
-
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-function AlignToPtr(p : pointer): pointer; inline;
-begin
-  result := align(p,sizeof(p));
-end;
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-type
-  AlignToPtr = pointer;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
-{$else FPC}
+{$ifndef FPC}
 
 type
   /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
@@ -13602,12 +13596,14 @@ const
 
 function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
 {$ifdef USETYPEINFO}
+{$ifndef FPC}
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: PtrInt of object;
   TIndexedGetProc = function(Index: Integer): PtrInt of object;
 var value: PtrInt;
     Call: TMethod;
     P: pointer;
+{$endif}
 begin
   {$ifdef FPC}
   result := GetFPCOrdProp(Instance,pointer(PropInfo));
@@ -13700,11 +13696,13 @@ end;
 procedure SetOrdProp(Instance: TObject; PropInfo: PPropInfo; Value: PtrInt);
 // AB: use the getter field address if no setter (no write attribute) exists
 {$ifdef USETYPEINFO}
+{$ifndef FPC}
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(Value: PtrInt) of object;
   TIndexedProp = procedure(Index: integer; Value: PtrInt) of object;
 var P: pointer;
     Call: TMethod;
+{$endif}
 begin
   {$ifdef FPC}
   SetFPCOrdProp(Instance,pointer(PropInfo),Value);
@@ -14534,7 +14532,7 @@ begin
   if ClassType<>nil then begin
     CP := InternalClassProp(ClassType);
     if CP<>nil then begin
-      P := @CP^.PropList;
+      P := AlignToPtr(@CP^.PropList);
       for result := 0 to CP^.PropCount-1 do
         if IdemPropName(P^.Name,PropName) then
           exit else
@@ -14559,7 +14557,7 @@ begin
     CP := InternalClassProp(aClassType);
     if CP=nil then
       break; // no RTTI information (e.g. reached TObject level)
-    result := @CP^.PropList;
+    result := AlignToPtr(@CP^.PropList);
     for i := 1 to CP^.PropCount do
       if IdemPropName(result^.Name,PropName) then
         exit else
@@ -14570,9 +14568,14 @@ begin
 end;
 
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
+{$ifndef FPC}
 var i, L: integer;
     CP: PClassProp;
+{$endif}
 begin
+  {$ifdef FPC}
+  result := pointer(GetFPCPropInfo(aClassType,PUTF8Char(PropName)));
+  {$else}
   L := StrLen(PropName);
   while (L<>0) and (aClassType<>nil) do begin
     CP := InternalClassProp(aClassType);
@@ -14586,6 +14589,7 @@ begin
     aClassType := aClassType.ClassParent;
   end;
   result := nil;
+  {$endif}
 end;
 
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -14611,7 +14615,7 @@ begin
   if ClassType<>nil then
   with InternalClassProp(ClassType)^ do
   if PropIndex<PropCount then begin
-    result := @PropList;
+    result := AlignToPtr(@PropList);
     for i := 1 to PropIndex do
       result := result^.Next;
   end;
@@ -19002,7 +19006,7 @@ begin
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then 
         include(EnumValues,Value);
       inc(PtrUInt(P),ord(P^[0])+1);
-     {$ifdef FPC}P := AlignToPtr(P);{$endif}
+      // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
@@ -20046,7 +20050,7 @@ begin
     CP := InternalClassProp(PPointer(Value)^);
     if CP=nil then
       exit;
-    P := @CP^.PropList;
+    P := AlignToPtr(@CP^.PropList);
     for i := 1 to CP^.PropCount do begin
       case P^.PropType^.Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}:
@@ -20874,6 +20878,7 @@ begin
     while Value>0 do begin
       dec(Value);
       inc(PtrUInt(result),ord(result^[0])+1);
+      //{$ifdef FPC}result := AlignToPtr(result);{$endif} // enum names seem not aligned
     end else
     result := @NULL_SHORTSTRING;
 end;
@@ -22527,7 +22532,13 @@ begin // private sub function makes the code faster in most case
       raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true 
     // register to the internal garbage collection (avoid memory leak)
+    // ALF //
+    // Does not work under ARM ... I do not know why !!
+    {$ifdef CPUARM}
+    {$WARNING 'This code (GarbageCollectorFreeAndNil(PVMT^,result);) does not work on ARM.'}
+    {$else}
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+    {$endif}
   end;
 end;
 
@@ -32280,7 +32291,7 @@ begin
     CP := InternalClassProp(C);
     if CP=nil then
       break; // no more RTTI information available
-    P := @CP^.PropList;
+    P := AlignToPtr(@CP^.PropList);
     for i := 1 to CP^.PropCount do begin
       P^.CopyValue(aFrom,aTo); // shortstring not handled
       P := P^.Next;
@@ -32321,7 +32332,7 @@ begin
   CP := InternalClassProp(PPointer(Value)^);
   if CP=nil then
     exit; // no RTTI available
-  P := @CP^.PropList;
+  P := AlignToPtr(@CP^.PropList);
   for i := 1 to CP^.PropCount do begin
     case P^.PropType^.Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}:
@@ -33257,7 +33268,7 @@ begin
   CP := InternalClassProp(PPointer(Value)^);
   if CP=nil then
     exit; // no RTTI available
-  P := @CP^.PropList;
+  P := AlignToPtr(@CP^.PropList);
   for i := 1 to CP^.PropCount do begin
     PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
     U := FindIniNameValue(From,UpperName);
@@ -33339,7 +33350,7 @@ begin
   CP := InternalClassProp(PPointer(Value)^);
   if CP=nil then
     exit; // no RTTI available
-  P := @CP^.PropList;
+  P := AlignToPtr(@CP^.PropList);
   for i := 1 to CP^.PropCount do begin
     case P^.PropType^.Kind of
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
@@ -33940,7 +33951,7 @@ constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
     AddParentsFirst(aClassType.ClassParent);
     CP := InternalClassProp(aClassType);
     if CP<>nil then begin
-      P := @CP^.PropList;
+      P := AlignToPtr(@CP^.PropList);
       for i := 1 to CP^.PropCount do begin
         Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count));
         P := P^.Next;
@@ -34638,7 +34649,7 @@ begin
     CP := InternalClassProp(aClassType);
     if CP=nil then
       break; // no more RTTI information available
-    P := @CP^.PropList;
+    P := AlignToPtr(@CP^.PropList);
     for i := 1 to CP^.PropCount do begin
       if IsObj in [oSQLRecord,oSQLMany] then begin
         if IsRowIDShort(P^.Name) then
@@ -36559,6 +36570,11 @@ begin
 end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
+{$ifdef CPUARM}
+begin
+  raise EInterfaceFactoryException('You encountered an ALF !!! This code is disabled on ARM !!!');
+end;
+{$else}
 var method: ^TServiceMethod;
 procedure RaiseError(Format: PUTF8Char; const Args: array of const);
 begin
@@ -36755,6 +36771,7 @@ begin
   end;
   {$endif}
 end;
+{$endif CPUARM}
 
 
 { TInterfaceFactory }
@@ -37108,10 +37125,10 @@ begin
     Ancestor := nil;
   if Ancestor<>nil then
     AddMethodsFromTypeInfo(Ancestor);
-  P := @PI^.IntfUnit[ord(PI^.IntfUnit[0])+1];
+  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
   // retrieve methods for this interface level
   {$ifdef FPC}
-  PS := @PS^[ord(PS^[0])+1]; // ignore iidstr
+  PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // ignore iidstr
   {$endif}
   n := PW^; inc(PW);
   if (PW^=$ffff) or (n=0) then
@@ -37123,7 +37140,7 @@ begin
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
-      PS := @PS^[ord(PS^[0])+1];
+      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
       Kind := PME^.Kind;
       if PME^.CC<>ccRegister then
         RaiseError('method shall use register calling convention',[]);
@@ -37155,9 +37172,9 @@ begin
         if ValueDirection<>smdConst then
           ArgsOutNotResultLast := a;
         ParamName := PS;
-        PS := @PS^[ord(PS^[0])+1];
+        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
         TypeName := PS;
-        PS := @PS^[ord(PS^[0])+1];
+        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
         if PP^=nil then
           RaiseError('"%" parameter has no information',[ParamName^]);
         TypeInfo := PP^{$ifndef FPC}^{$endif};
@@ -37207,7 +37224,7 @@ begin
           ArgsResultIndex := n;
           ValueDirection := smdResult;
           TypeName := PS;
-          PS := @PS^[ord(PS^[0])+1];
+          PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
           TypeInfo := PP^{$ifndef FPC}^{$endif};
           inc(PP);
           ValueType := TypeInfoToMethodValueType(TypeInfo);
@@ -37306,7 +37323,7 @@ begin
   {$ifdef MSWINDOWS}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
   {$else}
-  fStub := fpmmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_ANONYMOUS,-1,0);
+  fStub := fpmmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
   {$endif}
 end;
 
@@ -38369,6 +38386,11 @@ type
   end;
 
 procedure CallMethod(var Args: TCallMethodArgs);
+{$ifdef CPUARM}
+begin
+  raise EInterfaceFactoryException('You encountered an ALF !!! This code is disabled on ARM !!!');
+end;
+{$else}
 {$ifdef CPU64}
 asm
     .params 64    // size for 64 parameters
@@ -38442,6 +38464,7 @@ asm
     pop esi
 end;
 {$endif CPU64}
+{$endif CPUARM}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var synch: PBackgroundLauncher absolute Call;

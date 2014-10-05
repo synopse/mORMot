@@ -67,6 +67,12 @@ const
   ptVirtual = 2;
   ptConst = 3;
 
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+function AlignToPtr(p : pointer): pointer; inline;
+{$else FPC_REQUIRES_PROPER_ALIGNMENT}
+type
+  AlignToPtr = pointer;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetFPCVariantProp(Instance: TObject; PropInfo : PPropInfo): Variant; inline;
 procedure SetFPCVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: Variant); inline;
@@ -85,10 +91,22 @@ procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: Wid
 procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
 function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
 procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended); inline;
-function GetTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
+function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
+
+{$if FPC_FULLVERSION>=20701}
+  {$define IS_FPC271}
+{$endif}
+
 
 
 implementation
+
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+function AlignToPtr(p : pointer): pointer; inline;
+begin
+  result := align(p,sizeof(p));
+end;
+{$endif}
 
 function GetFPCVariantProp(Instance: TObject; PropInfo: PPropInfo): Variant;
 begin
@@ -139,7 +157,7 @@ begin
   if Length(Name)=0 then
     exit(-1);
   sName := Name;
-  PT := GetTypeData(TypeInfo);
+  PT := GetFPCTypeData(TypeInfo);
   Count := 0;
   Result := -1;
 
@@ -167,7 +185,7 @@ const NULL_SHORTSTRING: string[1] = '';
 Var PS: PShortString;
     PT: PTypeData;
 begin
-  PT := GetTypeData(TypeInfo);
+  PT := GetFPCTypeData(TypeInfo);
   if TypeInfo^.Kind=tkBool then
     begin
       case Value of
@@ -192,7 +210,7 @@ end;
 
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
 begin
-  result := GetTypeData(TypeInfo);
+  result := AlignToPtr(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^);
 end;
 
 {
@@ -248,9 +266,9 @@ begin
   TYPINFO.SetFloatProp(Instance,PropInfo,Value);
 end;
 
-function GetTypeData(TypeInfo: PTypeInfo): PTypeData;
+function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
-  result := PTypeData((PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+  result := TYPINFO.GetPropInfo(AClass,PropName);
 end;
 
 end.

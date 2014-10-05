@@ -400,7 +400,7 @@ unit SynCommons;
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
   - faster x86/x64 asm versions of StrUInt32() StrInt32() StrInt64() functions
-  - new StrUInt64(), UniqueRawUTF8() and SetRawUTF8() functions
+  - new StrUInt64(), UniqueRawUTF8(), FastNewRawUTF8() and SetRawUTF8() functions
   - recognize 8.1 and upcoming "Threshold" 9 in TWindowsVersion
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
@@ -1290,6 +1290,10 @@ const
 // ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetRawUTF8 245.64ms
 // ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetString  136.39ms
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
+
+/// faster equivalence to SetString(s,nil,len) function for a RawUTF8
+// - won't allocate the content if the string refcount is 1 and len matches
+procedure FastNewRawUTF8(var s: RawUTF8; len: integer);
 
 /// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
 // - will ensure that the string refcount is 1, and return a pointer to the text
@@ -13819,22 +13823,16 @@ const
    // maps record or object types
    tkRecordTypes = [tkObject,tkRecord];
 
-function AlignToPtr(p : pointer): pointer; inline;
-begin
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := align(p,sizeof(p));
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := p;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-end;
-
 {$else}
 
-type  /// available type families for Delphi 6 and up, similar to typinfo.pas
+type
+  /// available type families for Delphi 6 and up, similar to typinfo.pas
   TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
     {$ifdef UNICODE}, tkUString, tkClassRef, tkPointer, tkProcedure{$endif});
+  /// no Rtti alignment under Delphi
+  AlignToPtr = pointer;
 
 const
   // maps record or object types
@@ -13849,10 +13847,16 @@ type
   
   PStrRec = ^TStrRec;
   /// map the Delphi string header, as defined in System.pas
-  TStrRec = packed record
-{$ifdef FPC}
+  TStrRec =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
+    {$ifdef FPC}
+    {$ifdef IS_FPC271}}
     codePage: Word;
     elemSize: Word;
+    {$endif}
     {$ifdef CPU64}
     _Padding: LongInt;
     {$endif}
@@ -13884,14 +13888,18 @@ type
   end;
 
   /// map the Delphi dynamic array header (stored before each instance)
-  TDynArrayRec = packed record
+  TDynArrayRec =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     {$ifdef CPUX64}
     _Padding: LongInt; // Delphi XE2+ expects 16 byte alignment
     {$endif}
     /// dynamic array reference count (basic garbage memory mechanism)
     {$ifdef FPC}
     refCnt: PtrInt;
-    high: sizeint;
+    high: tdynarrayindex;
     function GetLength: sizeint; inline;
     procedure SetLength(len: sizeint); inline;
     property length: sizeint read GetLength write SetLength;
@@ -13904,16 +13912,25 @@ type
   end;
   PDynArrayRec = ^TDynArrayRec;
 
+  {$ifdef FPC}
+  {$PACKRECORDS C}
+  {$endif}
+
   /// map the Delphi dynamic array RTTI
   PDynArrayTypeInfo = ^TDynArrayTypeInfo;
-  TDynArrayTypeInfo = packed record
+  TDynArrayTypeInfo =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     kind: TTypeKind;
     NameLen: Byte;
     {$ifdef FPC}
-    elSize: PtrUInt;
+    elSize: SizeUInt;
     elType2: PDynArrayTypeInfo;
-    varType: Integer;
+    varType: LongInt;
     elType: PDynArrayTypeInfo;
+    //DynUnitName: ShortStringBase;
     {$else}
     // storage byte count for this field
     elSize: Longint;
@@ -13928,7 +13945,11 @@ type
 
   /// map the Delphi static array RTTI
   PArrayTypeInfo = ^TArrayTypeInfo;
-  TArrayTypeInfo = packed record
+  TArrayTypeInfo =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     Size: Integer;
     // product of lengths of all dimensions
     elCount: Integer;
@@ -13939,7 +13960,11 @@ type
 
 
   /// map the Delphi record field RTTI
-  TFieldInfo = packed record
+  TFieldInfo =
+    //{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    //{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     {$ifdef FPC}
     TypeInfo: PDynArrayTypeInfo;
     Offset: sizeint;
@@ -13961,7 +13986,11 @@ type
   {$endif}
 
   /// map the Delphi record RTTI
-  TFieldTable = packed record
+  TFieldTable =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     Kind: TTypeKind;
     NameLen: byte; // = Name[0] = length(Name)
     Size: cardinal;
@@ -13982,11 +14011,16 @@ const
   STRRECSIZE = SizeOf(TStrRec);
 
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
-{$ifdef FPC_OR_PUREPASCAL}
+{$ifdef FPC}inline;
+begin
+  SetString(Dest,PAnsiChar(text),len);
+end;
+{$else}
+{$ifdef PUREPASCAL}
 var P: PStrRec;
 begin
-  if (len>128) or (PtrInt(Dest)=0) or     // s=''
-     (PInteger(PtrInt(Dest)-8)^<>1) then  // s.refcount<>1
+  if (len>128) or (PtrInt(Dest)=0) or     // Dest=''
+    (PStrRec(PtrInt(Dest)-STRRECSIZE)^.refCnt<>1) then 
     SetString(Dest,PAnsiChar(text),len) else begin
     if PStrRec(Pointer(PtrInt(Dest)-STRRECSIZE))^.length<>len then begin
       P := Pointer(PtrInt(Dest)-STRRECSIZE);
@@ -14043,6 +14077,7 @@ asm // eax=@Dest text=edx len=ecx
     call Move
     pop ebx
 end;
+{$endif}
 {$endif}
 
 function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
@@ -16840,7 +16875,8 @@ begin
   end else
     if P2='' then
       exit;
-  L := PInteger(@PAnsiChar(pointer(P1))[-4])^;
+
+  L := PInteger(@PAnsiChar(pointer(P1))[-4])^; CHANGE TO USE STRREC (FPC ARM)
   if L<>PInteger(@PAnsiChar(pointer(P2))[-4])^ then
     exit;
   j := 1;
@@ -24628,12 +24664,16 @@ var NewJump: packed record
     Distance: integer; // relative jump is 32 bit even on CPU64
   end;
 begin
+  {$ifdef CPUARM}
+  {$warning 'This code (procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);) will never work on ARM.'}
+  {$else}
   assert(sizeof(TPatchCode)=sizeof(NewJump));
   NewJump.Code := $e9;
   NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
   PatchCode(Func,@NewJump,sizeof(NewJump),Backup);
   {$ifndef LVCL}
   assert(pByte(Func)^=$e9);
+  {$endif}
   {$endif}
 end;
 
@@ -25119,27 +25159,34 @@ end;
 function RTTIArraySize(typeInfo: Pointer): SizeInt;
 type
   PArrayInfo=^TArrayInfo;
-  TArrayInfo=packed record
+  TArrayInfo=
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     ElSize: SizeInt;
     ElCount: SizeInt;
     ElInfo: Pointer;
   end;
 begin
-  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
-  result := PArrayInfo(typeInfo)^.ElSize * PArrayInfo(typeInfo)^.ElCount;
+  with PArrayInfo(pointer(GetFPCTypeData(typeInfo)))^ do
+    result := ElSize * ElCount;
 end;
 
 function RTTIRecordSize(typeInfo: Pointer): SizeInt; inline;
 type
   PRecordInfo=^TRecordInfo;
-  TRecordInfo=packed record
+  TRecordInfo=
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     Size: Longint;
     Count: Longint;
     { Elements: array[count] of TRecordElement }
   end;
 begin
-  typeInfo := aligntoptr(typeInfo+2+PByte(typeInfo)[1]);
-  result := PRecordInfo(typeInfo)^.Size;
+  result := PRecordInfo(pointer(GetFPCTypeData(typeInfo)))^.Size;
 end;
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
@@ -26406,8 +26453,7 @@ begin
   if fCustomTypeInfo<>nil then begin
     TypeInfoToName(fCustomTypeInfo,fCustomTypeName,aCustomTypeName);
     with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-      fTypeData := pointer(PtrUInt(@elSize)+NameLen);
-   {$ifdef FPC}fTypeData := AlignToPtr(fTypeData);{$endif}
+      fTypeData := AlignToPtr(PtrUInt(@elSize)+NameLen);
     case PTypeKind(fCustomTypeInfo)^ of
     tkEnumeration: begin
       fKnownType := ktEnumeration;
@@ -26522,8 +26568,7 @@ begin
       if V<0 then
         exit;
       with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-        Typ := pointer(PtrUInt(@elSize)+NameLen);
-      {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+        Typ := AlignToPtr(PtrUInt(@elSize)+NameLen);
       case Typ^ of
       otSByte,otUByte: byte(aValue) := V;
       otSWord,otUWord: word(aValue) := V;
@@ -26756,8 +26801,7 @@ begin
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkInteger, tkSet: begin
-        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-        {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+        Typ := AlignToPtr(PtrUInt(@Item.elSize)+Item.NameLen);
         case TOrdType(Typ^) of
         otSByte,otUByte: ItemType := ptByte;
         otSWord,otUWord: ItemType := ptWord;
@@ -26775,8 +26819,7 @@ begin
           // other enumerates will use TJSONCustomParserCustomSimple below
       {$endif}
       tkFloat: begin
-        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-        {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+        Typ := AlignToPtr(PtrUInt(@Item.elSize)+Item.NameLen);
         case TFloatType(Typ^) of
         ftSingle: ItemType := ptSingle;
         ftDoub:   ItemType := ptDouble;
@@ -27081,7 +27124,12 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptRawUTF8:   PRawUTF8(Data)^ := PropValue;
       ptString:    UTF8DecodeToString(PropValue,StrLen(PropValue),PString(Data)^);
       ptSynUnicode:UTF8ToSynUnicode(PropValue,StrLen(PropValue),PSynUnicode(Data)^);
+      {$ifdef FPC}
+      ptDateTime:  Iso8601ToDateTimePUTF8CharVar(PropValue,0,{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PDateTime(Data)^));
+      // see http://wiki.freepascal.org/Windows_CE_Development_Notes#What_is_misaligned_data_access.3F
+      {$else}
       ptDateTime:  Iso8601ToDateTimePUTF8CharVar(PropValue,0,PDateTime(Data)^);
+      {$endif}
       ptTimeLog:   PInt64(Data)^ := Iso8601ToTimeLogPUTF8Char(PropValue,0);
       ptWideString:UTF8ToWideString(PropValue,StrLen(PropValue),PWideString(Data)^);
       ptWord:      PWord(Data)^ := GetCardinal(PropValue);
@@ -27200,7 +27248,12 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
       ptSynUnicode,
       ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
+      {$ifdef FPC}
+      ptDateTime:      aWriter.AddDateTime({$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PDateTime(Value)^));
+      // see http://wiki.freepascal.org/Windows_CE_Development_Notes#What_is_misaligned_data_access.3F
+      {$else}
       ptDateTime:      aWriter.AddDateTime(PDateTime(Value)^);
+      {$endif}
       ptTimeLog:       aWriter.AddTimeLog(PInt64(Value));
       ptGUID:          aWriter.Add(PGUID(Value)^);
       end;
@@ -27221,7 +27274,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
           end;
           {$ifdef ALIGNCUSTOMREC}
           if PtrUInt(DynArray)and 7<>0 then
-            inc(DynArray,8-(PtrUInt(DynArray)and 7);
+            inc(DynArray,8-(PtrUInt(DynArray)and 7));
           {$endif}
         end;
       aWriter.CancelLastComma;
@@ -35571,7 +35624,11 @@ constructor TSynTest.Create(const Ident: string);
 
   procedure AddParentsFirst(C: TClass);
   type
-    TMethodInfo = packed record
+    TMethodInfo =
+      {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+      packed
+      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+      record
     {$ifdef FPC}
       Name: PShortString;
       Addr: Pointer;
@@ -42225,7 +42282,13 @@ begin // private sub function makes the code faster in most case
       raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
     // register to the internal garbage collection (avoid memory leak)
+    // ALF //
+    // Does not work under ARM ... I do not know why !!
+    {$ifdef CPUARM}
+    {$WARNING 'This code (GarbageCollectorFreeAndNil(PVMT^,result);) does not work on ARM.'}
+    {$else}
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+    {$endif}
   end;
 end;
 
@@ -42793,11 +42856,17 @@ end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
 type
-  TTypeInfo = packed record
+  {$ifdef FPC}{$PACKRECORDS 1}{$endif}
+  TTypeInfo = record
     Kind: TTypeKind;
     Name: ShortString;
   end;
-  TClassType = packed record
+  {$ifdef FPC}{$PACKRECORDS C}{$endif}
+  TClassType =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
      ClassType: TClass;
      ParentInfo: pointer;
      PropCount: SmallInt;
@@ -42817,7 +42886,7 @@ begin
         if fFamily.WithUnitName then begin
           Info := PPointer(PtrInt(ClassType)+vmtTypeInfo)^;
           if Info<>nil then begin
-            fWriter.AddShort(PClassType(@Info^.Name[ord(Info^.Name[0])+1])^.UnitName);
+            fWriter.AddShort(PClassType(AlignToPtr(@Info^.Name[ord(Info^.Name[0])+1]))^.UnitName);
             fWriter.Add('.');
           end;
         end;
