@@ -221,10 +221,12 @@ unit SynDB;
   - added optional BoundType parameter to BindNull() method since some providers
     (e.g. OleDB during MULTI INSERT statements - see ticket [e8c211062e581])
     expect the column type to be set in BoundType, even for NULL values
+  - TSQLDBStatement.Bind(const Params: array of const) will accept variant
+    values for BLOB, as requested by [64f7d840e1bf]
   - added missing ColumnToSQLVar() method to ISQLDBRows interface
   - added TSQLDBStatement.ColumnsToBinary() method
   - method TSQLDBStatement.ColumnTypeNativeToDB() is now public, and will
-    recognize uniqueidentifier data type as ftUTF8
+    recognize "uniqueidentifier" data type as ftUTF8
   - added TSQLDBStatementWithParams.BindFromRows() method
   - new TSQLDBProxyStatementRandomAccess class for in-memory browsing of data
     retrieved via TSQLDBStatement.FetchAllToBinary()
@@ -1592,6 +1594,8 @@ type
        via BinToBase64WithMagic() call
      - TDateTime parameters can be bound with this method, when encoded via
        a DateToSQL() or DateTimeToSQL() call
+     - any variant parameter will be bound with BindVariant(i,VVariant^,true,IO)
+       i.e. with DataIsBlob=true
      - this default implementation will call corresponding Bind*() method }
     procedure Bind(const Params: array of const;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual;
@@ -4272,7 +4276,7 @@ const
   DECIMAL=18; // change it if you update PCHARS[] below before 'DECIMAL'
   NUMERIC=DECIMAL+1;
   PCHARS: array[0..55] of PAnsiChar = (
-    'TEXT COLLATE ISO8601',
+    'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
     'TEXT','CHAR','NCHAR','VARCHAR','NVARCHAR','CLOB','NCLOB','DBCLOB',
     'BIT','INT','BIGINT', 'DOUBLE','NUMBER','FLOAT','REAL','DECFLOAT',
     'CURR','DECIMAL','NUMERIC', 'BLOB SUB_TYPE 1',  'BLOB',
@@ -4342,7 +4346,7 @@ begin
          else  result := ftDouble;
          end;
     2610: result := ftBlob;
-    else result := ftUTF8;
+    else  result := ftUTF8;
     end;
 end;
 begin
@@ -5208,6 +5212,7 @@ begin
       if VPointer=nil then
         BindNull(i,IO) else
         raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',[self]);
+    vtVariant:    BindVariant(i,VVariant^,true,IO);
     else
       raise ESQLDBException.CreateUTF8(
         '%.BindArrayOfConst(Param=%,Type=%)',[self,i,VType]);
@@ -5242,7 +5247,7 @@ begin
     {$endif}
     varInteger:
       Bind(Param,TVarData(Data).VInteger,IO);
-    varInt64:
+    varInt64, varWord64:
       Bind(Param,TVarData(Data).VInt64,IO);
     varSingle:
       Bind(Param,TVarData(Data).VSingle,IO);
@@ -5270,7 +5275,7 @@ begin
     else
     {$ifdef LVCL}
       raise ESQLDBException.CreateUTF8(                                  
-        'Unhandled variant type % in %.BindVariant',[TVarData(Data).VType,self]);
+        'Unhandled variant type  % in %.BindVariant',[TVarData(Data).VType,self]);
     {$else}
       // also use TEXT for any non native VType parameter
       BindTextU(Param,StringToUTF8(string(Data)),IO);
