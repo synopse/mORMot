@@ -32791,6 +32791,22 @@ begin
   until false;
 end;
 
+function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
+  Value: TObject): boolean; // see [22ce911c715]
+begin
+  if (Value<>nil) and (Prop^.PropType^.ClassSQLFieldType=sftID) then
+  case IsObj of
+  oSQLMany:
+    if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
+      result := false else
+      result := not TSQLRecord(Value).fFill.JoinedFields;
+  oSQLRecord:
+    result := not TSQLRecord(Value).fFill.JoinedFields;
+  else result := false;
+  end else
+    result := false; // assume true instance by default
+end;
+
 function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): PUTF8Char;
 var P: PPropInfo;
@@ -32833,7 +32849,7 @@ begin
     oCollection: Coll.Clear;
 {$endif}
     oStrings:    Str.Clear;
-    oUTfs:       Utf.Clear;
+    oUtfs:       Utf.Clear;
     oObjectList: Lst.Clear;
     end;
     exit;
@@ -32968,7 +32984,7 @@ begin
 {$endif}
     end;
     oUtfs: begin
-      utf.BeginUpdate; // utf: TStrings absolute Value
+      utf.BeginUpdate; // utf: TRawUTF8List absolute Value
       try
         utf.Clear;
         repeat
@@ -33101,10 +33117,8 @@ begin
       end else begin
         if Kind<>tkClass then
           exit; // true nested object should begin with '[' or '{'
-        if (IsObj in [oSQLRecord,oSQLMany]) and
-           (P^.PropType^.ClassSQLFieldType=sftID) and
-           not TSQLRecord(Value).fFill.JoinedFields then
-          exit; // only TSQLRecordMany properties are true instances
+        if PropIsIDTypeCastedField(P,IsObj,Value) then
+          exit; // only TSQLRecordMany/joined properties are true instances
         // will handle '[TCollection...' '[TStrings...' '{TObject...'
         From := P^.ClassFromJSON(Value,From,NestedValid,Options);
         if not NestedValid then begin
@@ -34651,11 +34665,11 @@ begin
       break; // no more RTTI information available
     P := AlignToPtr(@CP^.PropList);
     for i := 1 to CP^.PropCount do begin
-      if IsObj in [oSQLRecord,oSQLMany] then begin
+      if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
         if IsRowIDShort(P^.Name) then
           goto next;
       end else
-        if not P^.IsStored(Value) then
+        if not P^.IsStored(Value) then // regular "stored" attribute
           goto next;
       Added := false;
       Kind := P^.PropType^.Kind;
@@ -34768,10 +34782,7 @@ begin
             WriteObject(Obj,Options);
           end;
           oSQLRecord,oSQLMany: // TSQLRecord or inherited
-          if (IsObj<>oSQLMany) or
-             not(IdemPropName(P^.Name,'source') or IdemPropName(P^.Name,'dest')) then
-            if (P^.PropType^.ClassSQLFieldType=sftID) and
-               not TSQLRecord(Value).fFill.JoinedFields then begin
+            if PropIsIDTypeCastedField(P,IsObj,Value) then begin
               HR(P);
               Add(PtrInt(Obj)); // not true instances, but ID
             end else
