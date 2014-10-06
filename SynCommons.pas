@@ -11759,7 +11759,12 @@ begin
 end;
 
 procedure FastNewRawUTF8(var s: RawUTF8; len: integer);
-{$ifdef FPC_OR_PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
+{$ifdef FPC} inline;
+begin
+  SetString(s,nil,len);
+end;
+{$else}
+{$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
 begin
   if len<>0 then
     if (PtrUInt(s)=0) or                   // s=''
@@ -11792,7 +11797,8 @@ asm // eax=s edx=len
 {$endif}
 @out:
 end;
-{$endif FPC_OR_PUREPASCAL}
+{$endif PUREPASCAL}
+{$endif FPC}
 
 function TSynAnsiConvert.AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode;
 var U: PWideChar;
@@ -14013,7 +14019,9 @@ const
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef FPC}inline;
 begin
-  SetString(Dest,PAnsiChar(text),len);
+  if text<>pointer(Dest) then
+    SetString(Dest,PAnsiChar(text),len) else
+    SetLength(Dest,len);
 end;
 {$else}
 {$ifdef PUREPASCAL}
