@@ -19737,8 +19737,23 @@ procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
   Reversed: PIntegerArray);
 var i: integer;
 begin
-  for i := 0 to ValuesCount-1 do
+  i := 0;
+  if ValuesCount>=4 then begin
+    dec(ValuesCount,4);
+    while i<ValuesCount do begin // faster pipelined version
+      Reversed[Values[i]] := i;
+      Reversed[Values[i+1]] := i+1;
+      Reversed[Values[i+2]] := i+2;
+      Reversed[Values[i+3]] := i+3;
+      inc(i,4);
+    end;
+    inc(ValuesCount,4);
+  end;
+  while i<ValuesCount do begin
     Reversed[Values[i]] := i;
+    inc(i);
+  end;
+  //for i := 0 to Count-1 do Assert(Reverse[Orig[i]]=i);
 end;
 
 procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
@@ -26243,7 +26258,8 @@ function TJSONCustomParsers.RecordSearch(const aTypeName: RawUTF8): integer;
 begin
   if self=nil then
     result := -1 else
-    if IdemPropNameU(fParser[fLastRecordIndex].RecordTypeName,aTypeName) then
+    if (cardinal(fLastRecordIndex)<cardinal(fParsersCount)) and
+       IdemPropNameU(fParser[fLastRecordIndex].RecordTypeName,aTypeName) then
       result := fLastRecordIndex else begin
       result := fParsers.FindHashed(aTypeName);
       if result>=0 then
@@ -28621,6 +28637,10 @@ end;
 
 {$endif FPC}
 
+{$ifdef DOPATCHTRTL}
+  {$define DOPATCHDISPINVOKE} // much faster late-binding process for our types
+{$endif}
+
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 var i: integer;
 {$ifdef NOVARCOPYPROC}
@@ -28628,15 +28648,19 @@ var i: integer;
 {$endif}
 begin
   if SynVariantTypes=nil then begin
-    {$ifdef NOVARCOPYPROC}
-    GetVariantManager(VarMgr);
-    VarMgr.DispInvoke := @SynVarDispProc;
-    SetVariantManager(VarMgr);
-    {$else}
     {$ifndef FPC}
-    RedirectCode(VariantsDispInvokeAddress,@SynVarDispProc);
-    {$endif}
-    {$endif}
+    {$ifdef DOPATCHDISPINVOKE}
+    if DebugHook=0 then begin // patch VCL/RTL only outside debugging
+      {$ifdef NOVARCOPYPROC}
+      GetVariantManager(VarMgr);
+      VarMgr.DispInvoke := @SynVarDispProc;
+      SetVariantManager(VarMgr);
+      {$else}
+      RedirectCode(VariantsDispInvokeAddress,@SynVarDispProc);
+      {$endif NOVARCOPYPROC}
+    end;
+    {$endif DOPATCHDISPINVOKE}
+    {$endif FPC}
     GarbageCollectorFreeAndNil(SynVariantTypes,TObjectList.Create);
   end else
     for i := 0 to SynVariantTypes.Count-1 do
@@ -38942,9 +38966,8 @@ begin
   OrderedIndexCount := RD.ReadVarUInt32Array(OrderedIndex);
   if OrderedIndexCount>0 then begin
     if tfoIndex in Options then begin
-      SetLength(OrderedIndexReverse,
-        MaxInteger(OrderedIndex,OrderedIndexCount,OrderedIndexCount)+1);
-      Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
+      assert(OrderedIndexReverse=nil);
+      OrderedIndexReverseSet(-1); // compute whole OrderedIndexReverse[] array
     end else
       RD.ErrorInvalidContent;
   end;
@@ -39168,28 +39191,6 @@ begin
   end;
 end;
 
-procedure SetReverse(Orig, Reverse: PIntegerArray; Count: integer);
-var i: integer;
-begin
-  i := 0;
-  if Count>=4 then begin
-    dec(Count,4);
-    while i<Count do begin // faster pipelined version
-      Reverse[Orig[i]] := i;
-      Reverse[Orig[i+1]] := i+1;
-      Reverse[Orig[i+2]] := i+2;
-      Reverse[Orig[i+3]] := i+3;
-      inc(i,4);
-    end;
-    inc(Count,4);
-  end;
-  while i<Count do begin
-    Reverse[Orig[i]] := i;
-    inc(i);
-  end;
-  //for i := 0 to Count-1 do Assert(Reverse[Orig[i]]=i);
-end;
-
 procedure TSynTableFieldProperties.OrderedIndexReverseSet(aOrderedIndex: integer);
 var nrev, ndx, n: PtrInt;
 begin
@@ -39199,14 +39200,15 @@ begin
     if n=0 then
       exit else begin
       // void OrderedIndexReverse[]
-      nrev := n;
-      SetLength(OrderedIndexReverse,n);
-      SetReverse(pointer(OrderedIndex),pointer(OrderedIndexReverse),OrderedIndexCount);
+      nrev := MaxInteger(OrderedIndex,OrderedIndexCount,n)+1;
+      SetLength(OrderedIndexReverse,nrev);
+      FillChar(OrderedIndexReverse[0],nrev*4,255); // all to -1
+      Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
     end;
   if PtrUInt(aOrderedIndex)>=PtrUInt(OrderedIndexCount) then
-    exit;
+    exit; // e.g. CreateFrom() will call OrderedIndexReverseSet(-1)
   if nrev<n then begin
-    SetLength(OrderedIndexReverse,n);
+    SetLength(OrderedIndexReverse,n); // resize if needed
     nrev := n;
   end;
   ndx := OrderedIndex[aOrderedIndex];
@@ -39390,7 +39392,7 @@ begin
     if aNewIndex<0 then begin
       // deleted record
       DeleteInteger(OrderedIndex,OrderedIndexCount,aOldIndexIndex);
-      SetReverse(pointer(OrderedIndex),pointer(OrderedIndexReverse),OrderedIndexCount);
+      Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
       // no need to refresh OrderedIndex[], since data will remain sorted
     end else begin
       // updated record
@@ -39425,7 +39427,7 @@ begin
           if fOrderedIndexFindAdd>aOldIndexIndex then
             dec(fOrderedIndexFindAdd);
           InsertInteger(OrderedIndex,OrderedIndexCount,aNewIndex,fOrderedIndexFindAdd);
-          SetReverse(pointer(OrderedIndex),pointer(OrderedIndexReverse),OrderedIndexCount);
+          Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
         end else
           // slow full sort - with 1,000,000 items it's about 100 times slower
           // (never called with common usage in SynBigTable unit)
@@ -44344,7 +44346,7 @@ begin
     {$ifndef ENHANCEDRTL}
      {$ifndef DELPHI5OROLDER}
       {$ifndef USEPACKAGES}
-       {$ifdef DOPATCHTRTL}
+       {$ifdef DOPATCHTRTL}    
   RedirectCode(SystemRecordCopyAddress,@RecordCopy);
   RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
   RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
