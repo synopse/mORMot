@@ -33,6 +33,7 @@ unit SynPdf;
    aweste
    CoMPi
    Damien (ddemars)
+   David Mead (MDW)
    Ondrej (reddwarf)
    Sinisa (sinisav)
    Pierre le Riche
@@ -217,6 +218,7 @@ unit SynPdf;
   - therefore, TPdfDocumentGDI will use much less resource and memory with no
     swaping to disk (tested with 200,000 simple text pages)
   - reduced generated file size, with optional PDFGeneratePDF15File property
+  - embedd ttc fonts [d2d6953fb3] - thanks David Mead (MDW) for the patch
   - fixed incorrect Postscript font name retrieval e.g. for Asiatic fonts
   - fixed potential GPF issue in TPdfWrite.AddUnicodeHex and TPdfWrite.AddHex
   - fixed compilation warnings regarding Delphi XE3 regressions
@@ -3111,6 +3113,106 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
 end;
 
+{$ifndef DELPHI5OROLDER}
+// used by TPdfFontTrueType.PrepareForSaving()
+function GetTTCIndex(const FontName: RawUTF8; var ttcIndex: Word;
+  const FontCount: LongWord): Boolean;
+// Looks up ttcIndex from list of font names in known ttc font collections.
+// For some locales, the lookup may fail
+// Result must not be greater than FontCount-1
+const
+  // Font names for Simp/Trad Chinese, Japanese, Korean locales.
+  BATANG_KO = #48148#53461;
+  BATANGCHE_KO = BATANG_KO + #52404;
+  GUNGSUH_KO = #44417#49436;
+  GUNGSUHCHE_KO = GUNGSUH_KO + #52404;
+  GULIM_KO = #44404#47548;
+  GULIMCHE_KO = GULIM_KO + #52404;
+  DOTUM_KO = #46027#50880;
+  DOTUMCHE_KO = DOTUM_KO + #52404;
+  MINGLIU_CH = #32048#26126#39636;
+  PMINGLIU_CH = #26032 + MINGLIU_CH;
+  MINGLIU_HK_CH = MINGLIU_CH + '_hkscs';
+  MINGLIU_XB_CH = MINGLIU_CH + '-extb';
+  PMINGLIU_XB_CH = PMINGLIU_CH + '-extb';
+  MINGLIU_XBHK_CH = MINGLIU_CH + '-extb_hkscs';
+  MSGOTHIC_JA = #65325#65331#32#12468#12471#12483#12463;
+  MSPGOTHIC_JA = #65325#65331#32#65328#12468#12471#12483#12463;
+  MSMINCHO_JA = #65325#65331#32#26126#26397;
+  MSPMINCHO_JA = #65325#65331#32#65328#26126#26397;
+  SIMSUN_CHS = #23435#20307;
+  NSIMSUN_CHS = #26032#23435#20307;
+var
+  lcfn: SynUnicode;
+begin
+  result := True;
+  UTF8ToSynUnicode(fontName,lcfn);
+  lcfn := {$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(lcfn);
+  // batang.ttc (Korean)
+  if (lcfn='batang') or (lcfn=BATANG_KO) then
+    ttcIndex := 0 else
+  if (lcfn='batangche') or (lcfn=BATANGCHE_KO) then
+    ttcIndex := 1 else
+  if (lcfn='gungsuh') or (lcfn=GUNGSUH_KO) then
+    ttcIndex := 2 else
+  if (lcfn='gungsuhche') or (lcfn=GUNGSUHCHE_KO) then
+    ttcIndex := 3 else
+  // cambria.ttc
+  if lcfn='cambria' then
+    ttcIndex := 0 else
+  if lcfn='cambria math' then
+    ttcIndex := 1 else
+  // gulim.ttc (Korean)
+  if (lcfn='gulim') or (lcfn=GULIM_KO) then
+    ttcIndex := 0 else
+  if (lcfn='gulimche') or (lcfn=GULIMCHE_KO) then
+    ttcIndex := 1 else
+  if (lcfn='dotum') or (lcfn=DOTUM_KO) then
+    ttcIndex := 2 else
+  if (lcfn='dotumche') or (lcfn=DOTUMCHE_KO) then
+    ttcIndex := 3 else
+  // mingliu.ttc (Traditional Chinese)
+  if (lcfn='mingliu') or (lcfn=MINGLIU_CH) then
+    ttcIndex := 0 else
+  if (lcfn='pmingliu') or (lcfn=PMINGLIU_CH) then
+    ttcIndex := 1 else
+  if (lcfn='mingliu_hkscs') or (lcfn=MINGLIU_HK_CH) then
+    ttcIndex := 2 else
+  // mingliub.ttc (Traditional Chinese)
+  if (lcfn='mingliu-extb') or (lcfn=MINGLIU_XB_CH) then
+    ttcIndex := 0 else
+  if (lcfn='pmingliu-extb') or (lcfn=PMINGLIU_XB_CH) then
+    ttcIndex := 1 else
+  if (lcfn='mingliu_hkscs-extb') or (lcfn=MINGLIU_XBHK_CH) then
+    ttcIndex := 2 else
+  // msgothic.ttc (Japanese)
+  if (lcfn='ms gothic') or
+     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSGOTHIC_JA)) then
+    ttcIndex := 0 // MSGOTHIC_JA contains full-width uppercase chars
+  else if (lcfn='ms pgothic') or
+    (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSPGOTHIC_JA)) then
+      ttcIndex := 1 else
+  if lcfn='ms ui gothic' then
+    ttcIndex := 2 else
+  // msmincho.ttc (Japanese)
+  if (lcfn='ms mincho') or
+     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSMINCHO_JA)) then
+    ttcIndex := 0 else
+  if (lcfn='ms pmincho') or
+     (lcfn={$ifdef UNICODE}SysUtils.LowerCase{$else}WideLowerCase{$endif}(MSPMINCHO_JA)) then
+    ttcIndex := 1 else
+  // simsun.ttc (Simplified Chinese)
+  if (lcfn='simsun') or (lcfn=SIMSUN_CHS) then
+    ttcIndex := 0 else
+  if (lcfn='nsimsun') or (lcfn=NSIMSUN_CHS) then
+    ttcIndex := 1 else
+    result := False;
+  if result and (ttcIndex>(FontCount-1)) then
+    result := False;
+end;
+{$endif DELPHI5OROLDER}
+
+
 { TPdfObject }
 
 constructor TPdfObject.Create;
@@ -5799,6 +5901,8 @@ const
 
   TTFCFP_FLAGS_SUBSET = 1;
   TTFMFP_SUBSET = 0;
+  TTFCFP_FLAGS_TTC = 4;
+  TTCF_TABLE = $66637474;
 
 type
   /// a TTF name record used for the 'name' Format 4 table
@@ -7499,6 +7603,13 @@ var c: AnsiChar;
     SubSetMem: cardinal;
     SubSetSize: cardinal;
     Used: TSortedWordArray;
+    usFlags: Word;  // For CreateFontPackage
+    ttcIndex: Word; // For CreateFontPackage
+    tableTag: Longword;
+    {$ifndef DELPHI5OROLDER}
+    ttcNumFonts: Longword;
+    ttcBytes: array of byte;
+    {$endif}
 begin
   DS := THeapMemoryStream.Create;
   WR := TPdfWrite.Create(fDoc,DS);
@@ -7595,10 +7706,34 @@ begin
          ((fDoc.fEmbeddedTTFIgnore=nil) or (fDoc.fEmbeddedTTFIgnore.
            IndexOf(fDoc.FTrueTypeFonts[fTrueTypeFontsIndex-1])<0))) then begin
         fDoc.GetDCWithFont(self);
-        ttfSize := GetFontData(fDoc.FDC, 0, 0, nil, 0);
+        {$ifndef DELPHI5OROLDER}
+        // is the font in a .ttc collection?
+        ttfSize := GetFontData(fDoc.FDC,TTCF_TABLE,0,nil,0);
+        if ttfSize<>GDI_ERROR then begin
+          // Yes, the font is in a .ttc collection
+          // find out how many fonts are included in the collection
+          SetLength(ttcBytes,4);
+          if GetFontData(fDoc.FDC,TTCF_TABLE,8,pointer(ttcBytes),4) <> GDI_ERROR then
+            ttcNumFonts := ttcBytes[3] else // Higher bytes will be zero
+            ttcNumFonts := 1;
+          // we need to find out the index of the font within the ttc collection
+          // (this is not easy, so GetTTCIndex uses lookup on known ttc fonts)
+          if (ttcNumFonts < 2) or not
+             GetTTCIndex(fDoc.FTrueTypeFonts[fTrueTypeFontsIndex-1],ttcIndex,ttcNumFonts) then
+            ttcIndex := 0;
+          usFlags := TTFCFP_FLAGS_SUBSET or TTFCFP_FLAGS_TTC;
+          tableTag := TTCF_TABLE;
+        end else
+        {$endif}
+        begin
+          ttfSize := GetFontData(fDoc.FDC,0,0,nil,0);
+          usFlags := TTFCFP_FLAGS_SUBSET;
+          ttcIndex := 0;
+          tableTag := 0;
+        end;
         if ttfSize<>GDI_ERROR then begin
           SetLength(ttf,ttfSize);
-          if GetFontData(fDoc.FDC, 0, 0, pointer(ttf), ttfSize)<>GDI_ERROR then begin
+          if GetFontData(fDoc.FDC,tableTag,0,pointer(ttf),ttfSize)<>GDI_ERROR then begin
             fFontFile2 := TPdfStream.Create(fDoc);
             if not fDoc.fEmbeddedWholeTTF then begin
               if FontSub=INVALID_HANDLE_VALUE then begin
@@ -7617,10 +7752,10 @@ begin
                     Used.Add(Values[i]);
                 if CreateFontPackage(pointer(ttf),ttfSize,
                     SubSetData,SubSetMem,SubSetSize,
-                    TTFCFP_FLAGS_SUBSET,0,TTFMFP_SUBSET,0,
+                    usFlags,ttcIndex,TTFMFP_SUBSET,0,
                     TTFCFP_MS_PLATFORMID,TTFCFP_UNICODE_CHAR_SET,
                     pointer(Used.Values),Used.Count,
-                    @lpfnAllocate, @lpfnReAllocate, @lpfnFree, nil)=0 then begin
+                    @lpfnAllocate,@lpfnReAllocate,@lpfnFree,nil)=0 then begin
                   // subset was created successfully -> save to PDF file
                   SetString(ttf,SubSetData,SubSetSize);
                   FreeMem(SubSetData);
