@@ -773,7 +773,7 @@ begin
             SetLength(fDateDynArray[n],fParamsArrayCount);
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
-                fDateDynArray[n][j] := Iso8601ToDateTime(VArray[j]);
+                fDateDynArray[n][j] := Iso8601ToDateTime(UnQuoteSQLString(VArray[j]));
             fStatement.SetDataArray(p+1,fDateDynArray[n],stTimeStamp);
           end;
           ftUTF8: begin
