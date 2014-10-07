@@ -180,6 +180,8 @@ type
     ProxyName: string;
     /// the optional proxy password to be used
     ProxyByPass: string;
+    /// the connection timeout, in ms 
+    ConnectionTimeOut: integer;
     /// the timeout when sending data, in ms
     SendTimeout: cardinal;
     /// the timeout when receiving data, in ms
@@ -202,8 +204,8 @@ type
     /// perform the request
     // - this is the main entry point of this class
     // - inherited classes should override this abstract method
-    procedure URI(var Call: TSQLRestURIParams;
-      const InDataType: string; KeepAlive: integer); virtual; abstract;
+    procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
+      KeepAlive: integer); virtual; abstract;
 
     /// the remote server full URI
     // - e.g. 'http://myserver:888/'
@@ -519,6 +521,7 @@ constructor TIndyHttpConnectionClass.Create(
 begin
   inherited;
   fConnection := TIdHTTP.Create(nil);
+  fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
   if fParameters.Https then
     fConnection.IOHandler:= TIdSSLIOHandlerSocketOpenSSL.Create(nil);
   if fParameters.ProxyName<>'' then
@@ -617,7 +620,7 @@ begin
   fConnection := TWinHTTP.Create(RawByteString(fParameters.Server),
     RawByteString(IntToStr(fParameters.Port)),fParameters.Https,
     RawByteString(fParameters.ProxyName),RawByteString(fParameters.ProxyByPass),
-    fParameters.SendTimeout,fParameters.ReceiveTimeout);
+    fParameters.ConnectionTimeOut,fParameters.SendTimeout,fParameters.ReceiveTimeout);
 end;
 
 destructor TWinHttpConnectionClass.Destroy;

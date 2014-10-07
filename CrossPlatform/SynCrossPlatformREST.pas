@@ -1074,7 +1074,9 @@ type
   protected
     fConnection: TAbstractHttpConnection;
     fParameters: TSQLRestConnectionParams;
+    {$ifndef ISSMS}
     fKeepAlive: Integer;
+    {$endif}
     fCustomHttpHeader: RawUTF8; // e.g. for SetHttpBasicAuthHeaders()
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
@@ -1083,7 +1085,8 @@ type
       aOwnModel: boolean=false; aHttps: boolean=false
     {$ifndef ISSMS}; const aProxyName: string='';
       const aProxyByPass: string=''; aSendTimeout: Cardinal=30000;
-      aReceiveTimeout: Cardinal=30000{$endif}); reintroduce; virtual;
+      aReceiveTimeout: Cardinal=30000; aConnectionTimeOut: cardinal=30000{$endif});
+      reintroduce; virtual;
     /// finalize the connection
     destructor Destroy; override;
     /// force the HTTP headers of any request to contain some HTTP BASIC
@@ -1098,8 +1101,10 @@ type
     property Connection: TAbstractHttpConnection read fConnection;
     /// the connection parameters
     property Parameters: TSQLRestConnectionParams read fParameters;
-    /// the keep-alive timout, in ms (20000 by default)
+    {$ifndef ISSMS}
+    /// the keep-alive timeout, in ms (20000 by default)
     property KeepAlive: Integer read fKeepAlive write fKeepAlive;
+    {$endif ISSMS}
   end;
 
 const
@@ -2979,7 +2984,7 @@ end;
 constructor TSQLRestClientHTTP.Create(const aServer: string;
   aPort: integer; aModel: TSQLModel; aOwnModel, aHttps: boolean
   {$ifndef ISSMS}; const aProxyName, aProxyByPass: string;
-                   aSendTimeout, aReceiveTimeout: Cardinal{$endif});
+  aSendTimeout, aReceiveTimeout, aConnectionTimeOut: Cardinal{$endif});
 begin
   inherited Create(aModel,aOwnModel);
   fParameters.Server := aServer;
@@ -2988,6 +2993,7 @@ begin
   {$ifndef ISSMS}
   fParameters.ProxyName := aProxyName;
   fParameters.ProxyByPass := aProxyByPass;
+  fParameters.ConnectionTimeOut := aConnectionTimeOut;
   fParameters.SendTimeout := aSendTimeout;
   fParameters.ReceiveTimeout := aReceiveTimeout;
   fKeepAlive := 20000;
