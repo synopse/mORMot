@@ -3730,6 +3730,7 @@ begin
   fUserID := aUserID;
   fPassWord := aPassWord;
   fEngineName := EngineName;
+  fRollbackOnDisconnect := true; // enabled by default
   fUseCache := true;
   SetInternalProperties; // virtual method used to override default parameters
   aDBMS := DBMS;
