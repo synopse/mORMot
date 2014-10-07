@@ -10813,6 +10813,7 @@ type
     {$ifdef MSWINDOWS}
     procedure SetAutoFlush(TimeOut: cardinal);
     {$endif}
+    procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
   public
@@ -10890,7 +10891,7 @@ type
     property LevelStackTrace: TSynLogInfos read fLevelStackTrace write fLevelStackTrace;
     /// the folder where the log must be stored
     // - by default, is in the executable folder
-    property DestinationPath: TFileName read fDestinationPath write fDestinationPath;
+    property DestinationPath: TFileName read fDestinationPath write SetDestinationPath;
     /// the file extension to be used
     // - is '.log' by default
     property DefaultExtension: TFileName read fDefaultExtension write fDefaultExtension;
@@ -41719,6 +41720,11 @@ end;
 {$endif WITH_VECTOREXCEPT}
 
 {$endif NOEXCEPTIONINTERCEPT}
+
+procedure TSynLogFamily.SetDestinationPath(const value: TFileName);
+begin
+  fDestinationPath := IncludeTrailingPathDelimiter(value);
+end;
 
 procedure TSynLogFamily.SetLevel(aLevel: TSynLogInfos);
 begin
