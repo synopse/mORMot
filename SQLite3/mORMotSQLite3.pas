@@ -29,6 +29,7 @@ unit mORMotSQLite3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Mario Moretti
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -206,7 +207,7 @@ unit mORMotSQLite3;
     - updated SQLite3 engine to latest version 3.8.6
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
-      (full w/out transaction) - faster than SQlite3 as external DB  
+      (full w/out transaction) - faster than SQlite3 as external DB
     - fixed potential GPF issue in TSQLRestServerDB.Destroy when registered
       TSQLVVirtualtableModuleDBs are already destroyed
     - fixed ticket [64c90ade80] in TSQLRestClientDB.Destroy when associated
@@ -676,7 +677,7 @@ begin
   assert(sqlite3.bind_parameter_count(result^.Request)=maxParam);
   for i := 0 to maxParam-1 do
   if i in Nulls then
-    result^.BindNull(i) else
+    result^.BindNull(i+1) else
     case Types[i] of
       sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
       sptText:    result^.Bind(i+1,Values[i]);
