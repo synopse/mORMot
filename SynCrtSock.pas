@@ -155,8 +155,8 @@ unit SynCrtSock;
   - let WinSock-based THttpServer.Process() handle HTTP_RESP_STATICFILE
   - force disable range checking and other compiler options for this unit
   - included more detailed information to HTTP client User-Agent header
-  - added SendTimeout and ReceiveTimeout optional parameters to TWinHttpAPI
-    constructors - feature request [bfe485b678]
+  - added ConnectionTimeOut, SendTimeout and ReceiveTimeout optional parameters
+    to TWinHttpAPI constructors - feature request [bfe485b678]
   - added optional aCompressMinSize parameter to RegisterCompress() methods
   - added TWinHttpAPI.Get/Post/Put/Delete() class functions for easy remote
     resource retrieval using either WinHTTP or WinINet APIs
@@ -1120,7 +1120,7 @@ type
     fCompressHeader: THttpSocketCompressSet;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
-    procedure InternalConnect(SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
+    procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
     procedure InternalRequest(const method, aURL: RawByteString); virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
     procedure InternalAddHeader(const hdr: RawByteString); virtual; abstract;
@@ -1141,6 +1141,7 @@ type
     // initial values once created
     constructor Create(const aServer, aPort: RawByteString; aHttps: boolean;
       const aProxyName: RawByteString=''; const aProxyByPass: RawByteString='';
+      ConnectionTimeOut: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT;
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
       ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT);
 
@@ -1218,7 +1219,7 @@ type
   TWinINet = class(TWinHttpAPI)
   protected
     // those internal methods will raise an EWinINet exception on error
-    procedure InternalConnect(SendTimeout,ReceiveTimeout: DWORD); override;
+    procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalRequest(const method, aURL: RawByteString); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawByteString); override;
@@ -1261,7 +1262,7 @@ type
   private
   protected
     // those internal methods will raise an EOSError exception on error
-    procedure InternalConnect(SendTimeout,ReceiveTimeout: DWORD); override;
+    procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalRequest(const method, aURL: RawByteString); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawByteString); override;
@@ -5449,7 +5450,7 @@ end;
 { TWinHttpAPI }
 
 constructor TWinHttpAPI.Create(const aServer, aPort: RawByteString; aHttps: boolean;
-  const aProxyName,aProxyByPass: RawByteString; SendTimeout,ReceiveTimeout: DWORD);
+  const aProxyName,aProxyByPass: RawByteString; ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 begin
   fPort := GetCardinal(pointer(aPort));
   if fPort=0 then
@@ -5460,7 +5461,7 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
-  InternalConnect(SendTimeout,ReceiveTimeout); // should raise an exception on error
+  InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout); // raise an exception on error
 end;
 
 function TWinHttpAPI.RegisterCompress(aFunction: THttpSocketCompress;
@@ -5637,7 +5638,7 @@ begin
   end;
 end;
 
-procedure TWinINet.InternalConnect(SendTimeout,ReceiveTimeout: DWORD);
+procedure TWinINet.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
 begin
   if fProxyName='' then
@@ -5648,6 +5649,8 @@ begin
   if fSession=nil then
     raise EWinINet.Create;
   InternetSetOption(fConnection,INTERNET_OPTION_SEND_TIMEOUT,
+    @ConnectionTimeOut,SizeOf(ConnectionTimeOut));
+  InternetSetOption(fConnection,INTERNET_OPTION_CONNECT_TIMEOUT,
     @SendTimeout,SizeOf(SendTimeout));
   InternetSetOption(fConnection,INTERNET_OPTION_RECEIVE_TIMEOUT,
     @ReceiveTimeout,SizeOf(ReceiveTimeout));
@@ -5769,7 +5772,7 @@ begin
   end;
 end;
 
-procedure TWinHTTP.InternalConnect(SendTimeout,ReceiveTimeout: DWORD);
+procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
 begin
   if fProxyName='' then
@@ -5781,7 +5784,7 @@ begin
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpSetTimeouts(fSession,HTTP_DEFAULT_RESOLVETIMEOUT,
-     HTTP_DEFAULT_CONNECTTIMEOUT,SendTimeout,ReceiveTimeout) then
+     ConnectionTimeOut,SendTimeout,ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   fConnection := WinHttpConnect(fSession, pointer(Ansi7ToUnicode(FServer)), fPort, 0);
   if fConnection=nil then
