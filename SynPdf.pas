@@ -1678,7 +1678,7 @@ type
     // result := FOffsetY - Y * fFactorY;
     function I2Y(Y: Integer): Single; overload;
     // result := FOffsetY - Y * fFactorY;
-    function I2Y(Y: Single): Single; overload; 
+    function I2Y(Y: Single): Single; overload;
     // wrapper call I2X() and I2Y() for conversion
     procedure LineToI(x, y: Integer); overload;
     procedure LineToI(x, y: Single); overload;
@@ -10346,9 +10346,6 @@ initialization
   // initialize the Gdi+ library if necessary
   if Gdip=nil then
     Gdip := TGDIPlus.Create('gdiplus.dll');
-{$endif}
-{$ifndef USE_SYNZIP}
-  InitCrc32Tab;
 {$endif}
 
 finalization
