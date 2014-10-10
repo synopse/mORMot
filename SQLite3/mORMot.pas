@@ -992,6 +992,7 @@ unit mORMot;
       SQL pattern recognition for TSQLRestStorageInMemory)
     - added TSQLRest.RetrieveList method to retrieve a TObjectList of TSQLRecord
     - added TSQLRest.RetrieveList<T> generic method to retrieve a TObjectList<T>
+    - added TSQLRest.RetrieveListJSON method to get a TSQLRecord list as JSON
     - added TSQLRest.UpdateField() overloaded methods to update a single field
     - "rowCount": is added in TSQLRestStorageInMemory.GetJSONValues,
       TSQLTable.GetJSONValues and in TSQLTableJSON.ParseAndConvert, at the end
@@ -8990,6 +8991,9 @@ type
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     // - this default implementation always returns TRUE (always allow cache)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
+    /// compute SELECT ... FROM TABLE WHERE ...
+    function SQLComputeForSelect(Table: TSQLRecordClass;
+      const FieldNames, WhereClause: RawUTF8): RawUTF8;
     /// wrapper methods to access fAcquireExecution[]
     function GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
     procedure SetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand; Value: TSQLRestServerAcquireMode);
@@ -9369,7 +9373,7 @@ type
     // - is just a wrapper around Retrieve(aPublishedRecord.ID,aValue)
     // - return true on success
     function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
-    /// get a list of members from a SQL statement
+    /// get a list of members from a SQL statement as TObjectList
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
     // identified as '?' in the FormatSQLWhere statement, which is expected to
@@ -9386,6 +9390,23 @@ type
     function RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList; overload;
+    /// get a list of members from a SQL statement as RawJSON
+    // - implements REST GET collection
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - returns the raw JSON array content with all items on success, with
+    // our expanded / not expanded JSON format - so can be used with SOA methods
+    // and RawJSON results, for direct process from the client side
+    // - returns '' on error
+    function RetrieveListJSON(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): RawJSON;
     {$ifndef NOVARIANTS}
     /// get a list of all members from a SQL statement as a TDocVariant
     // - implements REST GET collection
@@ -23870,22 +23891,30 @@ begin
   end;
 end;
 
+function TSQLRest.SQLComputeForSelect(Table: TSQLRecordClass;
+  const FieldNames, WhereClause: RawUTF8): RawUTF8;
+begin
+  result := '';
+  if (self=nil) or (Table=nil) then
+    exit;
+  if FieldNames='' then
+    result := Model.Props[Table].SQLFromSelectWhere('*',WhereClause) else
+  with Table.RecordProps do
+  if FieldNames='*' then
+    result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
+  if (PosEx(RawUTF8(','),FieldNames,1)=0) and not IsFieldName(FieldNames) then
+    result := '' else // prevent SQL error
+    result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
+end;
+
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames, WhereClause: RawUTF8): TSQLTableJSON;
 var sql: RawUTF8;
 begin
-  result := nil;
-  if (self=nil) or (Table=nil) then
-    exit;
-  if FieldNames='' then
-    sql := Model.Props[Table].SQLFromSelectWhere('*',WhereClause) else
-  with Table.RecordProps do
-  if FieldNames='*' then
-    sql := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-  if (PosEx(RawUTF8(','),FieldNames,1)=0) and not IsFieldName(FieldNames) then
-    exit else // prevent SQL error
-    sql := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
-  result := ExecuteList([Table],sql);
+  sql := SQLComputeForSelect(Table,FieldNames,WhereClause);
+  if sql='' then
+    result := nil else
+    result := ExecuteList([Table],sql);
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
@@ -23970,6 +23999,17 @@ begin
   finally
     T.Free;
   end;
+end;
+
+function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): RawJSON;
+var sql: RawUTF8;
+begin
+  sql := SQLComputeForSelect(Table,aCustomFieldsCSV,
+    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
+  if sql='' then
+    result := '' else
+    result := EngineList(sql);
 end;
 
 {$ifndef NOVARIANTS}
@@ -26002,9 +26042,9 @@ end;
 function TSQLRestClientURI.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 begin
-  if (self=nil) or (SQL='') or (ReturnedRowCount<>nil) or 
+  if (self=nil) or (SQL='') or (ReturnedRowCount<>nil) or
      (URI(Model.Root,'GET',@result,nil,@SQL).Lo<>HTML_SUCCESS) then
-    result := ''
+    result := '';
 end;
 
 function TSQLRestClientURI.ClientRetrieve(TableModelIndex, ID: integer;
@@ -33614,7 +33654,6 @@ begin
   if fRefCount<>0 then
     System.Error(reInvalidPtr);
 end;
-
 
 {$ifdef FPC}
 function TSQLRecordInterfaced.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
