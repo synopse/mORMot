@@ -28697,8 +28697,10 @@ end;
 
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 var i: integer;
+{$ifdef DOPATCHTRTL}
 {$ifdef NOVARCOPYPROC}
     VarMgr: TVariantManager;
+{$endif}
 {$endif}
 begin
   if SynVariantTypes=nil then begin
