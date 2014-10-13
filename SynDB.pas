@@ -30,6 +30,7 @@ unit SynDB;
 
   Contributor(s):
   - delphinium
+  - Joe (at jokusoftware)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -165,6 +166,9 @@ unit SynDB;
     SQL statements
   - added RaiseExceptionOnError: boolean=false optional parameter to
     TSQLDBConnection.NewStatementPrepared() method
+  - fixed TSQLDBConnection.NewStatementPrepared() so that a prepared statement
+    currently in use (e.g. for a mORMot virtual table external JOINed query with
+    two similar JOINed clauses) won't be cached - see ticket [736295149a9]
   - added TSQLDBConnection.LastErrorMessage and LastErrorException properties,
     to retrieve the error when NewStatementPrepared() returned nil
   - added TSQLDBConnectionProperties.ConnectionTimeOutMinutes property to
@@ -3626,9 +3630,12 @@ begin
     ndx := fCache.IndexOf(aSQL);
     if ndx>=0 then begin
       Stmt := fCache.Objects[ndx] as TSQLDBStatement;
-      Stmt.Reset;
-      result := Stmt;
-      exit;
+      if Stmt.RefCount=1 then begin
+        Stmt.Reset;
+        result := Stmt;
+        exit;
+      end else
+        ToCache := false;
     end;
   end;
   // default implementation with no cache

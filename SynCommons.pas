@@ -11632,7 +11632,7 @@ uses
   SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
   , SynFPCLinux,BaseUnix, Unix,dynlibs
-{$endif} ;
+  {$endif} ;
 {$endif}
 
 
