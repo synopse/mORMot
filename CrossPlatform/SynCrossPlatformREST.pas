@@ -1074,9 +1074,7 @@ type
   protected
     fConnection: TAbstractHttpConnection;
     fParameters: TSQLRestConnectionParams;
-    {$ifndef ISSMS}
     fKeepAlive: Integer;
-    {$endif}
     fCustomHttpHeader: RawUTF8; // e.g. for SetHttpBasicAuthHeaders()
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
@@ -2996,8 +2994,8 @@ begin
   fParameters.ConnectionTimeOut := aConnectionTimeOut;
   fParameters.SendTimeout := aSendTimeout;
   fParameters.ReceiveTimeout := aReceiveTimeout;
-  fKeepAlive := 20000;
   {$endif}
+  fKeepAlive := 20000;
 end;
 
 destructor TSQLRestClientHTTP.Destroy;
