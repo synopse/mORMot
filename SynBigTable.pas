@@ -232,7 +232,9 @@ interface
 { Stack Checking must be sent to OFF in the code below }
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   Classes,
   SysUtils,
   {$ifdef FPC}
@@ -1136,9 +1138,7 @@ var s,s2: RawByteString;
     tot: integer;
     tmp: TIntegerDynArray;
     rec: TSynTableData;
-{$ifndef LVCL}
     p: pointer;
-{$endif}
 function stats(T: TSynBigTable): string;
 begin
   result := Format('Values: %s, file size: %s',
@@ -1177,6 +1177,7 @@ begin
        (integer(rec.GetFieldValue(fInt))<>i-1) then
       exit;
   end;
+  {$endif}
   Start('Read direct');
   for i := 1 to n do begin
     if DoRecord then
@@ -1186,8 +1187,7 @@ begin
        (fInt.GetInteger(p)<>i-1) or
        (fText.GetRawUTF8(p)<>By8[n-i]) then
       exit;
-  end;  
-  {$endif}
+  end;
   Start('Search 50 Text iterating');
   IDCount := 0; // not mandatory (if ID=nil, TR.Search will do it)
   for i := n-50 to n-1 do
@@ -3290,9 +3290,10 @@ begin
       rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1]));
       rec.SetFieldSBFValue(fInt,fInt.SBF(i));
       if DoRecord then
-        Check(TRec.RecordAdd(rec)<>0) else
-        Check(TMeta.RecordAdd(CreateString(i+1),rec)<>0);
+        Check(TRec.RecordAdd(rec)=i+1) else
+        Check(TMeta.RecordAdd(CreateString(i+1),rec)=i+1);
     end;
+    if CheckFailed(TRTest) then exit;
     if tfoUnique in fInt.Options then
       for i := 0 to (n shr 3)-1 do begin
         rec.SetFieldSBFValue(fInt,fInt.SBF(i shl 3));
@@ -3315,7 +3316,7 @@ begin
     if DoRecord then
       T := TSynBigTableRecord.Create(FN,'test') else
       T := TSynBigTableMetaData.Create(FN,'test');
-    if CheckFailed(TRTest) then exit;
+    if CheckFailed(TRTest,'after update+reload') then exit;
     Check(T.AddField('bool',tftBoolean));
     T.AddFieldUpdate;
     if CheckFailed(TRTest) then exit;

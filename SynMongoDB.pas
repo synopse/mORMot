@@ -64,7 +64,11 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 SQLITE3_FASTCALL
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  SynFPCLinux,
+  {$endif}
   Classes,
   Variants, // this unit expects Variants to be available for storage
   SysUtils,

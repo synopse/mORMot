@@ -185,7 +185,9 @@
   {$ifdef CPU64}
     {$define PUREPASCAL}
   {$else}
+    {$ifndef CPUARM}
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
+    {$endif}
   {$endif CPU64}
 
   {$define FPC_OR_PUREPASCAL}

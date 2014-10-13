@@ -69,6 +69,7 @@ const
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p : pointer): pointer; inline;
+function GetFPCAlignRecordPtr(P: pointer): pointer;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
@@ -212,6 +213,15 @@ function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
 begin
   result := AlignToPtr(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^);
 end;
+
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+
+function GetFPCAlignRecordPtr(P: pointer): pointer;
+begin
+  result := PByte(GetFPCTypeData(P))-2; // -2 to include Kind+NameLen bytes
+end;
+
+{$endif}
 
 {
 procedure getMethodList(aClass:TClass);

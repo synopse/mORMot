@@ -268,7 +268,12 @@ interface
 {$endif}
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  SynFPCLinux,
+  dynlibs,
+  {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   {$ifndef LVCL}

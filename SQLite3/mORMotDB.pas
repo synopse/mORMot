@@ -133,7 +133,11 @@ unit mORMotDB;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  SynFPCLinux,
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,

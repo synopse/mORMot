@@ -36622,7 +36622,7 @@ end;
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException('You encountered an ALF !!! This code is disabled on ARM !!!');
+  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
 end;
 {$else}
 var method: ^TServiceMethod;
@@ -38438,7 +38438,7 @@ type
 procedure CallMethod(var Args: TCallMethodArgs);
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException('You encountered an ALF !!! This code is disabled on ARM !!!');
+  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
 end;
 {$else}
 {$ifdef CPU64}

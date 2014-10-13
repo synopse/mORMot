@@ -695,7 +695,9 @@ uses
   SyncObjs, // for TEvent
   Contnrs,  // for TObjectList
 {$ifdef HASINLINE}
+{$ifndef LINUX} // for Kylix
   Types,
+{$endif}
 {$endif}
 {$endif}
 {$ifndef NOVARIANTS}
@@ -7037,7 +7039,8 @@ function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean
 
 /// fast conversion from hexa chars into a cardinal
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    // inline gives an error under release conditions with FPC
 
 /// fast conversion from binary data into Base64 encoded text
 function BinToBase64(const s: RawByteString): RawByteString; overload;
@@ -13838,8 +13841,6 @@ type
     tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
     {$ifdef UNICODE}, tkUString, tkClassRef, tkPointer, tkProcedure{$endif});
-  /// no Rtti alignment under Delphi
-  AlignToPtr = pointer;
 
 const
   // maps record or object types
@@ -14125,8 +14126,11 @@ var Typ: PDynArrayTypeInfo absolute aDynArrayTypeInfo;
 begin
   result := nil;
   if (aDynArrayTypeInfo<>nil) and (Typ^.kind=tkDynArray) then begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := GetFPCAlignRecordPtr(Typ);
+    {$else}
     inc(PtrUInt(Typ),Typ^.NameLen);
-    {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+    {$endif}
     if Typ^.elType<>nil then
       result := Typ^.elType{$ifndef FPC}^{$endif};
   end;
@@ -14150,8 +14154,11 @@ begin
     result := nil;
     exit;
   end;
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  result := GetFPCAlignRecordPtr(result);
+  {$else}
   inc(PtrUInt(result),result^.NameLen);
-  {$ifdef FPC}result := AlignToPtr(result);{$endif}
+  {$endif}
 end;
 
 function RecordTypeInfoSize(aRecordTypeInfo: Pointer): integer;
@@ -14169,8 +14176,11 @@ function TypeInfoSize(aTypeInfo: pointer): integer;
 begin
   if aTypeInfo=nil then
     result := 0 else begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    aTypeInfo := GetFPCAlignRecordPtr(aTypeInfo);
+    {$else}
     inc(PtrUInt(aTypeInfo),PFieldTable(aTypeInfo)^.NameLen);
-    {$ifdef FPC}aTypeInfo := AlignToPtr(aTypeInfo);{$endif}
+    {$endif}
     result := PFieldTable(aTypeInfo)^.Size;
   end;
 end;
@@ -16884,9 +16894,9 @@ begin
   end else
     if P2='' then
       exit;
+  L := PStrRec(PtrInt(P1)-STRRECSIZE)^.length;
 
-  L := PInteger(@PAnsiChar(pointer(P1))[-4])^; CHANGE TO USE STRREC (FPC ARM)
-  if L<>PInteger(@PAnsiChar(pointer(P2))[-4])^ then
+  if L<>PStrRec(PtrInt(P2)-STRRECSIZE)^.length then
     exit;
   j := 1;
   for i := 1 to L shr 2 do
@@ -22415,6 +22425,13 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
   result := not crc;
   if (buf<>nil) and (len>0) then begin
+   {$ifdef CPUARM} // circumvent FPC issue on ARM
+    while len>0 do begin
+      result := crc32ctab[0,(result xor PByte(buf)^) and $ff] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    end;
+    {$else}
     repeat
       if PtrUInt(buf) and 3=0 then // align to 4 bytes boundary
         break;
@@ -22436,6 +22453,7 @@ begin
       dec(len);
       inc(buf);
     end;
+   {$endif CPUARM}
   end;
   result := not result;
 end;
@@ -25292,8 +25310,11 @@ begin
   result := false;
   if  not (FieldTable^.Kind in tkRecordTypes) then
     exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+  {$endif}
   Field := @FieldTable^.ManagedFields[0];
   Diff := 0;
   for F := 1 to FieldTable^.ManagedCount do begin
@@ -25366,8 +25387,11 @@ begin
     result := 0; // should have been checked before
     exit; // raise Exception.CreateFmt('%s is not a record',[FieldTable^.NameLen]);
   end;
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+  {$endif}
   Field := @FieldTable.ManagedFields[0];
   result := FieldTable.Size;
   for F := 1 to FieldTable.ManagedCount do begin
@@ -25395,8 +25419,11 @@ begin
         end;
         inc(result,Len);
         IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+        IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+        {$else}
         inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
-        {$ifdef FPC}IntFieldTable := AlignToPtr(IntFieldTable);{$endif}
+        {$endif}
         dec(result,IntFieldTable^.Size);
       end;
       {$ifndef NOVARIANTS}
@@ -25435,8 +25462,11 @@ begin
     result := nil;
     exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
   end; }
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+  {$endif}
   Field := @FieldTable^.ManagedFields[0];
   Diff := 0;
   for F := 1 to FieldTable^.ManagedCount do begin
@@ -25475,8 +25505,11 @@ begin
         exit;
       end;
       IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+      {$else}
       inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
-      {$ifdef FPC}IntFieldTable := AlignToPtr(IntFieldTable);{$endif}
+      {$endif}
       Diff := IntFieldTable^.Size; // size of the record in record
     end;
     {$ifndef NOVARIANTS}
@@ -25595,8 +25628,11 @@ begin
     result := nil; // should have been checked before
     exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
   end;
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+  {$endif}
   Field := @FieldTable^.ManagedFields[0];
   if Source=nil then begin  // inline RecordClear() function
     for F := 1 to  FieldTable^.ManagedCount do begin
@@ -25646,8 +25682,11 @@ begin
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       Source := RecordLoad(R^,Source,Field.TypeInfo{$ifndef FPC}^{$endif});
       IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+      {$else}
       inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
-      {$ifdef FPC}IntFieldTable := AlignToPtr(IntFieldTable);{$endif}
+      {$endif}
       Diff := IntFieldTable^.Size; // size of the record in record
     end;
     {$ifndef NOVARIANTS}
@@ -26477,8 +26516,12 @@ begin
   end else
   if fCustomTypeInfo<>nil then begin
     TypeInfoToName(fCustomTypeInfo,fCustomTypeName,aCustomTypeName);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    fTypeData := GetFPCTypeData(fCustomTypeInfo);
+    {$else}
     with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-      fTypeData := AlignToPtr(PtrUInt(@elSize)+NameLen);
+      fTypeData := pointer(PtrUInt(@elSize)+NameLen);
+    {$endif}
     case PTypeKind(fCustomTypeInfo)^ of
     tkEnumeration: begin
       fKnownType := ktEnumeration;
@@ -26592,8 +26635,12 @@ begin
         V := GetInteger(PropValue);
       if V<0 then
         exit;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      Typ := GetFPCTypeData(fCustomTypeInfo);
+      {$else}
       with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-        Typ := AlignToPtr(PtrUInt(@elSize)+NameLen);
+        Typ := pointer(PtrUInt(@elSize)+NameLen);
+      {$endif}
       case Typ^ of
       otSByte,otUByte: byte(aValue) := V;
       otSWord,otUWord: word(aValue) := V;
@@ -26826,7 +26873,11 @@ begin
       tkDynArray: ItemType := ptArray;
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkInteger, tkSet: begin
-        Typ := AlignToPtr(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+        Typ := GetFPCTypeData(Item);
+        {$else}
+        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$endif}
         case TOrdType(Typ^) of
         otSByte,otUByte: ItemType := ptByte;
         otSWord,otUWord: ItemType := ptWord;
@@ -26844,7 +26895,11 @@ begin
           // other enumerates will use TJSONCustomParserCustomSimple below
       {$endif}
       tkFloat: begin
-        Typ := AlignToPtr(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+        Typ := GetFPCTypeData(Item);
+        {$else}
+        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+        {$endif}
         case TFloatType(Typ^) of
         ftSingle: ItemType := ptSingle;
         ftDoub:   ItemType := ptDouble;
@@ -27733,8 +27788,7 @@ begin // only tkRecord is needed here
   SetLength(ItemFields,FieldTable^.AllCount);
   for i := 0 to FieldTable^.AllCount-1 do begin
     ItemFields[i] := RecField;
-    inc(PByte(RecField),RecField^.NameLen);
-    {$ifdef FPC}RecField := AlignToPtr(RecField);{$endif}
+    inc(PByte(RecField),RecField^.NameLen); // Delphi: no AlignPtr() needed
     inc(RecField);
     inc(PByte(RecField),PWord(RecField)^);
   end;
@@ -27752,7 +27806,6 @@ begin // only tkRecord is needed here
     case Item.PropertyType of
     ptArray: begin
       inc(PByte(ItemField),ItemField^.NameLen);
-      {$ifdef FPC}ItemField := AlignToPtr(ItemField);{$endif}
       ItemArray := AddItemFromRTTI('',ItemField^.elType2^,ItemField^.elSize);
       if (ItemArray.PropertyType=ptCustom) and
          (ItemArray.ClassType=TJSONCustomParserRTTI) then
@@ -30049,8 +30102,11 @@ begin
     {$endif}
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      FieldTable := GetFPCAlignRecordPtr(FieldTable);
+      {$else}
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-      {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+      {$endif}
       if FieldTable^.ManagedCount=0 then begin
         {$ifndef LVCL}
         assert(FieldTable^.Size=ElemSize);
@@ -30253,8 +30309,11 @@ Bin:  case ElemSize of
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         FieldTable := ElemType;
-Rec:    inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-        {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+rec:    FieldTable := GetFPCAlignRecordPtr(FieldTable);
+        {$else}
+rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
+        {$endif}
         if FieldTable^.ManagedCount=0 then // only binary content -> full content
           goto Bin;
         with FieldTable^.ManagedFields[0] do
@@ -30405,8 +30464,11 @@ begin
   result := nil;
   if (aTypeInfo=nil) or (Typ^.kind<>tkDynArray) then
     exit; // invalid type information
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  Typ := GetFPCAlignRecordPtr(Typ);
+  {$else}
   inc(PtrUInt(Typ),Typ^.NameLen);
-  {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+  {$endif}
   if (Typ^.ElType<>nil) or (Source=nil) or
      (Source[0]<>AnsiChar(Typ^.elSize)) or (Source[1]<>#0) then
     exit; // invalid type information or Source content
@@ -30520,8 +30582,11 @@ begin
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      FieldTable := GetFPCAlignRecordPtr(FieldTable);
+      {$else}
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-      {$ifdef FPC}FieldTable := AlignToPtr(FieldTable);{$endif}
+      {$endif}
       if FieldTable^.ManagedCount=0 then begin
         {$ifndef LVCL}
         assert(FieldTable^.Size=ElemSize);
@@ -30942,8 +31007,11 @@ begin
   Value := @aValue;
   if Typ^.Kind<>tkDynArray then
     raise ESynException.CreateFmt('%s is not a dynamic array',[PShortString(@Typ^.NameLen)^]);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  Typ := GetFPCAlignRecordPtr(Typ);
+  {$else}
   inc(PtrUInt(Typ),Typ^.NameLen);
-  {$ifdef FPC}Typ := AlignToPtr(Typ);{$endif}
+  {$endif}
   with Typ^ do begin
     fElemSize := elSize;
     if elType=nil then
@@ -32582,9 +32650,10 @@ begin
   typ := TypeInfo;
   if (self=nil) or (typ=nil) or not(typ^.kind in tkRecordTypes) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  typ := GetFPCAlignRecordPtr(typ);
+  {$else}
   inc(PtrUInt(typ),typ^.NameLen);
-  {$ifdef FPC}
-  typ := AlignToPtr(typ);
   {$endif}
   SetLength(tmp,typ^.elSize);
   AddRecordJSON(tmp[0],TypeInfo);
@@ -37004,15 +37073,13 @@ begin
     // Windows failed to find a contiguous VA space -> fall back on direct read
     CloseHandle(fMap);
     fMap := 0;
-  end else
-    result := true;
   {$else}
   fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
-    exit;
-  end;
   {$endif}
+  end else
+    result := true;
 end;
 
 procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: cardinal);
@@ -42873,7 +42940,7 @@ end;
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
 type
   {$ifdef FPC}{$PACKRECORDS 1}{$endif}
-  TTypeInfo = record
+  TTypeInfo = {$ifndef FPC}packed{$endif} record
     Kind: TTypeKind;
     Name: ShortString;
   end;
@@ -42902,7 +42969,11 @@ begin
         if fFamily.WithUnitName then begin
           Info := PPointer(PtrInt(ClassType)+vmtTypeInfo)^;
           if Info<>nil then begin
-            fWriter.AddShort(PClassType(AlignToPtr(@Info^.Name[ord(Info^.Name[0])+1]))^.UnitName);
+            {$ifdef FPC}
+            fWriter.AddShort(PClassType(GetFPCTypeData(pointer(Info)))^.UnitName);
+            {$else}
+            fWriter.AddShort(PClassType(@Info^.Name[ord(Info^.Name[0])+1])^.UnitName);
+            {$endif}
             fWriter.Add('.');
           end;
         end;

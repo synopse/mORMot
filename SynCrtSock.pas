@@ -858,12 +858,12 @@ type
     property APIVersion: string read GetAPIVersion;
   end;
 
-  {$ifdef MSWINDOWS}
-
   ULONGLONG = Int64;
   HTTP_OPAQUE_ID = ULONGLONG;
   HTTP_URL_GROUP_ID = HTTP_OPAQUE_ID;
   HTTP_SERVER_SESSION_ID = HTTP_OPAQUE_ID;
+
+  {$ifdef MSWINDOWS}
 
   {/ HTTP server using fast http.sys kernel-mode server
    - The HTTP Server API enables applications to communicate over HTTP without
@@ -2140,6 +2140,15 @@ begin
     else exit; // make this stupid compiler happy
   end;
   IP := ResolveName(Server);
+  {$ifndef MSWINDOWS}
+  //writeln(IP);
+  // my arm server has no domain name --> binds by default to localhost
+  // this makes him unreachable over the network
+  // therefore cAnyHost ... for testing only !!
+  //IP := cAnyHost;
+  //writeln(IP);
+  //writeln(Server);
+  {$endif MSWINDOWS}
   // use AF_INET+PF_INET instead of AF_UNSPEC+PF_UNSPEC: IP6 is buggy!
   if SetVarSin(Sin, IP, Port, AF_INET, PF_INET, SOCK_TYPE, true)<>0 then
     exit;

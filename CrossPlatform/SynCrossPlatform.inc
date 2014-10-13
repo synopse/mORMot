@@ -48,7 +48,7 @@
 
 {$ifdef FPC}
 
-  {$MODE DELPHI} // we need e.g. auto-dereferenced pointers, as in Delphi
+  {.$MODE DELPHI} // we need e.g. auto-dereferenced pointers, as in Delphi
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKSET 1}

@@ -74,8 +74,9 @@ procedure SQLite3ConsoleTests;
 implementation
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
-  SysUtils,
+  {$endif}
   Classes,
   SynLZ,
   SynLZO,
@@ -83,7 +84,9 @@ uses
   SynCrtSock,
   SynCommons,
 {$ifndef DELPHI5OROLDER}
+  {$ifdef MSWINDOWS}
   SynBigTable,
+  {$endif}
   SynSQLite3,
   SynSQLite3Static,
   mORMot,
@@ -99,9 +102,11 @@ uses
 {$ifndef LVCL}
   Contnrs,
   SynDB,
+  {$ifdef MSWINDOWS}
   SynOleDB,
   SynDBOracle,
   SynDBODBC,
+  {$endif}
   SynDBSQLite3,
 {$ifndef FPC}
   SynPdf,
@@ -176,7 +181,9 @@ end;
 
 procedure SQLite3ConsoleTests;
 begin
+  {$ifdef MSWINDOWS}
   AllocConsole;
+  {$endif}
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
   TSQLLog.Family.Level := LOG_STACKTRACE; // log errors by default
   if false then // "if not false then" will create around 550 MB of log file

@@ -90,7 +90,11 @@ unit SynDBSQLite3;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  SynFPCLinux,
+  {$endif}
   SysUtils,
   {$ifndef DELPHI5OROLDER}
   Variants,

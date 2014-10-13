@@ -173,7 +173,9 @@ begin
     // in all cases, client will call DropTable method-based service
   AddToServerWrapperMethod(DB,['..\..\..\CrossPlatform\templates',
                                 '..\..\..\..\CrossPlatform\templates']);
+  {$ifndef FPC}
   DB.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+  {$endif}
 end;
 
 procedure StopServer;
