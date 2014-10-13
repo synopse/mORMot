@@ -167,8 +167,8 @@ unit SynDB;
   - added RaiseExceptionOnError: boolean=false optional parameter to
     TSQLDBConnection.NewStatementPrepared() method
   - fixed TSQLDBConnection.NewStatementPrepared() so that a prepared statement
-    currently in use (e.g. for a mORMot virtual table external JOINed query with
-    two similar JOINed clauses) won't be cached - see ticket [736295149a9]
+    currently in use (e.g. for a mORMot virtual table external query with two
+    similar JOINed clauses) will create up to 9 cache slots - see [736295149a9]
   - added TSQLDBConnection.LastErrorMessage and LastErrorException properties,
     to retrieve the error when NewStatementPrepared() returned nil
   - added TSQLDBConnectionProperties.ConnectionTimeOutMinutes property to
@@ -1425,6 +1425,7 @@ type
     // implement handle statement caching is UseCache=true - in this case,
     // the TSQLDBStatement.Reset method shall have been overridden to allow
     // binding and execution of the very same prepared statement
+    // - the same aSQL can cache up to 9 statements in this TSQLDBConnection
     // - this method should return a prepared statement instance on success
     // - on error, if RaiseExceptionOnError=false (by default), it returns nil
     // and you can check LastErrorMessage and LastErrorException properties to
@@ -3618,7 +3619,8 @@ function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
   ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement;
 var Stmt: TSQLDBStatement;
     ToCache: boolean;
-    ndx: integer;
+    ndx,altern: integer;
+    cachedSQL: RawUTF8;
 begin
   fErrorMessage := '';
   if length(aSQL)<5 then begin
@@ -3627,15 +3629,32 @@ begin
   end;
   ToCache := fProperties.IsCachable(Pointer(aSQL));
   if ToCache and (fCache<>nil) then begin
-    ndx := fCache.IndexOf(aSQL);
+    cachedSQL := aSQL;
+    ndx := fCache.IndexOf(cachedSQL);
     if ndx>=0 then begin
       Stmt := fCache.Objects[ndx] as TSQLDBStatement;
-      if Stmt.RefCount=1 then begin
+      if Stmt.RefCount=1 then begin // ensure statement is not currently in use
         Stmt.Reset;
         result := Stmt;
         exit;
-      end else
-        ToCache := false;
+      end else begin // in use -> create up to 8 cached alternatives
+        ToCache := false; // if all slots are used, won't cache this statement
+        for altern := 1 to 8 do begin
+          cachedSQL := aSQL+RawUTF8(AnsiChar(altern)); // safe SQL duplicate
+          ndx := fCache.IndexOf(cachedSQL);
+          if ndx>=0 then begin
+            Stmt := fCache.Objects[ndx] as TSQLDBStatement;
+            if Stmt.RefCount=1 then begin
+              Stmt.Reset;
+              result := Stmt;
+              exit;
+            end;
+          end else begin
+            ToCache := true; // cache the statement in this void slot
+            break;
+          end;
+        end;
+      end;
     end;
   end;
   // default implementation with no cache
@@ -3648,7 +3667,7 @@ begin
       if ToCache then begin
         if fCache=nil then
           fCache := TRawUTF8ListHashed.Create(true);
-        fCache.AddObject(aSQL,Stmt);
+        fCache.AddObject(cachedSQL,Stmt);
         Stmt._AddRef;
       end;
       result := Stmt;
