@@ -124,16 +124,21 @@ begin
 end;
 
 {$ifdef Linux}
+
+const
+  C_THOUSAND = Int64(1000);
+  C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
+  C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
+
 procedure QueryPerformanceCounter(var Value: Int64);
+var
+  r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@Value);
+  clock_gettime(CLOCK_MONOTONIC,@r);
+  value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
 function QueryPerformanceFrequency(var Value: Int64):boolean;
-const
-  C_THOUSAND = 1000;
-  C_MILLION  = C_THOUSAND * C_THOUSAND;
-  C_BILLION  = C_THOUSAND * C_THOUSAND * C_THOUSAND;
 var
   r : TTimeSpec;
   FIsHighResolution : boolean;
@@ -141,7 +146,7 @@ begin
   FIsHighResolution := (clock_getres(CLOCK_MONOTONIC,@r) = 0);
   FIsHighResolution := FIsHighResolution and (r.tv_nsec <> 0);
   if (r.tv_nsec <> 0) then
-      value := C_BILLION div r.tv_nsec;
+    value := C_BILLION div (r.tv_nsec+(r.tv_sec*C_BILLION));
   result := FIsHighResolution;
 end;
 

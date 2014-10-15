@@ -3374,6 +3374,7 @@ begin
 end;
 
 procedure TBSONObjectID.ComputeNew;
+  {$ifdef MSWINDOWS}
   function ComputeMachineID: Cardinal;
   var tmp: array[byte] of AnsiChar;
   begin
@@ -3382,6 +3383,7 @@ procedure TBSONObjectID.ComputeNew;
       result := GetCurrentProcessId else
       result := kr32(0,@tmp,result);
   end;
+  {$endif}
 var Tick, CurrentTime: cardinal;
 begin // this is a bit complex, but we have to avoid any collision
   with GlobalBSONObjectID do begin
@@ -3399,7 +3401,11 @@ begin // this is a bit complex, but we have to avoid any collision
       end;
     end;
     if ProcessID=0 then begin
+      {$ifdef MSWINDOWS}
       PCardinal(@MachineID)^ := ComputeMachineID;
+      {$else}
+      PCardinal(@MachineID)^ := MainThreadID; // temporary workaround
+      {$endif}
       ProcessID := GetCurrentThreadId;
       FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
       Counter := FirstCounter;
@@ -4935,7 +4941,9 @@ end;
 constructor EMongoRequestOSException.Create(const aMsg: string;
   aConnection: TMongoConnection; aRequest: TMongoRequest=nil);
 begin
+  {$ifdef MSWINDOWS}
   fSystemLastError := Windows.GetLastError;
+  {$endif}
   CreateFmt('%s: %s (%d)',[aMsg,SysErrorMessage(fSystemLastError),fSystemLastError],
     aConnection,aRequest);
 end;

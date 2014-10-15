@@ -4151,7 +4151,6 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
 
 /// compute the record size from its low-level RTTI
 function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
@@ -11665,7 +11664,7 @@ implementation
 uses
   SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
-  , SynFPCLinux,BaseUnix, Unix,dynlibs
+  , SynFPCLinux,BaseUnix, Unix, dynlibs, crt
   {$endif} ;
 {$endif}
 
@@ -18226,7 +18225,7 @@ end;
 
 procedure Base64FromURI(var base64: RawByteString);
 var P: PUTF8Char;
-    len: integer;
+    len,i,append: integer;
 begin
   len := length(base64);
   if len=0 then
@@ -18243,8 +18242,12 @@ begin
     end;
     inc(P);
   until false;
-  if len and 3<>0 then // add unsignificant trailing '=' characters
-    base64 := base64+StringOfChar('=',4-(len and 3));
+  append := 4-(len and 3);
+  if append<>4 then begin // add unsignificant trailing '=' characters
+    SetLength(base64,len+append);
+    for i := len+1 to len+append do
+      base64[i] := '=';
+  end;
 end;
 
 function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
@@ -24714,10 +24717,12 @@ end;
 
 procedure TextColor(Color: TConsoleColor);
 begin
+  crt.TextColor(integer(Color));
 end;
 
 procedure TextBackground(Color: TConsoleColor);
 begin
+  crt.TextBackground(integer(Color));
 end;
 
 procedure ConsoleWaitForEnterKey;
@@ -35604,7 +35609,7 @@ function TPrecisionTimer.PerSec(Count: cardinal): cardinal;
 begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Int64(Count)*(1000*1000))div iTime;
+    result := (Int64(Count)*Int64(1000*1000)) div iTime;
 end;
 
 procedure TPrecisionTimer.Init;
@@ -35627,7 +35632,7 @@ begin
     QueryPerformanceFrequency(iFreq);
   if iFreq=0 then
     iTime := 0 else
-    iTime := ((iStop-iStart)*(1000*1000))div iFreq;
+    iTime := ((iStop-iStart)*Int64(1000*1000))div iFreq;
   result := MicroSecToString(iTime);
 end;
 
@@ -36120,8 +36125,8 @@ procedure TSynTests.Color(aColor: TConsoleColor);
 begin
 {$ifdef MSWINDOWS}
   if (StdOut<>0) and (THandle(TTextRec(fSaveToFile).Handle)=StdOut) then
-    TextColor(aColor);
 {$endif}
+    TextColor(aColor);
 end;
 
 procedure TSynTests.CreateSaveToFile;
@@ -42577,7 +42582,9 @@ begin
   FileWrite(stdOut,PByte(tmp)^,length(tmp));
   TextColor(ccLightGray);
   {$else}
-  writeln(Text);
+  TextColor(LOGCOLORS[Level]);
+  writeln(#13#10,Text,#13#10);
+  TextColor(ccLightGray);
   {$endif}
 end;
 
@@ -44629,6 +44636,8 @@ initialization
   if DebugHook=0 then // patch VCL/RTL only outside debugging
     InitRedirectCode;
   {$endif}
+  {$else}
+  DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}

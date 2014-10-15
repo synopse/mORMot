@@ -1590,7 +1590,7 @@ begin
           privateCopy := fBatchValues[ndx];
           if privateCopy='' then
             raise EORMException.CreateUTF8('%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
-          P := @privateCopy[1]; // make copy before in-place decoding
+          P := UniqueRawUTF8(privateCopy);
           while P^ in [#1..' ','{','['] do inc(P);
           Decode.Decode(P,nil,pNonQuoted,fBatchFirstID+ndx);
           inc(ndx);

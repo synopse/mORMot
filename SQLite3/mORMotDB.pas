@@ -977,7 +977,7 @@ begin
         BatchEnd := fBatchCount-1;
         for i := BatchBegin to BatchEnd do begin
           privateCopy := fBatchValues[i];
-          P := @privateCopy[1]; // make copy before in-place decoding
+          P := UniqueRawUTF8(privateCopy);
           while P^ in [#1..' ','{','['] do inc(P);
           if fBatchMethod=mPost then
             Occasion := soInsert else

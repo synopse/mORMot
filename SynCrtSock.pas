@@ -2104,9 +2104,10 @@ var Sin: TVarSin;
     IP: RawByteString;
     li: TLinger;
     SOCK_TYPE, IPPROTO: integer;
-{$ifdef LINUX}
+    {$ifndef MSWINDOWS}
+    SO_True: integer;
     serveraddr: sockaddr;
-{$endif}
+    {$endif}
 begin
   result := -1;
   case aLayer of
@@ -2119,7 +2120,7 @@ begin
       IPPROTO := IPPROTO_UDP;
     end;
     cslUNIX: begin
-{$ifndef LINUX}
+{$ifdef MSWINDOWS}
       exit; // not handled under Win32
 {$else} // special version for UNIX sockets
       result := socket(AF_UNIX,SOCK_STREAM,0);
@@ -2140,15 +2141,7 @@ begin
     else exit; // make this stupid compiler happy
   end;
   IP := ResolveName(Server);
-  {$ifndef MSWINDOWS}
-  //writeln(IP);
-  // my arm server has no domain name --> binds by default to localhost
-  // this makes him unreachable over the network
-  // therefore cAnyHost ... for testing only !!
   //IP := cAnyHost;
-  //writeln(IP);
-  //writeln(Server);
-  {$endif MSWINDOWS}
   // use AF_INET+PF_INET instead of AF_UNSPEC+PF_UNSPEC: IP6 is buggy!
   if SetVarSin(Sin, IP, Port, AF_INET, PF_INET, SOCK_TYPE, true)<>0 then
     exit;
@@ -2160,6 +2153,14 @@ begin
     li.l_onoff := Ord(true);
     li.l_linger := 5;
     SetSockOpt(result, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
+    {$ifndef MSWINDOWS}
+    SO_True := 1;
+    SetSockOpt(result, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
+    {$endif}
+    {$ifdef darwin}
+    SO_True := 1;
+    SetSockOpt(result, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
+    {$endif}
     // bind and listen to this port
     if (Bind(result, Sin)<>0) or
        ((aLayer<>cslUDP) and (Listen(result, SOMAXCONN)<>0)) then begin
@@ -3462,6 +3463,9 @@ end;
 
 procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
 var li: TLinger;
+    {$ifndef MSWINDOWS}
+    SO_True: integer;
+    {$endif}
 begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   OpenBind('','',false,aClientSock); // open aClientSock for reading
@@ -3469,6 +3473,14 @@ begin
   li.l_onoff := Ord(true);
   li.l_linger := 5;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
+  {$ifndef MSWINDOWS}
+  SO_True := 1;
+  SetSockOpt(aClientSock, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
+  {$endif}
+  {$ifdef darwin}
+  SO_True := 1;
+  SetSockOpt(aClientSock, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
+  {$endif}
 end;
 
 function THttpServerSocket.HeaderGetText: RawByteString;

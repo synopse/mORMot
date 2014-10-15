@@ -663,12 +663,14 @@ begin
   fLog.Add.Log(sllDebug,'Redirect localhost:% to localhost:%/%',[Port,Port,RedirectedURI],self);
   {$endif}
   fRootRedirectToURI := RedirectedURI;
+  {$ifdef MSWINDOWS}
   if (RedirectedURI<>'') and fHttpServer.InheritsFrom(THttpApiServer) then
   try // not needed (nor available) for TCrtSocket
    THttpApiServer(fHttpServer).AddUrl('/',Port,False,'+',aRegisterURI);
   except
     on E: Exception do ;
   end;
+  {$endif}
 end;
 
 function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;

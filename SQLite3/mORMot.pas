@@ -10880,12 +10880,12 @@ type
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
     // - otherwise, SentDataJSON may contain the latest values as JSON
-    property Event: TSQLHistoryEvent read fEvent;
+    property Event: TSQLHistoryEvent read fEvent write fEvent;
     /// for heAdd/heUpdate, the data is stored as JSON
     // - note that we defined a default maximum size of 4KB for this column,
     // to avoid using a CLOB here - perhaps it may not be enough for huge
     // records - feedback is welcome...
-    property SentDataJSON: RawUTF8 index 4000 read fSentData;
+    property SentDataJSON: RawUTF8 index 4000 read fSentData write fSentData;
     /// when the modification was recorded
     property TimeStamp: TModTime read fTimeStamp;
     /// after some events are written as individual SentData content, they
@@ -10895,7 +10895,7 @@ type
     // - as any BLOB field, this one won't be retrieved by default: use
     // explicitly TSQLRest.RetrieveBlobFields(aRecordHistory) to get it if you
     // want to access it directly, and not via CreateHistory()
-    property History: TSQLRawBlob read fHistory;
+    property History: TSQLRawBlob read fHistory write fHistory;
   end;
 
   /// specifies the storage table to be used for tracking TSQLRecord changes
@@ -11187,12 +11187,14 @@ type
     function ExportServerNamedPipe(const ServerApplicationName: TFileName): boolean;
     /// end any currently initialized named pipe server
     function CloseServerNamedPipe: boolean;
+    {$endif}
     /// grant access to this database content from a dll using the global
     // URIRequest() function
     // - returns true if the URIRequest() function is set to this TSQLRestServer
     // - returns false if a TSQLRestServer was already exported
     // - client must release all memory acquired by URIRequest() with GlobalFree()
     function ExportServer: boolean; overload;
+    {$ifdef MSWINDOWS}
     /// declare the server on the local machine to be accessible for local
     // client connection, by using Windows messages
     // - the data is sent and received by using the standard and fast WM_COPYDATA message
@@ -12703,7 +12705,6 @@ type
     property SessionID: cardinal read fSessionID;
   end;
 
-{$ifdef MSWINDOWS}
   /// Rest client with remote access to a server through a dll
   // - use only one TURIMapRequest function for the whole communication
   // - the data is stored in Global system memory, and freed by GlobalFree()
@@ -12730,6 +12731,8 @@ type
     /// release memory and handles
     destructor Destroy; override;
   end;
+
+  {$ifdef MSWINDOWS}
 
   /// Rest client with remote access to a server through Windows messages
   // - use only one TURIMapRequest function for the whole communication
@@ -13516,7 +13519,6 @@ type
   end;
 {$endif}
 
-{$ifdef MSWINDOWS}
 var
   /// if this variable is TRUE, the URIRequest() function won't use
   // Win32 API GlobalAlloc() function, but fastest native Getmem()
@@ -13530,7 +13532,6 @@ var
 // this pointers with GlobalFree() after having retrieved their content
 // - simply use TSQLRestClientURIDll to access to an exported URIRequest() function
 function URIRequest(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): Int64Rec; cdecl;
-{$endif}
 
 
 threadvar
@@ -26166,7 +26167,6 @@ end;
 
 { TSQLRestServer }
 
-{$ifdef MSWINDOWS}
 const
   ServerPipeNamePrefix: TFileName = '\\.\pipe\mORMot_';
 
@@ -26181,9 +26181,11 @@ begin
   if L=0 then
     result := nil else begin
     inc(L); // copy also last #0 from s
-    if USEFASTMM4ALLOC then
-      GetMem(result,L) else
-      result := pointer(GlobalAlloc(GMEM_FIXED,L));
+    {$ifdef MSWINDOWS}
+    if not USEFASTMM4ALLOC then
+      result := pointer(GlobalAlloc(GMEM_FIXED,L)) else
+    {$endif}
+      GetMem(result,L);
     move(pointer(s)^,result^,L);
   end;
 end;
@@ -26243,6 +26245,8 @@ begin
     // write length+content at once
     FileWrite(Handle,pointer(PtrInt(Text)-4)^,L+4);
 end;
+
+{$ifdef MSWINDOWS}
 
 function TSQLRestServer.ExportServerNamedPipe(const ServerApplicationName: TFileName): boolean;
 var PipeName: TFileName;
@@ -26341,18 +26345,20 @@ begin
   result := ReleaseInternalWindow(fServerWindowName,fServerWindow);
 end;
 
+{$endif MSWINDOWS}
+
 function TSQLRestServer.ExportServer: boolean;
 begin
+  {$ifdef MSWINDOWS}
   if (fServerWindow<>0) or (fExportServerNamedPipeThread<>nil) then
     result := false else // another server was running
+  {$endif MSWINDOWS}
   if (GlobalURIRequestServer=nil) or (GlobalURIRequestServer=self) then begin
     GlobalURIRequestServer := self;
     result := true;
   end else
     result := false;
 end;
-
-{$endif MSWINDOWS}
 
 procedure TSQLRestServer.ServiceMethodRegister(const aMethodName: RawUTF8;
   const aEvent: TSQLRestServerCallBack);
@@ -26516,15 +26522,15 @@ destructor TSQLRestServer.Destroy;
 var i: integer;
 begin
   Shutdown;
-{$ifdef MSWINDOWS}
   if GlobalURIRequestServer=self then begin
     GlobalURIRequestServer := nil;
     sleep(200); // way some time any request is finished in another thread
   end;
   // close any running named-pipe or GDI-messages server instance
+  {$ifdef MSWINDOWS}
   CloseServerNamedPipe;
   CloseServerMessage;
-{$endif}
+  {$endif}
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
@@ -29427,16 +29433,17 @@ begin
   result := ServiceContext;
 end;
 
-
-{$ifdef MSWINDOWS}
-
 { TSQLRestClientURIDll }
 
 constructor TSQLRestClientURIDll.Create(aModel: TSQLModel; const DllName: TFileName);
 var aRequest: TURIMapRequest;
     aDLL: cardinal;
 begin
+  {$ifndef MSWINDOWS}
+  aDLL := LoadLibrary(DllName);
+  {$else}
   aDLL := LoadLibrary(pointer(DllName));
+  {$endif}
   if aDLL=0 then
     raise ECommunicationException.CreateUTF8('%.Create: LoadLibrary(%)',[self,DllName]);
   aRequest := GetProcAddress(aDLL,'URIRequest');
@@ -29483,13 +29490,17 @@ begin
       Call.OutBody := pResp;
   finally // always release response memory allocated by the server
     if pResp<>nil then
-      if USEFASTMM4ALLOC then
-        Freemem(pResp) else
-        GlobalFree(PtrUInt(pResp));
+      {$ifdef MSWINDOWS}
+      if not USEFASTMM4ALLOC then
+        GlobalFree(PtrUInt(pResp)) else
+      {$endif}
+        Freemem(pResp);
     if pHead<>nil then
-      if USEFASTMM4ALLOC then
-        Freemem(pHead) else
-        GlobalFree(PtrUInt(pHead));
+      {$ifdef MSWINDOWS}
+      if not USEFASTMM4ALLOC then
+        GlobalFree(PtrUInt(pHead)) else
+      {$endif}
+        Freemem(pHead);
   end;
 end;
 
@@ -29501,8 +29512,6 @@ end;
 procedure TSQLRestClientURIDll.InternalClose;
 begin
 end;
-
-{$endif MSWINDOWS}
 
 
 {$ifdef MSWINDOWS}
@@ -36623,7 +36632,7 @@ end;
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
+  raise EInterfaceFactoryException.CreateUTF8('You encountered an ALF !!! This code is disabled on ARM !!!',[]);
 end;
 {$else}
 var method: ^TServiceMethod;
@@ -38439,7 +38448,7 @@ type
 procedure CallMethod(var Args: TCallMethodArgs);
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
+  raise EInterfaceFactoryException.CreateUTF8('You encountered an ALF !!! This code is disabled on ARM !!!',[]);
 end;
 {$else}
 {$ifdef CPU64}
