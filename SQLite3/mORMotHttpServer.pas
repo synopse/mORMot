@@ -351,10 +351,10 @@ type
     /// allow to redirect ip:port root URI to a given sub-URI
     // - by default, only sub-URI, as defined by TSQLRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
-    // is directly accessed from a browser, e.g. localhost:Port will redirect to
-    // localhost:Port/RedirectedURI
+    // is directly accessed from a browser, e.g. localhost:port will redirect to
+    // localhost:port/RedirectedURI
     // - for http.sys server, would try to register '/' if aRegisterURI is TRUE
-    procedure RootRedirectToURI(const Port,RedirectedURI: RawUTF8; aRegisterURI: boolean=true);
+    procedure RootRedirectToURI(const RedirectedURI: RawUTF8; aRegisterURI: boolean=true);
     /// the associated running HTTP server instance
     // - either THttpApiServer, either THttpServer
     property HttpServer: THttpServerGeneric read fHttpServer;
@@ -654,7 +654,7 @@ begin
     fDBServers[Index].RestAccessRights := Value;
 end;
 
-procedure TSQLHttpServer.RootRedirectToURI(const Port,RedirectedURI: RawUTF8;
+procedure TSQLHttpServer.RootRedirectToURI(const RedirectedURI: RawUTF8;
   aRegisterURI: boolean);
 begin
   if fRootRedirectToURI=RedirectedURI then
