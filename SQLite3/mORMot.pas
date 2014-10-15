@@ -806,6 +806,7 @@ unit mORMot;
       value will continue to return simple fields, excluding BLOBs)
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
+    - added TSQLRecord.GetAsDocVariant() method to create such a variant object
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
       fields (including ID/RowID)
     - added TSQLInitializeTableOptions parameter to CreateMissingTables and
@@ -4992,6 +4993,9 @@ type
         ("x'01234'" e.g.) or '\uFFF0base64encodedbinary' }
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     {$ifndef NOVARIANTS}
+    /// retrieve the record content as a TDocVariant custom variant object
+    function GetAsDocVariant(withID: boolean=true;
+      const Fields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): variant;
     /// retrieve the published property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // property type
@@ -22521,6 +22525,22 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+function TSQLRecord.GetAsDocVariant(withID: boolean;
+  const Fields: TSQLFieldBits): variant;
+var f: integer;
+    v: variant;
+begin
+  if withID then
+    result := _ObjFast(['ID',fID]) else
+    result := _ObjFast([]);
+  with RecordProps do
+    for f := 0 to Fields.Count-1 do begin
+      Fields.List[f].GetVariant(self,v);
+      TDocVariantData(result).AddValue(Fields.List[f].Name,v);
+    end;
+end;
+
 function TSQLRecord.GetFieldVariant(const PropName: string): Variant;
 var P: TSQLPropInfo;
 begin
@@ -22542,7 +22562,8 @@ begin
   if P<>nil then
     P.SetVariant(self,Source);
 end;
-{$endif}
+
+{$endif NOVARIANTS}
 
 function PropsCreate(aTable: TSQLRecordClass): TSQLRecordProperties;
 var PVMT: pointer;
