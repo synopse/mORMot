@@ -140,6 +140,7 @@ unit mORMotHttpServer;
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
       - added TSQLHTTPRemoteLogServer class for easy remote log serving
       - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
+      - added TSQLHttpServer.RootRedirectToURI() method for root URI redirection
       - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
 
 }
@@ -260,6 +261,7 @@ type
     end;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
+    fRootRedirectToURI: RawUTF8;
     fHttpServerKind: TSQLHttpServerOptions;
     {$ifdef WITHLOG}
     fLog: TSynLogClass;
@@ -346,6 +348,13 @@ type
     // identify which instance must handle a particular request from its URI
     // - return true on success, false on error (e.g. specified server not found)
     function RemoveServer(aServer: TSQLRestServer): boolean;
+    /// allow to redirect ip:port root URI to a given sub-URI
+    // - by default, only sub-URI, as defined by TSQLRestServer.Model.Root, are
+    // registered - you can define here a sub-URI to reach when the main server
+    // is directly accessed from a browser, e.g. localhost:Port will redirect to
+    // localhost:Port/RedirectedURI
+    // - for http.sys server, would try to register '/' if aRegisterURI is TRUE
+    procedure RootRedirectToURI(const Port,RedirectedURI: RawUTF8; aRegisterURI: boolean=true);
     /// the associated running HTTP server instance
     // - either THttpApiServer, either THttpServer
     property HttpServer: THttpServerGeneric read fHttpServer;
@@ -645,14 +654,36 @@ begin
     fDBServers[Index].RestAccessRights := Value;
 end;
 
+procedure TSQLHttpServer.RootRedirectToURI(const Port,RedirectedURI: RawUTF8;
+  aRegisterURI: boolean);
+begin
+  if fRootRedirectToURI=RedirectedURI then
+    exit;
+  {$ifdef WITHLOG}
+  fLog.Add.Log(sllDebug,'Redirect localhost:% to localhost:%/%',[Port,Port,RedirectedURI],self);
+  {$endif}
+  fRootRedirectToURI := RedirectedURI;
+  if (RedirectedURI<>'') and fHttpServer.InheritsFrom(THttpApiServer) then
+  try // not needed (nor available) for TCrtSocket
+   THttpApiServer(fHttpServer).AddUrl('/',Port,False,'+',aRegisterURI);
+  except
+    on E: Exception do ;
+  end;
+end;
+
 function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
     i: integer;
     P: PUTF8Char;
 begin
-  if (Ctxt.URL='') or (Ctxt.Method='') or
-     (OnlyJSONRequests and
-      not IdemPChar(pointer(Ctxt.InContentType),'APPLICATION/JSON')) then
+  if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
+    if fRootRedirectToURI<>'' then begin
+      result := HTML_MOVEDPERMANENTLY;
+      Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI;
+    end else
+      result := HTML_BADREQUEST else
+  if (Ctxt.Method='') or (OnlyJSONRequests and
+     not IdemPChar(pointer(Ctxt.InContentType),'APPLICATION/JSON')) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTML_BADREQUEST else
   if Ctxt.Method='OPTIONS' then begin
