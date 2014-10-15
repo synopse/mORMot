@@ -4149,6 +4149,10 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
 
+/// compute the record size from its low-level RTTI
+function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -4219,6 +4223,10 @@ function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
 
+/// save a record content into a Base-64 encoded RawByteString content
+// - will use RecordSave() format, with a left-sided binary CRC
+function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawByteString;
+
 /// compute the number of bytes needed to save a record content
 // using the RecordSave() function
 // - will return 0 in case of an invalid (not handled) record type (e.g. if
@@ -4226,8 +4234,9 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; o
 function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
 
 /// save record into its JSON serialization as saved by TTextWriter.AddRecordJSON
-// - will handle both default (Bin64 encoding of Record Save binary) and
-// custom true JSON format (as set by TTextWriter.RegisterCustomJSONSerializer)
+// - will use default Base64 encoding over RecordSave() binary - or custom true
+// JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
+// enhanced RTTI), if available
 function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
 
 /// fill a record content from a memory buffer as saved by RecordSave()
@@ -4236,12 +4245,18 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
 // read content
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 
+/// read a record content from a Base-64 encoded content
+// - expects RecordSaveBase64() format, with a left-sided binary CRC
+function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec; TypeInfo: pointer;
+  UriCompatible: boolean=false): boolean;
+
 /// fill a record content from a JSON serialization as saved by
-// TTextWriter.AddRecordJSON
-// - will handle both default (Bin64 encoding of Record Save binary) and
-// custom true JSON format (as set by TTextWriter.RegisterCustomJSONSerializer)
+// TTextWriter.AddRecordJSON / RecordSaveJSON
+// - will use default Base64 encoding over RecordSave() binary - or custom true
+// JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
+// enhanced RTTI), if available
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later 
+// a temporary copy if you need to access it later
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 
@@ -4814,7 +4829,8 @@ type
 
   /// which kind of property does TJSONCustomParserCustomSimple refer to
   TJSONCustomParserCustomSimpleKnownType = (
-    ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray);
+    ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray
+    {$ifndef FPC}, ktSet{$endif});
 
   /// used to store additional RTTI for simple type as a ptCustom kind
   // - this class handle currently enumerate, TGUID or a static array
@@ -7030,9 +7046,13 @@ function PointerToHex(aPointer: Pointer): RawUTF8; overload;
 // - use internally BinToHexDisplay()
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8); overload;
 
-/// fast conversion from a Cardinal data into hexa chars, ready to be displayed
+/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
+
+/// fast conversion from a Int64 value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+function Int64ToHex(aInt64: Int64): RawUTF8;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -7052,6 +7072,16 @@ function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawByteString; overload
 // - will trim any right-sided '=' unsignificant characters, and replace
 // '+' or '/' by '_' or '-'
 function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+
+/// conversion from any Base64 encoded value into URI-compatible encoded text
+// - will trim any right-sided '=' unsignificant characters, and replace
+// '+' or '/' by '_' or '-'
+procedure Base64ToURI(var base64: RawByteString);
+
+/// conversion from URI-compatible encoded text into its original Base64 value
+// - will add any right-sided '=' unsignificant characters, and replace back
+// '_' or '-' by '+' or '/' 
+procedure Base64FromURI(var base64: RawByteString);
 
 /// fast conversion from binary data into Base64 encoded text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
@@ -7091,7 +7121,11 @@ function IsBase64(const s: RawByteString): boolean; overload;
 /// check if the supplied text is a valid Base64 encoded stream
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean; overload;
 
-/// retrieve the expected length of a Base64 encoded buffer
+/// retrieve the expected encoded length after Base64 process
+function BinToBase64Length(len: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve the expected undecoded length of a Base64 encoded buffer
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 
 /// direct decoding of a Base64 encoded buffer
@@ -14162,7 +14196,6 @@ begin
 end;
 
 function RecordTypeInfoSize(aRecordTypeInfo: Pointer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 var FieldTable: PFieldTable;
 begin
   FieldTable := RecordTypeInfoFieldTable(aRecordTypeInfo);
@@ -14172,7 +14205,6 @@ begin
 end;
 
 function TypeInfoSize(aTypeInfo: pointer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 begin
   if aTypeInfo=nil then
     result := 0 else begin
@@ -18145,29 +18177,38 @@ begin
   Base64EncodeTrailing(rp+main*4,sp+main*3,len-main*3);
 end;
 
+function BinToBase64Length(len: PtrUInt): PtrUInt;
+begin
+  result := ((len+2)div 3)*4;
+end;
+
 function BinToBase64(const s: RawByteString): RawByteString;
 var len: integer;
 begin
-  result:='';
+  result := '';
   len := length(s);
-  if len = 0 then exit;
-  SetLength(result,((len + 2) div 3) * 4);
+  if len=0 then
+    exit;
+  SetLength(result,BinToBase64Length(len));
   Base64Encode(pointer(result),pointer(s),len);
 end;
 
-function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawByteString; 
+function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawByteString;
 begin
-  result:='';
-  if BinBytes = 0 then exit;
-  SetLength(result,((BinBytes + 2) div 3) * 4);
+  result := '';
+  if BinBytes=0 then
+    exit;
+  SetLength(result,BinToBase64Length(BinBytes));
   Base64Encode(pointer(result),Bin,BinBytes);
 end;
 
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+procedure Base64ToURI(var base64: RawByteString);
 var P: PUTF8Char;
 begin
-  result := BinToBase64(Bin,BinBytes);
-  P := pointer(result);
+  {$ifdef FPC}
+  UniqueString(base64); // @base64[1] won't call UniqueString() under FPC :(
+  {$endif}
+  P := @base64[1];
   if P<>nil then
     repeat
       case P^ of
@@ -18175,12 +18216,41 @@ begin
       '+': P^ := '-';
       '/': P^ := '_';
       '=': begin // trim unsignificant trailing '=' characters
-        SetLength(result,P-pointer(result));
+        SetLength(base64,P-pointer(base64));
         break;
       end;
       end;
       inc(P);
     until false;
+end;
+
+procedure Base64FromURI(var base64: RawByteString);
+var P: PUTF8Char;
+    len: integer;
+begin
+  len := length(base64);
+  if len=0 then
+    exit;
+  {$ifdef FPC}
+  UniqueString(base64); // @base64[1] won't call UniqueString() under FPC :(
+  {$endif}
+  P := @base64[1];
+  repeat
+    case P^ of
+    #0: break;
+    '-': P^ := '+';
+    '_': P^ := '/';
+    end;
+    inc(P);
+  until false;
+  if len and 3<>0 then // add unsignificant trailing '=' characters
+    base64 := base64+StringOfChar('=',4-(len and 3));
+end;
+
+function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+begin
+  result := BinToBase64(Bin,BinBytes);
+  Base64ToURI(result);
 end;
 
 function BinToBase64WithMagic(const s: RawByteString): RawByteString;
@@ -18588,6 +18658,12 @@ function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
   FastNewRawUTF8(result,sizeof(Cardinal)*2);
   BinToHexDisplay(@aCardinal,pointer(Result),sizeof(Cardinal));
+end;
+
+function Int64ToHex(aInt64: Int64): RawUTF8;
+begin
+  FastNewRawUTF8(result,sizeof(Int64)*2);
+  BinToHexDisplay(@AInt64,pointer(Result),sizeof(Int64));
 end;
 
 procedure YearToPChar(Y: Word; P: PUTF8Char);
@@ -25562,6 +25638,45 @@ begin
     RecordSave(Rec,pointer(result),TypeInfo);
 end;
 
+function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawByteString;
+var len: integer;
+    data: RawByteString;
+    dat: PAnsiChar;
+begin
+  result := '';
+  len := RecordSaveLength(Rec,TypeInfo);
+  if len=0 then
+    exit;
+  SetLength(data,len+4);
+  dat := PAnsiChar(pointer(data))+4;
+  RecordSave(Rec,dat,TypeInfo);
+  PCardinal(data)^ := crc32c(0,dat,len);
+  result := BinToBase64(data);
+  if UriCompatible then
+    Base64ToURI(result);
+end;
+
+function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec;
+  TypeInfo: pointer; UriCompatible: boolean): boolean;
+var data: RawByteString;
+begin
+  result := false;
+  if Len<=6 then
+    exit;
+  if UriCompatible then begin
+    SetString(data,Source,Len);
+    Base64FromURI(data);
+    data := Base64ToBin(data);
+  end else
+    data := Base64ToBin(Source,Len);
+  Len := length(data);
+  if Len<=4 then
+    exit;
+  Source := PAnsiChar(pointer(data))+4;
+  if crc32c(0,Source,Len-4)=PCardinal(data)^ then
+    result := RecordLoad(Rec,Source,TypeInfo)<>nil;
+end;
+
 procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
 {$ifdef FPC}
   [external name 'FPC_FINALIZE'];
@@ -26523,13 +26638,22 @@ begin
       fTypeData := pointer(PtrUInt(@elSize)+NameLen);
     {$endif}
     case PTypeKind(fCustomTypeInfo)^ of
-    tkEnumeration: begin
-      fKnownType := ktEnumeration;
+    tkEnumeration{$ifndef FPC}, tkSet{$endif}: begin
       case TOrdType(PByte(fTypeData)^) of
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
       end;
+      {$ifdef FPC}
+      fKnownType := ktEnumeration;
+      {$else}
+      if PTypeKind(fCustomTypeInfo)^=tkEnumeration then
+        fKnownType := ktEnumeration else begin
+        fKnownType := ktSet;
+        inc(PByte(fTypeData)); // jump over TOrdType
+        fTypeData := PPointer(fTypeData)^;
+      end;
+      {$endif}
     end;
     tkArray: begin
       if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
@@ -26566,8 +26690,9 @@ end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
-var i: integer;
+var i,max: integer;
     V: PByte;
+    item: PShortString;
 begin
   case fKnownType of
   ktStaticArray: begin
@@ -26578,6 +26703,17 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
+  {$ifndef FPC}
+  ktSet: begin // written as an object with set names as fields = true/false
+    aWriter.Add('{');
+    item := GetEnumBaseTypeList(fTypeData,max);
+    for i := 0 to max do begin
+      aWriter.AddPropName(item^);
+      aWriter.AddString(JSON_BOOLEAN[GetBit(aValue,i)]);
+      inc(PByte(item),ord(item^[0])+1); // next short string
+    end;
+  end;
+  {$endif}
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -26599,7 +26735,6 @@ var PropValue: PUTF8Char;
     V,i: integer;
     wasString: boolean;
     Val: PByte;
-    Typ: ^TOrdType;
 begin
   result := nil;
   case fKnownType of
@@ -26621,6 +26756,10 @@ begin
       inc(P);
     result := P;
   end;
+  {$ifndef FPC}
+  ktSet: // not implemented yet
+    raise ESynException.CreateUTF8('%.CustomReader("%") set',[self,fCustomTypeName]);
+  {$endif}
   else begin // encoded as JSON strings
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
     if PropValue=nil then
@@ -26635,16 +26774,10 @@ begin
         V := GetInteger(PropValue);
       if V<0 then
         exit;
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      Typ := GetFPCTypeData(fCustomTypeInfo);
-      {$else}
-      with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-        Typ := pointer(PtrUInt(@elSize)+NameLen);
-      {$endif}
-      case Typ^ of
-      otSByte,otUByte: byte(aValue) := V;
-      otSWord,otUWord: word(aValue) := V;
-      otSLong,otULong: integer(aValue) := V;
+      case fDataSize of
+      1: byte(aValue) := V;
+      2: word(aValue) := V;
+      4: integer(aValue) := V;
       else exit;
       end;
       result := P;

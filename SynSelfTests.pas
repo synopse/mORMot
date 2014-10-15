@@ -1812,6 +1812,16 @@ begin
   Fill(F,0);
   Check(RecordLoad(F,pointer(Test),TypeInfo(TFV))-pointer(Test)=Len);
   Check(RecordEquals(F,AF[100],TypeInfo(TFV)));
+  Test := RecordSaveBase64(F,TypeInfo(TFV));
+  Check(Test<>'');
+  Fill(F,0);
+  Check(RecordLoadBase64(pointer(Test),length(Test),F,TypeInfo(TFV)));
+  Check(RecordEquals(F,AF[100],TypeInfo(TFV)));
+  Test := RecordSaveBase64(F,TypeInfo(TFV),true);
+  Check(Test<>'');
+  Fill(F,0);
+  Check(RecordLoadBase64(pointer(Test),length(Test),F,TypeInfo(TFV),true));
+  Check(RecordEquals(F,AF[100],TypeInfo(TFV)));
   for i := 0 to 1000 do
     with AF[i] do begin
       Check(Major=i);
@@ -2105,6 +2115,7 @@ var i: integer;
     s: RawByteString;
     name,value: RawUTF8;
     P: PUTF8Char;
+    GUID2: TGUID;
 const GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 procedure Test(const decoded,encoded: RawUTF8);
 begin
@@ -2142,7 +2153,13 @@ begin
     s := RandomString(i*5);
     Check(UrlDecode(UrlEncode(s))=s,string(s));
   end;
-  Check(BinToBase64URI(@GUID,sizeof(GUID))='00amyWGct0y_ze4lIsj2Mw');
+  s := BinToBase64URI(@GUID,sizeof(GUID));
+  Check(s='00amyWGct0y_ze4lIsj2Mw');
+  Base64FromURI(s);
+  Check(Base64ToBinLength(pointer(s),length(s))=sizeof(GUID2));
+  fillchar(GUID2,sizeof(GUID2),0);
+  SynCommons.Base64Decode(Pointer(s),@GUID2,SizeOf(GUID2));
+  Check(IsEqualGUID(GUID2,GUID));
 end;
 
 procedure TTestLowLevelCommon._GUID;
