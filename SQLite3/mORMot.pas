@@ -774,6 +774,7 @@ unit mORMot;
     - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID,
       SessionUserName and ResourceFileName properties
     - added TSQLRestServerURIContext.Redirect() method for HTTP 301 commands
+    - added TSQLRestServer.ServiceMethodRegister() low-level method
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
     - ServiceContext threadvar will now be set in all ORM and SOA process, to
@@ -7452,7 +7453,7 @@ type
   public
     /// this is the main entry point to the global interface factory cache
     // - access to this method is thread-safe
-    // - this method will also register the class to further
+    // - this method will also register the class to further retrieval
     class function Get(aInterface: PTypeInfo): TInterfaceFactory; overload;
     /// retrieve an interface factory from cache, from its TGUID
     // - access to this method is thread-safe
@@ -7467,7 +7468,7 @@ type
     // - if the supplied TGUID has not been previously registered, returns nil
     class function Get(const aInterfaceName: RawUTF8): TInterfaceFactory; overload;
     /// register one or several interfaces to the global interface factory cache
-    // - so that you can use TInterfaceFactory.Get(aGUID) or Get(
+    // - so that you can use TInterfaceFactory.Get(aGUID) or Get(aName)
     class procedure RegisterInterfaces(const aInterfaces: array of PTypeInfo);
     /// create a fake class instance implementing the corresponding interface
     // - aInvoke event will be called at method execution
@@ -11376,6 +11377,9 @@ type
     // - all those published method signature should match TSQLRestServerCallBack
     procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
       aInstance: TObject);
+    /// direct registration of a method for a given low-level event handler
+    procedure ServiceMethodRegister(const aMethodName: RawUTF8;
+      const aEvent: TSQLRestServerCallBack);
     /// call this method to disable Authentication method check for a given
     // published method name
     // - by default, only Auth and TimeStamp methods do not require the RESTful
@@ -26350,8 +26354,19 @@ end;
 
 {$endif MSWINDOWS}
 
+procedure TSQLRestServer.ServiceMethodRegister(const aMethodName: RawUTF8;
+  const aEvent: TSQLRestServerCallBack);
+begin
+  if Model.GetTableIndex(aMethodName)>=0 then
+    raise EServiceException.CreateUTF8('Published method name %.% '+
+      'conflicts with a Table in the Model!',[self,aMethodName]);
+  PSQLRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
+      'Duplicated published method name %.%',[self,aMethodName]))^.CallBack := aEvent;
+end;
+
 procedure TSQLRestServer.ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
   aInstance: TObject);
+var CallBack: TMethod;
 {$ifdef FPC}
 type
   PMethodNameRec = ^TMethodNameRec;
@@ -26368,23 +26383,16 @@ var methodTable: pMethodNameTable;
     i: integer;
     vmt: TClass;
     pmr: PMethodNameRec;
-    MethodName: RawUTF8;
 begin
   vmt := aInstance.ClassType;
   while assigned(vmt) do begin
     methodTable := PMethodNameTable((Pointer(vmt)+vmtMethodTable)^);
     if Assigned(MethodTable) then begin
+      CallBack.Data := aInstance;
       pmr := @methodTable^.entries[0];
       for i := 0 to MethodTable^.count-1 do begin
-        MethodName := aPrefix+RawUTF8(pmr^.name^);
-        if Model.GetTableIndex(MethodName)>=0 then
-          raise EServiceException.CreateUTF8('Published method name %.% '+
-            'conflicts with a Table in the Model!',[self,MethodName]);
-        with TMethod(PSQLRestServerMethod(fPublishedMethods.AddUniqueName(MethodName,
-            'Duplicated published method name %.%',[self,MethodName]))^.CallBack) do begin
-          Data := aInstance;
-          Code := pmr^.addr;
-        end;
+        CallBack.Code := pmr^.addr;
+        ServiceMethodRegister(aPrefix+RawUTF8(pmr^.name^),TSQLRestServerCallBack(CallBack));
         inc(pmr);
       end;
     end;
@@ -26395,14 +26403,13 @@ end;
 var i,n: integer;
     C: PtrInt;
     M: PMethodInfo;
-    MethodName: RawUTF8;
     RI: PReturnInfo; // such RTTI info not available at least in Delphi 7
     Param: PParamInfo;
 procedure SignatureError;
 begin
   raise EServiceException.CreateUTF8(
     'Expected "procedure %.%(Ctxt: TSQLRestServerURIContext)" method signature',
-     [self,MethodName]);
+     [self,M^.Name]);
 end;
 begin
   if aInstance=nil then
@@ -26414,10 +26421,10 @@ begin
   while C<>0 do begin
     M := PPointer(C+vmtMethodTable)^;
     if M<>nil then begin
+      CallBack.Data := aInstance;
       n := PWord(M)^;
       inc(PWord(M));
       for i := 1 to n do begin
-        MethodName := aPrefix+RawUTF8(M^.Name);
         RI := M^.ReturnInfo;
         if (RI<>nil) then
           // $METHODINFO would also include public methods -> check signature
@@ -26436,14 +26443,8 @@ begin
                end;
           else
           end;
-        if Model.GetTableIndex(MethodName)>=0 then
-          raise EServiceException.CreateUTF8('Published method name %.% '+
-            'conflicts with a Table in the Model!',[self,MethodName]);
-        with TMethod(PSQLRestServerMethod(fPublishedMethods.AddUniqueName(MethodName,
-          'Duplicated published method name %.%',[self,MethodName]))^.CallBack) do begin
-          Data := aInstance;
-          Code := M^.Addr;
-        end;
+        CallBack.Code := M^.Addr;
+        ServiceMethodRegister(aPrefix+RawUTF8(M^.Name),TSQLRestServerCallBack(CallBack));
         inc(PByte(M),M^.Len);
       end;
     end;
@@ -27927,7 +27928,7 @@ var i: integer;
 begin
   result := '';
   CookieName := trim(CookieName);
-  if CookieName='' then
+  if (self=nil) or (CookieName='') then
     exit;
   if not fInputCookiesRetrieved then begin
     fInputCookiesRetrieved := true;
