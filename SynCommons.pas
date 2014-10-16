@@ -24221,24 +24221,25 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     case PosEx(copy(Result,2,4),
         'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-        'atom,rdf,rss,webp,appc,mani,docx') of
-      // 63   68  72  76   81   86   91
+        'atom,rdf,rss,webp,appc,mani,docx,xml,json') of
+      // 63   68  72  76   81   86   91   96  100
       1:  Result := 'image/png';
       5:  Result := 'image/gif';
       9:  Result := 'image/tiff';
       14,18: Result := 'image/jpeg';
       23: Result := 'image/bmp';
       27,91: Result := 'application/msword';
-      31,35: Result := 'text/html';
+      31,35: Result := HTML_CONTENT_TYPE;
       40: Result := 'text/css';
       44: Result := 'application/x-javascript';
       47: Result := 'image/x-icon';
       51: Result := 'application/font-woff';
-      55: Result := 'text/plain';
+      55: Result := TEXT_CONTENT_TYPE;
       59: Result := 'image/svg+xml';
-      63,68,72: Result := 'application/xml';
+      63,68,72,96: Result := XML_CONTENT_TYPE;
       76: Result := 'image/webp';
       81,86: Result := 'text/cache-manifest';
+      100: Result := JSON_CONTENT_TYPE;
       else
         if Result<>'' then
           Result := 'application/'+copy(result,2,10);
@@ -24285,7 +24286,8 @@ end;
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
-    ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
+    ['TEXT/','APPLICATION/JSON','APPLICATION/XML',
+     'APPLICATION/X-JAVASCRIPT','IMAGE/SVG+XML']);
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
