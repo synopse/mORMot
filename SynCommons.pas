@@ -39742,13 +39742,16 @@ function TSynTableFieldProperties.SBF(const Value: Variant): TSBFString;
 var V64: Int64;
     VC: Currency absolute V64;
     VD: Double absolute V64;
+    utf8: RawUTF8;
+    dummy: boolean;
 begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
   case FieldType of
     tftBoolean:
       result := SBF_BOOL[boolean(Value)];
     tftUInt8, tftUInt16, tftUInt24, tftInt32, tftInt64,
     tftVarUInt32, tftVarInt32, tftVarUInt64, tftVarInt64: begin
-      V64 := Value;
+      if not VariantToInt64(Value,V64) then
+        V64 := 0;
       result := SBF(V64);
     end;
     tftCurrency: begin
@@ -39759,14 +39762,12 @@ begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
       VD := Value;
       SetString(result,PAnsiChar(@VD),sizeof(VD));
     end;
-    tftWinAnsi:
-      {$ifdef UNICODE}
-      ToSBFStr(UnicodeStringToWinAnsi(Value),result);
-      {$else}
-      ToSBFStr(WinAnsiConvert.AnsiToAnsi(CurrentAnsiConvert,Value),result);
-      {$endif}
-    tftUTF8:
-      ToSBFStr(StringToUTF8(Value),result);
+    tftWinAnsi,tftUTF8: begin
+      VariantToUTF8(Value,utf8,dummy);
+      if FieldType=tftWinAnsi then
+        ToSBFStr(Utf8ToWinAnsi(utf8),result) else
+        ToSBFStr(utf8,result);
+    end;
     else
       result := '';
   end;
