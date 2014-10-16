@@ -44631,13 +44631,15 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
-  {$ifndef FPC}
+  {$ifdef FPC}
+  {$ifdef FPC_FULLVERSION>=20701}
+  DefaultSystemCodepage := CODEPAGE_US;
+  {$endif}
+  {$else}
   {$ifdef DOPATCHTRTL}
   if DebugHook=0 then // patch VCL/RTL only outside debugging
     InitRedirectCode;
   {$endif}
-  {$else}
-  DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}
