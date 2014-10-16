@@ -11708,6 +11708,11 @@ const
 function TSynAnsiConvert.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal): PWideChar;
 var c: cardinal;
+{$ifndef MSWINDOWS}
+{$ifdef FPC}
+    tmp: UnicodeString;
+{$endif}
+{$endif}
 begin
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   if SourceChars>=4 then
@@ -11740,10 +11745,16 @@ begin
     result := Dest+MultiByteToWideChar(
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
     {$else}
+    {$ifdef FPC}
+    widestringmanager.Ansi2UnicodeMoveProc(Source,fCodePage,tmp,SourceChars);
+    move(Pointer(tmp)^,Dest^,length(tmp)*2);
+    result := Dest+length(tmp);
+    {$else}
     raise ESynException.CreateUTF8('%.AnsiBufferToUnicode() not supported yet for CP=%',
       [self,CodePage]);
-    {$endif}
-    {$endif}
+    {$endif FPC}
+    {$endif MSWINDOWS}
+    {$endif ISDELPHIXE}
     {$ifndef DELPHI5OROLDER}
     if result=Dest then
       TSynLogTestLog.DebuggerNotify([GetLastError,CodePage],'Error % on CodePage %');
@@ -11920,6 +11931,11 @@ end;
 function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
+{$ifndef MSWINDOWS}
+{$ifdef FPC}
+    tmp: RawByteString;
+{$endif}
+{$endif}
 begin
   // first handle trailing 7 bit ASCII chars, by pairs (Sha optimization)
   if SourceChars>=2 then
@@ -11947,9 +11963,15 @@ begin
     result := Dest+WideCharToMultiByte(
       fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
     {$else}
+    {$ifdef FPC}
+    widestringmanager.Unicode2AnsiMoveProc(Source,tmp,fCodePage,SourceChars);
+    move(Pointer(tmp)^,Dest^,length(tmp));
+    result := Dest+length(tmp);
+    {$else}
     raise ESynException.CreateUTF8('%.UnicodeBufferToAnsi() not supported yet for CP=%',
       [self,CodePage]);
-    {$endif}
+    {$endif FPC}
+    {$endif MSWINDOWS}
 end;
 
 function TSynAnsiConvert.UTF8BufferToAnsi(Dest: PAnsiChar;
@@ -12164,7 +12186,7 @@ begin // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
       A256[i] := AnsiChar(i);
     if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)<>512 then
       raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
-    move(U256,fAnsiToWide[0],256*2);
+    move(U256[0],fAnsiToWide[0],256*2);
   end;
   SetLength(fWideToAnsi,65536);
   fillchar(fWideToAnsi[1],65535,ord('?')); // '?' for unknown char
