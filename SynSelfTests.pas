@@ -6161,8 +6161,11 @@ begin
       '"ValWord":0,"ValDate":"","Next":0,"Data":"","ValVariant":null}');
 {$endif}
     T.ValDate := 39882.888612; // a fixed date and time
-    T.Ansi := 'abcde'+#$00E9+'ef'+#$00E0+#$00E9;
-    T.Test := WinAnsiToUTF8('abcde'+#$00E9+'ef'+#$00E0+#$00E9);
+    T.Ansi := 'abcde6ef90';
+    T.fAnsi[6] := #$E9;
+    T.fAnsi[9] := #$E0;
+    T.fAnsi[10] := #$E9;
+    T.Test := WinAnsiToUTF8(T.Ansi);
     T.Unicode := Utf8DecodeToRawUnicode(T.fTest);
     Check(RawUnicodeToWinAnsi(T.fUnicode)=T.fAnsi);
     // the same string is stored with some Delphi types, but will remain
@@ -6600,11 +6603,15 @@ end;
 
 procedure TTestCryptographicRoutines._Base64;
 const
-  Value: WinAnsiString = 'Hello /c'''+#$00E9+'tait '+#$00E7+#$00E0+'+';
   Value64: RawByteString = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
 var tmp, b64: RawByteString;
+    Value: WinAnsiString;
     i, L: Integer;
 begin
+  Value := 'Hello /c''0tait 67+';
+  Value[10] := #$E9;
+  Value[16] := #$E7;
+  Value[17] := #$E0;
   Check(not IsBase64(Value));
   Check(Base64Encode(Value)=Value64);
   Check(BinToBase64(Value)=Value64);
@@ -7163,6 +7170,10 @@ const // BLOBs are stored as array of byte to avoid any charset conflict
   BlobDali: array[0..3] of byte = (97,233,224,231);
   BlobMonet: array[0..13] of byte = (224,233,231,ord('d'),ord('s'),ord('j'),
         ord('d'),ord('s'),ord('B'),ord('L'),ord('O'),ord('B'),ord('2'),ord('3'));
+  utf8E0E7E9: array[0..5] of byte = ($E0,$E7,$E8,$E9,$EA,$F4);
+
+var
+  _uE0,_uE7,_uE8,_uE9,_uEA,_uF4: RawUTF8;
 
 procedure TTestSQLite3Engine.DatabaseDirectAccess;
 procedure InsertData(n: integer);
@@ -7180,30 +7191,33 @@ begin
    R.Prepare(Demo.DB,ins+'Salvador'+RawUTF8(s)+''', ''Dali'', ?, 1904, 1989);');
    R.Bind(1,@BlobDali,4); // Bind Blob
    R.Execute;
-   Demo.Execute(ins+StringToUtf8('Samuel Finley Breese'+s+''', ''Morse'', ''a'+#$00E9+#$00E0+#$00E7+''', 1791, 1872);'));
-   Demo.Execute(ins+StringToUtf8('Sergei'+s+''', ''Rachmaninoff'', '''+#$00E9+'z'+#$00E7+'b'', 1873, 1943);'));
-   Demo.Execute(ins+StringToUtf8('Alexandre'+s+''', ''Dumas'', '''+#$00E9+#$00E7+'b'', 1802, 1870);'));
-   Demo.Execute(ins+StringToUtf8('Franz'+s+''', ''Schubert'', '''+#$00E9+#$00E0+#$00E7+'a'', 1797, 1828);'));
-   Demo.Execute(ins+StringToUtf8('Leonardo'+s+''', ''da Vin'+#$00E7+'i'', ''@'+#$00E7+'b'', 1452, 1519);'));
-   Demo.Execute(ins+StringToUtf8('Aldous Leonard'+s+''', ''Huxley'', '''+#$00E9+#$00E0+''', 1894, 1963);'));
-   R.Prepare(Demo.DB,ins+StringToUtf8('Claud'+#$00E8+s+#10#7''', ''M'+#$00F4+'net'', ?, 1840, 1926);'));
+   Demo.Execute(ins+'Samuel Finley Breese'+s+''', ''Morse'', ''a'+_uE9+_uE0+_uE7+''', 1791, 1872);');
+   Demo.Execute(ins+'Sergei'+s+''', ''Rachmaninoff'', '''+_uE9+'z'+_uE7+'b'', 1873, 1943);');
+   Demo.Execute(ins+'Alexandre'+s+''', ''Dumas'', '''+_uE9+_uE7+'b'', 1802, 1870);');
+   Demo.Execute(ins+'Franz'+s+''', ''Schubert'', '''+_uE9+_uE0+_uE7+'a'', 1797, 1828);');
+   Demo.Execute(ins+'Leonardo'+s+''', ''da Vin'+_uE7+'i'', ''@'+_uE7+'b'', 1452, 1519);');
+   Demo.Execute(ins+'Aldous Leonard'+s+''', ''Huxley'', '''+_uE9+_uE0+''', 1894, 1963);');
+   R.Prepare(Demo.DB,ins+'Claud'+_uE8+s+#10#7''', ''M'+_uF4+'net'', ?, 1840, 1926);');
    R.Bind(1,@BlobMonet,sizeof(BlobMonet)); // Bind Blob
    R.Execute;
-   Demo.Execute(ins+StringToUtf8('Albert'+s+''', ''Einstein'', '''+#$00E9+#$00E7+'p'', 1879, 1955);'));
-   Demo.Execute(ins+StringToUtf8('Johannes'+s+''', ''Gutenberg'', '''+#$00EA+'mls'', 1400, 1468);'));
-   Demo.Execute(ins+StringToUtf8('Jane'+s+''', ''Aust'+#$00E8+'n'', '''+#$00E7+#$00E0+#$00E7+'m'', 1775, 1817);'));
+   Demo.Execute(ins+'Albert'+s+''', ''Einstein'', '''+_uE9+_uE7+'p'', 1879, 1955);');
+   Demo.Execute(ins+'Johannes'+s+''', ''Gutenberg'', '''+_uEA+'mls'', 1400, 1468);');
+   Demo.Execute(ins+'Jane'+s+''', ''Aust'+_uE8+'n'', '''+_uE7+_uE0+_uE7+'m'', 1775, 1817);');
  end;
 end;
-const
-  ReqAnsi: WinAnsiString =
-    'SELECT * FROM People WHERE LastName=''M'+#$00F4+'net'' ORDER BY FirstName;';
-  SoundexValues: array[0..5] of RawUTF8 =
-    ('bonjour','bonchour','Bnjr','mohammad','mohhhammeeet','bonjourtr'+#$00E8+'slongmotquid'+#$00E9+'passe');
-var Names: TRawUTF8DynArray;
-    i1,i2: integer;
-    Res: Int64;
-    password, s: RawUTF8;
+var
+  SoundexValues: array[0..5] of RawUTF8;
+  Names: TRawUTF8DynArray;
+  i1,i2: integer;
+  Res: Int64;
+  password, s: RawUTF8;
 begin
+  SoundexValues[0] := 'bonjour';
+  SoundexValues[1] := 'bonchour';
+  SoundexValues[2] := 'Bnjr';
+  SoundexValues[3] := 'mohammad';
+  SoundexValues[4] := 'mohhhammeeet';
+  SoundexValues[5] := 'bonjourtr'+_uE8+'slongmotquid'+_uE9+'passe';
   if (PosEx(RawUTF8('SQlite3 engine'),Owner.CustomVersions,1)=0) and
      (sqlite3<>nil) then
     Owner.CustomVersions := Owner.CustomVersions+#13#10'SQlite3 engine used: '+
@@ -7274,8 +7288,8 @@ begin
   Demo.TransactionBegin;
   InsertData(1000);
   Demo.Commit;
-  Req := WinAnsiToUtf8(ReqAnsi);
-  Check(Utf8ToWinAnsi(Req)=ReqAnsi,'WinAnsiToUtf8/Utf8ToWinAnsi');
+  Req := 'SELECT * FROM People WHERE LastName=''M'+_uF4+'net'' ORDER BY FirstName;';
+  Check(WinAnsiToUtf8(Utf8ToWinAnsi(Req))=Req,'WinAnsiToUtf8/Utf8ToWinAnsi');
   JS := Demo.ExecuteJSON(Req); // get result in JSON format
   FileFromString(JS,'Test1.json');
   Check(Hash32(JS)=$40C1649A,'Expected ExecuteJSON result not retrieved');
@@ -9237,7 +9251,7 @@ begin
       // direct client access test
       Client.Server.CreateMissingTables; // NEED Dest,Source,Dests,...
       Check(Client.SetUser('User','synopse')); // use default user
-      DaVinci := WinAnsiToUtf8('da Vin'+#$00E7+'i');
+      DaVinci := 'da Vin'+_uE7+'i';
       Check(Client.Retrieve('LastName='''+DaVinci+'''',V));
       Check(V.FirstName='Leonardo1');
       Check(V.LastName=DaVinci);
@@ -9273,7 +9287,7 @@ begin
       Check(not Refreshed);
       Req := StringReplace(Req,'*',
         Client.Model.Props[TSQLRecordPeople].SQL.TableSimpleFields[true,false],[]);
-      s := WinAnsiToUtf8('LastName=''M'+#$00F4+'net'' ORDER BY FirstName');
+      s := 'LastName=''M'+_uF4+'net'' ORDER BY FirstName';
       J := Client.List([TSQLRecordPeople],'*',s);
       Check(Client.UpdateFromServer([J],Refreshed));
       Check(not Refreshed);
@@ -11705,5 +11719,12 @@ end;
 
 {$endif DELPHI5OROLDER}
 
+initialization
+  _uE0 := WinAnsiToUtf8(@utf8E0E7E9[0],1);
+  _uE7 := WinAnsiToUtf8(@utf8E0E7E9[1],1);
+  _uE8 := WinAnsiToUtf8(@utf8E0E7E9[2],1);
+  _uE9 := WinAnsiToUtf8(@utf8E0E7E9[3],1);
+  _uEA := WinAnsiToUtf8(@utf8E0E7E9[4],1);
+  _uF4 := WinAnsiToUtf8(@utf8E0E7E9[5],1);
 end.
 
