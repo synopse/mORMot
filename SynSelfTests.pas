@@ -7122,8 +7122,12 @@ end;
 {$endif}
 {$endif}
 
-{$ifndef DELPHI5OROLDER}
+const
+  UTF8_E0_F4_BYTES: array[0..5] of byte = ($E0,$E7,$E8,$E9,$EA,$F4);
+var
+  _uE0,_uE7,_uE8,_uE9,_uEA,_uF4: RawUTF8;
 
+{$ifndef DELPHI5OROLDER}
 
 { TTestSQLite3Engine }
 
@@ -7178,10 +7182,6 @@ const // BLOBs are stored as array of byte to avoid any charset conflict
   BlobDali: array[0..3] of byte = (97,233,224,231);
   BlobMonet: array[0..13] of byte = (224,233,231,ord('d'),ord('s'),ord('j'),
         ord('d'),ord('s'),ord('B'),ord('L'),ord('O'),ord('B'),ord('2'),ord('3'));
-  utf8E0E7E9: array[0..5] of byte = ($E0,$E7,$E8,$E9,$EA,$F4);
-
-var
-  _uE0,_uE7,_uE8,_uE9,_uEA,_uF4: RawUTF8;
 
 procedure TTestSQLite3Engine.DatabaseDirectAccess;
 procedure InsertData(n: integer);
@@ -11728,11 +11728,11 @@ end;
 {$endif DELPHI5OROLDER}
 
 initialization
-  _uE0 := WinAnsiToUtf8(@utf8E0E7E9[0],1);
-  _uE7 := WinAnsiToUtf8(@utf8E0E7E9[1],1);
-  _uE8 := WinAnsiToUtf8(@utf8E0E7E9[2],1);
-  _uE9 := WinAnsiToUtf8(@utf8E0E7E9[3],1);
-  _uEA := WinAnsiToUtf8(@utf8E0E7E9[4],1);
-  _uF4 := WinAnsiToUtf8(@utf8E0E7E9[5],1);
+  _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
+  _uE7 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[1],1);
+  _uE8 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[2],1);
+  _uE9 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[3],1);
+  _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
+  _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
 

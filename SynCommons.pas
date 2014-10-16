@@ -12169,9 +12169,10 @@ constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var i: integer;
     A256: array[0..256] of AnsiChar;
     U256: array[0..256] of WideChar; // AnsiBufferToUnicode() write a last #0
-begin // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here                     
+begin                      
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
+    // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
     raise ESynException.CreateFmt('%s.Create - Invalid code page %d',
       [ClassName,fCodePage]);
   // create internal look-up tables
@@ -12186,6 +12187,7 @@ begin // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
       A256[i] := AnsiChar(i);
     fillchar(U256,sizeof(U256),0);
     if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)>512 then
+      // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
       raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
     move(U256[0],fAnsiToWide[0],512);
   end;
@@ -19560,7 +19562,7 @@ begin
     if not CreateDir(result) then
       if not RaiseExceptionOnCreationFailure then
         result := '' else
-        raise ESynException.CreateFmt('Impossible to create "%s" folder',[Directory]);
+        raise ESynException.CreateUTF8('Impossible to create "%" folder',[Directory]);
 end;
 
 {$ifdef DELPHI5OROLDER}
@@ -25352,7 +25354,7 @@ begin
     tkObject,tkRecord:
       result := RTTIRecordSize(typeinfo);
   else
-    raise ESynException.CreateFmt('RTTIManagedSize(%d)',[PByte(typeinfo)^]);
+    raise ESynException.CreateUTF8('RTTIManagedSize(%)',[PByte(typeinfo)^]);
   end;
 end;
 
@@ -25415,7 +25417,7 @@ begin
   end;
   result := false;
   if  not (FieldTable^.Kind in tkRecordTypes) then
-    exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
+    exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   FieldTable := GetFPCAlignRecordPtr(FieldTable);
   {$else}
@@ -25491,7 +25493,7 @@ begin
   R := @Rec;
   if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
     result := 0; // should have been checked before
-    exit; // raise Exception.CreateFmt('%s is not a record',[FieldTable^.NameLen]);
+    exit; // raise Exception.CreateUTF8('% is not a record',[FieldTable^.NameLen]);
   end;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   FieldTable := GetFPCAlignRecordPtr(FieldTable);
@@ -25566,7 +25568,7 @@ begin
   R := @Rec;
 {  if FieldTable^.Kind<>tkRecord then begin // should have been checked before
     result := nil;
-    exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
+    exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   end; }
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   FieldTable := GetFPCAlignRecordPtr(FieldTable);
@@ -25771,7 +25773,7 @@ begin
   R := @Rec;
   if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
     result := nil; // should have been checked before
-    exit; // raise Exception.CreateFmt('%s is not a record',[Typ^.Name]);
+    exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   end;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   FieldTable := GetFPCAlignRecordPtr(FieldTable);
@@ -28067,7 +28069,7 @@ begin
     varUString:
       UTF8DecodeToUnicodeString(pointer(Txt),length(Txt),UnicodeString(Value.VAny));
     {$endif}
-    else raise ESynException.CreateFmt('RawUTF8ToVariant(ExpectedValueType=%d)',
+    else raise ESynException.CreateUTF8('RawUTF8ToVariant(ExpectedValueType=%)',
       [ExpectedValueType]);
   end;
 end;
@@ -28385,7 +28387,7 @@ begin
       VAny := nil; // avoid GPF on next line
       VarRecToUTF8(V,RawUTF8(VAny));
     end;
-    else raise ESynException.CreateFmt('Unhandled TVarRec.VType=%d',[V.VType]);
+    else raise ESynException.CreateUTF8('Unhandled TVarRec.VType=%',[V.VType]);
   end;
 end;
 
@@ -29080,7 +29082,7 @@ begin
       Source := VPointer else
       Source := @SourceDocVariant;
   if (DocVariantType=nil) or (Source^.VType<>DocVariantType.VarType) then
-    raise ESynException.CreateFmt('No TDocVariant for InitCopy(%d)',[Source.VType]);
+    raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[Source.VType]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
     VType := DocVariantType.VarType;
@@ -29127,7 +29129,7 @@ begin
       dvUndefined:
         VKind := dvObject;
       dvArray:
-        raise EDocVariant.CreateFmt('Unexpected "%s" property name in an array',[aName]);
+        raise EDocVariant.CreateUTF8('Unexpected "%" property name in an array',[aName]);
     end else
     case Kind of // aName is not set for an array
       dvUndefined:
@@ -29167,7 +29169,7 @@ begin
   if dvoCheckForDuplicatedNames in VOptions then begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
-      raise EDocVariant.CreateFmt('Duplicated "%s" name',[aName]);
+      raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   end;
   InternalAddValue(aName,aValue);
   result := VCount-1;
@@ -29211,9 +29213,9 @@ begin
   if Kind=dvArray then begin
     result := GetInteger(aName,err);
     if err<>0 then
-      raise EDocVariant.CreateFmt('Impossible to find "%s" property in an array',[aName]);
+      raise EDocVariant.CreateUTF8('Impossible to find "%" property in an array',[aName]);
     if cardinal(result)>=cardinal(VCount) then
-      raise EDocVariant.CreateFmt('Out of range [%s] property in an array',[aName]);
+      raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
     exit;
   end;
   // simple lookup for object names -> hashing may be needed for huge count
@@ -29329,7 +29331,7 @@ end;
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
 begin
   if cardinal(Index)>=cardinal(VCount) then
-    raise EDocVariant.CreateFmt('Out of range [%d] (count=%d)',[Index,VCount]) else
+    raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
     VValue[Index] := NewValue;
 end;
 
@@ -29339,7 +29341,7 @@ begin
   if (cardinal(Index)>=cardinal(VCount)) or (VName=nil) then
     if dvoReturnNullForOutOfRangeIndex in VOptions then
       Dest := '' else
-      raise EDocVariant.CreateFmt('Out of range [%d] (count=%d)',[Index,VCount]) else
+      raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
       Dest := VName[Index];
 end;
 
@@ -29350,7 +29352,7 @@ begin
   if cardinal(Index)>=cardinal(VCount) then
     if dvoReturnNullForOutOfRangeIndex in VOptions then
       SetVariantNull(Dest) else
-      raise EDocVariant.CreateFmt('Out of range [%d] (count=%d)',[Index,VCount]) else
+      raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
     if DestByRef then
       SetVariantByRef(VValue[Index],Dest) else begin
       Source := @VValue[Index];
@@ -29369,7 +29371,7 @@ begin
   if ndx<0 then
     if dvoReturnNullForUnknownProperty in VOptions then
       SetVariantNull(Dest) else
-      raise EDocVariant.CreateFmt('Unexpected "%s" property',[aName]) else
+      raise EDocVariant.CreateUTF8('Unexpected "%" property',[aName]) else
     RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
 end;
 
@@ -29385,7 +29387,7 @@ begin
         dvoNameCaseSensitive in VOptions,result,true) else
       if dvoReturnNullForUnknownProperty in VOptions then
         SetVariantNull(result) else
-        raise EDocVariant.CreateFmt('Unexpected "%s" property',[Name]);
+        raise EDocVariant.CreateUTF8('Unexpected "%" property',[Name]);
   end;
 end;
 
@@ -29582,7 +29584,7 @@ begin
       W.Add(']');
     end;
   end else
-    raise ESynException.CreateFmt('Unexpected variant type %d',[VType]);
+    raise ESynException.CreateUTF8('Unexpected variant type %',[VType]);
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
@@ -29753,7 +29755,7 @@ begin
       result := @DocVariant else
     if VType=varByRef or varVariant then
       result := DocVariantData(PVariant(VPointer)^) else
-    raise EDocVariant.CreateFmt('DocVariantType.Data(%d<>TDocVariant)',[VType]);
+    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
 end;
 
 const // will be in code section of the exe, so will be read-only by design
@@ -31171,7 +31173,7 @@ begin
   fTypeInfo := aTypeInfo;
   Value := @aValue;
   if Typ^.Kind<>tkDynArray then
-    raise ESynException.CreateFmt('%s is not a dynamic array',[PShortString(@Typ^.NameLen)^]);
+    raise ESynException.CreateUTF8('% is not a dynamic array',[PShortString(@Typ^.NameLen)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   Typ := GetFPCAlignRecordPtr(Typ);
   {$else}
@@ -31206,7 +31208,7 @@ begin
   Init(aTypeInfo,aValue,aCountPointer);
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   if @Comp=nil then
-    raise ESynException.CreateFmt('TDynArray.InitSpecific wrong aKind=%d',[ord(aKind)]);
+    raise ESynException.CreateUTF8('TDynArray.InitSpecific wrong aKind=%',[ord(aKind)]);
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];
@@ -31271,7 +31273,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength*ElemSize+Sizeof(TDynArrayRec);
   if NeededSize>1024*1024*512 then // max allowed memory block is 512MB
-    raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
+    raise ERangeError.CreateFmt('TDynArray SetLength(%d,%d) size concern',
       [PShortString(@PDynArrayTypeInfo(ArrayType)^.NameLen)^,NewLength]);
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
@@ -40609,7 +40611,7 @@ begin
     CheckVTableInitialized;
     aField := VTable.FieldFromName[FieldName];
     if aField=nil then
-      raise ETableDataException.CreateFmt('Unknown %s property',[FieldName]) else
+      raise ETableDataException.CreateUTF8('Unknown % property',[FieldName]) else
     aField.GetVariant(VTable.GetData(pointer(VValue),aField),result);
   end;
 end;
@@ -40667,7 +40669,7 @@ begin
     VID := Value else begin
     F := VTable.FieldFromName[FieldName];
     if F=nil then
-      raise ETableDataException.CreateFmt('Unknown %s property',[FieldName]) else
+      raise ETableDataException.CreateUTF8('Unknown % property',[FieldName]) else
       SetFieldValue(F,Value);
   end;
 end;
@@ -41366,7 +41368,7 @@ begin
     W.fTotalWritten := W.Flush;
   with W do
     if fPos+n*5>fBufLen then // BufLen=1 shl 19=512 KB should be enough
-      raise ESynException.CreateFmt('TSynMapFile.WriteSymbol: too big %s',[
+      raise ESynException.CreateUTF8('TSynMapFile.WriteSymbol: too big %',[
         PShortString(@PDynArrayTypeInfo(A.ArrayType).NameLen)^]) else
       P := @PByteArray(fBuf)^[fPos];
   Beg := PtrUInt(P);
