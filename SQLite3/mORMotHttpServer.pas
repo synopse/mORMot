@@ -348,7 +348,7 @@ type
     // identify which instance must handle a particular request from its URI
     // - return true on success, false on error (e.g. specified server not found)
     function RemoveServer(aServer: TSQLRestServer): boolean;
-    /// allow to redirect ip:port root URI to a given sub-URI
+    /// allow to temporarly redirect ip:port root URI to a given sub-URI
     // - by default, only sub-URI, as defined by TSQLRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
     // is directly accessed from a browser, e.g. localhost:port will redirect to
@@ -680,7 +680,7 @@ var call: TSQLRestURIParams;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI<>'' then begin
-      result := HTML_MOVEDPERMANENTLY;
+      result := HTML_TEMPORARYREDIRECT;
       Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI;
     end else
       result := HTML_BADREQUEST else

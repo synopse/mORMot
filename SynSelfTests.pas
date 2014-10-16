@@ -6099,12 +6099,15 @@ end;
 procedure TTestBasicClasses._TSQLRecord;
 var i: integer;
     P: PPropInfo;
-    s,s1,s2: RawUTF8;
+    s,s1,s2,s3: RawUTF8;
     M: TSQLModel;
     T,T2: TSQLRecordTest;
 {$ifndef LVCL}
     bin: RawByteString;
     valid: boolean;
+{$endif}
+{$ifndef NOVARIANTS}
+    obj: Variant;
 {$endif}
 begin
   Check(isSelect('select * from toto'));
@@ -6206,6 +6209,11 @@ begin
     T2.FillFrom(s);
     Check(T.SameValues(T2));
     Check(T2.GetJSONValues(true,true,soSelect)=s);
+{$ifndef NOVARIANTS}
+    obj := T.GetSimpleFieldsAsDocVariant;
+    s3 := VariantSaveJSON(obj);
+    Check(s3=s);
+{$endif}
 {$ifndef LVCL}
     s := ObjectToJSON(T);
     Check(s='{"ID":10,"Int":0,"Test":"'+T.Test+'","Unicode":"'+T.Test+

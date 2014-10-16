@@ -3282,6 +3282,9 @@ const
   /// HTML Status Code for "HTTP Version Not Supported"
   HTML_HTTPVERSIONNONSUPPORTED = 505;
 
+  /// you can use this cookie value to delete a cookie on the browser side
+  COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
+
   /// used e.g. by THttpApiServer.Request for http.sys to send a static file
   // - the OutCustomHeader should contain the proper 'Content-type: ....'
   // corresponding to the file (e.g. by calling GetMimeContentType() function
@@ -4136,6 +4139,7 @@ type
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
+    // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
@@ -4172,8 +4176,9 @@ type
     procedure ReturnFile(const FileName: TFileName;
       Handle304NotModified: boolean=false; const ContentType: RawUTF8='');
     /// use this method notify the caller that the resource URI has changed
-    // - returns a HTML_MOVEDPERMANENTLY status with the specified location
-    procedure Redirect(const NewLocation: RawUTF8);
+    // - returns a HTML_TEMPORARYREDIRECT status with the specified location,
+    // or HTML_MOVEDPERMANENTLY if PermanentChange is TRUE
+    procedure Redirect(const NewLocation: RawUTF8; PermanentChange: boolean=false);
     /// use this method to send back a JSON object with a "result" field
     // - this method will encode the supplied values as a {"result":"...}
     // JSON object, as such for one value:
@@ -4994,8 +4999,9 @@ type
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
-    function GetAsDocVariant(withID: boolean=true;
-      const Fields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): variant;
+    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits): variant;
+    /// retrieve the simple record content as a TDocVariant custom variant object
+    function GetSimpleFieldsAsDocVariant(withID: boolean=true): variant;
     /// retrieve the published property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // property type
@@ -22527,18 +22533,24 @@ end;
 {$ifndef NOVARIANTS}
 
 function TSQLRecord.GetAsDocVariant(withID: boolean;
-  const Fields: TSQLFieldBits): variant;
+  const withFields: TSQLFieldBits): variant;
 var f: integer;
     v: variant;
 begin
   if withID then
-    result := _ObjFast(['ID',fID]) else
+    result := _ObjFast(['RowID',fID]) else
     result := _ObjFast([]);
   with RecordProps do
-    for f := 0 to Fields.Count-1 do begin
+    for f := 0 to Fields.Count-1 do
+    if f in withFields then begin
       Fields.List[f].GetVariant(self,v);
       TDocVariantData(result).AddValue(Fields.List[f].Name,v);
     end;
+end;
+
+function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean): variant;
+begin
+  result := GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect]);
 end;
 
 function TSQLRecord.GetFieldVariant(const PropName: string): Variant;
@@ -28039,9 +28051,12 @@ begin
   end;
 end;
 
-procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8);
+procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8;
+  PermanentChange: boolean);
 begin
-  Call.OutStatus := HTML_MOVEDPERMANENTLY;
+  if PermanentChange then
+    Call.OutStatus := HTML_MOVEDPERMANENTLY else
+    Call.OutStatus := HTML_TEMPORARYREDIRECT;
   Call.OutHead := 'Location: '+NewLocation; 
 end;
 
@@ -36942,6 +36957,8 @@ end;
 class function TInterfaceFactory.Get(aInterface: PTypeInfo): TInterfaceFactory;
 var i: integer;
 begin
+  if aInterface=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Get(nil)',[self]);
   EnterInterfaceFactoryCache;
   try
     for i := 0 to InterfaceFactoryCache.Count-1 do begin
