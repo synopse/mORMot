@@ -1066,7 +1066,10 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; overload; virtual;
     /// convert any Ansi buffer into an Unicode String
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
-    function AnsiToUnicodeString(Source: PAnsiChar; SourceChars: Cardinal): SynUnicode;
+    function AnsiToUnicodeString(Source: PAnsiChar; SourceChars: Cardinal): SynUnicode; overload;
+    /// convert any Ansi buffer into an Unicode String
+    // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
+    function AnsiToUnicodeString(const Source: RawByteString): SynUnicode; overload;
     /// convert any Ansi Text into an UTF-8 encoded String
     // - internaly calls AnsiBufferToUTF8 virtual method
     function AnsiToUTF8(const AnsiText: RawByteString): RawUTF8; virtual;
@@ -11870,6 +11873,15 @@ begin
   end;
 end;
 
+function TSynAnsiConvert.AnsiToUnicodeString(const Source: RawByteString): SynUnicode;
+begin
+  result := '';
+  if Source<>'' then begin
+    SetLength(result,length(Source));
+    SetLength(result,AnsiBufferToUnicode(pointer(result),pointer(Source),length(Source))-pointer(result));
+  end;
+end;
+
 function TSynAnsiConvert.AnsiToUTF8(const AnsiText: RawByteString): RawUTF8;
 begin
   result := AnsiBufferToRawUTF8(pointer(AnsiText),length(AnsiText));
@@ -12192,9 +12204,11 @@ begin
     move(U256[0],fAnsiToWide[0],512);
   end;
   SetLength(fWideToAnsi,65536);
-  fillchar(fWideToAnsi[1],65535,ord('?')); // '?' for unknown char
-  for i := 1 to 255 do
-    if fAnsiToWide[i]<>0 then
+  for i := 1 to 126 do
+    fWideToAnsi[i] := i;
+  fillchar(fWideToAnsi[127],65536-127,ord('?')); // '?' for unknown char
+  for i := 127 to 255 do
+    if (fAnsiToWide[i]<>0) and (fAnsiToWide[i]<>ord('?')) then
       fWideToAnsi[fAnsiToWide[i]] := i;
   // fixed width Ansi will never be bigger than UTF-8
   fAnsiCharShift := 0;

@@ -2930,6 +2930,7 @@ var W: TFileBufferWriter;
     i: integer;
     V: double;
     s: WinAnsiString;
+    u: SynUnicode;
     {$endif NOVARIANTS}
 begin
   T := TSynTable.Create('Test');
@@ -2977,11 +2978,11 @@ begin
       data.Field['double'] := 3.1415;
       CheckSame(data.Field['double'],3.1415);
       for i := 1 to 100 do begin
-        s := RandomString(i*2);
-        data.Field['text'] := s;
-        check(data.Field['text']=s);
-        data.Field['ansi'] := s; 
-        check(data.Field['ansi']=s);
+        u := WinAnsiConvert.AnsiToUnicodeString(RandomString(i*2));
+        data.Field['text'] := u;
+        check(data.Field['text']=u);
+        data.Field['ansi'] := u; 
+        check(data.Field['ansi']=u);
         // with RandomUTF8, WinAnsi is more efficent than UTF-8 for storage size
       end;
       check(data.Field['bool']=true);
@@ -2996,8 +2997,8 @@ begin
         CheckSame(data.Field['double'],V);
       end;
       check(data.Field['bool']=true);
-      check(data.Field['text']=s);
-      check(data.Field['ansi']=s);
+      check(data.Field['text']=u);
+      check(data.Field['ansi']=u);
       check(data.Field['ID']=1);
       // test TSynTableVariantType
       {$ifndef FPC} // waiting for bug fix for DispInvoke/SetProperty
