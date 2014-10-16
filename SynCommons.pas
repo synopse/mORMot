@@ -12184,9 +12184,10 @@ begin // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
   end else begin // from Operating System returned values
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
-    if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)<>512 then
+    fillchar(U256,sizeof(U256),0);
+    if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)>512 then
       raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
-    move(U256[0],fAnsiToWide[0],256*2);
+    move(U256[0],fAnsiToWide[0],512);
   end;
   SetLength(fWideToAnsi,65536);
   fillchar(fWideToAnsi[1],65535,ord('?')); // '?' for unknown char

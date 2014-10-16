@@ -806,7 +806,7 @@ unit mORMot;
       value will continue to return simple fields, excluding BLOBs)
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
-    - added TSQLRecord.GetAsDocVariant() method to create such a variant object
+    - added TSQLRecord.GetAsDocVariant/GetSimpleFieldsAsDocVariant methods
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
       fields (including ID/RowID)
     - added TSQLInitializeTableOptions parameter to CreateMissingTables and
