@@ -11415,7 +11415,7 @@ type
       aInstance: TObject);
     /// direct registration of a method for a given low-level event handler
     procedure ServiceMethodRegister(const aMethodName: RawUTF8;
-      const aEvent: TSQLRestServerCallBack);
+      const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean=false);
     /// call this method to disable Authentication method check for a given
     // published method name
     // - by default, only Auth and TimeStamp methods do not require the RESTful
@@ -26427,13 +26427,16 @@ begin
 end;
 
 procedure TSQLRestServer.ServiceMethodRegister(const aMethodName: RawUTF8;
-  const aEvent: TSQLRestServerCallBack);
+  const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean);
 begin
   if Model.GetTableIndex(aMethodName)>=0 then
     raise EServiceException.CreateUTF8('Published method name %.% '+
       'conflicts with a Table in the Model!',[self,aMethodName]);
-  PSQLRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
-      'Duplicated published method name %.%',[self,aMethodName]))^.CallBack := aEvent;
+  with PSQLRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
+      'Duplicated published method name %.%',[self,aMethodName]))^ do begin
+    CallBack := aEvent;
+    ByPassAuthentication := aByPassAuthentication;
+  end;
 end;
 
 procedure TSQLRestServer.ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;

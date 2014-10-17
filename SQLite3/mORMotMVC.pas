@@ -230,7 +230,15 @@ type
   { ====== Application / ViewModel ====== }
 
   /// record type to define commands e.g. to redirect to another URI
-  // - this record type should match exactly TServiceCustomAnswer layout
+  // - do NOT access those record property directly, but rather use
+  // TMVCApplication.GotoView/GotoError/GotoDefault methods, e.g.
+  // !  function TBlogApplication.Logout: TMVCAction;
+  // !  begin
+  // !    CurrentSession.Finalize;
+  // !    GotoDefault(result);
+  // !  end;
+  // - this record type should match exactly TServiceCustomAnswer layout,
+  // so that TServiceMethod.InternalExecute() would handle it directly
   TMVCAction = record
     /// the method name to be executed
     RedirectToMethodName: RawUTF8;
@@ -767,9 +775,9 @@ begin
     fRestServer := RestModel as TSQLRestServer else
     fRestServer := aRestServer;
   for m := 0 to fFactory.MethodsCount-1 do
-    fRestServer.ServiceMethodRegister(fFactory.Methods[m].URI,RunOnRestServer);
+    fRestServer.ServiceMethodRegister(fFactory.Methods[m].URI,RunOnRestServer,true);
   if aPublishMvcInfo then begin
-    fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServer);
+    fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServer,true);
     fPublishMvcInfo := true;
   end;
   if aViews=nil then
