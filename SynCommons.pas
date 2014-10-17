@@ -446,6 +446,7 @@ unit SynCommons;
     (with corresponding boolean property FlushShouldNotAutoResize)
   - fixed ticket [5bd9df5979] about TTextWriter.CancelAll issue
   - added optional internal buffer size for TTextWriter.CreateOwnedStream()
+  - added new constructor TTextWriter.CreateOwnedFileStream()
   - added TTextWriter.LastChar and TTextWriter.AddStrings() methods
   - added TTextWriter.ForceContent() method
   - added faster TTextWriter.SetText() method in conjuction to Text function
@@ -5099,6 +5100,9 @@ type
     // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
     constructor CreateOwnedStream(aBufSize: integer=4096);
+    /// the data will be written to an external file
+    // - you should call explicitly Flush to write any pending data to the file
+    constructor CreateOwnedFileStream(const aFileName: TFileName; aBufSize: integer=8192);
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
@@ -14373,7 +14377,7 @@ begin
     ExtendedToStr(VDouble,DOUBLE_PRECISION,result);
   varCurrency:
     Curr64ToStr(VInt64,result);
-  varDate:     begin
+  varDate: begin
     wasString := true;
     DateTimeToIso8601TextVar(VDate,'T',result);
   end;
@@ -26696,8 +26700,8 @@ begin
       if PTypeKind(fCustomTypeInfo)^=tkEnumeration then
         fKnownType := ktEnumeration else begin
         fKnownType := ktSet;
-        inc(PByte(fTypeData)); // jump over TOrdType
-        fTypeData := PPointer(fTypeData)^;
+        inc(PByte(fTypeData)); // jump over TOrdType (see TTypeInfo.SetEnumType)
+        fTypeData := PPointer(PPointer(fTypeData)^)^;
       end;
       {$endif}
     end;
@@ -26756,8 +26760,11 @@ begin
     for i := 0 to max do begin
       aWriter.AddPropName(item^);
       aWriter.AddString(JSON_BOOLEAN[GetBit(aValue,i)]);
+      aWriter.Add(',');
       inc(PByte(item),ord(item^[0])+1); // next short string
     end;
+    aWriter.CancelLastComma;
+    aWriter.Add('}');
   end;
   {$endif}
   else begin // encoded as JSON strings
@@ -34051,6 +34058,14 @@ end;
 constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
 begin
   Create(TRawByteStringStream.Create,aBufSize);
+  fStreamIsOwned := true;
+end;
+
+constructor TTextWriter.CreateOwnedFileStream(const aFileName: TFileName;
+  aBufSize: integer);
+begin
+  DeleteFile(aFileName);
+  Create(TFileStream.Create(aFileName,fmCreate),aBufSize);
   fStreamIsOwned := true;
 end;
 
