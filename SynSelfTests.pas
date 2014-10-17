@@ -2929,7 +2929,6 @@ var W: TFileBufferWriter;
     rec: Variant;
     i: integer;
     V: double;
-    s: WinAnsiString;
     u: SynUnicode;
     {$endif NOVARIANTS}
 begin
@@ -2981,7 +2980,7 @@ begin
         u := WinAnsiConvert.AnsiToUnicodeString(RandomString(i*2));
         data.Field['text'] := u;
         check(data.Field['text']=u);
-        data.Field['ansi'] := u; 
+        data.Field['ansi'] := u;
         check(data.Field['ansi']=u);
         // with RandomUTF8, WinAnsi is more efficent than UTF-8 for storage size
       end;
@@ -3020,11 +3019,11 @@ begin
       rec.double := 3.141592654;
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
-        s := RandomString(i*2);
-        rec.text := s;
-        check(rec.text=s);
-        rec.ansi := s;
-        check(rec.ansi=s);
+        u := WinAnsiConvert.AnsiToUnicodeString(RandomString(i*2));
+        rec.text := u;
+        check(rec.text=u);
+        rec.ansi := u;
+        check(rec.ansi=u);
       end;
       check(rec.bool=true);
       check(rec.varint=100);
@@ -3038,8 +3037,8 @@ begin
         CheckSame(rec.double,V);
       end;
       check(rec.bool=true);
-      check(rec.text=s);
-      check(rec.ansi=s);
+      check(rec.text=u);
+      check(rec.ansi=u);
       check(rec.ID=1);
       {$endif}
     except
