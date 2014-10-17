@@ -3300,7 +3300,11 @@ const
 
 /// convert any HTML_* constant to a short English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
+procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
+
+/// convert any HTML_* constant to an integer error code and its English text
+// - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 
 type
   /// the available HTTP methods transmitted between client and server
@@ -3908,6 +3912,7 @@ type
   TSQLRestServerURIContext = class
   protected
     fInput: TRawUTF8DynArray; // even items are parameter names, odd are values
+    fInputPostContentType: RawUTF8;
     fSessionAccessRights: RawByteString; // session may be deleted meanwhile
     fInputCookiesRetrieved: boolean;
     fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
@@ -3918,6 +3923,7 @@ type
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
+    function GetInputAsTDocVariant: variant;
     {$endif}
     function GetInputNameIndex(const ParamName: RawUTF8): integer;
     function GetInputExists(const ParamName: RawUTF8): Boolean;
@@ -3930,6 +3936,7 @@ type
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
+    procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -4049,6 +4056,8 @@ type
     ForceServiceResultAsXMLObjectNameSpace: RawUTF8;
     /// URI inlined parameters
     // - use UrlDecodeValue*() functions to retrieve the values
+    // - for mPOST requests, would also be filled for following content types:
+    // ! application/x-www-form-urlencoded or multipart/form-data
     Parameters: PUTF8Char;
     /// URI inlined parameters position in Call^.url string
     // - use Parameters field to retrieve the values
@@ -4129,13 +4138,16 @@ type
     // some characters at decoding from UTF-8 input buffer
     // - returns Unassigned if the parameter is not found
     property InputOrVoid[const ParamName: RawUTF8]: variant read GetInputOrVoid;
+    /// retrieve all input paramters from URI as a variant JSON object 
+    // - returns Unassigned if no parameter was defined
+    property InputAsTDocVariant: variant read GetInputAsTDocVariant;
     {$endif}
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - the supplied cookie name is case-insensitive
-    property InCookie[CookieName: RawUTF8]: RawUTF8 read GetInCookie;
+    property InCookie[CookieName: RawUTF8]: RawUTF8 read GetInCookie write SetInCookie;
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
@@ -4156,7 +4168,8 @@ type
     // will return HTML_NOTMODIFIED to the browser, without the actual result
     // content (to save bandwidth)
     procedure Returns(const Result: RawUTF8; Status: integer=HTML_SUCCESS;
-      const CustomHeader: RawUTF8=''; Handle304NotModified: boolean=false); overload;
+      const CustomHeader: RawUTF8=''; Handle304NotModified: boolean=false;
+      HandleErrorAsRegularResult: boolean=false); overload;
     /// use this method to send back a JSON object to the caller
     // - this method will encode the supplied values e.g. as
     // ! JSONEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
@@ -7193,6 +7206,9 @@ type
     smdOut,
     smdResult);
 
+  /// set of parameters direction for an interface-based service method
+  TServiceMethodValueDirections = set of TServiceMethodValueDirection;
+
   /// describe a service provider method argument
   TServiceMethodArgument = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
@@ -7239,11 +7255,11 @@ type
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TTextWriter);
     {$ifndef NOVARIANTS}
-    /// retrieve a context document defining this method arguments
+    /// retrieve a context document defining this method argument
     // - will be used e.g. by mORMotWrapper.pas unit to export the service
     // - if an enumeration is added to aRegisteredTypes.Objects[], this
     // TJSONCustomParserCustomSimple instance shall be released by the caller
-    function ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
+    function ContextFromArgument(aRegisteredTypes: TRawUTF8List): variant;
     {$endif}
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
@@ -7365,6 +7381,13 @@ type
     /// find the next var / out / result argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgResultNext(var arg: integer): boolean;
+    {$ifndef NOVARIANTS}
+    /// retrieve a context document defining this method arguments
+    // - will be used e.g. by mORMotWrapper.pas unit to export the service
+    // - if an enumeration is added to aRegisteredTypes.Objects[], this
+    // TJSONCustomParserCustomSimple instance shall be released by the caller
+    function ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
+    {$endif}
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -7442,8 +7465,8 @@ type
   // - a thread-safe global list of such class instances is implemented to cache
   // information for better speed: use class function TInterfaceFactory.Get()
   // and not manual TInterfaceFactory.Create / Free
-  // - if you want to specify the interfaces by name or TGUID, call once
-  // Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
+  // - if you want to search the interfaces by name or TGUID, call once
+  // Get(TypeInfo(IMyInterface)) or RegisterInterfaces() for proper registration
   TInterfaceFactory = class
   protected
     fInterfaceTypeInfo: PTypeInfo;
@@ -8976,7 +8999,6 @@ type
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); 
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
     // - e.g. you can add digital signature to a record to disallow record editing
@@ -9005,6 +9027,8 @@ type
     /// compute SELECT ... FROM TABLE WHERE ...
     function SQLComputeForSelect(Table: TSQLRecordClass;
       const FieldNames, WhereClause: RawUTF8): RawUTF8;
+    /// wrapper method for RoutingClass property
+    procedure SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
     /// wrapper methods to access fAcquireExecution[]
     function GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
     procedure SetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand; Value: TSQLRestServerAcquireMode);
@@ -10886,7 +10910,7 @@ type
     // - in case of the record deletion, all matching TSQLRecordHistory won't
     // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
     // property is a plain integer, not a TRecordReference field
-    property ModifiedRecord: PtrInt read fModifiedRecord;
+    property ModifiedRecord: PtrInt read fModifiedRecord write fModifiedRecord;
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
     // - otherwise, SentDataJSON may contain the latest values as JSON
@@ -10897,7 +10921,7 @@ type
     // records - feedback is welcome...
     property SentDataJSON: RawUTF8 index 4000 read fSentData write fSentData;
     /// when the modification was recorded
-    property TimeStamp: TModTime read fTimeStamp;
+    property TimeStamp: TModTime read fTimeStamp write fTimeStamp;
     /// after some events are written as individual SentData content, they
     // will be gathered and compressed within one BLOB field
     // - use HistoryOpen/HistoryCount/HistoryGet to access the stored data after
@@ -14704,6 +14728,12 @@ begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
     HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
     else                      result := 'Invalid Request';
   end;
+end;
+
+function StatusCodeToErrorMsg(Code: integer): RawUTF8;
+begin
+  StatusCodeToErrorMsg(Code,result);
+  result := FormatUTF8('HTTP Error % - %',[Code,result]);
 end;
 
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
@@ -22536,6 +22566,7 @@ function TSQLRecord.GetAsDocVariant(withID: boolean;
   const withFields: TSQLFieldBits): variant;
 var f: integer;
     v: variant;
+    n: RawUTF8;
 begin
   if withID then
     result := _ObjFast(['RowID',fID]) else
@@ -22544,7 +22575,9 @@ begin
     for f := 0 to Fields.Count-1 do
     if f in withFields then begin
       Fields.List[f].GetVariant(self,v);
-      TDocVariantData(result).AddValue(Fields.List[f].Name,v);
+      n := Fields.List[f].Name;
+      n[1] := NormToLower[n[1]]; // follow JSON convention
+      TDocVariantData(result).AddValue(n,v);
     end;
 end;
 
@@ -24006,7 +24039,7 @@ begin
   if (self=nil) or (Value=nil) then
     T := nil else
     T := ExecuteList([PSQLRecordClass(Value)^],
-      Model.Props[PSQLRecordClass(Value)^].SQLFromSelectWhere('*',SQLWhere+' LIMIT 1'));
+      Model.Props[PSQLRecordClass(Value)^].SQLFromSelectWhere('*',trim(SQLWhere+' LIMIT 1')));
   if T=nil then
     result := false else
     try
@@ -27180,7 +27213,12 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   URI := copy(Call^.url,j+i+2,maxInt); // trim any '/root/' left side of Ctxt.URI
   ParametersPos := PosEx(RawUTF8('?'),Call^.url,1);
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
-    Parameters := @Call^.url[ParametersPos+1];
+    Parameters := @Call^.url[ParametersPos+1] else
+    if Method=mPost then begin
+      fInputPostContentType := FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
+      if IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
+        Parameters := pointer(Call^.InBody);
+    end; 
   // compute Table, TableID and URIBlobFieldName
   i := PosEx(RawUTF8('/'),URI,1);
   if i>0 then begin
@@ -27944,6 +27982,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
 function TSQLRestServerURIContext.GetInput(const ParamName: RawUTF8): variant;
 begin
   GetVariantFromJSON(pointer(GetInputUTF8(ParamName)),false,Result);
@@ -27953,13 +27992,68 @@ function TSQLRestServerURIContext.GetInputOrVoid(const ParamName: RawUTF8): vari
 begin
   GetVariantFromJSON(pointer(GetInputUTF8OrVoid(ParamName)),false,Result);
 end;
-{$endif}
+
+function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
+  var Names,ContentTypes: TRawUTF8DynArray; var Values: TRawByteStringDynArray): boolean;
+var boundary: RawUTF8;
+    i: integer;
+begin
+  result := false;
+  i := PosEx('boundary=',MimeType);
+  if i=0 then
+    exit;
+  boundary := '--'+trim(copy(MimeType,i+9,200));
+  // to be done
+  raise ECommunicationException.Create('multipart/form-data not implemented yet');
+end;
+
+function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
+var i: integer;
+    v: variant;
+    Names,ContentTypes: TRawUTF8DynArray;
+    Values: TRawByteStringDynArray;
+//    Variants: TVariantDynArray;
+begin
+  VarClear(result);
+  FillInput;
+  if fInput<>nil then begin
+    with TDocVariantData(result) do begin
+      Init(JSON_OPTIONS[true]);
+      for i := 0 to (length(fInput) shr 1)-1 do begin
+        GetVariantFromJSON(pointer(fInput[i*2+1]),false,v);
+        AddValue(fInput[i*2],v);
+      end;
+    end;
+  end else
+  if (Method=mPOST) and
+     IdemPChar(pointer(fInputPostContentType),'MULTIPART/FORM-DATA') and
+     MultiPartFormDataDecode(fInputPostContentType,Call^.InBody,Names,ContentTypes,Values) then begin
+    //TDocVariantData(result).InitObjectFromVariants(Names,Variants);
+  end;
+end;
+
+{$endif NOVARIANTS}
 
 function TSQLRestServerURIContext.GetInHeader(const HeaderName: RawUTF8): RawUTF8;
 var up: array[byte] of AnsiChar;
 begin
   PWord(UpperCopy255(up,HeaderName))^ := ord(':');
   result := Trim(FindIniNameValue(pointer(Call.InHead),up));
+end;
+
+procedure TSQLRestServerURIContext.SetInCookie(CookieName, CookieValue: RawUTF8);
+var i,n: integer;
+begin
+  GetInCookie(CookieName); // force retrieve cookies
+  CookieName := UpperCase(trim(CookieName))+'=';
+  n := length(fInputCookies);
+  for i := 0 to n-1 do
+    if IdemPChar(pointer(fInputCookies[i]),pointer(CookieName)) then begin
+      fInputCookies[i] := CookieName+CookieValue; // update in-place
+      exit;
+    end;
+  SetLength(fInputCookies,n+1);
+  fInputCookies[n] := CookieName+CookieValue; // add new cookie
 end;
 
 function TSQLRestServerURIContext.GetInCookie(CookieName: RawUTF8): RawUTF8;
@@ -27972,6 +28066,8 @@ begin
   if not fInputCookiesRetrieved then begin
     fInputCookiesRetrieved := true;
     CSVToRawUTF8DynArray(pointer(GetInHeader('cookie')),fInputCookies,';');
+    for i := 0 to length(fInputCookies)-1 do
+      fInputCookies[i] := trim(fInputCookies[i]);
   end;
   if fInputCookies=nil then
     exit;
@@ -27985,6 +28081,8 @@ end;
 
 procedure TSQLRestServerURIContext.SetOutSetCookie(aOutSetCookie: RawUTF8);
 begin
+  if self=nil then
+    exit;
   aOutSetCookie := Trim(aOutSetCookie);
   if PosEx('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
@@ -28000,10 +28098,12 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
-  Status: integer; const CustomHeader: RawUTF8; Handle304NotModified: boolean);
+  Status: integer; const CustomHeader: RawUTF8;
+  Handle304NotModified,HandleErrorAsRegularResult: boolean);
 var clientHash, serverHash: RawUTF8;
-begin 
-  if Status in [HTML_SUCCESS,HTML_CREATED] then begin
+begin
+  if HandleErrorAsRegularResult or
+     (Status in [HTML_SUCCESS,HTML_CREATED]) then begin
     Call.OutStatus := Status;
     Call.OutBody := Result;
     if CustomHeader<>'' then
@@ -28382,7 +28482,7 @@ begin
         if Ctxt.Method in [mLOCK,mGET,mUNLOCK,mSTATE] then
           // handle read methods
           Ctxt.Execute(execORMGet) else
-          // write methods (mPOST, mPUT, mDELETE...) 
+          // write methods (mPOST, mPUT, mDELETE...)
           Ctxt.Execute(execORMWrite);
       except
         on E: Exception do // return 500 internal server error
@@ -28393,6 +28493,10 @@ begin
     if (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) or
        (Call.OutStatus=HTML_NOTMODIFIED) then begin
       inc(fStats.fResponses);
+      if (Call.OutBody<>'') and
+         (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
+         IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
+        inc(fStats.fOutcomingFiles);
       {$ifdef WITHLOG}
       Ctxt.Log.Log(sllServer,'% % -> %',[Call.Method,Ctxt.URI,Call.OutStatus],self);
       {$endif}
@@ -28402,10 +28506,6 @@ begin
         Ctxt.Error(Ctxt.CustomErrorMsg,Call.OutStatus);
     end;
     inc(fStats.fOutcomingBytes,length(Call.OutHead)+length(Call.OutBody)+16);
-    if (Call.OutBody<>'') and
-       (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
-       IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
-      inc(fStats.fOutcomingFiles);
     if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
        TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
@@ -28413,7 +28513,8 @@ begin
       // database state may have changed above
       Call.OutInternalState := InternalState;
     if Ctxt.OutSetCookie<>'' then
-      Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie);
+      Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
+        '; Path=/'+Model.Root);
     {$ifdef WITHSTATPROCESS}
     QueryPerformanceCounter(timeEnd);
     inc(fStats.ProcessTimeCounter,timeEnd-timeStart);
@@ -30418,8 +30519,11 @@ begin
     exit;
   end;
   P := GotoNextNotSpace(P);
-  if not IdemPChar(P,'WHERE ') then
+  if not IdemPChar(P,'WHERE ') then begin
+    if IdemPChar(P,'LIMIT ') then
+      result := true;
     exit;
+  end;
   P := GotoNextNotSpace(P+6);
   Prop := GetNextItem(P,'=');
   if (P=nil) or (fStoredClassRecordProps.Fields.IndexByName(Prop)<0) then
@@ -30428,14 +30532,14 @@ begin
     inc(P,2); // +2 to ignore :(...): parameter
   if P^ in ['''','"'] then begin
     P := GotoEndOfQuotedString(P);
-    if P^<>'"' then
+    if not (P^ in ['''','"']) then
       exit;
   end;
   repeat inc(P) until P^ in [#0..' ',';',')']; // go to end of value
   if PWord(P)^=ord(')')+ord(':')shl 8 then
     inc(P,2); // ignore :(...): parameter
   P := GotoNextNotSpace(P);
-  if (P^ in [#0,';']) or IdemPChar(P,'LIMIT 1;') then
+  if (P^ in [#0,';']) or IdemPChar(P,'LIMIT ') then
     result := true; // properly ended the WHERE clause as 'FIELDNAME=value'
 end;
 
@@ -37157,41 +37261,18 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
 function TInterfaceFactory.ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
-const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
-      NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
-var methods,arguments: TDocVariantData;
-    m,a,r: integer;
-    arg: variant;
+var m: integer;
+    methods: TDocVariantData;
 begin
   methods.Init(JSON_OPTIONS[true]);
   for m := 0 to fMethodsCount-1 do
-  with fMethods[m] do begin
-    r := 0;
-    arguments.Init(JSON_OPTIONS[true]);
-    for a := 1 to high(args) do begin // ignore self as a=0
-      arg := args[a].ContextFromArguments(aRegisteredTypes);
-      if a<ArgsNotResultLast then
-        arg.commaArg := '; ';
-      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
-        arg.commaInSingle := RawUTF8(',');
-      if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
-        arg.commaOut := '; ';
-      if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
-        arg.indexOutResult := UInt32ToUtf8(r)+']';
-        inc(r);
-        if a<ArgsOutLast then
-          arg.commaOutResult := '; ';
-      end;
-      arguments.AddItem(arg);
-    end;
-    methods.AddItem(_ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
-      'args',variant(arguments),'argsOutputCount',r]));
-    arguments.Clear;
-  end;
+    methods.AddItem(fMethods[m].ContextFromArguments(aRegisteredTypes));
   result := variant(methods);
 end;
-{$endif}
+
+{$endif NOVARIANTS}
 
 procedure TInterfaceFactory.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 var P: Pointer;
@@ -39108,7 +39189,7 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TServiceMethodArgument.ContextFromArguments(
+function TServiceMethodArgument.ContextFromArgument(
   aRegisteredTypes: TRawUTF8List): variant;
 const
   TYPETOSIMPLE: array[TServiceMethodValueType] of TJSONCustomParserRTTIType = (
@@ -39286,6 +39367,43 @@ begin
       inc(arg);
   result := false;
 end;
+
+{$ifndef NOVARIANTS}
+
+function TServiceMethod.ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
+const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+var arguments: TDocVariantData;
+    a,r: integer;
+    arg: variant;
+begin
+  r := 0;
+  arguments.Init(JSON_OPTIONS[true]);
+  for a := 1 to high(args) do begin // ignore self as a=0
+    arg := args[a].ContextFromArgument(aRegisteredTypes);
+    if a<ArgsNotResultLast then
+      arg.commaArg := '; ';
+    if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
+      arg.commaInSingle := RawUTF8(',');
+    if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
+      arg.commaOut := '; ';
+    if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+      arg.indexOutResult := UInt32ToUtf8(r)+']';
+      inc(r);
+      if a<ArgsOutLast then
+        arg.commaOutResult := '; ';
+    end;
+    arguments.AddItem(arg);
+  end;
+  result := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
+    'args',variant(arguments),'argsOutputCount',r,
+    'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
+  if ArgsInFirst>=0 then
+    result.AsInParams := true;
+  if ArgsOutFirst>=0 then
+    result.AsOutParams := true;
+end;
+
+{$endif NOVARIANTS}
 
 function TServiceMethod.InternalExecute(Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
@@ -39949,5 +40067,6 @@ initialization
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
 end.
+
 
 
