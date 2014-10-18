@@ -22566,7 +22566,6 @@ function TSQLRecord.GetAsDocVariant(withID: boolean;
   const withFields: TSQLFieldBits): variant;
 var f: integer;
     v: variant;
-    n: RawUTF8;
 begin
   if withID then
     result := _ObjFast(['RowID',fID]) else
@@ -22575,9 +22574,7 @@ begin
     for f := 0 to Fields.Count-1 do
     if f in withFields then begin
       Fields.List[f].GetVariant(self,v);
-      n := Fields.List[f].Name;
-      n[1] := NormToLower[n[1]]; // follow JSON convention
-      TDocVariantData(result).AddValue(n,v);
+      TDocVariantData(result).AddValue(Fields.List[f].Name,v);
     end;
 end;
 
