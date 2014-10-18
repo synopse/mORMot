@@ -278,10 +278,12 @@ type
   IMVCApplication = interface(IInvokable)
     ['{C48718BF-861B-448A-B593-8012DB51E15D}']
     /// the default main page
-    // - whole data context is returned as a TDocVariant
-    function Default: variant;
+    // - whole data context is retrieved and returned as a TDocVariant
+    procedure Default(var Scope: variant);
     /// the error page
-    function Error(var Msg: RawUTF8): variant;
+    // - in addition to the error message, a whole data context is retrieved
+    // and returned as a TDocVariant
+    procedure Error(var Msg: RawUTF8; var Scope: variant);
   end;
 
   /// parent class to implement a MVC/MVVM application
@@ -302,7 +304,7 @@ type
     procedure SetSession(const Value: TMVCSessionAbstract);
     procedure SetViews(const Value: TMVCViewsAbtract);
     /// generic IMVCApplication implementation
-    function Error(var Msg: RawUTF8): variant; virtual;
+    procedure Error(var Msg: RawUTF8; var Scope: variant);
     /// every view will have this data context transmitted as "main":...
     function GetViewInfo(MethodIndex: integer): variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
@@ -599,15 +601,15 @@ var rec: TByteDynArray; // to store locally any kind of record
 begin
   SetLength(rec,RecordTypeInfoSize(PRecordDataTypeInfo));
   try
+    SetVariantNull(result);
     sessionID := CheckAndRetrieve(pointer(rec),PRecordDataTypeInfo);
     if sessionID=0 then
-      SetVariantNull(result) else begin
-      if rec<>nil then
-        recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
-      if recJSON='' then
-        result := _ObjFast(['id',sessionID]) else
-        result := _ObjFast(['id',sessionID,'data',_JsonFast(recJSON)]);
+      exit;
+    if rec<>nil then begin
+      recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
+      result := _JsonFast(recJSON);
     end;
+    _ObjAddProps(['id',sessionID],result);
   finally
     if rec<>nil then // manual finalization of managed fields
       RecordClear(pointer(rec)^,PRecordDataTypeInfo);
@@ -717,9 +719,8 @@ begin
   fSession.Free;
 end;
 
-function TMVCApplication.Error(var Msg: RawUTF8): variant;
+procedure TMVCApplication.Error(var Msg: RawUTF8; var Scope: variant);
 begin // do nothing: just pass input error Msg to the view
-  SetVariantNull(result);
 end;
 
 class procedure TMVCApplication.GotoView(var Action: TMVCAction; const MethodName: string;

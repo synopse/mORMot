@@ -26,11 +26,11 @@ type
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
     /// blog/main/logout -> disconnect author
     function Logout: TMVCAction;
-    /// blog/main/editarticle -> article edition (ID=0 for new)
+    /// blog/main/articleedit -> article edition (ID=0 for new)
     procedure ArticleEdit(
-      ID: integer; const Title,Content: RawUTF8;
+      ID: integer; const Title,Content, ValidationError: RawUTF8;
       out Article: TSQLArticle);
-    /// blog/main/editarticle -> article edition commit (ID=0 for new)
+    /// blog/main/articlecommit -> article edition commit (ID=0 for new)
     function ArticleCommit(
       ID: integer; const Title,Content: RawUTF8): TMVCAction;
   end;
@@ -54,13 +54,13 @@ type
   public
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
-    function Default: variant;
+    procedure Default(var Scope: variant);
     procedure ArticleView(ID: integer; WithComments: boolean;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
-    procedure ArticleEdit(ID: integer; const Title,Content: RawUTF8;
+    procedure ArticleEdit(ID: integer; const Title,Content, ValidationError: RawUTF8;
       out Article: TSQLArticle);
     function ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
   end;
@@ -105,12 +105,15 @@ end;
 function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
 begin
   result := inherited GetViewInfo(MethodIndex);
-  result.blog := fBlogMainInfo;
-  result.session := CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData));
+  _ObjAddProps(['blog',fBlogMainInfo,
+    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
 end;
 
-procedure TBlogApplication.ArticleEdit(ID: integer; const Title,Content: RawUTF8;
-  out Article: TSQLArticle);
+
+{ TBlogApplication - Commands }
+
+procedure TBlogApplication.ArticleEdit(ID: integer;
+  const Title,Content, ValidationError: RawUTF8; out Article: TSQLArticle);
 var AuthorID: integer;
 begin
   AuthorID := GetLoggedAuthorID([canPost]);
@@ -172,12 +175,12 @@ begin
   end;
 end;
 
-function TBlogApplication.Default: variant;
+procedure TBlogApplication.Default(var Scope: variant);
 begin
   if VarIsEmpty(fCachedMainArticles) then
     fCachedMainArticles := RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','order by ID desc limit 40',[],'ID,Title,CreatedAt');
-  result := _ObjFast(['articles',fCachedMainArticles]);
+  _ObjAddProps(['articles',fCachedMainArticles],Scope);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
