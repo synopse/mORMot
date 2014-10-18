@@ -9637,7 +9637,11 @@ type
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
     procedure InternalAddValue(const aName: RawUTF8; const aValue: variant);
     procedure SetCapacity(aValue: integer);
-    function GetCapacity: integer; 
+    function GetCapacity: integer;
+    /// add some properties to a TDocVariantData dvObject
+    // - data is supplied two by two, as Name,Value pairs
+    // - caller should ensure that VKind=dvObject
+    procedure AddNameValuesToObject(const NameValuePairs: array of const);
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -9969,6 +9973,14 @@ function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
 // or using _ObjFast() will increase the process speed a lot
 function _Obj(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
+
+/// add some property values to a document-based object content
+// - if the Obj is a TDocVariant object, will add the Name/Value pairs
+// - if the Obj is not a TDocVariant, will create a new fast document,
+// initialized with the Name/Value pairs
+// - this function will also ensure that ensure Obj is not stored by reference,
+// but as a true TDocVariantData
+procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant);
 
 /// initialize a variant instance to store some document-based array content
 // - array will be initialized with data supplied as parameters, e.g.
@@ -28532,9 +28544,11 @@ end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
 begin
-  if TVarData(V).VType=varByRef or varVariant then
-    result := IsOfType(PVariant(TVarData(V).VPointer)^) else
-    result := (self<>nil) and (TVarData(V).VType=VarType);
+  if self=nil then
+    result := false else
+    if TVarData(V).VType=varByRef or varVariant then
+      result := IsOfType(PVariant(TVarData(V).VPointer)^) else
+      result := (self<>nil) and (TVarData(V).VType=VarType);
 end;  
 
 
@@ -28950,19 +28964,25 @@ end;
 
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
   aOptions: TDocVariantOptions=[]);
-var A: integer;
 begin
   Init(aOptions);
   VKind := dvObject;
-  VCount := length(NameValuePairs) shr 1;
-  if VCount>0 then begin
-    SetLength(VValue,VCount);
-    SetLength(VName,VCount);
-    for A := 0 to VCount-1 do begin
-      VarRecToUTF8(NameValuePairs[A*2],VName[A]);
-      VarRecToVariant(NameValuePairs[A*2+1],VValue[A]);
-    end;
+  AddNameValuesToObject(NameValuePairs);
+end;
+
+procedure TDocVariantData.AddNameValuesToObject(const NameValuePairs: array of const);
+var n,A: integer;
+begin
+  n := length(NameValuePairs) shr 1;
+  if n=0 then
+    exit; // nothing to add
+  SetLength(VValue,VCount+n);
+  SetLength(VName,VCount+n);
+  for A := 0 to n-1 do begin
+    VarRecToUTF8(NameValuePairs[A*2],VName[A+VCount]);
+    VarRecToVariant(NameValuePairs[A*2+1],VValue[A+VCount]);
   end;
+  inc(VCount,n);
 end;
 
 procedure TDocVariantData.InitArray(const Items: array of const;
@@ -29806,6 +29826,24 @@ begin
   if not(TVarData(result).VType in VTYPE_STATIC) then
     VarClear(result);
   TDocVariantData(result).InitArray(Items,Options);
+end;
+
+procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant);
+begin
+  // ensure Obj is not by reference
+  while TVarData(Obj).VType=varByRef or varVariant do
+    TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
+  // add name,value pairs
+  if (DocVariantType=nil) or
+     (TVarData(Obj).VType<>DocVariantType.VarType) or
+     (TDocVariantData(Obj).Kind<>dvObject) then begin
+    // Obj is not a valid TDocVariant object -> create new
+    if not(TVarData(Obj).VType in VTYPE_STATIC) then
+      VarClear(Obj);
+    TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS[true]);
+  end else
+    // add name,value pairs to the TDocVariant object
+    TDocVariantData(Obj).AddNameValuesToObject(NameValuePairs);
 end;
 
 function _ObjFast(const NameValuePairs: array of const): variant;
