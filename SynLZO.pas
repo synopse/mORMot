@@ -1833,7 +1833,7 @@ begin
     case L and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(P)^);
     2: inc(s1,PWord(P)^);
-    3: inc(s1,PWord(P)^ or (PByteArray(P)^[2] shl 16));
+    3: inc(s1,PWord(P)^ or (ord(PAnsiChar(P)[2]) shl 16));
     end;
     inc(s2,s1);
     result := s1 xor (s2 shl 16);
