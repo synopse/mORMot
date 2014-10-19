@@ -333,4 +333,20 @@
   {.$define SQLITE3_FASTCALL}
 {$endif}
 
+// Only Win32 supports SQLite3 static linked library by now 
+{$ifdef CPU64}  
+  {$define NOSQLITE3STATIC}
+{$endif}
+{$ifndef MSWINDOWS}  
+  {$define NOSQLITE3STATIC}
+{$endif}
+
+{$ifdef NOSTATIC}
+  // our proprietary crypto expects a patched SQlite3.c statically linked
+  {$define NOSQLITE3ENCRYPT}
+{$endif}
+{$ifdef FPC}
+  // statically linked FPC as computed by c-fpcmingw.bat not yet working
+  {$define NOSQLITE3ENCRYPT}
+{$endif}
 

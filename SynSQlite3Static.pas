@@ -56,6 +56,10 @@ unit SynSQLite3Static;
 
   Will work only on Windows 32 bit (when the corresponding .obj are available)
   under other platforms, this unit will just do nothing (but compile).
+  
+  To compile our patched SQlite3.c version, available in this source folder:
+  - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
+  - Run c-fpcmingw.bat to compile the sqlite3*.o for Win32/FPC
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll).
 
@@ -78,15 +82,7 @@ unit SynSQLite3Static;
 
 interface
 
-{$ifdef CPU64}  // under Win64 e.g. this unit will do nothing, but compile
-  {$define NOSTATIC}
-{$endif}
-
-{$ifndef MSWINDOWS}  // Only Win32 supports static by now
-  {$define NOSTATIC}
-{$endif}
-
-{$ifdef NOSTATIC}
+{$ifdef NOSQLITE3STATIC}
 uses
   SysUtils,
   SynSQLite3;
@@ -1128,6 +1124,6 @@ end;
 initialization
   FreeAndNil(sqlite3);
   sqlite3 := TSQLite3LibraryStatic.Create;
-{$endif NOSTATIC}
+{$endif NOSQLITE3STATIC}
 
 end.

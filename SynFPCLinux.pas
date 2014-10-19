@@ -60,7 +60,6 @@ uses
   SysUtils
   {$ifdef Linux}
   ,UnixType
-  ,lazutf8sysutils
   {$endif};
 
 const
@@ -76,6 +75,9 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef Linux}
+
+/// copy one file to another place
+function CopyFile(const Source, Target: string; FailIfExists:boolean): boolean;
 
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64); inline;
@@ -101,7 +103,7 @@ function FPCNowUTC: TDateTime; inline;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64; inline;
+function GetTickCount64: Int64;
 
 {$endif Linux}
 
@@ -123,7 +125,90 @@ begin
   DoneCriticalSection(cs);
 end;
 
+// some of these functions are copied from lazutf8sysutils to remove the dependency
+// from Lazarus this allows for the use of only FPC for command line compilation
 {$ifdef Linux}
+
+const
+{Date Translation}
+  C1970=2440588;
+  D0   =   1461;
+  D1   = 146097;
+  D2   =1721119;
+
+Procedure JulianToGregorian(JulianDN:LongInt;out Year,Month,Day:Word);
+Var YYear,XYear,Temp,TempMonth : LongInt;
+Begin
+  Temp:=((JulianDN-D2) shl 2)-1;
+  JulianDN:=Temp Div D1;
+  XYear:=(Temp Mod D1) or 3;
+  YYear:=(XYear Div D0);
+  Temp:=((((XYear mod D0)+4) shr 2)*5)-3;
+  Day:=((Temp Mod 153)+5) Div 5;
+  TempMonth:=Temp Div 153;
+  If TempMonth>=10 Then Begin
+     inc(YYear);
+     dec(TempMonth,12);
+   End;
+  inc(TempMonth,3);
+  Month := TempMonth;
+  Year:=YYear+(JulianDN*100);
+end;
+
+Procedure EpochToLocal(epoch:longint;out year,month,day,hour,minute,second:Word);
+{ Transforms Epoch time into local time (hour, minute,seconds) }
+Var DateNum: LongInt;
+Begin
+  Datenum:=(Epoch Div 86400) + c1970;
+  JulianToGregorian(DateNum,Year,Month,day);
+  Epoch:=Abs(Epoch Mod 86400);
+  Hour:=Epoch Div 3600;
+  Epoch:=Epoch Mod 3600;
+  Minute:=Epoch Div 60;
+  Second:=Epoch Mod 60;
+End;
+
+function FPCNowUTC: TDateTime;
+var tz:timeval;
+    SystemTime: TSystemTime;
+begin
+  fpgettimeofday(@tz,nil);
+  EpochToLocal(tz.tv_sec,SystemTime.year,SystemTime.month,SystemTime.day,SystemTime.hour,SystemTime.Minute,SystemTime.Second);
+  SystemTime.MilliSecond:=tz.tv_usec div 1000;
+  result := systemTimeToDateTime(SystemTime);
+end;
+
+{$if not defined(GetTickCountTimeOfDay)}
+function GetTickCount64: Int64;
+var tp: timespec;
+begin
+  clock_gettime(CLOCK_MONOTONIC, @tp); // exists since Linux Kernel 2.6
+  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_nsec div 1000000);
+end;
+{$ELSE}
+function GetTickCount64: Int64;
+var
+  tp: TTimeVal;
+begin
+  fpgettimeofday(@tp, nil);
+  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_usec div 1000);
+end;
+{$ENDIF}
+
+function CopyFile(const Source, Target: string; FailIfExists:boolean): boolean;
+var SourceF, DestF: TFileStream;
+begin
+  result:=True;
+  if FailIfExists then
+    if FileExists(Target) then 
+      exit else 
+      DeleteFile(Target);
+  SourceF:= TFileStream.Create(Source, fmOpenRead);
+  DestF:= TFileStream.Create(Target, fmCreate);
+  DestF.CopyFrom(SourceF, SourceF.Size);
+  SourceF.Free;
+  DestF.Free;
+end;
 
 const
   C_THOUSAND = Int64(1000);
@@ -170,16 +255,6 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 begin
   result := WideCompareText(Pwidechar(lpString1),Pwidechar(lpString2));
-end;
-
-function FPCNowUTC: TDateTime;
-begin
-  result := lazutf8sysutils.NowUTC;
-end;
-
-function GetTickCount64: Int64;
-begin
-  result := lazutf8sysutils.GetTickCount64;
 end;
 
 {$endif}

@@ -11767,7 +11767,7 @@ begin
     {$ifdef FPC}
     widestringmanager.Ansi2UnicodeMoveProc(Source,fCodePage,tmp,SourceChars);
     move(Pointer(tmp)^,Dest^,length(tmp)*2);
-    result := Dest+length(tmp);
+    result := Dest+SourceChars;
     {$else}
     raise ESynException.CreateUTF8('%.AnsiBufferToUnicode() not supported yet for CP=%',
       [self,CodePage]);
@@ -11890,11 +11890,19 @@ begin
 end;
 
 function TSynAnsiConvert.AnsiToUnicodeString(const Source: RawByteString): SynUnicode;
+{$ifndef MSWINDOWS}
+var P: PAnsiChar;
+{$endif}
 begin
   result := '';
   if Source<>'' then begin
-    SetLength(result,length(Source));
+    SetLength(result,length(Source)*3);
+    {$ifdef MSWINDOWS}
     SetLength(result,AnsiBufferToUnicode(pointer(result),pointer(Source),length(Source))-pointer(result));
+    {$else} // FPC/Linux workaround by ALF
+    P := @result;
+    SetLength(result,PAnsiChar(AnsiBufferToUnicode(PWideChar(result),PAnsiChar(Source),length(Source)))-P);
+    {$endif}
   end;
 end;
 
@@ -12180,6 +12188,7 @@ begin
   end;
 end;
 
+{$ifndef FPC}
 const
   /// used for fast WinAnsi to Unicode conversion
   // - this table contain all the unicode characters corresponding to
@@ -12192,7 +12201,7 @@ const
     (8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
      141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
      353, 8250, 339, 157, 382, 376);
-
+{$endif}
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var i: integer;
     A256: array[0..256] of AnsiChar;
@@ -12205,12 +12214,15 @@ begin
       [ClassName,fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide,256);
+  {$ifndef FPC}
   if aCodePage=CODEPAGE_US then begin // do not trust the Windows API :(
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
     for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
       fAnsiToWide[i] := WinAnsiUnicodeChars[i];
-  end else begin // from Operating System returned values
+  end else
+  {$endif}
+  begin // from Operating System returned values
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     fillchar(U256,sizeof(U256),0);
@@ -14215,7 +14227,7 @@ begin
   result := nil;
   if (aDynArrayTypeInfo<>nil) and (Typ^.kind=tkDynArray) then begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := GetFPCAlignRecordPtr(Typ);
+    result := GetFPCAlignPtr(Typ);
     {$else}
     inc(PtrUInt(Typ),Typ^.NameLen);
     {$endif}
@@ -14243,7 +14255,7 @@ begin
     exit;
   end;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := GetFPCAlignRecordPtr(result);
+  result := GetFPCAlignPtr(result);
   {$else}
   inc(PtrUInt(result),result^.NameLen);
   {$endif}
@@ -14263,7 +14275,7 @@ begin
   if aTypeInfo=nil then
     result := 0 else begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    aTypeInfo := GetFPCAlignRecordPtr(aTypeInfo);
+    aTypeInfo := GetFPCAlignPtr(aTypeInfo);
     {$else}
     inc(PtrUInt(aTypeInfo),PFieldTable(aTypeInfo)^.NameLen);
     {$endif}
@@ -16645,7 +16657,7 @@ Txt:  len := Format-PDeb;
       PWord(Format)^ := ord(')')+ord(':')shl 8;
       inc(Format,2);
     end;
-  end
+  end;
 end;
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
@@ -25449,7 +25461,7 @@ begin
   if  not (FieldTable^.Kind in tkRecordTypes) then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  FieldTable := GetFPCAlignPtr(FieldTable);
   {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
   {$endif}
@@ -25526,7 +25538,7 @@ begin
     exit; // raise Exception.CreateUTF8('% is not a record',[FieldTable^.NameLen]);
   end;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  FieldTable := GetFPCAlignPtr(FieldTable);
   {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
   {$endif}
@@ -25558,7 +25570,7 @@ begin
         inc(result,Len);
         IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+        IntFieldTable := GetFPCAlignPtr(IntFieldTable);
         {$else}
         inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
         {$endif}
@@ -25601,7 +25613,7 @@ begin
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   end; }
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  FieldTable := GetFPCAlignPtr(FieldTable);
   {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
   {$endif}
@@ -25644,7 +25656,7 @@ begin
       end;
       IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+      IntFieldTable := GetFPCAlignPtr(IntFieldTable);
       {$else}
       inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
       {$endif}
@@ -25806,7 +25818,7 @@ begin
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   end;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignRecordPtr(FieldTable);
+  FieldTable := GetFPCAlignPtr(FieldTable);
   {$else}
   inc(PtrUInt(FieldTable),FieldTable^.NameLen);
   {$endif}
@@ -25860,7 +25872,7 @@ begin
       Source := RecordLoad(R^,Source,Field.TypeInfo{$ifndef FPC}^{$endif});
       IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      IntFieldTable := GetFPCAlignRecordPtr(IntFieldTable);
+      IntFieldTable := GetFPCAlignPtr(IntFieldTable);
       {$else}
       inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
       {$endif}
@@ -27072,7 +27084,7 @@ begin
       tkChar, tkClass, tkMethod, tkWChar, tkInterface,
       tkInteger, tkSet: begin
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        Typ := GetFPCTypeData(Item);
+        Typ := GetFPCAlignPtr(pointer(Item));
         {$else}
         Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
         {$endif}
@@ -27094,7 +27106,7 @@ begin
       {$endif}
       tkFloat: begin
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        Typ := GetFPCTypeData(Item);
+        Typ := GetFPCAlignPtr(Item);
         {$else}
         Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
         {$endif}
@@ -30329,7 +30341,7 @@ begin
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      FieldTable := GetFPCAlignRecordPtr(FieldTable);
+      FieldTable := GetFPCAlignPtr(FieldTable);
       {$else}
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
       {$endif}
@@ -30536,7 +30548,7 @@ Bin:  case ElemSize of
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         FieldTable := ElemType;
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-rec:    FieldTable := GetFPCAlignRecordPtr(FieldTable);
+rec:    FieldTable := GetFPCAlignPtr(FieldTable);
         {$else}
 rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
         {$endif}
@@ -30691,7 +30703,7 @@ begin
   if (aTypeInfo=nil) or (Typ^.kind<>tkDynArray) then
     exit; // invalid type information
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Typ := GetFPCAlignRecordPtr(Typ);
+  Typ := GetFPCAlignPtr(Typ);
   {$else}
   inc(PtrUInt(Typ),Typ^.NameLen);
   {$endif}
@@ -30809,7 +30821,7 @@ begin
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       FieldTable := ElemType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      FieldTable := GetFPCAlignRecordPtr(FieldTable);
+      FieldTable := GetFPCAlignPtr(FieldTable);
       {$else}
       inc(PtrUInt(FieldTable),FieldTable^.NameLen);
       {$endif}
@@ -31234,7 +31246,7 @@ begin
   if Typ^.Kind<>tkDynArray then
     raise ESynException.CreateUTF8('% is not a dynamic array',[PShortString(@Typ^.NameLen)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Typ := GetFPCAlignRecordPtr(Typ);
+  Typ := GetFPCAlignPtr(Typ);
   {$else}
   inc(PtrUInt(Typ),Typ^.NameLen);
   {$endif}
@@ -32877,7 +32889,7 @@ begin
   if (self=nil) or (typ=nil) or not(typ^.kind in tkRecordTypes) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  typ := GetFPCAlignRecordPtr(typ);
+  typ := GetFPCAlignPtr(typ);
   {$else}
   inc(PtrUInt(typ),typ^.NameLen);
   {$endif}
@@ -36248,7 +36260,7 @@ begin
   if TestMethodIndex<0 then begin
     Color(ccWhite);
     writeln(fSaveToFile,#13#10' ',C.MethodIndex+1,'.',C.TestCaseIndex+1,
-      '. ',C.Ident,': ');
+      '. ',C.Ident,': ',#13);
   end else begin
     Run := C.Assertions-C.fAssertionsBeforeRun;
     Failed := C.AssertionsFailed-C.fAssertionsFailedBeforeRun;
@@ -36274,9 +36286,9 @@ begin
       Write(fSaveToFile,'  ',KB(C.fRunConsoleMemoryUsed));
       C.fRunConsoleMemoryUsed := 0; // display only once
     end;
-    Writeln(fSaveToFile);
+    Writeln(fSaveToFile,#13);
     if C.fRunConsole<>'' then begin
-      Writeln(fSaveToFile,'     ',C.fRunConsole);
+      Writeln(fSaveToFile,'     ',C.fRunConsole,#13);
       C.fRunConsole := '';
     end;
     if TestMethodIndex=C.Count-1 then begin
@@ -36288,7 +36300,7 @@ begin
       if C.AssertionsFailed=0 then
         Write(fSaveToFile,' PASSED') else
         Write(fSaveToFile,' FAILED');
-      Writeln(fSaveToFile,'  ',TotalTimer.Stop);
+      Writeln(fSaveToFile,'  ',TotalTimer.Stop,#13);
     end;
     Color(ccLightGray);
   end;
@@ -39809,8 +39821,6 @@ function TSynTableFieldProperties.SBF(const Value: Variant): TSBFString;
 var V64: Int64;
     VC: Currency absolute V64;
     VD: Double absolute V64;
-    utf8: RawUTF8;
-    dummy: boolean;
 begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
   case FieldType of
     tftBoolean:
@@ -39829,12 +39839,14 @@ begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
       VD := Value;
       SetString(result,PAnsiChar(@VD),sizeof(VD));
     end;
-    tftWinAnsi,tftUTF8: begin
-      VariantToUTF8(Value,utf8,dummy);
-      if FieldType=tftWinAnsi then
-        ToSBFStr(Utf8ToWinAnsi(utf8),result) else
-        ToSBFStr(utf8,result);
-    end;
+    tftWinAnsi:
+      {$ifdef UNICODE}
+      ToSBFStr(UnicodeStringToWinAnsi(Value),result);
+      {$else}
+      ToSBFStr(WinAnsiConvert.AnsiToAnsi(CurrentAnsiConvert,Value),result);
+      {$endif}
+    tftUTF8:
+      ToSBFStr(StringToUTF8((Value)),result);
     else
       result := '';
   end;

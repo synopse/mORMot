@@ -620,7 +620,7 @@ implementation
 
 {$ifdef Linux}
 uses
-  SynFPCLinux, FileUtil;
+  SynFPCLinux;
 {$endif}
 
 

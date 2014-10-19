@@ -7166,13 +7166,6 @@ end;
 {$WARNINGS OFF} // don't care about implicit string cast in tests
 {$endif}
 
-{$ifdef CPU64}  // under Win64 e.g. this unit will do nothing, but compile
-  {$define NOSQLITE3ENCRYPT}
-{$endif}
-{$ifdef FPC}  // FPC is not compatible with our custom encryption yet
-  {$define NOSQLITE3ENCRYPT}
-{$endif}
-
 {.$define WITHUNSAFEBACKUP}
 { define this if you really need the old blocking TSQLRestServerDB backup methods
   - those methods are deprecated - you should use DB.BackupBackground() instead
@@ -7503,14 +7496,6 @@ begin
   Check(Model<>nil);
   Check(Model.GetTableIndex('people')>=0);
   try
-    // test.db3 corrupted by previous tests!
-    // this is needed under Linux ... not yet sure why
-    // to be done !!
-    {$ifndef MSWINDOWS}
-    {$WARNING The database is corrupted at this point ... I do not know why .... to be done}
-    DeleteFile('test.db3');
-    RenameFile('backupbackground.db3','test.db3');
-    {$endif}
     DataBase := TSQLRestServerDB.Create(Model,'test.db3');
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
@@ -8373,11 +8358,7 @@ begin
         try
           Client2.Server.DB.Synchronous := smOff;
           Client2.Server.DB.LockingMode := lmExclusive;
-          {$ifdef MSWINDOWS}
           Client2.Server.DB.WALMode := true;
-          {$else}
-          {$WARNING Wall does not work with crypted databases under Linux ... I do not know why ... to be done}
-          {$endif}
           Client2.Server.CreateMissingTables;
           Check(Client2.TransactionBegin(TSQLRecordPeople));
           Check(Client2.BatchStart(TSQLRecordPeople));

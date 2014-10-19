@@ -2898,7 +2898,6 @@ implementation
 {$ifdef Linux}
 uses
   SynFPCLinux,
-  FileUtil,
   DynLibs
   //,BaseUnix
   ;
@@ -3754,9 +3753,14 @@ begin
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
+  {$ifndef MSWINDOWS}
+  // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
+  result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,'unix-excl');
+  {$else}
   if fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE) then
     result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,nil) else
     result := sqlite3.open(pointer(utf8),fDB);
+  {$endif}
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
     if Log<>nil then
