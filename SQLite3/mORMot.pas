@@ -3916,6 +3916,8 @@ type
     fSessionAccessRights: RawByteString; // session may be deleted meanwhile
     fInputCookiesRetrieved: boolean;
     fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
+    fInputCookieLastName: RawUTF8;
+    fInputCookieLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
@@ -8995,6 +8997,7 @@ type
     fLogClass: TSynLogClass;   // =SQLite3Log by default
     fLogFamily: TSynLogFamily; // =SQLite3Log.Family by default
     procedure SetLogClass(aClass: TSynLogClass); virtual;
+    function GetLogClass: TSynLogClass;
     {$endif}
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); 
@@ -9156,7 +9159,7 @@ type
     {$ifdef WITHLOG}
     /// the logging class used for this instance
     // - is set by default to SQLite3Log, but could be set to a custom class
-    property LogClass: TSynLogClass read fLogClass write SetLogClass;
+    property LogClass: TSynLogClass read GetLogClass write SetLogClass;
     /// the logging family used for this instance
     // - is set by default to SQLite3Log.Family, but could be set to something
     // else by setting a custom class to the LogClass property
@@ -11414,7 +11417,7 @@ type
     procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
       aInstance: TObject);
     /// direct registration of a method for a given low-level event handler
-    procedure ServiceMethodRegister(const aMethodName: RawUTF8;
+    procedure ServiceMethodRegister(aMethodName: RawUTF8;
       const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean=false);
     /// call this method to disable Authentication method check for a given
     // published method name
@@ -23754,6 +23757,13 @@ begin
   fLogClass := aClass;
   fLogFamily := fLogClass.Family;
 end;
+
+function TSQLRest.GetLogClass: TSynLogClass;
+begin
+  if self=nil then
+    result := SQLite3Log else
+    result := fLogClass;
+end;
 {$endif}
 
 procedure TSQLRest.SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
@@ -26423,9 +26433,10 @@ begin
     result := false;
 end;
 
-procedure TSQLRestServer.ServiceMethodRegister(const aMethodName: RawUTF8;
+procedure TSQLRestServer.ServiceMethodRegister(aMethodName: RawUTF8;
   const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean);
 begin
+  aMethodName := trim(aMethodName);
   if Model.GetTableIndex(aMethodName)>=0 then
     raise EServiceException.CreateUTF8('Published method name %.% '+
       'conflicts with a Table in the Model!',[self,aMethodName]);
@@ -28045,6 +28056,7 @@ procedure TSQLRestServerURIContext.SetInCookie(CookieName, CookieValue: RawUTF8)
 var i,n: integer;
 begin
   GetInCookie(CookieName); // force retrieve cookies
+  fInputCookieLastName := ''; // cache reset
   CookieName := UpperCase(trim(CookieName))+'=';
   n := length(fInputCookies);
   for i := 0 to n-1 do
@@ -28058,23 +28070,31 @@ end;
 
 function TSQLRestServerURIContext.GetInCookie(CookieName: RawUTF8): RawUTF8;
 var i: integer;
+    cookieSearch: RawUTF8;
 begin
   result := '';
   CookieName := trim(CookieName);
   if (self=nil) or (CookieName='') then
     exit;
+  if CookieName=fInputCookieLastName then begin
+    result := fInputCookieLastValue;
+    exit;
+  end;
   if not fInputCookiesRetrieved then begin
     fInputCookiesRetrieved := true;
     CSVToRawUTF8DynArray(pointer(GetInHeader('cookie')),fInputCookies,';');
     for i := 0 to length(fInputCookies)-1 do
       fInputCookies[i] := trim(fInputCookies[i]);
   end;
+  fInputCookieLastName := CookieName;
+  fInputCookieLastValue := '';
   if fInputCookies=nil then
     exit;
-  CookieName := UpperCase(CookieName)+'=';
+  cookieSearch := UpperCase(CookieName)+'=';
   for i := 0 to length(fInputCookies)-1 do
-    if IdemPChar(pointer(fInputCookies[i]),pointer(CookieName)) then begin
-      result := copy(fInputCookies[i],length(CookieName)+1,MaxInt);
+    if IdemPChar(pointer(fInputCookies[i]),pointer(cookieSearch)) then begin
+      result := copy(fInputCookies[i],length(cookieSearch)+1,MaxInt);
+      fInputCookieLastValue := result;
       exit;
     end;
 end;
@@ -28088,6 +28108,7 @@ begin
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   fOutSetCookie := aOutSetCookie;
+  fInputCookieLastName := ''; // cache reset
 end;
 
 function TSQLRestServerURIContext.GetResourceFileName: TFileName;
