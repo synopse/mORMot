@@ -169,6 +169,8 @@ type
     // default is 1 hour - note that overriden methods may not implement it
     function Initialize(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil;
       SessionTimeOut: TDateTime=1/24): integer; virtual; abstract;
+    /// fast check if there is a session associated to the current context
+    function Exists: boolean; virtual; abstract;
     /// retrieve the current session ID
     // - can optionally retrieve the associated record Data parameter
     function CheckAndRetrieve(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil): integer; virtual; abstract;
@@ -198,6 +200,8 @@ type
     // default is 1 hour
     function Initialize(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil;
       SessionTimeOut: TDateTime=1/24): integer; override;
+    /// fast check if there is a cookie session associated to the current context
+    function Exists: boolean; override;
     /// retrieve the session ID from the current cookie
     // - can optionally retrieve the record Data parameter stored in the cookie
     function CheckAndRetrieve(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil): integer; override;
@@ -279,27 +283,46 @@ type
     property Input: RawUTF8 read fInput write fInput;
   end;
 
+  /// how TMVCRendererReturningData should cache its content
+  TMVCRendererCachePolicy = (
+    cacheNone,
+    cacheRootIgnoringSession, cacheRootIfSession, cacheRootIfNoSession,
+    cacheRootWithSession,
+    cacheWithParametersIgnoringSession, cacheWithParametersIfSession,
+    cacheWithParametersIfNoSession);
+
+  TMVCRunWithViews = class;
+
   /// abstract MVC rendering execution context, returning some content
   // - the Output property would contain the content to be returned
   // - can be used to return e.g. some rendered HTML or some raw JSON
   TMVCRendererReturningData = class(TMVCRendererAbstract)
   protected
+    fRun: TMVCRunWithViews;
     fOutput: TServiceCustomAnswer;
+    fCacheCurrent: (noCache, rootCache, inputCache);
+    fCacheCurrentSec: cardinal;
+    fCacheCurrentInputValueKey: RawUTF8;
   public
-    /// caller should handle this value after ExecuteCommand method execution
+    /// initialize a rendering process for a given MVC Application/ViewModel
+    // - you need to specify a MVC Views engine, e.g. TMVCViewsMustache instance
+    constructor Create(aRun: TMVCRunWithViews); reintroduce;
+    /// main execution method of the rendering process
+    // - this overriden method would handle proper caching as defined by
+    // TMVCRunWithViews.SetCache()
+    procedure ExecuteCommand(aMethodIndex: integer); override;
+    /// caller should retrieve this value after ExecuteCommand method execution
     property Output: TServiceCustomAnswer read fOutput;
   end;
+
+  TMVCRendererReturningDataClass = class of TMVCRendererReturningData;
 
   /// MVC rendering execution context, returning some rendered View content
   // - will use an associated Views templates system, e.g. a Mustache renderer
   TMVCRendererFromViews = class(TMVCRendererReturningData)
   protected
-    fViews: TMVCViewsAbtract;
     // Renders() will fill Output using the corresponding View, to be sent back
     procedure Renders(outContext: variant; status: cardinal; forcesError: boolean); override;
-  public
-    /// you need to specify a Views engine, e.g. a TMCVViewsMustache instance
-    constructor Create(aApplication: TMVCApplication; aViews: TMVCViewsAbtract); reintroduce;
   end;
 
   /// MVC rendering execution context, returning some un-rendered JSON content
@@ -319,51 +342,80 @@ type
     fApplication: TMVCApplication;
   public
     /// link this runner class to a specified MVC application
-    // - will also reset the associated Application.Session instance 
+    // - will also reset the associated Application.Session instance
     constructor Create(aApplication: TMVCApplication); reintroduce;
+    /// method called to flush the caching mechanism for all MVC commands
+    procedure NotifyContentChanged; virtual;
+    /// you may call this method to flush any caching mechanism for a MVC command
+    procedure NotifyContentChangedForMethod(aMethodIndex: integer); overload; virtual;
+    /// you may call this method to flush any caching mechanism for a MVC command
+    procedure NotifyContentChangedForMethod(const aMethodName: RawUTF8); overload;
     /// read-write access to the associated MVC Application/ViewModel instance
     property Application: TMVCApplication read fApplication write fApplication;
   end;
 
   /// abstract class used by TMVCApplication to run TMVCViews-based process
-  // - this inherited class will host a MVC Views instance
+  // - this inherited class will host a MVC Views instance, and handle
+  // an optional simple in-memory cache
   TMVCRunWithViews = class(TMVCRun)
   protected
     fViews: TMVCViewsAbtract;
-    procedure SetViews(const Value: TMVCViewsAbtract); virtual;
+    fCache: array of record
+      Policy: TMVCRendererCachePolicy;
+      TimeOutSeconds: cardinal;
+      RootValue: RawUTF8;
+      RootValueExpirationTime: cardinal;
+      InputValues: TSynNameValue;
+    end;
   public
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMVCApplication;
       aViews: TMVCViewsAbtract=nil); reintroduce;
+    /// method called to flush the caching mechanism for a MVC command
+    procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
+    /// defines the caching policy for a given MVC command
+    // - a time expiration period (up to 5 minutes) can also be defined per
+    // MVC command - leaving default 0 will set to 5 minutes expiration delay
+    // - function calls can be chained to create some fluent definition interface
+    // like in TAnyBLogapplication.Create:
+    // ! fMainRunner := TMVCRunWithViews.Create(self).SetCache('default',cacheRoot);
+    function SetCache(const aMethodName: RawUTF8; aPolicy: TMVCRendererCachePolicy;
+      aTimeOutSeconds: cardinal=0): TMVCRunWithViews; virtual;
     /// finalize this instance
     destructor Destroy; override;
     /// read-write access to the associated MVC Views instance
-    property Views: TMVCViewsAbtract read fViews write SetViews;
+    property Views: TMVCViewsAbtract read fViews;
   end;
 
 
   /// run TMVCApplication directly within a TSQLRestServer method-based service
+  // - this is the easiest way to host and publish a MVC Application, optionally
+  // in conjunction with REST/AJAX client access
   TMVCRunOnRestServer = class(TMVCRunWithViews)
   protected
     fRestServer: TSQLRestServer;
     fPublishMvcInfo: boolean;
+    fMvcInfoCache: RawUTF8;
     /// callback used for the rendering on the TSQLRestServer
     procedure RunOnRestServerRoot(Ctxt: TSQLRestServerURIContext);
     procedure RunOnRestServerSub(Ctxt: TSQLRestServerURIContext);
     procedure InternalRunOnRestServer(Ctxt: TSQLRestServerURIContext;
       const MethodName: RawUTF8);
   public
-    /// this constructor will publish the views to a TSQLRestServer URI
+    /// this constructor will publish some views to a TSQLRestServer instance
     // - the associated RestModel can match the supplied TSQLRestServer, or be
     // another instance (if the data model is not part of the publishing server)
-    // - all application methods
-    // - will create a TMVCSessionWithRestServer instance for cookies process
+    // - all TMVCApplication methods would be registered to the TSQLRestServer,
+    // as /root/methodName if aSubURI is '', or as /root/aSubURI/methodName
     // - if aApplication has no Views instance associated, this constructor will
     // initialize a Mustache renderer in its default folder, with '.html' void
     // template generation
+    // - will also create a TMVCSessionWithRestServer for simple cookie sessions
+    // - aPublishMvcInfo=TRUE will define a /root/[aSubURI/]mvc-info HTML page,
+    // which is pretty convenient when working with views
     constructor Create(aApplication: TMVCApplication;
-      aViews: TMVCViewsAbtract=nil; aRestServer: TSQLRestServer=nil;
-      aPublishMvcInfo: boolean=true; const aSubURI: RawUTF8=''); reintroduce;
+      aRestServer: TSQLRestServer=nil; const aSubURI: RawUTF8='';
+      aViews: TMVCViewsAbtract=nil; aPublishMvcInfo: boolean=true); reintroduce;
   end;
 
 
@@ -422,6 +474,9 @@ type
     // but note that a single TMVCApplication logic may handle several TMVCRun
     fMainRunner: TMVCRun;
     procedure SetSession(const Value: TMVCSessionAbstract);
+    /// to be called when the data model did change to force content re-creation
+    // - this default implementation will call fMainRunner.NotifyContentChanged
+    procedure FlushAnyCache; virtual;
     /// generic IMVCApplication implementation
     procedure Error(var Msg: RawUTF8; var Scope: variant);
     /// every view will have this data context transmitted as "main":...
@@ -450,6 +505,10 @@ type
     property Factory: TInterfaceFactory read fFactory;
     /// read-write access to the associated Session instance
     property CurrentSession: TMVCSessionAbstract read fSession write SetSession;
+    /// read-write access to the main associated TMVCRun instance
+    // - if any TMVCRun instance is stored here, will be freed by Destroy
+    // - but note that a single TMVCApplication logic may handle several TMVCRun
+    property MainRunner: TMVCRun read fMainRunner;
   end;
 
 const
@@ -672,6 +731,11 @@ begin
     FormatUTF8('%%%',[self,GetTickCount64,MainThreadID])),1,14);
 end;
 
+function TMVCSessionWithCookies.Exists: boolean;
+begin
+  result := GetCookie<>'';
+end;
+
 // Cookie is session_expires_________optionalrecord___crc_____
 //           UInt32  TTimeLog        ..base64..       UInt32
 //           1       9               25               len-8
@@ -884,6 +948,11 @@ begin
     'methods',fFactory.ContextFromMethods(nil)]);
 end;
 
+procedure TMVCApplication.FlushAnyCache;
+begin
+  if fMainRunner<>nil then
+    fMainRunner.NotifyContentChanged;
+end;
 
 
 { TMVCRendererAbstract }
@@ -970,20 +1039,13 @@ end;
 
 { TMVCRendererFromViews }
 
-constructor TMVCRendererFromViews.Create(aApplication: TMVCApplication;
-  aViews: TMVCViewsAbtract);
-begin
-  inherited Create(aApplication);
-  fViews := aViews;
-end;
-
 procedure TMVCRendererFromViews.Renders(outContext: variant;
   status: cardinal; forcesError: boolean);
 var view: TMVCView;
 begin
-  if forcesError or (fMethodIndex=fViews.fFactoryErrorIndex) then
+  if forcesError or (fMethodIndex=fRun.fViews.fFactoryErrorIndex) then
     try // last change rendering of the error page
-      fViews.Render(fViews.fFactoryErrorIndex,outContext,view);
+      fRun.fViews.Render(fRun.fViews.fFactoryErrorIndex,outContext,view);
     except // fallback to default HTML error template, if current did not work
       on E: Exception do begin
         _ObjAddProps(['exceptionName',E.ClassName,
@@ -992,7 +1054,7 @@ begin
         view.ContentType := HTML_CONTENT_TYPE;
       end;
     end else
-      fViews.Render(fMethodIndex,outContext,view);
+      fRun.fViews.Render(fMethodIndex,outContext,view);
   fOutput.Content := view.Content;
   fOutput.Header := HEADER_CONTENT_TYPE+view.ContentType;
   fOutput.Status := status;
@@ -1018,6 +1080,22 @@ begin
   fApplication.SetSession(nil);
 end;
 
+procedure TMVCRun.NotifyContentChangedForMethod(aMethodIndex: integer);
+begin // do nothing at this abstract level
+end;
+
+procedure TMVCRun.NotifyContentChanged;
+var m: integer;
+begin
+  for m := 0 to fApplication.fFactory.MethodsCount-1 do
+    NotifyContentChangedForMethod(m)
+end;
+
+procedure TMVCRun.NotifyContentChangedForMethod(const aMethodName: RawUTF8);
+begin
+  NotifyContentChangedForMethod(fApplication.fFactory.FindMethodIndex(aMethodName));
+end;
+
 
 { TMVCRunWithViews }
 
@@ -1025,7 +1103,25 @@ constructor TMVCRunWithViews.Create(aApplication: TMVCApplication;
   aViews: TMVCViewsAbtract);
 begin
   inherited Create(aApplication);
-  SetViews(aViews);
+  fViews := aViews;
+end;
+
+function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
+  aPolicy: TMVCRendererCachePolicy; aTimeOutSeconds: cardinal): TMVCRunWithViews;
+const MAX_CACHE_TIMEOUT = 60*15; // 15 minutes
+var aMethodIndex: integer;
+begin
+  aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
+  if fCache=nil then
+    SetLength(fCache,fApplication.fFactory.MethodsCount);
+  with fCache[aMethodIndex] do begin
+    Policy := aPolicy;
+    if aTimeOutSeconds-1>=MAX_CACHE_TIMEOUT then
+      TimeOutSeconds := MAX_CACHE_TIMEOUT else
+      TimeOutSeconds := aTimeOutSeconds;
+    NotifyContentChangedForMethod(aMethodIndex);
+  end;
+  result := self;
 end;
 
 destructor TMVCRunWithViews.Destroy;
@@ -1034,28 +1130,39 @@ begin
   inherited;
 end;
 
-procedure TMVCRunWithViews.SetViews(const Value: TMVCViewsAbtract);
+procedure TMVCRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
 begin
-  FreeAndNil(fViews);
-  fViews := Value;
+  inherited;
+  if cardinal(aMethodIndex)<cardinal(Length(fCache)) then
+  with fCache[aMethodIndex] do
+    case Policy of
+    cacheRootIgnoringSession,cacheRootIfSession,cacheRootIfNoSession:
+      RootValue := '';
+    cacheRootWithSession,
+    cacheWithParametersIgnoringSession,cacheWithParametersIfSession,
+    cacheWithParametersIfNoSession:
+      InputValues.Init(false);
+    end;
 end;
 
 
 { TMVCRunOnRestServer }
 
 constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
-  aViews: TMVCViewsAbtract; aRestServer: TSQLRestServer;
-  aPublishMvcInfo: boolean; const aSubURI: RawUTF8);
+  aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
+  aViews: TMVCViewsAbtract; aPublishMvcInfo: boolean);
 var m: integer;
 begin
+  if aApplication=nil then
+    raise EMVCException.CreateUTF8('%.Create(aApplication=nil)',[self]);
+  if aRestServer=nil then
+    fRestServer := aApplication.RestModel as TSQLRestServer else
+    fRestServer := aRestServer;
   if aViews=nil then
     aViews := TMVCViewsMustache.Create(
-      fApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
+      aApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
     aViews.fLogClass := fRestServer.LogClass;
   inherited Create(aApplication,aViews);
-  if aRestServer=nil then
-    fRestServer := fApplication.RestModel as TSQLRestServer else
-    fRestServer := aRestServer;
   fPublishMvcInfo := aPublishMvcInfo;
   if aSubURI<>'' then
     fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
@@ -1072,20 +1179,22 @@ procedure TMVCRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TSQLRestServerURIContext; const MethodName: RawUTF8);
 var mvcinfo, inputContext: variant;
     rawMethodName,rawFormat: RawUTF8;
+    rendererClass: TMVCRendererReturningDataClass;
     renderer: TMVCRendererReturningData;
 begin
   Split(MethodName,'/',rawMethodName,rawFormat);
   if fPublishMvcInfo and IdemPropNameU(rawMethodName,MVCINFO_URI) then begin
-    mvcinfo := fApplication.GetMvcInfo;
-    mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
-    Ctxt.Returns(TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo),
-      HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
+    if fMvcInfoCache='' then begin
+      mvcinfo := fApplication.GetMvcInfo;
+      mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
+      fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
+    end;
+    Ctxt.Returns(fMvcInfoCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
   end else begin
     if IdemPropNameU(rawFormat,'json') then
-      // root/method/json will return the JSON outputContext
-      renderer := TMVCRendererJson.Create(fApplication) else
-      // root/method will render the outputContext using fViews (e.g. Mustache)
-      renderer := TMVCRendererFromViews.Create(fApplication,fViews);
+      rendererClass := TMVCRendererJSON else
+      rendererClass := TMVCRendererFromViews;
+    renderer := rendererClass.Create(self);
     try
       if Ctxt.Method in [mGET,mPOST] then begin
         inputContext := Ctxt.InputAsTDocVariant;
@@ -1113,6 +1222,96 @@ begin
 end;
 
 
+
+{ TMVCRendererReturningData }
+
+constructor TMVCRendererReturningData.Create(aRun: TMVCRunWithViews);
+begin
+  fRun := aRun;
+  inherited Create(fRun.Application);
+end;
+
+procedure TMVCRendererReturningData.ExecuteCommand(aMethodIndex: integer);
+  procedure SetOutputValue(const aValue: RawUTF8);
+  begin
+    fOutput.Status := HTML_SUCCESS;
+    Split(aValue,#0,fOutput.Header,RawUTF8(fOutput.Content));
+  end;
+  function RetrievedFromInputValues(const aKey: RawUTF8;
+    const aInputValues: TSynNameValue): boolean;
+  var i: integer;
+  begin
+    i := aInputValues.Find(aKey);
+    if (i>=0) and (aInputValues.List[i].Value<>'') and
+       (fCacheCurrentSec<cardinal(aInputValues.List[i].Tag)) then begin
+      SetOutputValue(aInputValues.List[i].Value);
+      result := true;
+    end else begin
+      fCacheCurrent := inputCache;
+      fCacheCurrentInputValueKey := aKey;
+      result := false;
+    end;
+  end;
+var sessionID: integer;
+label doRoot,doInput;
+begin
+  fCacheCurrent := noCache;
+  fCacheCurrentSec := GetTickCount64 div 1000;
+  if cardinal(aMethodIndex)<cardinal(Length(fRun.fCache)) then
+  with fRun.fCache[aMethodIndex] do begin
+    case Policy of
+    cacheRootIgnoringSession:
+      if fInput='' then
+ doRoot:if (RootValue<>'') and (fCacheCurrentSec<RootValueExpirationTime) then begin
+          SetOutputValue(RootValue);
+          exit;
+        end else
+          fCacheCurrent := rootCache;
+    cacheRootIfSession:
+      if (fInput='') and fApplication.CurrentSession.Exists then
+        goto doRoot;
+    cacheRootIfNoSession:
+      if (fInput='') and not fApplication.CurrentSession.Exists then
+        goto doRoot;
+    cacheRootWithSession:
+      if fInput='' then begin
+        sessionID := fApplication.CurrentSession.CheckAndRetrieve;
+        if sessionID=0 then
+          goto doRoot else
+        if RetrievedFromInputValues(UInt32ToUtf8(sessionID),InputValues) then
+          exit;
+      end;
+    cacheWithParametersIgnoringSession:
+doInput:if fInput='' then
+          goto doRoot else
+        if RetrievedFromInputValues(fInput,InputValues) then
+          exit;
+    cacheWithParametersIfSession:
+      if fApplication.CurrentSession.Exists then
+        goto doInput;
+    cacheWithParametersIfNoSession:
+      if not fApplication.CurrentSession.Exists then
+        goto doInput;
+    end;
+  end;
+  inherited ExecuteCommand(aMethodIndex);
+  if fCacheCurrent<>noCache then
+    with fRun.fCache[aMethodIndex] do begin
+      inc(fCacheCurrentSec,TimeOutSeconds);
+      case fCacheCurrent of
+      rootCache:
+        if fOutput.Status=HTML_SUCCESS then begin
+          RootValue := fOutput.Header+#0+fOutput.Content;
+          RootValueExpirationTime := fCacheCurrentSec;
+        end else
+          RootValue := '';
+      inputCache:
+        if fOutput.Status=HTML_SUCCESS then
+          InputValues.Add(fCacheCurrentInputValueKey,fOutput.Header+#0+fOutput.Content,fCacheCurrentSec) else
+          InputValues.Add(fCacheCurrentInputValueKey,'');
+      end;
+    end;
+end;
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));

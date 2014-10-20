@@ -36,8 +36,9 @@ type
   end;
 
   /// session information which will be stored on client side within a cookie
-  // - before Delphi 2010, TTextWriter.RegisterCustomJSONSerializerFromText()
-  // is set in initialization block below, to allow proper JSON serialization
+  // - before Delphi 2010, TTextWriter.RegisterCustomJSONSerializerFromText() is
+  // called in initialization block below, to allow proper JSON serialization
+  // as needed for proper injection into the Mustache rendering data context
   TCookieData = packed record
     AuthorName: RawUTF8;
     AuthorID: cardinal;
@@ -49,6 +50,7 @@ type
   protected
     fBlogMainInfo: variant;
     fCachedMainArticles: variant;
+    procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
     function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
   public
@@ -91,8 +93,10 @@ begin
   finally
     info.Free;
   end;
-  // publish IBlogApplication using SynMustache Views
-  fMainRunner := TMVCRunOnRestServer.Create(Self);
+  // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
+  fMainRunner := TMVCRunOnRestServer.Create(Self).
+    SetCache('Default',cacheRootIfNoSession,15). 
+    SetCache('ArticleView',cacheWithParametersIfNoSession,60);
 end;
 
 function TBlogApplication.GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
@@ -108,6 +112,12 @@ begin
   result := inherited GetViewInfo(MethodIndex);
   _ObjAddProps(['blog',fBlogMainInfo,
     'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
+end;
+
+procedure TBlogApplication.FlushAnyCache;
+begin
+  inherited FlushAnyCache; // call fMainRunner.NotifyContentChanged
+  VarClear(fCachedMainArticles);
 end;
 
 
@@ -193,7 +203,7 @@ begin
     GotoError(result,sErrorNeedValidAuthorSession);
     exit;
   end;
-  VarClear(fCachedMainArticles);
+  FlushAnyCache;
   Article := TSQLArticle.Create(RestModel,ID);
   try
     Article.Title := Title;
@@ -215,6 +225,7 @@ begin
 end;
 
 {$ifndef ISDELPHI2010}
+
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLAuthorRights));
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TCookieData),
