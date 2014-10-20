@@ -253,52 +253,105 @@ type
 
   TMVCApplication = class;
 
-  /// one execution context used by TMVCRun
-  TMVCRunContext = record
-    methodIndex: integer;
-    input: RawUTF8;
-    output: RawUTF8;
-    renderContext: variant;
-    isAction: boolean;
-    action: TMVCAction;
-    opaqueExecutionContext: TObject;
+  /// abtract MVC rendering execution context
+  // - you shoud not execute this abstract class, but any of the inherited class
+  // - one instance inherited from this class would be allocated for each event 
+  // - may return some data (when inheriting from TMVCRendererReturningData), or
+  // even simply display the value in a VCL/FMX GUI, without any output
+  TMVCRendererAbstract = class
+  protected
+    fApplication: TMVCApplication;
+    fMethodIndex: integer;
+    fMethodReturnsAction: boolean;
+    fInput: RawUTF8;
+    procedure Renders(outContext: variant; status: cardinal;
+      forcesError: boolean); virtual; abstract;
+    procedure CommandError(const ErrorName: RawUTF8; const ErrorValue: variant;
+      ErrorCode: Integer); virtual;
+  public
+    /// initialize a rendering process for a given MVC Application/ViewModel
+    constructor Create(aApplication: TMVCApplication); reintroduce;
+    /// main execution method of the rendering process
+    // - Input should have been set with the incoming execution context
+    procedure ExecuteCommand(aMethodIndex: integer); virtual;
+    /// incoming execution context, to be processed via ExecuteCommand() method
+    // - should be specified as a raw JSON object
+    property Input: RawUTF8 read fInput write fInput;
+  end;
+
+  /// abstract MVC rendering execution context, returning some content
+  // - the Output property would contain the content to be returned
+  // - can be used to return e.g. some rendered HTML or some raw JSON
+  TMVCRendererReturningData = class(TMVCRendererAbstract)
+  protected
+    fOutput: TServiceCustomAnswer;
+  public
+    /// caller should handle this value after ExecuteCommand method execution
+    property Output: TServiceCustomAnswer read fOutput;
+  end;
+
+  /// MVC rendering execution context, returning some rendered View content
+  // - will use an associated Views templates system, e.g. a Mustache renderer
+  TMVCRendererFromViews = class(TMVCRendererReturningData)
+  protected
+    fViews: TMVCViewsAbtract;
+    // Renders() will fill Output using the corresponding View, to be sent back
+    procedure Renders(outContext: variant; status: cardinal; forcesError: boolean); override;
+  public
+    /// you need to specify a Views engine, e.g. a TMCVViewsMustache instance
+    constructor Create(aApplication: TMVCApplication; aViews: TMVCViewsAbtract); reintroduce;
+  end;
+
+  /// MVC rendering execution context, returning some un-rendered JSON content
+  // - may be used e.g. for debugging purpose
+  // - for instance, TMVCRunOnRestServer will return such context with the
+  // supplied URI ends with '/json' (e.g. for any /root/method/json request)
+  TMVCRendererJson = class(TMVCRendererReturningData)
+  protected
+    // Renders() will fill Output with the outgoing JSON, to be sent back
+    procedure Renders(outContext: variant; status: cardinal; forcesError: boolean); override;
   end;
 
   /// abstract class used by TMVCApplication to run
+  // - a single TMVCApplication logic may handle several TMVCRun instances
   TMVCRun = class
   protected
     fApplication: TMVCApplication;
-    fViews: TMVCViewsAbtract;
-    procedure SetViews(const Value: TMVCViewsAbtract); virtual;
-    // virtual methods used to process requests, using private TMVCRunContext
-    procedure ExecuteCommand(var Context: TMVCRunContext); virtual;
-    procedure CommandRunMethod(var Context: TMVCRunContext); virtual;
-    procedure CommandError(var Context: TMVCRunContext;
-      const ErrorName: RawUTF8; const ErrorValue: variant; ErrorCode: Integer); virtual;
-    // virtual abstract methods which should be overriden for views rendering
-    procedure RenderView(var Context: TMVCRunContext); virtual; abstract;
-    procedure RenderError(var Context: TMVCRunContext); virtual; abstract;
   public
     /// link this runner class to a specified MVC application
-    // - will also reset both Views and Session associated to the application
+    // - will also reset the associated Application.Session instance 
     constructor Create(aApplication: TMVCApplication); reintroduce;
-    /// finalize this instance
-    destructor Destroy; override;
     /// read-write access to the associated MVC Application/ViewModel instance
     property Application: TMVCApplication read fApplication write fApplication;
+  end;
+
+  /// abstract class used by TMVCApplication to run TMVCViews-based process
+  // - this inherited class will host a MVC Views instance
+  TMVCRunWithViews = class(TMVCRun)
+  protected
+    fViews: TMVCViewsAbtract;
+    procedure SetViews(const Value: TMVCViewsAbtract); virtual;
+  public
+    /// link this runner class to a specified MVC application
+    constructor Create(aApplication: TMVCApplication;
+      aViews: TMVCViewsAbtract=nil); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
     /// read-write access to the associated MVC Views instance
     property Views: TMVCViewsAbtract read fViews write SetViews;
   end;
 
+
   /// run TMVCApplication directly within a TSQLRestServer method-based service
-  TMVCRunOnRestServer = class(TMVCRun)
+  TMVCRunOnRestServer = class(TMVCRunWithViews)
   protected
     fRestServer: TSQLRestServer;
     fPublishMvcInfo: boolean;
-    procedure RenderView(var Context: TMVCRunContext); override;
-    procedure RenderError(var Context: TMVCRunContext); override;
     /// callback used for the rendering on the TSQLRestServer
     procedure RunOnRestServerRoot(Ctxt: TSQLRestServerURIContext);
+    procedure RunOnRestServerSub(Ctxt: TSQLRestServerURIContext);
+    procedure InternalRunOnRestServer(Ctxt: TSQLRestServerURIContext;
+      const MethodName: RawUTF8);
   public
     /// this constructor will publish the views to a TSQLRestServer URI
     // - the associated RestModel can match the supplied TSQLRestServer, or be
@@ -331,7 +384,8 @@ type
     constructor CreateGotoView(const aMethod: RawUTF8;
       const aParametersNameValuePairs: array of const);
     /// same as calling TMVCApplication.GotoError()
-    constructor CreateGotoError(const aErrorMessage: string); overload;
+    constructor CreateGotoError(const aErrorMessage: string;
+      ErrorCode: integer=HTML_BADREQUEST); overload;
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(aHtmlErrorCode: integer); overload;
     /// same as calling TMVCApplication.GotoDefault
@@ -360,10 +414,12 @@ type
   protected
     fFactory: TInterfaceFactory;
     fFactoryEntry: pointer;
+    fFactoryErrorIndex: integer;
     fSession: TMVCSessionAbstract;
     fRestModel: TSQLRest;
     fRestServer: TSQLRestServer;
     // if any TMVCRun instance is store here, will be freed by Destroy
+    // but note that a single TMVCApplication logic may handle several TMVCRun
     fMainRunner: TMVCRun;
     procedure SetSession(const Value: TMVCSessionAbstract);
     /// generic IMVCApplication implementation
@@ -374,8 +430,9 @@ type
     function GetMvcInfo: variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
     class procedure GotoView(var Action: TMVCAction; const MethodName: string;
-      const ParametersNameValuePairs: array of const);
-    class procedure GotoError(var Action: TMVCAction; const Msg: string); overload;
+      const ParametersNameValuePairs: array of const; status: cardinal=0);
+    class procedure GotoError(var Action: TMVCAction; const Msg: string;
+      ErrorCode: integer=HTML_BADREQUEST); overload;
     class procedure GotoError(var Action: TMVCAction; ErrorCode: integer); overload;
     class procedure GotoDefault(var Action: TMVCAction);
   public
@@ -410,9 +467,6 @@ begin
   inherited Create;
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
-  if fFactoryErrorIndex<0 then
-    raise EMVCException.CreateUTF8(
-      '% does not implement the IMVCApplication.Error() method',[aInterface.Name]);
   if aLogClass=nil then
     fLogClass := TSQLLog else
     fLogClass := aLogClass;
@@ -461,8 +515,8 @@ const
   MUSTACHE_DEFAULTERROR =
   '<html><head><title>mORMotMVC Error</title></head><body style='+
   '"font-family:Verdana;"><h1>mORMotMVC Default Error Page</h1><p>A <code>'+
-  '{{exceptionName}}</code> exception did raise in {{className}}.RunOnRest'+
-  'Server() with the following message:</p><pre>{{exceptionMessage}}</pre><p>'+
+  '{{exceptionName}}</code> exception did raise during {{className}} process '+
+  'with the following message:</p><pre>{{exceptionMessage}}</pre><p>'+
   'Triggered with the following context:</p><pre>{{originalErrorContext}}</pre>';
 
 
@@ -723,9 +777,10 @@ begin
   TMVCApplication.GotoDefault(fAction);
 end;
 
-constructor EMVCApplication.CreateGotoError(const aErrorMessage: string);
+constructor EMVCApplication.CreateGotoError(const aErrorMessage: string;
+  ErrorCode: integer);
 begin
-  TMVCApplication.GotoError(fAction,aErrorMessage);
+  TMVCApplication.GotoError(fAction,aErrorMessage,ErrorCode);
 end;
 
 constructor EMVCApplication.CreateGotoError(aHtmlErrorCode: integer);
@@ -749,6 +804,10 @@ begin
   inherited Create;
   fRestModel := aRestModel;
   fFactory := TInterfaceFactory.Get(aInterface);
+  fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
+  if fFactoryErrorIndex<0 then
+    raise EMVCException.CreateUTF8(
+      '% does not implement the IMVCApplication.Error() method',[aInterface.Name]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry=nil then
     raise EMVCException.CreateUTF8('%.Create: this class should implement %',
@@ -773,13 +832,13 @@ begin
 end;
 
 procedure TMVCApplication.Error(var Msg: RawUTF8; var Scope: variant);
-begin // do nothing: just pass input error Msg to the view
+begin // do nothing: just pass input error Msg and data Scope to the view
 end;
 
 class procedure TMVCApplication.GotoView(var Action: TMVCAction; const MethodName: string;
-  const ParametersNameValuePairs: array of const);
+  const ParametersNameValuePairs: array of const; status: cardinal);
 begin
-  Action.ReturnedStatus := 0;
+  Action.ReturnedStatus := status;
   Action.RedirectToMethodName := MethodName;
   if high(ParametersNameValuePairs)<1 then
     Action.RedirectToMethodParameters := '' else
@@ -787,17 +846,17 @@ begin
 end;
 
 class procedure TMVCApplication.GotoError(var Action: TMVCAction;
-  const Msg: string);
+  const Msg: string; ErrorCode: integer);
 begin
-  GotoView(Action,'Error',['Msg',Msg]);
+  GotoView(Action,'Error',['Msg',Msg],ErrorCode);
 end;
 
 class procedure TMVCApplication.GotoError(var Action: TMVCAction;
   ErrorCode: integer);
 begin
-  if ErrorCode<=0 then
+  if ErrorCode<=HTML_CONTINUE then
     ErrorCode := HTML_BADREQUEST;
-  GotoView(Action,'Error',['Msg',StatusCodeToErrorMsg(ErrorCode)]);
+  GotoView(Action,'Error',['Msg',StatusCodeToErrorMsg(ErrorCode)],ErrorCode);
 end;
 
 class procedure TMVCApplication.GotoDefault(var Action: TMVCAction);
@@ -826,97 +885,160 @@ begin
 end;
 
 
-{ TMVCRun }
 
-constructor TMVCRun.Create(aApplication: TMVCApplication);
+{ TMVCRendererAbstract }
+
+constructor TMVCRendererAbstract.Create(aApplication: TMVCApplication);
 begin
   fApplication := aApplication;
-  SetViews(nil);
-  fApplication.SetSession(nil);
 end;
 
-destructor TMVCRun.Destroy;
+procedure TMVCRendererAbstract.CommandError(const ErrorName: RawUTF8;
+  const ErrorValue: variant; ErrorCode: Integer);
+var renderContext: variant;
 begin
-  fViews.Free;
-  inherited;
+  renderContext := _ObjFast([
+    'main',fApplication.GetViewInfo(fMethodIndex),
+    'msg',StatusCodeToErrorMsg(ErrorCode),
+    'errorCode',ErrorCode,ErrorName,ErrorValue]);
+  renderContext.originalErrorContext := JSONReformat(VariantToUTF8(renderContext));
+  Renders(renderContext,ErrorCode,true);
 end;
 
-procedure TMVCRun.SetViews(const Value: TMVCViewsAbtract);
+procedure TMVCRendererAbstract.ExecuteCommand(aMethodIndex: integer);
+var action: TMVCAction;
+    isAction: boolean;
+    WR: TTextWriter;
+    methodOutput: RawUTF8;
+    renderContext: variant;
 begin
-  FreeAndNil(fViews);
-  fViews := Value;
-end;
-
-procedure TMVCRun.ExecuteCommand(var Context: TMVCRunContext);
-begin
+  action.ReturnedStatus := HTML_SUCCESS;
+  fMethodIndex := aMethodIndex;
   try
-    with Context do
-    if methodIndex>=0 then begin
-      action.ReturnedStatus := HTML_SUCCESS;
+    if fMethodIndex>=0 then begin
       repeat
         try
-          isAction := fViews.fFactory.Methods[methodIndex].ArgsResultIsServiceCustomAnswer;
-          CommandRunMethod(Context);
+          isAction := fApplication.fFactory.Methods[fMethodIndex].ArgsResultIsServiceCustomAnswer;
+          WR := TJSONWriter.CreateOwnedStream;
+          try
+            WR.Add('{');
+            with fApplication.fFactory do
+            if not Methods[fMethodIndex].InternalExecute([fApplication.fFactoryEntry],
+               pointer(fInput),WR,action.RedirectToMethodName,action.ReturnedStatus,
+               [optVariantCopiedByReference],true,nil) then
+              raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
+                [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
+            if not isAction then
+              WR.Add('}');
+            WR.SetText(methodOutput);
+          finally
+            WR.Free;
+          end;
           if isAction then
             // was a TMVCAction mapped in a TServiceCustomAnswer record
-            action.RedirectToMethodParameters := output else begin
-            // fast Mustache {{template}} rendering
-            renderContext := _JsonFast(output);
-            TDocVariantData(renderContext).AddValue('main',fApplication.GetViewInfo(methodIndex));
-            RenderView(Context);
+            action.RedirectToMethodParameters := methodOutput else begin
+            // rendering, e.g. with fast Mustache {{template}}
+            renderContext := _JsonFast(methodOutput);
+            TDocVariantData(renderContext).AddValue(
+              'main',fApplication.GetViewInfo(fMethodIndex));
+            if fMethodIndex=fApplication.fFactoryErrorIndex then
+              _ObjAddProps(['errorCode',action.ReturnedStatus,
+                'originalErrorContext',JSONReformat(VariantToUTF8(renderContext))],
+                renderContext);
+            Renders(renderContext,action.ReturnedStatus,false);
             exit; // success
           end;
         except
           on E: EMVCApplication do
             action := E.fAction;
         end; // lower level exceptions will be handled below
-        input := action.RedirectToMethodParameters;
-        methodIndex := fViews.fFactory.FindMethodIndex(action.RedirectToMethodName);
+        fInput := action.RedirectToMethodParameters;
+        fMethodIndex := fApplication.fFactory.FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus=0 then
           action.ReturnedStatus := HTML_SUCCESS;
-      until methodIndex<0;
+      until fMethodIndex<0;
     end;
     // if we reached here, there was a wrong URI -> render the 404 error page
-    CommandError(Context,'notfound',true,HTML_NOTFOUND);
+    CommandError('notfound',true,HTML_NOTFOUND);
   except
     on E: Exception do
-      CommandError(Context,'exception',FormatUTF8('% raised in %.RunOnRestServer: %',
-        [E,Self,E.Message]),HTML_SERVERERROR);
+      CommandError('exception',FormatUTF8('% raised in %.ExecuteCommand: %',
+        [E,self,E.Message]),HTML_SERVERERROR);
   end;
 end;
 
-procedure TMVCRun.CommandRunMethod(var Context: TMVCRunContext);
-var WR: TTextWriter;
+
+{ TMVCRendererFromViews }
+
+constructor TMVCRendererFromViews.Create(aApplication: TMVCApplication;
+  aViews: TMVCViewsAbtract);
 begin
-  WR := TJSONWriter.CreateOwnedStream;
-  try
-    WR.Add('{');
-    with Context, fApplication do
-    if not fFactory.Methods[methodIndex].InternalExecute([fFactoryEntry],
-       pointer(input),WR,action.RedirectToMethodName,action.ReturnedStatus,
-       [optVariantCopiedByReference],true,nil) then
-      raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
-        [Self,fFactory.InterfaceTypeInfo^.Name,fFactory.Methods[methodIndex].URI]);
-    if not Context.isAction then
-      WR.Add('}');
-    WR.SetText(Context.Output);
-  finally
-    WR.Free;
-  end;
+  inherited Create(aApplication);
+  fViews := aViews;
 end;
 
-procedure TMVCRun.CommandError(var Context: TMVCRunContext;
-  const ErrorName: RawUTF8; const ErrorValue: variant; ErrorCode: Integer);
+procedure TMVCRendererFromViews.Renders(outContext: variant;
+  status: cardinal; forcesError: boolean);
+var view: TMVCView;
 begin
-  Context.renderContext := _ObjFast([
-    'main',fApplication.GetViewInfo(fViews.fFactoryErrorIndex),
-    'msg',StatusCodeToErrorMsg(ErrorCode),'className',ClassName,
-    'errorCode',ErrorCode,ErrorName,ErrorValue]);
-  Context.renderContext.originalErrorContext := JSONReformat(VariantToUTF8(Context.renderContext));
-  Context.action.ReturnedStatus := ErrorCode;
-  RenderError(Context);
+  if forcesError or (fMethodIndex=fViews.fFactoryErrorIndex) then
+    try // last change rendering of the error page
+      fViews.Render(fViews.fFactoryErrorIndex,outContext,view);
+    except // fallback to default HTML error template, if current did not work
+      on E: Exception do begin
+        _ObjAddProps(['exceptionName',E.ClassName,
+          'exceptionMessage',E.Message,'className',ClassName],outContext);
+        view.Content := TSynMustache.Parse(MUSTACHE_DEFAULTERROR).Render(outContext);
+        view.ContentType := HTML_CONTENT_TYPE;
+      end;
+    end else
+      fViews.Render(fMethodIndex,outContext,view);
+  fOutput.Content := view.Content;
+  fOutput.Header := HEADER_CONTENT_TYPE+view.ContentType;
+  fOutput.Status := status;
 end;
 
+
+{ TMVCRendererJson }
+
+procedure TMVCRendererJson.Renders(outContext: variant;
+  status: cardinal; forcesError: boolean);
+begin
+  fOutput.Content := JSONReformat(VariantToUTF8(outContext));
+  fOutput.Header := JSON_CONTENT_TYPE_HEADER;
+  fOutput.Status := status;
+end;
+
+
+{ TMVCRun }
+
+constructor TMVCRun.Create(aApplication: TMVCApplication);
+begin
+  fApplication := aApplication;
+  fApplication.SetSession(nil);
+end;
+
+
+{ TMVCRunWithViews }
+
+constructor TMVCRunWithViews.Create(aApplication: TMVCApplication;
+  aViews: TMVCViewsAbtract);
+begin
+  inherited Create(aApplication);
+  SetViews(aViews);
+end;
+
+destructor TMVCRunWithViews.Destroy;
+begin
+  fViews.Free;
+  inherited;
+end;
+
+procedure TMVCRunWithViews.SetViews(const Value: TMVCViewsAbtract);
+begin
+  FreeAndNil(fViews);
+  fViews := Value;
+end;
 
 
 { TMVCRunOnRestServer }
@@ -926,76 +1048,71 @@ constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aPublishMvcInfo: boolean; const aSubURI: RawUTF8);
 var m: integer;
 begin
-  if aRestServer=nil then
-    fRestServer := fApplication.RestModel as TSQLRestServer else
-    fRestServer := aRestServer;
-  for m := 0 to fApplication.fFactory.MethodsCount-1 do
-    fRestServer.ServiceMethodRegister(
-      fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
-  if aPublishMvcInfo then begin
-    fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
-    fPublishMvcInfo := true;
-  end;
   if aViews=nil then
     aViews := TMVCViewsMustache.Create(
       fApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
     aViews.fLogClass := fRestServer.LogClass;
-  SetViews(aViews);
+  inherited Create(aApplication,aViews);
+  if aRestServer=nil then
+    fRestServer := fApplication.RestModel as TSQLRestServer else
+    fRestServer := aRestServer;
+  fPublishMvcInfo := aPublishMvcInfo;
+  if aSubURI<>'' then
+    fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
+    for m := 0 to fApplication.fFactory.MethodsCount-1 do
+      fRestServer.ServiceMethodRegister(
+        fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
+    if aPublishMvcInfo then
+      fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
+  end;
   fApplication.SetSession(TMVCSessionWithRestServer.Create);
 end;
 
-procedure TMVCRunOnRestServer.RunOnRestServerRoot(
-  Ctxt: TSQLRestServerURIContext);
+procedure TMVCRunOnRestServer.InternalRunOnRestServer(
+  Ctxt: TSQLRestServerURIContext; const MethodName: RawUTF8);
 var mvcinfo, inputContext: variant;
-    runContext: TMVCRunContext;
+    rawMethodName,rawFormat: RawUTF8;
+    renderer: TMVCRendererReturningData;
 begin
-  if fPublishMvcInfo and IdemPropNameU(Ctxt.URI,MVCINFO_URI) then begin
+  Split(MethodName,'/',rawMethodName,rawFormat);
+  if fPublishMvcInfo and IdemPropNameU(rawMethodName,MVCINFO_URI) then begin
     mvcinfo := fApplication.GetMvcInfo;
     mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
     Ctxt.Returns(TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo),
       HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
   end else begin
-    runContext.opaqueExecutionContext := Ctxt;
-    if Ctxt.Method in [mGET,mPOST] then begin
-      runContext.methodIndex := fViews.fFactory.FindMethodIndex(Ctxt.URI);
-      inputContext := Ctxt.InputAsTDocVariant;
-      if not VarIsEmpty(inputContext) then
-        VariantSaveJSON(inputContext,twJSONEscape,runContext.input);
-      ExecuteCommand(runContext);
-    end else
-      CommandError(runContext,'notfound',true,HTML_NOTFOUND);
-  end;
-end;
-
-procedure TMVCRunOnRestServer.RenderError(var Context: TMVCRunContext);
-begin
-  try
-    Context.methodIndex := fViews.fFactoryErrorIndex;
-    RenderView(Context);
-  except
-    on E: Exception do begin
-      Context.renderContext.exceptionName := E.ClassName;
-      Context.renderContext.exceptionMessage := E.Message;
-      (Context.opaqueExecutionContext as TSQLRestServerURIContext).Returns(
-        TSynMustache.Parse(MUSTACHE_DEFAULTERROR).Render(Context.renderContext),
-        Context.action.ReturnedStatus,HTML_CONTENT_TYPE_HEADER,true,true);
+    if IdemPropNameU(rawFormat,'json') then
+      // root/method/json will return the JSON outputContext
+      renderer := TMVCRendererJson.Create(fApplication) else
+      // root/method will render the outputContext using fViews (e.g. Mustache)
+      renderer := TMVCRendererFromViews.Create(fApplication,fViews);
+    try
+      if Ctxt.Method in [mGET,mPOST] then begin
+        inputContext := Ctxt.InputAsTDocVariant;
+        if not VarIsEmpty(inputContext) then
+          VariantSaveJSON(inputContext,twJSONEscape,renderer.fInput);
+        renderer.ExecuteCommand(fViews.fFactory.FindMethodIndex(rawMethodName));
+      end else
+        renderer.CommandError('notfound',true,HTML_NOTFOUND);
+      Ctxt.Returns(renderer.Output.Content,renderer.Output.Status,
+        renderer.Output.Header,True,true);
+    finally
+      renderer.Free;
     end;
   end;
 end;
 
-procedure TMVCRunOnRestServer.RenderView(var Context: TMVCRunContext);
-var view: TMVCView;
+procedure TMVCRunOnRestServer.RunOnRestServerRoot(Ctxt: TSQLRestServerURIContext);
 begin
-  with Context.opaqueExecutionContext as TSQLRestServerURIContext do
-  if IdemPropNameU(URIBlobFieldName,'json') then
-    // root/method/json will return the JSON outputContext
-    Returns(JSONReformat(VariantToUTF8(Context.renderContext))) else begin
-    // root/method will render the outputContext using Mustache
-    fViews.Render(methodIndex,Context.renderContext,view);
-    Returns(view.Content,Context.action.ReturnedStatus,
-      HEADER_CONTENT_TYPE+view.ContentType,true,true);
-  end;
+  InternalRunOnRestServer(Ctxt,Ctxt.URI+'/'+Ctxt.URIBlobFieldName);
 end;
+
+procedure TMVCRunOnRestServer.RunOnRestServerSub(Ctxt: TSQLRestServerURIContext);
+begin
+  InternalRunOnRestServer(Ctxt,Ctxt.URIBlobFieldName);
+end;
+
+
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));

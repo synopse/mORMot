@@ -113,6 +113,57 @@ end;
 
 { TBlogApplication - Commands }
 
+procedure TBlogApplication.Default(var Scope: variant);
+begin
+  if VarIsEmpty(fCachedMainArticles) then
+    fCachedMainArticles := RestModel.RetrieveDocVariantArray(
+      TSQLArticle,'','order by ID desc limit 40',[],'ID,Title,CreatedAt');
+  _ObjAddProps(['articles',fCachedMainArticles],Scope);
+end;
+
+procedure TBlogApplication.ArticleView(ID: integer; WithComments: boolean;
+  out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
+begin
+  RestModel.Retrieve(ID,Article);
+  if Article.ID<>0 then begin
+    RestModel.Retrieve(Article.Author.ID,Author);
+    if WithComments then begin
+      Comments.Free; // we will override the TObjectList created at input
+      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
+    end;
+  end else
+    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+end;
+
+function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
+var Author: TSQLAuthor;
+    SessionInfo: TCookieData;
+begin
+  if CurrentSession.CheckAndRetrieve<>0 then begin
+    GotoError(result,HTML_BADREQUEST);
+    exit;
+  end;
+  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
+  try
+    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
+      SessionInfo.AuthorName := Author.LogonName;
+      SessionInfo.AuthorID := Author.ID;
+      SessionInfo.AuthorRights := Author.Rights;
+      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
+      GotoDefault(result);
+    end else
+      GotoError(result,sErrorInvalidLogin);
+  finally
+    Author.Free;
+  end;
+end;
+
+function TBlogApplication.Logout: TMVCAction;
+begin
+  CurrentSession.Finalize;
+  GotoDefault(result);
+end;
+
 procedure TBlogApplication.ArticleEdit(ID: integer;
   const Title,Content, ValidationError: RawUTF8; out Article: TSQLArticle);
 var AuthorID: integer;
@@ -162,57 +213,6 @@ begin
     Article.Free;
   end;
 end;
-
-procedure TBlogApplication.ArticleView(ID: integer; WithComments: boolean;
-  out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
-begin
-  RestModel.Retrieve(ID,Article);
-  if Article.ID<>0 then begin
-    RestModel.Retrieve(Article.Author.ID,Author);
-    if WithComments then begin
-      Comments.Free; // we will override the TObjectList created at input
-      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
-    end;
-  end;
-end;
-
-procedure TBlogApplication.Default(var Scope: variant);
-begin
-  if VarIsEmpty(fCachedMainArticles) then
-    fCachedMainArticles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','order by ID desc limit 40',[],'ID,Title,CreatedAt');
-  _ObjAddProps(['articles',fCachedMainArticles],Scope);
-end;
-
-function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
-var Author: TSQLAuthor;
-    SessionInfo: TCookieData;
-begin
-  if CurrentSession.CheckAndRetrieve<>0 then begin
-    GotoError(result,HTML_BADREQUEST);
-    exit;
-  end;
-  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
-  try
-    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
-      SessionInfo.AuthorName := Author.LogonName;
-      SessionInfo.AuthorID := Author.ID;
-      SessionInfo.AuthorRights := Author.Rights;
-      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
-      GotoDefault(result);
-    end else
-      GotoError(result,sErrorInvalidLogin);
-  finally
-    Author.Free;
-  end;
-end;
-
-function TBlogApplication.Logout: TMVCAction;
-begin
-  CurrentSession.Finalize;
-  GotoDefault(result);
-end;
-
 
 {$ifndef ISDELPHI2010}
 initialization
