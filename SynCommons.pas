@@ -5133,10 +5133,12 @@ type
     /// append two chars to the buffer
     procedure Add(c1,c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
     /// append a 64 bit signed Integer Value as text
     procedure Add(Value: Int64); overload;
+    {$endif}
     /// append a 32 bit signed Integer Value as text
-    procedure Add(Value: longint); overload;
+    procedure Add(Value: PtrInt); overload;
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
@@ -32373,15 +32375,15 @@ end;
 
 { TTextWriter }
 
-procedure TTextWriter.Add(Value: longint);
-var tmp: array[0..15] of AnsiChar;
+procedure TTextWriter.Add(Value: PtrInt);
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
   if B+16>=BEnd then
     Flush;
-  P := StrInt32(@tmp[15],value);
-  Len := @tmp[15]-P;
+  P := StrInt32(@tmp[23],value);
+  Len := @tmp[23]-P;
   move(P[0],B[1],Len);
   inc(B,Len);
 end;
@@ -32487,6 +32489,7 @@ begin
     AddNoJSONEscape(@S[1],ExtendedToString(S,Value,DOUBLE_PRECISION));
 end;
 
+{$ifndef CPU64}
 procedure TTextWriter.Add(Value: Int64);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
@@ -32499,6 +32502,7 @@ begin
   move(P[0],B[1],Len);
   inc(B,Len);
 end;
+{$endif}
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
 var L: cardinal;

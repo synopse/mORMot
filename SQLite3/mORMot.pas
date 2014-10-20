@@ -11325,7 +11325,7 @@ type
     // TSQLRestServer instance
     // - if aRemoteRest is a TSQLRestClient, it should have been authenticated
     // to the remote TSQLRestServer, so that CRUD / ORM operations would pass
-    // - this would enable easy create of proxies, or local servers, with they
+    // - this would enable easy creation of proxies, or local servers, with they
     // own cache and data model - e.g. a branch office server which may server
     // its local client over Ethernet, but communicating to a main mORMot
     // server via Internet, storing the corporate data in the main office server
@@ -15683,7 +15683,7 @@ begin
   ID := GetOrdProp(Instance,pointer(fPropInfo));
   if TSQLRecord(Instance).fFill.JoinedFields then
     ID := TSQLRecord(ID).fID;
-  W.Add(integer(ID));
+  W.AddU(ID);
 end;
 
 
