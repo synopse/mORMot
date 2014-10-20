@@ -1775,7 +1775,7 @@ begin
 end;
 
 function TBlobData.Next: PAnsiChar;
-{$ifndef PUREPASCAL}
+{$ifdef PUREPASCAL}
 begin
   result := PAnsiChar(@databuf)+dataSize;
 end;

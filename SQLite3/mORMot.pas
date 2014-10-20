@@ -15683,7 +15683,7 @@ begin
   ID := GetOrdProp(Instance,pointer(fPropInfo));
   if TSQLRecord(Instance).fFill.JoinedFields then
     ID := TSQLRecord(ID).fID;
-  W.Add(ID);
+  W.Add(integer(ID));
 end;
 
 
@@ -37461,6 +37461,8 @@ end;
 procedure x64FakeStub;
 var smetndx, sxmm3, sxmm2, sxmm1: pointer;
 asm // mov ax,{MethodIndex}; jmp x64FakeStub
+  {$ifdef FPC} // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
+  {$else}
   .params 2 // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
   and rax,$ffff
   movsd sxmm1,xmm1
@@ -37475,6 +37477,7 @@ asm // mov ax,{MethodIndex}; jmp x64FakeStub
   call TInterfacedObjectFake.FakeCall
   // FakeCall should set Int64 result in method result, and float in aCall.XMM1
   movsd xmm0,sxmm1
+  {$endif}
 end;
 {$endif}
 
@@ -38572,6 +38575,8 @@ end;
 {$else}
 {$ifdef CPU64}
 asm
+{$ifdef FPC} // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
+{$else}
     .params 64    // size for 64 parameters
     .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
     mov r12,Args
@@ -38601,6 +38606,7 @@ asm
     jne @e
 @d: movsd [r12].TCallMethodArgs.res64,xmm0
 @e:
+{$endif}
 end;
 {$else}
 asm
