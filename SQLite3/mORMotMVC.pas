@@ -208,7 +208,7 @@ type
     procedure Finalize; override;
   end;
 
-  /// implement a ViewModel/Controller sessions in a TSQLRestServer instance 
+  /// implement a ViewModel/Controller sessions in a TSQLRestServer instance
   // - will use ServiceContext.Request threadvar to access the client cookies
   TMVCSessionWithRestServer = class(TMVCSessionWithCookies)
   protected
@@ -216,7 +216,7 @@ type
     procedure SetCookie(const cookie: RawUTF8); override;
   end;
 
-  /// implement a single ViewModel/Controller in-memory session 
+  /// implement a single ViewModel/Controller in-memory session
   // - this kind of session could be used in-process, e.g. for a VCL/FMX GUI
   // - do NOT use it with multiple clients, e.g. from HTTP remote access
   TMVCSessionSingle = class(TMVCSessionWithCookies)
@@ -226,8 +226,7 @@ type
     procedure SetCookie(const cookie: RawUTF8); override;
   end;
 
-
-  { ====== Application / ViewModel ====== }
+  { ====== Application Run ====== }
 
   /// record type to define commands e.g. to redirect to another URI
   // - do NOT access those record property directly, but rather use
@@ -251,6 +250,71 @@ type
     // 201 HTML_CREATED or 404 HTML_NOTFOUND
     ReturnedStatus: cardinal;
   end;
+
+  TMVCApplication = class;
+
+  /// one execution context used by TMVCRun
+  TMVCRunContext = record
+    methodIndex: integer;
+    input: RawUTF8;
+    output: RawUTF8;
+    renderContext: variant;
+    isAction: boolean;
+    action: TMVCAction;
+    opaqueExecutionContext: TObject;
+  end;
+
+  /// abstract class used by TMVCApplication to run
+  TMVCRun = class
+  protected
+    fApplication: TMVCApplication;
+    fViews: TMVCViewsAbtract;
+    procedure SetViews(const Value: TMVCViewsAbtract); virtual;
+    // virtual methods used to process requests, using private TMVCRunContext
+    procedure ExecuteCommand(var Context: TMVCRunContext); virtual;
+    procedure CommandRunMethod(var Context: TMVCRunContext); virtual;
+    procedure CommandError(var Context: TMVCRunContext;
+      const ErrorName: RawUTF8; const ErrorValue: variant; ErrorCode: Integer); virtual;
+    // virtual abstract methods which should be overriden for views rendering
+    procedure RenderView(var Context: TMVCRunContext); virtual; abstract;
+    procedure RenderError(var Context: TMVCRunContext); virtual; abstract;
+  public
+    /// link this runner class to a specified MVC application
+    // - will also reset both Views and Session associated to the application
+    constructor Create(aApplication: TMVCApplication); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// read-write access to the associated MVC Application/ViewModel instance
+    property Application: TMVCApplication read fApplication write fApplication;
+    /// read-write access to the associated MVC Views instance
+    property Views: TMVCViewsAbtract read fViews write SetViews;
+  end;
+
+  /// run TMVCApplication directly within a TSQLRestServer method-based service
+  TMVCRunOnRestServer = class(TMVCRun)
+  protected
+    fRestServer: TSQLRestServer;
+    fPublishMvcInfo: boolean;
+    procedure RenderView(var Context: TMVCRunContext); override;
+    procedure RenderError(var Context: TMVCRunContext); override;
+    /// callback used for the rendering on the TSQLRestServer
+    procedure RunOnRestServerRoot(Ctxt: TSQLRestServerURIContext);
+  public
+    /// this constructor will publish the views to a TSQLRestServer URI
+    // - the associated RestModel can match the supplied TSQLRestServer, or be
+    // another instance (if the data model is not part of the publishing server)
+    // - all application methods
+    // - will create a TMVCSessionWithRestServer instance for cookies process
+    // - if aApplication has no Views instance associated, this constructor will
+    // initialize a Mustache renderer in its default folder, with '.html' void
+    // template generation
+    constructor Create(aApplication: TMVCApplication;
+      aViews: TMVCViewsAbtract=nil; aRestServer: TSQLRestServer=nil;
+      aPublishMvcInfo: boolean=true; const aSubURI: RawUTF8=''); reintroduce;
+  end;
+
+
+  { ====== Application / ViewModel ====== }
 
   /// Exception class triggerred by mORMot MVC/MVVM applications internally
   // - those error are internal fatal errors of the server side process
@@ -297,39 +361,30 @@ type
     fFactory: TInterfaceFactory;
     fFactoryEntry: pointer;
     fSession: TMVCSessionAbstract;
-    fViews: TMVCViewsAbtract;
     fRestModel: TSQLRest;
     fRestServer: TSQLRestServer;
-    fPublishMvcInfo: boolean;
+    // if any TMVCRun instance is store here, will be freed by Destroy
+    fMainRunner: TMVCRun;
     procedure SetSession(const Value: TMVCSessionAbstract);
-    procedure SetViews(const Value: TMVCViewsAbtract);
     /// generic IMVCApplication implementation
     procedure Error(var Msg: RawUTF8; var Scope: variant);
     /// every view will have this data context transmitted as "main":...
     function GetViewInfo(MethodIndex: integer): variant; virtual;
+    /// compute the data context e.g. for the /mvc-info URI
+    function GetMvcInfo: variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
     class procedure GotoView(var Action: TMVCAction; const MethodName: string;
       const ParametersNameValuePairs: array of const);
     class procedure GotoError(var Action: TMVCAction; const Msg: string); overload;
     class procedure GotoError(var Action: TMVCAction; ErrorCode: integer); overload;
     class procedure GotoDefault(var Action: TMVCAction);
-    /// callback used by AssociateWithRestServer() for the rendering
-    procedure RunOnRestServer(Ctxt: TSQLRestServerURIContext);
   public
     /// create an instance of the MVC/MVVM application
     // - define the associated REST instance, and the interface definition for
     // application commands
     constructor Create(aRestModel: TSQLRest; aInterface: PTypeInfo); reintroduce; virtual;
-    /// this method will publish the views to a TSQLRestServer URI
-    // - the associated RestModel can match the supplied TSQLRestServer, or be
-    // another instance (if the data model is not part of the publishing server)
-    // - will create a TMVCSessionWithRestServer instance for cookies process
-    // - if no Views instance is supplied, will initialize a Mustache renderer
-    // in its default folder, with '.html' void template generation 
-    procedure AssociateWithRestServer(aViews: TMVCViewsAbtract=nil;
-      aRestServer: TSQLRestServer=nil; aPublishMvcInfo: boolean=true);
     /// finalize the application
-    // - and release any associated CurrentSession and Views
+    // - and release any associated CurrentSession, Views, and fMainRunner
     destructor Destroy; override;
 
     /// read-only access to the associated mORMot REST data Model
@@ -338,8 +393,6 @@ type
     property Factory: TInterfaceFactory read fFactory;
     /// read-write access to the associated Session instance
     property CurrentSession: TMVCSessionAbstract read fSession write SetSession;
-    /// read-write access to the associated MVC Views instance
-    property Views: TMVCViewsAbtract read fViews write SetViews;
   end;
 
 const
@@ -715,7 +768,7 @@ end;
 destructor TMVCApplication.Destroy;
 begin
   inherited;
-  fViews.Free;
+  fMainRunner.Free;
   fSession.Free;
 end;
 
@@ -760,112 +813,57 @@ begin
   fSession := Value;
 end;
 
-procedure TMVCApplication.SetViews(const Value: TMVCViewsAbtract);
+function TMVCApplication.GetViewInfo(MethodIndex: integer): variant;
+begin
+  result := _ObjFast(['pageName',fFactory.Methods[MethodIndex].URI]);
+end;
+
+function TMVCApplication.GetMvcInfo: variant;
+begin
+  Result := _ObjFast(['name',fFactory.InterfaceTypeInfo^.Name,
+    'mORMot',SYNOPSE_FRAMEWORK_VERSION,'root',RestModel.Model.Root,
+    'methods',fFactory.ContextFromMethods(nil)]);
+end;
+
+
+{ TMVCRun }
+
+constructor TMVCRun.Create(aApplication: TMVCApplication);
+begin
+  fApplication := aApplication;
+  SetViews(nil);
+  fApplication.SetSession(nil);
+end;
+
+destructor TMVCRun.Destroy;
+begin
+  fViews.Free;
+  inherited;
+end;
+
+procedure TMVCRun.SetViews(const Value: TMVCViewsAbtract);
 begin
   FreeAndNil(fViews);
   fViews := Value;
 end;
 
-procedure TMVCApplication.AssociateWithRestServer(aViews: TMVCViewsAbtract;
-  aRestServer: TSQLRestServer; aPublishMvcInfo: boolean);
-var m: integer;
+procedure TMVCRun.ExecuteCommand(var Context: TMVCRunContext);
 begin
-  SetViews(nil);
-  SetSession(nil);
-  if aRestServer=nil then
-    fRestServer := RestModel as TSQLRestServer else
-    fRestServer := aRestServer;
-  for m := 0 to fFactory.MethodsCount-1 do
-    fRestServer.ServiceMethodRegister(fFactory.Methods[m].URI,RunOnRestServer,true);
-  if aPublishMvcInfo then begin
-    fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServer,true);
-    fPublishMvcInfo := true;
-  end;
-  if aViews=nil then
-    aViews := TMVCViewsMustache.Create(
-      fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
-    aViews.fLogClass := fRestServer.LogClass;
-  SetViews(aViews);
-  SetSession(TMVCSessionWithRestServer.Create);
-end;
-
-procedure TMVCApplication.RunOnRestServer(Ctxt: TSQLRestServerURIContext);
-procedure ReturnError(const ErrorName: RawUTF8; const ErrorValue: variant;
-  ErrorCode: Integer);
-var context: variant;
-    view: TMVCView;
-begin
-  context := _ObjFast(['main',GetViewInfo(fViews.fFactoryErrorIndex),
-    'msg',StatusCodeToErrorMsg(ErrorCode),'className',ClassName,
-    'errorCode',ErrorCode,ErrorName,ErrorValue]);
-  context.originalErrorContext := JSONReformat(VariantToUTF8(context));
   try
-    fViews.Render(fViews.fFactoryErrorIndex,context,view);
-  except
-    on E: Exception do begin
-      context.exceptionName := E.ClassName;
-      context.exceptionMessage := E.Message;
-      view.Content := TSynMustache.Parse(MUSTACHE_DEFAULTERROR).Render(context);
-      view.ContentType := HTML_CONTENT_TYPE;
-    end;
-  end;
-  Ctxt.Returns(view.Content,ErrorCode,HEADER_CONTENT_TYPE+view.ContentType,true,true);
-end;
-var methodIndex: integer;
-    view: TMVCView;
-    action: TMVCAction;
-    isAction: boolean;
-    input,output: RawUTF8;
-    context: variant;
-    WR: TTextWriter;
-begin
-  if fPublishMvcInfo and IdemPropNameU(Ctxt.URI,MVCINFO_URI) then begin
-    context := _ObjFast(['name',fFactory.InterfaceTypeInfo^.Name,
-      'mORMot',SYNOPSE_FRAMEWORK_VERSION,'root',RestModel.Model.Root,
-      'viewsFolder',fViews.ViewTemplateFolder,
-      'methods',fFactory.ContextFromMethods(nil)]);
-    Ctxt.Returns(TSynMustache.Parse(MUSTACHE_MVCINFO).Render(context),
-      HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
-    exit;
-  end;
-  methodIndex := fFactory.FindMethodIndex(Ctxt.URI);
-  try
-    if (methodIndex>=0) and (Ctxt.Method in [mGET,mPOST]) then begin
+    with Context do
+    if methodIndex>=0 then begin
       action.ReturnedStatus := HTML_SUCCESS;
-      context := Ctxt.InputAsTDocVariant;
-      if not VarIsEmpty(context) then
-        VariantSaveJSON(context,twJSONEscape,input);
       repeat
         try
-          isAction := fFactory.Methods[methodIndex].ArgsResultIsServiceCustomAnswer;
-          WR := TJSONWriter.CreateOwnedStream;
-          try
-            WR.Add('{');
-            if not fFactory.Methods[methodIndex].InternalExecute([fFactoryEntry],
-               pointer(input),WR,action.RedirectToMethodName,action.ReturnedStatus,
-               [optVariantCopiedByReference],true,nil) then
-              raise EMVCException.CreateUTF8('%.RunOnRestServer: %.%() execution error',
-                [Self,fFactory.InterfaceTypeInfo^.Name,fFactory.Methods[methodIndex].URI]);
-            if not isAction then
-              WR.Add('}');
-            WR.SetText(output);
-          finally
-            WR.Free;
-          end;
+          isAction := fViews.fFactory.Methods[methodIndex].ArgsResultIsServiceCustomAnswer;
+          CommandRunMethod(Context);
           if isAction then
             // was a TMVCAction mapped in a TServiceCustomAnswer record
             action.RedirectToMethodParameters := output else begin
             // fast Mustache {{template}} rendering
-            context := _JsonFast(output);
-            TDocVariantData(context).AddValue('main',GetViewInfo(methodIndex));
-            if IdemPropNameU(Ctxt.URIBlobFieldName,'json') then
-              // root/method/json will return the JSON context
-              Ctxt.Returns(JSONReformat(VariantToUTF8(context))) else begin
-              // root/method will render the context using Mustache
-              fViews.Render(methodIndex,context,view);
-              Ctxt.Returns(view.Content,action.ReturnedStatus,
-                HEADER_CONTENT_TYPE+view.ContentType,true,true);
-            end;
+            renderContext := _JsonFast(output);
+            TDocVariantData(renderContext).AddValue('main',fApplication.GetViewInfo(methodIndex));
+            RenderView(Context);
             exit; // success
           end;
         except
@@ -873,25 +871,131 @@ begin
             action := E.fAction;
         end; // lower level exceptions will be handled below
         input := action.RedirectToMethodParameters;
-        methodIndex := fFactory.FindMethodIndex(action.RedirectToMethodName);
+        methodIndex := fViews.fFactory.FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus=0 then
           action.ReturnedStatus := HTML_SUCCESS;
       until methodIndex<0;
     end;
     // if we reached here, there was a wrong URI -> render the 404 error page
-    ReturnError('notfound',true,HTML_NOTFOUND);
+    CommandError(Context,'notfound',true,HTML_NOTFOUND);
   except
     on E: Exception do
-      ReturnError('exception',FormatUTF8('% raised in %.RunOnRestServer: %',
+      CommandError(Context,'exception',FormatUTF8('% raised in %.RunOnRestServer: %',
         [E,Self,E.Message]),HTML_SERVERERROR);
   end;
 end;
 
-function TMVCApplication.GetViewInfo(MethodIndex: integer): variant;
+procedure TMVCRun.CommandRunMethod(var Context: TMVCRunContext);
+var WR: TTextWriter;
 begin
-  result := _ObjFast(['pageName',fFactory.Methods[MethodIndex].URI]);
+  WR := TJSONWriter.CreateOwnedStream;
+  try
+    WR.Add('{');
+    with Context, fApplication do
+    if not fFactory.Methods[methodIndex].InternalExecute([fFactoryEntry],
+       pointer(input),WR,action.RedirectToMethodName,action.ReturnedStatus,
+       [optVariantCopiedByReference],true,nil) then
+      raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
+        [Self,fFactory.InterfaceTypeInfo^.Name,fFactory.Methods[methodIndex].URI]);
+    if not Context.isAction then
+      WR.Add('}');
+    WR.SetText(Context.Output);
+  finally
+    WR.Free;
+  end;
 end;
 
+procedure TMVCRun.CommandError(var Context: TMVCRunContext;
+  const ErrorName: RawUTF8; const ErrorValue: variant; ErrorCode: Integer);
+begin
+  Context.renderContext := _ObjFast([
+    'main',fApplication.GetViewInfo(fViews.fFactoryErrorIndex),
+    'msg',StatusCodeToErrorMsg(ErrorCode),'className',ClassName,
+    'errorCode',ErrorCode,ErrorName,ErrorValue]);
+  Context.renderContext.originalErrorContext := JSONReformat(VariantToUTF8(Context.renderContext));
+  Context.action.ReturnedStatus := ErrorCode;
+  RenderError(Context);
+end;
+
+
+
+{ TMVCRunOnRestServer }
+
+constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
+  aViews: TMVCViewsAbtract; aRestServer: TSQLRestServer;
+  aPublishMvcInfo: boolean; const aSubURI: RawUTF8);
+var m: integer;
+begin
+  if aRestServer=nil then
+    fRestServer := fApplication.RestModel as TSQLRestServer else
+    fRestServer := aRestServer;
+  for m := 0 to fApplication.fFactory.MethodsCount-1 do
+    fRestServer.ServiceMethodRegister(
+      fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
+  if aPublishMvcInfo then begin
+    fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
+    fPublishMvcInfo := true;
+  end;
+  if aViews=nil then
+    aViews := TMVCViewsMustache.Create(
+      fApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
+    aViews.fLogClass := fRestServer.LogClass;
+  SetViews(aViews);
+  fApplication.SetSession(TMVCSessionWithRestServer.Create);
+end;
+
+procedure TMVCRunOnRestServer.RunOnRestServerRoot(
+  Ctxt: TSQLRestServerURIContext);
+var mvcinfo, inputContext: variant;
+    runContext: TMVCRunContext;
+begin
+  if fPublishMvcInfo and IdemPropNameU(Ctxt.URI,MVCINFO_URI) then begin
+    mvcinfo := fApplication.GetMvcInfo;
+    mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
+    Ctxt.Returns(TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo),
+      HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
+  end else begin
+    runContext.opaqueExecutionContext := Ctxt;
+    if Ctxt.Method in [mGET,mPOST] then begin
+      runContext.methodIndex := fViews.fFactory.FindMethodIndex(Ctxt.URI);
+      inputContext := Ctxt.InputAsTDocVariant;
+      if not VarIsEmpty(inputContext) then
+        VariantSaveJSON(inputContext,twJSONEscape,runContext.input);
+      ExecuteCommand(runContext);
+    end else
+      CommandError(runContext,'notfound',true,HTML_NOTFOUND);
+  end;
+end;
+
+procedure TMVCRunOnRestServer.RenderError(var Context: TMVCRunContext);
+begin
+  try
+    Context.methodIndex := fViews.fFactoryErrorIndex;
+    RenderView(Context);
+  except
+    on E: Exception do begin
+      Context.renderContext.exceptionName := E.ClassName;
+      Context.renderContext.exceptionMessage := E.Message;
+      (Context.opaqueExecutionContext as TSQLRestServerURIContext).Returns(
+        TSynMustache.Parse(MUSTACHE_DEFAULTERROR).Render(Context.renderContext),
+        Context.action.ReturnedStatus,HTML_CONTENT_TYPE_HEADER,true,true);
+    end;
+  end;
+end;
+
+procedure TMVCRunOnRestServer.RenderView(var Context: TMVCRunContext);
+var view: TMVCView;
+begin
+  with Context.opaqueExecutionContext as TSQLRestServerURIContext do
+  if IdemPropNameU(URIBlobFieldName,'json') then
+    // root/method/json will return the JSON outputContext
+    Returns(JSONReformat(VariantToUTF8(Context.renderContext))) else begin
+    // root/method will render the outputContext using Mustache
+    fViews.Render(methodIndex,Context.renderContext,view);
+    Returns(view.Content,Context.action.ReturnedStatus,
+      HEADER_CONTENT_TYPE+view.ContentType,true,true);
+  end;
+end;
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));

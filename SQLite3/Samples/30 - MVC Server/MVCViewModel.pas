@@ -91,7 +91,8 @@ begin
   finally
     info.Free;
   end;
-  AssociateWithRestServer; // publish IBlogApplication using SynMustache Views
+  // publish IBlogApplication using SynMustache Views
+  fMainRunner := TMVCRunOnRestServer.Create(Self);
 end;
 
 function TBlogApplication.GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
