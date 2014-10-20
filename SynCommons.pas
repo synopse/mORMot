@@ -23298,15 +23298,27 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
+var
+  UTCTimeCache: TTimeLog;
+  UTCTimeTicks: cardinal;
+
 procedure TTimeLogBits.FromUTCTime;
 {$ifdef MSWINDOWS}
 var Now: TSystemTime;
     V: cardinal;
+    Ticks: cardinal;
 begin
+  Ticks := GetTickCount; // typically in range of 10-16 ms
+  if Ticks=UTCTimeTicks then begin
+    Value := UTCTimeCache;
+    exit;
+  end;
+  UTCTimeTicks := Ticks;
   GetSystemTime(Now); // this API is fast enough for our purpose
   V := Now.wHour+Now.wDay shl 5+Now.wMonth shl 10+
     Now.wYear shl 14-(1 shl 5+1 shl 10);
   Value := Now.wSecond+Now.wMinute shl 6+Int64(V) shl 12;
+  UTCTimeCache := Value;
 end;
 {$else}
 begin
