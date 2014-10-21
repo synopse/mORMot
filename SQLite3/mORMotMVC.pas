@@ -139,14 +139,14 @@ type
     /// create an instance of this ViewModel implementation class
     // - define the associated REST instance, the interface definition and the
     // local folder where the mustache template files are stored
-    // - will search and parse the matching views (and associated *.partials)
+    // - will search and parse the matching views (and associated *.partial)
     constructor Create(aInterface: PTypeInfo;
       const aParameters: TMVCViewsMustacheParameters;
       aLogClass: TSynLogClass=nil); reintroduce; overload; virtual;
     /// create an instance of this ViewModel implementation class
     // - this overloaded version will use default parameters (i.e. search for
     // html+json+css in the "Views" sub-folder under the executable)
-    // - will search and parse the matching views (and associated *.partials),
+    // - will search and parse the matching views (and associated *.partial),
     // optionally creating void templates for any missing view
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass=nil;
       aExtensionForNotExistingTemplate: TFileName=''); overload;
@@ -639,7 +639,7 @@ begin
   end;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
-  if FindFirst(fViewTemplateFolder+'*.partials',faAnyFile,SR)=0 then
+  if FindFirst(fViewTemplateFolder+'*.partial',faAnyFile,SR)=0 then
   try
     repeat
       StringToUTF8(GetFileNameWithoutExt(SR.Name),partialName);
