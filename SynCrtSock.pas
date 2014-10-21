@@ -30,6 +30,7 @@ unit SynCrtSock;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
+  - EMartin
   - Pavel (mpv)
   
   Alternatively, the contents of this file may be used under the terms of
@@ -162,6 +163,7 @@ unit SynCrtSock;
     resource retrieval using either WinHTTP or WinINet APIs
   - added TURI structure, ready to parse a supplied HTTP URI
   - added 'ConnectionID: 1234578' to the HTTP headers - request [0636eeec54]
+  - added TWinHTTP.IgnoreSSLCertificates property (proposal by EMartin)
   - fixed TCrtSocket.BytesIn and TCrtSocket.BytesOut properties
   - fixed ticket [82df275784] TWinHttpAPI with responses without Content-Length
   - fixed ticket [f0749956af] TWinINet does not work with HTTPS servers
@@ -1259,8 +1261,8 @@ type
    - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
      back-end server applications that require access to an HTTP client stack }
   TWinHTTP = class(TWinHttpAPI)
-  private
   protected
+    fIgnoreSSLCertificates: boolean;
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalRequest(const method, aURL: RawByteString); override;
@@ -1273,8 +1275,12 @@ type
   public
     /// relase the connection
     destructor Destroy; override;
+    /// allows to ignore untrusted SSL certificates
+    // - similar to adding a security exception for a domain in the browser
+    property IgnoreSSLCertificates: boolean
+      read fIgnoreSSLCertificates write fIgnoreSSLCertificates;
   end;
-
+        
   /// type of a TWinHttpAPI class
   TWinHttpAPIClass = class of TWinHttpAPI;
 
@@ -1623,7 +1629,7 @@ var I, L: Integer;
 begin
   L := Length(S);
   I := 1;
-  while (I<=L) and (S[I]<=' ') do Inc(I);
+  while (I<=L) and (S[i]<=' ') do Inc(I);
   if I>L then
     Result := '' else
   if (I=1) and (S[L]>' ') then
@@ -4484,8 +4490,8 @@ begin
     L := 0;
   inc(L,(CONNECTIONID_HEADERLEN+2)+ord(ConnectionID[0]));
   for H := low(KNOWNHEADERS) to high(KNOWNHEADERS) do
-    if Request.Headers.KnownHeaders[H].RawValueLength<>0 then
-      inc(L,Request.Headers.KnownHeaders[H].RawValueLength+ord(KNOWNHEADERS[H][0])+4);
+    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then
+      inc(L,Request.Headers.KnownHeaders[h].RawValueLength+ord(KNOWNHEADERS[h][0])+4);
   P := Request.Headers.pUnknownHeaders;
   if P<>nil then
     for i := 1 to Request.Headers.UnknownHeaderCount do begin
@@ -4496,14 +4502,14 @@ begin
   SetString(result,nil,L);
   D := pointer(result);
   for H := low(KNOWNHEADERS) to high(KNOWNHEADERS) do
-    if Request.Headers.KnownHeaders[H].RawValueLength<>0 then begin
-      move(KNOWNHEADERS[H][1],D^,ord(KNOWNHEADERS[H][0]));
-      inc(D,ord(KNOWNHEADERS[H][0]));
+    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then begin
+      move(KNOWNHEADERS[h][1],D^,ord(KNOWNHEADERS[h][0]));
+      inc(D,ord(KNOWNHEADERS[h][0]));
       PWord(D)^ := ord(':')+ord(' ')shl 8;
       inc(D,2);
-      move(Request.Headers.KnownHeaders[H].pRawValue^,D^,
-        Request.Headers.KnownHeaders[H].RawValueLength);
-      inc(D,Request.Headers.KnownHeaders[H].RawValueLength);
+      move(Request.Headers.KnownHeaders[h].pRawValue^,D^,
+        Request.Headers.KnownHeaders[h].RawValueLength);
+      inc(D,Request.Headers.KnownHeaders[h].RawValueLength);
       PWord(D)^ := 13+10 shl 8;
       inc(D,2);
     end;
@@ -5767,6 +5773,8 @@ function WinHttpReadData(hRequest: HINTERNET; lpBuffer: Pointer;
   dwNumberOfBytesToRead: DWORD; var lpdwNumberOfBytesRead: DWORD): BOOL; stdcall; external winhttpdll;
 function WinHttpSetTimeouts(hInternet: HINTERNET; dwResolveTimeout: DWORD;
   dwConnectTimeout: DWORD; dwSendTimeout: DWORD; dwReceiveTimeout: DWORD): BOOL; stdcall; external winhttpdll;
+function WinHttpSetOption(hInternet: HINTERNET; dwOption: DWORD;
+  lpBuffer: Pointer; dwBufferLength: DWORD): BOOL; stdcall; external winhttpdll;
 
 destructor TWinHTTP.Destroy;
 begin
@@ -5861,9 +5869,26 @@ begin
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
+const
+  // from http://www.tek-tips.com/faqs.cfm?fid=7493
+  WINHTTP_OPTION_SECURITY_FLAGS = 31;
+  SECURITY_FLAG_IGNORE_UNKNOWN_CA = $00000100;
+  SECURITY_FLAG_IGNORE_CERT_DATE_INVALID = $00002000; // expired X509 Cert.
+  SECURITY_FLAG_IGNORE_CERT_CN_INVALID = $00001000; // bad common name in X509 Cert.
+  SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE = $00000200;
+  SECURITY_FLAT_IGNORE_CERTIFICATES: DWORD =
+    SECURITY_FLAG_IGNORE_UNKNOWN_CA or
+    SECURITY_FLAG_IGNORE_CERT_DATE_INVALID or
+    SECURITY_FLAG_IGNORE_CERT_CN_INVALID or
+    SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+
 procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
 var L: integer;
 begin
+  if fHTTPS and fIgnoreSSLCertificates then 
+    if not WinHttpSetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+       @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
+      RaiseLastModuleError(winhttpdll,EWinHTTP);
   L := length(aData);
   if not WinHttpSendRequest(fRequest, nil, 0, pointer(aData), L, L, 0) or
      not WinHttpReceiveResponse(fRequest,nil) then
@@ -5923,4 +5948,3 @@ finalization
   {$endif}
   DestroySocketInterface;
 end.
-
