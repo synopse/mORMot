@@ -15,12 +15,15 @@ uses
 type
   /// defines the main ViewModel/Controller commands of the BLOG web site
   IBlogApplication = interface(IMVCApplication)
-    /// blog/main/article?id=12 -> view one article
+    /// blog/main/articleView?id=12 -> view one article
     // - here article details are returned as out parameters values
     procedure ArticleView(
       ID: integer; WithComments: boolean;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
+    /// blog/main/authorView?id=12 -> information about one author
+    procedure AuthorView(
+      ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     /// blog/main/login?name=...&plainpassword=... -> log as author
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
@@ -60,6 +63,8 @@ type
     procedure ArticleView(ID: integer; WithComments: boolean;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
+    procedure AuthorView(
+      ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
     procedure ArticleEdit(ID: integer; const Title,Content, ValidationError: RawUTF8;
@@ -86,7 +91,9 @@ begin
   try
     if not RestModel.Retrieve('',info) then begin // retrieve first item
       info.Title := 'mORMot BLOG';
-      info.Copyright := '(c)2014 <a href=http://synopse.info>Synopse Informatique</a>';
+      info.Language := 'en';
+      info.Description := 'Sample Blog Web Application using Synopse mORMot MVC'; 
+      info.Copyright := '&copy;2014 <a href=http://synopse.info>Synopse Informatique</a>';
       RestModel.Add(info,true);
     end;
     fBlogMainInfo := info.GetSimpleFieldsAsDocVariant(false);
@@ -96,7 +103,8 @@ begin
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
   fMainRunner := TMVCRunOnRestServer.Create(Self).
     SetCache('Default',cacheRootIfNoSession,15). 
-    SetCache('ArticleView',cacheWithParametersIfNoSession,60);
+    SetCache('ArticleView',cacheWithParametersIfNoSession,60).
+    SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
 end;
 
 function TBlogApplication.GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
@@ -123,11 +131,14 @@ end;
 
 { TBlogApplication - Commands }
 
+const
+  ARTICLE_FIELDS = 'ID,Title,Abstract,Author,AuthorName,CreatedAt';
+
 procedure TBlogApplication.Default(var Scope: variant);
 begin
   if VarIsEmpty(fCachedMainArticles) then
     fCachedMainArticles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','order by ID desc limit 40',[],'ID,Title,CreatedAt');
+      TSQLArticle,'','order by ID desc limit 40',[],ARTICLE_FIELDS);
   _ObjAddProps(['articles',fCachedMainArticles],Scope);
 end;
 
@@ -142,6 +153,15 @@ begin
       Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
     end;
   end else
+    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+end;
+
+procedure TBlogApplication.AuthorView(ID: integer; out Author: TSQLAuthor;
+  out Articles: RawJSON);
+begin
+  RestModel.Retrieve(ID,Author);
+  if Author.ID<>0 then
+    Articles := RestModel.RetrieveListJSON(TSQLArticle,'Author=?',[ID],ARTICLE_FIELDS) else
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 

@@ -12,9 +12,13 @@ type
   TSQLBlogInfo = class(TSQLRecord)
   private
     fCopyright: RawUTF8;
+    fDescription: RawUTF8;
     fTitle: RawUTF8;
+    fLanguage: RawUTF8;
   published
     property Title: RawUTF8 index 80 read fTitle write fTitle;
+    property Language: RawUTF8 index 3 read fLanguage write fLanguage;
+    property Description: RawUTF8 index 120 read fDescription write fDescription;
     property Copyright: RawUTF8 index 80 read fCopyright write fCopyright;
   end;
 
@@ -81,9 +85,13 @@ type
 
   TSQLArticle = class(TSQLContent)
   private
+    fAbstract: RawUTF8;
     fAuthor: TSQLAuthor;
+    fAuthorName: RawUTF8;
   published
+    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
     property Author: TSQLAuthor read fAuthor write fAuthor;
+    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
   end;
 
   TSQLComment = class(TSQLContent)

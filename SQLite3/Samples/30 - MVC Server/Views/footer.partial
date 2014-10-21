@@ -1,0 +1,8 @@
+    </div><!-- container -->
+    <div class="blog-footer">
+      <p>Proudly using the Open Source Synopse <a href="http://mormot.net">mORMot ORM/SOA/MVC Framework</a>.<br>
+      <small>{{{main.blog.copyright}}}</small></p>
+      <p><a href="#">Back to top</a></p>
+    </div>
+  </body>
+</html>

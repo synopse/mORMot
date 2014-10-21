@@ -1,0 +1,13 @@
+{{>header}}
+{{>masthead}}
+      <div class="blog-main">
+        <h3>{{main.blog.title}} Error Page</h3>
+        <p>{{#errorCode}}Low-level <b>#{{errorCode}}</b>{{/errorCode}} Error occured in with the following message:</p>
+        <pre>{{msg}}</pre>
+        {{#exception}}
+        <p>The following Exception did occur:</p>
+        <pre>{{exception}}</pre>
+        {{/exception}}
+        <p>Error context:</p><pre>{{originalErrorContext}}</pre>
+      </div>
+{{>footer}}
