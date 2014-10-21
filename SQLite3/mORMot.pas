@@ -36590,17 +36590,17 @@ end;
 {$ifndef NOVARIANTS}
 function TServiceContainer.ContextFromRegisteredServices(
   aRegisteredTypes: TRawUTF8List): Variant;
-var serv: TDocVariantData;
+var serv: variant;
     i: integer;
 begin
   SetVariantNull(result);
   if (self=nil) or (fList.Count=0) then
     exit;
-  serv.Init(JSON_OPTIONS[true]);
+  TDocVariant.NewFast(serv);
   for i := 0 to fList.Count-1 do
-    serv.AddItem(Index(i).ContextFromInterface(ExpectMangledURI,aRegisteredTypes));
-  result := _ObjFast(['enabled',True,'services',variant(serv),
-    'expectMangledURI',ExpectMangledURI]);
+    TDocVariantData(serv).AddItem(
+      Index(i).ContextFromInterface(ExpectMangledURI,aRegisteredTypes));
+  result := _ObjFast(['enabled',True,'services',serv,'expectMangledURI',ExpectMangledURI]);
 end;
 {$endif}
 
@@ -37285,12 +37285,10 @@ end;
 
 function TInterfaceFactory.ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
 var m: integer;
-    methods: TDocVariantData;
 begin
-  methods.Init(JSON_OPTIONS[true]);
+  TDocVariant.NewFast(result);
   for m := 0 to fMethodsCount-1 do
-    methods.AddItem(fMethods[m].ContextFromArguments(aRegisteredTypes));
-  result := variant(methods);
+    TDocVariantData(result).AddItem(fMethods[m].ContextFromArguments(aRegisteredTypes));
 end;
 
 {$endif NOVARIANTS}
@@ -39250,12 +39248,12 @@ begin
     result.dirResult := true;
   case ValueType of // // handle some special complex types
   smvEnum: begin
-    result.isEnum := true;
-    result.toVariant := 'ord';
-    result.fromVariant := typRtti; // always transmitted as integer
     if (aRegisteredTypes<>nil) and (aRegisteredTypes.IndexOf(typRtti)<0) then
       // warning; this instance should be released by caller!
       aRegisteredTypes.AddObject(typRtti,TJSONCustomParserCustomSimple.Create('',typRtti,TypeInfo));
+    result.isEnum := true;
+    result.toVariant := 'ord';
+    result.fromVariant := typRtti; // always transmitted as integer
   end;
   smvSet: begin
     result.isSet := true;
@@ -39399,30 +39397,29 @@ end;
 
 function TServiceMethod.ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
 const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
-var arguments: TDocVariantData;
-    a,r: integer;
-    arg: variant;
+var a,r: integer;
+    arguments,arg: variant;
 begin
   r := 0;
-  arguments.Init(JSON_OPTIONS[true]);
+  TDocVariant.NewFast(arguments);
   for a := 1 to high(args) do begin // ignore self as a=0
     arg := args[a].ContextFromArgument(aRegisteredTypes);
     if a<ArgsNotResultLast then
-      arg.commaArg := '; ';
+      _ObjAddProps(['commaArg','; '],arg);
     if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
-      arg.commaInSingle := RawUTF8(',');
+      _ObjAddProps(['commaInSingle',','],arg);
     if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
-      arg.commaOut := '; ';
+      _ObjAddProps(['commaOut','; '],arg);
     if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
-      arg.indexOutResult := UInt32ToUtf8(r)+']';
+      _ObjAddProps(['indexOutResult',UInt32ToUtf8(r)+']'],arg);
       inc(r);
       if a<ArgsOutLast then
-        arg.commaOutResult := '; ';
+        _ObjAddProps(['commaOutResult','; '],arg);
     end;
-    arguments.AddItem(arg);
+    TDocVariantData(arguments).AddItem(arg);
   end;
   result := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
-    'args',variant(arguments),'argsOutputCount',r,
+    'args',arguments,'argsOutputCount',r,
     'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
   if ArgsInFirst>=0 then
     result.AsInParams := true;

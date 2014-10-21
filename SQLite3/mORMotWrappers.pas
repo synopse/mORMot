@@ -213,33 +213,26 @@ begin
         if typ=ptCustom then // guess from SQL type
           typ := TYPETOSIMPLE[nfo.SQLFieldType];
         field := TJSONCustomParserRTTI.ContextProperty(typ,nfoSQLFieldRTTITypeName,'','');
-        field.index := f+1;
-        field.name := nfo.Name;
-        field.sql := ord(nfo.SQLFieldType);
-        field.sqlName := nfo.SQLFieldTypeName^;
-        field.typeKind := ord(kind);
-        field.typeKindName := CROSSPLATFORMKIND_TEXT[kind];
-        field.attr := byte(nfo.Attributes);
+        _ObjAddProps(['index',f+1,'name',nfo.Name,'sql',ord(nfo.SQLFieldType),
+          'sqlName',nfo.SQLFieldTypeName^,'typeKind',ord(kind),
+          'typeKindName',CROSSPLATFORMKIND_TEXT[kind],'attr',byte(nfo.Attributes)],field);
         if aIsUnique in nfo.Attributes then
-          field.unique := true;
+          _ObjAddProps(['unique',true],field);
         if nfo.FieldWidth>0 then
-          field.width := nfo.FieldWidth;
+          _ObjAddProps(['width',nfo.FieldWidth],field);
         if f<nfoList.Count-1 then
-          field.comma := RawUTF8(',') else
-          field.comma := null; // may conflict with rec.comma otherwise
+          _ObjAddProps(['comma',','],field) else
+          _ObjAddProps(['comma',null],field); // may conflict with rec.comma otherwise
         case nfo.SQLFieldType of // handle some special complex types
-        sftEnumerate: begin
-          field.isEnum := true;
-          field.ToVariant := 'ord';
-          field.fromVariant := nfoSQLFieldRTTITypeName;
-        end;
+        sftEnumerate:
+          _ObjAddProps(['isEnum',True,'ToVariant','ord',
+            'fromVariant',nfoSQLFieldRTTITypeName],field);
         sftSet: begin
-          field.isSet := true;
+          _ObjAddProps(['isSet',True,'fromVariant',nfoSQLFieldRTTITypeName],field);
           if nfo.InheritsFrom(TSQLPropInfoRTTISet) then
-            field.toVariant := CONST_SIZETODELPHI[
-              TSQLPropInfoRTTISet(nfo).SetEnumType^.SizeInStorageAsSet] else
-            field.toVariant := 'byte';
-          field.fromVariant := nfoSQLFieldRTTITypeName;
+            _ObjAddProps(['toVariant',CONST_SIZETODELPHI[
+              TSQLPropInfoRTTISet(nfo).SetEnumType^.SizeInStorageAsSet]],field) else
+            _ObjAddProps(['toVariant','byte'],field);
         end;
         end;
         fields.AddItem(field);
