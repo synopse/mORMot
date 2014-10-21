@@ -649,6 +649,9 @@ unit SynCommons;
   - introduced TSynInvokeableVariantType.Clear() and Copy() default methods
   - added TSynInvokeableVariantType.CopyByValue() virtual method
   - added TSynInvokeableVariantType.IsOfType() method
+  - TSynInvokeableVariantType.SetProperty() will now convert any varOleStr into
+    a RawUTF8/varString, and dereference any simple varByRef transmitted values
+    so that we could safely use late-binding with any kind of value
   - internal DispInvoke() function speed-up by caching the latest accessed type
   - enabled DispInvoke() function for Delphi XE2 and up (it will also fix the
     regression issue in the new RTL which let the field names be uppercased)   
@@ -10444,6 +10447,10 @@ type
     // (code page 1252) content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomUTF8(CharCount: Integer): RawUTF8;
+    /// create a temporary UTF-16 string random content, using WinAnsi
+    // (code page 1252) content
+    // - it somewhat faster if CharCount is a multiple of 5
+    class function RandomUnicode(CharCount: Integer): SynUnicode;
     /// create a temporary string random content, using ASCII 7 bit content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
@@ -19514,7 +19521,7 @@ function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
 var i, max: PtrInt;
 begin
   i := length(FileName);
-  max := i-4;
+  max := i-8;
   while (i>0) and not(cardinal(FileName[i]) in [ord('\'),ord('/'),ord('.')])
     and (i>=max) do dec(i);
   if (i=0) or (FileName[i]<>'.') then
@@ -27706,36 +27713,26 @@ begin
      'typePascal',TypeNameVariant(aPropertyType,aCustomTypeName,lngPascal),
      'typeCS',TypeNameVariant(aPropertyType,aCustomTypeName,lngCS),
      'typeJava',TypeNameVariant(aPropertyType,aCustomTypeName,lngJava)]);
-  if aPropertyName<>'' then begin
-    result.propName := aPropertyName;
-    result.fullPropName := aFullPropertyName;
-  end;
+  if aPropertyName<>'' then
+    _ObjAddProps(['propName',aPropertyName,'fullPropName',aFullPropertyName],result);
   case aPropertyType of
   ptRecord:
-    if aCustomTypeName<>'' then begin
-      result.isRecord := true;
-      result.toVariant := aCustomTypeName+'2Variant';
-      result.fromVariant := 'Variant2'+aCustomTypeName;
-    end;
-  ptRawByteString: begin
-    result.isBlob := true;
-    result.toVariant := 'BlobToVariant';
-    result.fromVariant := 'VariantToBlob';
-  end;
-  ptGUID: begin
-    result.isGUID := true;
-    result.toVariant := 'GUIDToVariant';
-    result.fromVariant := 'VariantToGUID';
-  end;
-  ptDateTime: begin
-    result.isDateTime := true;
-    result.toVariant := 'DateTimeToIso8601';
-    result.fromVariant := 'Iso8601ToDateTime';
-  end;
-  ptCurrency: result.isCurrency := true;
-  ptVariant:  result.isVariant := true;
-  ptRawJSON:  result.isJson := true;
-  ptArray:    result.isArray := true;
+    if aCustomTypeName<>'' then
+      _ObjAddProps(['isRecord',true,'toVariant',aCustomTypeName+'2Variant',
+        'fromVariant','Variant2'+aCustomTypeName],result);
+  ptRawByteString:
+    _ObjAddProps(['isBlob',true,'toVariant','BlobToVariant',
+      'fromVariant','VariantToBlob'],result);
+  ptGUID:
+    _ObjAddProps(['isGUID',true,'toVariant','GUIDToVariant',
+      'fromVariant','VariantToGUID'],result);
+  ptDateTime:
+    _ObjAddProps(['isDateTime',true,'toVariant','DateTimeToIso8601',
+      'fromVariant','Iso8601ToDateTime'],result);
+  ptCurrency: _ObjAddProps(['isCurrency',true],result);
+  ptVariant:  _ObjAddProps(['isVariant',true],result);
+  ptRawJSON:  _ObjAddProps(['isJson',true],result);
+  ptArray:    _ObjAddProps(['isArray',true],result);
   end;
 end;
 
@@ -28522,16 +28519,43 @@ end;
 
 function TSynInvokeableVariantType.SetProperty(const V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
+var ValueSet: TVarData;
+    WS: PWideString;
+    PropName: PAnsiChar;
 {$ifdef UNICODE}
-var Buf: array[byte] of AnsiChar; // to avoid heap allocation
+    Buf: array[byte] of AnsiChar; // to avoid heap allocation
 {$endif}
 begin
-{$ifdef UNICODE}
+{$ifdef UNICODE}            
   RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name));
-  IntSet(V,Value,Buf);
+  PropName := @Buf[0];
 {$else}
-  IntSet(V,Value,pointer(Name));
+  PropName := pointer(Name);
 {$endif}
+  if Value.VType=varByRef or varOleStr then
+    WS := Value.VPointer else
+  if Value.VType=varOleStr then
+    WS := @Value.VPointer else
+  if ((Value.VType and varByRef)<>0) and
+     ((Value.VType and not varByRef) in VTYPE_STATIC) then begin
+    ValueSet.VType := Value.VType and not varByRef;
+    ValueSet.VInt64 := PInt64(Value.VPointer)^;
+    IntSet(V,ValueSet,PropName);
+    result := true;
+    exit;
+  end else begin
+    IntSet(V,Value,PropName);
+    result := True;
+    exit;
+  end;
+  ValueSet.VType := varString; // unpatched RTL do not like WideString values
+  ValueSet.VString := nil; // to avoid GPF in RawUTF8(ValueSet.VString) below
+  RawUnicodeToUtf8(pointer(WS^),length(WS^),RawUTF8(ValueSet.VString));
+  try
+    IntSet(V,ValueSet,PropName);
+  finally
+    RawUTF8(ValueSet.VString) := ''; // avoid memory leak
+  end;
   result := True;
 end;
 
@@ -28915,11 +28939,15 @@ asm
   {$endif}
 end;
 
-{$endif FPC}
-
 {$ifdef DOPATCHTRTL}
   {$define DOPATCHDISPINVOKE} // much faster late-binding process for our types
 {$endif}
+{$ifdef CPU64}
+  {$define DOPATCHDISPINVOKE}
+  // we NEED our patched DispInvoke to circumvent some Delphi bugs on Win64
+{$endif}
+
+{$endif FPC}
 
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 var i: integer;
@@ -28932,7 +28960,9 @@ begin
   if SynVariantTypes=nil then begin
     {$ifndef FPC}
     {$ifdef DOPATCHDISPINVOKE}
-    if DebugHook=0 then begin // patch VCL/RTL only outside debugging
+    {$ifndef CPU64} // we NEED our patched RTL on Win64
+    if DebugHook=0 then // patch VCL/RTL only outside debugging
+    {$endif} begin
       {$ifdef NOVARCOPYPROC}
       GetVariantManager(VarMgr);
       VarMgr.DispInvoke := @SynVarDispProc;
@@ -36185,6 +36215,11 @@ begin
   result := WinAnsiToUtf8(WinAnsiString(RandomString(CharCount)));
 end;
 
+class function TSynTestCase.RandomUnicode(CharCount: Integer): SynUnicode;
+begin
+  result := WinAnsiConvert.AnsiToUnicodeString(RandomString(CharCount));
+end;
+
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
   {$ifndef DELPHI5OROLDER}
@@ -39856,13 +39891,9 @@ begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
       SetString(result,PAnsiChar(@VD),sizeof(VD));
     end;
     tftWinAnsi:
-      {$ifdef UNICODE}
-      ToSBFStr(UnicodeStringToWinAnsi(Value),result);
-      {$else}
-      ToSBFStr(WinAnsiConvert.AnsiToAnsi(CurrentAnsiConvert,Value),result);
-      {$endif}
+      ToSBFStr(WinAnsiConvert.UTF8ToAnsi(VariantToUTF8(Value)),result);
     tftUTF8:
-      ToSBFStr(StringToUTF8((Value)),result);
+      ToSBFStr(VariantToUTF8(Value),result);
     else
       result := '';
   end;

@@ -341,7 +341,7 @@
   {$define NOSQLITE3STATIC}
 {$endif}
 
-{$ifdef NOSTATIC}
+{$ifdef NOSQLITE3STATIC}
   // our proprietary crypto expects a patched SQlite3.c statically linked
   {$define NOSQLITE3ENCRYPT}
 {$endif}

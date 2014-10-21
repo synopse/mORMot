@@ -151,6 +151,9 @@ uses
   mORMotSQLite3,
   mORMotHttpServer,
   mORMotHttpClient,
+  {$ifndef NOVARIANTS}
+  mORMotMVC,
+  {$endif}
 {$endif DELPHI5OROLDER}
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
@@ -2977,12 +2980,12 @@ begin
       data.Field['double'] := 3.1415;
       CheckSame(data.Field['double'],3.1415);
       for i := 1 to 100 do begin
-        u := WinAnsiConvert.AnsiToUnicodeString(RandomString(i*2));
+        u := RandomUnicode(i*2);
         data.Field['text'] := u;
         check(data.Field['text']=u);
         data.Field['ansi'] := u;
         check(data.Field['ansi']=u);
-        // with RandomUTF8, WinAnsi is more efficent than UTF-8 for storage size
+        // here, ansi is more efficent than text for storage size
       end;
       check(data.Field['bool']=true);
       check(data.Field['varint']=100);
@@ -3019,7 +3022,7 @@ begin
       rec.double := 3.141592654;
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
-        u := WinAnsiConvert.AnsiToUnicodeString(RandomString(i*2));
+        u := RandomUnicode(i*2);
         rec.text := u;
         check(rec.text=u);
         rec.ansi := u;
