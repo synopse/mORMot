@@ -300,13 +300,14 @@ type
   protected
     fRun: TMVCRunWithViews;
     fOutput: TServiceCustomAnswer;
+    fCacheEnabled: boolean;
     fCacheCurrent: (noCache, rootCache, inputCache);
     fCacheCurrentSec: cardinal;
     fCacheCurrentInputValueKey: RawUTF8;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMVCViewsMustache instance
-    constructor Create(aRun: TMVCRunWithViews); reintroduce;
+    constructor Create(aRun: TMVCRunWithViews); reintroduce; virtual;
     /// main execution method of the rendering process
     // - this overriden method would handle proper caching as defined by
     // TMVCRunWithViews.SetCache()
@@ -323,6 +324,10 @@ type
   protected
     // Renders() will fill Output using the corresponding View, to be sent back
     procedure Renders(outContext: variant; status: cardinal; forcesError: boolean); override;
+  public
+    /// initialize a rendering process for a given MVC Application/ViewModel
+    // - this overriden constructor will ensure that cache is enabled
+    constructor Create(aRun: TMVCRunWithViews); override;
   end;
 
   /// MVC rendering execution context, returning some un-rendered JSON content
@@ -387,6 +392,11 @@ type
     property Views: TMVCViewsAbtract read fViews;
   end;
 
+  /// the kinds of optional content which may be published
+  TMVCPublishOption = (publishMvcInfo, publishStatic);
+
+  /// which kind of optional content should be publish
+  TMVCPublishOptions = set of TMVCPublishOption;
 
   /// run TMVCApplication directly within a TSQLRestServer method-based service
   // - this is the easiest way to host and publish a MVC Application, optionally
@@ -394,8 +404,9 @@ type
   TMVCRunOnRestServer = class(TMVCRunWithViews)
   protected
     fRestServer: TSQLRestServer;
-    fPublishMvcInfo: boolean;
+    fPublishOptions: TMVCPublishOptions;
     fMvcInfoCache: RawUTF8;
+    fStaticCache: TSynNameValue;
     /// callback used for the rendering on the TSQLRestServer
     procedure RunOnRestServerRoot(Ctxt: TSQLRestServerURIContext);
     procedure RunOnRestServerSub(Ctxt: TSQLRestServerURIContext);
@@ -415,7 +426,8 @@ type
     // which is pretty convenient when working with views
     constructor Create(aApplication: TMVCApplication;
       aRestServer: TSQLRestServer=nil; const aSubURI: RawUTF8='';
-      aViews: TMVCViewsAbtract=nil; aPublishMvcInfo: boolean=true); reintroduce;
+      aViews: TMVCViewsAbtract=nil; aPublishOptions: TMVCPublishOptions=
+        [low(TMVCPublishOption)..high(TMVCPublishOption)]); reintroduce;
   end;
 
 
@@ -484,7 +496,7 @@ type
     /// compute the data context e.g. for the /mvc-info URI
     function GetMvcInfo: variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
-    class procedure GotoView(var Action: TMVCAction; const MethodName: string;
+    class procedure GotoView(var Action: TMVCAction; const MethodName: RawUTF8;
       const ParametersNameValuePairs: array of const; status: cardinal=0);
     class procedure GotoError(var Action: TMVCAction; const Msg: string;
       ErrorCode: integer=HTML_BADREQUEST); overload;
@@ -514,6 +526,9 @@ type
 const
   /// the pseudo-method name for the MVC information html page
   MVCINFO_URI = 'mvc-info';
+
+  /// the pseudo-method name for any static content for Views
+  STATIC_URI = '.static';
 
 
 implementation
@@ -899,7 +914,7 @@ procedure TMVCApplication.Error(var Msg: RawUTF8; var Scope: variant);
 begin // do nothing: just pass input error Msg and data Scope to the view
 end;
 
-class procedure TMVCApplication.GotoView(var Action: TMVCAction; const MethodName: string;
+class procedure TMVCApplication.GotoView(var Action: TMVCAction; const MethodName: RawUTF8;
   const ParametersNameValuePairs: array of const; status: cardinal);
 begin
   Action.ReturnedStatus := status;
@@ -1039,6 +1054,12 @@ end;
 
 { TMVCRendererFromViews }
 
+constructor TMVCRendererFromViews.Create(aRun: TMVCRunWithViews);
+begin
+  inherited;
+  fCacheEnabled := true;
+end;
+
 procedure TMVCRendererFromViews.Renders(outContext: variant;
   status: cardinal; forcesError: boolean);
 var view: TMVCView;
@@ -1150,7 +1171,7 @@ end;
 
 constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
-  aViews: TMVCViewsAbtract; aPublishMvcInfo: boolean);
+  aViews: TMVCViewsAbtract; aPublishOptions: TMVCPublishOptions);
 var m: integer;
 begin
   if aApplication=nil then
@@ -1163,35 +1184,60 @@ begin
       aApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
     aViews.fLogClass := fRestServer.LogClass;
   inherited Create(aApplication,aViews);
-  fPublishMvcInfo := aPublishMvcInfo;
+  fPublishOptions := aPublishOptions;
   if aSubURI<>'' then
     fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
     for m := 0 to fApplication.fFactory.MethodsCount-1 do
       fRestServer.ServiceMethodRegister(
         fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
-    if aPublishMvcInfo then
+    if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
+    if publishStatic in fPublishOptions then
+      fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,true);
   end;
+  fStaticCache.Init(true);
   fApplication.SetSession(TMVCSessionWithRestServer.Create);
 end;
 
 procedure TMVCRunOnRestServer.InternalRunOnRestServer(
   Ctxt: TSQLRestServerURIContext; const MethodName: RawUTF8);
 var mvcinfo, inputContext: variant;
-    rawMethodName,rawFormat: RawUTF8;
+    rawMethodName,rawFormat,static: RawUTF8;
+    staticFileName: TFileName;
     rendererClass: TMVCRendererReturningDataClass;
     renderer: TMVCRendererReturningData;
 begin
   Split(MethodName,'/',rawMethodName,rawFormat);
-  if fPublishMvcInfo and IdemPropNameU(rawMethodName,MVCINFO_URI) then begin
+  if (publishMvcInfo in fPublishOptions) and
+     IdemPropNameU(rawMethodName,MVCINFO_URI) then begin
     if fMvcInfoCache='' then begin
       mvcinfo := fApplication.GetMvcInfo;
       mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
       fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
     end;
     Ctxt.Returns(fMvcInfoCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
+  end else 
+  if (publishStatic in fPublishOptions) and
+     IdemPropNameU(rawMethodName,STATIC_URI) then begin
+    static := fStaticCache.Value(rawFormat,#0);
+    if static=#0 then begin
+      staticFileName := UTF8ToString(rawFormat);
+      if PosEx('.\',rawFormat)>0 then
+        static := '' else begin
+        static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+'\'+staticFileName);
+        if static<>'' then
+          static := GetMimeContentType(nil,0,staticFileName)+#0+static;
+      end;
+      fStaticCache.Add(rawFormat,static);
+    end;
+    if static='' then
+      Ctxt.Error('',HTML_NOTFOUND) else begin
+      Split(static,#0,rawFormat,static);
+      Ctxt.Returns(static,HTML_SUCCESS,HEADER_CONTENT_TYPE+rawFormat,True);
+    end;
+    exit;
   end else begin
-    if IdemPropNameU(rawFormat,'json') then
+     if IdemPropNameU(rawFormat,'json') then
       rendererClass := TMVCRendererJSON else
       rendererClass := TMVCRendererFromViews;
     renderer := rendererClass.Create(self);
@@ -1255,6 +1301,10 @@ procedure TMVCRendererReturningData.ExecuteCommand(aMethodIndex: integer);
 var sessionID: integer;
 label doRoot,doInput;
 begin
+  if not fCacheEnabled then begin
+    inherited ExecuteCommand(aMethodIndex);
+    exit;
+  end;
   fCacheCurrent := noCache;
   fCacheCurrentSec := GetTickCount64 div 1000;
   if cardinal(aMethodIndex)<cardinal(Length(fRun.fCache)) then
