@@ -43114,9 +43114,9 @@ var timeNow,hourRotate,timeBeforeRotate: TDateTime;
 begin
   {$ifdef MSWINDOWS}
   ExeVersionRetrieve;
-  fFileName := Ansi7ToString(ExeVersion.ProgramName);
+  fFileName := UTF8ToString(ExeVersion.ProgramName);
   if fFamily.IncludeComputerNameInFileName then
-    fFileName := fFileName+' ('+Ansi7ToString(ExeVersion.Host)+')';
+    fFileName := fFileName+' ('+UTF8ToString(ExeVersion.Host)+')';
   {$else}
   fFileName := ExtractFileName(ParamStr(0));
   i := Pos('.',fFileName);
