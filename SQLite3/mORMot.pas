@@ -39554,11 +39554,13 @@ begin
         {$endif}
         smvBoolean..smvWideString: begin
           Val := GetJSONField(Par,Par,@wasString);
-          if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
+          if (Val=nil) and (Par=nil) then
+            exit;  // 'null' will set Val=nil and Par<>nil 
+          if (Val<>nil) and (wasString<>(vIsString in ValueKindAsm)) then
             exit;
           case ValueType of
           smvBoolean:
-            Int64s[IndexVar] := byte(PInteger(Val)^=TRUE_LOW);
+            Int64s[IndexVar] := byte((Val<>nil) and (PInteger(Val)^=TRUE_LOW));
           smvEnum..smvInt64:
             SetInt64(Val,Int64s[IndexVar]);
           smvDouble,smvDateTime:
@@ -39573,7 +39575,7 @@ begin
             UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
           else exit; // should not happen
           end;
-          continue; // here Par=nil is correct
+          continue; // here Par=nil or Val=nil is correct
         end;
         else continue;
         end;
