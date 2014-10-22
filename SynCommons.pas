@@ -479,6 +479,8 @@ unit SynCommons;
   - added RawUnicodeToUtf8() and UTF8ToSynUnicode() overloaded procedures
   - added UrlDecodeNextValue() and UrlDecodeNextNameValue() functions
   - added Utf8DecodeToRawUnicodeUI() overloaded function returning text as var
+  - added class function TSynTestCase.RandomTextParagraph
+  - added UrlEncodeJsonObject() and new overloaded JSONDecode() function
   - added TRawUTF8DynArrayFrom(const Values: array of RawUTF8) function
   - added overloaded function FindRawUTF8() using array of RawUTF8 parameter
   - added TPropNameList record/object to maintain a stack-based list of names
@@ -2103,6 +2105,14 @@ function NextUTF8UCS4(var P: PUTF8Char): cardinal;
 
 /// encode a string to be compatible with URI encoding
 function UrlEncode(const svar: RawUTF8): RawUTF8; overload;
+
+/// encode a string to be compatible with URI encoding
+function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
+
+/// encode a JSON object UTF-8 buffer into URI parameters
+// - you can specify property names to ignore during the object decoding
+function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
+  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
 
 /// decode a string compatible with URI encoding into its original value
 // - you can specify the decoding range (as in copy(s,i,len) function)
@@ -6473,10 +6483,33 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 // - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
 // JSON arrays or objects
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
-// just like '{"name":'"John","year":1972}' 
+// just like '{"name":'"John","year":1972}'
 procedure JSONDecode(var JSON: RawUTF8;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+type
+  /// store one name/value pair of raw UTF-8 content, from a JSON buffer
+  // - used e.g. by JSONDecode() overloaded function to returns names/values
+  TNameValuePUTF8Char = record
+    Name: PUTF8Char;
+    Value: PUTF8Char;
+  end;
+  /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
+  TNameValuePUTF8CharDynArray = array of TNameValuePUTF8Char;
+
+/// decode the supplied UTF-8 JSON content into an array of name/value pairs
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside JSON, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - the supplied JSON buffer should stay available until Name/Value pointers
+// from returned Values[] are accessed  
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
+// just like '{"name":'"John","year":1972}'
+function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
+  HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - data will be set in Values, according to the Names supplied e.g.
@@ -10454,6 +10487,9 @@ type
     /// create a temporary string random content, using ASCII 7 bit content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
+    /// create a temporary string, containing some fake text, with paragraphs
+    class function RandomTextParagraph(WordCount: Integer;
+      LastPunctuation: AnsiChar='.'): RawUTF8;
     /// this method is triggered internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
@@ -21882,6 +21918,11 @@ begin
 end;
 
 function UrlEncode(const svar: RawUTF8): RawUTF8;
+begin
+  result := UrlEncode(pointer(svar));
+end;
+
+function UrlEncode(Text: PUTF8Char): RawUTF8;
 function Enc(s, p: PUTF8Char): PUTF8Char;
 var c: PtrInt;
 begin
@@ -21928,10 +21969,45 @@ begin
 end;
 begin
   result := '';
-  if pointer(svar)=nil then
-    exit else
-    SetLength(result,Size(pointer(svar))); // reserve exact memory count
-  Enc(pointer(svar),pointer(result));
+  if Text=nil then
+    exit;
+  SetLength(result,Size(Text)); // reserve exact memory count
+  Enc(Text,pointer(result));
+end;
+
+function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
+  const PropNamesToIgnore: array of RawUTF8): RawUTF8;
+var i,j, NameLen: integer;
+    sep: AnsiChar;
+    Params: TNameValuePUTF8CharDynArray;
+begin
+  if ParametersJSON=nil then
+    result := URIName else
+    with TTextWriter.CreateOwnedStream do
+    try
+      AddString(URIName);
+      if (JSONDecode(ParametersJSON,Params,true)<>nil) and (Params<>nil) then begin
+        sep := '?';
+        for i := 0 to High(Params) do begin
+          NameLen := StrLen(Params[i].Name);
+          for j := 0 to high(PropNamesToIgnore) do
+            if IdemPropNameU(PropNamesToIgnore[j],Params[i].Name,NameLen) then begin
+              NameLen := 0;
+              break;
+            end;
+          if NameLen=0 then
+            continue;
+          Add(sep);
+          AddNoJSONEscape(Params[i].Name,NameLen);
+          Add('=');
+          AddString(UrlEncode(Params[i].Value));
+          sep := '&';
+        end;
+      end;
+      SetText(result);
+    finally
+      Free;
+    end;
 end;
 
 function UrlDecode(const s: RawUTF8; i: PtrInt = 1; len: PtrInt = -1): RawUTF8;
@@ -34587,6 +34663,40 @@ begin
   until (P=nil) or (EndOfObject='}');
 end;
 
+function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
+  HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char;
+var n: PtrInt;
+    Name, Value: PUTF8Char;
+    EndOfObject: AnsiChar;
+begin
+  result := nil;
+  n := 0;
+  if P<>nil then begin
+    while P^<>'{' do
+      if P^=#0 then
+        exit else
+        inc(P);
+    inc(P); // jump {
+    repeat
+      Name := GetJSONPropName(P);
+      if Name=nil then
+        exit;  // invalid JSON content
+      Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
+      if (Value=nil) or not(EndOfObject in [',','}']) then
+        exit; // invalid item separator
+      if n=length(Values) then
+        SetLength(Values,n+32);
+      Values[n].Name := Name;
+      Values[n].Value := Value;
+      inc(n);
+    until (P=nil) or (EndOfObject='}');
+  end;
+  SetLength(Values,n);
+  if P=nil then // result=nil indicates failure -> points to #0 for end of text
+    result := @NULCHAR else
+    result := P;
+end;
+
 function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
   out FieldLen: integer; ExpectNameField: boolean): PUTF8Char;
 begin
@@ -36218,6 +36328,56 @@ end;
 class function TSynTestCase.RandomUnicode(CharCount: Integer): SynUnicode;
 begin
   result := WinAnsiConvert.AnsiToUnicodeString(RandomString(CharCount));
+end;
+
+class function TSynTestCase.RandomTextParagraph(WordCount: Integer;
+  LastPunctuation: AnsiChar): RawUTF8;
+type TKind = (space, comma, dot, question, paragraph);
+const bla: array[0..4] of string[3]=('bla','ble','bli','blo','blu');
+      endKind = [dot,paragraph,question];
+var n: integer;
+    WR: TTextWriter;
+    s: string[3];
+    last: TKind;
+begin
+  WR := TTextWriter.CreateOwnedStream;
+  try
+    last := paragraph;
+    while WordCount>0 do begin
+      for n := 0 to random(4) do begin
+         s := bla[random(5)];
+        if last in endKind then
+          s[1] := upcase(s[1]);
+        WR.AddShort(s);
+        WR.Add(' ');
+        dec(WordCount);
+        last := space;
+      end;
+      WR.CancelLastChar;
+      case random(100) of
+      0..40:  last := space;
+      41..70: last := comma;
+      71..85: last := dot;
+      86..90: last := question;
+      91..99: last := paragraph;
+      end;
+      case last of
+      space: WR.Add(' ');
+      comma: WR.Add(',',' ');
+      dot:   WR.Add('.',' ');
+      question:  WR.Add('?',' ');
+      paragraph: WR.AddShort('.'#13#10);
+      end;
+    end;
+    if not (last in endKind) then begin
+      WR.AddShort('bla');
+      if LastPunctuation<>' ' then
+        WR.Add(LastPunctuation);
+    end;
+    WR.SetText(result);
+  finally
+    WR.Free;
+  end;
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
@@ -44708,44 +44868,50 @@ begin
 {$else}
 begin
 {$endif DELPHI5OROLDER}
-  {$ifndef FPC}
-   {$ifdef CPU64}
-   {$ifndef NOX64PATCHRTL}
-   RedirectCode(SystemFillCharAddress,@FillChar);
-   RedirectCode(@System.Move,@Move);
-   {$endif NOX64PATCHRTL}
-   {$endif CPU64}
-   {$ifndef PUREPASCAL}
-    {$ifndef ENHANCEDRTL}
-     {$ifndef DELPHI5OROLDER}
-      {$ifndef USEPACKAGES}
-       {$ifdef DOPATCHTRTL}    
-  RedirectCode(SystemRecordCopyAddress,@RecordCopy);
-  RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
-  RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
-  {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
-  RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
-  {$endif}
-       {$endif DOPATCHTRTL}
-      {$endif USEPACKAGES}
-     {$endif DELPHI5OROLDER}
-     {$ifndef LVCL}
-      {$ifndef DELPHI5OROLDER}
-  if not SupportsSSE2 then // back to default X87 code for older CPUs
-    PatchCode(@FillChar,@FillCharX87,FILLCHAR_SIZE);
-      {$endif DELPHI5OROLDER}
-      {$ifndef ISDELPHI2007ANDUP} // use faster FillChar/Move for older Delphi
-  RedirectCode(SystemFillCharAddress,@FillChar);
-  RedirectCode(@System.Move,@Move);
-      {$endif ISDELPHI2007ANDUP}
-     {$endif LVCL}
-    {$endif ENHANCEDRTL}
-    {$ifndef DELPHI5OROLDER}
-  if not SupportsSSE2 then // back to default X86 code for older CPUs
+{$ifndef FPC}
+ {$ifdef CPU64}
+  {$ifndef NOX64PATCHRTL}
+  if DebugHook=0 then begin // patch VCL/RTL only outside debugging
+    RedirectCode(SystemFillCharAddress,@FillChar);
+    RedirectCode(@System.Move,@Move);
+  end;
+  {$endif NOX64PATCHRTL}
+ {$endif CPU64}
+{$endif FPC}
+{$ifndef PUREPASCAL}
+ {$ifndef FPC}
+  if DebugHook=0 then begin // patch VCL/RTL only outside debugging
+  {$ifndef ENHANCEDRTL}
+   {$ifndef DELPHI5OROLDER}
+    {$ifndef USEPACKAGES}
+     {$ifdef DOPATCHTRTL}
+    RedirectCode(SystemRecordCopyAddress,@RecordCopy);
+    RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
+    RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
+    {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
+    RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
+    {$endif}
+     {$endif DOPATCHTRTL}
+    {$endif USEPACKAGES}
+   {$endif DELPHI5OROLDER}
+   {$ifndef LVCL}
+    {$ifndef ISDELPHI2007ANDUP} // use faster FillChar/Move for older Delphi
+    RedirectCode(SystemFillCharAddress,@FillChar);
+    RedirectCode(@System.Move,@Move);
+    {$endif ISDELPHI2007ANDUP}
+   {$endif LVCL}
+  {$endif ENHANCEDRTL}
+  end;
+ {$endif FPC}
+ {$ifndef DELPHI5OROLDER}
+  if not SupportsSSE2 then begin // back to default X86/X87 code for older CPUs
     PatchCode(@SynCommons.StrLen,@StrLenX86,STRLEN_SIZE);
-    {$endif DELPHI5OROLDER}
-   {$endif PUREPASCAL}
-  {$endif FPC}
+  {$ifndef ENHANCEDRTL} 
+    PatchCode(@SynCommons.FillChar,@FillCharX87,FILLCHAR_SIZE);
+  {$endif ENHANCEDRTL}
+  end;
+ {$endif DELPHI5OROLDER}
+{$endif PUREPASCAL}
 end;
 
 
@@ -44785,16 +44951,12 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  InitRedirectCode;
   {$ifdef FPC}
   {$ifdef FPC_FULLVERSION>=20701}
   DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
-  {$else}
-  {$ifdef DOPATCHTRTL}
-  if DebugHook=0 then // patch VCL/RTL only outside debugging
-    InitRedirectCode;
-  {$endif}
-  {$endif}
+  {$endif FPC}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}
   RetrieveSystemInfo;
