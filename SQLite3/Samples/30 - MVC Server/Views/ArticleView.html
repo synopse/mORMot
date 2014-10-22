@@ -7,3 +7,20 @@
    * Author: TSQLAuthor
    * Comments: TObjectList
 }}
+{{>header}}
+{{>masthead}}
+      <div class="blog-header">
+        <h1 class="blog-title">{{article.title}}</h1>
+        <div class="lead blog-description">
+		Written by <a href="authorView?id={{article.Author}}">{{article.AuthorName}}</a> on {{TimeLogToText article.CreatedAt}}
+		</div>
+      </div>
+      <div class="blog-main">
+	  {{{WikiToHtml article.abstract}}}
+	  <hr>
+	  {{{WikiToHtml article.content}}}
+	  </div>
+{{#Scope}}
+{{>articlerow}}
+{{/Scope}}
+{{>footer}}

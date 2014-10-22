@@ -3,7 +3,8 @@
         {{#articles}}
             <h2 class="blog-post-title"><a href=articleView?id={{id}}>{{Title}}</a></h2>
             <p class="blog-post-meta">{{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></p>
-            {{Abstract}}
+            {{{WikiToHtml Abstract}}}
+			<hr>
         {{/articles}}
         </div>
       </div>

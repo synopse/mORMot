@@ -1105,7 +1105,7 @@ begin
       repeat
         try
           isAction := fApplication.fFactory.Methods[fMethodIndex].ArgsResultIsServiceCustomAnswer;
-          WR := TJSONWriter.CreateOwnedStream;
+          WR := TJSONSerializer.CreateOwnedStream;
           try
             WR.Add('{');
             with fApplication.fFactory do

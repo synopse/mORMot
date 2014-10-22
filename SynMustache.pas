@@ -275,6 +275,7 @@ type
     class procedure DateToText(const Value: variant; out result: variant);
     class procedure TimeLogToText(const Value: variant; out result: variant);
     class procedure ToJSON(const Value: variant; out result: variant);
+    class procedure WikiToHtml(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -314,6 +315,7 @@ type
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText,DateToText,TimeLogToText,ToJSON
+    // and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -861,9 +863,16 @@ class function TSynMustache.HelpersGetStandardList: TSynMustacheHelpers;
 begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
-      ['DateTimeToText','DateToText','TimeLogToText','ToJSON'],
-      [DateTimeToText,DateToText,TimeLogToText,ToJSON]);
+      ['DateTimeToText','DateToText','TimeLogToText','ToJSON','WikiToHtml'],
+      [DateTimeToText,DateToText,TimeLogToText,ToJSON,WikiToHtml]);
   result := HelpersStandardList;
+end;
+
+class function TSynMustache.HelpersGetStandardList(const aNames: array of RawUTF8;
+  const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers;
+begin
+  result := HelpersGetStandardList;
+  HelperAdd(result,aNames,aEvents);
 end;
 
 class procedure TSynMustache.DateTimeToText(const Value: variant;
@@ -902,11 +911,19 @@ begin
   RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
 end;
 
-class function TSynMustache.HelpersGetStandardList(const aNames: array of RawUTF8;
-  const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers;
+class procedure TSynMustache.WikiToHtml(const Value: variant;
+  out result: variant);
+var txt: RawUTF8;
 begin
-  result := HelpersGetStandardList;
-  HelperAdd(result,aNames,aEvents);
+  with TTextWriter.CreateOwnedStream do
+  try
+    txt := VariantToUTF8(Value);
+    AddHtmlEscapeWiki(pointer(txt));
+    SetText(txt);
+  finally
+    Free;
+  end;
+  RawUTF8ToVariant(txt,result);
 end;
 
 

@@ -121,7 +121,7 @@ begin
       for n := 1 to 10 do begin
         article.Title := TSynTestCase.RandomTextParagraph(5,' ');
         article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
-        article.Content := TSynTestCase.RandomTextParagraph(200);
+        article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
         RestModel.Add(article,true);
       end;
     finally
