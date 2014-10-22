@@ -590,6 +590,7 @@ unit SynCommons;
     TTextWriter.AddJSONEscapeW()
   - fixed ticket [a75c0c6759] about TTextWriter.AddNoJSONEscapeW()
   - added TTextWriter.AddHtmlEscape() and TTextWriter.AddXmlEscape() methods
+  - new TTextWriter.AddHtmlEscapeWiki() method, supporting wiki-like syntax 
   - TTextWriter.AddJSONEscape/AddJSONEscapeW methods speed up
   - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
     now a per-thread context will be stored, e.g. for Enter/Leave tracking
@@ -5299,7 +5300,14 @@ type
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
     /// append some chars, escaping all HTML special chars as expected
     // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
-    procedure AddHtmlEscape(Text: PUTF8Char);
+    procedure AddHtmlEscape(Text: PUTF8Char); overload;
+    /// append some chars, escaping all HTML special chars as expected
+    // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
+    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: integer); overload;
+    /// convert some wiki-like text into proper HTML 
+    // - convert all #13#10 into <p>...</p>, *..* into <i>..</i> and +..+ into
+    // <b>..</b>, then escape http:// as <a href=...> and any HTML special chars
+    procedure AddHtmlEscapeWiki(P: PUTF8Char); 
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -10494,7 +10502,7 @@ type
     class function RandomAnsi7(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
-      LastPunctuation: AnsiChar='.'): RawUTF8;
+      LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''): RawUTF8;
     /// this method is triggered internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
@@ -33564,8 +33572,10 @@ begin
   inc(B);
 end;
 
+const
+  HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
+  
 procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char);
-const HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
 var i,beg: PtrInt;
 begin
   if Text=nil then
@@ -33591,6 +33601,94 @@ begin
       inc(i);
     until false;
   until false;
+end;
+
+procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: integer);
+var i,beg: PtrInt;
+begin
+  if (Text=nil) or (TextLen<=0) then
+    exit;
+  i := 0;
+  repeat
+    beg := i;
+    if not(ord(Text[i]) in HTML_ESCAPE) then begin
+      repeat // it is faster to handle all not-escaped chars at once
+        inc(i);
+      until (ord(Text[i]) in HTML_ESCAPE) or (i>=TextLen);
+      AddNoJSONEscape(Text+beg,i-beg);
+    end;
+    if i=TextLen then
+      exit;
+    repeat
+      case Text[i] of
+      #0: exit;
+      '<': AddShort('&lt;');
+      '>': AddShort('&gt;');
+      '&': AddShort('&amp;');
+      '"': AddShort('&quot;');
+      else break;
+      end;
+      inc(i);
+    until false;
+  until false;
+end;
+
+procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char);
+var B: PUTF8Char;
+    bold,italic: boolean;
+  procedure Toggle(var value: Boolean; HtmlChar: AnsiChar);
+  begin
+    Add('<');
+    if value then
+      Add('/');
+    Add(HtmlChar,'>');
+    value := not value;
+  end;
+  procedure EndOfParagraph;
+  begin
+    if bold then
+      Toggle(bold,'B');
+    if italic then
+      Toggle(italic,'I');
+    AddShort('</p>');
+  end;
+begin
+  bold := false;
+  italic := false;
+  AddShort('<p>');
+  if P<>nil then
+    repeat
+      B := P;
+      while not (ord(P^) in [0,13,10,ord('*'),ord('+')]) do
+        if (P^='h') and IdemPChar(P+1,'TTP://') then
+          break else
+          inc(P);
+      AddHtmlEscape(B,P-B);
+      case ord(P^) of
+      0: break;
+      10,13: begin
+        EndOfParagraph;
+        AddShort('<p>');
+        while P[1] in [#10,#13] do inc(P);
+      end;
+      ord('*'):
+        Toggle(italic,'I');
+      ord('+'):
+        Toggle(bold,'B');
+      ord('h'): begin
+        B := P;
+        while P^>' ' do inc(P);
+        AddShort('<a href=');
+        AddHtmlEscape(B,P-B);
+        Add('>');
+        AddHtmlEscape(B,P-B);
+        AddShort('</a>');
+        continue;
+      end;
+      end;
+      inc(P);
+    until P^=#0;
+  EndOfParagraph;
 end;
 
 procedure TTextWriter.AddXmlEscape(Text: PUTF8Char);
@@ -36343,7 +36441,7 @@ begin
 end;
 
 class function TSynTestCase.RandomTextParagraph(WordCount: Integer;
-  LastPunctuation: AnsiChar): RawUTF8;
+  LastPunctuation: AnsiChar; const RandomInclude: RawUTF8): RawUTF8;
 type TKind = (space, comma, dot, question, paragraph);
 const bla: array[0..4] of string[3]=('bla','ble','bli','blo','blu');
       endKind = [dot,paragraph,question];
@@ -36367,7 +36465,14 @@ begin
       end;
       WR.CancelLastChar;
       case random(100) of
-      0..40:  last := space;
+      0..2: begin
+        if RandomInclude<>'' then begin
+          WR.Add(' ');
+          WR.AddString(RandomInclude);
+        end;
+        last := space;
+      end;
+      3..40:  last := space;
       41..70: last := comma;
       71..85: last := dot;
       86..90: last := question;
