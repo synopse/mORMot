@@ -53,6 +53,7 @@ type
   protected
     fBlogMainInfo: variant;
     fCachedMainArticles: variant;
+    procedure ComputeMinimalData;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
     function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
@@ -84,15 +85,27 @@ resourcestring
 { TBlogApplication }
 
 constructor TBlogApplication.Create(aServer: TSQLRestServer);
-var info: TSQLBlogInfo;
 begin
   inherited Create(aServer,TypeInfo(IBlogApplication));
+  ComputeMinimalData;
+  // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
+  fMainRunner := TMVCRunOnRestServer.Create(Self).
+    SetCache('Default',cacheRootIfNoSession,15).
+    SetCache('ArticleView',cacheWithParametersIfNoSession,60).
+    SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
+end;
+
+procedure TBlogApplication.ComputeMinimalData;
+var info: TSQLBlogInfo;
+    article: TSQLArticle;
+    n: integer;
+begin
   info := TSQLBlogInfo.Create;
   try
     if not RestModel.Retrieve('',info) then begin // retrieve first item
       info.Title := 'mORMot BLOG';
       info.Language := 'en';
-      info.Description := 'Sample Blog Web Application using Synopse mORMot MVC'; 
+      info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
       info.Copyright := '&copy;2014 <a href=http://synopse.info>Synopse Informatique</a>';
       RestModel.Add(info,true);
     end;
@@ -100,11 +113,21 @@ begin
   finally
     info.Free;
   end;
-  // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
-  fMainRunner := TMVCRunOnRestServer.Create(Self).
-    SetCache('Default',cacheRootIfNoSession,15). 
-    SetCache('ArticleView',cacheWithParametersIfNoSession,60).
-    SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
+  if not RestModel.TableHasRows(TSQLArticle) then begin
+    article := TSQLArticle.Create;
+    try
+      article.Author := TSQLAuthor(1);
+      article.AuthorName := 'synopse';
+      for n := 1 to 10 do begin
+        article.Title := TSynTestCase.RandomTextParagraph(5,' ');
+        article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
+        article.Content := TSynTestCase.RandomTextParagraph(200);
+        RestModel.Add(article,true);
+      end;
+    finally
+      article.Free;
+    end;
+  end;
 end;
 
 function TBlogApplication.GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
