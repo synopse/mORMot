@@ -270,6 +270,7 @@ type
     fInput: RawUTF8;
     procedure Renders(outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
+    function Redirects(const action: TMVCAction): boolean; virtual;  
     procedure CommandError(const ErrorName: RawUTF8; const ErrorValue: variant;
       ErrorCode: Integer); virtual;
   public
@@ -304,6 +305,7 @@ type
     fCacheCurrent: (noCache, rootCache, inputCache);
     fCacheCurrentSec: cardinal;
     fCacheCurrentInputValueKey: RawUTF8;
+    function Redirects(const action: TMVCAction): boolean; override;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     // - you need to specify a MVC Views engine, e.g. TMVCViewsMustache instance
@@ -445,15 +447,18 @@ type
     fAction: TMVCAction;
   public
     /// same as calling TMVCApplication.GotoView()
+    // - HTML_TEMPORARYREDIRECT will change the URI, but HTML_SUCCESS won't
     constructor CreateGotoView(const aMethod: RawUTF8;
-      const aParametersNameValuePairs: array of const);
+      const aParametersNameValuePairs: array of const;
+      aStatus: cardinal=HTML_TEMPORARYREDIRECT);
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(const aErrorMessage: string;
       ErrorCode: integer=HTML_BADREQUEST); overload;
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(aHtmlErrorCode: integer); overload;
     /// same as calling TMVCApplication.GotoDefault
-    constructor CreateDefault;
+    // - HTML_TEMPORARYREDIRECT will change the URI, but HTML_SUCCESS won't
+    constructor CreateDefault(aStatus: cardinal=HTML_TEMPORARYREDIRECT);
   end;
 
   /// defines the main and error pages for the ViewModel of one application
@@ -496,12 +501,16 @@ type
     /// compute the data context e.g. for the /mvc-info URI
     function GetMvcInfo: variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
+    // - if status is HTML_TEMPORARYREDIRECT, it will change the URI
+    // whereas HTML_SUCCESS would just render the view for the current URI
     class procedure GotoView(var Action: TMVCAction; const MethodName: RawUTF8;
-      const ParametersNameValuePairs: array of const; status: cardinal=0);
+      const ParametersNameValuePairs: array of const;
+      Status: cardinal=HTML_TEMPORARYREDIRECT);
     class procedure GotoError(var Action: TMVCAction; const Msg: string;
       ErrorCode: integer=HTML_BADREQUEST); overload;
     class procedure GotoError(var Action: TMVCAction; ErrorCode: integer); overload;
-    class procedure GotoDefault(var Action: TMVCAction);
+    class procedure GotoDefault(var Action: TMVCAction;
+      Status: cardinal=HTML_TEMPORARYREDIRECT);
   public
     /// create an instance of the MVC/MVVM application
     // - define the associated REST instance, and the interface definition for
@@ -851,9 +860,9 @@ end;
 
 { EMVCApplication }
 
-constructor EMVCApplication.CreateDefault;
+constructor EMVCApplication.CreateDefault(aStatus: cardinal);
 begin
-  TMVCApplication.GotoDefault(fAction);
+  TMVCApplication.GotoDefault(fAction,aStatus);
 end;
 
 constructor EMVCApplication.CreateGotoError(const aErrorMessage: string;
@@ -868,9 +877,9 @@ begin
 end;
 
 constructor EMVCApplication.CreateGotoView(const aMethod: RawUTF8;
-  const aParametersNameValuePairs: array of const);
+  const aParametersNameValuePairs: array of const; aStatus: cardinal);
 begin
-  TMVCApplication.GotoView(fAction,aMethod,aParametersNameValuePairs);
+  TMVCApplication.GotoView(fAction,aMethod,aParametersNameValuePairs,aStatus);
 end;
 
 
@@ -938,9 +947,9 @@ begin
   GotoView(Action,'Error',['Msg',StatusCodeToErrorMsg(ErrorCode)],ErrorCode);
 end;
 
-class procedure TMVCApplication.GotoDefault(var Action: TMVCAction);
+class procedure TMVCApplication.GotoDefault(var Action: TMVCAction; Status: cardinal);
 begin
-  Action.ReturnedStatus := 0;
+  Action.ReturnedStatus := Status;
   Action.RedirectToMethodName := 'Default';
   Action.RedirectToMethodParameters := '';
 end;
@@ -1039,7 +1048,12 @@ begin
         fInput := action.RedirectToMethodParameters;
         fMethodIndex := fApplication.fFactory.FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus=0 then
-          action.ReturnedStatus := HTML_SUCCESS;
+          action.ReturnedStatus := HTML_SUCCESS else
+        if (action.ReturnedStatus=HTML_TEMPORARYREDIRECT) or
+           (action.ReturnedStatus=HTML_MOVEDPERMANENTLY) then
+          if Redirects(action) then // if redirection is implemented
+            exit else
+            action.ReturnedStatus := HTML_SUCCESS; // fallback is to handle here
       until fMethodIndex<0;
     end;
     // if we reached here, there was a wrong URI -> render the 404 error page
@@ -1050,6 +1064,11 @@ begin
         [E,self,E.Message]),HTML_SERVERERROR);
   end;
 end;
+
+function TMVCRendererAbstract.Redirects(const action: TMVCAction): boolean;
+begin
+  result := false;
+end; // indicates redirection did not happen -> caller should do it manually
 
 
 { TMVCRendererFromViews }
@@ -1362,6 +1381,15 @@ doInput:if fInput='' then
       end;
     end;
 end;
+
+function TMVCRendererReturningData.Redirects(const action: TMVCAction): boolean;
+begin
+  fOutput.Header := 'Location: '+UrlEncodeJsonObject(action.RedirectToMethodName,
+    pointer(action.RedirectToMethodParameters),['main']);
+  fOutput.Status := action.ReturnedStatus;
+  result := true;
+end;
+
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));
