@@ -185,9 +185,7 @@ unit SynCrtSock;
   - fixed several issues when releasing THttpApiServer and THttpServer instances
   - allow to use any Unicode content for SendEmail() - also includes
     SendEmailSubject() function, for feature request [0a5fdf9129]
-  -
-
-}
+ }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
