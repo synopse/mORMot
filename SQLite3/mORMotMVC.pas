@@ -59,6 +59,9 @@ uses
   Windows,
   SysUtils,
   Classes,
+  {$ifndef LVCL}
+  Contnrs,
+  {$endif}
   Variants,
   SynCommons,
   SynCrypto,
@@ -206,6 +209,10 @@ type
   /// a class able to implement ViewModel/Controller sessions with cookies
   // - this kind of ViewModel will implement cookie-based sessions, able to
   // store any (simple) record content in the cookie, on the browser client side
+  // - record content will be stored in raw binary format (using RecordSave),
+  // and base64 encoded: at login, session-related information can be retrieved
+  // only once on the server side, then stored on the client side and used by
+  // the renderer - such a pattern is very efficient and allows easy scaling
   TMVCSessionWithCookies = class(TMVCSessionAbstract)
   protected
     fSessionCount: integer;
@@ -748,7 +755,7 @@ constructor TExpressionHelperForTable.Create(aRest: TSQLRest;
 begin
   aRest.PrivateGarbageCollector.Add(self);
   Rest := aRest;
-  HelperName := ShortStringToUTF8(aTable.ClassName);
+  HelperName := RawUTF8(aTable.ClassName);
   Table := aTable;
   TSynMustache.HelperAdd(aHelpers,HelperName,Expression);
 end;

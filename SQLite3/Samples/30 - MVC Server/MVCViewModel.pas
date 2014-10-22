@@ -23,7 +23,7 @@ type
       out Comments: TObjectList);
     /// blog/main/authorView?id=12 -> information about one author
     procedure AuthorView(
-      ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
+      var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     /// blog/main/login?name=...&plainpassword=... -> log as author
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
@@ -39,9 +39,11 @@ type
   end;
 
   /// session information which will be stored on client side within a cookie
+  // - TMVCSessionWithCookies is able to store any record on the client side,
+  // as optimized base64 encoded binary data, without any storage on the server
   // - before Delphi 2010, TTextWriter.RegisterCustomJSONSerializerFromText() is
   // called in initialization block below, to allow proper JSON serialization
-  // as needed for proper injection into the Mustache rendering data context
+  // as needed for fields injection into the Mustache rendering data context
   TCookieData = packed record
     AuthorName: RawUTF8;
     AuthorID: cardinal;
@@ -70,7 +72,7 @@ type
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     procedure AuthorView(
-      ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
+      var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content, ValidationError: RawUTF8;
@@ -216,7 +218,7 @@ begin
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 
-procedure TBlogApplication.AuthorView(ID: integer; out Author: TSQLAuthor;
+procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
   out Articles: RawJSON);
 begin
   RestModel.Retrieve(ID,Author);

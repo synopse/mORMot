@@ -173,10 +173,6 @@ unit SynSQLite3;
   - small fix of TOnSQLStoredProc callback parameter (TSQLRequest as const)
   - added SQLITE_MEMORY_DATABASE_NAME constant as alias to ':memory:'
 
-
-    Todo:
-    - port to systems other than Delphi+Win32 (use external DLL?)
-
 }
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER SQLITE3_FASTCALL
@@ -189,9 +185,9 @@ uses
   {$endif}
   SysUtils,
   Classes,
-{$ifndef LVCL}
+  {$ifndef LVCL}
   Contnrs,
-{$endif}
+  {$endif}
   SynCommons;
 
 
