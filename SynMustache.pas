@@ -189,7 +189,7 @@ type
       ListCurrentDocument: TVarData;
       ListCurrentDocumentType: TSynInvokeableVariantType;
     end;
-    fTempGetValueFromContextHelper: variant;
+    fTempGetValueFromContextHelper: TVariantDynArray;
     procedure PushContext(aDoc: TVarData);
     procedure PopContext; override;
     procedure AppendValue(const ValueName: RawUTF8; UnEscape: boolean); override;
@@ -994,7 +994,7 @@ end;
 
 procedure TSynMustacheContextVariant.GetValueFromContext(
   const ValueName: RawUTF8; var Value: TVarData);
-var i,helper: Integer;
+var i,helper,n: Integer;
     Name: PUTF8Char;
     temp: TVarData;
 begin
@@ -1012,8 +1012,11 @@ begin
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),i-1);
     if helper>=0 then begin
       GetValueFromContext(Name,temp); // allows {{helper1 helper2 value}} call
-      Helpers[helper].Event(variant(temp),fTempGetValueFromContextHelper);
-      Value := TVarData(fTempGetValueFromContextHelper);
+      n := fContextCount+4;
+      if length(fTempGetValueFromContextHelper)<n then
+        SetLength(fTempGetValueFromContextHelper,n);
+      Helpers[helper].Event(variant(temp),fTempGetValueFromContextHelper[fContextCount-1]);
+      Value := TVarData(fTempGetValueFromContextHelper[fContextCount-1]);
       exit;
     end; // if helper not found, will return the unprocessed value
   end;
