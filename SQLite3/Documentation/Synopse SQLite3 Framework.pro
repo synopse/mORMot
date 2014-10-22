@@ -2067,7 +2067,7 @@ Following the three previous purposes, these properties will be used:
 - To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way;
 - To have business logic objects accessible for both the Client and Server side, in a RESTful approach;
 - To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
-Our ORM engine has genuine advanced features like convention-over-configuration, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
+Our ORM engine has genuine advanced features like {\i @*convention over configuration@}, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
 :26 TSQLRecord fields definition
 For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !/// some enumeration
@@ -3548,6 +3548,7 @@ All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. A
 In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
 |%20%80
 |\b Marker|Description\b0
+|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
 |{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
 |{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
 |{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
@@ -3727,6 +3728,13 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 !  mustache := TSynMustache.Parse('{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
 !  html := mustache.RenderJSON('{name:3}');
 !  // now html='1'#$A'234','internal partials'
+:    Expression Helpers
+{\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
+For instance, if you create a MVC web application using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID. For instance, you may write:
+! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
+So that any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
 :    Internationalization
 You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
 By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
@@ -3745,9 +3753,9 @@ Then, you will be able to define your template as such:
 !  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
 All text has indeed been translated as expected.
 \page
-:   Integration with the ORM
+:   Low-level integration with the ORM
 You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
-For instance, you may write:
+For instance, you may write, in any method-based service - see @49@:
 !var template: TSynMustache;
 !    html: RawUTF8;
 ! ...
@@ -3757,17 +3765,37 @@ For instance, you may write:
 !    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
 !  // now html will contain a ready-to-be-displayed unordered list
 Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
-In conjunction with method-based services - see @49@ - which can return directly HTML content to a HTTP client, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern:
+Following this low-level method-based services process, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern as such:
 |%20%80
 |\b MVC|mORMot\b0
 |{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
 |{\i View}|@81@\line (may be stored as separated files or within the database)
 |{\i Controller}|Method-based services - see @49@
 |%
-In the future, this MVC design will probably be enhanced, and benefit from interface-based services - see @63@ - to write:
-- Some part of the {\i Model} (i.e. the business logic);
-- Some part of the {\i Controller} (i.e. the application logic).
-Both {\i Model} and {\i Controller} logic, even if defined via {\f1\fs20 interface}, may be implemented in {\i Delphi} or even in {\i JavaScript} - see @79@. {\i Delphi} code would gives strong typing, full integration to the framework, and the best performance possible. {\i JavaScript} code may be changed on the fly, and even stored as separated files.
+But still, a lot of code is needed to glue the MVC parts.
+:108 mORMotMVC for building Web applications
+:  MVVM Design
+This basic @*MVC@ design has been enhanced, and benefit from interface-based services - see @63@ - to define a true @**MVVM@ model via {\f1\fs20 mORMotMVC.pas}:
+|%20%80
+|\b MVVM|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i ViewModel}|{\f1\fs20 Interface}-based services - see @63@
+|%
+In the MVVM pattern, both {\i Model} and {\i View} components do match the classic @10@ layout. But the {\i ViewModel} will define some kind of "model for the view", i.e. the data context to be sent and retrieved from the view.
+In the {\i mORMot} implemenation, {\f1\fs20 interface}-based services methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
+|%20%80
+|\b ViewModel|mORMot\b0
+|{\i Route}|From the {\f1\fs20 interface} name and its method name
+|{\i Command}|Defined by the method name
+|{\i Controller}|Defined by the method implementation
+|{\i Input Context}|Transmitted as method input parameters ({\f1\fs20 const}/{\f1\fs20 var}) from the {\i View}
+|{\i Output Context}|Method output parameters ({\f1\fs20 var}/{\f1\fs20 out}) are sent to the {\i View}
+|{\i Actions}|By default, a {\f1\fs20 procedure} method will render the associated view with the output parameters, but you can define a {\f1\fs20 function} and (optionally) redirect to any other action/uri
+|%
+This may sounds pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use, since you do not need to define explicit data structures for the {\i ViewModel} layer. For instance, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
+:
+
 :42Database layer
 %cartoon05.png
 : SQLite3-powered, not SQLite3-limited

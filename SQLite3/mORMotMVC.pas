@@ -114,6 +114,9 @@ type
     /// file extension (e.g. '.html') to be used to create void templates
     // - default '' will create no void template file in the given Folder
     ExtensionForNotExistingTemplate: TFileName;
+    /// set of block helpers to be registered to TSynMustache
+    // - default will use TSynMustache.HelpersGetStandardList definition
+    Helpers: TSynMustacheHelpers;
   end;
 
   /// a class able to implement Views using Mustache templates
@@ -121,6 +124,7 @@ type
   protected
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
+    fViewHelpers: TSynMustacheHelpers;
     fViews: array of record // follows fFactory.Methods[]
       Mustache: TSynMustache;
       Template: RawUTF8;
@@ -150,6 +154,24 @@ type
     // optionally creating void templates for any missing view
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass=nil;
       aExtensionForNotExistingTemplate: TFileName=''); overload;
+    /// will add the supplied Expression Helpers definition
+    procedure RegisterExpressionHelpers(const aNames: array of RawUTF8;
+      const aEvents: array of TSynMustacheHelperEvent);
+    /// will add Expression Helpers for some ORM tables 
+    // - e.g. to read a TSQLMyRecord from its ID value and put its fields
+    // in the current rendering data context, you can write:
+    // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
+    // then use the following Mustache tag
+    // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
+    procedure RegisterExpressionHelpersForTables(aRest: TSQLRest;
+      const aTables: array of TSQLRecordClass); overload;
+    /// will add Expression Helpers for all ORM tables of the supplied model
+    // - e.g. to read a TSQLMyRecord from its ID value and put its fields
+    // in the current rendering data context, you can write:
+    // ! aView.RegisterExpressionHelpersForTables(aServer);
+    // then use the following Mustache tag
+    // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
+    procedure RegisterExpressionHelpersForTables(aRest: TSQLRest); overload;
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -395,7 +417,14 @@ type
   end;
 
   /// the kinds of optional content which may be published
-  TMVCPublishOption = (publishMvcInfo, publishStatic);
+  // - publishMvcInfo will define a /root/[aSubURI/]mvc-info HTML page,
+  // which is pretty convenient when working with views
+  // - publishStatic will define a /root/[aSubURI/].static sub-folder,
+  // ready to serve any file available in the Views\.static local folder
+  // - registerORMTableAsExpressions will register Mustache Expression Helpers
+  // for every TSQLRecord table of the Server data model
+  TMVCPublishOption = (publishMvcInfo, publishStatic,
+    registerORMTableAsExpressions);
 
   /// which kind of optional content should be publish
   TMVCPublishOptions = set of TMVCPublishOption;
@@ -424,8 +453,7 @@ type
     // initialize a Mustache renderer in its default folder, with '.html' void
     // template generation
     // - will also create a TMVCSessionWithRestServer for simple cookie sessions
-    // - aPublishMvcInfo=TRUE will define a /root/[aSubURI/]mvc-info HTML page,
-    // which is pretty convenient when working with views
+    // - aPublishOptions could be used to specify integration with the server
     constructor Create(aApplication: TMVCApplication;
       aRestServer: TSQLRestServer=nil; const aSubURI: RawUTF8='';
       aViews: TMVCViewsAbtract=nil; aPublishOptions: TMVCPublishOptions=
@@ -661,6 +689,7 @@ begin
         end;
       end;
   end;
+  fViewHelpers := aParameters.Helpers;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
   if FindFirst(fViewTemplateFolder+'*.partial',faAnyFile,SR)=0 then
@@ -686,6 +715,7 @@ var params: TMVCViewsMustacheParameters;
 begin
   fillchar(params,sizeof(params),0);
   params.ExtensionForNotExistingTemplate := aExtensionForNotExistingTemplate;
+  params.Helpers := TSynMustache.HelpersGetStandardList;
   Create(aInterface,params,aLogClass);
 end;
 
@@ -693,6 +723,69 @@ destructor TMVCViewsMustache.Destroy;
 begin
   inherited;
   fViewPartials.Free;
+end;
+
+procedure TMVCViewsMustache.RegisterExpressionHelpers(
+  const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent);
+begin
+  if self<>nil then
+    TSynMustache.HelperAdd(fViewHelpers,aNames,aEvents);
+end;
+
+type
+  TExpressionHelperForTable = class
+  public
+    Rest: TSQLRest;
+    HelperName: RawUTF8;
+    Table: TSQLRecordClass;
+    constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
+      var aHelpers: TSynMustacheHelpers);
+    procedure Expression(const Value: variant; out result: variant);
+  end;
+
+constructor TExpressionHelperForTable.Create(aRest: TSQLRest;
+  aTable: TSQLRecordClass; var aHelpers: TSynMustacheHelpers);
+begin
+  aRest.PrivateGarbageCollector.Add(self);
+  Rest := aRest;
+  HelperName := ShortStringToUTF8(aTable.ClassName);
+  Table := aTable;
+  TSynMustache.HelperAdd(aHelpers,HelperName,Expression);
+end;
+
+procedure TExpressionHelperForTable.Expression(const Value: variant;
+  out result: variant);
+var Rec: TSQLRecord;
+    ID: integer;
+begin
+  SetVariantNull(result);
+  if not VariantToInteger(Value,ID) then
+    exit;
+  Rec := Table.Create;
+  try
+    if Rest.Retrieve(ID,Rec) then
+      result := Rec.GetSimpleFieldsAsDocVariant(true);
+  finally
+    Rec.Free;
+  end;
+end;
+
+procedure TMVCViewsMustache.RegisterExpressionHelpersForTables(
+  aRest: TSQLRest; const aTables: array of TSQLRecordClass);
+var t: integer;
+begin
+  if (self<>nil) and (aRest<>nil) then
+    for t := 0 to high(aTables) do
+      if aRest.Model.GetTableIndex(aTables[t])>=0 then
+        TExpressionHelperForTable.Create(aRest,aTables[t],fViewHelpers);
+end;
+
+procedure TMVCViewsMustache.RegisterExpressionHelpersForTables(aRest: TSQLRest);
+var t: integer;
+begin
+  if (self<>nil) and (aRest<>nil) then
+    for t := 0 to aRest.Model.TablesMax do
+     TExpressionHelperForTable.Create(aRest,aRest.Model.Tables[t],fViewHelpers);
 end;
 
 procedure TMVCViewsMustache.Render(methodIndex: Integer; const Context: variant;
@@ -727,7 +820,7 @@ begin
             Int64(fViewTemplateFileTimestampMonitor)*Int64(1000);
       end;
     end;
-    View.Content := Mustache.Render(Context,fViewPartials);
+    View.Content := Mustache.Render(Context,fViewPartials,fViewHelpers);
     if trim(View.Content)='' then begin
       Mustache := nil; // force reload ASAP
       raise EMVCException.CreateUTF8(
@@ -1214,6 +1307,9 @@ begin
     if publishStatic in fPublishOptions then
       fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,true);
   end;
+  if (registerORMTableAsExpressions in fPublishOptions) and
+     aViews.InheritsFrom(TMVCViewsMustache) then
+    TMVCViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
   fStaticCache.Init(true);
   fApplication.SetSession(TMVCSessionWithRestServer.Create);
 end;
@@ -1240,9 +1336,9 @@ begin
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
     static := fStaticCache.Value(rawFormat,#0);
     if static=#0 then begin
-      staticFileName := UTF8ToString(rawFormat);
-      if PosEx('.\',rawFormat)>0 then
+      if (PosEx('\',rawFormat)>0) or (PosEx('/',rawFormat)>0) then // avoid injection
         static := '' else begin
+        staticFileName := UTF8ToString(rawFormat);
         static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+'\'+staticFileName);
         if static<>'' then
           static := GetMimeContentType(nil,0,staticFileName)+#0+static;
@@ -1389,6 +1485,7 @@ begin
   fOutput.Status := action.ReturnedStatus;
   result := true;
 end;
+
 
 
 initialization

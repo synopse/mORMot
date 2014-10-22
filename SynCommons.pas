@@ -7645,6 +7645,9 @@ type
     /// convert to Iso-8601 encoded text
     function Text(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'): integer; overload;
+    /// convert to ready-to-be displayed text
+    // - using i18nDateText global event, if set (e.g. by mORMoti18n.pas)
+    function i18nText: string;
     /// convert to a Delphi Time
     function ToTime: TDateTime;
     /// convert to a Delphi Date
@@ -7913,8 +7916,10 @@ function NowUTC: TDateTime;
 var
   /// custom date to ready to be displayed text function
   // - you can override this pointer in order to display the text according
-  // to your current i18n settings
-  // - used by TSQLTable.ExpandAsString() method, i.e. TSQLTableToGrid.DrawCell()
+  // to your expected i18n settings
+  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // - used by TTimeLogBits.i18nText and by TSQLTable.ExpandAsString() method,
+  // i.e. TSQLTableToGrid.DrawCell()
   i18nDateText: function(Iso: TTimeLog): string = nil;
 
 
@@ -23541,6 +23546,13 @@ begin
   if Value=0 then
     result := '' else
     SetString(result,PAnsiChar(@tmp),Text(tmp,Expanded,FirstTimeChar));
+end;
+
+function TTimeLogBits.i18nText: string;
+begin
+  if Assigned(i18nDateText) then
+    result := i18nDateText(Value) else
+    result := {$ifdef UNICODE}Ansi7ToString{$endif}(Text(true,' '));
 end;
 
 function TimeLogNow: TTimeLog;

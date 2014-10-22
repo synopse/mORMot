@@ -401,7 +401,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     result := template else begin
     context.templateName := templateName;
     context.filename := unitName;
-    result := TSynMustache.Parse(template).Render(context,nil,nil,true);
+    result := TSynMustache.Parse(template).Render(context,nil,nil,nil,true);
   end;
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;
@@ -415,7 +415,7 @@ begin
     aPort := 80;
   context.port := aPort;
   context.filename := aFileName;
-  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,true); 
+  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,nil,true); 
 end;
 
 

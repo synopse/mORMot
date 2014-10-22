@@ -2,7 +2,7 @@
         <div class="col-sm-8 blog-main">
         {{#articles}}
             <h2 class="blog-post-title"><a href=articleView?id={{id}}>{{Title}}</a></h2>
-            <p class="blog-post-meta">{{CreatedAt}} by <a href="authorView?id={{Author}}">AuthorName</a></p>
+            <p class="blog-post-meta">{{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></p>
             {{Abstract}}
         {{/articles}}
         </div>

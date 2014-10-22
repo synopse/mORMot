@@ -3674,7 +3674,7 @@ begin
   mustache := TSynMustache.Parse(
     '{{"Hello}} {{name}}'#13#10'{{"You have just won}} {{value}} {{"dollars}}!');
   Check(mustache.SectionMaxCount=0);
-  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
+  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,nil,MustacheTranslate);
   Check(html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!');
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A+

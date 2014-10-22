@@ -19223,9 +19223,7 @@ IsDateTime:
           exit; // valid conversion
       end;
       {$endif LVCL}
-      if Assigned(i18nDateText) then
-        Text := i18nDateText(Value) else
-        Text := {$ifdef UNICODE}Ansi7ToString{$endif}(TTimeLogBits(Value).Text(true,' '));
+      Text := TTimeLogBits(Value).i18nText;
       exit;
     end;
   end;
