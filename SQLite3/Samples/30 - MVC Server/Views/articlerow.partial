@@ -1,10 +1,7 @@
-      <div class="row">
-        <div class="col-sm-8 blog-main">
         {{#articles}}
+		  <div class="blog-post">
             <h2 class="blog-post-title"><a href=articleView?id={{id}}>{{Title}}</a></h2>
             <p class="blog-post-meta">{{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></p>
             {{{WikiToHtml Abstract}}}
-			<hr>
+		  </div>
         {{/articles}}
-        </div>
-      </div>

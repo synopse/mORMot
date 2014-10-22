@@ -18,7 +18,7 @@ type
     /// blog/main/articleView?id=12 -> view one article
     // - here article details are returned as out parameters values
     procedure ArticleView(
-      ID: integer; WithComments: boolean;
+      var ID: integer; var WithComments: boolean;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     /// blog/main/authorView?id=12 -> information about one author
@@ -31,7 +31,7 @@ type
     function Logout: TMVCAction;
     /// blog/main/articleedit -> article edition (ID=0 for new)
     procedure ArticleEdit(
-      ID: integer; const Title,Content, ValidationError: RawUTF8;
+      var ID: integer; const Title,Content, ValidationError: RawUTF8;
       out Article: TSQLArticle);
     /// blog/main/articlecommit -> article edition commit (ID=0 for new)
     function ArticleCommit(
@@ -52,23 +52,28 @@ type
   TBlogApplication = class(TMVCApplication,IBlogApplication)
   protected
     fBlogMainInfo: variant;
-    fCachedMainArticles: variant;
+    fCachedMain: record
+      Articles: variant;
+      ArticlesLastID: integer;
+      Months: variant;
+    end;
     procedure ComputeMinimalData;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
     function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
+    procedure MonthToText(const Value: variant; out result: variant);
   public
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
     procedure Default(var Scope: variant);
-    procedure ArticleView(ID: integer; WithComments: boolean;
+    procedure ArticleView(var ID: integer; var WithComments: boolean;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     procedure AuthorView(
       ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
-    procedure ArticleEdit(ID: integer; const Title,Content, ValidationError: RawUTF8;
+    procedure ArticleEdit(var ID: integer; const Title,Content, ValidationError: RawUTF8;
       out Article: TSQLArticle);
     function ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
   end;
@@ -93,6 +98,21 @@ begin
     SetCache('Default',cacheRootIfNoSession,15).
     SetCache('ArticleView',cacheWithParametersIfNoSession,60).
     SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
+  (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).
+    RegisterExpressionHelpers(['MonthToText'],[MonthToText]);
+end;
+
+procedure TBlogApplication.MonthToText(const Value: variant;
+  out result: variant);
+const MONTHS: array[1..12] of RawUTF8 = (
+  'January','February','March','April','May','June','July','August',
+  'September','October','November','December');
+var month: integer;
+    text: RawUTF8;
+begin
+  if VariantToInteger(Value,month) and (month mod 12>0) then
+    text := MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12);
+  RawUTF8ToVariant(text,result);
 end;
 
 procedure TBlogApplication.ComputeMinimalData;
@@ -118,10 +138,11 @@ begin
     try
       article.Author := TSQLAuthor(1);
       article.AuthorName := 'synopse';
-      for n := 1 to 10 do begin
+      for n := 1 to 100 do begin
         article.Title := TSynTestCase.RandomTextParagraph(5,' ');
         article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
         article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
+        article.PublishedMonth := 2014*12+(n div 10)+1;
         RestModel.Add(article,true);
       end;
     finally
@@ -148,7 +169,7 @@ end;
 procedure TBlogApplication.FlushAnyCache;
 begin
   inherited FlushAnyCache; // call fMainRunner.NotifyContentChanged
-  VarClear(fCachedMainArticles);
+  Finalize(fCachedMain);
 end;
 
 
@@ -158,14 +179,30 @@ const
   ARTICLE_FIELDS = 'ID,Title,Abstract,Author,AuthorName,CreatedAt';
 
 procedure TBlogApplication.Default(var Scope: variant);
+var lastID: integer;
 begin
-  if VarIsEmpty(fCachedMainArticles) then
-    fCachedMainArticles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','order by ID desc limit 40',[],ARTICLE_FIELDS);
-  _ObjAddProps(['articles',fCachedMainArticles],Scope);
+  if VariantToInteger(Scope,lastID) and (lastID>0) then begin
+    _ObjAddProps(['articles',RestModel.RetrieveDocVariantArray(
+        TSQLArticle,'','ID<? order by ID desc limit 20',[lastID],ARTICLE_FIELDS,
+        nil,@lastID)],Scope);
+    if lastID>1 then
+      _ObjAddProps(['lastID',lastID],Scope);
+  end else begin
+    if VarIsEmpty(fCachedMain.Articles) then
+      fCachedMain.Articles := RestModel.RetrieveDocVariantArray(
+        TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS,
+        nil,@fCachedMain.ArticlesLastID);
+    _ObjAddProps(['articles',fCachedMain.Articles,
+                  'lastID',fCachedMain.ArticlesLastID],Scope);
+  end;
+  if VarIsEmpty(fCachedMain.Months) then
+    fCachedMain.Months := RestModel.RetrieveDocVariantArray(
+      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+      'distinct(PublishedMonth),max(ID)+1 as FirstID');
+  _ObjAddProps(['Archives',fCachedMain.Months],Scope);
 end;
 
-procedure TBlogApplication.ArticleView(ID: integer; WithComments: boolean;
+procedure TBlogApplication.ArticleView(var ID: integer; var WithComments: boolean;
   out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
 begin
   RestModel.Retrieve(ID,Article);
@@ -217,7 +254,7 @@ begin
   GotoDefault(result);
 end;
 
-procedure TBlogApplication.ArticleEdit(ID: integer;
+procedure TBlogApplication.ArticleEdit(var ID: integer;
   const Title,Content, ValidationError: RawUTF8; out Article: TSQLArticle);
 var AuthorID: integer;
 begin
@@ -258,16 +295,20 @@ begin
       GotoView(result,'ArticleEdit',
         ['ValidationError',error,'ID',ID,
          'Title',Article.Title,'Content',Article.Content]) else
-      if Article.ID=0 then
+      if Article.ID=0 then begin
+        Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
         if RestModel.Add(Article,true)<>0 then
           GotoView(result,'Article',['ID',Article.ID]) else
           GotoError(result,sErrorWriting);
+      end else
+        RestModel.Update(Article);
   finally
     Article.Free;
   end;
 end;
 
 {$ifndef ISDELPHI2010}
+
 
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLAuthorRights));

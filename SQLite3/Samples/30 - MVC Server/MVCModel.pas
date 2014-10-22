@@ -4,6 +4,7 @@ unit MVCModel;
 interface
 
 uses
+  SysUtils,
   SynCommons,
   SynCrypto,
   mORMot;
@@ -71,9 +72,13 @@ type
   private
     fContent: RawUTF8;
     fTitle: RawUTF8;
+    fAuthor: TSQLAuthor;
+    fAuthorName: RawUTF8;
   published
     property Title: RawUTF8 index 80 read fTitle write fTitle;
     property Content: RawUTF8 read fContent write fContent;
+    property Author: TSQLAuthor read fAuthor write fAuthor;
+    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
   end;
 
   TSQLCategory = class(TSQLRecord)
@@ -86,23 +91,24 @@ type
   TSQLArticle = class(TSQLContent)
   private
     fAbstract: RawUTF8;
-    fAuthor: TSQLAuthor;
-    fAuthorName: RawUTF8;
+    fPublishedMonth: Integer;
+  public
+    class function CurrentPublishedMonth: Integer;
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
   published
+    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
     property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
-    property Author: TSQLAuthor read fAuthor write fAuthor;
-    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
   end;
 
   TSQLComment = class(TSQLContent)
   private
-    fCommentor: TSQLAuthor;
     fArticle: TSQLArticle;
   published
-    property Commentor: TSQLAuthor read fCommentor write fCommentor;
     property Article: TSQLArticle read fArticle write fArticle;
   end;
 
+  
 function CreateModel: TSQLModel;
 
 
@@ -162,5 +168,22 @@ begin
   end;
 end;
 
+
+{ TSQLArticle }
+
+class function TSQLArticle.CurrentPublishedMonth: Integer;
+var Y,M,D: word;
+begin
+  DecodeDate(NowUTC,Y,M,D);
+  result := integer(Y)*12+integer(M);
+end;
+
+class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+begin
+  inherited;
+  if (FieldName='') or (FieldName='PublishedMonth') then
+    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+end;
 
 end.

@@ -20,6 +20,22 @@
 	  <hr>
 	  {{{WikiToHtml article.content}}}
 	  </div>
+	  <hr>
+	  {{#WithComments}}
+	  {{#Comments}}
+      <blockquote>
+	    <p><strong>{{Title}}</strong></p>
+		<p>{{WikiToHtml Content}}</p>
+		<footer>Commented on {{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></<footer>>
+	  </blockquote>
+      <hr>
+	  {{/Comments}}
+	  {{^Comments}}<blockquote>No comment yet.</blockquote>{{/Comments}}
+	  {{/WithComments}}
+	  {{^WithComments}}
+	  <p><a href="ArticleView?id={{ID}}&withComments=true" class="btn btn-primary btn-sm">Show Comments</a></p>
+	  {{/WithComments}}
+	  <hr>
 {{#Scope}}
 {{>articlerow}}
 {{/Scope}}

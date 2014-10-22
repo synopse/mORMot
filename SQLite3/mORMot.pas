@@ -9456,7 +9456,8 @@ type
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
-      const ObjectName, CustomFieldsCSV: RawUTF8): variant; overload;
+      const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
+      LastRecordID: PInteger=nil): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get a list of members from a SQL statement as a TDocVariant
     // - implements REST GET collection over a specified WHERE clause
@@ -9475,7 +9476,8 @@ type
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
-      const CustomFieldsCSV: RawUTF8): variant; overload;
+      const CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
+      LastRecordID: PInteger=nil): variant; overload;
     {$endif}
 
     /// Execute directly a SQL statement, expecting a list of results
@@ -23978,7 +23980,9 @@ begin
   with Table.RecordProps do
   if FieldNames='*' then
     result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-  if (PosEx(RawUTF8(','),FieldNames,1)=0) and not IsFieldName(FieldNames) then
+  if (PosEx(RawUTF8(','),FieldNames,1)=0) and
+     not IdemPChar(pointer(FieldNames),'DISTINCT(') and
+     not IsFieldName(FieldNames) then
     result := '' else // prevent SQL error
     result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
 end;
@@ -24092,7 +24096,7 @@ end;
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
   const ObjectName: RawUTF8;
   FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
-  const CustomFieldsCSV: RawUTF8): variant;
+  const CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PInteger): variant;
 var T: TSQLTable;
     res: variant;
 begin
@@ -24102,6 +24106,10 @@ begin
     if T<>nil then
     try
       T.ToDocVariant(res,false); // readonly=false -> TDocVariant dvArray
+      if FirstRecordID<>nil then
+        FirstRecordID^ := T.IDColumnHiddenValue(1);
+      if LastRecordID<>nil then
+        LastRecordID^ := T.IDColumnHiddenValue(T.RowCount);
     finally
       T.Free;
     end;
@@ -24112,9 +24120,10 @@ begin
 end;
 
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName, CustomFieldsCSV: RawUTF8): variant;
+  const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PInteger): variant;
 begin
-  result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV);
+  result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV,
+    FirstRecordID,LastRecordID);
 end;
 {$endif}
 
