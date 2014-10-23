@@ -5254,7 +5254,10 @@ type
       - comparaison is much faster than SameValues() above }
     function SameRecord(Reference: TSQLRecord): boolean;
     /// clear the values of all published properties, and also the ID property
-    procedure ClearProperties;
+    procedure ClearProperties; overload;
+    /// clear the values of specified published properties 
+    // - '' would leave the content untouched, '*' will clear all simple fields
+    procedure ClearProperties(const aFieldsCSV: RawUTF8); overload;
     /// set the simple fields with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of published
     // properties of the supplied aTable class, excepting the TSQLRawBlob and
@@ -9211,6 +9214,11 @@ type
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
       WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const): RawUTF8; overload;
+    /// get one integer value of an unique field with a Where Clause
+    // - this overloaded function will return the field value as integer
+    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
+      out Data: integer): boolean; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
     // - example of use: OneFieldValue(TSQLRecord,'Name',23)
     // - call internaly ExecuteList() to get the value
@@ -9390,7 +9398,7 @@ type
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
    function Retrieve(aID: integer; Value: TSQLRecord;
-      ForUpdate: boolean=false): boolean; overload; virtual; 
+      ForUpdate: boolean=false): boolean; overload; virtual;
     /// get a member from its TRecordReference property content
     // - instead of the other Retrieve() methods, this implementation Create an
     // instance, with the appropriated class stored in Reference
@@ -9479,6 +9487,11 @@ type
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
       LastRecordID: PInteger=nil): variant; overload;
+    /// get one member from a SQL statement as a TDocVariant
+    // - implements REST GET collection
+    function RetrieveDocVariant(Table: TSQLRecordClass;
+      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const CustomFieldsCSV: RawUTF8): variant; 
     {$endif}
 
     /// Execute directly a SQL statement, expecting a list of results
@@ -22090,8 +22103,25 @@ begin
       CopiableFields[i].SetValue(self,nil,false);
 end;
 
+procedure TSQLRecord.ClearProperties(const aFieldsCSV: RawUTF8);
+var bits: TSQLFieldBits;
+    f: integer;
+begin
+  if (self=nil) or (aFieldsCSV='') then
+    exit;
+  with RecordProps do begin
+    if aFieldsCSV='*' then
+      bits := SimpleFieldsBits[soInsert] else
+      if not FieldIndexsFromCSV(aFieldsCSV,bits) then
+        exit;
+    for f := 0 to Fields.Count-1 do
+      if (f in bits) and (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) then
+        Fields.List[f].SetValue(self,nil,false); // clear field value
+  end;
+end;
+
 {$IFDEF PUREPASCAL}
-function TSQLRecord.RecordClass: TSQLRecordClass; 
+function TSQLRecord.RecordClass: TSQLRecordClass;
 begin
   if self=nil then
     Result := nil else
@@ -23826,6 +23856,21 @@ begin
     result := '';
 end;
 
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+  WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
+  out Data: integer): boolean;
+var Res: array[0..0] of RawUTF8;
+    err: integer;
+begin
+  result := false;
+  if MultiFieldValue(Table,[FieldName],Res,FormatUTF8(WhereClauseFmt,Args,Bounds)) then
+    if Res[0]<>'' then begin
+      Data := GetInteger(pointer(Res[0]),err);
+      if err=0 then
+        result := true;
+    end;
+end;
+
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; var Data: TRawUTF8DynArray): boolean;
 var i: integer;
@@ -24135,6 +24180,24 @@ begin
   result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV,
     FirstRecordID,LastRecordID);
 end;
+
+function TSQLRest.RetrieveDocVariant(Table: TSQLRecordClass;
+  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const CustomFieldsCSV: RawUTF8): variant;
+var T: TSQLTable;
+begin
+  SetVariantNull(result);
+  if (self<>nil) and (Table<>nil) then begin
+    T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
+    if T<>nil then
+    try
+      T.ToDocVariant(1,result)
+    finally
+      T.Free;
+    end;
+  end;
+end;
+
 {$endif}
 
 function TSQLRest.Retrieve(aID: integer; Value: TSQLRecord;
@@ -24172,7 +24235,7 @@ begin
   result := Retrieve(FormatUTF8(WhereClauseFmt,Args,Bounds),Value);
 end;
 
-function TSQLRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean=false): TSQLRecord;
+function TSQLRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;
 var aClass: TSQLRecordClass;
 begin
   result := nil;
@@ -32130,7 +32193,7 @@ begin
       Value.fID := aID; // JSON object may not contain the ID
       result := true;
       exit; // fast retrieved from internal Client cache (BLOBs ignored)
-    end;
+  end;
   end;
   try
     if ClientRetrieve(TableIndex,aID,ForUpdate,Value.fInternalState,Resp) then begin
