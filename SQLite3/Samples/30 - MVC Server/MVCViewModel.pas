@@ -21,7 +21,7 @@ type
   // ! blog/main/articlecommit -> article edition commit (ID=0 for new)
   IBlogApplication = interface(IMVCApplication)
     procedure ArticleView(
-      var ID: integer; var WithComments: boolean; Direction: integer;
+      ID: integer; var WithComments: boolean; Direction: integer;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     procedure AuthorView(
@@ -66,7 +66,7 @@ type
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
     procedure Default(var Scope: variant);
-    procedure ArticleView(var ID: integer; var WithComments: boolean;
+    procedure ArticleView(ID: integer; var WithComments: boolean;
       Direction: integer;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
@@ -120,6 +120,7 @@ end;
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
     article: TSQLArticle;
+    comment: TSQLComment;
     n: integer;
     res: TIntegerDynArray;
 begin
@@ -138,7 +139,7 @@ begin
     info.Free;
   end;
   if not RestModel.TableHasRows(TSQLArticle) then begin
-    RestModel.BatchStart(TSQLArticle);
+    RestModel.BatchStart(TSQLArticle,1000);
     article := TSQLArticle.Create;
     try
       article.Author := TSQLAuthor(1);
@@ -150,10 +151,26 @@ begin
         article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
         RestModel.BatchAdd(article,true);
       end;
+      if RestModel.BatchSend(res)=HTML_SUCCESS then begin
+        comment := TSQLComment.Create;
+        try
+          comment.Author := article.Author;
+          comment.AuthorName := article.AuthorName;
+          RestModel.BatchStart(TSQLComment,1000);
+          for n := 1 to 200 do begin
+            comment.Article := Pointer(res[random(length(res))]);
+            comment.Title := TSynTestCase.RandomTextParagraph(5,' ');
+            comment.Content := TSynTestCase.RandomTextParagraph(30,'.','http://mormot.net');
+            RestModel.BatchAdd(Comment,true);
+          end;
+          RestModel.BatchSend(res)
+        finally
+          comment.Free;
+        end;
+      end;
     finally
       article.Free;
     end;
-    RestModel.BatchSend(res);
   end;
 end;
 
@@ -208,8 +225,8 @@ begin
   _ObjAddProps(['Archives',fCachedMain.Months],Scope);
 end;
 
-procedure TBlogApplication.ArticleView(var ID: integer; var WithComments: boolean;
-  Direction: integer;
+procedure TBlogApplication.ArticleView(
+  ID: integer; var WithComments: boolean; Direction: integer;
   out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
 var newID: integer;
 const WHERE: array[1..2] of PUTF8Char = (
