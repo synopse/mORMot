@@ -70,6 +70,13 @@ type
     property Rights: TSQLAuthorRights read fRights write fRights;
   end;
 
+  TSQLCategory = class(TSQLRecord)
+  private
+    fIdent: RawUTF8;
+  published
+    property Ident: RawUTF8 read fIdent write fIdent;
+  end;
+
   TSQLContent = class(TSQLRecordTimeStamped)
   private
     fContent: RawUTF8;
@@ -81,13 +88,6 @@ type
     property Content: RawUTF8 read fContent write fContent;
     property Author: TSQLAuthor read fAuthor write fAuthor;
     property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
-  end;
-
-  TSQLCategory = class(TSQLRecord)
-  private
-    fIdent: RawUTF8;
-  published
-    property Ident: RawUTF8 read fIdent write fIdent;
   end;
 
   TSQLArticle = class(TSQLContent)

@@ -22,7 +22,7 @@ type
   IBlogApplication = interface(IMVCApplication)
     procedure ArticleView(
       ID: integer; var WithComments: boolean; Direction: integer;
-      out Article: TSQLArticle; out Author: TSQLAuthor;
+      out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
       var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
@@ -57,7 +57,7 @@ type
       ArticlesLastID: integer;
       Months: variant;
     end;
-    procedure ComputeMinimalData;
+    procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
     function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
@@ -68,7 +68,7 @@ type
     procedure Default(var Scope: variant);
     procedure ArticleView(ID: integer; var WithComments: boolean;
       Direction: integer;
-      out Article: TSQLArticle; out Author: TSQLAuthor;
+      out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
       var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
@@ -227,20 +227,19 @@ end;
 
 procedure TBlogApplication.ArticleView(
   ID: integer; var WithComments: boolean; Direction: integer;
-  out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
+  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
 var newID: integer;
 const WHERE: array[1..2] of PUTF8Char = (
   'ID<? order by id desc','ID>? order by id');
 begin
-  if Direction in [1,2] then begin
-    newID := GetInteger(pointer(RestModel.OneFieldValue(TSQLArticle,'ID',
-      WHERE[Direction],[ID])));
-    if newID<>0 then
+  if Direction in [1,2] then // allows fast paging using index on ID
+    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
+      (newID<>0) then
       ID := newID;
-  end;
   RestModel.Retrieve(ID,Article);
   if Article.ID<>0 then begin
-    RestModel.Retrieve(Article.Author.ID,Author);
+    Author := RestModel.RetrieveDocVariant(
+      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
     if WithComments then begin
       Comments.Free; // we will override the TObjectList created at input
       Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
@@ -253,7 +252,7 @@ procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
   out Articles: RawJSON);
 begin
   RestModel.Retrieve(ID,Author);
-  Author.HashedPassword := '';
+  Author.HashedPassword := ''; // no need to publish it
   if Author.ID<>0 then
     Articles := RestModel.RetrieveListJSON(
       TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else

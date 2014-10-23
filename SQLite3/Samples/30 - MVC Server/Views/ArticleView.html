@@ -3,7 +3,7 @@
       <div class="blog-header">
         <h1 class="blog-title">{{article.title}}</h1>
         <div class="lead blog-description">
-		Written by <a href="authorView?id={{article.Author}}">{{article.AuthorName}}</a> on {{TimeLogToText article.CreatedAt}}
+		Written by <a href="authorView?id={{article.Author}}">{{article.AuthorName}}</a> ({{author.FirstName}} {{author.FamilyName}}) on {{TimeLogToText article.CreatedAt}}
 		</div>
       </div>
       <div class="blog-main">

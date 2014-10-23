@@ -17,22 +17,14 @@ uses
   MVCViewModel,
   SysUtils;
 
-type
-  TServiceServer = class(TSQLRestServerDB)
-  published
-  end;
-
-
-{ TServiceServer }
-
 var aModel: TSQLModel;
-    aServer: TServiceServer;
+    aServer: TSQLRestServerDB;
     aApplication: TBlogApplication;
     aHTTPServer: TSQLHttpServer;
 begin
   aModel := CreateModel;
   try
-    aServer := TServiceServer.Create(aModel,ChangeFileExt(paramstr(0),'.db'));
+    aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'));
     try
       aServer.DB.Synchronous := smNormal;
       aServer.DB.LockingMode := lmExclusive; 
