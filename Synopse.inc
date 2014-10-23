@@ -177,6 +177,7 @@
   {$PACKSET 1}
   {$PACKENUM 1}
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
+  {$undef DOPATCHTRTL}
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define NODELPHIASM}   // need some low-level System.@LStrFromPCharLen calls
@@ -216,8 +217,10 @@
       {$if RTLVersion = 14.5}
         // Kylix 3 will be handled just like Delphi 7
         {$undef ENHANCEDRTL} // Enhanced Runtime library not fully tested yet
+        {$undef DOPATCHTRTL}
         {$define NOVARCOPYPROC}
         {$define NOEXCEPTIONINTERCEPT} // no exception interception yet
+        {$define KYLIX3}
       {$else}
       Kylix1/2 are unsupported
       {$ifend}
@@ -287,6 +290,7 @@
     {$define NOVARIANTS}
     {$define NOVARCOPYPROC}
     {$undef ENHANCEDRTL} // Delphi 5 doesn't have our Enhanced Runtime library
+    {$undef DOPATCHTRTL}
   {$ENDIF}
 
 {$endif FPC}
@@ -294,6 +298,7 @@
 {$ifdef PUREPASCAL}
   {$define NODELPHIASM}
   {$define FPC_OR_PUREPASCAL}
+  {$undef DOPATCHTRTL}
 {$endif PUREPASCAL}
 
 {$R-} // disable Range checking in our code

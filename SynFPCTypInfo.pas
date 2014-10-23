@@ -94,10 +94,6 @@ function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
 procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended); inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 
-{$if FPC_FULLVERSION>=20701}
-  {$define IS_FPC271}
-{$endif}
-
 
 
 implementation

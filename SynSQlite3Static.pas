@@ -130,7 +130,7 @@ type
   /// access class to the static .obj SQLite3 engine
   // - the intialization section of this unit calls:
   // ! sqlite3 := TSQLite3LibraryStatic.Create;
-  // therefore, adding SynSQlite3Static to your uses clause is enough to use
+  // therefore, adding SynSQLite3Static to your uses clause is enough to use
   // the statically linked SQLite3 engine with SynSQLite3
   TSQLite3LibraryStatic = class(TSQLite3Library)
   public

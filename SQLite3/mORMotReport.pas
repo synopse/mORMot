@@ -227,7 +227,7 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
-  SynCommons, SynLz,
+  SynCommons, SynLZ,
 {$ifndef USEPDFPRINTER}
   SynPdf,
 {$endif}

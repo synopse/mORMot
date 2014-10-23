@@ -143,7 +143,7 @@ uses
 {$endif LVCL}
   SynDB,
   SynSQLite3,
-  SynSQlite3Static,
+  SynSQLite3Static,
   SynDBSQLite3,
 {$ifndef DELPHI5OROLDER}
   mORMot,
@@ -987,7 +987,7 @@ uses
   SynCrypto,
   SynCrtSock,
   SynLZ,
-  SynLzo,
+  SynLZO,
   SynZip;
 
 

@@ -101,11 +101,11 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 /// returns the current UTC time
 function FPCNowUTC: TDateTime; inline;
 
+{$endif Linux}
+
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
 function GetTickCount64: Int64;
-
-{$endif Linux}
 
 
 implementation
@@ -187,8 +187,7 @@ begin
 end;
 {$ELSE}
 function GetTickCount64: Int64;
-var
-  tp: TTimeVal;
+var tp: TTimeVal;
 begin
   fpgettimeofday(@tp, nil);
   Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_usec div 1000);

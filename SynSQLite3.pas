@@ -53,7 +53,7 @@ unit SynSQLite3;
     - FLEXIBLE: in process, local or remote access (JSON RESTFUL HTTP server)
     - STANDARD: full UTF-8 and Unicode, SQLite3 engine (enhanced but not hacked)
     - SECURE: tested, multi-thread oriented, atomic commit, encryption ready
-    - SIMPLE: staticaly linked into a single Delphi unit (via SynSQlite3Static)
+    - SIMPLE: staticaly linked into a single Delphi unit (via SynSQLite3Static)
       or standard external dll - via TSQLite3LibraryDynamic
     - LIGHT: use native classes, not TDataSet nor TDataSource
     - SMART: queries share a JSON-based memory cache for immediate response
@@ -1096,14 +1096,14 @@ type
 
     ///  specify the encryption key on a newly opened database connection
     // - Assigned(key)=false if encryption is not available for this .dll
-    // - SynSQlite3Static will use its own internal encryption format
+    // - SynSQLite3Static will use its own internal encryption format
     key: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// change the encryption key on a database connection that is already opened
     // -  can also decrypt a previously encrypted database (so that it is accessible
     // from any version of SQLite) by specifying a nil key
     // - Assigned(key)=false if encryption is not available for this .dll
-    // - SynSQlite3Static will throw an exception if you try to use this API:
+    // - SynSQLite3Static will throw an exception if you try to use this API:
     // you shall call ChangeSQLEncryptTablePassWord() procedure instead
     rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -2758,7 +2758,7 @@ type
     // - set to a number of Mega Bytes value of memory for the mapping
     // - expects a SQLite3 engine version >= 3.7.17
     // - Memory-Mapped I/O is NOT compatible with password encryption as
-    // implemented in our SynSQlite3Static unit 
+    // implemented in our SynSQLite3Static unit 
     property MemoryMappedMB: cardinal read GetMemoryMappedMB write SetMemoryMappedMB;
     /// retrieve of define a limit on the current database connection
     // - see TSQLLimitCategory for a details of all available limits

@@ -84,7 +84,7 @@ uses
   - TSynCompressionAlgo is called by 64KB chunks or once for whole data
   - inherit from TSynCompressionAlgoBuf to simply handle 64KB chunks
   - Synopse has registered several TSynCompressionAlgo IDs:
-     1=SynLz-chunked 2=SynLz-whole
+     1=SynLZ-chunked 2=SynLZ-whole
      3=LzoAsm-chunked 4=LzoAsm-whole
      5=Bz2-chunked 
      6=AES-chunked 7=AES+Zip-chunked 8=AES+SynLz-chunked

@@ -710,7 +710,7 @@ uses
 {$ifndef NOVARIANTS}
   Variants,
 {$endif}
-  SynLz, // needed for TSynMapFile .mab format
+  SynLZ, // needed for TSynMapFile .mab format
   SysUtils;
 
 
@@ -1811,47 +1811,20 @@ type
   TBytes = array of byte;
 {$endif}
 
-{$ifdef CPU64}
-{$ifndef NOX64PATCHRTL}
-/// faster implementation of Move() for x64 Delphi versions
-// - Delphi RTL will be patched in memory to run this faster x64 asm version
-procedure Move(const Source; var Dest; Count: NativeInt);
-
-/// faster implementation of FillChar() for x64 Delphi versions
-// - Delphi RTL will be patched in memory to run this faster x64 asm version
-procedure FillChar(var Dest; Count: NativeInt; Value: Byte);
-{$endif}
-{$endif}
-
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
 
 {$define OWNNORMTOUPPER} { NormToUpper[] exists only in our enhanced RTL }
 
-{$ifndef PUREPASCAL} { these functions are implemented in asm }
+{$ifndef PUREPASCAL}
 {$ifndef LVCL} { don't define these functions twice }
 
-{$ifndef PUREPASCAL}
-
-/// faster implementation of FillChar() for Delphi versions with no FastCode inside
-// - Delphi RTL will be patched in memory to run this faster version
-procedure FillChar(var Dest; Count: Integer; Value: Byte);
-
-{$ifndef ISDELPHI2007ANDUP}
-/// faster implementation of Move() for Delphi versions with no FastCode inside
-// - Delphi RTL will be patched in memory to run this faster version
-procedure Move(const Source; var Dest; Count: Integer);
-{$endif}
-{$endif}
-
 {$ifndef FPC}  { these asm function use some low-level system.pas calls }
-
 /// use our fast asm RawUTF8 version of Trim()
 function Trim(const S: RawUTF8): RawUTF8;
 
 /// use our fast asm version of CompareMem()
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
-
 {$endif FPC}
 
 {$ifdef UNICODE}
@@ -1859,7 +1832,7 @@ function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 // - this Pos() is seldom used, but this RawUTF8 specific version is needed
 // by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
 function Pos(const substr, str: RawUTF8): Integer; overload; inline;
-{$endif}
+{$endif UNICODE}
 
 {$endif LVCL}
 {$endif PUREPASCAL}
@@ -1995,17 +1968,17 @@ function StrComp(Str1, Str2: pointer): PtrInt;
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
 
+/// slower version of StrLen(), but which will never read over the buffer
+// - to be used instead of StrLen() on a memory protected buffer
+function StrLenPas(S: pointer): PtrInt;
+
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms: please note that in this case, it may read up to 15 bytes
 // before or beyond the string; this is rarely a problem but it can in principle
 // generate a protection violation (e.g. when used over mapped files) - in this
 // case, you can use the slower StrLenPas() function instead
-function StrLen(S: pointer): PtrInt;
-
-/// slower version of StrLen(), but which will never read over the buffer
-// - to be used instead of StrLen() on a memory protected buffer
-function StrLenPas(S: pointer): PtrInt;
+var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -7316,7 +7289,7 @@ function SupportSSE42: boolean;
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$endif}
+{$endif PUREPASCAL}
 
 var
   /// compute CRC32C checksum on the supplied buffer
@@ -8186,7 +8159,7 @@ var
   // will emulate it for older Windows versions
   GetTickCount64: function: Int64; stdcall;
 
-{$else}
+{$else MSWINDOWS}
 
 /// compatibility function for Linux
 function GetCurrentThreadID: LongWord; cdecl;
@@ -11823,7 +11796,8 @@ begin
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
     {$else}
     {$ifdef FPC}
-    widestringmanager.Ansi2UnicodeMoveProc(Source,fCodePage,tmp,SourceChars);
+    widestringmanager.Ansi2UnicodeMoveProc(Source,
+      {$ifdef VER2_7}fCodePage,{$endif}tmp,SourceChars);
     move(Pointer(tmp)^,Dest^,length(tmp)*2);
     result := Dest+SourceChars;
     {$else}
@@ -12058,7 +12032,8 @@ begin
       fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
     {$else}
     {$ifdef FPC}
-    widestringmanager.Unicode2AnsiMoveProc(Source,tmp,fCodePage,SourceChars);
+    widestringmanager.Unicode2AnsiMoveProc(Source,tmp,
+      {$ifdef VER2_7}fCodePage,{$endif}SourceChars);
     move(Pointer(tmp)^,Dest^,length(tmp));
     result := Dest+length(tmp);
     {$else}
@@ -14019,7 +13994,7 @@ type
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
     {$ifdef FPC}
-    {$ifdef IS_FPC271}}
+    {$ifdef VER2_7}
     codePage: Word;
     elemSize: Word;
     {$endif}
@@ -14664,339 +14639,7 @@ asm
   bswap eax
 end;
 {$endif}
-{$endif}
-
-{$ifndef FPC}
-
-function SystemFillCharAddress: Pointer;
-asm
-  {$ifdef CPU64}
-  mov rax,offset System.@FillChar
-  {$else}
-  mov eax,offset System.@FillChar
-  {$endif}
-end;
-
-{$ifdef CPU64}
-{$ifndef NOX64PATCHRTL}
-
-{ Some notes about MOVNTI opcode use below:
-  - Delphi inline assembler is not able to compile the instruction -> so we
-    had to write some manual DB $... values instead :(
-  - The I in MOVNTI means "non-temporal hint". It is implemented by using a
-    write combining (WC) memory type protocol when writing the data to memory.
-    The processor does not write the data into the cache hierarchy, nor does
-    it fetch the corresponding cache line from memory into the cache hierarchy.
-    By-passing the cache should enhance move() speed of big memory blocks. }
-
-procedure Move(const Source; var Dest; Count: NativeInt);
-asm // rcx=Source, rdx=Dest, r8=Count
-     .noframe
-     mov rax,r8
-     sub rcx,rdx
-     je @11
-     jnc @03
-     add rax,rcx
-     jc @17
-@03: cmp r8,8
-     jl @09
-     test dl,07H
-     jz @06
-     test dl,01H
-     jz @04
-     mov al,[rcx+rdx]
-     dec r8
-     mov [rdx],al
-     add rdx,1
-@04: test dl,02H
-     jz @05
-     mov ax,[rcx+rdx]
-     sub r8,2
-     mov [rdx],ax
-     add rdx,2
-@05: test dl,04H
-     jz @06
-     mov eax,[rcx+rdx]
-     sub r8,4
-     mov [rdx],eax
-     add rdx,4
-@06: mov r9,r8
-     shr r9,5
-     jnz @12
-@07: mov r9,r8
-     shr r9,3
-     jz @09
-     nop
-@08: dec r9
-     mov rax,[rcx+rdx]
-     mov [rdx],rax
-     lea rdx,rdx+8
-     jnz @08
-     and r8,07H
-@09: test r8,r8
-     jle @11
-     db 66H,66H,66H,90H
-@10: dec r8
-     mov al,[rcx+rdx]
-     mov [rdx],al
-     lea rdx,rdx+1
-     jnz @10
-@11: ret
-@12: cmp r9,8192
-     jc @13
-     cmp rcx,4096
-     jnc @14
-@13: dec r9
-     lea rdx,rdx+32
-     mov rax,[rcx+rdx-20H]
-     mov r10,[rcx+rdx-18H]
-     mov [rdx-20H],rax
-     mov [rdx-18H],r10
-     mov rax,[rcx+rdx-10H]
-     mov r10,[rcx+rdx-8H]
-     mov [rdx-10H],rax
-     mov [rdx-8H],r10
-     jnz @13
-     and r8,1FH
-     jmp @07
-@14: mov eax,32
-     db 66H,66H,66H,90H,66H,66H,66H,90H
-@15: prefetchnta [rcx+rdx]
-     prefetchnta [rcx+rdx+40H]
-     add rdx,128
-     dec eax
-     jnz @15
-     sub rdx,4096
-     mov eax,64
-@16: add rdx,64
-     mov r9,[rcx+rdx-40H]
-     mov r10,[rcx+rdx-38H]
-     db $4C,$0F,$C3,$4A,$C0 // movnti [rdx-40H],r9
-     db $4C,$0F,$C3,$52,$C8 // movnti [rdx-38H],r10
-     mov r9,[rcx+rdx-30H]
-     mov r10,[rcx+rdx-28H]
-     db $4C,$0F,$C3,$4A,$D0 // movnti [rdx-30H],r9
-     db $4C,$0F,$C3,$52,$D8 // movnti [rdx-28H],r10
-     dec eax
-     mov r9,[rcx+rdx-20H]
-     mov r10,[rcx+rdx-18H]
-     db $4C,$0F,$C3,$4A,$E0 // movnti [rdx-20H],r9
-     db $4C,$0F,$C3,$52,$E8 // movnti [rdx-18H],r10
-     mov r9,[rcx+rdx-10H]
-     mov r10,[rcx+rdx-8H]
-     db $4C,$0F,$C3,$4A,$F0 // movnti [rdx-10H],r9
-     db $4C,$0F,$C3,$52,$F8 // movnti [rdx-8H],r10
-     jnz @16
-     sub r8,4096
-     cmp r8,4096
-     jnc @14
-     mfence
-     jmp @06
-@17: add rdx,r8
-     cmp r8,8
-     jl @23
-     test dl,07H
-     jz @20
-     test dl,01H
-     jz @18
-     dec rdx
-     mov al,[rcx+rdx]
-     dec r8
-     mov [rdx],al
-@18: test dl,02H
-     jz @19
-     sub rdx,2
-     mov ax,[rcx+rdx]
-     sub r8,2
-     mov [rdx],ax
-@19: test dl,04H
-     jz @20
-     sub rdx,4
-     mov eax,[rcx+rdx]
-     sub r8,4
-     mov [rdx],eax
-@20: mov r9,r8
-     shr r9,5
-     jnz @26
-@21: mov r9,r8
-     shr r9,3
-     jz @23
-@22: sub rdx,8
-     mov rax,[rcx+rdx]
-     dec r9
-     mov [rdx],rax
-     jnz @22
-     and r8,07H
-@23: test r8,r8
-     jle @25
-     db 66H,66H,66H,90H,66H,66H,66H,90H
-     db 66H,66H,66H,90H,90H
-@24: dec rdx
-     mov al,[rcx+rdx]
-     dec r8
-     mov  [rdx],al
-     jnz @24
-@25: ret
-@26: cmp r9,8192
-     jc @27
-     cmp rcx,-4096
-     jc @28
-@27: sub rdx,32
-     mov rax,[rcx+rdx+18H]
-     mov r10,[rcx+rdx+10H]
-     mov [rdx+18H],rax
-     mov [rdx+10H],r10
-     dec r9
-     mov rax,[rcx+rdx+8H]
-     mov r10,[rcx+rdx]
-     mov [rdx+8H],rax
-     mov [rdx],r10
-     jnz @27
-     and r8,1FH
-     jmp @21
-@28: mov eax,32
-     db 66H,66H,66H,90H,66H,66H,90H
-@29: sub rdx,128
-     prefetchnta [rcx+rdx]
-     prefetchnta [rcx+rdx+40H]
-     dec eax
-     jnz @29
-     add rdx,4096
-     mov eax,64
-@30: sub rdx,64
-     sub r8,4096
-     mov r9,[rcx+rdx+38H]
-     mov r10,[rcx+rdx+30H]
-     db $4C,$0F,$C3,$4A,$38 // movnti [rdx+38H],r9
-     db $4C,$0F,$C3,$52,$30 // movnti [rdx+30H],r10
-     mov r9,[rcx+rdx+28H]
-     mov r10,[rcx+rdx+20H]
-     db $4C,$0F,$C3,$4A,$28 // movnti [rdx+28H],r9
-     db $4C,$0F,$C3,$52,$20 // movnti [rdx+20H],r10
-     dec eax
-     mov r9,[rcx+rdx+18H]
-     mov r10,[rcx+rdx+10H]
-     db $4C,$0F,$C3,$4A,$18 // movnti [rdx+18H],r9
-     db $4C,$0F,$C3,$52,$10 // movnti [rdx+10H],r10
-     mov r9,[rcx+rdx+8H]
-     mov r10,[rcx+rdx]
-     db $4C,$0F,$C3,$4A,$08 // movnti [rdx+8H],r9
-     db $4C,$0F,$C3,$12     // movnti [rdx],r10
-     jnz @30
-     cmp r8,4096
-     jnc @28
-     mfence
-     jmp @20
-end;
-
-procedure FillChar(var Dest; Count: NativeInt; Value: Byte);
-asm  // rcx=Dest rdx=Count r8=Value
-        .noframe
-        cmp rdx,32
-        mov rax,r8
-        jle @small
-        and r8,0FFH
-        mov r9,101010101010101H
-        imul r8,r9
-        test cl,07H
-        jz @27C5
-        test cl,01H
-        jz @27A4
-        mov [rcx],r8b
-        add rcx,1
-        sub rdx,1
-@27A4:  test cl,02H
-        jz @27B5
-        mov [rcx],r8w
-        add rcx,2
-        sub rdx,2
-@27B5:  test cl,04H
-        jz @27C5
-        mov [rcx],r8d
-        add rcx,4
-        sub rdx,4
-@27C5:  mov rax,rdx
-        and rdx,3FH
-        shr rax,6
-        jnz @27FD
-@27D2:  mov rax,rdx
-        and rdx,07H
-        shr rax,3
-        jz @27EC
-        db 66H,66H,90H
-@27E0:  mov [rcx],r8
-        add rcx,8
-        dec rax
-        jnz @27E0
-@27EC:  test rdx,rdx
-        jle @27FC
-@27F1:  mov [rcx],r8b
-        inc rcx
-        dec rdx
-        jnz @27F1
-@27FC:  ret
-@27FD:  cmp rax,8192
-        jnc @2840
-        db 66H,66H,66H,90H,90H,90H
-@2810:  add rcx,64
-        mov [rcx-40H],r8
-        mov [rcx-38H],r8
-        mov [rcx-30H],r8
-        mov [rcx-28H],r8
-        dec rax
-        mov [rcx-20H],r8
-        mov [rcx-18H],r8
-        mov [rcx-10H],r8
-        mov [rcx-8H],r8
-        jnz @2810
-        jmp @27D2
-        db 66H,66H,66H,90H,90H
-@2840:  add rcx,64
-        db $4C,$0F,$C3,$41,$C0 // movnti  [rcx-40H],r8
-        db $4C,$0F,$C3,$41,$C8 // movnti  [rcx-38H],r8
-        db $4C,$0F,$C3,$41,$D0 // movnti  [rcx-30H],r8
-        db $4C,$0F,$C3,$41,$D8 // movnti  [rcx-28H],r8
-        dec rax
-        db $4C,$0F,$C3,$41,$E0 // movnti  [rcx-20H],r8
-        db $4C,$0F,$C3,$41,$E8 // movnti  [rcx-18H],r8
-        db $4C,$0F,$C3,$41,$F0 // movnti  [rcx-10H],r8
-        db $4C,$0F,$C3,$41,$F8 // movnti  [rcx-8H],r8
-        jnz @2840
-        mfence
-        jmp @27D2
-@small: // rcx=Dest rdx=Count r8=Value<=32
-        test rdx,rdx
-        jle @@done
-        mov ah,al
-        mov [rcx+rdx-1],al
-        lea r8,@table
-        and rdx,-2
-        neg rdx
-        lea rdx,[r8+rdx*2+64]
-        jmp rdx
-@table: mov [rcx+30],ax
-        mov [rcx+28],ax
-        mov [rcx+26],ax
-        mov [rcx+24],ax
-        mov [rcx+22],ax
-        mov [rcx+20],ax
-        mov [rcx+18],ax
-        mov [rcx+16],ax
-        mov [rcx+14],ax
-        mov [rcx+12],ax
-        mov [rcx+10],ax
-        mov [rcx+ 8],ax
-        mov [rcx+ 6],ax
-        mov [rcx+ 4],ax
-        mov [rcx+ 2],ax
-        mov [rcx   ],ax
-        ret
-@@done:
-end;
-{$endif NOX64PATCHRTL}
 {$endif CPU64}
-
-{$endif FPC}
 
 {$ifndef ENHANCEDRTL} { our Enhanced Runtime (or LVCL) library contain fast asm versions }
 
@@ -15442,237 +15085,8 @@ asm // eax=P1 edx=P2 ecx=Length
 end;
 {$endif FPC}  { these asm function had some low-level system.pas calls }
 
-
-{$ifndef DELPHI5OROLDER}
-const
-  FILLCHAR_SIZE = 160;
-
-procedure FillChar(var Dest; Count: Integer; Value: Byte);
-asm
-  cmp       edx, 32
-  mov       ch,cl                {copy value into both bytes of cx}
-  jl        @@small
-  sub       edx,16
-  movd      xmm0,ecx
-  pshuflw   xmm0,xmm0,0
-  pshufd    xmm0,xmm0,0
-  movups    [eax],xmm0           {fill first 16 bytes}
-  movups    [eax+edx],xmm0       {fill last 16 bytes}
-  mov       ecx,eax              {16-byte align writes}
-  and       ecx,15
-  sub       ecx,16
-  sub       eax,ecx
-  add       edx,ecx
-  add       eax,edx
-  neg       edx
-  cmp       edx,-512*1024
-  jb        @@large
-@@loop:
-  movaps    [eax+edx],xmm0       {fill 16 bytes per loop}
-  add       edx,16
-  jl        @@loop
-  ret
-@@large:
-  movntdq    [eax+edx],xmm0      {fill 16 bytes per loop}
-  add       edx,16
-  jl        @@large
-  ret
-@@small:
-  test      edx,edx
-  jle       @@done
-  mov       [eax+edx-1],cl       {fill last byte}
-  and       edx,-2               {no. of words to fill}
-  neg       edx
-  lea       edx,[@@smallfill+60+edx*2]
-  jmp       edx
-  nop                             {align jump destinations}
-  nop
-@@smallfill:
-  mov       [eax+28],cx
-  mov       [eax+26],cx
-  mov       [eax+24],cx
-  mov       [eax+22],cx
-  mov       [eax+20],cx
-  mov       [eax+18],cx
-  mov       [eax+16],cx
-  mov       [eax+14],cx
-  mov       [eax+12],cx
-  mov       [eax+10],cx
-  mov       [eax+ 8],cx
-  mov       [eax+ 6],cx
-  mov       [eax+ 4],cx
-  mov       [eax+ 2],cx
-  mov       [eax   ],cx
-  ret {do not remove - this is for alignment}
-@@done:
-end;
-{$endif DELPHI5OROLDER}
-
-
 {$ifndef ISDELPHI2007ANDUP}
-/// faster implementation of Move() for Delphi versions with no FastCode inside
-procedure Move(const Source; var Dest; Count: Integer);
-asm // eax=source edx=dest ecx=count
-         // original code by John O'Harrow - included since delphi 2007
-        cmp     eax,edx
-        jz      @exit                 // exit if source=dest
-        cmp     ecx,32
-        ja      @lrg                  // count > 32 or count < 0
-        sub     ecx,8
-        jg      @sml                  // 9..32 byte move
-        jmp     dword ptr [@table+32+ecx*4]   // 0..8 byte move
-@sml:   fild    qword ptr [eax+ecx]   // load last 8
-        fild    qword ptr [eax]       // load first 8
-        cmp     ecx,8
-        jle     @sml16
-        fild    qword ptr [eax+8]     // load second 8
-        cmp     ecx,16
-        jle     @sml24
-        fild    qword ptr [eax+16]    // load third 8
-        fistp   qword ptr [edx+16]    // save third 8
-@sml24: fistp   qword ptr [edx+8]     // save second 8
-@sml16: fistp   qword ptr [edx]       // save first 8
-        fistp   qword ptr [edx+ecx]   // save last 8
-@exit:  ret
-        lea eax,[eax+0]  // for 4-byte alignment of @table
-@table: dd @exit,@m01,@m02,@m03,@m04,@m05,@m06,@m07,@m08
-@lrgfwd:push    edx
-        fild    qword ptr [eax]       // first 8
-        lea     eax,[eax+ecx-8]
-        lea     ecx,[ecx+edx-8]
-        fild    qword ptr [eax]       // last 8
-        push    ecx
-        neg     ecx
-        and     edx,-8                // 8-byte align writes
-        lea     ecx,[ecx+edx+8]
-        pop     edx
-@fwd:   fild    qword ptr [eax+ecx]
-        fistp   qword ptr [edx+ecx]
-        add     ecx,8
-        jl      @fwd
-        fistp   qword ptr [edx]       // last 8
-        pop     edx
-        fistp   qword ptr [edx]       // first 8
-        ret
-@lrg:   jng     @done                 // count < 0
-        cmp     eax,edx
-        ja      @lrgfwd
-        sub     edx,ecx
-        cmp     eax,edx
-        lea     edx,[edx+ecx]
-        jna     @lrgfwd
-        sub     ecx,8                 // backward move
-        push    ecx
-        fild    qword ptr [eax+ecx]   // last 8
-        fild    qword ptr [eax]       // first 8
-        add     ecx,edx
-        and     ecx,-8                // 8-byte align writes
-        sub     ecx,edx
-@bwd:   fild    qword ptr [eax+ecx]
-        fistp   qword ptr [edx+ecx]
-        sub     ecx,8
-        jg      @bwd
-        pop     ecx
-        fistp   qword ptr [edx]       // first 8
-        fistp   qword ptr [edx+ecx]   // last 8
-@done:  ret
-@m01:   movzx   ecx,byte ptr [eax]
-        mov     [edx],cl
-        ret
-@m02:   movzx   ecx,word ptr [eax]
-        mov     [edx],cx
-        ret
-@m03:   mov     cx,[eax]
-        mov     al,[eax+2]
-        mov     [edx],cx
-        mov     [edx+2],al
-        ret
-@m04:   mov     ecx,[eax]
-        mov     [edx],ecx
-        ret
-@m05:   mov     ecx,[eax]
-        mov     al,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],al
-        ret
-@m06:   mov     ecx,[eax]
-        mov     ax,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],ax
-        ret
-@m07:   mov     ecx,[eax]
-        mov     eax,[eax+3]
-        mov     [edx],ecx
-        mov     [edx+3],eax
-        ret
-@m08:   mov     ecx,[eax]
-        mov     eax,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],eax
-end;
-
 {$endif ISDELPHI2007ANDUP}
-
-{$ifdef DELPHI5OROLDER}
-procedure FillChar(var Dest; Count: Integer; Value: Byte);
-{$else}
-procedure FillCharX87(var Dest; Count: Integer; Value: Byte);
-{$endif}
-asm // eax=Dest edx=Count cl=Value
-        // faster version by John O'Harrow  (Code Size = 153 Bytes)
-        cmp   edx,32
-        mov   ch,cl                 // copy value into both bytes of cx
-        jl    @small
-        mov   [eax  ],cx            // fill first 8 bytes
-        mov   [eax+2],cx
-        mov   [eax+4],cx
-        mov   [eax+6],cx
-        sub   edx,16
-        fld   qword ptr [eax]
-        fst   qword ptr [eax+edx]    // fill last 16 bytes
-        fst   qword ptr [eax+edx+8]
-        mov   ecx,eax
-        and   ecx,7                 // 8-byte align writes
-        sub   ecx,8
-        sub   eax,ecx
-        add   edx,ecx
-        add   eax,edx
-        neg   edx
-@loop:  fst   qword ptr [eax+edx]    // fill 16 bytes per loop
-        fst   qword ptr [eax+edx+8]
-        add   edx,16
-        jl    @loop
-        ffree st(0)
-        fincstp
-        ret
-        nop
-@small: test  edx,edx
-        jle   @done
-        mov   [eax+edx-1],cl        // fill last byte
-        and   edx,-2                // no. of words to fill
-        neg   edx
-        lea   edx,[@fill+60+edx*2]
-        jmp   edx
-        nop                          // align jump destinations
-        nop
-@fill:  mov   [eax+28],cx
-        mov   [eax+26],cx
-        mov   [eax+24],cx
-        mov   [eax+22],cx
-        mov   [eax+20],cx
-        mov   [eax+18],cx
-        mov   [eax+16],cx
-        mov   [eax+14],cx
-        mov   [eax+12],cx
-        mov   [eax+10],cx
-        mov   [eax+ 8],cx
-        mov   [eax+ 6],cx
-        mov   [eax+ 4],cx
-        mov   [eax+ 2],cx
-        mov   [eax   ],cx
-        ret                         // for alignment
-@done:  db $f3 // rep ret AMD trick here
-end;
 
 {$endif LVCL}
 {$endif PUREPASCAL}
@@ -16842,136 +16256,6 @@ begin
       exit;
 end;
 
-function StrLen(S: pointer): PtrInt;
-{$ifdef CPU64DELPHI}
-asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
-        .NOFRAME
-        mov      rax,rcx             // get pointer to string from rcx
-        or       rax,rax
-        mov      r8,rcx              // copy pointer
-        jz       @null               // returns 0 if S=nil
-        // rax = s,ecx = 32 bits of s
-        pxor     xmm0,xmm0           // set to zero
-        and      ecx,0FH             // lower 4 bits indicate misalignment
-        and      rax,-10H            // align pointer by 16
-        movdqa   xmm1,[rax]          // read from nearest preceding boundary
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        shr      edx,cl              // shift out false bits
-        shl      edx,cl              // shift back again
-        bsf      edx,edx             // find first 1-bit
-        jnz      @L2                 // found
-        // Main loop,search 16 bytes at a time
-@L1:    add      rax,10H             // increment pointer by 16
-        movdqa   xmm1,[rax]          // read 16 bytes aligned
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        bsf      edx,edx             // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors,  but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz       @L1                 // loop if not found
-@L2:    // Zero-byte found. Compute string length
-        sub      rax,r8              // subtract start address
-        add      rax,rdx             // add byte index
-@null:
-end;
-{$else}
-{$ifdef PUREPASCAL}
-begin
-  result := 0;
-  if S<>nil then
-  while true do
-    if PAnsiChar(S)[0]<>#0 then
-    if PAnsiChar(S)[1]<>#0 then
-    if PAnsiChar(S)[2]<>#0 then
-    if PAnsiChar(S)[3]<>#0 then begin
-      inc(PtrUInt(S),4);
-      inc(result,4);
-    end else begin
-      inc(result,3);
-      exit;
-    end else begin
-      inc(result,2);
-      exit;
-    end else begin
-      inc(result);
-      exit;
-    end else
-      exit;
-end;
-{$else}
-{$ifndef DELPHI5OROLDER}
-asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        or       eax,eax
-        mov      ecx,eax             // copy pointer
-        jz       @null               // returns 0 if S=nil
-        push     eax                 // save start address
-        pxor     xmm0,xmm0           // set to zero
-        and      ecx,0FH             // lower 4 bits indicate misalignment
-        and      eax,-10H            // align pointer by 16
-        movdqa   xmm1,[eax]          // read from nearest preceding boundary
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        shr      edx,cl              // shift out false bits
-        shl      edx,cl              // shift back again
-        bsf      edx,edx             // find first 1-bit
-        jnz      @A200               // found
-        // Main loop,search 16 bytes at a time
-@A100:  add      eax,10H             // increment pointer by 16
-        movdqa   xmm1,[eax]          // read 16 bytes aligned
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        bsf      edx,edx             // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors,  but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz       @A100               // loop if not found
-@A200:  // Zero-byte found. Compute string length
-        pop      ecx                 // restore start address
-        sub      eax,ecx             // subtract start address
-        add      eax,edx             // add byte index
-@null:
-end;
-
-const
-  STRLEN_SIZE = 87;
-
-function StrLenX86(S: pointer): PtrInt;
-{$endif}
-// pure x86 function (if SSE2 not available) - faster than SysUtils' version
-asm
-     test eax,eax
-     jz @@z
-     cmp   byte ptr [eax+0],0; je @@0
-     cmp   byte ptr [eax+1],0; je @@1
-     cmp   byte ptr [eax+2],0; je @@2
-     cmp   byte ptr [eax+3],0; je @@3
-     push  eax
-     and   eax,-4              { DWORD Align Reads }
-@@Loop:
-     add   eax,4
-     mov   edx,[eax]           { 4 Chars per Loop }
-     lea   ecx,[edx-$01010101]
-     not   edx
-     and   edx,ecx
-     and   edx,$80808080       { Set Byte to $80 at each #0 Position }
-     jz    @@Loop              { Loop until any #0 Found }
-@@SetResult:
-     pop   ecx
-     bsf   edx,edx             { Find First #0 Position }
-     shr   edx,3               { Byte Offset of First #0 }
-     add   eax,edx             { Address of First #0 }
-     sub   eax,ecx             { Returns Length }
-@@z: ret
-@@0: xor eax,eax; ret
-@@1: mov eax,1;   ret
-@@2: mov eax,2;   ret
-@@3: mov eax,3
-end;
-{$endif PUREPASCAL}
-{$endif CPU64}
-
 function StrCompW(Str1, Str2: PWideChar): PtrInt;
 begin
   if Str1<>Str2 then
@@ -17192,6 +16476,11 @@ const n2u: array[138..255] of byte =
    79,79,79,79,247,79,85,85,85,85,89,222,89);
 {$endif OWNNORMTOUPPER}
 begin
+  {$ifdef FPC}
+  {$ifdef FPC_FULLVERSION>=20701}
+  DefaultSystemCodepage := CODEPAGE_US;
+  {$endif}
+  {$endif FPC}
 {$ifndef EXTENDEDTOSTRING_USESTR}
   {$ifdef ISDELPHIXE}
   SettingsUS := TFormatSettings.Create($0409);
@@ -23394,9 +22683,11 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
+{$ifdef MSWINDOWS}
 var
   UTCTimeCache: TTimeLog;
   UTCTimeTicks: cardinal;
+{$endif}
 
 procedure TTimeLogBits.FromUTCTime;
 {$ifdef MSWINDOWS}
@@ -26032,48 +25323,22 @@ begin
     result := Source;
 end;
 
-{$ifdef USEPACKAGES}
-procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
-asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
-{$ifdef CPUX64}
-  .NOFRAME
-{$endif}
-  jmp System.@CopyRecord
-end;
-
-procedure RecordClear(var Dest; TypeInfo: pointer);
-asm
-{$ifdef CPUX64}
-  .NOFRAME
-{$endif}
-  jmp System.@FinalizeRecord
-end;
-{$else USEPACKAGES}
-{$ifdef DELPHI5OROLDER}
-procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
-asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
-  jmp System.@CopyRecord
-end;
-
-procedure RecordClear(var Dest; TypeInfo: pointer);
-asm
-  jmp System.@FinalizeRecord
-end;
-{$else DELPHI5OROLDER}
-{$ifdef ENHANCEDRTL}
-procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
-asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
-  jmp System.@CopyRecord // our enhanced RTL already has the faster version
-end;
-
-procedure RecordClear(var Dest; TypeInfo: pointer);
-asm // our enhanced RTL already has the faster version
-  jmp System.@FinalizeRecord
-end;
-{$else ENHANCEDRTL}
 {$ifndef FPC}
 
-{$ifdef PUREPASCAL}
+  {$ifdef USEPACKAGES}
+  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+  {$endif}
+  {$ifdef DELPHI5OROLDER}
+  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+  {$endif}
+  {$ifdef PUREPASCAL}
+  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+  {$endif}
+  {$ifndef DOPATCHTRTL}
+  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+  {$endif}
+
+{$ifdef EXPECTSDELPHIRTLRECORDCOPYCLEAR}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
 {$ifdef CPUX64}
@@ -26083,14 +25348,16 @@ asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
 end;
 
 procedure RecordClear(var Dest; TypeInfo: pointer);
-asm // inlined _FinalizeRecord()
+asm
 {$ifdef CPUX64}
   .NOFRAME
 {$endif}
   jmp System.@FinalizeRecord
 end;
+{$endif EXPECTSDELPHIRTLRECORDCOPYCLEAR}
 
-{$else PUREPASCAL}
+
+{$ifdef DOPATCHTRTL}
 
 function SystemRecordCopyAddress: Pointer;
 asm
@@ -26120,7 +25387,7 @@ asm
 end;
 
 procedure _InitializeRecord(P: Pointer; TypeInfo: Pointer);
-asm // faster version by AB 
+asm // faster version by AB
         { ->    EAX pointer to record to be finalized   }
         {       EDX pointer to type info                }
 (* // this TObject.Create-like initialization sounds slower
@@ -26264,7 +25531,6 @@ asm // faster version by AB (direct call to finalization procedures)
         // we made Call @@Array -> ret to continue
 end;
 
-
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         { ->    EAX pointer to dest             }
@@ -26397,11 +25663,731 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         pop ebx
         pop ebp
 end;
-{$endif PUREPASCAL}
+
+{$endif DOPATCHTRTL}
 {$endif FPC}
-{$endif ENHANCEDRTL}
+
+{$ifndef FPC}
+{$ifndef CPUARM}
+
+function SystemFillCharAddress: Pointer;
+asm
+  {$ifdef CPU64}
+  mov rax,offset System.@FillChar
+  {$else}
+  mov eax,offset System.@FillChar
+  {$endif}
+end;
+
+{$ifdef CPU64}
+
+{ Some notes about MOVNTI opcode use below:
+  - Delphi inline assembler is not able to compile the instruction -> so we
+    had to write some manual DB $... values instead :(
+  - The I in MOVNTI means "non-temporal hint". It is implemented by using a
+    write combining (WC) memory type protocol when writing the data to memory.
+    The processor does not write the data into the cache hierarchy, nor does
+    it fetch the corresponding cache line from memory into the cache hierarchy.
+    By-passing the cache should enhance move() speed of big memory blocks. }
+
+procedure MoveSSE2;
+asm // rcx=Source, rdx=Dest, r8=Count
+     .noframe
+     mov rax,r8
+     sub rcx,rdx
+     je @11
+     jnc @03
+     add rax,rcx
+     jc @17
+@03: cmp r8,8
+     jl @09
+     test dl,07H
+     jz @06
+     test dl,01H
+     jz @04
+     mov al,[rcx+rdx]
+     dec r8
+     mov [rdx],al
+     add rdx,1
+@04: test dl,02H
+     jz @05
+     mov ax,[rcx+rdx]
+     sub r8,2
+     mov [rdx],ax
+     add rdx,2
+@05: test dl,04H
+     jz @06
+     mov eax,[rcx+rdx]
+     sub r8,4
+     mov [rdx],eax
+     add rdx,4
+@06: mov r9,r8
+     shr r9,5
+     jnz @12
+@07: mov r9,r8
+     shr r9,3
+     jz @09
+     nop
+@08: dec r9
+     mov rax,[rcx+rdx]
+     mov [rdx],rax
+     lea rdx,rdx+8
+     jnz @08
+     and r8,07H
+@09: test r8,r8
+     jle @11
+     db 66H,66H,66H,90H
+@10: dec r8
+     mov al,[rcx+rdx]
+     mov [rdx],al
+     lea rdx,rdx+1
+     jnz @10
+@11: ret
+@12: cmp r9,8192
+     jc @13
+     cmp rcx,4096
+     jnc @14
+@13: dec r9
+     lea rdx,rdx+32
+     mov rax,[rcx+rdx-20H]
+     mov r10,[rcx+rdx-18H]
+     mov [rdx-20H],rax
+     mov [rdx-18H],r10
+     mov rax,[rcx+rdx-10H]
+     mov r10,[rcx+rdx-8H]
+     mov [rdx-10H],rax
+     mov [rdx-8H],r10
+     jnz @13
+     and r8,1FH
+     jmp @07
+@14: mov eax,32
+     db 66H,66H,66H,90H,66H,66H,66H,90H
+@15: prefetchnta [rcx+rdx]
+     prefetchnta [rcx+rdx+40H]
+     add rdx,128
+     dec eax
+     jnz @15
+     sub rdx,4096
+     mov eax,64
+@16: add rdx,64
+     mov r9,[rcx+rdx-40H]
+     mov r10,[rcx+rdx-38H]
+     db $4C,$0F,$C3,$4A,$C0 // movnti [rdx-40H],r9
+     db $4C,$0F,$C3,$52,$C8 // movnti [rdx-38H],r10
+     mov r9,[rcx+rdx-30H]
+     mov r10,[rcx+rdx-28H]
+     db $4C,$0F,$C3,$4A,$D0 // movnti [rdx-30H],r9
+     db $4C,$0F,$C3,$52,$D8 // movnti [rdx-28H],r10
+     dec eax
+     mov r9,[rcx+rdx-20H]
+     mov r10,[rcx+rdx-18H]
+     db $4C,$0F,$C3,$4A,$E0 // movnti [rdx-20H],r9
+     db $4C,$0F,$C3,$52,$E8 // movnti [rdx-18H],r10
+     mov r9,[rcx+rdx-10H]
+     mov r10,[rcx+rdx-8H]
+     db $4C,$0F,$C3,$4A,$F0 // movnti [rdx-10H],r9
+     db $4C,$0F,$C3,$52,$F8 // movnti [rdx-8H],r10
+     jnz @16
+     sub r8,4096
+     cmp r8,4096
+     jnc @14
+     mfence
+     jmp @06
+@17: add rdx,r8
+     cmp r8,8
+     jl @23
+     test dl,07H
+     jz @20
+     test dl,01H
+     jz @18
+     dec rdx
+     mov al,[rcx+rdx]
+     dec r8
+     mov [rdx],al
+@18: test dl,02H
+     jz @19
+     sub rdx,2
+     mov ax,[rcx+rdx]
+     sub r8,2
+     mov [rdx],ax
+@19: test dl,04H
+     jz @20
+     sub rdx,4
+     mov eax,[rcx+rdx]
+     sub r8,4
+     mov [rdx],eax
+@20: mov r9,r8
+     shr r9,5
+     jnz @26
+@21: mov r9,r8
+     shr r9,3
+     jz @23
+@22: sub rdx,8
+     mov rax,[rcx+rdx]
+     dec r9
+     mov [rdx],rax
+     jnz @22
+     and r8,07H
+@23: test r8,r8
+     jle @25
+     db 66H,66H,66H,90H,66H,66H,66H,90H
+     db 66H,66H,66H,90H,90H
+@24: dec rdx
+     mov al,[rcx+rdx]
+     dec r8
+     mov  [rdx],al
+     jnz @24
+@25: ret
+@26: cmp r9,8192
+     jc @27
+     cmp rcx,-4096
+     jc @28
+@27: sub rdx,32
+     mov rax,[rcx+rdx+18H]
+     mov r10,[rcx+rdx+10H]
+     mov [rdx+18H],rax
+     mov [rdx+10H],r10
+     dec r9
+     mov rax,[rcx+rdx+8H]
+     mov r10,[rcx+rdx]
+     mov [rdx+8H],rax
+     mov [rdx],r10
+     jnz @27
+     and r8,1FH
+     jmp @21
+@28: mov eax,32
+     db 66H,66H,66H,90H,66H,66H,90H
+@29: sub rdx,128
+     prefetchnta [rcx+rdx]
+     prefetchnta [rcx+rdx+40H]
+     dec eax
+     jnz @29
+     add rdx,4096
+     mov eax,64
+@30: sub rdx,64
+     sub r8,4096
+     mov r9,[rcx+rdx+38H]
+     mov r10,[rcx+rdx+30H]
+     db $4C,$0F,$C3,$4A,$38 // movnti [rdx+38H],r9
+     db $4C,$0F,$C3,$52,$30 // movnti [rdx+30H],r10
+     mov r9,[rcx+rdx+28H]
+     mov r10,[rcx+rdx+20H]
+     db $4C,$0F,$C3,$4A,$28 // movnti [rdx+28H],r9
+     db $4C,$0F,$C3,$52,$20 // movnti [rdx+20H],r10
+     dec eax
+     mov r9,[rcx+rdx+18H]
+     mov r10,[rcx+rdx+10H]
+     db $4C,$0F,$C3,$4A,$18 // movnti [rdx+18H],r9
+     db $4C,$0F,$C3,$52,$10 // movnti [rdx+10H],r10
+     mov r9,[rcx+rdx+8H]
+     mov r10,[rcx+rdx]
+     db $4C,$0F,$C3,$4A,$08 // movnti [rdx+8H],r9
+     db $4C,$0F,$C3,$12     // movnti [rdx],r10
+     jnz @30
+     cmp r8,4096
+     jnc @28
+     mfence
+     jmp @20
+end;
+
+procedure FillCharSSE2;
+asm  // rcx=Dest rdx=Count r8=Value
+        .noframe
+        cmp rdx,32
+        mov rax,r8
+        jle @small
+        and r8,0FFH
+        mov r9,101010101010101H
+        imul r8,r9
+        test cl,07H
+        jz @27C5
+        test cl,01H
+        jz @27A4
+        mov [rcx],r8b
+        add rcx,1
+        sub rdx,1
+@27A4:  test cl,02H
+        jz @27B5
+        mov [rcx],r8w
+        add rcx,2
+        sub rdx,2
+@27B5:  test cl,04H
+        jz @27C5
+        mov [rcx],r8d
+        add rcx,4
+        sub rdx,4
+@27C5:  mov rax,rdx
+        and rdx,3FH
+        shr rax,6
+        jnz @27FD
+@27D2:  mov rax,rdx
+        and rdx,07H
+        shr rax,3
+        jz @27EC
+        db 66H,66H,90H
+@27E0:  mov [rcx],r8
+        add rcx,8
+        dec rax
+        jnz @27E0
+@27EC:  test rdx,rdx
+        jle @27FC
+@27F1:  mov [rcx],r8b
+        inc rcx
+        dec rdx
+        jnz @27F1
+@27FC:  ret
+@27FD:  cmp rax,8192
+        jnc @2840
+        db 66H,66H,66H,90H,90H,90H
+@2810:  add rcx,64
+        mov [rcx-40H],r8
+        mov [rcx-38H],r8
+        mov [rcx-30H],r8
+        mov [rcx-28H],r8
+        dec rax
+        mov [rcx-20H],r8
+        mov [rcx-18H],r8
+        mov [rcx-10H],r8
+        mov [rcx-8H],r8
+        jnz @2810
+        jmp @27D2
+        db 66H,66H,66H,90H,90H
+@2840:  add rcx,64
+        db $4C,$0F,$C3,$41,$C0 // movnti  [rcx-40H],r8
+        db $4C,$0F,$C3,$41,$C8 // movnti  [rcx-38H],r8
+        db $4C,$0F,$C3,$41,$D0 // movnti  [rcx-30H],r8
+        db $4C,$0F,$C3,$41,$D8 // movnti  [rcx-28H],r8
+        dec rax
+        db $4C,$0F,$C3,$41,$E0 // movnti  [rcx-20H],r8
+        db $4C,$0F,$C3,$41,$E8 // movnti  [rcx-18H],r8
+        db $4C,$0F,$C3,$41,$F0 // movnti  [rcx-10H],r8
+        db $4C,$0F,$C3,$41,$F8 // movnti  [rcx-8H],r8
+        jnz @2840
+        mfence
+        jmp @27D2
+@small: // rcx=Dest rdx=Count r8=Value<=32
+        test rdx,rdx
+        jle @@done
+        mov ah,al
+        mov [rcx+rdx-1],al
+        lea r8,@table
+        and rdx,-2
+        neg rdx
+        lea rdx,[r8+rdx*2+64]
+        jmp rdx
+@table: mov [rcx+30],ax
+        mov [rcx+28],ax
+        mov [rcx+26],ax
+        mov [rcx+24],ax
+        mov [rcx+22],ax
+        mov [rcx+20],ax
+        mov [rcx+18],ax
+        mov [rcx+16],ax
+        mov [rcx+14],ax
+        mov [rcx+12],ax
+        mov [rcx+10],ax
+        mov [rcx+ 8],ax
+        mov [rcx+ 6],ax
+        mov [rcx+ 4],ax
+        mov [rcx+ 2],ax
+        mov [rcx   ],ax
+        ret
+@@done:
+end;
+
+function StrLenSSE2(S: pointer): PtrInt;
+asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+        .NOFRAME
+        mov      rax,rcx             // get pointer to string from rcx
+        or       rax,rax
+        mov      r8,rcx              // copy pointer
+        jz       @null               // returns 0 if S=nil
+        // rax = s,ecx = 32 bits of s
+        pxor     xmm0,xmm0           // set to zero
+        and      ecx,0FH             // lower 4 bits indicate misalignment
+        and      rax,-10H            // align pointer by 16
+        movdqa   xmm1,[rax]          // read from nearest preceding boundary
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        shr      edx,cl              // shift out false bits
+        shl      edx,cl              // shift back again
+        bsf      edx,edx             // find first 1-bit
+        jnz      @L2                 // found
+        // Main loop,search 16 bytes at a time
+@L1:    add      rax,10H             // increment pointer by 16
+        movdqa   xmm1,[rax]          // read 16 bytes aligned
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        bsf      edx,edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors,  but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz       @L1                 // loop if not found
+@L2:    // Zero-byte found. Compute string length
+        sub      rax,r8              // subtract start address
+        add      rax,rdx             // add byte index
+@null:
+end;
+
+{$else CPU64}
+
+procedure FillCharX87;
+asm // eax=Dest edx=Count cl=Value
+        // faster version by John O'Harrow  (Code Size = 153 Bytes)
+        cmp   edx,32
+        mov   ch,cl                 // copy value into both bytes of cx
+        jl    @small
+        mov   [eax  ],cx            // fill first 8 bytes
+        mov   [eax+2],cx
+        mov   [eax+4],cx
+        mov   [eax+6],cx
+        sub   edx,16
+        fld   qword ptr [eax]
+        fst   qword ptr [eax+edx]    // fill last 16 bytes
+        fst   qword ptr [eax+edx+8]
+        mov   ecx,eax
+        and   ecx,7                 // 8-byte align writes
+        sub   ecx,8
+        sub   eax,ecx
+        add   edx,ecx
+        add   eax,edx
+        neg   edx
+@loop:  fst   qword ptr [eax+edx]    // fill 16 bytes per loop
+        fst   qword ptr [eax+edx+8]
+        add   edx,16
+        jl    @loop
+        ffree st(0)
+        fincstp
+        ret
+        nop
+@small: test  edx,edx
+        jle   @done
+        mov   [eax+edx-1],cl        // fill last byte
+        and   edx,-2                // no. of words to fill
+        neg   edx
+        lea   edx,[@fill+60+edx*2]
+        jmp   edx
+        nop                          // align jump destinations
+        nop
+@fill:  mov   [eax+28],cx
+        mov   [eax+26],cx
+        mov   [eax+24],cx
+        mov   [eax+22],cx
+        mov   [eax+20],cx
+        mov   [eax+18],cx
+        mov   [eax+16],cx
+        mov   [eax+14],cx
+        mov   [eax+12],cx
+        mov   [eax+10],cx
+        mov   [eax+ 8],cx
+        mov   [eax+ 6],cx
+        mov   [eax+ 4],cx
+        mov   [eax+ 2],cx
+        mov   [eax   ],cx
+        ret                         // for alignment
+@done:  db $f3 // rep ret AMD trick here
+end;
+
+/// faster implementation of Move() for Delphi versions with no FastCode inside
+procedure MoveX87;
+asm // eax=source edx=dest ecx=count
+         // original code by John O'Harrow - included since delphi 2007
+        cmp     eax,edx
+        jz      @exit                 // exit if source=dest
+        cmp     ecx,32
+        ja      @lrg                  // count > 32 or count < 0
+        sub     ecx,8
+        jg      @sml                  // 9..32 byte move
+        jmp     dword ptr [@table+32+ecx*4]   // 0..8 byte move
+@sml:   fild    qword ptr [eax+ecx]   // load last 8
+        fild    qword ptr [eax]       // load first 8
+        cmp     ecx,8
+        jle     @sml16
+        fild    qword ptr [eax+8]     // load second 8
+        cmp     ecx,16
+        jle     @sml24
+        fild    qword ptr [eax+16]    // load third 8
+        fistp   qword ptr [edx+16]    // save third 8
+@sml24: fistp   qword ptr [edx+8]     // save second 8
+@sml16: fistp   qword ptr [edx]       // save first 8
+        fistp   qword ptr [edx+ecx]   // save last 8
+@exit:  ret
+        lea eax,[eax+0]  // for 4-byte alignment of @table
+@table: dd @exit,@m01,@m02,@m03,@m04,@m05,@m06,@m07,@m08
+@lrgfwd:push    edx
+        fild    qword ptr [eax]       // first 8
+        lea     eax,[eax+ecx-8]
+        lea     ecx,[ecx+edx-8]
+        fild    qword ptr [eax]       // last 8
+        push    ecx
+        neg     ecx
+        and     edx,-8                // 8-byte align writes
+        lea     ecx,[ecx+edx+8]
+        pop     edx
+@fwd:   fild    qword ptr [eax+ecx]
+        fistp   qword ptr [edx+ecx]
+        add     ecx,8
+        jl      @fwd
+        fistp   qword ptr [edx]       // last 8
+        pop     edx
+        fistp   qword ptr [edx]       // first 8
+        ret
+@lrg:   jng     @done                 // count < 0
+        cmp     eax,edx
+        ja      @lrgfwd
+        sub     edx,ecx
+        cmp     eax,edx
+        lea     edx,[edx+ecx]
+        jna     @lrgfwd
+        sub     ecx,8                 // backward move
+        push    ecx
+        fild    qword ptr [eax+ecx]   // last 8
+        fild    qword ptr [eax]       // first 8
+        add     ecx,edx
+        and     ecx,-8                // 8-byte align writes
+        sub     ecx,edx
+@bwd:   fild    qword ptr [eax+ecx]
+        fistp   qword ptr [edx+ecx]
+        sub     ecx,8
+        jg      @bwd
+        pop     ecx
+        fistp   qword ptr [edx]       // first 8
+        fistp   qword ptr [edx+ecx]   // last 8
+@done:  ret
+@m01:   movzx   ecx,byte ptr [eax]
+        mov     [edx],cl
+        ret
+@m02:   movzx   ecx,word ptr [eax]
+        mov     [edx],cx
+        ret
+@m03:   mov     cx,[eax]
+        mov     al,[eax+2]
+        mov     [edx],cx
+        mov     [edx+2],al
+        ret
+@m04:   mov     ecx,[eax]
+        mov     [edx],ecx
+        ret
+@m05:   mov     ecx,[eax]
+        mov     al,[eax+4]
+        mov     [edx],ecx
+        mov     [edx+4],al
+        ret
+@m06:   mov     ecx,[eax]
+        mov     ax,[eax+4]
+        mov     [edx],ecx
+        mov     [edx+4],ax
+        ret
+@m07:   mov     ecx,[eax]
+        mov     eax,[eax+3]
+        mov     [edx],ecx
+        mov     [edx+3],eax
+        ret
+@m08:   mov     ecx,[eax]
+        mov     eax,[eax+4]
+        mov     [edx],ecx
+        mov     [edx+4],eax
+end;
+
+function StrLenX86(S: pointer): PtrInt;
+// pure x86 function (if SSE2 not available) - faster than SysUtils' version
+asm
+     test eax,eax
+     jz @@z
+     cmp   byte ptr [eax+0],0; je @@0
+     cmp   byte ptr [eax+1],0; je @@1
+     cmp   byte ptr [eax+2],0; je @@2
+     cmp   byte ptr [eax+3],0; je @@3
+     push  eax
+     and   eax,-4              { DWORD Align Reads }
+@@Loop:
+     add   eax,4
+     mov   edx,[eax]           { 4 Chars per Loop }
+     lea   ecx,[edx-$01010101]
+     not   edx
+     and   edx,ecx
+     and   edx,$80808080       { Set Byte to $80 at each #0 Position }
+     jz    @@Loop              { Loop until any #0 Found }
+@@SetResult:
+     pop   ecx
+     bsf   edx,edx             { Find First #0 Position }
+     shr   edx,3               { Byte Offset of First #0 }
+     add   eax,edx             { Address of First #0 }
+     sub   eax,ecx             { Returns Length }
+@@z: ret
+@@0: xor eax,eax; ret
+@@1: mov eax,1;   ret
+@@2: mov eax,2;   ret
+@@3: mov eax,3
+end;
+
+{$ifndef DELPHI5OROLDER} // need SSE2 asm instruction set
+
+function SupportsSSE2: boolean;
+begin
+  result := false;
+  asm
+    pushfd
+    pop eax
+    mov edx,eax
+    xor eax,$200000
+    push eax
+    popfd
+    pushfd
+    pop eax
+    xor eax,edx
+    jz @nocpuidopcode
+    push ebx
+    mov eax,1
+    cpuid
+    test edx,$04000000
+    jz @nosse2
+    mov result,true
+@nosse2:
+    pop ebx
+@nocpuidopcode:
+  end;
+end;
+
+procedure FillCharSSE2;
+asm // Dest=eax Count=edx Value=cl
+  cmp       edx, 32
+  mov       ch,cl                {copy value into both bytes of cx}
+  jl        @@small
+  sub       edx,16
+  movd      xmm0,ecx
+  pshuflw   xmm0,xmm0,0
+  pshufd    xmm0,xmm0,0
+  movups    [eax],xmm0           {fill first 16 bytes}
+  movups    [eax+edx],xmm0       {fill last 16 bytes}
+  mov       ecx,eax              {16-byte align writes}
+  and       ecx,15
+  sub       ecx,16
+  sub       eax,ecx
+  add       edx,ecx
+  add       eax,edx
+  neg       edx
+  cmp       edx,-512*1024
+  jb        @@large
+@@loop:
+  movaps    [eax+edx],xmm0       {fill 16 bytes per loop}
+  add       edx,16
+  jl        @@loop
+  ret
+@@large:
+  movntdq    [eax+edx],xmm0      {fill 16 bytes per loop}
+  add       edx,16
+  jl        @@large
+  ret
+@@small:
+  test      edx,edx
+  jle       @@done
+  mov       [eax+edx-1],cl       {fill last byte}
+  and       edx,-2               {no. of words to fill}
+  neg       edx
+  lea       edx,[@@smallfill+60+edx*2]
+  jmp       edx
+  nop                             {align jump destinations}
+  nop
+@@smallfill:
+  mov       [eax+28],cx
+  mov       [eax+26],cx
+  mov       [eax+24],cx
+  mov       [eax+22],cx
+  mov       [eax+20],cx
+  mov       [eax+18],cx
+  mov       [eax+16],cx
+  mov       [eax+14],cx
+  mov       [eax+12],cx
+  mov       [eax+10],cx
+  mov       [eax+ 8],cx
+  mov       [eax+ 6],cx
+  mov       [eax+ 4],cx
+  mov       [eax+ 2],cx
+  mov       [eax   ],cx
+  ret {do not remove - this is for alignment}
+@@done:
+end;
+
+function StrLenSSE2(S: pointer): PtrInt;
+asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        or       eax,eax
+        mov      ecx,eax             // copy pointer
+        jz       @null               // returns 0 if S=nil
+        push     eax                 // save start address
+        pxor     xmm0,xmm0           // set to zero
+        and      ecx,0FH             // lower 4 bits indicate misalignment
+        and      eax,-10H            // align pointer by 16
+        movdqa   xmm1,[eax]          // read from nearest preceding boundary
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        shr      edx,cl              // shift out false bits
+        shl      edx,cl              // shift back again
+        bsf      edx,edx             // find first 1-bit
+        jnz      @A200               // found
+        // Main loop,search 16 bytes at a time
+@A100:  add      eax,10H             // increment pointer by 16
+        movdqa   xmm1,[eax]          // read 16 bytes aligned
+        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
+        pmovmskb edx,xmm1            // get one bit for each byte result
+        bsf      edx,edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors,  but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz       @A100               // loop if not found
+@A200:  // Zero-byte found. Compute string length
+        pop      ecx                 // restore start address
+        sub      eax,ecx             // subtract start address
+        add      eax,edx             // add byte index
+@null:
+end;
+
 {$endif DELPHI5OROLDER}
-{$endif USEPACKAGES}
+
+{$endif CPU64}
+
+procedure InitRedirectCode;
+var FillCharAddr, MoveAddr: pointer;
+begin
+  {$ifdef DELPHI5OROLDER}
+  FillCharAddr := @FillCharX87;
+  MoveAddr := @MoveX87;
+  StrLen := @StrLenX86;
+  {$else}
+  {$ifdef CPU64}
+  FillCharAddr := @FillCharSSE2;
+  MoveAddr := @MoveSSE2;
+  StrLen := @StrLenSSE2;
+  {$else}
+  MoveAddr := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
+  if SupportsSSE2 then begin
+    FillCharAddr := @FillCharSSE2;
+    StrLen := @StrLenSSE2;
+  end else begin
+    FillCharAddr := @FillCharX87;
+    StrLen := @StrLenX86;
+  end;
+  {$endif CPU64}
+  {$endif DELPHI5OROLDER}
+  // do redirection from RTL to our fastest version
+  {$ifndef USEPACKAGES}
+  if DebugHook=0 then begin // patch only outside debugging
+    RedirectCode(SystemFillCharAddress,FillCharAddr);
+    RedirectCode(@System.Move,MoveAddr);
+    {$ifdef DOPATCHTRTL}
+    RedirectCode(SystemRecordCopyAddress,@RecordCopy);
+    RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
+    RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
+    {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
+    RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
+    {$endif UNICODE}
+    {$endif DOPATCHTRTL}
+  end;
+  {$endif USEPACKAGES}
+end;
+
+{$endif CPUARM}
+{$endif FPC}
 
 
 { ************  Custom record / dynamic array JSON serialization }
@@ -29047,7 +29033,7 @@ end;
 
 function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 var i: integer;
-{$ifdef DOPATCHTRTL}
+{$ifdef DOPATCHDISPINVOKE}
 {$ifdef NOVARCOPYPROC}
     VarMgr: TVariantManager;
 {$endif}
@@ -44944,94 +44930,6 @@ begin
 end;
 
 
-
-procedure InitRedirectCode;
-{$ifndef DELPHI5OROLDER}
-{$ifndef PUREPASCAL}
-{$ifdef CPU64}
-const
-  SupportsSSE2 = true;
-begin
-{$else}
-var
-  SupportsSSE2: boolean;
-begin
-  asm
-    mov SupportsSSE2,false
-    pushfd
-    pop eax
-    mov edx,eax
-    xor eax,$200000
-    push eax
-    popfd
-    pushfd
-    pop eax
-    xor eax,edx
-    jz @exit
-    push ebx
-    mov eax,1
-    cpuid
-    test edx,$04000000
-    jz @no
-    mov SupportsSSE2,true
-  @no:
-    pop ebx
-  @exit:
-  end;
-{$endif CPU64}
-{$else}
-begin
-{$endif PUREPASCAL}
-{$else}
-begin
-{$endif DELPHI5OROLDER}
-{$ifndef FPC}
- {$ifdef CPU64}
-  {$ifndef NOX64PATCHRTL}
-  if DebugHook=0 then begin // patch VCL/RTL only outside debugging
-    RedirectCode(SystemFillCharAddress,@FillChar);
-    RedirectCode(@System.Move,@Move);
-  end;
-  {$endif NOX64PATCHRTL}
- {$endif CPU64}
-{$endif FPC}
-{$ifndef PUREPASCAL}
- {$ifndef FPC}
-  if DebugHook=0 then begin // patch VCL/RTL only outside debugging
-  {$ifndef ENHANCEDRTL}
-   {$ifndef DELPHI5OROLDER}
-    {$ifndef USEPACKAGES}
-     {$ifdef DOPATCHTRTL}
-    RedirectCode(SystemRecordCopyAddress,@RecordCopy);
-    RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
-    RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
-    {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
-    RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
-    {$endif}
-     {$endif DOPATCHTRTL}
-    {$endif USEPACKAGES}
-   {$endif DELPHI5OROLDER}
-   {$ifndef LVCL}
-    {$ifndef ISDELPHI2007ANDUP} // use faster FillChar/Move for older Delphi
-    RedirectCode(SystemFillCharAddress,@FillChar);
-    RedirectCode(@System.Move,@Move);
-    {$endif ISDELPHI2007ANDUP}
-   {$endif LVCL}
-  {$endif ENHANCEDRTL}
-  end;
- {$endif FPC}
- {$ifndef DELPHI5OROLDER}
-  if not SupportsSSE2 then begin // back to default X86/X87 code for older CPUs
-    PatchCode(@SynCommons.StrLen,@StrLenX86,STRLEN_SIZE);
-  {$ifndef ENHANCEDRTL} 
-    PatchCode(@SynCommons.FillChar,@FillCharX87,FILLCHAR_SIZE);
-  {$endif ENHANCEDRTL}
-  end;
- {$endif DELPHI5OROLDER}
-{$endif PUREPASCAL}
-end;
-
-
 var
   GarbageCollectorFreeAndNilList: TList;
   
@@ -45068,12 +44966,11 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  {$ifndef FPC}
+  {$ifndef CPUARM}
   InitRedirectCode;
-  {$ifdef FPC}
-  {$ifdef FPC_FULLVERSION>=20701}
-  DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
-  {$endif FPC}
+  {$endif}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}
   RetrieveSystemInfo;
