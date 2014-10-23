@@ -1213,7 +1213,7 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 SourcePath=Lib\SQLite3
 IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
-SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
+SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
 Version=1.18
 TitleOffset=0
@@ -2292,7 +2292,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !end;
 Of course, you can have a {\f1\fs20 TSQLBaby} instance alive during a longer time. The same {\f1\fs20 TSQLBaby} instance can be used to access several record content, and call {\f1\fs20 Retrieve / Add / Delete / Update} methods on purpose.
 No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. It could even work with @*NoSQL@ databases, like a fast {\f1\fs20 TObjectList} or @*MongoDB@. This is the magic of @*ORM@.
-To be honnest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little bit the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
+To be honest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little bit the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':
@@ -3777,8 +3777,8 @@ Following this low-level method-based services process, you can easily create a 
 But still, a lot of code is needed to glue the MVC parts.
 \page
 :108 mORMotMVC for building Web applications
-:  MVVM Design
-In practice, method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshalling, rendering or routing.
+:  MVC/MVVM Design
+In practice, method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshaling, rendering or routing.
 The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
 |%20%80
 |\b MVVM|mORMot\b0
@@ -3808,9 +3808,393 @@ The fact that the {\i ViewModel} data context is transmitted as JSON content - {
 - In the {\i Controller} code, you have access to the {\i mORMot} ORM methods and services to implement any command, making it pretty easy to implement a web front-end to any @*SOA@ project;
 - The associated data {\i Model} is {\i mORMot}'s ORM, which is also optimized for JSON processing, so most of memory fragmentation is reduced to the minimum during the rendering;
 - The {\i Controller} would be most of the time hosted within the web server application, but {\i may} be physically hosted in another remote process - this remote {\i Controller} service may even be shared between web and VCL/FMX clients;
-- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients;
-:
-
+- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients.
+:  Building a MVC/MVVM web application
+We will now explain how to build such a MVC/MVVM web application using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample.
+This little web application publishes a simple BLOG, not fully finished (but you can see the articles list, view one article and its comments, view the author information, log in and out), implemented as such:
+|%15%22%63
+|\b MVVM|Unit|mORMot\b0
+|{\i Model}|{\f1\fs20 MVCModel.pas}|{\f1\fs20 TSQLRestServerDB} ORM over a {\i SQlite3} database
+|{\i View}|-|@81@ in the {\i Views} sub-folder
+|{\i ViewModel}|{\f1\fs20 MVCViewModel.pas}|Defined as one {\f1\fs20 IBlogApplication} interface
+|%
+:  MVCModel
+The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you would find the following type definitions:
+!  TSQLContent = class(TSQLRecordTimeStamped)
+!  private ...
+!  published
+!    property Title: RawUTF8 index 80 read fTitle write fTitle;
+!    property Content: RawUTF8 read fContent write fContent;
+!    property Author: TSQLAuthor read fAuthor write fAuthor;
+!    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
+!  end;
+!
+!  TSQLArticle = class(TSQLContent)
+!  private ...
+!  public
+!    class function CurrentPublishedMonth: Integer;
+!    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+!      Options: TSQLInitializeTableOptions); override;
+!  published
+!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!  end;
+!
+!  TSQLComment = class(TSQLContent)
+!  private ...
+!  published
+!    property Article: TSQLArticle read fArticle write fArticle;
+!  end;
+Then the whole database model will be created in this function:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLCategory,TSQLAuthor,
+!    TSQLArticle,TSQLComment],'blog');
+!  TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
+!  TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
+!  TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
+!  TSQLArticle.AddFilterOrValidate('Content',TSynValidateText.Create);
+!end;
+As you can discover:
+- We used {\f1\fs20 class} inheritance to gather properties for similar tables;
+- Some classes are {\i not} part of the model, since they are just {\f1\fs20 abstract} parents, e.g. {\f1\fs20 TSQLContent} is not part of the model, but {\f1\fs20 TSQLArticle} and {\f1\fs20 TSQLComment} are;
+- We defined some regular {\i one-to-one} relationships, e.g. every {\f1\fs20 Content} (which may be either an {\f1\fs20 Article} or a {\f1\fs20 Comment}) will be tied to one {\f1\fs20 Author} - see @70@;
+- We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
+- Some properties are stored twice, e.g. {\f1\fs20 TSQLContent} defines both {\f1\fs20 Author} and {\f1\fs20 AuthorName} fields, the second being a convenient direct access to the author name, therefore avoiding a JOINed query for each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
+- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
+- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterOrValidate()} method, which would be applied before an article is stored;
+- The whole application would run without writing any SQL, but just high-level ORM methods;
+- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG).
+Foreign keys and indexes are managed as such:
+- The {\f1\fs20 TSQLRecord.ID} primary key of any ORM class will be indexed;
+- For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
+- An index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a lot of publication months in the main BLOG page, and access to the per-month articles. The following code will take care of it:
+!class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
+!  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+!begin
+!  inherited;
+!  if (FieldName='') or (FieldName='PublishedMonth') then
+!    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+!end;
+The ORM is defined and run over a {\i SQLite3} database in the main {\f1\fs20 MVCServer.dpr} program, as we will see below.
+:  MVCViewModel
+:   Defining the commands
+The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the application. It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).
+First of all, we defined an {\f1\fs20 interface}, with the expected methods corresponding to the various {\i commands} of the web application:
+!  IBlogApplication = interface(IMVCApplication)
+!    procedure ArticleView(
+!      ID: integer; var WithComments: boolean; Direction: integer;
+!      out Article: TSQLArticle; out Author: TSQLAuthor;
+!      out Comments: TObjectList);
+!    procedure AuthorView(
+!      var ID: integer; out Author: variant; out Articles: RawJSON);
+!    function Login(
+!      const LogonName,PlainPassword: RawUTF8): TMVCAction;
+!    function Logout: TMVCAction;
+!    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
+!      const ValidationError: variant;
+!      out Article: TSQLArticle);
+!    function ArticleCommit(
+!      ID: integer; const Title,Content: RawUTF8): TMVCAction;
+!  end;
+In fact, {\f1\fs20 IMVCApplication} is defined as such in {\f1\fs20 mORMotMVC.pas}:
+!  IMVCApplication = interface(IInvokable)
+!    ['{C48718BF-861B-448A-B593-8012DB51E15D}']
+!    procedure Default(var Scope: variant);
+!    procedure Error(var Msg: RawUTF8; var Scope: variant);
+!  end;
+As such, the {\f1\fs20 IBlogApplication} will define the following web pages, corresponding to each of its methods: {\i Default, Error, ArticleView, AuthorView, Login, Logout, ArticleEdit} and {\i ArticleCommit}. Each command of this application will map an URI, e.g. {\f1\fs20 /blog/default} or {\f1\fs20 /blog/login} - remember that our model defined {\f1\fs20 'blog'} as its root URI. You may let all commands be accessible from a sub-URI (e.g. {\f1\fs20 /blog/web/default}), but here this is not needed, since we are creating a "pure web" application.
+Each command will have its own {\i View}. For instance, you will find {\f1\fs20 Default.html}, {\f1\fs20 Error.html} or {\f1\fs20 ArticleView.html} in the {\i "Views"} sub-folder of the sample. If you did not supply any file in this folder, some void files would be created.
+Incoming method parameters of each method (i.e. defined as {\f1\fs20 const} or {\f1\fs20 var}) will be transmitted on the URI, encoded as regular HTTP parameters, whereas outgoing method parameters (i.e. defined as {\f1\fs20 var} or {\f1\fs20 out}) would be transmitted to the {\i View}, as data context for the rendering. Simple types are transmitted (like {\f1\fs20 integer} or {\f1\fs20 RawUTF8}); but you would also find ORM classes (like {\f1\fs20 TSQLAuthor}), an outgoing {\f1\fs20 TObjectList}, or some {\f1\fs20 variant} - which may be either values or a complex @80@.
+In fact, you may find out that the {\i Login, Logout} and {\i ArticleCommit} methods do not have any outgoing parameters, but were defined as {\f1\fs20 function} returning a {\f1\fs20 TMVCAction} record. This type is declared as such in {\f1\fs20 mORMotMVC.pas}:
+!  TMVCAction = record
+!    RedirectToMethodName: RawUTF8;
+!    RedirectToMethodParameters: RawUTF8;
+!    ReturnedStatus: cardinal;
+!  end;
+Any method returning such a {\f1\fs20 TMVCAction} content won't render directly any view, but will allow to go directly to another method, for proper rendering, just by providing a method name and some optional parameters.\line Note that even the regular views, i.e. the methods which do not have this {\f1\fs20 TMVCAction} parameter, may break the default rendering process on any error, raising an {\f1\fs20 EMVCApplication} exception which will in fact redirect the view to another page, mainly the {\f1\fs20 Error} page.
+To better understand how it works, run the "{\i 30 - MVC Server}" sample. Remember that to be able to register the port #8092 for the {\f1\fs20 http.sys} server, you would need to run the {\f1\fs20 MVCServer.exe} program at least once with {\i Windows Administrator} rights - see @109@. Then point your browser to @http://localhost:8092/ - you will see the main page of the BLOG, filled with some random data. Quite some "blabla", to be honest!
+What you see is the {\f1\fs20 Default} page rendered. The {\f1\fs20 IBlogApplication.Default()} method has been called, then the outgoing {\f1\fs20 Scope} data has been rendered by the {\f1\fs20 Default.html} {\i Mustache} template. If you click on an article title, it will go to @http://localhost:8092/blog/articleView?id=99 - i.e. calling {\f1\fs20 IBlogApplication.ArticleView()} with the {\f1\fs20 ID} parameter containing 99, and other incoming parameters (i.e. {\f1\fs20 WithComments} and {\f1\fs20 Direction}) set to their default value (i.e. respectively {\f1\fs20 false} and {\f1\fs20 0}). The {\f1\fs20 ArticleView()} method will then read the {\f1\fs20 TSQLArticle} data from the ORM, then send it to the {\f1\fs20 ArticleView.html} {\i Mustache} template.
+Now, just change in your browser the URI from @http://localhost:8092/blog/articleView?id=99 (here we clicked on the {\f1\fs20 Article} with ID=99) into @http://localhost:8092/blog/articleView/json?id=99 (i.e. entering {\f1\fs20 /articleView{\b /json}} instead of {\f1\fs20 /articleView}, as a fake sub-URI). Now the browser is showing you the JSON data context, which is transmitted to the {\f1\fs20 ArticleView.html} template - just check both the JSON content and the corresponding {\i Mustache} template, and I think you will find out how it works.
+From any blog article view, click on the "{\f1\fs20 Show Comments}" button: you are redirected to a new page, at URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true#comments and now the comments corresponding to the article are displayed. If you click on the "{\f1\fs20 Previous}" or "{\f1\fs20 Next}" buttons, a new URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true&direction=1 will be submitted: {\f1\fs20 direction=1} will search for the previous article, and we still have the {\f1\fs20 withComments=true} parameter set, so that the user would be able to see the comments, as expected. If you click on the "{\f1\fs20 Hide Comments}" button, the URI would change to be without any {\f1\fs20 withComments=true} parameter - i.e. @http://localhost:8092/blog/ArticleView?id=98#comments : now the comments won't be displayed.
+The sequence is rendered as such:
+\graph mORMotMVCSequence mORMot MVC/MVVM URI - Commands sequence
+\/blog/default URI\Default()\routing + decode¤incoming params¤to controller method
+\Default()\defaultjson\outgoing params¤encoded as JSON
+\defaultjson\default.html¤template\rendering¤data context
+\default.html¤template\main blog web page¤with list of articles\Mustache¤engine
+\/blog/articleView?id=99\ArticleView(ID=99)\routing + decode¤incoming params¤to controller method
+\ArticleView(ID=99)\articlejson\outgoing params¤encoded as JSON
+\articlejson\articleView.html¤template\rendering¤data context
+\articleView.html¤template\web page¤with one article¤without comments\Mustache¤engine
+\/blog/articleView?id=99&withcomments=true\ArticleView(ID=99,WithComments=true)\routing + decode¤incoming params¤to controller method
+\ArticleView(ID=99,WithComments=true)\articlecomment\outgoing params¤encoded as JSON
+\articlecomment\ articleView.html¤template\rendering¤data context
+\ articleView.html¤template\web page¤with one article¤and its comments\Mustache¤engine
+=defaultjson={Scope:{articles:[....
+=articlejson={WithComments=false,¤Article={ID=99,Author:1,...¤Comments:[],...
+=articlecomment={WithComments=true,¤Article={ID=99,Author:1,...¤Comments:[¤{ID:163],...
+\
+In this diagram, we can see that each HTTP request is stateless, uncoupled from the previous. The user experience is created by changing the URI, and by passing additional parameters (like {\f1\fs20 withComments=true}). This is how the web works.
+Then try to go to @http://localhost:8092/blog/mvc-info - and check out the page which appears. You will get all the information corresponding to your application, especially a list of all available commands:
+$/blog/Default?Scope=..[variant]..
+$/blog/Error?Msg=..[string]..&Scope=..[variant]..
+$/blog/ArticleView?ID=..[integer]..&WithComments=..[boolean]..&Direction=..[integer]..
+$/blog/AuthorView?ID=..[integer]..
+$/blog/Login?LogonName=..[string]..&PlainPassword=..[string]..
+$/blog/Logout
+$/blog/ArticleEdit?ID=..[integer]..&Title=..[string]..&Content=..[string]..&ValidationError=..[variant]..
+$/blog/ArticleCommit?ID=..[integer]..&Title=..[string]..&Content=..[string]..
+And every view, including its data context, e.g.
+$/blog/AuthorView?ID=..[integer]..
+${{Main}}: variant
+${{ID}}: integer
+${{Author}}: TSQLAuthor
+${{Articles}}: variant
+You may use this page as reference when writing your {\i Mustache} Views. It will reflect the exact state of the running application.
+:   Implementing the Controller
+To build the application {\i Controller}, we would need to implements our {\f1\fs20 IBlogApplication interface}.
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  ...
+!  public
+!    constructor Create(aServer: TSQLRestServer); reintroduce;
+!    procedure Default(var Scope: variant);
+!    procedure ArticleView(ID: integer; var WithComments: boolean;
+!      Direction: integer;
+!      out Article: TSQLArticle; out Author: variant;
+!      out Comments: TObjectList);
+!    ...
+!  end;
+We defined a new class, inheriting from {\f1\fs20 TMVCApplication} - as defined in {\f1\fs20 mORMotMVC.pas}, and implementing our expected interface. {\f1\fs20 TMVCApplication} will do all the low-level plumbing for you, using a set of implementation classes.
+Let's implement a simple command:
+!procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
+!  out Articles: RawJSON);
+!begin
+!  RestModel.Retrieve(ID,Author);
+!  if Author.ID<>0 then
+!    Articles := RestModel.RetrieveListJSON(
+!      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 RawJSON}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances.\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, and will return an error page, using the {\f1\fs20 Error.html} view template.
+Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
+!var newID: integer;
+!const WHERE: array[1..2] of PUTF8Char = (
+!  'ID<? order by id desc','ID>? order by id');
+!begin
+!  if Direction in [1,2] then // allows fast paging using index on ID
+!    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
+!      (newID<>0) then
+!      ID := newID;
+!  RestModel.Retrieve(ID,Article);
+!  if Article.ID<>0 then begin
+!    Author := RestModel.RetrieveDocVariant(
+!      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
+!    if WithComments then begin
+!      Comments.Free; // we will override the TObjectList created at input
+!      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
+!    end;
+!  end else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+This method has to manage several use cases:
+- Display an {\f1\fs20 Article} from the database;
+- Retrieve the {\f1\fs20 Author} first name and family name;
+- Optionally display the associated {\f1\fs20 Comment}s;
+- Optionally get the previous or next {\f1\fs20 Article};
+- Trigger an error in case of an invalid request.
+Reading the above code is enough to understand how those 5 features are implemented in this method.\line The incoming parameters, as triggered by the {\i Views}, are used to identify the action to be taken.\line Then {\f1\fs20 TMVCApplication.RestModel} methods are used to retrieve the needed information directly from the ORM.\line Outgoing parameters ({\f1\fs20 Article,Author,Comments}) are transmitted to the {\i Mustache} {\i View}, for rendering.
+In fact, there are sometimes several way to retrieve or retrieve your data. For instance, in the above code, we used a {\f1\fs20 TObjectList} to transmit our comments.\line But we may have used a @80@ parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: variant);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveDocVariantArray(TSQLComment,'','Article=?',[Article.ID],'');
+Or with a {\f1\fs20 RawJSON} kind of output parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: RawJSON);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveListJSON(TSQLComment,'Article=?',[Article.ID],'');
+Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is just perfect. But having a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list; or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
+!procedure TBlogApplication.Default(var Scope: variant);
+! ...
+!    fCachedMain.Months := RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+!      'distinct(PublishedMonth),max(ID)+1 as FirstID');
+!  _ObjAddProps(['Archives',fCachedMain.Months],Scope);
+!end;
+You can notice how the calendar months are retrieved from the database. The above ORM request will generate the following SQL statement:
+$ SELECT distinct(PublishedMonth),max(ID)+1 as FirstID FROM Article
+$  group by PublishedMonth order by PublishedMonth desc limit 12
+The {\f1\fs20 Default()} method will therefore return the following JSON context:
+${
+$  "Scope": {
+$    ...
+$    "Archives":
+$    [
+$      {
+$        "PublishedMonth": 24178,
+$        "FirstID": 101
+$      },
+$      {
+$        "PublishedMonth": 24177,
+$        "FirstID": 100
+$      },
+$      ...
+Which will be processed by the {\i Mustache} engine. If you put a breakpoint at the end of this method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
+I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
+:  Web Sessions
+@*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the web application, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows to create such sessions.
+You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name, or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
+For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
+!  TCookieData = packed record
+!    AuthorName: RawUTF8;
+!    AuthorID: cardinal;
+!    AuthorRights: TSQLAuthorRights;
+!  end;
+This record will be serialized in two ways:
+- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
+- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
+In order to have proper JSON serialization of the {\f1\fs20 record}, you would need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
+Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
+!function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
+!var Author: TSQLAuthor;
+!!    SessionInfo: TCookieData;
+!begin
+!!  if CurrentSession.CheckAndRetrieve<>0 then begin
+!    GotoError(result,HTML_BADREQUEST);
+!    exit;
+!  end;
+!!  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
+!  try
+!!    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
+!      SessionInfo.AuthorName := Author.LogonName;
+!      SessionInfo.AuthorID := Author.ID;
+!      SessionInfo.AuthorRights := Author.Rights;
+!!      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
+!!      GotoDefault(result);
+!    end else
+!      GotoError(result,sErrorInvalidLogin);
+!  finally
+!    Author.Free;
+!  end;
+!end;
+As you can see, this {\f1\fs20 Login()} method will be trigerred from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
+The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI would be requested.
+When a web page is computed, the following overriden method will be executed:
+!function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
+!begin
+!  result := inherited GetViewInfo(MethodIndex);
+!!  _ObjAddProps(['blog',fBlogMainInfo,
+!!    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
+!end;
+It will append the session information from the cookie to the returned {\i View} data context, as such:
+${
+$  "Scope": {
+$    "articles":
+$    ...
+$},
+$  "main": {
+$    "pageName": "Default",
+$    "blog": {
+$      "Title": "mORMot BLOG",
+$      ...
+$    },
+$!    "session": {
+!$      "AuthorName": "synopse",
+!$      "AuthorID": 1,
+!$      "AuthorRights": {
+!$        "canComment": true,
+!$        "canPost": true,
+!$        "canDelete": true,
+!$        "canAdministrate": true
+!$      },
+$      "id": 1
+$    }
+$  }
+$}
+Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
+When the browser ask for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
+!function TBlogApplication.Logout: TMVCAction;
+!begin
+!!  CurrentSession.Finalize;
+!  GotoDefault(result);
+!end;
+The session cookie will then be deleted on the browser side.
+:   Writing the Views
+See @81@ for a description of how rendering take place in this MVC/MVVM application. You would find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
+You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
+Here is how {\f1\fs20 Default.html} is achieved:
+$${{>header}}
+$${{>masthead}}
+$$      <div class="blog-header">
+$$        <h1 class="blog-title">{{main.blog.title}}</h1>
+$$        <p class="lead blog-description">{{main.blog.description}}</p>
+$$      </div>
+$$      <div class="row">
+$$        <div class="col-sm-8 blog-main">
+$${{#Scope}}
+$${{>articlerow}}
+$$  {{#lastID}}
+$$  <p><a href="default?scope={{.}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
+$$  {{/lastID}}
+$$        </div>
+$$        <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
+$$          <div class="sidebar-module sidebar-module-inset">
+$$            <h4>About</h4>
+$$            {{{WikiToHtml main.blog.about}}}
+$$          </div>
+$$          <div class="sidebar-module">
+$$            <h4>Archives</h4>
+$$            <ol class="list-unstyled">
+$$     {{#Archives}}
+$$              <li><a href="default?scope={{FirstID}}">{{MonthToText PublishedMonth}}</a></li>
+$$     {{/Archives}}
+$$            </ol>
+$$          </div>
+$$  </div>
+$$   </div>
+$${{/Scope}}
+$${{>footer}}
+The {\f1\fs20 \{\{>partials\}\}} are easily identified, as other {\f1\fs20 \{\{...\}\}} value tags.\line {\f1\fs20 \{\{\{WikiToHtml main.blog.about\}\}\}} is an {\i Expression Block} able to render some simple text into proper HTML, using a simple Wiki syntax.\line {\f1\fs20 \{\{MonthToText PublishedMonth\}\}} will execute a custom {\i Expression Block}, defined in our {\f1\fs20 TBlogApplication}, which will convert the obfuscated {\f1\fs20 TSQLArticle.PublishedMonth} integer value into the corresponding name and year:
+!procedure TBlogApplication.MonthToText(const Value: variant;
+!  out result: variant);
+!const MONTHS: array[0..11] of RawUTF8 = (
+!  'January','February','March','April','May','June','July','August',
+!  'September','October','November','December');
+!var month: integer;
+!    text: RawUTF8;
+!begin
+!  if VariantToInteger(Value,month) and (month>0) then
+!    text := MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12);
+!  RawUTF8ToVariant(text,result);
+!end;
+The page displaying the {\f1\fs20 Author} information is in fact quite simple:
+$${{>header}}
+$${{>masthead}}
+$$      <div class="blog-header">
+$$        <h1 class="blog-title">User {{Author.LogonName}}</h1>
+$$  <div class="lead blog-description">{{Author.FirstName}} {{Author.FamilyName}}
+$$  </div>
+$$      </div>
+$$   <div class="panel panel-default">
+$$   <div class="panel-heading">Information about <strong>{{Author.LogonName}}</strong></div>
+$$   <div class="panel-body">
+$$      {{{TSQLAuthor.HtmlTable Author}}}
+$$   </div>
+$$   </div>
+$${{>articlerow}}
+$${{>footer}}
+It will share the same {\f1\fs20 \{\{>partials\}\}}, for a consistent and maintainable web site design, but in fact most of the process would take place by the magic of two tags:
+- {\f1\fs20 \{\{\{TSQLAuthor.HtmlTable Author\}\}\}} is an {\i Expression Block} linked to {\f1\fs20 TMVCApplication.RestModel} @*ORM@, which will create a HTML table - with the syntax expected by our {\i BootStrap} {\f1\fs20 css} - for a {\f1\fs20 TSQLAuthor} record, identifying the property types and display them as expected (e.g. for dates or time stamps, or for enumerates or sets).
+- {\f1\fs20 \{\{>articlerow\}\}} is a partial also shared with {\f1\fs20 ArticleView.html}, which will render a list of {\f1\fs20 TSQLArticle} encoded as {\f1\fs20 \{\{#Articles\}\}}...{\f1\fs20 \{\{/Articles\}\}} sections.
+Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every aspect of the MVC process has been divided into small classes, so that the framework is able to create web applications, but also any kind of MVC applications, including mobile or VCL/FMX apps, and/or reporting - using {\f1\fs20 mORMotReport.pas}.
 :42Database layer
 %cartoon05.png
 : SQLite3-powered, not SQLite3-limited
@@ -6804,7 +7188,7 @@ As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sy
 Inside {\f1\fs20 http.sys} all the magic is made... it will listen to any incoming connection request, then handle the headers, then check against any matching URL.
 {\f1\fs20 http.sys} will handle all the communication by itself, leaving the server threads free to process the next request.
 You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
-:   URI authorization as Administrator
+:109   URI authorization as Administrator
 This works fine under XP. Performances are very good, and stability is there. But... here comes the UAC nightmare again.
 Security settings have changed since XP. Now only applications running with Administrator rights can register URLs to {\f1\fs20 http.sys}. That is, no real application. So the URI registration step will always fail with the default settings, under Vista and Seven.
 The only case when authorization will be possible is when the application launched as a Windows Service, with default services execution user. By default, Windows services are launched with a User which has the Administrator rights.
