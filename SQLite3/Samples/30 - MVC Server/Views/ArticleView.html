@@ -1,12 +1,3 @@
-{{! void template created for the IBlogApplication.ArticleView View:
- defined as
-   procedure ArticleView(const ID: integer; const WithComments: boolean; out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
- with the following data context:
-   * Main: variant
-   * Article: TSQLArticle
-   * Author: TSQLAuthor
-   * Comments: TObjectList
-}}
 {{>header}}
 {{>masthead}}
       <div class="blog-header">
@@ -16,26 +7,31 @@
 		</div>
       </div>
       <div class="blog-main">
-	  {{{WikiToHtml article.abstract}}}
-	  <hr>
-	  {{{WikiToHtml article.content}}}
+		  {{{WikiToHtml article.abstract}}}
+		  <hr>
+		  {{{WikiToHtml article.content}}}
+		  <hr>
+		  <ul class="pager">
+			<li class="previous"><a href="ArticleView?id={{ID}}&withComments={{withComments}}&direction=1">&larr; Previous</a></li>
+			<li class="next"><a href="ArticleView?id={{ID}}&withComments={{withComments}}&direction=2">Next &rarr;</a></li>
+		  </ul>
+		  <a name="comments">
+		  {{#WithComments}}
+		  {{#Comments}}
+		  <blockquote>
+			<p><strong>{{Title}}</strong></p>
+			<p>{{WikiToHtml Content}}</p>
+			<footer>Commented on {{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></<footer>>
+		  </blockquote>
+		  <hr>
+		  {{/Comments}}
+		  {{^Comments}}<blockquote>No comment yet.</blockquote>{{/Comments}}
+		  <p><a href="ArticleView?id={{ID}}#comments" class="btn btn-primary btn-sm">Hide Comments</a></p>
+		  {{/WithComments}}
+		  {{^WithComments}}
+		  <p><a href="ArticleView?id={{ID}}&withComments=true#comments" class="btn btn-primary btn-sm">Show Comments</a></p>
+		  {{/WithComments}}
 	  </div>
-	  <hr>
-	  {{#WithComments}}
-	  {{#Comments}}
-      <blockquote>
-	    <p><strong>{{Title}}</strong></p>
-		<p>{{WikiToHtml Content}}</p>
-		<footer>Commented on {{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></<footer>>
-	  </blockquote>
-      <hr>
-	  {{/Comments}}
-	  {{^Comments}}<blockquote>No comment yet.</blockquote>{{/Comments}}
-	  {{/WithComments}}
-	  {{^WithComments}}
-	  <p><a href="ArticleView?id={{ID}}&withComments=true" class="btn btn-primary btn-sm">Show Comments</a></p>
-	  {{/WithComments}}
-	  <hr>
 {{#Scope}}
 {{>articlerow}}
 {{/Scope}}

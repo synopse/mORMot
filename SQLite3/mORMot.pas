@@ -2555,6 +2555,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
+    function GetCaption(Value: RawUTF8; out IntValue: integer): string;
     property EnumType: PEnumType read fEnumType;
   end;
 
@@ -15235,6 +15236,15 @@ begin
   if fSQLFieldType=sftBoolean then
     W.AddString(JSON_BOOLEAN[boolean(i)]) else
     W.Add(i);
+end;
+
+function TSQLPropInfoRTTIEnum.GetCaption(Value: RawUTF8; out IntValue: integer): string;
+begin
+  NormalizeValue(Value);
+  IntValue := GetInteger(pointer(Value));
+  if Value='' then
+    result := '' else
+    result := EnumType^.GetCaption(IntValue);
 end;
 
 procedure TSQLPropInfoRTTIEnum.GetValueVar(Instance: TObject;

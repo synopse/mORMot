@@ -329,7 +329,8 @@ type
 
   /// abstract MVC rendering execution context, returning some content
   // - the Output property would contain the content to be returned
-  // - can be used to return e.g. some rendered HTML or some raw JSON
+  // - can be used to return e.g. some rendered HTML or some raw JSON,
+  // or even some server-side generated report as PDF, using our mORMotReport.pas
   TMVCRendererReturningData = class(TMVCRendererAbstract)
   protected
     fRun: TMVCRunWithViews;
@@ -744,27 +745,126 @@ begin
 end;
 
 type
+  THtmlTableStyleLabel = (labelFalse,labelTrue,labelOff,labelOn,labelValue);
+  TExpressionHtmlTableStyle = class
+  public
+    class procedure StartTable(WR: TTextWriter); virtual;
+    class procedure BeforeFieldName(WR: TTextWriter); virtual;
+    class procedure BeforeValue(WR: TTextWriter); virtual;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
+      kind: THtmlTableStyleLabel); virtual;
+    class procedure AfterValue(WR: TTextWriter); virtual;
+    class procedure EndTable(WR: TTextWriter); virtual;
+  end;
+  TExpressionHtmlTableStyleBootstrap = class(TExpressionHtmlTableStyle)
+  public
+    class procedure StartTable(WR: TTextWriter); override;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
+      kind: THtmlTableStyleLabel); override;
+  end;
+  TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
   TExpressionHelperForTable = class
   public
     Rest: TSQLRest;
-    HelperName: RawUTF8;
     Table: TSQLRecordClass;
+    TableProps: TSQLRecordProperties;
+    HtmlTableStyle: TExpressionHtmlTableStyleClass;
     constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
       var aHelpers: TSynMustacheHelpers);
-    procedure Expression(const Value: variant; out result: variant);
+    procedure ExpressionGet(const Value: variant; out result: variant);
+    procedure ExpressionHtmlTable(const Value: variant; out result: variant);
   end;
 
 constructor TExpressionHelperForTable.Create(aRest: TSQLRest;
   aTable: TSQLRecordClass; var aHelpers: TSynMustacheHelpers);
+var HelperName: RawUTF8;
 begin
   aRest.PrivateGarbageCollector.Add(self);
   Rest := aRest;
   HelperName := RawUTF8(aTable.ClassName);
   Table := aTable;
-  TSynMustache.HelperAdd(aHelpers,HelperName,Expression);
+  TableProps := aTable.RecordProps;
+  TSynMustache.HelperAdd(aHelpers,HelperName,ExpressionGet);
+  HtmlTableStyle := TExpressionHtmlTableStyleBootstrap;
+  TSynMustache.HelperAdd(aHelpers,HelperName+'.HtmlTable',ExpressionHtmlTable);
 end;
 
-procedure TExpressionHelperForTable.Expression(const Value: variant;
+procedure TExpressionHelperForTable.ExpressionHtmlTable(const Value: variant;
+  out result: variant);
+var Rec: PDocVariantData;
+    f,i,j,int: integer;
+    Field: TSQLPropInfo;
+    timelog: TTimeLogBits;
+    caption: string;
+    sets: TStringList;
+    utf8: RawUTF8;
+    W: TTextWriter;
+const ONOFF: array[boolean] of THtmlTableStyleLabel = (labelOff,labelOn);
+      ENUM: array[boolean,boolean] of THtmlTableStyleLabel =
+        ((labelValue,labelValue),(labelFalse,labelTrue));
+begin
+  Rec := DocVariantDataSafe(Value);
+  if Rec^.Kind=dvObject then begin
+    W := TTextWriter.CreateOwnedStream;
+    try
+      HtmlTableStyle.StartTable(W);
+      for f := 0 to TableProps.Fields.Count-1 do begin
+        Field := TableProps.Fields.List[f];
+        i := Rec^.GetValueIndex(Field.Name);
+        if i<0 then
+          continue;
+        if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,
+           sftInteger,sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,
+           sftDateTime,sftBoolean,sftEnumerate,sftSet]) then
+          continue;
+        HtmlTableStyle.BeforeFieldName(W);
+        GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
+        W.AddHtmlEscapeString(caption);
+        HtmlTableStyle.BeforeValue(W);
+        utf8 := VariantToUTF8(Rec^.Values[i]);
+        case Field.SQLFieldType of
+        sftAnsiText,sftUTF8Text,sftInteger,sftFloat,sftCurrency:
+          W.AddHtmlEscape(pointer(utf8));
+        sftTimeLog,sftModTime,sftCreateTime:
+          if VariantToInt64(Rec^.Values[i],timelog.Value) then
+            W.AddHtmlEscapeString(timeLog.i18nText);
+        sftDateTime: begin
+          timelog.From(utf8);
+          W.AddHtmlEscapeString(timeLog.i18nText);
+        end;
+        sftBoolean,sftEnumerate:
+          if Field.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
+            caption := TSQLPropInfoRTTIEnum(Field).GetCaption(utf8,int);
+            HtmlTableStyle.AddLabel(W,caption,
+              ENUM[Field.SQLFieldType=sftBoolean,int<>0]);
+          end;
+        sftSet:
+          if Field.InheritsFrom(TSQLPropInfoRTTISet) and
+             VariantToInteger(Rec^.Values[i],int) then begin
+            sets := TStringList.Create;
+            try
+              TSQLPropInfoRTTISet(Field).SetEnumType^.AddCaptionStrings(sets);
+              for j := 0 to sets.Count-1 do begin
+                HtmlTableStyle.AddLabel(W,sets[j],ONOFF[GetBit(int,j)]);
+                W.AddShort('<br/>');
+              end;
+            finally
+              sets.Free;
+            end;
+          end;
+        end;
+        HtmlTableStyle.AfterValue(W);
+      end;
+      HtmlTableStyle.EndTable(W);
+      RawUTF8ToVariant(W.Text,result);
+    finally
+      W.Free;
+    end;
+  end else
+   result := Value; // not an object -> return input value as is
+end;
+
+procedure TExpressionHelperForTable.ExpressionGet(const Value: variant;
   out result: variant);
 var Rec: TSQLRecord;
     ID: integer;
@@ -779,6 +879,57 @@ begin
   finally
     Rec.Free;
   end;
+end;
+
+class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
+  const text: string; kind: THtmlTableStyleLabel);
+const SETLABEL: array[THtmlTableStyleLabel] of string[3] = ('','','- ','+ ','');
+begin
+  WR.AddShort(SETLABEL[kind]);
+  WR.AddHtmlEscapeString(text);
+  WR.AddShort('&nbsp;');
+end;
+
+class procedure TExpressionHtmlTableStyle.AfterValue(WR: TTextWriter);
+begin
+  WR.AddShort('</td></tr>');
+end;
+
+class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TTextWriter);
+begin
+  WR.AddShort('<tr><td>');
+end;
+
+class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TTextWriter);
+begin
+  WR.AddShort('</td><td>');
+end;
+
+class procedure TExpressionHtmlTableStyle.EndTable(WR: TTextWriter);
+begin
+  WR.AddShort('</table>');
+end;
+
+class procedure TExpressionHtmlTableStyle.StartTable(WR: TTextWriter);
+begin
+  WR.AddShort('<table>');
+end;
+
+class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(
+  WR: TTextWriter; const text: string; kind: THtmlTableStyleLabel);
+const SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
+  'danger','success','danger','success','primary');
+begin
+  WR.AddShort('<span class="label label-');
+  WR.AddShort(SETLABEL[kind]);
+  WR.Add('"','>');
+  WR.AddHtmlEscapeString(text);
+  WR.AddShort('</span>');
+end;
+
+class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TTextWriter);
+begin
+  WR.AddShort('<table class="table table-striped table-bordered">');
 end;
 
 procedure TMVCViewsMustache.RegisterExpressionHelpersForTables(

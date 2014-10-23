@@ -14,26 +14,24 @@ uses
 
 type
   /// defines the main ViewModel/Controller commands of the BLOG web site
+  // - typical URI are:
+  // ! blog/main/articleView?id=12 -> view one article
+  // ! blog/main/authorView?id=12 -> information about one author
+  // ! blog/main/login?name=...&plainpassword=... -> log as author
+  // ! blog/main/articlecommit -> article edition commit (ID=0 for new)
   IBlogApplication = interface(IMVCApplication)
-    /// blog/main/articleView?id=12 -> view one article
-    // - here article details are returned as out parameters values
     procedure ArticleView(
-      var ID: integer; var WithComments: boolean;
+      var ID: integer; var WithComments: boolean; Direction: integer;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
-    /// blog/main/authorView?id=12 -> information about one author
     procedure AuthorView(
       var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
-    /// blog/main/login?name=...&plainpassword=... -> log as author
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
-    /// blog/main/logout -> disconnect author
     function Logout: TMVCAction;
-    /// blog/main/articleedit -> article edition (ID=0 for new)
-    procedure ArticleEdit(
-      var ID: integer; const Title,Content, ValidationError: RawUTF8;
+    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
+      const ValidationError: variant;
       out Article: TSQLArticle);
-    /// blog/main/articlecommit -> article edition commit (ID=0 for new)
     function ArticleCommit(
       ID: integer; const Title,Content: RawUTF8): TMVCAction;
   end;
@@ -69,13 +67,15 @@ type
   public
     procedure Default(var Scope: variant);
     procedure ArticleView(var ID: integer; var WithComments: boolean;
+      Direction: integer;
       out Article: TSQLArticle; out Author: TSQLAuthor;
       out Comments: TObjectList);
     procedure AuthorView(
       var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
-    procedure ArticleEdit(var ID: integer; const Title,Content, ValidationError: RawUTF8;
+    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
+      const ValidationError: variant;
       out Article: TSQLArticle);
     function ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
   end;
@@ -106,13 +106,13 @@ end;
 
 procedure TBlogApplication.MonthToText(const Value: variant;
   out result: variant);
-const MONTHS: array[1..12] of RawUTF8 = (
+const MONTHS: array[0..11] of RawUTF8 = (
   'January','February','March','April','May','June','July','August',
   'September','October','November','December');
 var month: integer;
     text: RawUTF8;
 begin
-  if VariantToInteger(Value,month) and (month mod 12>0) then
+  if VariantToInteger(Value,month) and (month>0) then
     text := MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12);
   RawUTF8ToVariant(text,result);
 end;
@@ -121,6 +121,7 @@ procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
     article: TSQLArticle;
     n: integer;
+    res: TIntegerDynArray;
 begin
   info := TSQLBlogInfo.Create;
   try
@@ -129,6 +130,7 @@ begin
       info.Language := 'en';
       info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
       info.Copyright := '&copy;2014 <a href=http://synopse.info>Synopse Informatique</a>';
+      info.About := TSynTestCase.RandomTextParagraph(30,'!');
       RestModel.Add(info,true);
     end;
     fBlogMainInfo := info.GetSimpleFieldsAsDocVariant(false);
@@ -136,20 +138,22 @@ begin
     info.Free;
   end;
   if not RestModel.TableHasRows(TSQLArticle) then begin
+    RestModel.BatchStart(TSQLArticle);
     article := TSQLArticle.Create;
     try
       article.Author := TSQLAuthor(1);
       article.AuthorName := 'synopse';
       for n := 1 to 100 do begin
+        article.PublishedMonth := 2014*12+(n div 10);
         article.Title := TSynTestCase.RandomTextParagraph(5,' ');
         article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
         article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
-        article.PublishedMonth := 2014*12+(n div 10)+1;
-        RestModel.Add(article,true);
+        RestModel.BatchAdd(article,true);
       end;
     finally
       article.Free;
     end;
+    RestModel.BatchSend(res);
   end;
 end;
 
@@ -205,8 +209,18 @@ begin
 end;
 
 procedure TBlogApplication.ArticleView(var ID: integer; var WithComments: boolean;
+  Direction: integer;
   out Article: TSQLArticle; out Author: TSQLAuthor; out Comments: TObjectList);
+var newID: integer;
+const WHERE: array[1..2] of PUTF8Char = (
+  'ID<? order by id desc','ID>? order by id');
 begin
+  if Direction in [1,2] then begin
+    newID := GetInteger(pointer(RestModel.OneFieldValue(TSQLArticle,'ID',
+      WHERE[Direction],[ID])));
+    if newID<>0 then
+      ID := newID;
+  end;
   RestModel.Retrieve(ID,Article);
   if Article.ID<>0 then begin
     RestModel.Retrieve(Article.Author.ID,Author);
@@ -222,8 +236,10 @@ procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
   out Articles: RawJSON);
 begin
   RestModel.Retrieve(ID,Author);
+  Author.HashedPassword := '';
   if Author.ID<>0 then
-    Articles := RestModel.RetrieveListJSON(TSQLArticle,'Author=?',[ID],ARTICLE_FIELDS) else
+    Articles := RestModel.RetrieveListJSON(
+      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 
@@ -257,7 +273,8 @@ begin
 end;
 
 procedure TBlogApplication.ArticleEdit(var ID: integer;
-  const Title,Content, ValidationError: RawUTF8; out Article: TSQLArticle);
+  const Title,Content: RawUTF8; const ValidationError: variant;
+  out Article: TSQLArticle);
 var AuthorID: integer;
 begin
   AuthorID := GetLoggedAuthorID([canPost]);

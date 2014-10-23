@@ -1,8 +1,15 @@
-{{! void template created for the IBlogApplication.AuthorView View:
- defined as
-   procedure AuthorView(const ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
- with the following data context:
-   * Main: variant
-   * Author: TSQLAuthor
-   * Articles: variant
-}}
+{{>header}}
+{{>masthead}}
+      <div class="blog-header">
+        <h1 class="blog-title">User {{Author.LogonName}}</h1>
+		<div class="lead blog-description">{{Author.FirstName}} {{Author.FamilyName}}
+		</div>
+      </div>
+	  <div class="panel panel-default">
+	  <div class="panel-heading">Information about <strong>{{Author.LogonName}}</strong></div>
+	  <div class="panel-body">
+      {{{TSQLAuthor.HtmlTable Author}}}
+	  </div>
+	  </div>
+{{>articlerow}}
+{{>footer}}

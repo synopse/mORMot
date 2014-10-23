@@ -16,11 +16,13 @@ type
     fDescription: RawUTF8;
     fTitle: RawUTF8;
     fLanguage: RawUTF8;
+    fAbout: RawUTF8;
   published
     property Title: RawUTF8 index 80 read fTitle write fTitle;
     property Language: RawUTF8 index 3 read fLanguage write fLanguage;
     property Description: RawUTF8 index 120 read fDescription write fDescription;
     property Copyright: RawUTF8 index 80 read fCopyright write fCopyright;
+    property About: RawUTF8 read fAbout write fAbout;
   end;
 
   TSQLRecordTimeStamped = class(TSQLRecord)
@@ -175,7 +177,7 @@ class function TSQLArticle.CurrentPublishedMonth: Integer;
 var Y,M,D: word;
 begin
   DecodeDate(NowUTC,Y,M,D);
-  result := integer(Y)*12+integer(M);
+  result := integer(Y)*12+integer(M)-1;
 end;
 
 class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;

@@ -3732,9 +3732,12 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 {\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
 {\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
 But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
-For instance, if you create a MVC web application using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID. For instance, you may write:
+The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC web application using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
+For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
-So that any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
+This will define two {\i Expression Helpers} for the specified table:
+- Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
+- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
 :    Internationalization
 You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
 By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
@@ -3752,8 +3755,7 @@ Then, you will be able to define your template as such:
 !  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
 !  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
 All text has indeed been translated as expected.
-\page
-:   Low-level integration with the ORM
+:   Low-level integration with method-based services
 You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
 For instance, you may write, in any method-based service - see @49@:
 !var template: TSynMustache;
@@ -3773,27 +3775,40 @@ Following this low-level method-based services process, you can easily create a 
 |{\i Controller}|Method-based services - see @49@
 |%
 But still, a lot of code is needed to glue the MVC parts.
+\page
 :108 mORMotMVC for building Web applications
 :  MVVM Design
-This basic @*MVC@ design has been enhanced, and benefit from interface-based services - see @63@ - to define a true @**MVVM@ model via {\f1\fs20 mORMotMVC.pas}:
+In practice, method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshalling, rendering or routing.
+The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
 |%20%80
 |\b MVVM|mORMot\b0
 |{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
 |{\i View}|@81@\line (may be stored as separated files or within the database)
-|{\i ViewModel}|{\f1\fs20 Interface}-based services - see @63@
+|{\i ViewModel}|{\f1\fs20 Interface} services - see also @63@
 |%
 In the MVVM pattern, both {\i Model} and {\i View} components do match the classic @10@ layout. But the {\i ViewModel} will define some kind of "model for the view", i.e. the data context to be sent and retrieved from the view.
-In the {\i mORMot} implemenation, {\f1\fs20 interface}-based services methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
-|%20%80
+In the {\i mORMot} implementation, {\f1\fs20 interface} methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
+|%23%77
 |\b ViewModel|mORMot\b0
 |{\i Route}|From the {\f1\fs20 interface} name and its method name
 |{\i Command}|Defined by the method name
 |{\i Controller}|Defined by the method implementation
+|{\i ViewModel Context}|Transmitted {\i by representation}, as @*JSON@, including complex values like {\f1\fs20 @*TSQLRecord@}, records, @*dynamic array@s or @*variant@s (including {\f1\fs20 @*TDocVariant@})
 |{\i Input Context}|Transmitted as method input parameters ({\f1\fs20 const}/{\f1\fs20 var}) from the {\i View}
 |{\i Output Context}|Method output parameters ({\f1\fs20 var}/{\f1\fs20 out}) are sent to the {\i View}
-|{\i Actions}|By default, a {\f1\fs20 procedure} method will render the associated view with the output parameters, but you can define a {\f1\fs20 function} and (optionally) redirect to any other action/uri
+|{\i Actions}|A method will render the associated view with the output parameters, or go to another command (optionally via {\f1\fs20 EMVCApplication})
 |%
-This may sounds pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use, since you do not need to define explicit data structures for the {\i ViewModel} layer. For instance, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
+This may sound pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use. Main benefit is that you do not need to define explicit data structures for the {\i ViewModel} layer. The method parameters will declare the execution context for you at {\f1\fs20 interface} level, ready to be implemented in a {\f1\fs20 TMVCApplication} class. In practice, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
+The fact that the {\i ViewModel} data context is transmitted as JSON content - {\i by representation} just like @*REST@ @9@ - allows nice side effects:
+- {\i Views} do not know anything about the execution context, so are very likely to be uncoupled from any business logic - this will enhance security and maintainability of your applications;
+- You can optionally see in real time the JSON data context (by using a fake {\f1\fs20 root/methodname/json} URI) of a running application, for easier debugging of the {\i Controller} or the {\i Views};
+- You can test any {\i View} by using fake static JSON content, without the need of a real server;
+- In fact, {\i Views} could be even not tied to the web model, but run in a classic rich application, with VCL/FMX User Interface (we still need to automate the binding process to UI components, but this is technically feasible, whereas almost no regular MVC web framework do support this);
+- Since {\f1\fs20 interface} are used to define the {\i Controller}, you could @*mock@ and @*stub@ them - see @62@ - for proper unit testing;
+- In the {\i Controller} code, you have access to the {\i mORMot} ORM methods and services to implement any command, making it pretty easy to implement a web front-end to any @*SOA@ project;
+- The associated data {\i Model} is {\i mORMot}'s ORM, which is also optimized for JSON processing, so most of memory fragmentation is reduced to the minimum during the rendering;
+- The {\i Controller} would be most of the time hosted within the web server application, but {\i may} be physically hosted in another remote process - this remote {\i Controller} service may even be shared between web and VCL/FMX clients;
+- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients;
 :
 
 :42Database layer
