@@ -75,23 +75,10 @@ type
   AlignToPtr = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-function GetFPCVariantProp(Instance: TObject; PropInfo : PPropInfo): Variant; inline;
-procedure SetFPCVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: Variant); inline;
-function GetFPCInt64Prop(Instance: TObject; PropInfo: PPropInfo): Int64; inline;
-procedure SetFPCInt64Prop(Instance: TObject; PropInfo: PPropInfo;  const Value: Int64); inline;
-function GetFPCOrdProp(Instance: TObject; PropInfo: PPropInfo): Int64; inline;
-procedure SetFPCOrdProp(Instance: TObject; PropInfo: PPropInfo;  Value: Int64); inline;
-procedure GetFPCStrProp(Instance: TObject; PropInfo: PPropInfo; var result: AnsiString); inline;
-procedure SetFPCStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: AnsiString); inline;
-
 function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 //procedure getMethodList(aClass:TClass);
-procedure GetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString); inline;
-procedure SetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
-function GetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
-procedure SetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended); inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
 
 
@@ -104,46 +91,6 @@ begin
   result := align(p,sizeof(p));
 end;
 {$endif}
-
-function GetFPCVariantProp(Instance: TObject; PropInfo: PPropInfo): Variant;
-begin
-  result := TYPINFO.GetVariantProp(Instance,PropInfo);
-end;
-
-procedure SetFPCVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: Variant);
-begin
-  TYPINFO.SetVariantProp(Instance,PropInfo,Value);
-end;
-
-function GetFPCInt64Prop(Instance: TObject; PropInfo: PPropInfo): Int64;
-begin
-  result := TYPINFO.GetInt64Prop(Instance,PropInfo);
-end;
-
-procedure SetFPCInt64Prop(Instance: TObject; PropInfo: PPropInfo;  const Value: Int64);
-begin
-  TYPINFO.SetInt64Prop(Instance,PropInfo,Value);
-end;
-
-function GetFPCOrdProp(Instance: TObject; PropInfo: PPropInfo): Int64;
-begin
-  result := TYPINFO.GetOrdProp(Instance,PropInfo);
-end;
-
-procedure SetFPCOrdProp(Instance: TObject; PropInfo: PPropInfo;  Value: Int64);
-begin
-  TYPINFO.SetOrdProp(Instance,PropInfo,Value);
-end;
-
-procedure GetFPCStrProp(Instance: TObject; PropInfo: PPropInfo; var result: AnsiString);
-begin
-  result := TYPINFO.GetStrProp(Instance,PropInfo);
-end;
-
-procedure SetFPCStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: AnsiString);
-begin
-  TYPINFO.SetStrProp(Instance,PropInfo,Value);
-end;
 
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer;
 var PS: PShortString;
@@ -259,26 +206,6 @@ begin
   end;
 end;
 }
-
-procedure GetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString);
-begin
-  result := TYPINFO.GetWideStrProp(Instance,PropInfo);
-end;
-
-procedure SetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString);
-begin
-  TYPINFO.SetWideStrProp(Instance,PropInfo,Value);
-end;
-
-function GetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended;
-begin
-  result := TYPINFO.GetFloatProp(Instance,PropInfo);
-end;
-
-procedure SetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended);
-begin
-  TYPINFO.SetFloatProp(Instance,PropInfo,Value);
-end;
 
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
