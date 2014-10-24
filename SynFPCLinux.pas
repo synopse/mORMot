@@ -107,6 +107,10 @@ function FPCNowUTC: TDateTime; inline;
 // - expect more or less the same result as the homonymous Win32 API function
 function GetTickCount64: Int64;
 
+/// compatibility function, to be implemented according to the running OS
+// - expect more or less the same result as the homonymous Win32 API function
+function GetTickCount: cardinal;
+
 
 implementation
 
@@ -194,13 +198,18 @@ begin
 end;
 {$ENDIF}
 
+function GetTickCount: cardinal;
+begin
+  result := cardinal(GetTickCount64);
+end;
+
 function CopyFile(const Source, Target: string; FailIfExists:boolean): boolean;
 var SourceF, DestF: TFileStream;
 begin
   result:=True;
   if FailIfExists then
-    if FileExists(Target) then 
-      exit else 
+    if FileExists(Target) then
+      exit else
       DeleteFile(Target);
   SourceF:= TFileStream.Create(Source, fmOpenRead);
   DestF:= TFileStream.Create(Target, fmCreate);

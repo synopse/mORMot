@@ -88,11 +88,11 @@ function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inli
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 //procedure getMethodList(aClass:TClass);
-procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString); inline;
-procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
-function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
-procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended); inline;
-function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
+procedure GetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString); inline;
+procedure SetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
+function GetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
+procedure SetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended); inline;
+function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
 
 
 
@@ -260,22 +260,22 @@ begin
 end;
 }
 
-procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString);
+procedure GetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; var result: WideString);
 begin
   result := TYPINFO.GetWideStrProp(Instance,PropInfo);
 end;
 
-procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString);
+procedure SetFPCWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString);
 begin
   TYPINFO.SetWideStrProp(Instance,PropInfo,Value);
 end;
 
-function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended;
+function GetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended;
 begin
   result := TYPINFO.GetFloatProp(Instance,PropInfo);
 end;
 
-procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended);
+procedure SetFPCFloatProp(Instance: TObject; PropInfo: PPropInfo;  Value: Extended);
 begin
   TYPINFO.SetFloatProp(Instance,PropInfo,Value);
 end;

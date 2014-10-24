@@ -16480,7 +16480,7 @@ const n2u: array[138..255] of byte =
 {$endif OWNNORMTOUPPER}
 begin
   {$ifdef FPC}
-  {$ifdef FPC_FULLVERSION>=20701}
+  {$ifdef VER2_7}
   DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
   {$endif FPC}

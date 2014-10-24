@@ -14177,14 +14177,25 @@ asm     { ->    EAX Pointer to instance         }
 end;
 
 {$ifdef USETYPEINFO}
-// this pure pascal version must handle the 64-bits ordinal values and
-// the special layout of the underlying compiler (mostly FPC)
-// -> use the typinfo unit
+// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
+
 procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString); overload;
 {$ifdef HASINLINE}inline;{$endif}
 begin
-  GetWideStrProp(Instance,pointer(PropInfo),Value);
+  {$ifdef FPC}
+  GetFPCWideStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  Value := GetWideStrProp(Instance,pointer(PropInfo));
+  {$endif}
 end;
+
+{$ifdef FPC}
+procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
+begin
+  SetFPCWideStrProp(Instance,pointer(PropInfo),Value);
+end;
+{$endif}
+
 {$else}
 
 procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString);
@@ -14332,12 +14343,22 @@ St: case PropInfo^.PropType^^.FloatType of
     end;  // indexed methods not handled here, since not used in TSQLRecord
   end;
 end;
-{$endif}
+{$endif USETYPEINFO}
 
 {$ifdef USETYPEINFO}
-// this pure pascal version must handle the 64-bits ordinal values and
-// the special layout of the underlying compiler (mostly FPC)
-// -> use the typinfo unit
+// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
+
+{$ifdef FPC}
+function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
+begin
+  result := GetFPCFloatProp(Instance,pointer(PropInfo));
+end;
+
+procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo; Value: Extended); inline;
+begin
+  SetFPCFloatProp(Instance,pointer(PropInfo),value);
+end;
+{$endif}
 
 // a dedicated function to avoid conversion for currency values
 function GetCurrencyProp(Instance: TObject; PropInfo: PPropInfo): currency;
@@ -14469,9 +14490,7 @@ begin
 end;
 
 {$ifdef USETYPEINFO}
-// this pure pascal version must handle the 64-bits ordinal values and
-// the special layout of the underlying compiler (mostly FPC)
-// -> use the typinfo unit
+// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
 {$else}
 function GetMethodProp(Instance: TObject; PropInfo: PPropInfo): TMethod;
 asm     { ->    EAX Pointer to instance         }
