@@ -491,6 +491,7 @@ unit SynCommons;
   - added TRawUTF8List.CaseSensitive property as requested by [806332d296]
   - added TRawUTF8MethodList class (based on TRawUTF8ListHashed)
   - added TRawUTF8ListHashedLocked class (based on TRawUTF8ListHashed)
+  - added TAutoLocker/IAutoLocker and TLockedDocVariant/ILockedDocVariant types
   - added JSON_CONTENT_TYPE_HEADER and XML_CONTENT_TYPE[_HEADER] constants
   - new DateToSQL() overloaded function with direct Year/Month/Day parameters
   - added Base64MagicDecode(), Base64MagicCheckAndDecode() and SQLToDateTime()
@@ -9773,6 +9774,9 @@ type
     // !end;
     // - implemented as just a wrapper around DocVariantType.Clear()
     procedure Clear;
+    /// delete all internal stored values
+    // - like Clear + Init() with the same options
+    procedure Reset;
 
     /// save a document as UTF-8 encoded JSON
     // - will write either a JSON object or array, depending of the internal
@@ -9844,7 +9848,7 @@ type
       var Dest: RawUTF8);
     /// set an item in this document from its index
     // - raise an EDocVariant if the supplied Index is not in 0..Count-1 range
-    procedure SetValueOrRaiseException(Index: integer; const NewValue: variant);
+    procedure SetValueOrRaiseException(Index: integer; const NewValue: variant); 
 
     /// add a value in this document
     // - if aName is set, if dvoCheckForDuplicatedNames option is set, any
@@ -9968,7 +9972,7 @@ type
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
-
+  
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
@@ -10343,6 +10347,96 @@ type
 
 {$endif DELPHI5OROLDER}
 {$endif MSWINDOWS}
+
+  /// an interface used by TAutoLocker to protect multi-thread execution
+  IAutoLocker = interface
+    /// will enter the mutex until the IUnknown reference is released
+    // - i.e. until you left the method block
+    // - using an IUnknown interface to let the compiler auto-generate a
+    // try..finally block statement to release the lock
+    function ProtectMethod: IUnknown;
+    /// enter the mutex
+    // - any call to Enter should be ended with a call to Leave
+    procedure Enter;
+    /// leave the mutex
+    // - any call to Leave should be preceded with a call to Enter
+    procedure Leave;
+  end;
+
+  /// reference counted block code locker
+  // - you can use one instance of this to protect multi-thread execution
+  // - the main class may initialize a IAutoLocker property in Create, then call
+  // IAutoLocker.ProtectMethod in any method to make its execution thread safe
+  TAutoLocker = class(TInterfacedObject,IAutoLocker)
+  protected
+    fLock: TRTLCriticalSection;
+    fLocked: boolean;
+  public
+    /// initialize the mutex
+    constructor Create;
+    /// will enter the mutex until the IUnknown reference is released
+    function ProtectMethod: IUnknown;
+    /// enter the mutex
+    procedure Enter;
+    /// leave the mutex
+    procedure Leave;
+    /// finalize the mutex
+    destructor Destroy; override;
+  end;
+
+{$ifndef NOVARIANTS}
+  /// ref-counted interface for thread-safe access to a TDocVariant document
+  ILockedDocVariant = interface
+    function GetValue(const Name: RawUTF8): Variant;
+    procedure SetValue(const Name: RawUTF8; const Value: Variant);
+    /// check and return a given property by name
+    function Exists(const Name: RawUTF8; out Value: Variant): boolean;
+    /// set a value by property name, and set a local copy
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.Exists('prop',local) then
+    // !   cache.Replace('prop',newValue,local);
+    procedure Replace(const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.AddExistingProp('Articles',Scope) then
+    // !   cache.AddNewProp('Articles',GetArticlesFromDB,Scope);
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// delete all stored properties
+    procedure Clear;
+    /// the document fields would be safely accessed via this property
+    property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
+  end;
+
+  /// allows thread-safe access to a TDocVariant document
+  TLockedDocVariant = class(TInterfacedObject,ILockedDocVariant)
+  protected
+    fValue: TDocVariantData;
+    fLock: IAutoLocker;
+    function GetValue(const Name: RawUTF8): Variant;
+    procedure SetValue(const Name: RawUTF8; const Value: Variant);
+  public
+    /// initialize the thread-safe document storage
+    constructor Create(FastStorage: boolean=True); overload;
+    /// initialize the thread-safe document storage with the corresponding options
+    constructor Create(options: TDocVariantOptions); overload;
+    /// check and return a given property by name
+    function Exists(const Name: RawUTF8; out Value: Variant): boolean;
+    /// set a value by property name, and set a local copy
+    procedure Replace(const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
+    /// add an existing property value to the given TDocVariant document object
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// delete all stored properties
+    procedure Clear;
+    /// the document fields would be safely accessed via this property
+    // - result variant is returned as a copy, not as varByRef, since a copy
+    // will definitively be more thread safe
+    property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
+  end;
+{$endif}
 
   /// the prototype of an individual test
   // - to be used with TSynTest descendants
@@ -29303,6 +29397,15 @@ begin
   DocVariantType.Clear(TVarData(self));
 end;
 
+procedure TDocVariantData.Reset;
+var opt: TDocVariantOptions;
+begin
+  opt := VOptions;
+  DocVariantType.Clear(TVarData(self));
+  VType := DocVariantType.VarType;
+  VOptions := opt;
+end;
+
 procedure TDocVariantData.InternalAddValue(const aName: RawUTF8; const aValue: variant);
 var len: integer;
 begin
@@ -36088,10 +36191,9 @@ constructor TLocalPrecisionTimer.CreateAndStart;
 begin
   inherited;
   fTimer.Start;
-end;  
+end;
 
 {$ifdef MSWINDOWS}
-
 {$ifndef DELPHI5OROLDER}
 
 { TSynFPUException }
@@ -36161,9 +36263,159 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
-
-
 {$endif MSWINDOWS}
+
+type
+  /// used by TAutoLocker
+  TAutoLock = class(TInterfacedObject)
+  protected
+    fLock: TAutoLocker;
+  public
+    constructor Create(aLock: TAutoLocker);
+    destructor Destroy; override;
+  end;
+
+{ TAutoLock }
+
+constructor TAutoLock.Create(aLock: TAutoLocker);
+begin
+  fLock := aLock;
+  fLock.Enter;
+end;
+
+destructor TAutoLock.Destroy;
+begin
+  fLock.Leave;
+end;
+
+
+{ TAutoLocker }
+
+constructor TAutoLocker.Create;
+begin
+  InitializeCriticalSection(fLock);
+end;
+
+destructor TAutoLocker.Destroy;
+begin
+  DeleteCriticalSection(fLock);
+  inherited;
+end;
+
+function TAutoLocker.ProtectMethod: IUnknown;
+begin
+  result := TAutoLock.Create(self);
+end;
+
+procedure TAutoLocker.Enter;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TAutoLocker.Leave;
+begin
+  LeaveCriticalSection(fLock);
+end;
+
+
+{$ifndef NOVARIANTS}
+
+{ TLockedDocVariant }
+
+constructor TLockedDocVariant.Create(FastStorage: boolean);
+begin
+  Create(JSON_OPTIONS[FastStorage]);
+end;
+
+constructor TLockedDocVariant.Create(options: TDocVariantOptions);
+begin
+  fLock := TAutoLocker.Create;
+  fValue.Init(options);
+end;
+
+function TLockedDocVariant.Exists(const Name: RawUTF8; out Value: Variant): boolean;
+var i: integer;
+begin
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i<0 then begin
+      result := false;
+      exit;
+    end;
+    Value := fValue.Values[i];
+    result := true;
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.Replace(
+  const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
+begin
+  SetValue(Name,Value);
+  LocalValue := Value;
+end;
+
+function TLockedDocVariant.AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+var i: integer;
+begin
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i<0 then begin
+      result := false;
+      exit;
+    end;
+    _ObjAddProps([Name,fValue.Values[i]],Obj);
+    result := true;
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddNewProp(const Name: RawUTF8; const Value: variant;
+  var Obj: variant);
+begin
+  SetValue(Name,Value);
+  _ObjAddProps([Name,Value],Obj);
+end;
+
+function TLockedDocVariant.GetValue(const Name: RawUTF8): Variant;
+begin
+  fLock.Enter;
+  try
+    fValue.RetrieveValueOrRaiseException(pointer(Name),length(Name),
+      dvoNameCaseSensitive in fValue.Options,result,false);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.SetValue(const Name: RawUTF8;
+  const Value: Variant);
+begin
+  fLock.Enter;
+  try
+    fValue.AddValue(Name,Value);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.Clear;
+begin
+  fLock.Enter;
+  try
+    fValue.Clear;
+    fValue.Init();
+  finally
+    fLock.Leave;
+  end;
+end;
+
+{$endif NOVARIANTS}
+
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
