@@ -573,9 +573,11 @@ type
     /// global mutex which may be used to protect ViewModel/Controller code
     // - you may call Locker.ProtectMethod in any implementation method to
     // ensure that no other thread would access the same data
+    // - for store some cache data among methods, you may consider defining a
+    // ILockedDocVariant private field, and use it to store values safely 
     // - note that regular RestModel CRUD operations are already thread safe, so
     // it is not necessary to use this Locker with ORM or SOA methods
-    property Locker: IAutoLocker read fLocker write fLocker;
+    property Locker: IAutoLocker read fLocker;
     /// read-write access to the main associated TMVCRun instance
     // - if any TMVCRun instance is stored here, will be freed by Destroy
     // - but note that a single TMVCApplication logic may handle several TMVCRun

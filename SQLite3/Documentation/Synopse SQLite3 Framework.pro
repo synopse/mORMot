@@ -566,11 +566,13 @@ TitleOffset=0
 DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
-{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ and @*SOA@ framework for {\i Delphi} 6 up to XE7, targeting {\i Win32}/{\i Win64} for the server, and any platform for clients (including mobile or AJAX).
-The main two features of {\i mORMot} are therefore:
+{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to XE7 and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
+The main features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
-- {\i SOA}: organize your high-level data process into services.
-Both are available in local or remote access, via an auto-configuring Client-Server @*REST@ design.
+- {\i SOA}: organize your business logic into @*REST@ services;
+- {\i Clients}: consume your services from any platform;
+- {\i Web MVC}: publish your ORM/SOA process as @*Web Application@s.
+With local or remote access, via an auto-configuring Client-Server @*REST@ design.
 \graph mORMotDesignORMSOA General mORMot architecture
 subgraph cluster_0 {
 "SQLDB";
@@ -587,11 +589,12 @@ label="Services";
 subgraph cluster_3 {
 \SQLDB\ORM
 \NoSQLDB\ODM
+\REST Server\MVC/MVVM¤Web Server
 \ORM\REST Server
 \ODM\REST Server
 \Services\SOA
 \SOA\REST Server
-label=" mORMot";
+label=" mORMot\nServer";
 }
 \REST Server\Stand Alone¤Application
 subgraph cluster_4 {
@@ -602,19 +605,28 @@ label="REST   Clients";
 \REST Server\Delphi
 }
 subgraph cluster_5 {
+label="    Web   Clients";
+\MVC/MVVM¤Web Server\Desktop
+\MVC/MVVM¤Web Server\ Mobile
+}
+subgraph cluster_6 {
 label="         Featuring";
-\REST Server\Featured
+"Featured";
 }
 =SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle
 =NoSQLDB=MongoDB\nIn-Memory\nFiles
 =Services=Method-based Services\nInterface-based Services\nRemote (Saas) Services
 =Featured=User Management - Security & Rights¤Sessions - Logging - Performance - Profiling¤http.sys - MultiCore - Unit Testing - Mocks/Stubs¤Templates (MVC) - JavaScript Engine - JSON¤Reporting - PDF - Automated UI
 \
-{\i mORMot} offers all features needed for building any kind of modern project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.\line For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation. For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere! If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.\line The table content of this document makes it clear: this is no ordinary piece of software.
-\page
+{\i mORMot} offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.
+For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
+For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
+For building a MVC web site, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
+If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
+The table content of this document makes it clear: this is no ordinary piece of software.
 %IamLost.png
 The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
-- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
+- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
 - {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
@@ -693,7 +705,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from {\i Delphi} 6 up to XE7, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to XE7 and FPC 2.6.4/2.7.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
@@ -735,7 +747,7 @@ Feel free to give your feedback in the very same forum, asking new questions or 
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database and linked to VCL components, you would find in the {\f1\fs20 mORMotVCL.pas} unit a way to map JSON results, as returned by a {\i mORMot} server, to a {\f1\fs20 TDataSet} fast in-memory instance. See also sample "{\i 17 - TClientDataset use}".
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
-{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server} - and integrated {\i @*Mustache@} logic-less templates rendering - see @81@.
+{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see @81@ - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See @108@ for more details, and discovering a sample "blog" application.
 {\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
@@ -754,21 +766,11 @@ All those points render possible any project implementation, up to complex {\i @
 : General design
 A general design of the {\i mORMot} architecture is shown in the following diagram:
 \graph mORMotDesign3 General mORMot architecture - Client Server implementation
+\ RESTful Client\RESTful Server\REST¤JSON
 \RESTful Client\RESTful Server\REST¤JSON
-subgraph cluster_0 {
-label="Client (Delphi)";
-\Services\RESTful Client
-\RESTful Client\Business rules\uses
-\User Interface\Business rules\uses
-\Reporting\ORM methods¤over TSQLRecord\asks
-\ORM methods¤over TSQLRecord\RESTful Client\requests
-\User Interface\ORM methods¤over TSQLRecord\asks
-\User Interface\Services
-\User Interface\Reporting\runs
-\Services=ORM methods¤over TSQLRecord
-}
 subgraph cluster_1 {
-label="              Server";
+label=" mORMot Server";
+\MVC/MVVM¤Web Server\RESTful Server
 \RESTful Server\Business¤rules\uses
 \Business¤rules\ORM
 \Services¤implementation\ORM
@@ -804,7 +806,43 @@ subgraph cluster_4 {
 subgraph cluster_5 {
 \Redirected¤TSQLRestClient\Remote¤mORMot¤Server\REST¤JSON
 }
+\Desktop Browser\MVC/MVVM¤Web Server\HTTP¤HTML
+\Mobile Browser\MVC/MVVM¤Web Server
 subgraph cluster_6 {
+label="Web Clients";
+"Desktop Browser";
+"Mobile Browser";
+}
+subgraph cluster_7 {
+label="REST Client (FPC/FMX/Smart/Java/C#..)";
+\ Services\ RESTful Client
+\ORM methods ¤over TSQLRecord\ RESTful Client\requests
+\User Interface \ORM methods ¤over TSQLRecord\asks
+\User Interface \ Services
+}
+subgraph cluster_8 {
+label="mORMot Client (Delphi)";
+\Services\RESTful Client
+\RESTful Client\Business rules\uses
+\User Interface\Business rules\uses
+\Reporting\ORM methods¤over TSQLRecord\asks
+\ORM methods¤over TSQLRecord\RESTful Client\requests
+\User Interface\ORM methods¤over TSQLRecord\asks
+\User Interface\Services
+\User Interface\Reporting\runs
+\Services=ORM methods¤over TSQLRecord
+}
+\
+;subgraph cluster_8 {
+;label="Client (Java/C#/JavaScript)";
+;\  Services\RESTful  Client
+;\REST Resources\RESTful  Client\requests
+;\User  Interface\REST Resources\uses
+;\User  Interface\  Services
+;}
+In addition, you may use the following transversal features:
+\graph mORMotDesign4 General mORMot architecture - Cross-Cutting features
+subgraph cluster_9 {
 label="Cross-Cutting features";
 "File process\nCompression";
 "Security\nCryptography";
@@ -815,19 +853,21 @@ label="Cross-Cutting features";
 \
 Don't be afraid. Such a drawing may sound huge and confusing, especially when you have a RAD background, and did not work much with modern design patterns.
 Following pages will detail and explain how the framework implements this architecture, and sample code is available to help you discovering the amazing {\i mORMot} realm.
-\page
 In the previous diagram, you can already identify some key concepts of {\i mORMot}:
-- Client-Server architecture;
-- Transmitting some JSON content over a RESTful architecture;
+- Cross-Platform, multi clients, and multi devices;
+- Can integrate to an existing code base or architecture;
+- Client-Server RESTful design;
 - Layered (multi-tier) implementation;
-- Process can be defined via a set of Services;
-- Business rules and data model are shared on both Client and Server sides;
-- Data is mapped by objects (ORM);
+- Process can be defined via a set of Services (SOA);
+- Business rules and data model are shared by Clients and Server;
+- Data is mapped by objects (ORM/ODM);
 - Databases can be an embedded {\i SQLite3}, one or several standard RDBMS (with auto-generated SQL), a {\i MongoDB} NoSQL engine, fast in-memory objects lists, or another {\i mORMot} server;
 - Security (authentication and authorization) is integrated to all layers;
 - User interface and reporting classes are available;
+- You can write a MVC/MVVM AJAX or Web Application from your ORM/SOA methods;
+- Based on simple and proven patterns (REST, JSON, MVC, SOLID);
 - A consistent testing and debugging API is integrated;
-- Optimized low-level process of binary and text content.
+- Optimized for both scaling and stability.
 \page
 : Architecture Design Process
 First point is to state that you can't talk about architecture in isolation. Architecture is always driven by the actual needs of the application, not by whatever the architect read about last night and is dying to see how it works in the real world. There is no such "one architecture fits all" nor "one framework fits all" solution. Architecture is just a thinking of {\i how} you are building your own software.
@@ -898,7 +938,7 @@ rankdir=LR;
 In the framework, the {\i model} is not necessarily merely a database; the {\i model} in MVC is both the data and the business/domain logic needed to manipulate the data in the application. In our ORM, a model is implemented via a {\f1\fs20 @*TSQLModel@} class, which centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
 The {\i views} can be implemented using:
 - For Desktop clients, a full set of User-Interface units of the framework, which is mostly auto-generated from code - they will consume the {\i model} as reference for rendering the data;
-- For Web clients, an integrated high-speed {\i @*Mustache@} rendering engine - see @81@ - is able to render HTML pages with logic-less templates;
+- For Web clients, an integrated high-speed {\i @*Mustache@} rendering engine - see @81@ - is able to render HTML pages with logic-less templates, and {\i controller} methods written in Delphi - see @108@;
 - For @*AJAX@ clients, the server side is easy to be reached from @*REST@ful @*JSON@ services.
 The {\i controller} is mainly already implemented in our framework, within the RESTful commands, and will interact with both the associated {\i view} (e.g. for refreshing the User Interface) and {\i model} (for data handling). Some custom actions, related to the business logic, can be implemented via some custom {\f1\fs20 TSQLRecord} classes or via custom RESTful @*Service@s - see @11@.
 \page
@@ -1250,6 +1290,9 @@ rankdir=LR;
 \HTTP\SynCommons.pas
 \mORMotMongoDB.pas\SynMongoDB.pas
 \mORMotMongoDB.pas\mORMot.pas
+\mORMotMVC.pas\mORMot.pas
+\mORMotMVC.pas\SynCommons.pas
+\mORMotMVC.pas\SynMustache.pas
 \SynMongoDB.pas\SynCommons.pas
 \SynMongoDB.pas\SynCrtSock.pas
 =UI=mORMotUI.pas¤mORMotToolBar.pas¤mORMoti18n.pas¤mORMotUILogin.pas¤mORMotUIEdit.pas¤mORMotUIQuery.pas¤mORMotUIOptions.pas
@@ -1265,13 +1308,13 @@ The main units you have to be familiar with are the following:
 |{\f1\fs20 SynCommons.pas}|Common types, classes and functions
 |{\f1\fs20 mORMot.pas}|Main unit of the @*ORM@ / @*SOA@ framework
 |{\f1\fs20 SynSQLite3.pas\line SynSQLite3Static.pas}|{\i @*SQLite3@} database engine
-|{\f1\fs20 SynSM*.pas}|{\i SpiderMonkey} JavaScript engine
 |{\f1\fs20 mORMotSQLite3.pas}|Bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 @*SynDB@.pas\line SynDB*.pas}|Direct RDBMS access classes
 |{\f1\fs20 mORMotDB.pas}|ORM external {\f1\fs20 SynDB.pas} access, via {\i SQlite3} virtual tables
 |{\f1\fs20 SynMongoDB.pas\line mORMotMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
-|{\f1\fs20 SynCrtSock.pas}|Implements @*HTTP@/1.1 client and server protocol
-|{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas}|@*REST@ful HTTP/1.1 Client and Server
+|{\f1\fs20 SynSM*.pas}|{\i SpiderMonkey} JavaScript engine
+|{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas\line SynCrtSock.pas}|@*REST@ful HTTP/1.1 Client and Server
+|{\f1\fs20 mORMotMVC.pas\line SynMustache.pas}|@*MVC@ classes for writing @*Web Application@s
 |{\f1\fs20 mORMotUI*.pas}|Grid and Forms User Interface generation
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotReport.pas}|Integrated Reporting engine
@@ -3035,6 +3078,105 @@ After the statement has been prepared, you can use the standard {\f1\fs20 FillOn
 !!  MS.FillClose;
 Note that in our case, an explicit call to {\f1\fs20 FillClose} has been added in order to release all {\f1\fs20 Dest} instances created in {\f1\fs20 FillPrepareMany}. This call is not mandatory if you call {\f1\fs20 MS.Free} directly, but it is required if the same {\f1\fs20 MS} instance is about to use some regular many-to-many methods, like {\f1\fs20 MS.DestList.ManySelect()} - it will prevent any GPF exception to occur with code expecting the {\f1\fs20 Dest} property not to be an instance, but a {\f1\fs20 pointer(DestID)} value.
 \page
+:110 ORM Data Model
+:  Creating an ORM Model
+The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
+In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestStorageInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
+Each {\f1\fs20 TSQLModel} instance is in fact associated with a {\f1\fs20 TSQLRest} instance. An {\f1\fs20 Owner} property gives access to the current running client or server {\f1\fs20 @*TSQLRest@} instance associated with this model.
+By design, models are used on both Client and Server sides. It is therefore a good practice to use a common unit to define all {\f1\fs20 TSQLRecord} types, and have a common function to create the related {\f1\fs20 TSQLModel} class.
+For instance, here is the corresponding function as defined in the first samples available in the source code repository (unit {\f1\fs20 SampleData.pas}):
+!function CreateSampleModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLSampleRecord]);
+!end;
+For a more complex model including link to User Interface, see @64@.
+:  Several Models
+In practice, a same {\f1\fs20 TSQLRecord} can be used in several models: this is typically the case for {\f1\fs20 TSQLAuthUser} tables, or if client and server instances are running in the same process. So, for accessing the model properties, you have two structures available:
+|%37%68
+|\b Class|Description\b0
+|{\f1\fs20 @**TSQLModelRecordProperties@}|Model-specific ORM parameters, like dedicated SQL auto-generation and external DB settings.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[]} array
+|{\f1\fs20 @**TSQLRecordProperties@}|Low-level table properties, as retrieved from @5@ by the ORM kernel of {\i mORMot}.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[].Props}
+|%
+So you may use code like this:
+!var i: integer;
+!    ModelProps: TSQLModelRecordProperties;
+!    Props: TSQLRecordProperties;
+!begin
+!  ...
+!  for i := 0 to high(Model.TableProps) do begin
+!    ModelProps := Model.TableProps[i];
+!    // now you can access ModelProps.ExternalDB.TableName ...
+!    Props := ModelProps.Props;
+!    // now you can use Props.SQLTableName or Props.Fields[]
+!  end;
+!end;
+:56  Filtering and Validating
+According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
+If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
+In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
+\graph HierTSynFilter Filtering and Validation classes hierarchy
+\TSynValidate\TSynFilterOrValidate
+\TSynFilter\TSynFilterOrValidate
+\
+{\f1\fs20 @*TSQLRecord@} field content validation is handled in the new {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes.
+{\f1\fs20 TSQLRecord} field content filtering is handled in the new {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes.
+Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
+\graph HierTSynFilters Default filters and Validation classes hierarchy
+\TSynValidatePassWord\TSynValidateText
+\TSynValidateText\TSynValidate
+\TSynValidateTableUniqueField\TSynValidateTable
+\TSynValidateTable\TSynValidate
+\TSynValidateUniqueField\TSynValidateRest
+\TSynValidateRest\TSynValidate
+\TSynValidatePatternI\TSynValidatePattern
+\TSynValidatePattern\TSynValidate
+\TSynValidateIPAddress\TSynValidate
+\TSynValidateEmail\TSynValidate
+\TSynValidate\TSynFilterOrValidate
+\TSynFilterUpperCaseU\TSynFilter
+\TSynFilterUpperCase\TSynFilter
+\TSynFilterTrim\TSynFilter
+\TSynFilterLowerCaseU\TSynFilter
+\TSynFilterLowerCase\TSynFilter
+\TSynFilter\TSynFilterOrValidate
+rankdir=LR;
+\
+You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
+Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
+Of course, the {\f1\fs20 mORMotUIEdit} unit now handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (using one of the {\f1\fs20 TSQLValidate} classes).
+The unique field validation is now in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
+To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
+!function CreateFileModel(Owner: TSQLRest): TSQLModel;
+!begin
+!  result := TSQLModel.Create(Owner,
+!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
+!    TypeInfo(TFileAction),TypeInfo(TFileEvent),'synfile');
+!  TSQLFile.AddFilterOrValidate('Name',TSQLFilterLowerCase);
+!  TSQLUser.AddFilterOrValidate('Email',TSQLValidateEmail);
+!end;
+In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
+For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
+!procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
+! (...)
+!  // perform all registered filtering
+!!  Rec.Filter(ModifiedFields);
+!  // perform content validation
+!  FieldIndex := -1;
+!!  ErrMsg := Rec.Validate(Client,ModifiedFields,@FieldIndex);
+!  if ErrMsg<>'' then begin
+!    // invalid field content -> show message, focus component and abort saving
+!    if cardinal(FieldIndex)<cardinal(length(fFieldComponents)) then begin
+!      C := fFieldComponents[FieldIndex];
+!      C.SetFocus;
+!      Application.ProcessMessages;
+!      ShowMessage(ErrMsg,format(sInvalidFieldN,[fFieldCaption[FieldIndex]]),true);
+!    end else
+!      ShowMessage(ErrMsg,format(sInvalidFieldN,['?']),true);
+!  end else
+!    // close window on success
+!    ModalResult := mrOk;
+!end;
+It is up to your code to filter and validate the record content. By default, the {\i mORMot} @*CRUD@ operations won't call the registered filters or validators.
 :38 ORM Cache
 Here is the definition of "cache", as stated by {\i Wikipedia}:
 {\i In computer engineering, a @**cache@ is a component that transparently stores data so that future requests for that data can be served faster. The data that is stored within a cache might be values that have been computed earlier or duplicates of original values that are stored elsewhere. If requested data is contained in the cache (cache hit), this request can be served by simply reading the cache, which is comparatively faster. Otherwise (cache miss), the data has to be recomputed or fetched from its original storage location, which is comparatively slower. Hence, the greater the number of requests that can be served from the cache, the faster the overall system performance becomes.}
@@ -3338,865 +3480,8 @@ Therefore, we may sum up some potential use of ORM, depending of your intent:
 - If your expectation is to map an existing complex DB, {\i mORMot} will handle it soon (it is planned and prepared within the framework architecture).
 Therefore, {\i mORMot} is not just an ORM, nor just a "classic" ORM.
 About how to use {\i mORMot} with existing code, see @66@.
-:MVC pattern
-%cartoon04.png
-: Creating a Model
-According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
-The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
-In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestStorageInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
-Each {\f1\fs20 TSQLModel} instance is in fact associated with a {\f1\fs20 TSQLRest} instance. An {\f1\fs20 Owner} property gives access to the current running client or server {\f1\fs20 @*TSQLRest@} instance associated with this model.
-By design, models are used on both Client and Server sides. It is therefore a good practice to use a common unit to define all {\f1\fs20 TSQLRecord} types, and have a common function to create the related {\f1\fs20 TSQLModel} class.
-For instance, here is the corresponding function as defined in the first samples available in the source code repository (unit {\f1\fs20 SampleData.pas}):
-!function CreateSampleModel: TSQLModel;
-!begin
-!  result := TSQLModel.Create([TSQLSampleRecord]);
-!end;
-For a more complex model including link to User Interface, see @64@.
-In practice, a same {\f1\fs20 TSQLRecord} can be used in several models: this is typically the case for {\f1\fs20 TSQLAuthUser} tables, or if client and server instances are running in the same process. So, for accessing the model properties, you have two structures available:
-|%37%68
-|\b Class|Description\b0
-|{\f1\fs20 @**TSQLModelRecordProperties@}|Model-specific ORM parameters, like dedicated SQL auto-generation and external DB settings.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[]} array
-|{\f1\fs20 @**TSQLRecordProperties@}|Low-level table properties, as retrieved from @5@ by the ORM kernel of {\i mORMot}.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[].Props}
-|%
-So you may use code like this:
-!var i: integer;
-!    ModelProps: TSQLModelRecordProperties;
-!    Props: TSQLRecordProperties;
-!begin
-!  ...
-!  for i := 0 to high(Model.TableProps) do begin
-!    ModelProps := Model.TableProps[i];
-!    // now you can access ModelProps.ExternalDB.TableName ...
-!    Props := ModelProps.Props;
-!    // now you can use Props.SQLTableName or Props.Fields[]
-!  end;
-!end;
-\page
-:56 Filtering and Validating
-According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
-If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
-In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
-\graph HierTSynFilter Filtering and Validation classes hierarchy
-\TSynValidate\TSynFilterOrValidate
-\TSynFilter\TSynFilterOrValidate
-\
-{\f1\fs20 @*TSQLRecord@} field content validation is handled in the new {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes.
-{\f1\fs20 TSQLRecord} field content filtering is handled in the new {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes.
-Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
-\graph HierTSynFilters Default filters and Validation classes hierarchy
-\TSynValidatePassWord\TSynValidateText
-\TSynValidateText\TSynValidate
-\TSynValidateTableUniqueField\TSynValidateTable
-\TSynValidateTable\TSynValidate
-\TSynValidateUniqueField\TSynValidateRest
-\TSynValidateRest\TSynValidate
-\TSynValidatePatternI\TSynValidatePattern
-\TSynValidatePattern\TSynValidate
-\TSynValidateIPAddress\TSynValidate
-\TSynValidateEmail\TSynValidate
-\TSynValidate\TSynFilterOrValidate
-\TSynFilterUpperCaseU\TSynFilter
-\TSynFilterUpperCase\TSynFilter
-\TSynFilterTrim\TSynFilter
-\TSynFilterLowerCaseU\TSynFilter
-\TSynFilterLowerCase\TSynFilter
-\TSynFilter\TSynFilterOrValidate
-rankdir=LR;
-\
-You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
-Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
-Of course, the {\f1\fs20 mORMotUIEdit} unit now handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (using one of the {\f1\fs20 TSQLValidate} classes).
-The unique field validation is now in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
-To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
-!function CreateFileModel(Owner: TSQLRest): TSQLModel;
-!begin
-!  result := TSQLModel.Create(Owner,
-!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
-!    TypeInfo(TFileAction),TypeInfo(TFileEvent),'synfile');
-!  TSQLFile.AddFilterOrValidate('Name',TSQLFilterLowerCase);
-!  TSQLUser.AddFilterOrValidate('Email',TSQLValidateEmail);
-!end;
-In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
-For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
-!procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
-! (...)
-!  // perform all registered filtering
-!!  Rec.Filter(ModifiedFields);
-!  // perform content validation
-!  FieldIndex := -1;
-!!  ErrMsg := Rec.Validate(Client,ModifiedFields,@FieldIndex);
-!  if ErrMsg<>'' then begin
-!    // invalid field content -> show message, focus component and abort saving
-!    if cardinal(FieldIndex)<cardinal(length(fFieldComponents)) then begin
-!      C := fFieldComponents[FieldIndex];
-!      C.SetFocus;
-!      Application.ProcessMessages;
-!      ShowMessage(ErrMsg,format(sInvalidFieldN,[fFieldCaption[FieldIndex]]),true);
-!    end else
-!      ShowMessage(ErrMsg,format(sInvalidFieldN,['?']),true);
-!  end else
-!    // close window on success
-!    ModalResult := mrOk;
-!end;
-It is up to your code to filter and validate the record content. By default, the {\i mORMot} @*CRUD@ operations won't call the registered filters or validators.
-\page
-: Views
-The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
-- For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
-- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
-:  Desktop clients
-:5   RTTI
-The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
-In short, it allows the software logic to be extracted from the code itself. Here are the places where this technology was used:
-- All database structures are set in the code by normal classes definition, and most of the needed @*SQL@ code is created on the fly by the framework, before calling the {\i @*SQLite3@} database engine, resulting in a true Object-relational mapping (@*ORM@) framework;
-- All User Interface is generated by the code, by using some simple data structures, relying on enumerations (see next paragraph);
-- Most of the text displayed on the screen does rely on RTTI, thanks to the @*Camel@ approach (see below), ready to be translated into local languages;
-- All internal Event process (such as Button press) relies on enumerations RTTI;
-- Options and program parameters are using RTTI for data persistence and screen display (e.g. the Settings window of your program can be created by pure code): adding an option is a matter of a few code lines.
-In {\i Delphi}, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
-For example, some tool-bar actions can be defined with:
-!type
-!  /// item toolbar actions
-!  TBabyAction = (
-!    paCreateNew, paDelete, paEdit, paQuit);
-Then this {\f1\fs20 TBabyAction} @*enumerated@ type is used to create the User Interface ribbon of the main window, just by creating an array of set of this kind:
-!BarEdit: array[0..1] of set of TBabyAction = (
-!    [paCreateNew, paDelete, paEdit],
-!    [paQuit] );
-The caption of the buttons to be displayed on the screen is then extracted by the framework using "@**Camel@ Case": the second button, defined by the {\f1\fs20 paCreateNew} identifier in the source code, is displayed as "{\i Create new}" on the screen, and this "{\i Create new}" is used for direct @*i18n@ of the software. For further information about "Camel Case" and its usage in Object Pascal, Java, Dot Net, Python see @http://en.wikipedia.org/wiki/CamelCase
-Advantages of the RTTI can therefore by sum up:
-- Software maintainability, since the whole program logic is code-based, and the User Interface is created from it. It therefore avoid RAD (Rapid Application Development) abuse, which mix the User Interface with data logic, and could lead into "write fast, try to maintain" scenarios;
-- Enhanced code @*security@, thanks to Object Pascal @*strong type@ syntax;
-- Direct database access from the language object model, without the need of writing @*SQL@ or use of a @*MVC@ framework;
-- User Interface coherency, since most screen are created on the fly;
-- Easy @*i18n@ of the software, without additional components or systems.
-:64   User Interface
-User Interface generation from RTTI and the integrated reporting features will be described @31@, during presentation of the Main Demo application design.
-In short, such complex model including User Interface auto-creation could be written as such - extracted from unit {\f1\fs20 FileTables.pas}:
-!function CreateFileModel(Owner: TSQLRest): TSQLModel;
-!begin
-!  result := TSQLModel.Create(Owner,
-!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
-!    TypeInfo(TFileAction),TypeInfo(TFileEvent));
-!end;
-All needed {\f1\fs20 TSQLRecord} classes are declared in a
-! FileTabs: array[0..4] of TFileRibbonTabParameters = ( ...
-constant array, and will use {\f1\fs20 TFileAction / TFileEvent} enumeration types to handle the User Interface activity and Business Logic.
-\page
-:  Web clients
-:81   Mustache template engine
-{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure {\i Delphi} implementation of it, with a perfect integration with other bricks of the framework.
-Generally speaking, a @**Template@ system can be used to separate output formatting specifications, which govern the appearance and location of output text and data elements, from the executable logic which prepares the data and makes decisions about what appears in the output.
-Most template systems (e.g. PHP, smarty, Razor...) feature in fact a full scripting engine within the template content. It allows powerful constructs like variable assignment or conditional statements in the middle of the HTML content. It makes it easy to modify the look of an application within the template system exclusively, without having to modify any of the underlying "application logic". They do so, however, at the cost of separation, turning the templates themselves into part of the application logic.
-{\i Mustache} inherits from Google's {\i ctemplate} library, and is used in many famous applications, including the "main" Google web search, or the Twitter web site.\line The {\i Mustache} template system leans strongly towards preserving the separation of logic and presentation, therefore ensures a perfect  @*MVC@ - @10@ - design, and ready to consume @*SOA@ services.
-{\i Mustache} is intentionally constrained in the features it supports and, as a result, applications tend to require quite a bit of code to instantiate a template: all the application logic will be defined within the {\i Controller} code, not in the {\i View} source. This may not be to everybody's tastes. However, while this design limits the power of the template language, it does not limit the power or flexibility of the template system. This system supports arbitrarily complex text formatting.
-Finally, {\i Mustache} is designed with an eye towards efficiency. Template instantiation is very quick, with an eye towards minimizing both memory use and memory fragmentation. As a result, it sounds like a perfect template system for our {\i mORMot} framework.
-:   Mustache principles
-There are two main parts to the {\i Mustache} template system:
-- Templates (which are plain text files);
-- Data dictionaries (aka {\i Context}).
-For instance, given the following template:
-$$<h1>{{header}}</h1>
-$$
-$${{#items}}
-$$  {{#first}}
-$$    <li><strong>{{name}}</strong></li>
-$$  {{/first}}
-$$  {{#link}}
-$$    <li><a href="{{url}}">{{name}}</a></li>
-$$  {{/link}}
-$${{/items}}
-$$
-$${{#empty}}
-$$  <p>The list is empty.</p>
-$${{/empty}}
-and the following data context:
-#{
-#  "header": "Colors",
-#  "items": [
-#      {"name": "red", "first": true, "url": "#Red"},
-#      {"name": "green", "link": true, "url": "#Green"},
-#      {"name": "blue", "link": true, "url": "#Blue"}
-#  ],
-#  "empty": true
-#}
-The {\i Mustache} engine will render this data as such:
-$$<h1>Colors</h1>
-$$<li><strong>red</strong></li>
-$$<li><a href="#Green">green</a></li>
-$$<li><a href="#Blue">blue</a></li>
-$$<p>The list is empty.</p>
-In fact, you did not see any "{\f1\fs20 if}" nor "{\i for}" loop in the template, but {\i Mustache} conventions make it easy to render the supplied data as the expected HTML output. It is up to the MVC {\i Controller} to render the data as expected by the template, e.g. for formatting dates or currency values.
-:   Mustache templates
-The {\i Mustache} template logic-less language has five types of tags:
-- Variables;
-- Sections;
-- Inverted Sections;
-- Comments;
-- Partials.
-All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. Anything found in a template of this form is interpreted as a template marker. All other text is considered formatting text and is output verbatim at template expansion time.
-|%20%80
-|\b Marker|Description\b0
-|{\f1\fs20 \{\{variable\}\}}|The {\f1\fs20 variable} name will be searched recursively within the current context (possibly with dotted names), and, if found, will be written as escaped HTML.\line If there is no such key, nothing will be rendered.
-|{\f1\fs20 \{\{\{variable\}\}\}\line {\f1\fs20 \{\{& variable\}\}}}|The {\f1\fs20 variable} name will be searched recursively within the current context, and, if found, will be written directly, {\i without any HTML escape}.\line If there is no such key, nothing will be rendered.
-|{\f1\fs20 \{\{#section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i section}, which will be rendered depending of the {\f1\fs20 section} variable value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list} {\f1\fs20 []}, the whole block won't be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} but not a list, it will be used as the context for a single rendering of the block;\line - If {\f1\fs20 section} is a non-empty list, the text in the block will be rendered once for each item in the list - the context of the block will be set to the current item for each iteration.
-|{\f1\fs20 \{\{^section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i inverted section}, which will be rendered depending of the {\f1\fs20 section} variable {\i inverted }value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list}, the whole block {\i will} be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} or a non-empty list, it won't be rendered.
-|{\f1\fs20 \{\{! comment\}\}}|The comment text will just be ignored.
-|{\f1\fs20 \{\{>partial\}\}}|The {\f1\fs20 partial} name will be searched within the registered {\i partials list}, then will be executed at run-time (so recursive partials are possible), with the current execution context.
-|{\f1\fs20 \{\{=...=\}\}}|The delimiters (i.e. by default {\f1\fs20 \{\{...\}\}}) will be replaced by the specified characters (may be convenient when double-braces may appear in the text).
-|%
-In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
-|%20%80
-|\b Marker|Description\b0
-|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
-|{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
-|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
-|{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
-|{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
-|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
-|{\f1\fs20 \{\{<partial\}\}}\line ...\line {\f1\fs20 \{\{/partial\}\}}|Defines an in-lined {\i partial} - to be called later via {\f1\fs20 \{\{>partial\}\}} - within the scope of the current template
-|{\f1\fs20 \{\{"some text\}\}}|This pseudo-variable will supply the given text to a callback, which will for instance transform its content (e.g. translate it), before writing it to the output
-|%
-This set of markers will allow to easily write any kind of content, without any explicit logic nor nested code. As a major benefit, the template content could be edited and verified without the need of any {\i Mustache} compiler, since all those {\f1\fs20 \{\{...\}\}} markers will identify very clearly the resulting layout.
-:    Variables
-A typical Mustache template:
-$Hello {{name}}
-$You have just won {{value}} dollars!
-$Well, {{taxed_value}} dollars, after taxes.
-Given the following hash:
-#{
-#  "name": "Chris",
-#  "value": 10000,
-#  "taxed_value": 6000
-#}
-Will produce the following:
-$Hello Chris
-$You have just won 10000 dollars!
-$Well, 6000 dollars, after taxes.
-You can note that {\f1\fs20 \{\{variable\}\}} tags are escaped for HTML by default. This is a mandatory security feature. In fact, all web applications which create HTML documents can be vulnerable to Cross-Site-Scripting (XSS) attacks unless data inserted into a template is appropriately sanitized and/or escaped. With Mustache, this is done by default. Of course, you can override it and force to {\i not-escape} the value, using {\f1\fs20 \{\{\{variable\}\}\} or {\f1\fs20 \{\{& variable\}\}}}.
-For instance:
-|%24%38%38
-|\b Template|Context|Output\b0
-|{\f1\fs20 * \{\{name\}\}\line * \{\{age\}\}\line * \{\{company\}\}\line * \{\{\{company\}\}\}|\{\line   "name": "Chris",\line   "company": "<b>GitHub</b>"\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
-|%
-Variables resolve names within the current context with an optional dotted syntax, for instance:
-|%29%37%36
-|\b Template|Context|Output\b0
-|{\f1\fs20 * \{\{people.name\}\}\line * \{\{people.age\}\}\line * \{\{people.company\}\}\line * \{\{\{people.company\}\}\}|\{\line  "people": \{\line   "name":"Chris",\line   "company":"<b>GitHub</b>"\line  \}\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
-|%
-:    Sections
-{\i Sections} render blocks of text one or more times, depending on the value of the key in the current context.
-In our "wining template" above, what happen if we do want to hide the tax details?\line In most script languages, we may write an {\f1\fs20 if ... } block within the template. This is what {\i Mustache} avoids. So we define a section, which will be rendered on need.
-The template becomes:
-$Hello {{name}}
-$You have just won {{value}} dollars!
-${{#in_ca}}
-$Well, {{taxed_value}} dollars, after taxes.
-${{/in_ca}}
-Here, we created a new section, named {\f1\fs20 in_ca}.
-Given the hash value of {\f1\fs20 in_ca} (and its presence), the section will be rendered, or not:
-|%40%55
-|\b Context|Output\b0
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": true\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": false\line \}|Hello Chris\line You have just won 10000 dollars!}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
-|%
-Sections also change the context of its inner block. It means that the section variable content becomes the top-most context which will be used to identify any supplied variable key.
-Therefore, the following context will be perfectly valid: we can define {\f1\fs20 taxed_value} as a member of {\f1\fs20 in_ca}, and it will be rendered directly, since it is part of the new context.
-|%40%55
-|\b Context|Output\b0
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 3000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|%
-In the latest context above, there are two {\f1\fs20 taxed_value} variables. The engine will use the one defined by the context in the {\f1\fs20 in_ca} section, i.e. {\f1\fs20 in_ca.taxed_value}; the one defined at the root context level (which equals 3000) is just ignored.
-If the variable pointed by the section name is a list, the text in the block will be rendered once for each item in the list. The context of the block will be set to the current item for each iteration.\line In this way we can loop over collections. {\i Mustache} allows any depth of nested loops (e.g. any level of master/details information).
-|%24%38%38
-|\b Template|Context|Output\b0
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{name\}\}</b>\line \{\{/repo\}\}|\{\line   "repo": [\line     { "name": "resque" },\line     { "name": "hub" },\line     { "name": "rip" }\line   ]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}|\{\line   "repo":\line      ["resque", "hub", "rip"]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
-|%
-The latest template makes use of the {\f1\fs20 \{\{.\}\}} pseudo-variable, which allows to render the current item of the list.
-:    Inverted Sections
-An inverted section begins with a caret ({\f1\fs20 ^}) and ends as a standard (non-inverted) section. They may render text once, based on the {\i inverse} value of the key. That is, the text block will be rendered if the key doesn't exist, is false, or is an empty list.
-Inverted sections are usually defined after a standard section, to render some message in case no information will be written in the non-inverted section:
-|%30%30%30
-|\b Template|Context|Output\b0
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}\line \{\{^repo\}\}\line No repos :(\line \{\{/repo\}\}|\{\line   "repo":\line      []\line \}|No repos :(}
-|%
-:    Partials
-Partials are some kind of external sub-templates which can be included within a main template, for instance to follow the same rendering at several places. Just like functions in code, they do ease template maintainability and spare development time.
-Partials are rendered at runtime (as opposed to compile time), so recursive partials are possible. Just avoid infinite loops. They also inherit the calling context, so can easily be re-used within a list section, or together with plain variables.
-In practice, partials shall be supplied together with the data context - they could be seen as "template context".
-For example, this "main" template uses a {\f1\fs20 \{\{> user\}\}} partial:
-$$<h2>Names</h2>
-$${{#names}}
-$$  {{> user}}
-$${{/names}}
-With the following template registered as "user":
-$$<strong>{{name}}</strong>
-Can be thought of as a single, expanded template:
-$$<h2>Names</h2>
-$${{#names}}
-$$  <strong>{{name}}</strong>
-$${{/names}}
-In {\i mORMot}'s implementations, you can also create some {\i internal} partials, defined as {\f1\fs20 \{\{<partial\}\} ... \{\{/partial\}\}} pseudo-sections. It may decrease the need of maintaining multiple template files, and refine the rendering layout.
-For instance, the previous template may be defined at once:
-$$<h2>Names</h2>
-$${{#names}}
-$$  {{>user}}
-$${{/names}}
-$$
-$${{<user}}
-$$<strong>{{name}}</strong>
-$${{/user}}
-The same file will define both the partial and the main template. Note that we defined the internal partial after the main template, but we may have defined it anywhere in the main template logic: internal partials definitions are ignored when rendering the main template, just like comments.
-:   SynMustache unit
-Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} template engine in the {\f1\fs20 SynMustache} unit:
-- It is the first {\i Delphi} implementation of {\i Mustache};
-- It has a separate parser and renderer (so you can compile your templates ahead of time);
-- The parser features a shared cache of compiled templates;
-- It passes all official {\i Mustache} specification tests, as defined at @http://github.com/mustache/spec - including all weird whitespace process;
-- External partials can be supplied as {\f1\fs20 TSynMustachePartials} dictionaries;
-- {\f1\fs20 \{\{.\}\}}, {\f1\fs20 \{\{-index\}\}} and {\f1\fs20 \{\{"some text\}\}} pseudo-variables were added to the standard {\i Mustache} syntax;
-- {\f1\fs20 \{\{#-first\}\}}, {\f1\fs20 \{\{#-last\}\}} and {\f1\fs20 \{\{#-odd\}\}} pseudo-sections were added to the standard {\i Mustache} syntax;
-- Internal partials can be defined via {\f1\fs20 \{\{<partial\}\}} - also a nice addition to the standard {\i Mustache} syntax;
-- It allows the data context to be supplied as JSON or our @80@;
-- Almost no memory allocation is performed during the rendering;
-- It is natively UTF-8, from the ground up, with optimized conversion of any string data;
-- Performance has been tuned and grounded in {\f1\fs20 SynCommons}'s optimized code;
-- Each parsed template is thread-safe and re-entrant;
-- It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
-- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
-- API is flexible and easy to use.
-:    Variables
-Now, let's see some code.\line First, we define our needed variables:
-!var mustache: TSynMustache;
-!    doc: variant;
-In order to parse a template, you just need to call:
-!  mustache := TSynMustache.Parse(
-!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
-It will return a compiled instance of the template.\line The {\f1\fs20 Parse()} class method will use the shared cache, so you won't need to release the {\f1\fs20 mustache} instance once you are done with it: no need to write a {\f1\fs20 try ... finally mustache.Free; end} block.
-You can use a {\f1\fs20 TDocVariant} to supply the context data (with late-binding):
-!  TDocVariant.New(doc);
-!  doc.name := 'Chris';
-!  doc.value := 10000;
-As an alternative, you may have defined the context data as such:
-!  doc := _ObjFast(['name','Chris','value',1000]);
-Now you can render the template with this context:
-!  html := mustache.Render(doc);
-!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-If you want to supply the context data as JSON, then render it, you may write:
-!  mustache := TSynMustache.Parse(
-!    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
-!  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
-!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
-As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into UTF-8):
-!  mustache := TSynMustache.Parse(
-!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
-!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
-!  html='Hello Chris'#13#10'You have just won 10000 dollars!'
-You can find in the {\f1\fs20 mORMot.pas} unit the {\f1\fs20 ObjectToJSON()} function which is able to transform any {\f1\fs20 TPersistent} instance into valid JSON content, ready to be supplied to a {\f1\fs20 TSynMustache} compiled instance.\line If the object's published properties have some getter functions, they will be called on the fly to process the data (e.g. returning 'FirstName Name' as FullName by concatenating both sub-fields).
-:    Sections
-Sections are handled as expected:
-!  mustache := TSynMustache.Parse('Shown.{{#person}}As {{name}}!{{/person}}end{{name}}');
-!  html := mustache.RenderJSON('{person:{age:?,name:?}}',[10,'toto']);
-!  // now html='Shown.As toto!end'
-Note that the sections change the data context, so that within the {\f1\fs20 #person} section, you can directly access to the data context {\f1\fs20 person} member, i.e. writing directly {\f1\fs20 \{\{name\}\}}
-It supports also inverted sections:
-!  mustache := TSynMustache.Parse('Shown.{{^person}}Never shown!{{/person}}end');
-!  html := mustache.RenderJSON('{person:true}');
-!  // now html='Shown.end'
-To render a list of items, you can write for instance (using the {\f1\fs20 \{\{.\}\}} pseudo-variable):
-!  mustache := TSynMustache.Parse('{{#things}}{{.}}{{/things}}');
-!  html := mustache.RenderJSON('{things:["one", "two", "three"]}');
-!  // now html='onetwothree'
-The {\f1\fs20 \{\{-index\}\}} pseudo-variable allows to numerate the list items, when rendering:
-!  mustache := TSynMustache.Parse(
-!    'My favorite things:'#$A'{{#things}}{{-index}}. {{.}}'#$A'{{/things}}');
-!  html := mustache.RenderJSON('{things:["Peanut butter", "Pen spinning", "Handstands"]}');
-!  // now html='My favorite things:'#$A'1. Peanut butter'#$A'2. Pen spinning'#$A+
-!  //          '3. Handstands'#$A,'-index pseudo variable'
-:    Partials
-External partials (i.e. standard {\i Mustache} partials) can be defined using {\f1\fs20 TSynMustachePartials}. You can define and maintain a list of {\f1\fs20 TSynMustachePartials} instances, or you can use a one-time partial, for a given rendering process, as such:
-!  mustache := TSynMustache.Parse('{{>partial}}'#$A'3');
-!  html := mustache.RenderJSON('{}',TSynMustachePartials.CreateOwned(['partial','1'#$A'2']));
-!  // now html='1'#$A'23','external partials'
-Here {\f1\fs20 TSynMustachePartials.CreateOwned()} expects the partials to be supplied as name/value pairs.
-Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined directly in the main template:
-!  mustache := TSynMustache.Parse('{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
-!  html := mustache.RenderJSON('{name:3}');
-!  // now html='1'#$A'234','internal partials'
-:    Expression Helpers
-{\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
-{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
-But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
-The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC web application using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
-For instance, you may write:
-! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
-This will define two {\i Expression Helpers} for the specified table:
-- Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
-- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
-:    Internationalization
-You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
-By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
-!procedure TTestLowLevelTypes.MustacheTranslate(var English: string);
-!begin
-!  if English='Hello' then
-!    English := 'Bonjour' else
-!  if English='You have just won' then
-!    English := 'Vous venez de gagner';
-!end;
-Of course, in a real application, you may assign one {\f1\fs20 TLanguageFile.Translate(var English: string)} method, as defined in the {\f1\fs20 mORMoti18n.pas} unit.
-Then, you will be able to define your template as such:
-!  mustache := TSynMustache.Parse(
-!    '{{"Hello}} {{name}}'#13#10'{{"You have just won}} {{value}} {{"dollars}}!');
-!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
-!  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
-All text has indeed been translated as expected.
-:   Low-level integration with method-based services
-You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
-For instance, you may write, in any method-based service - see @49@:
-!var template: TSynMustache;
-!    html: RawUTF8;
-! ...
-!  template := TSynMustache.Parse(
-!    '<ul>{{#items}}<li>{{Name}} was born on {{BirthDate}}</li>{{/items}}</ul>');
-!  html := template.Render(
-!    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
-!  // now html will contain a ready-to-be-displayed unordered list
-Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
-Following this low-level method-based services process, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern as such:
-|%20%80
-|\b MVC|mORMot\b0
-|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
-|{\i View}|@81@\line (may be stored as separated files or within the database)
-|{\i Controller}|Method-based services - see @49@
-|%
-But still, a lot of code is needed to glue the MVC parts.
-\page
-:108 mORMotMVC for building Web applications
-:  MVC/MVVM Design
-In practice, method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshaling, rendering or routing.
-The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
-|%20%80
-|\b MVVM|mORMot\b0
-|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
-|{\i View}|@81@\line (may be stored as separated files or within the database)
-|{\i ViewModel}|{\f1\fs20 Interface} services - see also @63@
-|%
-In the MVVM pattern, both {\i Model} and {\i View} components do match the classic @10@ layout. But the {\i ViewModel} will define some kind of "model for the view", i.e. the data context to be sent and retrieved from the view.
-In the {\i mORMot} implementation, {\f1\fs20 interface} methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
-|%23%77
-|\b ViewModel|mORMot\b0
-|{\i Route}|From the {\f1\fs20 interface} name and its method name
-|{\i Command}|Defined by the method name
-|{\i Controller}|Defined by the method implementation
-|{\i ViewModel Context}|Transmitted {\i by representation}, as @*JSON@, including complex values like {\f1\fs20 @*TSQLRecord@}, records, @*dynamic array@s or @*variant@s (including {\f1\fs20 @*TDocVariant@})
-|{\i Input Context}|Transmitted as method input parameters ({\f1\fs20 const}/{\f1\fs20 var}) from the {\i View}
-|{\i Output Context}|Method output parameters ({\f1\fs20 var}/{\f1\fs20 out}) are sent to the {\i View}
-|{\i Actions}|A method will render the associated view with the output parameters, or go to another command (optionally via {\f1\fs20 EMVCApplication})
-|%
-This may sound pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use. Main benefit is that you do not need to define explicit data structures for the {\i ViewModel} layer. The method parameters will declare the execution context for you at {\f1\fs20 interface} level, ready to be implemented in a {\f1\fs20 TMVCApplication} class. In practice, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
-The fact that the {\i ViewModel} data context is transmitted as JSON content - {\i by representation} just like @*REST@ @9@ - allows nice side effects:
-- {\i Views} do not know anything about the execution context, so are very likely to be uncoupled from any business logic - this will enhance security and maintainability of your applications;
-- You can optionally see in real time the JSON data context (by using a fake {\f1\fs20 root/methodname/json} URI) of a running application, for easier debugging of the {\i Controller} or the {\i Views};
-- You can test any {\i View} by using fake static JSON content, without the need of a real server;
-- In fact, {\i Views} could be even not tied to the web model, but run in a classic rich application, with VCL/FMX User Interface (we still need to automate the binding process to UI components, but this is technically feasible, whereas almost no regular MVC web framework do support this);
-- Since {\f1\fs20 interface} are used to define the {\i Controller}, you could @*mock@ and @*stub@ them - see @62@ - for proper unit testing;
-- In the {\i Controller} code, you have access to the {\i mORMot} ORM methods and services to implement any command, making it pretty easy to implement a web front-end to any @*SOA@ project;
-- The associated data {\i Model} is {\i mORMot}'s ORM, which is also optimized for JSON processing, so most of memory fragmentation is reduced to the minimum during the rendering;
-- The {\i Controller} would be most of the time hosted within the web server application, but {\i may} be physically hosted in another remote process - this remote {\i Controller} service may even be shared between web and VCL/FMX clients;
-- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients.
-:  Building a MVC/MVVM web application
-We will now explain how to build such a MVC/MVVM web application using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample.
-This little web application publishes a simple BLOG, not fully finished (but you can see the articles list, view one article and its comments, view the author information, log in and out), implemented as such:
-|%15%22%63
-|\b MVVM|Unit|mORMot\b0
-|{\i Model}|{\f1\fs20 MVCModel.pas}|{\f1\fs20 TSQLRestServerDB} ORM over a {\i SQlite3} database
-|{\i View}|-|@81@ in the {\i Views} sub-folder
-|{\i ViewModel}|{\f1\fs20 MVCViewModel.pas}|Defined as one {\f1\fs20 IBlogApplication} interface
-|%
-:  MVCModel
-The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you would find the following type definitions:
-!  TSQLContent = class(TSQLRecordTimeStamped)
-!  private ...
-!  published
-!    property Title: RawUTF8 index 80 read fTitle write fTitle;
-!    property Content: RawUTF8 read fContent write fContent;
-!    property Author: TSQLAuthor read fAuthor write fAuthor;
-!    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
-!  end;
-!
-!  TSQLArticle = class(TSQLContent)
-!  private ...
-!  public
-!    class function CurrentPublishedMonth: Integer;
-!    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
-!      Options: TSQLInitializeTableOptions); override;
-!  published
-!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
-!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
-!  end;
-!
-!  TSQLComment = class(TSQLContent)
-!  private ...
-!  published
-!    property Article: TSQLArticle read fArticle write fArticle;
-!  end;
-Then the whole database model will be created in this function:
-!function CreateModel: TSQLModel;
-!begin
-!  result := TSQLModel.Create([TSQLBlogInfo,TSQLCategory,TSQLAuthor,
-!    TSQLArticle,TSQLComment],'blog');
-!  TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
-!  TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
-!  TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
-!  TSQLArticle.AddFilterOrValidate('Content',TSynValidateText.Create);
-!end;
-As you can discover:
-- We used {\f1\fs20 class} inheritance to gather properties for similar tables;
-- Some classes are {\i not} part of the model, since they are just {\f1\fs20 abstract} parents, e.g. {\f1\fs20 TSQLContent} is not part of the model, but {\f1\fs20 TSQLArticle} and {\f1\fs20 TSQLComment} are;
-- We defined some regular {\i one-to-one} relationships, e.g. every {\f1\fs20 Content} (which may be either an {\f1\fs20 Article} or a {\f1\fs20 Comment}) will be tied to one {\f1\fs20 Author} - see @70@;
-- We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
-- Some properties are stored twice, e.g. {\f1\fs20 TSQLContent} defines both {\f1\fs20 Author} and {\f1\fs20 AuthorName} fields, the second being a convenient direct access to the author name, therefore avoiding a JOINed query for each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
-- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
-- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterOrValidate()} method, which would be applied before an article is stored;
-- The whole application would run without writing any SQL, but just high-level ORM methods;
-- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG).
-Foreign keys and indexes are managed as such:
-- The {\f1\fs20 TSQLRecord.ID} primary key of any ORM class will be indexed;
-- For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
-- An index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a lot of publication months in the main BLOG page, and access to the per-month articles. The following code will take care of it:
-!class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
-!  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
-!begin
-!  inherited;
-!  if (FieldName='') or (FieldName='PublishedMonth') then
-!    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
-!end;
-The ORM is defined and run over a {\i SQLite3} database in the main {\f1\fs20 MVCServer.dpr} program, as we will see below.
-:  MVCViewModel
-:   Defining the commands
-The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the application. It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).
-First of all, we defined an {\f1\fs20 interface}, with the expected methods corresponding to the various {\i commands} of the web application:
-!  IBlogApplication = interface(IMVCApplication)
-!    procedure ArticleView(
-!      ID: integer; var WithComments: boolean; Direction: integer;
-!      out Article: TSQLArticle; out Author: TSQLAuthor;
-!      out Comments: TObjectList);
-!    procedure AuthorView(
-!      var ID: integer; out Author: variant; out Articles: RawJSON);
-!    function Login(
-!      const LogonName,PlainPassword: RawUTF8): TMVCAction;
-!    function Logout: TMVCAction;
-!    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
-!      const ValidationError: variant;
-!      out Article: TSQLArticle);
-!    function ArticleCommit(
-!      ID: integer; const Title,Content: RawUTF8): TMVCAction;
-!  end;
-In fact, {\f1\fs20 IMVCApplication} is defined as such in {\f1\fs20 mORMotMVC.pas}:
-!  IMVCApplication = interface(IInvokable)
-!    ['{C48718BF-861B-448A-B593-8012DB51E15D}']
-!    procedure Default(var Scope: variant);
-!    procedure Error(var Msg: RawUTF8; var Scope: variant);
-!  end;
-As such, the {\f1\fs20 IBlogApplication} will define the following web pages, corresponding to each of its methods: {\i Default, Error, ArticleView, AuthorView, Login, Logout, ArticleEdit} and {\i ArticleCommit}. Each command of this application will map an URI, e.g. {\f1\fs20 /blog/default} or {\f1\fs20 /blog/login} - remember that our model defined {\f1\fs20 'blog'} as its root URI. You may let all commands be accessible from a sub-URI (e.g. {\f1\fs20 /blog/web/default}), but here this is not needed, since we are creating a "pure web" application.
-Each command will have its own {\i View}. For instance, you will find {\f1\fs20 Default.html}, {\f1\fs20 Error.html} or {\f1\fs20 ArticleView.html} in the {\i "Views"} sub-folder of the sample. If you did not supply any file in this folder, some void files would be created.
-Incoming method parameters of each method (i.e. defined as {\f1\fs20 const} or {\f1\fs20 var}) will be transmitted on the URI, encoded as regular HTTP parameters, whereas outgoing method parameters (i.e. defined as {\f1\fs20 var} or {\f1\fs20 out}) would be transmitted to the {\i View}, as data context for the rendering. Simple types are transmitted (like {\f1\fs20 integer} or {\f1\fs20 RawUTF8}); but you would also find ORM classes (like {\f1\fs20 TSQLAuthor}), an outgoing {\f1\fs20 TObjectList}, or some {\f1\fs20 variant} - which may be either values or a complex @80@.
-In fact, you may find out that the {\i Login, Logout} and {\i ArticleCommit} methods do not have any outgoing parameters, but were defined as {\f1\fs20 function} returning a {\f1\fs20 TMVCAction} record. This type is declared as such in {\f1\fs20 mORMotMVC.pas}:
-!  TMVCAction = record
-!    RedirectToMethodName: RawUTF8;
-!    RedirectToMethodParameters: RawUTF8;
-!    ReturnedStatus: cardinal;
-!  end;
-Any method returning such a {\f1\fs20 TMVCAction} content won't render directly any view, but will allow to go directly to another method, for proper rendering, just by providing a method name and some optional parameters.\line Note that even the regular views, i.e. the methods which do not have this {\f1\fs20 TMVCAction} parameter, may break the default rendering process on any error, raising an {\f1\fs20 EMVCApplication} exception which will in fact redirect the view to another page, mainly the {\f1\fs20 Error} page.
-To better understand how it works, run the "{\i 30 - MVC Server}" sample. Remember that to be able to register the port #8092 for the {\f1\fs20 http.sys} server, you would need to run the {\f1\fs20 MVCServer.exe} program at least once with {\i Windows Administrator} rights - see @109@. Then point your browser to @http://localhost:8092/ - you will see the main page of the BLOG, filled with some random data. Quite some "blabla", to be honest!
-What you see is the {\f1\fs20 Default} page rendered. The {\f1\fs20 IBlogApplication.Default()} method has been called, then the outgoing {\f1\fs20 Scope} data has been rendered by the {\f1\fs20 Default.html} {\i Mustache} template. If you click on an article title, it will go to @http://localhost:8092/blog/articleView?id=99 - i.e. calling {\f1\fs20 IBlogApplication.ArticleView()} with the {\f1\fs20 ID} parameter containing 99, and other incoming parameters (i.e. {\f1\fs20 WithComments} and {\f1\fs20 Direction}) set to their default value (i.e. respectively {\f1\fs20 false} and {\f1\fs20 0}). The {\f1\fs20 ArticleView()} method will then read the {\f1\fs20 TSQLArticle} data from the ORM, then send it to the {\f1\fs20 ArticleView.html} {\i Mustache} template.
-Now, just change in your browser the URI from @http://localhost:8092/blog/articleView?id=99 (here we clicked on the {\f1\fs20 Article} with ID=99) into @http://localhost:8092/blog/articleView/json?id=99 (i.e. entering {\f1\fs20 /articleView{\b /json}} instead of {\f1\fs20 /articleView}, as a fake sub-URI). Now the browser is showing you the JSON data context, which is transmitted to the {\f1\fs20 ArticleView.html} template - just check both the JSON content and the corresponding {\i Mustache} template, and I think you will find out how it works.
-From any blog article view, click on the "{\f1\fs20 Show Comments}" button: you are redirected to a new page, at URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true#comments and now the comments corresponding to the article are displayed. If you click on the "{\f1\fs20 Previous}" or "{\f1\fs20 Next}" buttons, a new URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true&direction=1 will be submitted: {\f1\fs20 direction=1} will search for the previous article, and we still have the {\f1\fs20 withComments=true} parameter set, so that the user would be able to see the comments, as expected. If you click on the "{\f1\fs20 Hide Comments}" button, the URI would change to be without any {\f1\fs20 withComments=true} parameter - i.e. @http://localhost:8092/blog/ArticleView?id=98#comments : now the comments won't be displayed.
-The sequence is rendered as such:
-\graph mORMotMVCSequence mORMot MVC/MVVM URI - Commands sequence
-\/blog/default URI\Default()\routing + decode¤incoming params¤to controller method
-\Default()\defaultjson\outgoing params¤encoded as JSON
-\defaultjson\default.html¤template\rendering¤data context
-\default.html¤template\main blog web page¤with list of articles\Mustache¤engine
-\/blog/articleView?id=99\ArticleView(ID=99)\routing + decode¤incoming params¤to controller method
-\ArticleView(ID=99)\articlejson\outgoing params¤encoded as JSON
-\articlejson\articleView.html¤template\rendering¤data context
-\articleView.html¤template\web page¤with one article¤without comments\Mustache¤engine
-\/blog/articleView?id=99&withcomments=true\ArticleView(ID=99,WithComments=true)\routing + decode¤incoming params¤to controller method
-\ArticleView(ID=99,WithComments=true)\articlecomment\outgoing params¤encoded as JSON
-\articlecomment\ articleView.html¤template\rendering¤data context
-\ articleView.html¤template\web page¤with one article¤and its comments\Mustache¤engine
-=defaultjson={Scope:{articles:[....
-=articlejson={WithComments=false,¤Article={ID=99,Author:1,...¤Comments:[],...
-=articlecomment={WithComments=true,¤Article={ID=99,Author:1,...¤Comments:[¤{ID:163],...
-\
-In this diagram, we can see that each HTTP request is stateless, uncoupled from the previous. The user experience is created by changing the URI, and by passing additional parameters (like {\f1\fs20 withComments=true}). This is how the web works.
-Then try to go to @http://localhost:8092/blog/mvc-info - and check out the page which appears. You will get all the information corresponding to your application, especially a list of all available commands:
-$/blog/Default?Scope=..[variant]..
-$/blog/Error?Msg=..[string]..&Scope=..[variant]..
-$/blog/ArticleView?ID=..[integer]..&WithComments=..[boolean]..&Direction=..[integer]..
-$/blog/AuthorView?ID=..[integer]..
-$/blog/Login?LogonName=..[string]..&PlainPassword=..[string]..
-$/blog/Logout
-$/blog/ArticleEdit?ID=..[integer]..&Title=..[string]..&Content=..[string]..&ValidationError=..[variant]..
-$/blog/ArticleCommit?ID=..[integer]..&Title=..[string]..&Content=..[string]..
-And every view, including its data context, e.g.
-$/blog/AuthorView?ID=..[integer]..
-${{Main}}: variant
-${{ID}}: integer
-${{Author}}: TSQLAuthor
-${{Articles}}: variant
-You may use this page as reference when writing your {\i Mustache} Views. It will reflect the exact state of the running application.
-:   Implementing the Controller
-To build the application {\i Controller}, we would need to implements our {\f1\fs20 IBlogApplication interface}.
-!  TBlogApplication = class(TMVCApplication,IBlogApplication)
-!  ...
-!  public
-!    constructor Create(aServer: TSQLRestServer); reintroduce;
-!    procedure Default(var Scope: variant);
-!    procedure ArticleView(ID: integer; var WithComments: boolean;
-!      Direction: integer;
-!      out Article: TSQLArticle; out Author: variant;
-!      out Comments: TObjectList);
-!    ...
-!  end;
-We defined a new class, inheriting from {\f1\fs20 TMVCApplication} - as defined in {\f1\fs20 mORMotMVC.pas}, and implementing our expected interface. {\f1\fs20 TMVCApplication} will do all the low-level plumbing for you, using a set of implementation classes.
-Let's implement a simple command:
-!procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
-!  out Articles: RawJSON);
-!begin
-!  RestModel.Retrieve(ID,Author);
-!  if Author.ID<>0 then
-!    Articles := RestModel.RetrieveListJSON(
-!      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
-!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
-!end;
-By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 RawJSON}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances.\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, and will return an error page, using the {\f1\fs20 Error.html} view template.
-Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
-!procedure TBlogApplication.ArticleView(
-!  ID: integer; var WithComments: boolean; Direction: integer;
-!  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
-!var newID: integer;
-!const WHERE: array[1..2] of PUTF8Char = (
-!  'ID<? order by id desc','ID>? order by id');
-!begin
-!  if Direction in [1,2] then // allows fast paging using index on ID
-!    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
-!      (newID<>0) then
-!      ID := newID;
-!  RestModel.Retrieve(ID,Article);
-!  if Article.ID<>0 then begin
-!    Author := RestModel.RetrieveDocVariant(
-!      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
-!    if WithComments then begin
-!      Comments.Free; // we will override the TObjectList created at input
-!      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
-!    end;
-!  end else
-!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
-!end;
-This method has to manage several use cases:
-- Display an {\f1\fs20 Article} from the database;
-- Retrieve the {\f1\fs20 Author} first name and family name;
-- Optionally display the associated {\f1\fs20 Comment}s;
-- Optionally get the previous or next {\f1\fs20 Article};
-- Trigger an error in case of an invalid request.
-Reading the above code is enough to understand how those 5 features are implemented in this method.\line The incoming parameters, as triggered by the {\i Views}, are used to identify the action to be taken.\line Then {\f1\fs20 TMVCApplication.RestModel} methods are used to retrieve the needed information directly from the ORM.\line Outgoing parameters ({\f1\fs20 Article,Author,Comments}) are transmitted to the {\i Mustache} {\i View}, for rendering.
-In fact, there are sometimes several way to retrieve or retrieve your data. For instance, in the above code, we used a {\f1\fs20 TObjectList} to transmit our comments.\line But we may have used a @80@ parameter:
-!procedure TBlogApplication.ArticleView(
-!  ID: integer; var WithComments: boolean; Direction: integer;
-!  out Article: TSQLArticle; out Author: variant; out Comments: variant);
-! ...
-!    if WithComments then
-!      Comments := RestModel.RetrieveDocVariantArray(TSQLComment,'','Article=?',[Article.ID],'');
-Or with a {\f1\fs20 RawJSON} kind of output parameter:
-!procedure TBlogApplication.ArticleView(
-!  ID: integer; var WithComments: boolean; Direction: integer;
-!  out Article: TSQLArticle; out Author: variant; out Comments: RawJSON);
-! ...
-!    if WithComments then
-!      Comments := RestModel.RetrieveListJSON(TSQLComment,'Article=?',[Article.ID],'');
-Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is just perfect. But having a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list; or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
-!procedure TBlogApplication.Default(var Scope: variant);
-! ...
-!    fCachedMain.Months := RestModel.RetrieveDocVariantArray(
-!      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
-!      'distinct(PublishedMonth),max(ID)+1 as FirstID');
-!  _ObjAddProps(['Archives',fCachedMain.Months],Scope);
-!end;
-You can notice how the calendar months are retrieved from the database. The above ORM request will generate the following SQL statement:
-$ SELECT distinct(PublishedMonth),max(ID)+1 as FirstID FROM Article
-$  group by PublishedMonth order by PublishedMonth desc limit 12
-The {\f1\fs20 Default()} method will therefore return the following JSON context:
-${
-$  "Scope": {
-$    ...
-$    "Archives":
-$    [
-$      {
-$        "PublishedMonth": 24178,
-$        "FirstID": 101
-$      },
-$      {
-$        "PublishedMonth": 24177,
-$        "FirstID": 100
-$      },
-$      ...
-Which will be processed by the {\i Mustache} engine. If you put a breakpoint at the end of this method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
-I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
-:  Web Sessions
-@*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the web application, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows to create such sessions.
-You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name, or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
-For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
-!  TCookieData = packed record
-!    AuthorName: RawUTF8;
-!    AuthorID: cardinal;
-!    AuthorRights: TSQLAuthorRights;
-!  end;
-This record will be serialized in two ways:
-- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
-- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
-In order to have proper JSON serialization of the {\f1\fs20 record}, you would need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
-Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
-!function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
-!var Author: TSQLAuthor;
-!!    SessionInfo: TCookieData;
-!begin
-!!  if CurrentSession.CheckAndRetrieve<>0 then begin
-!    GotoError(result,HTML_BADREQUEST);
-!    exit;
-!  end;
-!!  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
-!  try
-!!    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
-!      SessionInfo.AuthorName := Author.LogonName;
-!      SessionInfo.AuthorID := Author.ID;
-!      SessionInfo.AuthorRights := Author.Rights;
-!!      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
-!!      GotoDefault(result);
-!    end else
-!      GotoError(result,sErrorInvalidLogin);
-!  finally
-!    Author.Free;
-!  end;
-!end;
-As you can see, this {\f1\fs20 Login()} method will be trigerred from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
-The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI would be requested.
-When a web page is computed, the following overriden method will be executed:
-!function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
-!begin
-!  result := inherited GetViewInfo(MethodIndex);
-!!  _ObjAddProps(['blog',fBlogMainInfo,
-!!    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
-!end;
-It will append the session information from the cookie to the returned {\i View} data context, as such:
-${
-$  "Scope": {
-$    "articles":
-$    ...
-$},
-$  "main": {
-$    "pageName": "Default",
-$    "blog": {
-$      "Title": "mORMot BLOG",
-$      ...
-$    },
-$!    "session": {
-!$      "AuthorName": "synopse",
-!$      "AuthorID": 1,
-!$      "AuthorRights": {
-!$        "canComment": true,
-!$        "canPost": true,
-!$        "canDelete": true,
-!$        "canAdministrate": true
-!$      },
-$      "id": 1
-$    }
-$  }
-$}
-Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
-When the browser ask for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
-!function TBlogApplication.Logout: TMVCAction;
-!begin
-!!  CurrentSession.Finalize;
-!  GotoDefault(result);
-!end;
-The session cookie will then be deleted on the browser side.
-:   Writing the Views
-See @81@ for a description of how rendering take place in this MVC/MVVM application. You would find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
-You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
-Here is how {\f1\fs20 Default.html} is achieved:
-$${{>header}}
-$${{>masthead}}
-$$      <div class="blog-header">
-$$        <h1 class="blog-title">{{main.blog.title}}</h1>
-$$        <p class="lead blog-description">{{main.blog.description}}</p>
-$$      </div>
-$$      <div class="row">
-$$        <div class="col-sm-8 blog-main">
-$${{#Scope}}
-$${{>articlerow}}
-$$  {{#lastID}}
-$$  <p><a href="default?scope={{.}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
-$$  {{/lastID}}
-$$        </div>
-$$        <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
-$$          <div class="sidebar-module sidebar-module-inset">
-$$            <h4>About</h4>
-$$            {{{WikiToHtml main.blog.about}}}
-$$          </div>
-$$          <div class="sidebar-module">
-$$            <h4>Archives</h4>
-$$            <ol class="list-unstyled">
-$$     {{#Archives}}
-$$              <li><a href="default?scope={{FirstID}}">{{MonthToText PublishedMonth}}</a></li>
-$$     {{/Archives}}
-$$            </ol>
-$$          </div>
-$$  </div>
-$$   </div>
-$${{/Scope}}
-$${{>footer}}
-The {\f1\fs20 \{\{>partials\}\}} are easily identified, as other {\f1\fs20 \{\{...\}\}} value tags.\line {\f1\fs20 \{\{\{WikiToHtml main.blog.about\}\}\}} is an {\i Expression Block} able to render some simple text into proper HTML, using a simple Wiki syntax.\line {\f1\fs20 \{\{MonthToText PublishedMonth\}\}} will execute a custom {\i Expression Block}, defined in our {\f1\fs20 TBlogApplication}, which will convert the obfuscated {\f1\fs20 TSQLArticle.PublishedMonth} integer value into the corresponding name and year:
-!procedure TBlogApplication.MonthToText(const Value: variant;
-!  out result: variant);
-!const MONTHS: array[0..11] of RawUTF8 = (
-!  'January','February','March','April','May','June','July','August',
-!  'September','October','November','December');
-!var month: integer;
-!    text: RawUTF8;
-!begin
-!  if VariantToInteger(Value,month) and (month>0) then
-!    text := MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12);
-!  RawUTF8ToVariant(text,result);
-!end;
-The page displaying the {\f1\fs20 Author} information is in fact quite simple:
-$${{>header}}
-$${{>masthead}}
-$$      <div class="blog-header">
-$$        <h1 class="blog-title">User {{Author.LogonName}}</h1>
-$$  <div class="lead blog-description">{{Author.FirstName}} {{Author.FamilyName}}
-$$  </div>
-$$      </div>
-$$   <div class="panel panel-default">
-$$   <div class="panel-heading">Information about <strong>{{Author.LogonName}}</strong></div>
-$$   <div class="panel-body">
-$$      {{{TSQLAuthor.HtmlTable Author}}}
-$$   </div>
-$$   </div>
-$${{>articlerow}}
-$${{>footer}}
-It will share the same {\f1\fs20 \{\{>partials\}\}}, for a consistent and maintainable web site design, but in fact most of the process would take place by the magic of two tags:
-- {\f1\fs20 \{\{\{TSQLAuthor.HtmlTable Author\}\}\}} is an {\i Expression Block} linked to {\f1\fs20 TMVCApplication.RestModel} @*ORM@, which will create a HTML table - with the syntax expected by our {\i BootStrap} {\f1\fs20 css} - for a {\f1\fs20 TSQLAuthor} record, identifying the property types and display them as expected (e.g. for dates or time stamps, or for enumerates or sets).
-- {\f1\fs20 \{\{>articlerow\}\}} is a partial also shared with {\f1\fs20 ArticleView.html}, which will render a list of {\f1\fs20 TSQLArticle} encoded as {\f1\fs20 \{\{#Articles\}\}}...{\f1\fs20 \{\{/Articles\}\}} sections.
-Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every aspect of the MVC process has been divided into small classes, so that the framework is able to create web applications, but also any kind of MVC applications, including mobile or VCL/FMX apps, and/or reporting - using {\f1\fs20 mORMotReport.pas}.
 :42Database layer
-%cartoon05.png
+%cartoon04.png
 : SQLite3-powered, not SQLite3-limited
 The core database of this framework uses the {\i @**SQLite3@} library, which is a Free, Secure, Zero-Configuration, Server-less, Single Stable Cross-Platform Database File database engine.
 As stated below, you can use any other database access layer, if you wish:
@@ -4293,7 +3578,7 @@ Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a sta
 - {\i @*Firebird@} embedded in revision 2.5.2;
 - {\i @*NexusDB@} 3.11 in Free Embedded Version;
 - {\i MongoDB} 2.6 in 64 bit mode.
-So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i Linux} configuration, you can expect even better numbers.
+So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i @*Linux@} configuration, you can expect even better numbers.
 Tests were compiled with the {\i Delphi} XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
 From our tests, the UniDAC version we were using had huge stability issues when used with DB2: the tests did not pass, and the DB2 server just hang processing the queries, whereas there was no problem with other libraries. It may have been fixed since, but you won't find any "UniDAC DB2" results in the benchmark below in the meanwhile.
@@ -4430,7 +3715,7 @@ Most recognized {\i closed source} databases are available:
 - IBM {\i DB2} is another good candidate, and the {\i Express-C} ("C" standing for Community) offers a no-charge opportunity to run an industry standard engine, with no restriction on the data size, and somewhat high hardware limitations (16 GB of RAM and 2 CPU cores for the latest 10.5 release) or enterprise-level features;
 - {\i @*NexusDB@} may be considered, if you have existing {\i Delphi} code and data - but it is less known and recognized as the its commercial competitors.
 {\i Open Source} databases are worth considering, especially in conjunction with an Open Source framework like {\i mORMot}:
-- {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i Linux Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
+- {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i @*Linux@ Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
 - {\i PostgreSQL} is an Enterprise class database, with amazing features among its Open Source alternatives, and really competes with commercial solutions. Even under Windows, we think it is easy to install and administrate, and uses less resource than the other commercial engines.
 - {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of {\i Delphi} programmers are skilled with this free alternative to {\i Interbase};
 - {\i @*MongoDB@} appears as a serious competitor to SQL databases, with the potential benefit of horizontal scaling and installation/administration ease - performance is very high, and its document-based storage fits perfectly with {\i mORMot}'s advanced ORM features like @29@.
@@ -5211,7 +4496,7 @@ Or, in case the table is defined as {\f1\fs20 TSQLValue1 = class(TSQLRecord)}, p
 The easiest is definitively to let your static in-memory tables inherit from {\f1\fs20 TSQLRecordVirtualTableAutoID}. Just use the framework by the book - see @76@.
 Once again, this restriction does not apply to @27@.
 :27External database access
-%cartoon06.png
+%cartoon05.png
 : Database agnosticism
 Since revision 1.15, our @*ORM@ @*REST@ful framework is able to access any available database engine, via a set of generic units and classes.
 The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mix those tables content with the native ORM tables of the framework. Thanks to the unique @*Virtual Table@s mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements. See @%%mORMotDesign3@.
@@ -6448,7 +5733,7 @@ $!     1000 rows deleted in 364us i.e. 2747252/s, aver. 0us, 23.4 MB/s
 $  Total failed: 0 / 376,435  - ORM without acknowledge PASSED  3.44s
 As for direct {\i MongoDB} access, the {\f1\fs20 wcUnacknowledged} is not to be used on production, but may be very useful in some particular scenarios. As expected, the reading process is not impacted by the {\i Write Concern} mode set.
 :6JSON RESTful Client-Server
-%cartoon07.png
+%cartoon06.png
 Before describing the Client-Server design of this framework, we may have to detail some standards it is based on:
 - JSON as its internal data storage and transmission format;
 - REST as its Client-Server architecture.
@@ -7063,7 +6348,7 @@ A {\f1\fs20 TSynCache} instance is instantiated within the {\f1\fs20 TSQLDataBas
 This will enable a global JSON cache at the SQL level. This cache will be reset on every {\f1\fs20 INSERT, UPDATE} or {\f1\fs20 DELETE} SQL statement, whatever the corresponding table is.
 In practice, this global cache was found to be efficient, even if its implementation is some kind of "naive". It is in fact much more tuned than other HTTP-level caching mechanisms used in most client-server solutions (using e.g. a {\i Squid} proxy) - since our caching is at the SQL level, it is shared among all @*CRUD@ / @*Rest@ful queries, and is also indenpendent from the authentication scheme, which pollutes the URI. Associated with the other levels of cache - see @38@ - the framework scaling was found to be very good.
 :35Client-Server process
-%cartoon08.png
+%cartoon07.png
 The {\i mORMot} framework can be used either @*stand-alone@, or in a @**Client-Server@ model, via several communication layers:
 - Fast in-process access (an executable file using a common library, for instance);
 - Windows Messages, only locally on the same computer, which are very fast for small content;
@@ -7471,7 +6756,7 @@ During all tests, no assertion failed, meaning that no concurrency problem did o
 Average performance is pretty good, even more if we consider that we are inserting one object per request, with no transaction. In fact, it sounds like if our little {\i SQLite3} server is faster than most database servers, even when accessed in highly concurrent mode! In batch mode - see @28@ - we may achieve amazing results.
 Feel free to send your own benchmark results and feedback, e.g. with concurrent clients on several workstations, or long-running tests, on our forums.
 :Client-Server ORM
-%cartoon01.png
+%cartoon08.png
 As stated above, all ORM features can be accessible either stand-alone, or remotely via some dedicated @35@.
 That is, CRUD operations can be executed either at the database level, or remotely, from the same methods defined in {\f1\fs20 TSQLRest} abstract class.
 This feature has several benefits, among them:
@@ -7687,7 +6972,7 @@ Some global variable were also defined to tune the behavior of those two callbac
 !  /// define the message text displayed by TLoginForm.OnIdleProcessForm()
 !  // - default is sOnIdleProcessFormMessage resourcestring, i.e. 'Please wait...'
 !  OnIdleProcessTemporaryFormMessage: string;
-You can therefore change those settings to customize the user experience. We tested it with a 3 second artificial temporizer for each request, and the applications were running smoothly, even if slowly - but comparable to most web applications, in fact. The {\i SynFile} main demo (available in the {\f1\fs20 SQlite3\\Samples\\MainDemo} folder) defines such a callback.
+You can therefore change those settings to customize the user experience. We tested it with a 3 second artificial temporizer for each request, and the applications were running smoothly, even if slowly - but comparable to most @*Web Application@s, in fact. The {\i SynFile} main demo (available in the {\f1\fs20 SQlite3\\Samples\\MainDemo} folder) defines such a callback.
 Note that this {\f1\fs20 OnIdle} feature is defined at {\f1\fs20 TSQLRestClientURI} class level, so is available for all communication protocols, not only HTTP but named pipes or in-process, so could be used to enhance user experience in case of some time consuming process.
 \page
 :28 BATCH sequences for adding/updating/deleting records
@@ -7964,7 +7249,7 @@ It's worth warning once again that it's up to the code responsibility to ensure 
 {\i On the Client side}, only local CRUD operations are tracked. According to the stateless design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
-%cartoon02.png
+%cartoon01.png
 In your developer background and history, you may have been used to write your business code as {\i @**stored procedure@s}, to be executed on the server side.\line In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the database side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature is usually much faster than a pure client-sided solution.
 Since {\i mORMot} is {\i Client/Server} from the ground up, it features some unique ways of improving data-intensive process on the client or server sides, without necessary relying on proprietary {\i stored procedures}.
 This chapter is worth reading, if you start a new {\i mORMot} project, and wonder about the architecture of your upcoming applications, or if you are integrating a {\i mORMot} server in an existing application... in which you or your predecessors may have (ab)used of stored procedures.\line It is time to sit down first, and take counsel how your project may be optimized enough to scale and profit.
@@ -8172,7 +7457,7 @@ In such situation, all RESTful Server-sided solutions could produce a lot of net
 In order to speed up the process, you may define some RDMS stored procedures in the external database syntax (P/SQL, {\i .Net}, {\i Java} or whatever), then define some @11@ to launch those functions.\line Note that in this case, you'll loose the database independence of the framework, and most of the benefits of using an ORM/ODM - later on, switching to another database engine may become impossible. Such RDBMS stored procedures may be envisaged only during the transition phase of an existing application. @28@ has almost all the speed advantages of stored procedures, with the benefit of a pure object oriented code, easy to debug and maintain.
 \page
 :11 Server side Services
-%cartoon03.png
+%cartoon02.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @35@;
 - By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native {\i Delphi} methods;
@@ -8182,7 +7467,7 @@ If you paid for a {\i Delphi Architect} edition, the first two items can be comp
 The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a @*KISS@ {\i @*convention over configuration@} manner.
 So {\i mORMot} is quite unique, in the fact that it features, in one unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a {\i Domain-Driven Design}, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
-%cartoon04.png
+%cartoon03.png
 To implement a service in the {\i Synopse mORMot framework}, the first method is to define @**published method@ Server-side, then use easy functions about JSON or URL-parameters to get the request encoded and decoded as expected, on Client-side.
 We'll implement the same example as in the official Embarcadero docwiki page above. Add two numbers. Very useful service, isn't it?
 : Publishing a service on the server
@@ -8367,7 +7652,7 @@ The {\i mORMot} implementation of method-based services gives full access to the
 Note that due to this implementation pattern, the {\i mORMot} service implementation is very fast, and not sensitive to the "Hash collision attack" security issue, as reported with {\i Apache} - see @http://blog.synopse.info/post/2011/12/30/Hash-collision-attack for details.
 But with this implementation, a lot of process (e.g. parameter marshalling) is to be done by hand on both client and server side code. In addition, building and maintaining a huge SOA system with a "method by method" approach could be difficult, since it publishes one big "flat" set of services. This is were {\f1\fs20 interface}s enter the scene.
 :46Interfaces
-%cartoon05.png
+%cartoon04.png
 : Delphi and interfaces
 :  Declaring an interface
 No, interface(-book) is not another social network, sorry.
@@ -8984,7 +8269,7 @@ Note that internally, those methods will internally call the {\f1\fs20 Hash32()}
 You have even a full access to the internal execution trace, via the two {\f1\fs20 TInterfaceStub.Log} and {\f1\fs20 LogCount} properties. This will allow any validation of mocked {\f1\fs20 interface} calls logic, beyond {\f1\fs20 ExpectsTrace()} possibilities.
 You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs} regression tests, for a whole coverage of all the internal features.
 :63Client-Server services via interfaces
-%cartoon06.png
+%cartoon05.png
 In real world, especially when your application relies heavily on services, the @49@ implementation pattern has some drawbacks:
 - Most content marshaling is to be done by hand, so may introduce implementation issues;
 - Client and server side code does not have the same implementation pattern, so you will have to code explicitly data marshaling twice, for both client and server ({\i DataSnap} and WCF both suffer from a similar issue, by which client classes shall be coded separately, most time generated by a Wizard);
@@ -10185,7 +9470,7 @@ Optionally, {\i mORMot}'s interface based services allow to publish their result
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
-%cartoon07.png
+%cartoon06.png
 Current version of the main framework units target only {\i Win32} and {\i Win64} systems.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the {\i Windows} world, especially mobile devices.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
@@ -10344,7 +9629,7 @@ Of course, from our point of view, use of modern {\i object pascal} is of great 
 The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
 The resulting HTML5 project is self-sufficient with no external {\i JavaScript} library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debug your application directly within the IDE (since revision 2.1 - even if it is not yet always stable) or within your browser (IE, Chrome or FireBug have great debuggers), with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
-Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
+Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, @*Linux@, BSD, MacOS) architectures.
 {\i @*Smart Mobile Studio@} is therefore a great platform for implementing rich client-side AJAX or {\i Mobile} applications, to work with our client-server {\i mORMot} framework.
 :   Using Smart Mobile Studio with mORMot
 There is no package to be installed within the {\i Smart Mobile Studio} IDE. The client units will be generated directly from the {\i mORMot} server.\line Any edition of {\i Smart} - see @http://smartmobilestudio.com/feature-matrix - is enough: you do not need to pay for the {\i Enterprise} edition to consume {\i mORMot} services. But of course, the {\i Professionnal} edition is recommended, since the {\i Basic} edition does not allow to create forms from the IDE, which is the main point for an AJAX application.
@@ -10664,7 +9949,7 @@ Note that all process here is executed {\i synchronously}, i.e. in blocking mode
 :  Smart Mobile Studio client samples
 In addition to {\i Delphi} and {\i FreePascal} clients, our framework is able to access any {\i mORMot} server from HTML5 / AJAX rich client, thanks to {\i @*Smart Mobile Studio@}.
 :   Adding two numbers in AJAX
-You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 web application, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i Linux}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
+You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 @*web application@, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i @*Linux@}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
 In order to create the application, we just clicked on "{\ul download as file}" in the {\b SmartMobileStudio} link in the web page, and copied the generated file in the source folder of a new {\i Smart Mobile} project.\line Of course, we did copy the needed {\f1\fs20 SynCrossPlatform*.pas} units from the {\i mORMot} source code tree into the Smart library folder, as stated above. Just ensure you run {\f1\fs20 CopySynCrossPlatformUnits.bat} from the {\f1\fs20 CrossPlatform} folder at least once from the latest revision of the framework source code.
 Then, on the form visual editor, we added a {\f1\fs20 BtnConnect} button, then a {\f1\fs20 PanelCompute} panel with two edit fields named {\f1\fs20 EditA} and {\f1\fs20 EditB}, and two other buttons, named {\f1\fs20 BtnComputeAsynch} and {\f1\fs20 BtnComputeSynch}. A {\f1\fs20 LabelResult} label will be used to display the computation result. The {\f1\fs20 BtnConnect} is a toggle which will show or display the {\f1\fs20 PanelCompute} panel, which is hidden by default, depending on the connection status.
 %SmartCalculator.png
@@ -10871,8 +10156,833 @@ Your AJAX client can then access to this {\f1\fs20 TSQLRecordPeople} content eas
 Here, the {\f1\fs20 client} variable is a {\f1\fs20 TSQLRestClientURI} instance, as returned by the {\f1\fs20 GetClient() onSuccess} callback generated in {\f1\fs20 mORMotClient.pas}.\line You have {\f1\fs20 Add() Delete() Update() FillPrepare() CreateAndFillPrepare()} and {\f1\fs20 Batch*()} methods available, ready to safely access your data from your AJAX client.
 If you update your data model on the server, just re-generate your {\f1\fs20 mORMotClient.pas} unit from {\f1\fs20 http://localhost:888/root/wrapper}, then rebuild your {\i Smart Mobile Studio} project to reflect all changes made to your ORM data model, or your SOA available services.
 Thanks to the {\i SmartPascal} strong typing, any breaking change of the server expectations would immediately be reported at compilation, and not at runtime, as it would with regular {\i JavaScript} clients.
-:75Hosting
+:MVC pattern
+%cartoon07.png
+: Model
+According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
+The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
+See @110@ for how to define the model of your application.
+: Views
+The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
+- For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
+- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
+:  Desktop clients
+:5   RTTI
+The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
+In short, it allows the software logic to be extracted from the code itself. Here are the places where this technology was used:
+- All database structures are set in the code by normal classes definition, and most of the needed @*SQL@ code is created on the fly by the framework, before calling the {\i @*SQLite3@} database engine, resulting in a true Object-relational mapping (@*ORM@) framework;
+- All User Interface is generated by the code, by using some simple data structures, relying on enumerations (see next paragraph);
+- Most of the text displayed on the screen does rely on RTTI, thanks to the @*Camel@ approach (see below), ready to be translated into local languages;
+- All internal Event process (such as Button press) relies on enumerations RTTI;
+- Options and program parameters are using RTTI for data persistence and screen display (e.g. the Settings window of your program can be created by pure code): adding an option is a matter of a few code lines.
+In {\i Delphi}, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
+For example, some tool-bar actions can be defined with:
+!type
+!  /// item toolbar actions
+!  TBabyAction = (
+!    paCreateNew, paDelete, paEdit, paQuit);
+Then this {\f1\fs20 TBabyAction} @*enumerated@ type is used to create the User Interface ribbon of the main window, just by creating an array of set of this kind:
+!BarEdit: array[0..1] of set of TBabyAction = (
+!    [paCreateNew, paDelete, paEdit],
+!    [paQuit] );
+The caption of the buttons to be displayed on the screen is then extracted by the framework using "@**Camel@ Case": the second button, defined by the {\f1\fs20 paCreateNew} identifier in the source code, is displayed as "{\i Create new}" on the screen, and this "{\i Create new}" is used for direct @*i18n@ of the software. For further information about "Camel Case" and its usage in Object Pascal, Java, Dot Net, Python see @http://en.wikipedia.org/wiki/CamelCase
+Advantages of the RTTI can therefore by sum up:
+- Software maintainability, since the whole program logic is code-based, and the User Interface is created from it. It therefore avoid RAD (Rapid Application Development) abuse, which mix the User Interface with data logic, and could lead into "write fast, try to maintain" scenarios;
+- Enhanced code @*security@, thanks to Object Pascal @*strong type@ syntax;
+- Direct database access from the language object model, without the need of writing @*SQL@ or use of a @*MVC@ framework;
+- User Interface coherency, since most screen are created on the fly;
+- Easy @*i18n@ of the software, without additional components or systems.
+:64   User Interface
+User Interface generation from RTTI and the integrated reporting features will be described @31@, during presentation of the Main Demo application design.
+In short, such complex model including User Interface auto-creation could be written as such - extracted from unit {\f1\fs20 FileTables.pas}:
+!function CreateFileModel(Owner: TSQLRest): TSQLModel;
+!begin
+!  result := TSQLModel.Create(Owner,
+!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
+!    TypeInfo(TFileAction),TypeInfo(TFileEvent));
+!end;
+All needed {\f1\fs20 TSQLRecord} classes are declared in a
+! FileTabs: array[0..4] of TFileRibbonTabParameters = ( ...
+constant array, and will use {\f1\fs20 TFileAction / TFileEvent} enumeration types to handle the User Interface activity and Business Logic.
+\page
+:  Web clients
+:81   Mustache template engine
+{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure {\i Delphi} implementation of it, with a perfect integration with other bricks of the framework.
+Generally speaking, a @**Template@ system can be used to separate output formatting specifications, which govern the appearance and location of output text and data elements, from the executable logic which prepares the data and makes decisions about what appears in the output.
+Most template systems (e.g. PHP, smarty, Razor...) feature in fact a full scripting engine within the template content. It allows powerful constructs like variable assignment or conditional statements in the middle of the HTML content. It makes it easy to modify the look of an application within the template system exclusively, without having to modify any of the underlying "application logic". They do so, however, at the cost of separation, turning the templates themselves into part of the application logic.
+{\i Mustache} inherits from Google's {\i ctemplate} library, and is used in many famous applications, including the "main" Google web search, or the Twitter web site.\line The {\i Mustache} template system leans strongly towards preserving the separation of logic and presentation, therefore ensures a perfect  @*MVC@ - @10@ - design, and ready to consume @*SOA@ services.
+{\i Mustache} is intentionally constrained in the features it supports and, as a result, applications tend to require quite a bit of code to instantiate a template: all the application logic will be defined within the {\i Controller} code, not in the {\i View} source. This may not be to everybody's tastes. However, while this design limits the power of the template language, it does not limit the power or flexibility of the template system. This system supports arbitrarily complex text formatting.
+Finally, {\i Mustache} is designed with an eye towards efficiency. Template instantiation is very quick, with an eye towards minimizing both memory use and memory fragmentation. As a result, it sounds like a perfect template system for our {\i mORMot} framework.
+:   Mustache principles
+There are two main parts to the {\i Mustache} template system:
+- Templates (which are plain text files);
+- Data dictionaries (aka {\i Context}).
+For instance, given the following template:
+$$<h1>{{header}}</h1>
+$$
+$${{#items}}
+$$  {{#first}}
+$$    <li><strong>{{name}}</strong></li>
+$$  {{/first}}
+$$  {{#link}}
+$$    <li><a href="{{url}}">{{name}}</a></li>
+$$  {{/link}}
+$${{/items}}
+$$
+$${{#empty}}
+$$  <p>The list is empty.</p>
+$${{/empty}}
+and the following data context:
+#{
+#  "header": "Colors",
+#  "items": [
+#      {"name": "red", "first": true, "url": "#Red"},
+#      {"name": "green", "link": true, "url": "#Green"},
+#      {"name": "blue", "link": true, "url": "#Blue"}
+#  ],
+#  "empty": true
+#}
+The {\i Mustache} engine will render this data as such:
+$$<h1>Colors</h1>
+$$<li><strong>red</strong></li>
+$$<li><a href="#Green">green</a></li>
+$$<li><a href="#Blue">blue</a></li>
+$$<p>The list is empty.</p>
+In fact, you did not see any "{\f1\fs20 if}" nor "{\i for}" loop in the template, but {\i Mustache} conventions make it easy to render the supplied data as the expected HTML output. It is up to the MVC {\i Controller} to render the data as expected by the template, e.g. for formatting dates or currency values.
+:   Mustache templates
+The {\i Mustache} template logic-less language has five types of tags:
+- Variables;
+- Sections;
+- Inverted Sections;
+- Comments;
+- Partials.
+All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. Anything found in a template of this form is interpreted as a template marker. All other text is considered formatting text and is output verbatim at template expansion time.
+|%20%80
+|\b Marker|Description\b0
+|{\f1\fs20 \{\{variable\}\}}|The {\f1\fs20 variable} name will be searched recursively within the current context (possibly with dotted names), and, if found, will be written as escaped HTML.\line If there is no such key, nothing will be rendered.
+|{\f1\fs20 \{\{\{variable\}\}\}\line {\f1\fs20 \{\{& variable\}\}}}|The {\f1\fs20 variable} name will be searched recursively within the current context, and, if found, will be written directly, {\i without any HTML escape}.\line If there is no such key, nothing will be rendered.
+|{\f1\fs20 \{\{#section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i section}, which will be rendered depending of the {\f1\fs20 section} variable value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list} {\f1\fs20 []}, the whole block won't be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} but not a list, it will be used as the context for a single rendering of the block;\line - If {\f1\fs20 section} is a non-empty list, the text in the block will be rendered once for each item in the list - the context of the block will be set to the current item for each iteration.
+|{\f1\fs20 \{\{^section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i inverted section}, which will be rendered depending of the {\f1\fs20 section} variable {\i inverted }value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list}, the whole block {\i will} be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} or a non-empty list, it won't be rendered.
+|{\f1\fs20 \{\{! comment\}\}}|The comment text will just be ignored.
+|{\f1\fs20 \{\{>partial\}\}}|The {\f1\fs20 partial} name will be searched within the registered {\i partials list}, then will be executed at run-time (so recursive partials are possible), with the current execution context.
+|{\f1\fs20 \{\{=...=\}\}}|The delimiters (i.e. by default {\f1\fs20 \{\{...\}\}}) will be replaced by the specified characters (may be convenient when double-braces may appear in the text).
+|%
+In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
+|%20%80
+|\b Marker|Description\b0
+|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
+|{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
+|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
+|{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
+|{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
+|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
+|{\f1\fs20 \{\{<partial\}\}}\line ...\line {\f1\fs20 \{\{/partial\}\}}|Defines an in-lined {\i partial} - to be called later via {\f1\fs20 \{\{>partial\}\}} - within the scope of the current template
+|{\f1\fs20 \{\{"some text\}\}}|This pseudo-variable will supply the given text to a callback, which will for instance transform its content (e.g. translate it), before writing it to the output
+|%
+This set of markers will allow to easily write any kind of content, without any explicit logic nor nested code. As a major benefit, the template content could be edited and verified without the need of any {\i Mustache} compiler, since all those {\f1\fs20 \{\{...\}\}} markers will identify very clearly the resulting layout.
+:    Variables
+A typical Mustache template:
+$Hello {{name}}
+$You have just won {{value}} dollars!
+$Well, {{taxed_value}} dollars, after taxes.
+Given the following hash:
+#{
+#  "name": "Chris",
+#  "value": 10000,
+#  "taxed_value": 6000
+#}
+Will produce the following:
+$Hello Chris
+$You have just won 10000 dollars!
+$Well, 6000 dollars, after taxes.
+You can note that {\f1\fs20 \{\{variable\}\}} tags are escaped for HTML by default. This is a mandatory security feature. In fact, all @*web application@s which create HTML documents can be vulnerable to Cross-Site-Scripting (XSS) attacks unless data inserted into a template is appropriately sanitized and/or escaped. With Mustache, this is done by default. Of course, you can override it and force to {\i not-escape} the value, using {\f1\fs20 \{\{\{variable\}\}\} or {\f1\fs20 \{\{& variable\}\}}}.
+For instance:
+|%24%38%38
+|\b Template|Context|Output\b0
+|{\f1\fs20 * \{\{name\}\}\line * \{\{age\}\}\line * \{\{company\}\}\line * \{\{\{company\}\}\}|\{\line   "name": "Chris",\line   "company": "<b>GitHub</b>"\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
+|%
+Variables resolve names within the current context with an optional dotted syntax, for instance:
+|%29%37%36
+|\b Template|Context|Output\b0
+|{\f1\fs20 * \{\{people.name\}\}\line * \{\{people.age\}\}\line * \{\{people.company\}\}\line * \{\{\{people.company\}\}\}|\{\line  "people": \{\line   "name":"Chris",\line   "company":"<b>GitHub</b>"\line  \}\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
+|%
+:    Sections
+{\i Sections} render blocks of text one or more times, depending on the value of the key in the current context.
+In our "wining template" above, what happen if we do want to hide the tax details?\line In most script languages, we may write an {\f1\fs20 if ... } block within the template. This is what {\i Mustache} avoids. So we define a section, which will be rendered on need.
+The template becomes:
+$Hello {{name}}
+$You have just won {{value}} dollars!
+${{#in_ca}}
+$Well, {{taxed_value}} dollars, after taxes.
+${{/in_ca}}
+Here, we created a new section, named {\f1\fs20 in_ca}.
+Given the hash value of {\f1\fs20 in_ca} (and its presence), the section will be rendered, or not:
+|%40%55
+|\b Context|Output\b0
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": true\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": false\line \}|Hello Chris\line You have just won 10000 dollars!}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
+|%
+Sections also change the context of its inner block. It means that the section variable content becomes the top-most context which will be used to identify any supplied variable key.
+Therefore, the following context will be perfectly valid: we can define {\f1\fs20 taxed_value} as a member of {\f1\fs20 in_ca}, and it will be rendered directly, since it is part of the new context.
+|%40%55
+|\b Context|Output\b0
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 3000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|%
+In the latest context above, there are two {\f1\fs20 taxed_value} variables. The engine will use the one defined by the context in the {\f1\fs20 in_ca} section, i.e. {\f1\fs20 in_ca.taxed_value}; the one defined at the root context level (which equals 3000) is just ignored.
+If the variable pointed by the section name is a list, the text in the block will be rendered once for each item in the list. The context of the block will be set to the current item for each iteration.\line In this way we can loop over collections. {\i Mustache} allows any depth of nested loops (e.g. any level of master/details information).
+|%24%38%38
+|\b Template|Context|Output\b0
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{name\}\}</b>\line \{\{/repo\}\}|\{\line   "repo": [\line     { "name": "resque" },\line     { "name": "hub" },\line     { "name": "rip" }\line   ]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}|\{\line   "repo":\line      ["resque", "hub", "rip"]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
+|%
+The latest template makes use of the {\f1\fs20 \{\{.\}\}} pseudo-variable, which allows to render the current item of the list.
+:    Inverted Sections
+An inverted section begins with a caret ({\f1\fs20 ^}) and ends as a standard (non-inverted) section. They may render text once, based on the {\i inverse} value of the key. That is, the text block will be rendered if the key doesn't exist, is false, or is an empty list.
+Inverted sections are usually defined after a standard section, to render some message in case no information will be written in the non-inverted section:
+|%30%30%30
+|\b Template|Context|Output\b0
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}\line \{\{^repo\}\}\line No repos :(\line \{\{/repo\}\}|\{\line   "repo":\line      []\line \}|No repos :(}
+|%
+:    Partials
+Partials are some kind of external sub-templates which can be included within a main template, for instance to follow the same rendering at several places. Just like functions in code, they do ease template maintainability and spare development time.
+Partials are rendered at runtime (as opposed to compile time), so recursive partials are possible. Just avoid infinite loops. They also inherit the calling context, so can easily be re-used within a list section, or together with plain variables.
+In practice, partials shall be supplied together with the data context - they could be seen as "template context".
+For example, this "main" template uses a {\f1\fs20 \{\{> user\}\}} partial:
+$$<h2>Names</h2>
+$${{#names}}
+$$  {{> user}}
+$${{/names}}
+With the following template registered as "user":
+$$<strong>{{name}}</strong>
+Can be thought of as a single, expanded template:
+$$<h2>Names</h2>
+$${{#names}}
+$$  <strong>{{name}}</strong>
+$${{/names}}
+In {\i mORMot}'s implementations, you can also create some {\i internal} partials, defined as {\f1\fs20 \{\{<partial\}\} ... \{\{/partial\}\}} pseudo-sections. It may decrease the need of maintaining multiple template files, and refine the rendering layout.
+For instance, the previous template may be defined at once:
+$$<h2>Names</h2>
+$${{#names}}
+$$  {{>user}}
+$${{/names}}
+$$
+$${{<user}}
+$$<strong>{{name}}</strong>
+$${{/user}}
+The same file will define both the partial and the main template. Note that we defined the internal partial after the main template, but we may have defined it anywhere in the main template logic: internal partials definitions are ignored when rendering the main template, just like comments.
+:   SynMustache unit
+Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} template engine in the {\f1\fs20 SynMustache} unit:
+- It is the first {\i Delphi} implementation of {\i Mustache};
+- It has a separate parser and renderer (so you can compile your templates ahead of time);
+- The parser features a shared cache of compiled templates;
+- It passes all official {\i Mustache} specification tests, as defined at @http://github.com/mustache/spec - including all weird whitespace process;
+- External partials can be supplied as {\f1\fs20 TSynMustachePartials} dictionaries;
+- {\f1\fs20 \{\{.\}\}}, {\f1\fs20 \{\{-index\}\}} and {\f1\fs20 \{\{"some text\}\}} pseudo-variables were added to the standard {\i Mustache} syntax;
+- {\f1\fs20 \{\{#-first\}\}}, {\f1\fs20 \{\{#-last\}\}} and {\f1\fs20 \{\{#-odd\}\}} pseudo-sections were added to the standard {\i Mustache} syntax;
+- Internal partials can be defined via {\f1\fs20 \{\{<partial\}\}} - also a nice addition to the standard {\i Mustache} syntax;
+- It allows the data context to be supplied as JSON or our @80@;
+- Almost no memory allocation is performed during the rendering;
+- It is natively UTF-8, from the ground up, with optimized conversion of any string data;
+- Performance has been tuned and grounded in {\f1\fs20 SynCommons}'s optimized code;
+- Each parsed template is thread-safe and re-entrant;
+- It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
+- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
+- API is flexible and easy to use.
+:    Variables
+Now, let's see some code.\line First, we define our needed variables:
+!var mustache: TSynMustache;
+!    doc: variant;
+In order to parse a template, you just need to call:
+!  mustache := TSynMustache.Parse(
+!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
+It will return a compiled instance of the template.\line The {\f1\fs20 Parse()} class method will use the shared cache, so you won't need to release the {\f1\fs20 mustache} instance once you are done with it: no need to write a {\f1\fs20 try ... finally mustache.Free; end} block.
+You can use a {\f1\fs20 TDocVariant} to supply the context data (with late-binding):
+!  TDocVariant.New(doc);
+!  doc.name := 'Chris';
+!  doc.value := 10000;
+As an alternative, you may have defined the context data as such:
+!  doc := _ObjFast(['name','Chris','value',1000]);
+Now you can render the template with this context:
+!  html := mustache.Render(doc);
+!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
+If you want to supply the context data as JSON, then render it, you may write:
+!  mustache := TSynMustache.Parse(
+!    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
+!  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
+!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
+Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
+As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into UTF-8):
+!  mustache := TSynMustache.Parse(
+!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
+!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
+!  html='Hello Chris'#13#10'You have just won 10000 dollars!'
+You can find in the {\f1\fs20 mORMot.pas} unit the {\f1\fs20 ObjectToJSON()} function which is able to transform any {\f1\fs20 TPersistent} instance into valid JSON content, ready to be supplied to a {\f1\fs20 TSynMustache} compiled instance.\line If the object's published properties have some getter functions, they will be called on the fly to process the data (e.g. returning 'FirstName Name' as FullName by concatenating both sub-fields).
+:    Sections
+Sections are handled as expected:
+!  mustache := TSynMustache.Parse('Shown.{{#person}}As {{name}}!{{/person}}end{{name}}');
+!  html := mustache.RenderJSON('{person:{age:?,name:?}}',[10,'toto']);
+!  // now html='Shown.As toto!end'
+Note that the sections change the data context, so that within the {\f1\fs20 #person} section, you can directly access to the data context {\f1\fs20 person} member, i.e. writing directly {\f1\fs20 \{\{name\}\}}
+It supports also inverted sections:
+!  mustache := TSynMustache.Parse('Shown.{{^person}}Never shown!{{/person}}end');
+!  html := mustache.RenderJSON('{person:true}');
+!  // now html='Shown.end'
+To render a list of items, you can write for instance (using the {\f1\fs20 \{\{.\}\}} pseudo-variable):
+!  mustache := TSynMustache.Parse('{{#things}}{{.}}{{/things}}');
+!  html := mustache.RenderJSON('{things:["one", "two", "three"]}');
+!  // now html='onetwothree'
+The {\f1\fs20 \{\{-index\}\}} pseudo-variable allows to numerate the list items, when rendering:
+!  mustache := TSynMustache.Parse(
+!    'My favorite things:'#$A'{{#things}}{{-index}}. {{.}}'#$A'{{/things}}');
+!  html := mustache.RenderJSON('{things:["Peanut butter", "Pen spinning", "Handstands"]}');
+!  // now html='My favorite things:'#$A'1. Peanut butter'#$A'2. Pen spinning'#$A+
+!  //          '3. Handstands'#$A,'-index pseudo variable'
+:    Partials
+External partials (i.e. standard {\i Mustache} partials) can be defined using {\f1\fs20 TSynMustachePartials}. You can define and maintain a list of {\f1\fs20 TSynMustachePartials} instances, or you can use a one-time partial, for a given rendering process, as such:
+!  mustache := TSynMustache.Parse('{{>partial}}'#$A'3');
+!  html := mustache.RenderJSON('{}',TSynMustachePartials.CreateOwned(['partial','1'#$A'2']));
+!  // now html='1'#$A'23','external partials'
+Here {\f1\fs20 TSynMustachePartials.CreateOwned()} expects the partials to be supplied as name/value pairs.
+Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined directly in the main template:
+!  mustache := TSynMustache.Parse('{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
+!  html := mustache.RenderJSON('{name:3}');
+!  // now html='1'#$A'234','internal partials'
+:    Expression Helpers
+{\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
+The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC @*web application@ using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
+For instance, you may write:
+! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
+This will define two {\i Expression Helpers} for the specified table:
+- Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
+- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
+:    Internationalization
+You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
+By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
+!procedure TTestLowLevelTypes.MustacheTranslate(var English: string);
+!begin
+!  if English='Hello' then
+!    English := 'Bonjour' else
+!  if English='You have just won' then
+!    English := 'Vous venez de gagner';
+!end;
+Of course, in a real application, you may assign one {\f1\fs20 TLanguageFile.Translate(var English: string)} method, as defined in the {\f1\fs20 mORMoti18n.pas} unit.
+Then, you will be able to define your template as such:
+!  mustache := TSynMustache.Parse(
+!    '{{"Hello}} {{name}}'#13#10'{{"You have just won}} {{value}} {{"dollars}}!');
+!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
+!  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
+All text has indeed been translated as expected.
+:   Low-level integration with method-based services
+You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
+For instance, you may write, in any method-based service - see @49@:
+!var template: TSynMustache;
+!    html: RawUTF8;
+! ...
+!  template := TSynMustache.Parse(
+!    '<ul>{{#items}}<li>{{Name}} was born on {{BirthDate}}</li>{{/items}}</ul>');
+!  html := template.Render(
+!    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
+!  // now html will contain a ready-to-be-displayed unordered list
+Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
+Following this low-level method-based services process, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern as such:
+|%20%80
+|\b MVC|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i Controller}|Method-based services - see @49@
+|%
+But still, a lot of code is needed to glue the MVC parts.
+:   MVC/MVVM Design
+In practice, the method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshaling, rendering or routing.
+The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
+|%20%80
+|\b MVVM|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i ViewModel}|{\f1\fs20 Interface} services - see also @63@
+|%
+In the MVVM pattern, both {\i Model} and {\i View} components do match the classic @10@ layout. But the {\i ViewModel} will define some kind of "model for the view", i.e. the data context to be sent and retrieved from the view.
+In the {\i mORMot} implementation, {\f1\fs20 interface} methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
+|%23%77
+|\b ViewModel|mORMot\b0
+|{\i Route}|From the {\f1\fs20 interface} name and its method name
+|{\i Command}|Defined by the method name
+|{\i Controller}|Defined by the method implementation
+|{\i ViewModel Context}|Transmitted {\i by representation}, as @*JSON@, including complex values like {\f1\fs20 @*TSQLRecord@}, records, @*dynamic array@s or @*variant@s (including {\f1\fs20 @*TDocVariant@})
+|{\i Input Context}|Transmitted as method input parameters ({\f1\fs20 const}/{\f1\fs20 var}) from the {\i View}
+|{\i Output Context}|Method output parameters ({\f1\fs20 var}/{\f1\fs20 out}) are sent to the {\i View}
+|{\i Actions}|A method will render the associated view with the output parameters, or go to another command (optionally via {\f1\fs20 EMVCApplication})
+|%
+This may sound pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use. Main benefit is that you do not need to define explicit data structures for the {\i ViewModel} layer. The method parameters will declare the execution context for you at {\f1\fs20 interface} level, ready to be implemented in a {\f1\fs20 TMVCApplication} class. In practice, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
+The fact that the {\i ViewModel} data context is transmitted as JSON content - {\i by representation} just like @*REST@ - see @9@ - allows nice side effects:
+- {\i Views} do not know anything about the execution context, so are very likely to be uncoupled from any business logic - this will enhance security and maintainability of your applications;
+- You can optionally see in real time the JSON data context (by using a fake {\f1\fs20 root/methodname{\f1\fs20 /json}} URI) of a running application, for easier debugging of the {\i Controller} or the {\i Views};
+- You can test any {\i View} by using fake static JSON content, without the need of a real server;
+- In fact, {\i Views} could be even not tied to the web model, but run in a classic rich application, with VCL/FMX User Interface (we still need to automate the binding process to UI components, but this is technically feasible, whereas almost no other MVC web framework do support this);
+- Since {\f1\fs20 interface} are used to define the {\i Controller}, you could @*mock@ and @*stub@ them - see @62@ - for proper unit testing;
+- In the {\i Controller} code, you have access to the {\i mORMot} ORM methods and services to write the various commands, making it pretty easy to implement a web front-end to any @*SOA@ project (also sharing a lot of high-level {\i Domain} types);
+- The associated data {\i Model} is {\i mORMot}'s ORM, which is also optimized for JSON processing, so most of memory fragmentation is reduced to the minimum during the rendering (see e.g. the use of {\f1\fs20 RawJSON} below);
+- The {\i Controller} would be most of the time hosted within the web server application, but {\i may} be physically hosted in another remote process - this remote {\i Controller} service may even be shared between web and VCL/FMX clients;
+- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients.
+The next chapter will uncover how to build such solid MVC / MVVM @*Web Application@s using {\i mORMot}.
+:108MVC/MVVM Web applications
 %cartoon08.png
+We will now explain how to build a @*MVC@/@*MVVM@ @**web application@ using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample.
+This little web application publishes a simple BLOG, not fully finished yet (this is a {\i Sample}, remember!). But you can still execute it in your desktop browser, or any mobile device (thanks to a simple {\i @*Bootstrap@}-based @*responsive design@), and see the articles list, view one article and its comments, view the author information, log in and out.
+This sample is implemented as such:
+|%15%22%63
+|\b MVVM|Source|mORMot\b0
+|{\i Model}|{\f1\fs20 MVCModel.pas}|{\f1\fs20 TSQLRestServerDB} ORM over a {\i SQlite3} database
+|{\i View}|{\f1\fs20 *.html}|@81@ in the {\i Views} sub-folder
+|{\i ViewModel}|{\f1\fs20 MVCViewModel.pas}|Defined as one {\f1\fs20 IBlogApplication} interface
+|%
+For the sake of the simplicity, the sample will create some fake data in its own local {\i SQlite3} database, the first time it is executed.
+: MVCModel
+The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you would find the following type definitions:
+!  TSQLContent = class(TSQLRecordTimeStamped)
+!  private ...
+!  published
+!    property Title: RawUTF8 index 80 read fTitle write fTitle;
+!    property Content: RawUTF8 read fContent write fContent;
+!    property Author: TSQLAuthor read fAuthor write fAuthor;
+!    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
+!  end;
+!
+!  TSQLArticle = class(TSQLContent)
+!  private ...
+!  public
+!    class function CurrentPublishedMonth: Integer;
+!    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+!      Options: TSQLInitializeTableOptions); override;
+!  published
+!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!  end;
+!
+!  TSQLComment = class(TSQLContent)
+!  private ...
+!  published
+!    property Article: TSQLArticle read fArticle write fArticle;
+!  end;
+Then the whole database model will be created in this function:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLCategory,TSQLAuthor,
+!    TSQLArticle,TSQLComment],'blog');
+!  TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
+!  TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
+!  TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
+!  TSQLArticle.AddFilterOrValidate('Content',TSynValidateText.Create);
+!end;
+As you can discover:
+- We used {\f1\fs20 class} inheritance to gather properties for similar tables;
+- Some classes are {\i not} part of the model, since they are just {\f1\fs20 abstract} parents, e.g. {\f1\fs20 TSQLContent} is not part of the model, but {\f1\fs20 TSQLArticle} and {\f1\fs20 TSQLComment} are;
+- We defined some regular {\i one-to-one} relationships, e.g. every {\f1\fs20 Content} (which may be either an {\f1\fs20 Article} or a {\f1\fs20 Comment}) will be tied to one {\f1\fs20 Author} - see @70@;
+- We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
+- Some properties are defined (and stored) twice, e.g. {\f1\fs20 TSQLContent} defines one {\f1\fs20 AuthorName} field in addition to the {\f1\fs20 Author} ID field, as a convenient direct access to the author name, therefore avoiding a JOINed query at each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
+- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
+- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterOrValidate()} method, which would be applied before an article is stored;
+- The whole application would run without writing any SQL, but just high-level ORM methods;
+- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG).
+Foreign keys and indexes are managed as such:
+- The {\f1\fs20 TSQLRecord.ID} primary key of any ORM class will be indexed;
+- For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
+- An index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a list of publication months in the main BLOG page, and link to the corresponding articles.\line The following code will take care of it:
+!class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
+!  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+!begin
+!  inherited;
+!  if (FieldName='') or (FieldName='PublishedMonth') then
+!    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+!end;
+The ORM is defined to run over a {\i SQLite3} database in the main {\f1\fs20 MVCServer.dpr} program, then served via a HTTP server as defined in {\f1\fs20 MVCServer.dpr}:
+!  aModel := CreateModel;
+!  try
+!    aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'));
+!    try
+!      aServer.DB.Synchronous := smNormal;
+!      aServer.DB.LockingMode := lmExclusive;
+!      aServer.CreateMissingTables;
+!!      aApplication := TBlogApplication.Create(aServer);
+!      try
+!        aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
+!        try
+!!          aHTTPServer.RootRedirectToURI('blog/default'); // redirect localhost:8092
+!          writeln('"MVC Blog Server" launched on port 8092');
+!  ....
+In comparison to a regular @35@, we instantiated a {\f1\fs20 TBlogApplication}, which will {\i inject} the MVC behavior to {\f1\fs20 aServer} and {\f1\fs20 aHTTPServer}. The same {\i mORMot} program could be used as a @*REST@ful server for remote @13@ and @17@, and also for publishing a web application, sharing the same data and business logic, over a single HTTP URI and port.\line A call to {\f1\fs20 RootRedirectToURI()} will let any @http://localhost:8092 HTTP request be redirected to @http://localhost:8092/blog/default which is our BLOG application main page. The other URIs could be used as usual, as any {\i mORMot}'s @6@.
+: MVCViewModel
+:  Defining the commands
+The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the "{\i 30 - MVC Server}" sample application.\line It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).
+First of all, we defined an {\f1\fs20 interface}, with the expected methods corresponding to the various {\i commands} of the @*web application@:
+!!  IBlogApplication = interface(IMVCApplication)
+!!    procedure ArticleView(
+!      ID: integer; var WithComments: boolean; Direction: integer;
+!      out Article: TSQLArticle; out Author: TSQLAuthor;
+!      out Comments: TObjectList);
+!!    procedure AuthorView(
+!      var ID: integer; out Author: variant; out Articles: RawJSON);
+!!    function Login(
+!      const LogonName,PlainPassword: RawUTF8): TMVCAction;
+!!    function Logout: TMVCAction;
+!!    procedure ArticleEdit(
+!      var ID: integer; const Title,Content: RawUTF8;
+!      const ValidationError: variant;
+!      out Article: TSQLArticle);
+!!    function ArticleCommit(
+!      ID: integer; const Title,Content: RawUTF8): TMVCAction;
+!  end;
+In fact, {\f1\fs20 IMVCApplication} is defined as such in {\f1\fs20 mORMotMVC.pas}:
+!  IMVCApplication = interface(IInvokable)
+!    ['{C48718BF-861B-448A-B593-8012DB51E15D}']
+!    procedure Default(var Scope: variant);
+!    procedure Error(var Msg: RawUTF8; var Scope: variant);
+!  end;
+As such, the {\f1\fs20 IBlogApplication} will define the following web pages, corresponding to each of its methods: {\i Default, Error, ArticleView, AuthorView, Login, Logout, ArticleEdit} and {\i ArticleCommit}. Each command of this application will map an URI, e.g. {\f1\fs20 /blog/default} or {\f1\fs20 /blog/login} - remember that our model defined {\f1\fs20 'blog'} as its root URI. You may let all commands be accessible from a sub-URI (e.g. {\f1\fs20 /blog/web/default}), but here this is not needed, since we are creating a "pure web" application.
+Each command will have its own {\i View}. For instance, you will find {\f1\fs20 Default.html}, {\f1\fs20 Error.html} or {\f1\fs20 ArticleView.html} in the {\i "Views"} sub-folder of the sample. If you did not supply any file in this folder, some void files would be created.
+Incoming method parameters of each method (i.e. defined as {\f1\fs20 const} or {\f1\fs20 var}) will be transmitted on the URI, encoded as regular HTTP parameters, whereas outgoing method parameters (i.e. defined as {\f1\fs20 var} or {\f1\fs20 out}) would be transmitted to the {\i View}, as data context for the rendering. Simple types are transmitted (like {\f1\fs20 integer} or {\f1\fs20 RawUTF8}); but you would also find ORM classes (like {\f1\fs20 TSQLAuthor}), an outgoing {\f1\fs20 TObjectList}, or some {\f1\fs20 variant} - which may be either values or a complex @80@.
+In fact, you may find out that the {\i Login, Logout} and {\i ArticleCommit} methods do not have any outgoing parameters, but were defined as {\f1\fs20 function} returning a {\f1\fs20 TMVCAction} record.\line This type is declared as such in {\f1\fs20 mORMotMVC.pas}:
+!  TMVCAction = record
+!    RedirectToMethodName: RawUTF8;
+!    RedirectToMethodParameters: RawUTF8;
+!    ReturnedStatus: cardinal;
+!  end;
+Any method returning a {\f1\fs20 TMVCAction} content won't render directly any view, but will allow to go directly to another method, for proper rendering, just by providing a method name and some optional parameters.\line Note that even the regular views, i.e. the methods which do not have this {\f1\fs20 TMVCAction} parameter, may break the default rendering process on any error, raising an {\f1\fs20 EMVCApplication} exception which will in fact redirect the view to another page, mainly the {\f1\fs20 Error} page.
+To better understand how it works, run the "{\i 30 - MVC Server}" sample. Remember that to be able to register the port #8092 for the {\f1\fs20 http.sys} server, you would need to run the {\f1\fs20 MVCServer.exe} program at least once with {\i Windows Administrator} rights - see @109@. Then point your browser to @http://localhost:8092/ - you will see the main page of the BLOG, filled with some random data. Quite some "blabla", to be sincere!
+What you see is the {\f1\fs20 Default} page rendered. The {\f1\fs20 IBlogApplication.Default()} method has been called, then the outgoing {\f1\fs20 Scope} data has been rendered by the {\f1\fs20 Default.html} {\i Mustache} template.
+If you click on an article title, it will go to @http://localhost:8092/blog/articleView?id=99 - i.e. calling {\f1\fs20 IBlogApplication.ArticleView()} with the {\f1\fs20 ID} parameter containing 99, and other incoming parameters (i.e. {\f1\fs20 WithComments} and {\f1\fs20 Direction}) set to their default value (i.e. respectively {\f1\fs20 false} and {\f1\fs20 0}). The {\f1\fs20 ArticleView()} method will then read the {\f1\fs20 TSQLArticle} data from the ORM, then send it to the {\f1\fs20 ArticleView.html} {\i Mustache} template.
+Now, just change in your browser the URI from @http://localhost:8092/blog/articleView?id=99 (here we clicked on the {\f1\fs20 Article} with ID=99) into @http://localhost:8092/blog/articleView/json?id=99 (i.e. entering {\f1\fs20 /articleView{\b /json}} instead of {\f1\fs20 /articleView}, as a fake sub-URI).\line Now the browser is showing you the JSON data context, as transmitted to the {\f1\fs20 ArticleView.html} template. Just check both the JSON content and the corresponding {\i Mustache} template: I think you will find out how it works. Take a look at @81@ as reference.
+From any blog article view, click on the "{\f1\fs20 Show Comments}" button: you are redirected to a new page, at URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true#comments and now the comments corresponding to the article are displayed. If you click on the "{\f1\fs20 Previous}" or "{\f1\fs20 Next}" buttons, a new URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true&direction=1 will be submitted: in fact, {\f1\fs20 direction=1} will search for the previous article, and we still have the {\f1\fs20 withComments=true} parameter set, so that the user would be able to see the comments, as expected. If you click on the "{\f1\fs20 Hide Comments}" button, the URI would change to be without any {\f1\fs20 withComments=true} parameter - i.e. @http://localhost:8092/blog/ArticleView?id=98#comments : now the comments won't be displayed.
+The sequence is rendered as such:
+\graph mORMotMVCSequence mORMot MVC/MVVM URI - Commands sequence
+\/blog/default URI\Default()\routing + decode¤incoming params¤to controller method
+\Default()\defaultjson\outgoing params¤encoded as JSON
+\defaultjson\default.html¤template\rendering¤data context
+\default.html¤template\main blog web page¤with list of articles\Mustache¤engine
+\/blog/articleView?id=99\ArticleView(ID=99)\routing + decode¤incoming params¤to controller method
+\ArticleView(ID=99)\articlejson\outgoing params¤encoded as JSON
+\articlejson\articleView.html¤template\rendering¤data context
+\articleView.html¤template\web page¤with one article¤without comments\Mustache¤engine
+\/blog/articleView?id=99&withcomments=true\ArticleView(ID=99,WithComments=true)\routing + decode¤incoming params¤to controller method
+\ArticleView(ID=99,WithComments=true)\articlecomment\outgoing params¤encoded as JSON
+\articlecomment\ articleView.html¤template\rendering¤data context
+\ articleView.html¤template\web page¤with one article¤and its comments\Mustache¤engine
+=defaultjson={Scope:{articles:[....
+=articlejson={WithComments=false,¤Article={ID=99,Author:1,...¤Comments:[],...
+=articlecomment={WithComments=true,¤Article={ID=99,Author:1,...¤Comments:[¤{ID:163],...
+\
+In this diagram, we can see that each HTTP request is stateless, uncoupled from the previous. The user experience is created by changing the URI with additional parameters (like {\f1\fs20 withComments=true}).\line This is how the web works.
+Then try to go to @http://localhost:8092/blog/mvc-info - and check out the page which appears.\line You will get all the information corresponding to your application, especially a list of all available commands:
+$/blog/Default?Scope=..[variant]..
+$/blog/Error?Msg=..[string]..&Scope=..[variant]..
+$/blog/ArticleView?ID=..[integer]..&WithComments=..[boolean]..&Direction=..[integer]..
+$/blog/AuthorView?ID=..[integer]..
+$/blog/Login?LogonName=..[string]..&PlainPassword=..[string]..
+$/blog/Logout
+$/blog/ArticleEdit?ID=..[integer]..&Title=..[string]..&Content=..[string]..&ValidationError=..[variant]..
+$/blog/ArticleCommit?ID=..[integer]..&Title=..[string]..&Content=..[string]..
+And every view, including its data context, e.g.
+$/blog/AuthorView?ID=..[integer]..
+${{Main}}: variant
+${{ID}}: integer
+${{Author}}: TSQLAuthor
+${{Articles}}: variant
+You may use this page as reference when writing your {\i Mustache} Views. It will reflect the exact state of the running application.
+:  Implementing the Controller
+To build the application {\i Controller}, we would need to implement our {\f1\fs20 IBlogApplication interface}.
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  ...
+!  public
+!    constructor Create(aServer: TSQLRestServer); reintroduce;
+!    procedure Default(var Scope: variant);
+!    procedure ArticleView(ID: integer; var WithComments: boolean;
+!      Direction: integer;
+!      out Article: TSQLArticle; out Author: variant;
+!      out Comments: TObjectList);
+!    ...
+!  end;
+We defined a new class, inheriting from {\f1\fs20 TMVCApplication} - as defined in {\f1\fs20 mORMotMVC.pas}, and implementing our expected interface. {\f1\fs20 TMVCApplication} will do all the low-level plumbing for you, using a set of implementation classes.
+Let's implement a simple command:
+!procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
+!  out Articles: RawJSON);
+!begin
+!  RestModel.Retrieve(ID,Author);
+!  if Author.ID<>0 then
+!    Articles := RestModel.RetrieveListJSON(
+!      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 RawJSON}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances.\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, which will return an error page, using the {\f1\fs20 Error.html} view template.
+Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
+!var newID: integer;
+!const WHERE: array[1..2] of PUTF8Char = (
+!  'ID<? order by id desc','ID>? order by id');
+!begin
+!  if Direction in [1,2] then // allows fast paging using index on ID
+!    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
+!      (newID<>0) then
+!      ID := newID;
+!  RestModel.Retrieve(ID,Article);
+!  if Article.ID<>0 then begin
+!    Author := RestModel.RetrieveDocVariant(
+!      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
+!    if WithComments then begin
+!      Comments.Free; // we will override the TObjectList created at input
+!      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
+!    end;
+!  end else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+This method has to manage several use cases:
+- Display an {\f1\fs20 Article} from the database;
+- Retrieve the {\f1\fs20 Author} first name and family name;
+- Optionally display the associated {\f1\fs20 Comment}s;
+- Optionally get the previous or next {\f1\fs20 Article};
+- Trigger an error in case of an invalid request.
+Reading the above code is enough to understand how those 5 features are implemented in this method. The incoming parameters, as triggered by the {\i Views}, are used to identify the action to be taken. Then {\f1\fs20 TMVCApplication.RestModel} methods are used to retrieve the needed information directly from the ORM. Outgoing parameters ({\f1\fs20 Article,Author,Comments}) are transmitted to the {\i Mustache} {\i View}, for rendering.
+In fact, there are several ways to retrieve your data, using the {\f1\fs20 RestModel} ORM methods. For instance, in the above code, we used a {\f1\fs20 TObjectList} to transmit our comments.\line But we may have used a @80@ parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: variant);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveDocVariantArray(TSQLComment,'','Article=?',[Article.ID],'');
+Or with a {\f1\fs20 RawJSON} kind of output parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: RawJSON);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveListJSON(TSQLComment,'Article=?',[Article.ID],'');
+Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is just perfect. But having a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list; or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
+!procedure TBlogApplication.Default(var Scope: variant);
+! ...
+!  if not fDefaultData.AddExistingProp('Archives',Scope) then
+!    fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+!      'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
+!end;
+You can notice how the calendar months are retrieved from the database, using a safe {\f1\fs20 fDefaultData: ILockedDocVariant} private field to store the value as cache, in a thread-safe manner (we will see later more about how to implement thread-safety). If the {\f1\fs20 'Archives'} value is in the {\f1\fs20 fDefaultData} cache, it will be returned immediately as part of the {\f1\fs20 Scope} returned document. Otherwise, it will use {\f1\fs20 RestModel.RetrieveDocVariantArray} to retrieve the last 12 available months. When a new {\f1\fs20 Article} is created, or modified, {\f1\fs20 TBlogApplication.FlushAnyCache} will call {\f1\fs20 fDefaultData.Clear} to ensure that the updated information will be retrieved from the database on next {\f1\fs20 Default()} call.
+The above ORM request will generate the following SQL statement:
+$ SELECT distinct(PublishedMonth),max(ID)+1 as FirstID FROM Article
+$  group by PublishedMonth order by PublishedMonth desc limit 12
+The {\f1\fs20 Default()} method will therefore return the following JSON context:
+${
+$  "Scope": {
+$    ...
+$    "Archives":
+$    [
+$      {
+$        "PublishedMonth": 24178,
+$        "FirstID": 101
+$      },
+$      {
+$        "PublishedMonth": 24177,
+$        "FirstID": 100
+$      },
+$      ...
+... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
+I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
+:  Controller Thread Safety
+When run from a {\f1\fs20 TSQLRestServer} instance, our {\i MVC} application commands will be executed by default without any thread protection. When hosted within a {\f1\fs20 TSQLHttpServer} instance - see @88@ - several threads may execute the same {\i Controller} methods at the same time. It is therefore up to your application code to ensure that your {\f1\fs20 TMVCApplication} process is thread safe.
+Note that by design, all {\f1\fs20 TMVCApplication.RestModel} ORM methods are thread-safe.\line If your {\i Controller} business code only uses ORM methods, sending back the information to the {\i Views}, without storing any data locally, it will be perfectly thread safe.\line See for instance the {\f1\fs20 TBlogApplication.AuthorView} method we described above.
+But consider this method (simplified from the real "{\i 30 - MVC Server}" sample):
+!type
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  protected
+!    fDefaultArticles: variant;
+!   ...
+!
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!  if VarIsEmpty(fDefaultArticles) then
+!    fDefaultArticles := RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS);
+!  _ObjAddProps(['Articles',fDefaultArticles],Scope);
+!end;
+In fact, even if this method may sound safe, we have an issue when it is executed by several threads: one thread may be assigning a value to {\f1\fs20 fDefaultArticles}, whereas another thread may be using the {\f1\fs20 fDefaultArticles} content. This may result into random runtime errors, very difficult to solve. Even creating a local variable may not be safe, since any access to {\f1\fs20 fDefaultArticles} should be protected.
+A first - and brutal - solution could be to force the {\f1\fs20 TSQLRestServer} instance to execute all method-based services (including our {\i MVC} commands) in a giant lock, as stated about @25@:
+! aServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // or amBackgroundThread
+But this may slow down the whole server process, and reduce its scaling abilities.
+You could also lock explictly the {\i Controller} method, for instance:
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!!  Locker.ProtectMethod;
+!  if VarIsEmpty(fDefaultData) then
+! ...
+Using the {\f1\fs20 TMVCApplication.Locker: IAutoLocker} is a simple and efficient way of protecting your method. In fact, {\f1\fs20 ProtectMethod} will return an {\f1\fs20 IUnknown} variable, which will let the compiler create an hidden {\f1\fs20 try .. finally} block in the method body, to release the lock when it quits. But this locker would be shared by the whole {\f1\fs20 TMVCApplication} instance, so will be like a giant lock on your {\i Controller} process.
+A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant} instead of a plain {\f1\fs20 TDocVariant} for caching the data. You may therefore write:
+!type
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  protected
+!    fDefaultData: ILockedDocVariant;
+!   ...
+!constructor TBlogApplication.Create(aServer: TSQLRestServer);
+!begin
+!  fDefaultData := TLockedDocVariant.Create;
+!  ...
+!
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!  if not fDefaultData.AddExistingProp('Articles',Scope) then
+!    fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS),Scope);
+!end;
+Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) would take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample.
+:  Web Sessions
+@*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the @*web application@, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows creating such sessions.
+You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
+For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
+!  TCookieData = packed record
+!    AuthorName: RawUTF8;
+!    AuthorID: cardinal;
+!    AuthorRights: TSQLAuthorRights;
+!  end;
+This record will be serialized in two ways:
+- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
+- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
+In order to have proper JSON serialization of the {\f1\fs20 record}, you would need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
+Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
+!function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
+!var Author: TSQLAuthor;
+!!    SessionInfo: TCookieData;
+!begin
+!!  if CurrentSession.CheckAndRetrieve<>0 then begin
+!    GotoError(result,HTML_BADREQUEST);
+!    exit;
+!  end;
+!!  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
+!  try
+!!    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
+!      SessionInfo.AuthorName := Author.LogonName;
+!      SessionInfo.AuthorID := Author.ID;
+!      SessionInfo.AuthorRights := Author.Rights;
+!!      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
+!!      GotoDefault(result);
+!    end else
+!      GotoError(result,sErrorInvalidLogin);
+!  finally
+!    Author.Free;
+!  end;
+!end;
+As you can see, this {\f1\fs20 Login()} method will be trigerred from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
+The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI would have been requested.
+When a web page is computed, the following overriden method will be executed:
+!function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
+!begin
+!  result := inherited GetViewInfo(MethodIndex);
+!!  _ObjAddProps(['blog',fBlogMainInfo,
+!!    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
+!end;
+It will append the session information from the cookie to the returned {\i View} data context, as such:
+${
+$  "Scope": {
+$    "articles":
+$    ...
+$  },
+$  "main": {
+$    "pageName": "Default",
+$    "blog": {
+$      "Title": "mORMot BLOG",
+$      ...
+$    },
+$!    "session": {
+!$      "AuthorName": "synopse",
+!$      "AuthorID": 1,
+!$      "AuthorRights": {
+!$        "canComment": true,
+!$        "canPost": true,
+!$        "canDelete": true,
+!$        "canAdministrate": true
+!$      },
+$      "id": 1
+$    }
+$  }
+$}
+Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
+When the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
+!function TBlogApplication.Logout: TMVCAction;
+!begin
+!!  CurrentSession.Finalize;
+!  GotoDefault(result);
+!end;
+The session cookie will then be deleted on the browser side.
+: Writing the Views
+See @81@ for a description of how rendering take place in this MVC/MVVM application. You would find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
+You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
+Here is how {\f1\fs20 Default.html} is defined:
+$$!{{>header}}
+$$!{{>masthead}}
+$$      <div class="blog-header">
+$$!        <h1 class="blog-title">{{main.blog.title}}</h1>
+$$!        <p class="lead blog-description">{{main.blog.description}}</p>
+$$      </div>
+$$      <div class="row">
+$$        <div class="col-sm-8 blog-main">
+$$!{{#Scope}}
+$$!{{>articlerow}}
+$$!        {{#lastID}}
+$$!        <p><a href="default?scope={{.}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
+$$!        {{/lastID}}
+$$        </div>
+$$        <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
+$$          <div class="sidebar-module sidebar-module-inset">
+$$            <h4>About</h4>
+$$!            {{{WikiToHtml main.blog.about}}}
+$$          </div>
+$$          <div class="sidebar-module">
+$$            <h4>Archives</h4>
+$$            <ol class="list-unstyled">
+$$!              {{#Archives}}
+$$!              <li><a href="default?scope={{FirstID}}">{{MonthToText PublishedMonth}}</a></li>
+$$!              {{/Archives}}
+$$            </ol>
+$$          </div>
+$$  </div>
+$$   </div>
+$$!{{/Scope}}
+$$!{{>footer}}
+The {\f1\fs20 \{\{>partials\}\}} are easily identified, as other {\f1\fs20 \{\{...\}\}} value tags. The main partial is {\f1\fs20 \{\{>articlerow\}\}}, which will display all articles list.\line {\f1\fs20 \{\{\{WikiToHtml main.blog.about\}\}\}} is an {\i Expression Block} able to render some simple text into proper HTML, using a simple Wiki syntax.\line {\f1\fs20 \{\{MonthToText PublishedMonth\}\}} will execute a custom {\i Expression Block}, defined in our {\f1\fs20 TBlogApplication}, which will convert the obfuscated {\f1\fs20 TSQLArticle.PublishedMonth} integer value into the corresponding name and year:
+!procedure TBlogApplication.MonthToText(const Value: variant;
+!  out result: variant);
+!const MONTHS: array[0..11] of string = (
+!  'January','February','March','April','May','June','July','August',
+!  'September','October','November','December');
+!var month: integer;
+!begin
+!  if VariantToInteger(Value,month) and (month>0) then
+!    result := MONTHS[month mod 12]+' '+IntToStr(month div 12);
+!end;
+The page displaying the {\f1\fs20 Author} information is in fact quite simple:
+$${{>header}}
+$${{>masthead}}
+$$      <div class="blog-header">
+$$        <h1 class="blog-title">User {{Author.LogonName}}</h1>
+$$  <div class="lead blog-description">{{Author.FirstName}} {{Author.FamilyName}}
+$$  </div>
+$$      </div>
+$$   <div class="panel panel-default">
+$$   <div class="panel-heading">Information about <strong>{{Author.LogonName}}</strong></div>
+$$   <div class="panel-body">
+$$!      {{{TSQLAuthor.HtmlTable Author}}}
+$$   </div>
+$$   </div>
+$$!{{>articlerow}}
+$${{>footer}}
+It will share the same {\f1\fs20 \{\{>partials\}\}}, for a consistent and maintainable web site design, but in fact most of the process would take place by the magic of two tags:
+- {\f1\fs20 \{\{\{TSQLAuthor.HtmlTable Author\}\}\}} is an {\i Expression Block} linked to {\f1\fs20 TMVCApplication.RestModel} @*ORM@, which will create a HTML table - with the syntax expected by our {\i @*BootStrap@} {\f1\fs20 CSS} - for a {\f1\fs20 TSQLAuthor} record, identifying the property types and display them as expected (e.g. for dates or time stamps, or for enumerates or sets).
+- {\f1\fs20 \{\{>articlerow\}\}} is a partial also shared with {\f1\fs20 ArticleView.html}, which will render a list of {\f1\fs20 TSQLArticle} encoded as {\f1\fs20 \{\{#Articles\}\}}...{\f1\fs20 \{\{/Articles\}\}} sections.
+Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every aspect of the MVC process has been divided into small classes, so that the framework is able to create web applications, but also any kind of MVC applications, including mobile or VCL/FMX apps, and/or reporting - using {\f1\fs20 mORMotReport.pas}.
+:75Hosting
+%cartoon01.png
 We could identify several implementation patterns of a {\i mORMot} server and its clients:
 - Stand-alone application, either in the same process or locally on the same computer;
 - Private self-hosting, e.g. in a corporate network, with a {\i mORMot} executable or service publishing some content to clients locally or over the Internet (directly from a DMZ or via a VPN);
@@ -10880,13 +10990,16 @@ We could identify several implementation patterns of a {\i mORMot} server and it
 - Mixed hosting, using @*CDN@ network services to cache most of the requests of your {\i mORMot} server.
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
-: Windows hosted
-The current version of the framework only supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable. For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the {\i Delphi} compiler (which is planned, but not scheduled).
+:111 Windows and Linux hosted
+The current version of the framework fully supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable.
+Preliminary {\i @**Linux@} support (via @**FPC@ 2.7.1) is available, but we face some FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774 - so that the SOA and MVC features are not working yet; but you can use remote @*REST@ful @*ORM@ process hosted on a Linux server.
+For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the {\i Delphi} compiler (which is planned, but not scheduled).
 In practice, a {\i mORMot} server expects much lower hardware requirements (in CPU, storage and RAM terms) than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack. And it requires almost no maintenance.
 As a consequence, the potential implementation schemes could be hosted as such:
 - Windows stand-alone application, without any explicit server;
 - Self-hosted Windows service running on the corporate file server, or on a small dedicated VM or recycled computer (for best performance, just put your data on a new SSD on the old hardware PC);
-- Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients.
+- Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients;
+- Linux servers to host ORM / RESTful applications - but without @63@ nor @108@ yet, and with less stability than under Windows, since this platform is very new to the framework.
 In the cloud, since every resource used is monitored and billed, you would like to minimize RAM use: you should better take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
 About the edition of {\i Windows} to be used, of course IT people will ensure you that {\i Windows Server} is mandatory. But from our tests, you will obtain pretty good results, even with a regular Windows 7 or 8 version of the operating system. On the other side, it is not serious to envisage hosting a server on Windows XP, which is not supported any more by Microsoft - even if technically a {\i mORMot} server will work very well on this deprecated platform.
 Of course, if you use @27@, the hardware and hosting expectations may vary. It will depend on the database back-end used, and will necessarily be much more demanding than our internal {\i SQLite3} database engine. In practice, a {\i mORMot} server using a {\i SQLite3} engine running on a SSD hardware, in {\f1\fs20 lmExclusive} mode - see @60@ - runs faster than most @*SQL@ or @*NoSQL@ engines available, since it will be hosted within the {\i mORMot} server process itself - see @4@.
@@ -11001,7 +11114,7 @@ Of course, you can make any combination of the protocols and servers, to tune ho
 If you consider implementing a @*stand-alone@ application for hosting your services, and has therefore basic ORM needs (e.g. you may need only CRUD statements for handling authentication), you may use the lighter {\f1\fs20 TSQLRestServerFullMemory} kind of server instead of a full {\f1\fs20 TSQLRestServerDB}, which will embed a {\i @*SQLite3@} database engine, perhaps not worth it in this case.
 :97  Scaling via CDN
 Our beloved stateless @9@ model, in conjunction with @96@ would enable several levels of caching, from a local proxy cache - see e.g. @http://www.squid-cache.org or @http://www.varnish-cache.org - or an external {\i Content Delivery Network} (@**CDN@) service - e.g. @http://www.cloudflare.com
-Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, and then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your web application to scale to thousands of visitors.
+Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, and then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your @*web application@ to scale to thousands of visitors.
 \graph mORMotServices4 Service Hosting on mORMot - Content Delivery Network (CDB)
 \Local Network A\Internet
 \Local Network B\Internet
@@ -11046,7 +11159,7 @@ Then each CDN will check if the requested URI is already in its cache, according
 Of course, you can define some URI patterns to never be cached, and point directly to the {\i mORMot} server. All authenticated services, for instance would need direct access to the {\i mORMot} server, since the @98@ will append a session-private signature to each URI. Just ensure that you disabled authentication - using {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
 If your project starts to have success, using a CDN is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
 :43Security
-%cartoon01.png
+%cartoon02.png
 The framework tries to implement @**security@ via:
 - Process safety;
 - Authentication;
@@ -11364,7 +11477,7 @@ For @49@, if authentication is enabled, any method execution will be processed o
 For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
 Do not forget to remove authentication for the services for which you want to enable @97@. In fact, such world-wide @*CDN@ caching services expect the URI to be generic, and not tied to a particular client session.
 :79Scripting Engine
-%cartoon02.png
+%cartoon03.png
 : Scripting abilities
 As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the {\i Delphi} source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a {\i Delphi} IDE installed (and paid), and know the {\i Delphi} language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
@@ -11623,7 +11736,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 !  ...
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :68Domain-Driven-Design
-%cartoon03.png
+%cartoon04.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
 This is were @54@ - abbreviated DDD - patterns are worth looking at.
 : Domain
@@ -11872,7 +11985,7 @@ label="Domain Model";
 In order to provide the better scaling of the server side, @*cache@ can be easily implemented at every level, and hosting can be tuned in order to provide the best response time possible: one central server, several dedicated servers for application, domain and persistence layers...
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
-%cartoon04.png
+%cartoon05.png
 : Automated testing
 You know that @**test@ing is (almost) everything if you want to avoid regression problems in your application.
 How can you be confident that any change made to your software code won't create any error in other part of the software?
@@ -12045,7 +12158,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  (...)
 Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
-%cartoon05.png
+%cartoon06.png
 =[License]
 \page
 : Availability
@@ -12065,8 +12178,9 @@ Follow these steps:
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
-- {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE (@**FPC@ support is not yet finished);
+- {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE, with @*FPC@ 2.7.1 support;
 - Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
+- Preliminary @*Linux@ platform for @*ORM@ servers using the FPC compiler - not yet stable enough to be used on production, and @*SOA@ or Web @*MVC@ not yet working due to a FPC bug - see @111@;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
@@ -12074,17 +12188,21 @@ Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPDF.pas} 
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
-The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s (yes, it is possible!). At least, it works, and works pretty well.\line As we just stated, we were able to make our cross-platform clients compatible with this developping environement, so every door is open! Stay tuned!
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and works pretty well. Official {\i @*Linux@} / {\i FPC} support is available for {\i mORMot} servers - thanks to Alfred! - but this platform is brand new to the framework, so less stable and not yet feature complete.
 :  32 bit sqlite3*.obj and 64 bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
 For native @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i Win64} library yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For FPC under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, the following has been reported to compile our customized {\f1\fs20 sqlite3.c} file:
+$ gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
+With FPC, you can also use an external library, on the target platform.
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
 You can download the needed files from @http://synopse.info/files/synsm.7z
 Do not forget to copy both files in the executable folder. For instance, put both {\f1\fs20 mozjs.dll} and {\f1\fs20 nspr4.dll} files with your {\f1\fs20 JSHttpApiServer.exe}.
+By now, this library will work only under {\i Win32}, with {\i Delphi} as compiler - it has not yet been tested nor ported to FPC and other platforms.
 :  Folder layout
 As retrieved from our source code repository, you'll find the following folder layout:
 \graph mORMotSourceCodeFolders mORMot Source Code Folders
@@ -12179,6 +12297,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 mORMotSQLite3.pas}|{\i SQLite3} kernel bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 mORMoti18n.pas}|internationalization (@*i18n@) routines and classes
 |{\f1\fs20 mORMotMongoDB.pas}|@*ODM@ integration of {\i @*MongoDB@} @*NoSQL@ database
+|{\f1\fs20 mORMotMVC.pas}|@*MVC@ classes to develop high performance @*Web Application@s
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotUI.*}|Grid to display Database content
 |{\f1\fs20 mORMotUIEdit.*}|Record edition dialog, used to edit record content on the screen
@@ -12248,7 +12367,7 @@ TitleOffset=0
 DisplayName=Main SynFile Demo
 
 :50SynFile application
-%cartoon06.png
+%cartoon07.png
 This sample application is a simple database tool which stores text content and files into the database, in both clear and "safe" manner. Safe records are stored using {\i AES-256/SHA-256} encryption. There is an {\i Audit Trail} table for tracking the changes made to the database.
 This document will follow the application architecture and implementation, in order to introduce the reader to some main aspects of the Framework:
 - General architecture - see @7@;

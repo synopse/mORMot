@@ -90,8 +90,8 @@ resourcestring
 
 constructor TBlogApplication.Create(aServer: TSQLRestServer);
 begin
-  inherited Create(aServer,TypeInfo(IBlogApplication));
   fDefaultData := TLockedDocVariant.Create;
+  inherited Create(aServer,TypeInfo(IBlogApplication));
   ComputeMinimalData;
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
   fMainRunner := TMVCRunOnRestServer.Create(Self).
