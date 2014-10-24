@@ -3485,13 +3485,9 @@ type
     {$ifndef NOVARIANTS}
     fVariant: variant;
     {$endif}
-//    fGUID: TGUID;
-//    fEnum: TOrdType;
-//    fBool: boolean;
     procedure SetInt(const Value: int64);
  public
  published
-   // add properties here
    property Int: int64 read fInt write SetInt default 12;
    property Test: RawUTF8 read fTest write fTest;
    property Unicode: RawUnicode read fUnicode write fUnicode;
@@ -3504,10 +3500,7 @@ type
    {$ifndef NOVARIANTS}
    property ValVariant: variant read fVariant write fVariant;
    {$endif}
-//   property GUID: TGUID read fGUID write fGUID;
-//   property Bool: boolean read fBool write fBool;
  end;
-
 
 procedure TSQLRecordTest.SetInt(const Value: int64);
 begin

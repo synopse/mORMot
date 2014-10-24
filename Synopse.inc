@@ -202,7 +202,6 @@
     {$define CPU64DELPHI}
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
-    {$define USETYPEINFO}  // in x64 we rely on official typeinfo structures
     {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU

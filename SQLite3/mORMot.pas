@@ -2518,6 +2518,8 @@ type
 
   /// information about an ordinal Int32 published property
   TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
+  protected
+    procedure SetInt(Instance: TObject; Value: PtrInt);
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -13673,20 +13675,192 @@ const
 
 {$endif FPC}
 
-function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
 {$ifdef USETYPEINFO}
-{$ifndef FPC}
+
+// -- some inlined wrappers calling either TypInfo.pas or SynFPCTypInfo.pas
+
+function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  result := GetFPCOrdProp(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetOrdProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+procedure SetOrdProp(Instance: TObject; PropInfo: PPropInfo; Value: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  SetFPCOrdProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  TypInfo.SetOrdProp(Instance,pointer(PropInfo),Value);
+  {$endif}
+end;
+
+function GetInt64Prop(Instance: TObject; PropInfo: PPropInfo): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  if PropInfo.GetterIsField then
+    result := PInt64(PropInfo.GetterAddr(Instance))^ else
+    result := GetFPCInt64Prop(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetInt64Prop(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+procedure SetInt64Prop(Instance: TObject; PropInfo: PPropInfo; const Value: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  if PropInfo.SetterIsField then
+    PInt64(PropInfo.SetterAddr(Instance))^ := Value else
+  if (PropInfo.SetProc=0) and PropInfo.GetterIsField then
+    PInt64(PropInfo.GetterAddr(Instance))^ := Value else
+    {$ifdef FPC}
+    SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
+    {$else}
+    TypInfo.SetInt64Prop(Instance,pointer(PropInfo),Value);
+    {$endif}
+end;
+
+procedure GetLongStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  GetFPCStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  {$ifdef UNICODE}
+  Value := TypInfo.GetAnsiStrProp(Instance,pointer(PropInfo));
+  {$else}
+  Value := TypInfo.GetStrProp(Instance,pointer(PropInfo));
+  {$endif}
+  {$endif}
+end;
+
+procedure SetLongStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: RawByteString);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  SetFPCStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  {$ifdef UNICODE}
+  TypInfo.SetAnsiStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  TypInfo.SetStrProp(Instance,pointer(PropInfo),Value);
+  {$endif}
+  {$endif}
+end;
+
+procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  GetFPCWideStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  Value := TypInfo.GetWideStrProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  SetFPCWideStrProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  TypInfo.SetWideStrProp(Instance,pointer(PropInfo),Value);
+  {$endif}
+end;
+
+{$ifdef UNICODE}
+function GetUnicodeStrProp(Instance: TObject; PropInfo: PPropInfo): UnicodeString; inline;
+begin
+  Value := TypInfo.GetUnicodeStrProp(Instance,pointer(PropInfo));
+end;
+
+procedure SetUnicodeStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: UnicodeString); inline;
+begin
+  TypInfo.SetUnicodeStrProp(Instance,pointer(PropInfo),Value);
+end;
+{$endif UNICODE}
+
+function GetCurrencyProp(Instance: TObject; PropInfo: PPropInfo): currency;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  result := GetFPCFloatProp(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetFloatProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+function GetDoubleProp(Instance: TObject; PropInfo: PPropInfo): double;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  result := GetFPCFloatProp(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetFloatProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): double;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  result := GetFPCFloatProp(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetFloatProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo; Value: Extended);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  SetFPCFloatProp(Instance,pointer(PropInfo),value);
+  {$else}
+  TypInfo.SetFloatProp(Instance,pointer(PropInfo),value);
+  {$endif}
+end;
+
+{$ifndef NOVARIANTS}
+procedure GetVariantProp(Instance: TObject; PropInfo: PPropInfo; var result: Variant);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  result := GetFPCVariantProp(Instance,pointer(PropInfo));
+  {$else}
+  result := TypInfo.GetVariantProp(Instance,pointer(PropInfo));
+  {$endif}
+end;
+
+procedure SetVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: Variant);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC}
+  SetFPCVariantProp(Instance,pointer(PropInfo),Value);
+  {$else}
+  TypInfo.SetVariantProp(Instance,pointer(PropInfo),Value);
+  {$endif}
+end;
+{$endif NOVARIANTS}
+
+{$else USETYPEINFO}
+
+{$ifdef PUREPASCAL}
+
+// -- some PASCAL wrappers extracting RTTI and getting getter address if no setter
+
+function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: PtrInt of object;
   TIndexedGetProc = function(Index: Integer): PtrInt of object;
 var value: PtrInt;
     Call: TMethod;
     P: pointer;
-{$endif}
 begin
-  {$ifdef FPC}
-  result := GetFPCOrdProp(Instance,pointer(PropInfo));
-  {$else}
   if PropInfo^.GetProc=0 then  // no read attribute -> use write offset
     if PropWrap(PropInfo^.SetProc).Kind<>$FF then begin
       result := 0;
@@ -13716,76 +13890,15 @@ begin
     otULong: result := PCardinal(P)^;
     else result := 0; // should not happen
     end;
-  {$endif}
 end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        { <-    EAX Longint result              }
-        PUSH    EBX
-        PUSH    EDI
-        MOV     EDI,[EDX].TPropInfo.PropType
-        MOV     EDI,[EDI]
-        MOV     BL,otSLong
-        CMP     [EDI].TTypeInfo.Kind,tkClass
-        JE      @@isClass
-        MOVZX   ECX,[EDI].TTypeInfo.Name.Byte[0]
-        MOV     BL,byte ptr [EDI].TTypeInfo.Name[ECX+1] // get the ord type
-@@isClass:
-        MOV     ECX,[EDX].TPropInfo.GetProc
-        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FE
-        MOV     EDX,[EDX].TPropInfo.Index
-        JB      @@isStaticMethod
-        JA      @@isField
-        {       the GetProc is a virtual method }
-        MOVSX   ECX,CX                  { sign extend slot offs }
-        ADD     ECX,[EAX]               { vmt   + slotoffs      }
-        CALL    dword ptr [ECX]         { call vmt[slot]        }
-        JMP     @@final
-@@isStaticMethod:
-        CALL    ECX
-        JMP     @@final
-@@isField:
-        AND     ECX,$00FFFFFF
-        ADD     ECX,EAX
-        MOV     AL,[ECX]
-        CMP     BL,otSWord
-        JB      @@final
-        MOV     AX,[ECX]
-        CMP     BL,otSLong
-        JB      @@final
-        MOV     EAX,[ECX]
-@@final:CMP     BL,otSLong
-        JAE     @@exit
-        CMP     BL,otSWord
-        JAE     @@word
-        CMP     BL,otSByte
-        MOVSX   EAX,AL
-        JE      @@exit
-        AND     EAX,$FF
-        JMP     @@exit
-@@word: MOVSX   EAX,AX
-        JE      @@exit
-        AND     EAX,$FFFF
-@@exit: POP     EDI
-        POP     EBX
-end;
-{$endif}
 
 procedure SetOrdProp(Instance: TObject; PropInfo: PPropInfo; Value: PtrInt);
-// AB: use the getter field address if no setter (no write attribute) exists
-{$ifdef USETYPEINFO}
-{$ifndef FPC}
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(Value: PtrInt) of object;
   TIndexedProp = procedure(Index: integer; Value: PtrInt) of object;
 var P: pointer;
     Call: TMethod;
-{$endif}
 begin
-  {$ifdef FPC}
-  SetFPCOrdProp(Instance,pointer(PropInfo),Value);
-  {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
@@ -13801,7 +13914,7 @@ begin
         TIndexedProp(Call)(PropInfo^.Index,Value);
       exit;
     end;
-  with PropInfo^.PropType^{$ifndef FPC}^{$endif} do
+  with PropInfo^.PropType^^ do
   if Kind=tkClass then
     PPtrInt(P)^ := Value else
     case OrdType of
@@ -13809,75 +13922,14 @@ begin
     otSWord,otUWord: PWord(P)^ := Value;
     otSLong,otULong: PInteger(P)^ := Value;
     end;
-  {$endif}
 end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        {       ECX Value                       }
-        PUSH    EBX
-        PUSH    ESI
-        PUSH    EDI
-        MOV     EDI,EDX
-        MOV     ESI,[EDI].TPropInfo.PropType
-        MOV     ESI,[ESI]
-        MOV     BL,otSLong
-        CMP     [ESI].TTypeInfo.Kind,tkClass
-        JE      @@isClass
-        XOR     EBX,EBX
-        MOV     BL,[ESI].TTypeInfo.Name.Byte[0]
-        MOV     BL,byte ptr [ESI].TTypeInfo.Name[EBX+1] // get field size
-@@isClass:
-        MOV     EDX,[EDI].TPropInfo.Index       { pass Index in DX      }
-        CMP     EDX,$80000000
-        JNE     @@hasIndex
-        MOV     EDX,ECX                         { pass value in EDX     }
-@@hasIndex:
-        MOV     ESI,[EDI].TPropInfo.SetProc
-        OR      ESI,ESI // no setter ? -> use the field address
-        JZ      @NOSET
-        CMP     [EDI].TPropInfo.SetProc.Byte[3],$FE
-@set:   JA      @@isField
-        JB      @@isStaticMethod
-        {       SetProc turned out to be a virtual method. call it      }
-        MOVSX   ESI,SI                          { sign extend slot offset }
-        ADD     ESI,[EAX]                       { vmt   + slot offset   }
-        CALL    dword ptr [ESI]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    ESI
-        JMP     @@exit
-@NoSet: MOV     ESI,[EDI].TPropInfo.GetProc // use the field address
-        CMP     [EDI].TPropInfo.GetProc.Byte[3],$FF
-        JNE     @@exit // we only allow setting if we know the field address
-@@isField:
-        AND     ESI,$00FFFFFF
-        ADD     EAX,ESI
-        MOV     [EAX],CL
-        CMP     BL,otSWord
-        JB      @@exit
-        MOV     [EAX],CX
-        CMP     BL,otSLong
-        JB      @@exit
-        MOV     [EAX],ECX
-@@exit: POP     EDI
-        POP     ESI
-        POP     EBX
-end;
-{$endif}
 
 function GetInt64Prop(Instance: TObject; PropInfo: PPropInfo): Int64;
-{$ifdef USETYPEINFO}
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: Int64 of object;
   TIndexedGetProc = function(Index: Integer): Int64 of object;
 var Call: TMethod;
-begin 
-  {$ifdef FPC}
-  if PropInfo.GetterIsField then
-    result := PInt64(PropInfo.GetterAddr(Instance))^ else
-    result := GetFPCInt64Prop(Instance,pointer(PropInfo));
-  {$else}
+begin
   if PropWrap(PropInfo^.GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
     result := PInt64(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
@@ -13890,111 +13942,14 @@ begin
       result := TGetProc(Call) else
       result := TIndexedGetProc(Call)(PropInfo^.Index);
   end;
-  {$endif}
 end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        { <-    EDX:EAX result                  }
-        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FE
-        MOV     ECX,[EDX].TPropInfo.GetProc
-        MOV     EDX,[EDX].TPropInfo.Index       { pass Index in EDX     }
-        JA      @@isField
-        JB      @@isStaticMethod
-        {       GetProc is a virtual method     }
-        MOVSX   ECX,CX                          { sign extend slot number }
-        ADD     ECX,[EAX]
-        CALL    dword ptr [ECX]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    ECX
-        JMP     @@exit
-@@isField:
-        AND     ECX,$00FFFFFF
-        ADD     EAX,ECX
-        MOV     EDX,[EAX].Integer[4]
-        MOV     EAX,[EAX].Integer[0]
-@@exit:
-end;
-{$endif}
-
-{$ifndef NOVARIANTS}
-
-procedure GetVariantProp(Instance: TObject; PropInfo: PPropInfo; var result: Variant);
-{$ifdef FPC}
-begin
-  result := GetFPCVariantProp(Instance,pointer(PropInfo));
-{$else}
-procedure ByMethod; // sub proc for faster execution of simple types
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TGetProc = function: Variant of object;
-  TIndexedGetProc = function(Index: Integer): Variant of object;
-var Call: TMethod;
-begin
-  if PropWrap(PropInfo^.GetProc).Kind=$FE then
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(PropInfo^.GetProc))^ else
-    Call.Code := Pointer(PropInfo^.GetProc);
-  Call.Data := Instance;
-  if PropInfo^.Index=NO_INDEX then
-    result := TGetProc(Call) else
-    result := TIndexedGetProc(Call)(PropInfo^.Index);
-end;
-begin
-  if PropWrap(PropInfo^.GetProc).Kind=$FF then
-    // field - Getter is the field offset in the instance data
-    result := PVariant(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
-  else
-    ByMethod;
-{$endif}
-end;
-
-procedure SetVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: variant);
-{$ifdef FPC}
-begin
-  SetFPCVariantProp(Instance,pointer(PropInfo),Value);
-{$else}
-procedure ByMethod; // sub proc for faster execution of simple types
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSetProp = procedure(const Value: Variant) of object;
-  TIndexedProp = procedure(Index: integer; const Value: Variant) of object;
-var Call: TMethod;
-begin
-  if PropWrap(PropInfo^.SetProc).Kind=$FE then
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(PropInfo^.SetProc))^ else
-    Call.Code := Pointer(PropInfo^.SetProc);
-  Call.Data := Instance;
-  if PropInfo^.Index=NO_INDEX then
-    TSetProp(Call)(Value) else
-    TIndexedProp(Call)(PropInfo^.Index,Value);
-end;
-begin
-  if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
-    if PropWrap(PropInfo^.GetProc).Kind<>$FF then
-      exit else // we only allow setting if we know the field address
-      PVariant(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^ := Value else
-    if PropWrap(PropInfo^.SetProc).Kind=$FF then
-      PVariant(PtrInt(Instance)+PropInfo^.SetProc and $00FFFFFF)^ := Value else
-      ByMethod;
-{$endif}
-end;
-
-{$endif NOVARIANTS}
 
 procedure SetInt64Prop(Instance: TObject; PropInfo: PPropInfo; const Value: Int64);
-// AB: use the getter field address if no setter (no write attribute) exists
-{$ifdef USETYPEINFO}
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(const Value: Int64) of object;
   TIndexedProp = procedure(Index: integer; const Value: Int64) of object;
 var Call: TMethod;
 begin
-  {$ifdef FPC}
-  if PropInfo.SetterIsField then
-    PInt64(PropInfo.SetterAddr(Instance))^ := Value else
-  if (PropInfo.SetProc=0) and PropInfo.GetterIsField then
-    PInt64(PropInfo.GetterAddr(Instance))^ := Value else
-    SetFPCInt64Prop(Instance,pointer(PropInfo),Value);
-  {$else}
   if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(PropInfo^.GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
@@ -14009,49 +13964,9 @@ begin
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(PropInfo^.Index,Value);
   end;
-  {$endif}
 end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        {       [ESP+4] Value                   }
-        MOV     ECX,[EDX].TPropInfo.SetProc
-        OR      ECX,ECX
-        JZ      @NoSet
-        CMP     [EDX].TPropInfo.SetProc.Byte[3],$FE
-        JA      @@isField
-        MOV     EDX,[EDX].TPropInfo.Index
-        PUSH    Value.Integer[4]
-        PUSH    Value.Integer[0]
-        JB      @@isStaticMethod
-        {       SetProc is a virtual method     }
-        MOVSX   ECX,CX
-        ADD     ECX,[EAX]
-        CALL    DWORD PTR [ECX]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    ECX
-        JMP     @@exit
-@NoSet: MOV     ECX,[EDX].TPropInfo.GetProc // use the field address
-        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FF
-        JNE     @@exit // we only allow setting if we know the field address
-@@isField:
-        AND     ECX,$00FFFFFF
-        ADD     EAX,ECX
-        MOV     EDX,Value.Integer[0]
-        MOV     ECX,Value.Integer[4]
-        MOV     [EAX].Integer[0],EDX
-        MOV     [EAX].Integer[4],ECX
-@@exit:
-end;
-{$endif}
 
 procedure GetLongStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
-{$ifdef USETYPEINFO}
-{$ifdef FPC}
-begin
-  GetFPCStrProp(Instance,pointer(PropInfo),Value);
-{$else}
 procedure CallMethod(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TAStringGetProc = function: RawByteString of object;
@@ -14073,49 +13988,9 @@ begin // caller must check that PropInfo^.PropType^.Kind = tkWString
     // field - Getter is the field offset in the instance data
     Value := PRawByteString(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^ else
     CallMethod(Instance,PropInfo,Value);
-{$endif}
 end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        {       ECX Pointer to result string    }
-        PUSH    ESI
-        PUSH    EDI
-        MOV     EDI,EDX
-        MOV     EDX,[EDI].TPropInfo.Index       { pass index in EDX }
-        CMP     EDX,$80000000
-        JNE     @@hasIndex
-        MOV     EDX,ECX                         { pass value in EDX }
-@@hasIndex:
-        MOV     ESI,[EDI].TPropInfo.GetProc
-        CMP     [EDI].TPropInfo.GetProc.Byte[3],$FE
-        JA      @@isField
-        JB      @@isStaticMethod
-@@isVirtualMethod:
-        MOVSX   ESI,SI                          { sign extend slot offset }
-        ADD     ESI,[EAX]                       { vmt + slot offset }
-        CALL    DWORD PTR [ESI]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    ESI
-        JMP     @@exit
-@@isField:
-        AND     ESI,$00FFFFFF
-        MOV     EDX,[EAX+ESI]
-        MOV     EAX,ECX
-        CALL    System.@LStrLAsg // copy local string(EDX) into string(EAX)
-@@exit: POP     EDI
-        POP     ESI
-end;
-{$endif}
 
 procedure SetLongStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: RawByteString);
-{$ifdef FPC} inline;
-begin
-  SetFPCStrProp(Instance,pointer(PropInfo),Value);
-{$else}
-  // AB: use the getter field address if no setter (no write attribute) exists
-{$ifdef USETYPEINFO}
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSetProp = procedure(const Value: RawByteString) of object;
   TIndexedProp = procedure(Index: integer; const Value: RawByteString) of object;
@@ -14136,67 +14011,11 @@ begin // caller must check that PropInfo^.PropType^.Kind = tkLString
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(PropInfo^.Index,Value);
   end;
-{$else}
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        {       ECX Pointer to string value     }
-        PUSH    ESI
-        PUSH    EDI
-        MOV     ESI,EDX
-        MOV     EDX,[ESI].TPropInfo.Index       { pass index in EDX }
-        CMP     EDX,$80000000
-        JNE     @@hasIndex
-        MOV     EDX,ECX                         { pass value in EDX }
-@@hasIndex:
-        MOV     EDI,[ESI].TPropInfo.SetProc
-        or edi,edi // no setter ?
-        jz @NoSet
-        CMP     [ESI].TPropInfo.SetProc.Byte[3],$FE
-        JA      @@isField
-        JB      @@isStaticMethod
-@@isVirtualMethod:
-        MOVSX   EDI,DI
-        ADD     EDI,[EAX]
-        CALL    DWORD PTR [EDI]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    EDI
-        JMP     @@exit
-@NoSet: MOV     EDI,[ESI].TPropInfo.GetProc // use the field address
-        CMP     [ESI].TPropInfo.GetProc.Byte[3],$FF
-        JNE     @@exit // we only allow setting if we know the field address
-@@isField:
-        AND     EDI,$00FFFFFF
-        ADD     EAX,EDI
-        MOV     EDX,ECX
-        CALL    System.@LStrLAsg // copy local string(EDX) into string(EAX)
-@@exit: POP     EDI
-        POP     ESI
-{$endif}
-{$endif}
 end;
 
-{$ifdef USETYPEINFO}
-// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
+{$endif PUREPASCAL}
 
-procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString); overload;
-{$ifdef HASINLINE}inline;{$endif}
-begin
-  {$ifdef FPC}
-  GetFPCWideStrProp(Instance,pointer(PropInfo),Value);
-  {$else}
-  Value := GetWideStrProp(Instance,pointer(PropInfo));
-  {$endif}
-end;
-
-{$ifdef FPC}
-procedure SetWideStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: WideString); inline;
-begin
-  SetFPCWideStrProp(Instance,pointer(PropInfo),Value);
-end;
-{$endif}
-
-{$else}
+// -- those functions have on x86/asm optimized version
 
 procedure GetWideStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: WideString);
 type
@@ -14204,7 +14023,7 @@ type
   TUStringIndexedGetProc = function(Index: Integer): WideString of object;
 var M: TMethod;
 begin // caller must check that PropInfo^.PropType^.Kind = tkWString
-  if PropWrap(PropInfo^.GetProc).Kind=$FF then 
+  if PropWrap(PropInfo^.GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
     Value := PWideString(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
   else begin
@@ -14343,37 +14162,6 @@ St: case PropInfo^.PropType^^.FloatType of
     end;  // indexed methods not handled here, since not used in TSQLRecord
   end;
 end;
-{$endif USETYPEINFO}
-
-{$ifdef USETYPEINFO}
-// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
-
-{$ifdef FPC}
-function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended; inline;
-begin
-  result := GetFPCFloatProp(Instance,pointer(PropInfo));
-end;
-
-procedure SetFloatProp(Instance: TObject; PropInfo: PPropInfo; Value: Extended); inline;
-begin
-  SetFPCFloatProp(Instance,pointer(PropInfo),value);
-end;
-{$endif}
-
-// a dedicated function to avoid conversion for currency values
-function GetCurrencyProp(Instance: TObject; PropInfo: PPropInfo): currency;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := GetFloatProp(Instance,pointer(PropInfo));
-end;
-
-function GetDoubleProp(Instance: TObject; PropInfo: PPropInfo): double;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := GetFloatProp(Instance,pointer(PropInfo));
-end;
-
-{$else}
 
 function GetFloatProp(Instance: TObject; PropInfo: PPropInfo): Extended;
 type // function(Instance: TObject) trick does not work with CPU64 :(
@@ -14457,23 +14245,315 @@ begin // faster code by AB
   end;
 end;
 
-{$endif}
-
-{$ifndef FPC}
-procedure UseImplGetter(Instance: TObject; ImplGetter: PtrInt; var result: IInterface);
+{$ifndef NOVARIANTS}
+procedure GetVariantProp(Instance: TObject; PropInfo: PPropInfo; var result: Variant);
+procedure ByMethod; // sub proc for faster execution of simple types
 type // function(Instance: TObject) trick does not work with CPU64 :(
-  TGetProc = function: IInterface of object;
+  TGetProc = function: Variant of object;
+  TIndexedGetProc = function(Index: Integer): Variant of object;
 var Call: TMethod;
-begin // sub-procedure to avoid try..finally for TGetProc(): Interface result 
-  if PropWrap(ImplGetter).Kind=$FE then
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(ImplGetter))^ else
-    Call.Code := Pointer(ImplGetter);
+begin
+  if PropWrap(PropInfo^.GetProc).Kind=$FE then
+    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(PropInfo^.GetProc))^ else
+    Call.Code := Pointer(PropInfo^.GetProc);
   Call.Data := Instance;
-  result := TGetProc(Call);
+  if PropInfo^.Index=NO_INDEX then
+    result := TGetProc(Call) else
+    result := TIndexedGetProc(Call)(PropInfo^.Index);
 end;
-{$endif}
+begin
+  if PropWrap(PropInfo^.GetProc).Kind=$FF then
+    // field - Getter is the field offset in the instance data
+    result := PVariant(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^
+  else
+    ByMethod;
+end;
+
+procedure SetVariantProp(Instance: TObject; PropInfo: PPropInfo; const Value: variant);
+procedure ByMethod; // sub proc for faster execution of simple types
+type // procedure(Instance: TObject) trick does not work with CPU64 :(
+  TSetProp = procedure(const Value: Variant) of object;
+  TIndexedProp = procedure(Index: integer; const Value: Variant) of object;
+var Call: TMethod;
+begin
+  if PropWrap(PropInfo^.SetProc).Kind=$FE then
+    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(PropInfo^.SetProc))^ else
+    Call.Code := Pointer(PropInfo^.SetProc);
+  Call.Data := Instance;
+  if PropInfo^.Index=NO_INDEX then
+    TSetProp(Call)(Value) else
+    TIndexedProp(Call)(PropInfo^.Index,Value);
+end;
+begin
+  if PropInfo^.SetProc=0 then  // no write attribute -> use read offset
+    if PropWrap(PropInfo^.GetProc).Kind<>$FF then
+      exit else // we only allow setting if we know the field address
+      PVariant(PtrInt(Instance)+PropInfo^.GetProc and $00FFFFFF)^ := Value else
+    if PropWrap(PropInfo^.SetProc).Kind=$FF then
+      PVariant(PtrInt(Instance)+PropInfo^.SetProc and $00FFFFFF)^ := Value else
+      ByMethod;
+end;
+{$endif NOVARIANTS}
+
+{$ifndef PUREPASCAL}
+
+// -- some x86 ASM wrappers extracting RTTI and getting getter address if no setter
+
+function GetOrdProp(Instance: TObject; PropInfo: PPropInfo): PtrInt;
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        { <-    EAX Longint result              }
+        PUSH    EBX
+        PUSH    EDI
+        MOV     EDI,[EDX].TPropInfo.PropType
+        MOV     EDI,[EDI]
+        MOV     BL,otSLong
+        CMP     [EDI].TTypeInfo.Kind,tkClass
+        JE      @@isClass
+        MOVZX   ECX,[EDI].TTypeInfo.Name.Byte[0]
+        MOV     BL,byte ptr [EDI].TTypeInfo.Name[ECX+1] // get the ord type
+@@isClass:
+        MOV     ECX,[EDX].TPropInfo.GetProc
+        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FE
+        MOV     EDX,[EDX].TPropInfo.Index
+        JB      @@isStaticMethod
+        JA      @@isField
+        {       the GetProc is a virtual method }
+        MOVSX   ECX,CX                  { sign extend slot offs }
+        ADD     ECX,[EAX]               { vmt   + slotoffs      }
+        CALL    dword ptr [ECX]         { call vmt[slot]        }
+        JMP     @@final
+@@isStaticMethod:
+        CALL    ECX
+        JMP     @@final
+@@isField:
+        AND     ECX,$00FFFFFF
+        ADD     ECX,EAX
+        MOV     AL,[ECX]
+        CMP     BL,otSWord
+        JB      @@final
+        MOV     AX,[ECX]
+        CMP     BL,otSLong
+        JB      @@final
+        MOV     EAX,[ECX]
+@@final:CMP     BL,otSLong
+        JAE     @@exit
+        CMP     BL,otSWord
+        JAE     @@word
+        CMP     BL,otSByte
+        MOVSX   EAX,AL
+        JE      @@exit
+        AND     EAX,$FF
+        JMP     @@exit
+@@word: MOVSX   EAX,AX
+        JE      @@exit
+        AND     EAX,$FFFF
+@@exit: POP     EDI
+        POP     EBX
+end;
+
+procedure SetOrdProp(Instance: TObject; PropInfo: PPropInfo; Value: PtrInt);
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        {       ECX Value                       }
+        PUSH    EBX
+        PUSH    ESI
+        PUSH    EDI
+        MOV     EDI,EDX
+        MOV     ESI,[EDI].TPropInfo.PropType
+        MOV     ESI,[ESI]
+        MOV     BL,otSLong
+        CMP     [ESI].TTypeInfo.Kind,tkClass
+        JE      @@isClass
+        XOR     EBX,EBX
+        MOV     BL,[ESI].TTypeInfo.Name.Byte[0]
+        MOV     BL,byte ptr [ESI].TTypeInfo.Name[EBX+1] // get field size
+@@isClass:
+        MOV     EDX,[EDI].TPropInfo.Index       { pass Index in DX      }
+        CMP     EDX,$80000000
+        JNE     @@hasIndex
+        MOV     EDX,ECX                         { pass value in EDX     }
+@@hasIndex:
+        MOV     ESI,[EDI].TPropInfo.SetProc
+        OR      ESI,ESI // no setter ? -> use the field address
+        JZ      @NOSET
+        CMP     [EDI].TPropInfo.SetProc.Byte[3],$FE
+@set:   JA      @@isField
+        JB      @@isStaticMethod
+        {       SetProc turned out to be a virtual method. call it      }
+        MOVSX   ESI,SI                          { sign extend slot offset }
+        ADD     ESI,[EAX]                       { vmt   + slot offset   }
+        CALL    dword ptr [ESI]
+        JMP     @@exit
+@@isStaticMethod:
+        CALL    ESI
+        JMP     @@exit
+@NoSet: MOV     ESI,[EDI].TPropInfo.GetProc // use the field address
+        CMP     [EDI].TPropInfo.GetProc.Byte[3],$FF
+        JNE     @@exit // we only allow setting if we know the field address
+@@isField:
+        AND     ESI,$00FFFFFF
+        ADD     EAX,ESI
+        MOV     [EAX],CL
+        CMP     BL,otSWord
+        JB      @@exit
+        MOV     [EAX],CX
+        CMP     BL,otSLong
+        JB      @@exit
+        MOV     [EAX],ECX
+@@exit: POP     EDI
+        POP     ESI
+        POP     EBX
+end;
+
+function GetInt64Prop(Instance: TObject; PropInfo: PPropInfo): Int64;
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        { <-    EDX:EAX result                  }
+        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FE
+        MOV     ECX,[EDX].TPropInfo.GetProc
+        MOV     EDX,[EDX].TPropInfo.Index       { pass Index in EDX     }
+        JA      @@isField
+        JB      @@isStaticMethod
+        {       GetProc is a virtual method     }
+        MOVSX   ECX,CX                          { sign extend slot number }
+        ADD     ECX,[EAX]
+        CALL    dword ptr [ECX]
+        JMP     @@exit
+@@isStaticMethod:
+        CALL    ECX
+        JMP     @@exit
+@@isField:
+        AND     ECX,$00FFFFFF
+        ADD     EAX,ECX
+        MOV     EDX,[EAX].Integer[4]
+        MOV     EAX,[EAX].Integer[0]
+@@exit:
+end;
+
+procedure SetInt64Prop(Instance: TObject; PropInfo: PPropInfo; const Value: Int64);
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        {       [ESP+4] Value                   }
+        MOV     ECX,[EDX].TPropInfo.SetProc
+        OR      ECX,ECX
+        JZ      @NoSet
+        CMP     [EDX].TPropInfo.SetProc.Byte[3],$FE
+        JA      @@isField
+        MOV     EDX,[EDX].TPropInfo.Index
+        PUSH    Value.Integer[4]
+        PUSH    Value.Integer[0]
+        JB      @@isStaticMethod
+        {       SetProc is a virtual method     }
+        MOVSX   ECX,CX
+        ADD     ECX,[EAX]
+        CALL    DWORD PTR [ECX]
+        JMP     @@exit
+@@isStaticMethod:
+        CALL    ECX
+        JMP     @@exit
+@NoSet: MOV     ECX,[EDX].TPropInfo.GetProc // use the field address
+        CMP     [EDX].TPropInfo.GetProc.Byte[3],$FF
+        JNE     @@exit // we only allow setting if we know the field address
+@@isField:
+        AND     ECX,$00FFFFFF
+        ADD     EAX,ECX
+        MOV     EDX,Value.Integer[0]
+        MOV     ECX,Value.Integer[4]
+        MOV     [EAX].Integer[0],EDX
+        MOV     [EAX].Integer[4],ECX
+@@exit:
+end;
+
+procedure GetLongStrProp(Instance: TObject; PropInfo: PPropInfo; var Value: RawByteString);
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        {       ECX Pointer to result string    }
+        PUSH    ESI
+        PUSH    EDI
+        MOV     EDI,EDX
+        MOV     EDX,[EDI].TPropInfo.Index       { pass index in EDX }
+        CMP     EDX,$80000000
+        JNE     @@hasIndex
+        MOV     EDX,ECX                         { pass value in EDX }
+@@hasIndex:
+        MOV     ESI,[EDI].TPropInfo.GetProc
+        CMP     [EDI].TPropInfo.GetProc.Byte[3],$FE
+        JA      @@isField
+        JB      @@isStaticMethod
+@@isVirtualMethod:
+        MOVSX   ESI,SI                          { sign extend slot offset }
+        ADD     ESI,[EAX]                       { vmt + slot offset }
+        CALL    DWORD PTR [ESI]
+        JMP     @@exit
+@@isStaticMethod:
+        CALL    ESI
+        JMP     @@exit
+@@isField:
+        AND     ESI,$00FFFFFF
+        MOV     EDX,[EAX+ESI]
+        MOV     EAX,ECX
+        CALL    System.@LStrLAsg // copy local string(EDX) into string(EAX)
+@@exit: POP     EDI
+        POP     ESI
+end;
+
+procedure SetLongStrProp(Instance: TObject; PropInfo: PPropInfo; const Value: RawByteString);
+asm     { ->    EAX Pointer to instance         }
+        {       EDX Pointer to property info    }
+        {       ECX Pointer to string value     }
+        PUSH    ESI
+        PUSH    EDI
+        MOV     ESI,EDX
+        MOV     EDX,[ESI].TPropInfo.Index       { pass index in EDX }
+        CMP     EDX,$80000000
+        JNE     @@hasIndex
+        MOV     EDX,ECX                         { pass value in EDX }
+@@hasIndex:
+        MOV     EDI,[ESI].TPropInfo.SetProc
+        or edi,edi // no setter ?
+        jz @NoSet
+        CMP     [ESI].TPropInfo.SetProc.Byte[3],$FE
+        JA      @@isField
+        JB      @@isStaticMethod
+@@isVirtualMethod:
+        MOVSX   EDI,DI
+        ADD     EDI,[EAX]
+        CALL    DWORD PTR [EDI]
+        JMP     @@exit
+@@isStaticMethod:
+        CALL    EDI
+        JMP     @@exit
+@NoSet: MOV     EDI,[ESI].TPropInfo.GetProc // use the field address
+        CMP     [ESI].TPropInfo.GetProc.Byte[3],$FF
+        JNE     @@exit // we only allow setting if we know the field address
+@@isField:
+        AND     EDI,$00FFFFFF
+        ADD     EAX,EDI
+        MOV     EDX,ECX
+        CALL    System.@LStrLAsg // copy local string(EDX) into string(EAX)
+@@exit: POP     EDI
+        POP     ESI
+end;
+
+{$endif PUREPASCAL}
+
+{$endif USETYPEINFO}
 
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry; out Obj): boolean;
+  {$ifndef FPC}
+  procedure UseImplGetter(Instance: TObject; ImplGetter: PtrInt; var result: IInterface);
+  type // function(Instance: TObject) trick does not work with CPU64 :(
+    TGetProc = function: IInterface of object;
+  var Call: TMethod;
+  begin // sub-procedure to avoid try..finally for TGetProc(): Interface result
+    if PropWrap(ImplGetter).Kind=$FE then
+      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(ImplGetter))^ else
+      Call.Code := Pointer(ImplGetter);
+    Call.Data := Instance;
+    result := TGetProc(Call);
+  end;
+  {$endif}
 begin
   Pointer(Obj) := nil;
   if Entry<>nil then
@@ -14488,45 +14568,6 @@ begin
       UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj)){$endif};
   Result := Pointer(Obj)<>nil;
 end;
-
-{$ifdef USETYPEINFO}
-// let TypInfo.pas handle layout of the underlying compiler (mostly FPC)
-{$else}
-function GetMethodProp(Instance: TObject; PropInfo: PPropInfo): TMethod;
-asm     { ->    EAX Pointer to instance         }
-        {       EDX Pointer to property info    }
-        {       ECX Pointer to result           }
-        PUSH    EBX
-        PUSH    EDI
-        MOV     EDI,EDX
-        MOV     EDX,[EDI].TPropInfo.Index       { pass Index in DX      }
-        CMP     EDX,$80000000
-        JNE     @@hasIndex
-        MOV     EDX,ECX                         { pass value in EDX     }
-@@hasIndex:
-        MOV     EBX,[EDI].TPropInfo.GetProc
-        CMP     [EDI].TPropInfo.GetProc.Byte[3],$FE
-        JA      @@isField
-        JB      @@isStaticMethod
-        {       GetProc is a virtual method     }
-        MOVSX   EBX,BX                          { sign extend slot number }
-        ADD     EBX,[EAX]
-        CALL    dword ptr [EBX]
-        JMP     @@exit
-@@isStaticMethod:
-        CALL    EBX
-        JMP     @@exit
-@@isField:
-        AND     EBX,$00FFFFFF
-        ADD     EAX,EBX
-        MOV     EDX,[EAX]
-        MOV     EBX,[EAX+4]
-        MOV     [ECX],EDX
-        MOV     [ECX+4],EBX
-@@exit: POP     EDI
-        POP     EBX
-end;
-{$endif}
 
 function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString): PMethodInfo;
 var Count, i: integer;
@@ -14705,7 +14746,7 @@ begin
       result := pointer(P^.GetOrdValue(Obj));
 {$endif}
 end;
-  
+
 function ClassFieldPropFromIndex(ClassType: TClass; PropIndex: integer): PPropInfo;
 var i: integer;
 begin
@@ -15159,7 +15200,7 @@ end;
 
 procedure TSQLPropInfoRTTIInt32.CopyValue(Source, Dest: TObject);
 begin
-  SetOrdProp(Dest,pointer(fPropInfo),GetOrdProp(Source,pointer(fPropInfo)));
+  SetInt(Dest,GetOrdProp(Source,pointer(fPropInfo)));
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -15208,27 +15249,30 @@ end;
 function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 begin
   if P<>nil then
-    SetOrdProp(Instance,pointer(fPropInfo),integer(FromVarUInt32(PByte(P))));
+    SetInt(Instance,integer(FromVarUInt32(PByte(P))));
   result := P;
+end;
+
+procedure TSQLPropInfoRTTIInt32.SetInt(Instance: TObject; Value: PtrInt);
+begin
+  {$ifdef USETYPEINFO}
+  if fPropInfo.SetterIsField then
+    PInteger(fPropInfo.SetterAddr(Instance))^ := Value else
+  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
+    PInteger(fPropInfo.GetterAddr(Instance))^ := Value else
+  {$endif}
+    SetOrdProp(Instance,pointer(fPropInfo),Value);
 end;
 
 procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
 begin
-{$ifdef FPC}
-  if fPropInfo.SetterIsField then
-    PInteger(fPropInfo.SetterAddr(Instance))^ := GetInteger(Value) else
-  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
-    PInteger(fPropInfo.GetterAddr(Instance))^ := GetInteger(Value) else
-    SetFPCOrdProp(Instance,pointer(fPropInfo),GetInteger(Value));
-{$else}
-  SetOrdProp(Instance,pointer(fPropInfo),GetInteger(Value));
-{$endif}
+  SetInt(Instance,GetInteger(Value));
 end;
 
 function TSQLPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 begin
   if aValue.VType=ftInt64 then begin
-    SetOrdProp(Instance,pointer(fPropInfo),aValue.VInt64);
+    SetInt(Instance,aValue.VInt64);
     result := true;
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
@@ -15704,16 +15748,15 @@ end;
 
 procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
 begin
-  {$ifdef FPC}
+  {$ifdef USETYPEINFO}
   if fPropInfo.SetterIsField then
     PPointer(fPropInfo.SetterAddr(Instance))^ := Value else
   if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
     PPointer(fPropInfo.GetterAddr(Instance))^ := Value else
-    SetFPCOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
-  {$else}
-    SetOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
   {$endif}
+    SetOrdProp(Instance,pointer(fPropInfo),PtrInt(Value));
 end;
+
 
 { TSQLPropInfoRTTIID }
 
