@@ -141,9 +141,11 @@ type
       ShortFileName: TFileName;
       FileExt: TFileName;
       ContentType: RawUTF8;
+      Locker: IAutoLocker;
       FileTimeStamp: TDateTime;
       FileTimeStampCheckTick: Int64;
     end;
+    function GetRenderer(methodIndex: integer; out ContentType: RawUTF8): TSynMustache;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); override;
   public
@@ -401,6 +403,7 @@ type
   TMVCRunWithViews = class(TMVCRun)
   protected
     fViews: TMVCViewsAbtract;
+    fCacheLocker: IAutoLocker;
     fCache: array of record
       Policy: TMVCRendererCachePolicy;
       TimeOutSeconds: cardinal;
@@ -527,6 +530,7 @@ type
     fSession: TMVCSessionAbstract;
     fRestModel: TSQLRest;
     fRestServer: TSQLRestServer;
+    fLocker: IAutoLocker;
     // if any TMVCRun instance is store here, will be freed by Destroy
     // but note that a single TMVCApplication logic may handle several TMVCRun
     fMainRunner: TMVCRun;
@@ -566,6 +570,12 @@ type
     property Factory: TInterfaceFactory read fFactory;
     /// read-write access to the associated Session instance
     property CurrentSession: TMVCSessionAbstract read fSession write SetSession;
+    /// global mutex which may be used to protect ViewModel/Controller code
+    // - you may call Locker.ProtectMethod in any implementation method to
+    // ensure that no other thread would access the same data
+    // - note that regular RestModel CRUD operations are already thread safe, so
+    // it is not necessary to use this Locker with ORM or SOA methods
+    property Locker: IAutoLocker read fLocker write fLocker;
     /// read-write access to the main associated TMVCRun instance
     // - if any TMVCRun instance is stored here, will be freed by Destroy
     // - but note that a single TMVCApplication logic may handle several TMVCRun
@@ -673,6 +683,7 @@ begin
   for m := 0 to fFactory.MethodsCount-1 do
   if MethodHasView(fFactory.Methods[m]) then
   with fViews[m] do begin
+    Locker := TAutoLocker.Create;
     MethodName := UTF8ToString(fFactory.Methods[m].URI);
     SearchPattern := fViewTemplateFolder+MethodName+'.*';
     if FindFirst(SearchPattern,faAnyFile-faDirectory,SR)=0 then
@@ -709,7 +720,7 @@ begin
     repeat
       StringToUTF8(GetFileNameWithoutExt(SR.Name),partialName);
       try
-        fViewPartials.Add(partialName,StringFromFile(fViewTemplateFolder+SR.Name));
+        fViewPartials.Add(partialName,AnyTextFileToRawUTF8(fViewTemplateFolder+SR.Name,true));
       except
         on E: Exception do
           fLogClass.Add.Log(
@@ -763,6 +774,7 @@ type
       kind: THtmlTableStyleLabel); override;
   end;
   TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
+
   TExpressionHelperForTable = class
   public
     Rest: TSQLRest;
@@ -950,14 +962,17 @@ begin
      TExpressionHelperForTable.Create(aRest,aRest.Model.Tables[t],fViewHelpers);
 end;
 
-procedure TMVCViewsMustache.Render(methodIndex: Integer; const Context: variant;
-  var View: TMVCView);
+function TMVCViewsMustache.GetRenderer(methodIndex: integer;
+  out ContentType: RawUTF8): TSynMustache;
 var age: TDateTime;
 begin
   if cardinal(methodIndex)>=fFactory.MethodsCount then
     raise EMVCException.CreateUTF8('%.Render(methodIndex=%)',[self,methodIndex]);
   with fViews[methodIndex] do begin
-    if (Mustache=nil) and (FileName='') then 
+    if MethodName='' then
+      raise EMVCException.CreateUTF8('%.Render(''%''): not a View',[self,MethodName]);
+    Locker.ProtectMethod;
+    if (Mustache=nil) and (FileName='') then
       raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
         [self,MethodName,SearchPattern]);
     if (Mustache=nil) or ((fViewTemplateFileTimestampMonitor<>0) and
@@ -966,7 +981,7 @@ begin
       if (Mustache=nil) or (age<>FileTimeStamp) then begin
         Mustache := nil;
         FileTimeStamp := age;
-        Template := StringFromFile(FileName);
+        Template := AnyTextFileToRawUTF8(FileName,true);
         if Template<>'' then
         try
           Mustache := TSynMustache.Parse(Template);
@@ -982,13 +997,22 @@ begin
             Int64(fViewTemplateFileTimestampMonitor)*Int64(1000);
       end;
     end;
-    View.Content := Mustache.Render(Context,fViewPartials,fViewHelpers);
-    if trim(View.Content)='' then begin
-      Mustache := nil; // force reload ASAP
-      raise EMVCException.CreateUTF8(
-        '%.Render(''%''): Void Template - please put some content!',[self,ShortFileName]);
-    end;
-    View.ContentType := ContentType;
+    result := Mustache;
+  end;
+end;
+
+procedure TMVCViewsMustache.Render(methodIndex: Integer; const Context: variant;
+  var View: TMVCView);
+begin
+  View.Content := GetRenderer(methodIndex,View.ContentType).Render(
+    Context,fViewPartials,fViewHelpers);
+  if trim(View.Content)='' then
+  with fViews[methodIndex] do begin
+    Locker.Enter;
+    Mustache := nil; // force reload ASAP
+    Locker.Leave;
+    raise EMVCException.CreateUTF8(
+      '%.Render(''%''): Void Template - please put some content!',[self,ShortFileName]);
   end;
 end;
 
@@ -1145,6 +1169,7 @@ var m: integer;
     entry: PInterfaceEntry;
 begin
   inherited Create;
+  fLocker := TAutoLocker.Create;
   fRestModel := aRestModel;
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
@@ -1399,6 +1424,7 @@ constructor TMVCRunWithViews.Create(aApplication: TMVCApplication;
 begin
   inherited Create(aApplication);
   fViews := aViews;
+  fCacheLocker := TAutoLocker.Create;
 end;
 
 function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
@@ -1406,6 +1432,7 @@ function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
 const MAX_CACHE_TIMEOUT = 60*15; // 15 minutes
 var aMethodIndex: integer;
 begin
+  fCacheLocker.ProtectMethod;
   aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
   if fCache=nil then
     SetLength(fCache,fApplication.fFactory.MethodsCount);
@@ -1428,6 +1455,7 @@ end;
 procedure TMVCRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
 begin
   inherited;
+  fCacheLocker.ProtectMethod;
   if cardinal(aMethodIndex)<cardinal(Length(fCache)) then
   with fCache[aMethodIndex] do
     case Policy of
@@ -1584,45 +1612,52 @@ begin
   end;
   fCacheCurrent := noCache;
   fCacheCurrentSec := GetTickCount64 div 1000;
-  if cardinal(aMethodIndex)<cardinal(Length(fRun.fCache)) then
-  with fRun.fCache[aMethodIndex] do begin
-    case Policy of
-    cacheRootIgnoringSession:
-      if fInput='' then
- doRoot:if (RootValue<>'') and (fCacheCurrentSec<RootValueExpirationTime) then begin
-          SetOutputValue(RootValue);
-          exit;
-        end else
-          fCacheCurrent := rootCache;
-    cacheRootIfSession:
-      if (fInput='') and fApplication.CurrentSession.Exists then
-        goto doRoot;
-    cacheRootIfNoSession:
-      if (fInput='') and not fApplication.CurrentSession.Exists then
-        goto doRoot;
-    cacheRootWithSession:
-      if fInput='' then begin
-        sessionID := fApplication.CurrentSession.CheckAndRetrieve;
-        if sessionID=0 then
-          goto doRoot else
-        if RetrievedFromInputValues(UInt32ToUtf8(sessionID),InputValues) then
-          exit;
+  fRun.fCacheLocker.Enter;
+  try
+    if cardinal(aMethodIndex)<cardinal(Length(fRun.fCache)) then
+    with fRun.fCache[aMethodIndex] do begin
+      case Policy of
+      cacheRootIgnoringSession:
+        if fInput='' then
+   doRoot:if (RootValue<>'') and (fCacheCurrentSec<RootValueExpirationTime) then begin
+            SetOutputValue(RootValue);
+            exit;
+          end else
+            fCacheCurrent := rootCache;
+      cacheRootIfSession:
+        if (fInput='') and fApplication.CurrentSession.Exists then
+          goto doRoot;
+      cacheRootIfNoSession:
+        if (fInput='') and not fApplication.CurrentSession.Exists then
+          goto doRoot;
+      cacheRootWithSession:
+        if fInput='' then begin
+          sessionID := fApplication.CurrentSession.CheckAndRetrieve;
+          if sessionID=0 then
+            goto doRoot else
+          if RetrievedFromInputValues(UInt32ToUtf8(sessionID),InputValues) then
+            exit;
+        end;
+      cacheWithParametersIgnoringSession:
+  doInput:if fInput='' then
+            goto doRoot else
+          if RetrievedFromInputValues(fInput,InputValues) then
+            exit;
+      cacheWithParametersIfSession:
+        if fApplication.CurrentSession.Exists then
+          goto doInput;
+      cacheWithParametersIfNoSession:
+        if not fApplication.CurrentSession.Exists then
+          goto doInput;
       end;
-    cacheWithParametersIgnoringSession:
-doInput:if fInput='' then
-          goto doRoot else
-        if RetrievedFromInputValues(fInput,InputValues) then
-          exit;
-    cacheWithParametersIfSession:
-      if fApplication.CurrentSession.Exists then
-        goto doInput;
-    cacheWithParametersIfNoSession:
-      if not fApplication.CurrentSession.Exists then
-        goto doInput;
     end;
+  finally
+    fRun.fCacheLocker.Leave; // ExecuteCommand() process should not be locked
   end;
   inherited ExecuteCommand(aMethodIndex);
   if fCacheCurrent<>noCache then
+  try
+    fRun.fCacheLocker.Enter;
     with fRun.fCache[aMethodIndex] do begin
       inc(fCacheCurrentSec,TimeOutSeconds);
       case fCacheCurrent of
@@ -1638,6 +1673,9 @@ doInput:if fInput='' then
           InputValues.Add(fCacheCurrentInputValueKey,'');
       end;
     end;
+  finally
+    fRun.fCacheLocker.Leave;
+  end;
 end;
 
 function TMVCRendererReturningData.Redirects(const action: TMVCAction): boolean;
@@ -1647,8 +1685,6 @@ begin
   fOutput.Status := action.ReturnedStatus;
   result := true;
 end;
-
-
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));

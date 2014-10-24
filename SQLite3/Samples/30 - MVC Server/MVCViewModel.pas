@@ -52,11 +52,8 @@ type
   TBlogApplication = class(TMVCApplication,IBlogApplication)
   protected
     fBlogMainInfo: variant;
-    fCachedMain: record
-      Articles: variant;
-      ArticlesLastID: integer;
-      Months: variant;
-    end;
+    fDefaultData: ILockedDocVariant;
+    fDefaultLastID: integer;
     procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
@@ -94,6 +91,7 @@ resourcestring
 constructor TBlogApplication.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer,TypeInfo(IBlogApplication));
+  fDefaultData := TLockedDocVariant.Create;
   ComputeMinimalData;
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
   fMainRunner := TMVCRunOnRestServer.Create(Self).
@@ -192,7 +190,7 @@ end;
 procedure TBlogApplication.FlushAnyCache;
 begin
   inherited FlushAnyCache; // call fMainRunner.NotifyContentChanged
-  Finalize(fCachedMain);
+  fDefaultData.Clear;
 end;
 
 
@@ -211,18 +209,16 @@ begin
     if lastID>1 then
       _ObjAddProps(['lastID',lastID],Scope);
   end else begin
-    if VarIsEmpty(fCachedMain.Articles) then
-      fCachedMain.Articles := RestModel.RetrieveDocVariantArray(
+    if not fDefaultData.AddExistingProp('Articles',Scope) then
+      fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
         TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS,
-        nil,@fCachedMain.ArticlesLastID);
-    _ObjAddProps(['articles',fCachedMain.Articles,
-                  'lastID',fCachedMain.ArticlesLastID],Scope);
+        nil,@fDefaultLastID),Scope);
+    _ObjAddProps(['lastID',fDefaultLastID],Scope);
   end;
-  if VarIsEmpty(fCachedMain.Months) then
-    fCachedMain.Months := RestModel.RetrieveDocVariantArray(
+  if not fDefaultData.AddExistingProp('Archives',Scope) then
+    fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
-      'distinct(PublishedMonth),max(ID)+1 as FirstID');
-  _ObjAddProps(['Archives',fCachedMain.Months],Scope);
+      'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
 end;
 
 procedure TBlogApplication.ArticleView(
