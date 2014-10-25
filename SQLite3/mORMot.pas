@@ -4742,6 +4742,9 @@ type
     class function AddFilterOrValidate(const aFieldName: RawUTF8;
       aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
         {$ifdef HASINLINE}inline;{$endif}
+    /// register a TSynFilterTrim and a TSynValidateText filters so that
+    // the specified fields, after space trimming, won't be void
+    class procedure AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
     /// protect several TSQLRecord local variable instances
     // - specified as localVariable/recordClass pairs
     // - is a wrapper around TAutoFree.Several(...) constructor
@@ -4757,7 +4760,23 @@ type
     // !     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment]);
     // !   .... now you can use info, article or comment
     // ! end; // will call info.Free article.Free and comment.Free
-    class function AutoFree(varClassPairs: array of pointer): IAutoFree;
+    class function AutoFree(varClassPairs: array of pointer): IAutoFree; overload;
+    /// protect one TSQLRecord local variable instance
+    // - be aware that it won't implement a full ARC memory model, but may be
+    // just used to avoid writing some try ... finally blocks on local variables
+    // - use with caution, only on well defined local scope
+    // - you may write for instance:
+    // ! var info: TSQLBlogInfo;
+    // ! begin
+    // !   TSQLBlogInfo.AutoFree(info);
+    // !   .... now you can use info
+    // ! end; // will call info.Free
+    class function AutoFree(var localVariable): IAutoFree; overload;
+    /// read and protect one TSQLRecord local variable instance
+    // - be aware that it won't implement a full ARC memory model, but may be
+    // just used to avoid writing some try ... finally blocks on local variables
+    // - use with caution, only on well defined local scope
+    class function AutoFree(var localVariable; Rest: TSQLRest; ID: integer): IAutoFree; overload;
 
     {/ get the captions to be used for this class
      - if Action is nil, return the caption of the table name
@@ -4820,6 +4839,12 @@ type
       index }
     function Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
       aInvalidFieldIndex: PInteger=nil): string; overload;
+    /// filter then validate the specified fields values of the current TSQLRecord
+    // - this version will call the overloaded Filter() and Validate() methods
+    // - returns true if all field names were correct and processed, or false
+    // and an explicit error message (translated in the current language) on error
+    function FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
+      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload; 
     /// should modify the record content before writing to the Server
     // - this default implementation will update any sftModTime / TModTime and
     // sftCreateTime / TCreateTime properties content with the exact server time stamp
@@ -9357,6 +9382,8 @@ type
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
     function TableHasRows(Table: TSQLRecordClass): boolean; virtual;
+    /// check if a given ID do exist for a given table
+    function MemberExists(Table: TSQLRecordClass; ID: integer): boolean;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - example of use - including inlined parameters via :(...):
     // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=:(23):')
@@ -22664,10 +22691,32 @@ begin
   result := TAutoFree.Several(varClassPairs);
 end;
 
+class function TSQLRecord.AutoFree(var localVariable): IAutoFree;
+begin
+  result := TAutoFree.One(localVariable,Create);
+end;
+
+class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest; ID: integer): IAutoFree;
+begin
+  result := TAutoFree.One(localVariable,Create(Rest,ID));
+end;
+
 class function TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
   aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
 begin
   result := RecordProps.AddFilterOrValidate(aFieldName,aFilter);
+end;
+
+class procedure TSQLRecord.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
+var i,f: Integer;
+begin
+  with RecordProps do begin
+    for i := 0 to high(aFieldNames) do begin
+      f := Fields.IndexByName(aFieldNames[i]);
+      AddFilterOrValidate(f,TSynFilterTrim.Create);
+      AddFilterOrValidate(f,TSynValidateText.Create);
+    end;
+  end;
 end;
 
 function TSQLRecord.Validate(aRest: TSQLRest; const aFields: TSQLFieldBits;
@@ -22719,6 +22768,14 @@ begin
     // must always call the virtual Validate() method
     result := Validate(aRest,F,aInvalidFieldIndex) else
     result := '';
+end;
+
+function TSQLRecord.FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
+  const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean;
+begin
+  Filter(aFields);
+  aErrorMessage := Validate(aRest,aFields);
+  result := aErrorMessage='';
 end;
 
 function TSQLRecord.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
@@ -23955,6 +24012,11 @@ begin
     {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(WhereID)+'):') then
     result := Res[0] else
     result := '';
+end;
+
+function TSQLRest.MemberExists(Table: TSQLRecordClass; ID: integer): boolean;
+begin
+  result := OneFieldValue(Table,'RowID',ID)<>'';
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
@@ -39629,14 +39691,15 @@ begin
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
         {$endif}
         smvBoolean..smvWideString: begin
-          Val := GetJSONField(Par,Par,@wasString);
-          if (Val=nil) and (Par=nil) then
+          Val := GetJSONField(Par,Par,@wasString,@EndOfObject);
+          if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
             exit;  // 'null' will set Val=nil and Par<>nil 
           if (Val<>nil) and (wasString<>(vIsString in ValueKindAsm)) then
             exit;
           case ValueType of
           smvBoolean:
-            Int64s[IndexVar] := byte((Val<>nil) and (PInteger(Val)^=TRUE_LOW));
+            Int64s[IndexVar] := byte((Val<>nil) and
+              ((PWord(Val)^=ord('1'))or(PInteger(Val)^=TRUE_LOW)));
           smvEnum..smvInt64:
             SetInt64(Val,Int64s[IndexVar]);
           smvDouble,smvDateTime:
