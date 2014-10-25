@@ -4734,6 +4734,22 @@ type
     class function AddFilterOrValidate(const aFieldName: RawUTF8;
       aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
         {$ifdef HASINLINE}inline;{$endif}
+    /// protect several TSQLRecord local variable instances
+    // - specified as localVariable/recordClass pairs
+    // - is a wrapper around TAutoFree.Several(...) constructor
+    // - be aware that it won't implement a full ARC memory model, but may be
+    // just used to avoid writing some try ... finally blocks on local variables
+    // - use with caution, only on well defined local scope
+    // - you may write for instance:
+    // ! var info: TSQLBlogInfo;
+    // !     article: TSQLArticle;
+    // !     comment: TSQLComment;
+    // ! begin
+    // !   TSQLRecord.AutoFree([ // avoid several try..finally
+    // !     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment]);
+    // !   .... now you can use info, article or comment
+    // ! end; // will call info.Free article.Free and comment.Free
+    class function AutoFree(varClassPairs: array of pointer): IAutoFree;
 
     {/ get the captions to be used for this class
      - if Action is nil, return the caption of the table name
@@ -22604,6 +22620,20 @@ begin
   if self=nil then
     result := '' else
     result := RecordProps.SQLTableName;
+end;
+
+class function TSQLRecord.AutoFree(varClassPairs: array of pointer): IAutoFree;
+var n,i: integer;
+begin
+  n := length(varClassPairs);
+  if (n=0) or (n and 1=1) then
+    exit;
+  n := n shr 1;
+  if n=0 then
+    exit;
+  for i := 0 to n-1 do
+    varClassPairs[i*2+1] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
+  result := TAutoFree.Several(varClassPairs);
 end;
 
 class function TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
