@@ -47,26 +47,28 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 engine
-   **********************************
+    Statically linked SQLite3 3.8.7 engine
+   ***************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
   sqlite3 := TSQLite3LibraryStatic.Create; is called at unit initialization.
 
-  Will work only on Windows 32 bit (when the corresponding .obj are available)
+  Will work only on Windows 32 bit (with Delphi or FPC, with expected .obj / .o)
+  or Linux 32 bit (with FPC, with the corresponding .o)
   under other platforms, this unit will just do nothing (but compile).
   
   To compile our patched SQlite3.c version, available in this source folder:
   - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
   - Run c-fpcmingw.bat to compile the sqlite3*.o for Win32/FPC
 
-  Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll).
+  Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
 
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
+  - updated SQLite3 engine to latest version 3.8.7
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -599,6 +601,20 @@ begin
   result := localtime64(t^);
 end;
 
+{$ifdef MSWINDOWS}
+function _beginthreadex(security: pointer; stksize: dword;
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
+  {$ifdef FPC}alias : '__beginthreadex';{$endif}
+begin
+  result := CreateThread(security,stkSize,start,arg,flags,threadid);
+end;
+
+procedure _endthreadex(ExitCode: DWORD); cdecl;
+  {$ifdef FPC}alias : '__endthreadex';{$endif}
+begin
+  ExitThread(ExitCode);
+end;
+{$endif MSWINDOWS}
 
 procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
 // very fast table (private key) computation from a given password
