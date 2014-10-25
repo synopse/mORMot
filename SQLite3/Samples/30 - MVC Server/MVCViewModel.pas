@@ -20,8 +20,8 @@ type
   // ! blog/main/login?name=...&plainpassword=... -> log as author
   // ! blog/main/articlecommit -> article edition commit (ID=0 for new)
   IBlogApplication = interface(IMVCApplication)
-    procedure ArticleView(
-      ID: integer; var WithComments: boolean; Direction: integer;
+    procedure ArticleView(ID: integer;
+      var WithComments: boolean; Direction: integer; var Scope: variant;
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
@@ -29,6 +29,7 @@ type
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
+    function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
@@ -60,21 +61,22 @@ type
     procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
-    function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
+    function GetLoggedAuthorID(Right: TSQLAuthorRight; out AuthorName: RawUTF8): integer;
     procedure MonthToText(const Value: variant; out result: variant);
     procedure TagToText(const Value: variant; out result: variant);
   public
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
     procedure Default(var Scope: variant);
-    procedure ArticleView(ID: integer; var WithComments: boolean;
-      Direction: integer;
+    procedure ArticleView(ID: integer;
+      var WithComments: boolean; Direction: integer; var Scope: variant;
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
       var ID: integer; out Author: TSQLAuthor; out Articles: variant);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
+    function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
@@ -165,53 +167,61 @@ begin
     info.About := TSynTestCase.RandomTextParagraph(30,'!');
     RestModel.Add(info,true);
   end;
-  if not RestModel.TableHasRows(TSQLArticle) then begin
-    batch := TSQLRestBatch.Create(RestModel,TSQLTag,100);
-    try
-      for n := 1 to 32 do begin
-        tag.Ident := 'Tag'+UInt32ToUtf8(n);
-        tag.ID := n*2; // force ID to test TSQLTag.ComputeTagIdentPerIDArray
-        batch.Add(tag,true,true);
-      end;
-      RestModel.BatchSend(batch,tags);
-      fTagsLookup := TSQLTag.ComputeTagIdentPerIDArray(RestModel,fTagsLookupOrder);
-      batch.Reset(TSQLArticle,20000);
-      article.Author := TSQLAuthor(1);
-      article.AuthorName := 'synopse';
-      for n := 1 to FAKEDATA_ARTICLESCOUNT do begin
-        article.PublishedMonth := 2014*12+(n div 10);
-        article.Title := TSynTestCase.RandomTextParagraph(5,' ');
-        article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
-        article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
-        article.Tags := nil;
-        for t := 1 to Random(6) do
-          article.TagsAddOrdered(tags[random(length(tags))],fTagsLookupOrder);
-        batch.Add(article,true);
-      end;
-      if RestModel.BatchSend(batch,articles)=HTML_SUCCESS then begin
-        comment.Author := article.Author;
-        comment.AuthorName := article.AuthorName;
-        batch.Reset(TSQLComment,20000);
-        for n := 1 to FAKEDATA_ARTICLESCOUNT*2 do begin
-          comment.Article := Pointer(articles[random(length(articles))]);
-          comment.Title := TSynTestCase.RandomTextParagraph(5,' ');
-          comment.Content := TSynTestCase.RandomTextParagraph(30,'.','http://mormot.net');
-          batch.Add(Comment,true);
-        end;
-        RestModel.BatchSend(batch,comments)
-      end;
-    finally
-      batch.Free;
+  if RestModel.TableHasRows(TSQLArticle) then
+    exit;
+  batch := TSQLRestBatch.Create(RestModel,TSQLTag,100);
+  try
+    for n := 1 to 32 do begin
+      tag.Ident := 'Tag'+UInt32ToUtf8(n);
+      tag.ID := n*2; // force ID to test TSQLTag.ComputeTagIdentPerIDArray
+      batch.Add(tag,true,true);
     end;
+    RestModel.BatchSend(batch,tags);
+    fTagsLookup := TSQLTag.ComputeTagIdentPerIDArray(RestModel,fTagsLookupOrder);
+    batch.Reset(TSQLArticle,20000);
+    article.Author := TSQLAuthor(1);
+    article.AuthorName := 'synopse';
+    for n := 1 to FAKEDATA_ARTICLESCOUNT do begin
+      article.PublishedMonth := 2014*12+(n div 10);
+      article.Title := TSynTestCase.RandomTextParagraph(5,' ');
+      article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
+      article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
+      article.Tags := nil;
+      for t := 1 to Random(6) do
+        article.TagsAddOrdered(tags[random(length(tags))],fTagsLookupOrder);
+      batch.Add(article,true);
+    end;
+    if RestModel.BatchSend(batch,articles)=HTML_SUCCESS then begin
+      comment.Author := article.Author;
+      comment.AuthorName := article.AuthorName;
+      batch.Reset(TSQLComment,20000);
+      for n := 1 to FAKEDATA_ARTICLESCOUNT*2 do begin
+        comment.Article := Pointer(articles[random(length(articles))]);
+        comment.Title := TSynTestCase.RandomTextParagraph(5,' ');
+        comment.Content := TSynTestCase.RandomTextParagraph(30,'.','http://mormot.net');
+        batch.Add(Comment,true);
+      end;
+      RestModel.BatchSend(batch,comments)
+    end;
+  finally
+    batch.Free;
   end;
 end;
 
-function TBlogApplication.GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
+function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
+  out AuthorName: RawUTF8): integer;
 var SessionInfo: TCookieData;
+    author: TSQLAuthor;
 begin
-  result := CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData));
-  if result>0 then
+  result := 0;
+  if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))=0) or
+     not(Right in SessionInfo.AuthorRights) then
+    exit;
+  TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID);
+  if Right in author.Rights then begin
     result := SessionInfo.AuthorID;
+    AuthorName := author.LogonName;
+  end;
 end;
 
 function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
@@ -268,8 +278,8 @@ begin
       'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
 end;
 
-procedure TBlogApplication.ArticleView(
-  ID: integer; var WithComments: boolean; Direction: integer;
+procedure TBlogApplication.ArticleView(ID: integer;
+  var WithComments: boolean; Direction: integer; var Scope: variant;
   out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
 var newID: integer;
 const WHERE: array[1..2] of PUTF8Char = (
@@ -331,16 +341,45 @@ begin
   GotoDefault(result);
 end;
 
+function TBlogApplication.ArticleComment(ID: integer;
+  const Title,Comment: RawUTF8): TMVCAction;
+var AuthorID: integer;
+    AuthorName: RawUTF8;
+    comm: TSQLComment;
+    error: string;
+begin
+  AuthorID := GetLoggedAuthorID(canComment,AuthorName);
+  if AuthorID=0 then
+    raise EMVCApplication.CreateGotoError(sErrorNeedValidAuthorSession);
+  if not RestModel.MemberExists(TSQLArticle,ID) then
+    raise EMVCApplication.CreateGotoError(HTML_UNAVAILABLE);
+  TSQLComment.AutoFree(comm);
+  comm.Title := Title;
+  comm.Content := Comment;
+  comm.Article := TSQLArticle(ID);
+  comm.Author := TSQLAuthor(AuthorID);
+  comm.AuthorName := AuthorName;
+  if comm.FilterAndValidate(RestModel,error) and (RestModel.Add(comm,true)<>0) then
+    GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
+    GotoView(result,'ArticleView',['ID',ID,'withComments',true,
+      'Scope',_ObjFast([
+        'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
+      HTML_NOTMODIFIED);
+end;
+
 procedure TBlogApplication.ArticleEdit(var ID: integer;
   const Title,Content: RawUTF8; const ValidationError: variant;
   out Article: TSQLArticle);
 var AuthorID: integer;
+    AuthorName: RawUTF8;
 begin
-  AuthorID := GetLoggedAuthorID([canPost]);
+  AuthorID := GetLoggedAuthorID(canPost,AuthorName);
   if AuthorID=0 then
     raise EMVCApplication.CreateGotoError(sErrorNeedValidAuthorSession);
-  if ID=0 then
-    Article.Author := pointer(AuthorID) else
+  if ID=0 then begin
+    Article.Author := pointer(AuthorID);
+    Article.AuthorName := AuthorName;
+  end else
     if not RestModel.Retrieve(ID,Article) then
       raise EMVCApplication.CreateGotoError(HTML_UNAVAILABLE) else
     if Article.Author<>pointer(AuthorID) then
@@ -354,38 +393,35 @@ end;
 function TBlogApplication.ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
 var AuthorID: integer;
     Article: TSQLArticle;
+    AuthorName: RawUTF8;
     error: string;
 begin
-  AuthorID := GetLoggedAuthorID([canPost]);
+  AuthorID := GetLoggedAuthorID(canPost,AuthorName);
   if AuthorID=0 then begin
     GotoError(result,sErrorNeedValidAuthorSession);
     exit;
   end;
   FlushAnyCache;
-  Article := TSQLArticle.Create(RestModel,ID);
-  try
-    Article.Title := Title;
-    Article.Content := Content;
-    Article.Author := pointer(AuthorID);
-    Article.Filter;
-    error := Article.Validate(RestModel);
-    if error<>'' then
-      GotoView(result,'ArticleEdit',
-        ['ValidationError',error,'ID',ID,
-         'Title',Article.Title,'Content',Article.Content]) else
-      if Article.ID=0 then begin
-        Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
-        if RestModel.Add(Article,true)<>0 then
-          GotoView(result,'Article',['ID',Article.ID]) else
-          GotoError(result,sErrorWriting);
-      end else
-        RestModel.Update(Article);
-  finally
-    Article.Free;
-  end;
+  TSQLArticle.AutoFree(Article,RestModel,ID);
+  Article.Title := Title;
+  Article.Content := Content;
+  Article.Author := pointer(AuthorID);
+  Article.AuthorName := AuthorName;
+  if not Article.FilterAndValidate(RestModel,error) then
+    GotoView(result,'ArticleEdit',
+      ['ValidationError',error,'ID',ID,
+       'Title',Article.Title,'Content',Article.Content],HTML_NOTMODIFIED) else
+    if Article.ID=0 then begin
+      Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
+      if RestModel.Add(Article,true)<>0 then
+        GotoView(result,'ArticleView',['ID',Article.ID],HTML_SUCCESS) else
+        GotoError(result,sErrorWriting);
+    end else
+      RestModel.Update(Article);
 end;
 
 {$ifndef ISDELPHI2010}
+
 
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLAuthorRights));

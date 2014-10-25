@@ -56,7 +56,7 @@ type
     property HashedPassword: RawUTF8 index 64 read fHashedPassword write fHashedPassword;
     property Verified: boolean read fVerified write fVerified;
   end;
-
+          
   TSQLAuthorRight = (canComment, canPost, canDelete, canAdministrate);
   TSQLAuthorRights = set of TSQLAuthorRight;
 
@@ -129,10 +129,9 @@ function CreateModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
     TSQLTag,TSQLArticle,TSQLComment],'blog');
-  TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
-  TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
-  TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
-  TSQLArticle.AddFilterOrValidate('Content',TSynValidateText.Create);
+  TSQLArticle.AddFilterNotVoidText(['Title','Content']);
+  TSQLComment.AddFilterNotVoidText(['Title','Content']);
+  TSQLTag.AddFilterNotVoidText(['Ident']);
 end;
 
 

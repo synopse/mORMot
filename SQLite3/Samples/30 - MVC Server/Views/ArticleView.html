@@ -28,12 +28,22 @@
 		  {{/Comments}}
 		  {{^Comments}}<blockquote>No comment yet.</blockquote>{{/Comments}}
 		  <p><a href="ArticleView?id={{Article.ID}}#comments" class="btn btn-primary btn-sm">Hide Comments</a></p>
+		  {{#main.session.AuthorRights.canComment}}
+		  <a name="addComment"></a>
+          <form class="form-horizontal" action="ArticleComment#addComment" method="post">
+			<div class="form-group">
+			    {{#Scope}}<p class="bg-danger">{{CommentError}}</p>{{/Scope}}
+				<input type="hidden" name="id" value={{Article.ID}}>
+				<input type="text" class="form-control" name="title" placeholder="Title" value="{{Scope.CommentTitle}}">
+				<textarea class="form-control" name="comment" rows="7" placeholder="Enter a new comment here">{{Scope.CommentContent}}</textarea>
+				<button type="submit" class="btn btn-primary btn-sm">Add Comment</a>
+			</div>
+		  </form>
+		  {{/main.session.AuthorRights.canComment}}
+		  </p>
 		  {{/WithComments}}
 		  {{^WithComments}}
 		  <p><a href="ArticleView?id={{Article.ID}}&withComments=true#comments" class="btn btn-primary btn-sm">Show Comments</a></p>
 		  {{/WithComments}}
 	  </div>
-{{#Scope}}
-{{>articlerow}}
-{{/Scope}}
 {{>footer}}
