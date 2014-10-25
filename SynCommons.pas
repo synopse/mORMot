@@ -3174,6 +3174,9 @@ procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
 /// sort an Integer array, low values first
 procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 
+/// sort an Integer array, low values first
+procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
+
 /// copy an integer array, then sort it, low values first
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
   var Dest: TIntegerDynArray);
@@ -3196,7 +3199,12 @@ function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): P
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt;
+  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt; overload;
+
+/// add an integer value in a sorted dynamic array of integers
+// - overloaded function which do not expect an external Count variable
+function AddSortedInteger(var Values: TIntegerDynArray;
+  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt; overload;
 
 /// insert an integer value at the specified index position of a dynamic array
 // of integers
@@ -19545,6 +19553,11 @@ begin
   until I >= R;
 end;
 
+procedure QuickSortInteger(var ID: TIntegerDynArray);
+begin
+  QuickSortInteger(pointer(ID),0,high(ID));
+end;
+
 procedure QuickSortInteger(ID,CoValues: PIntegerArray; L,R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: integer;
@@ -19625,6 +19638,18 @@ begin
   result := FastLocateIntegerSorted(pointer(Values),ValuesCount-1,Value);
   if result>=0 then // if Value exists -> fails
     result := InsertInteger(Values,ValuesCount,Value,result,CoValues);
+end;
+
+function AddSortedInteger(var Values: TIntegerDynArray;
+  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt;
+var ValuesCount: integer;
+begin
+  ValuesCount := length(Values);
+  result := FastLocateIntegerSorted(pointer(Values),ValuesCount-1,Value);
+  if result>=0 then begin // if Value exists -> fails
+    SetLength(Values,ValuesCount+1); // manual size increase
+    result := InsertInteger(Values,ValuesCount,Value,result,CoValues);
+  end;
 end;
 
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
