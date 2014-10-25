@@ -5833,6 +5833,7 @@ var Model: TSQLModel;
     Client: TSQLRestClientURIDll;
     {$endif}
     R: TSQLRecordTest;
+    Batch: TSQLRestBatch;
     IDs: TIntegerDynArray;
     i: integer;
     dummy: RawUTF8;
@@ -6017,12 +6018,16 @@ begin
         R := TSQLRecordTest.Create(Client,110);
         try
           CheckRWith(110,10);
-          Check(Server.BatchStart(TSQLRecordTest,30));
-          for i := 10000 to 10099 do begin
-            FillRWith(i);
-            Check(Server.BatchAdd(R,true,false,ALL_FIELDS)=i-10000);
+          Batch := TSQLRestBatch.Create(Server,TSQLRecordTest,30);
+          try
+            for i := 10000 to 10099 do begin
+              FillRWith(i);
+              Check(Batch.Add(R,true,false,ALL_FIELDS)=i-10000);
+            end;
+            Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
+          finally
+            Batch.Free;
           end;
-          Check(Server.BatchSend(IDs)=HTML_SUCCESS);
         finally
           R.Free;
         end;

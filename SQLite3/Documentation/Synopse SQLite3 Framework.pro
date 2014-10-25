@@ -7068,7 +7068,33 @@ This array of results is either the HTTP status codes (here 200 means OK), or th
 All the JSON generation (client-side) and parsing (server-side) has been optimized to minimize the resource needed. With the new internal {\i @*SynLZ@} compression (available by default in our @*HTTP@ Client-Server classes), used bandwidth is minimal.
 Thanks to this BATCH process, most time is now spent into the database engine itself, and not in the communication layer.
 :100  Unit Of Work pattern
-In practice, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}).
+:   Several Batches
+On the {\f1\fs20 TSQLRestClientURI} side, all {\i BatchStart/BatchAdd/BatchUpdate/BatchDelete} methods are using a single temporary storage furing the BATCH preparation. This may be safe only if one single thread is accessing the methods - which is usually the case for a @*REST@ Client application.
+In fact, all BATCH process is using a {\f1\fs20 @*TSQLRestBatch@} class, which can be created on the fly, and safely coexist as multiple instances for the same {\f1\fs20 TSQLRest}. As a result, you can create your own local {\f1\fs20 TSQLRestBatch} instances, for safe batch process. This is in fact mandatory on the {\f1\fs20 TSQLRestServer} side, which do not have the {\f1\fs20 Batch*()} methods, since they would not be thread safe.
+On the server side, you may write for instance:
+!var Batch: TSQLRestBatch;
+!    IDs: TIntegerDynArray;
+!...
+!  Batch := TSQLRestBatch.Create(Server,TSQLRecordTest,30);
+!  try
+!    for i := 10000 to 10099 do begin
+!      R.Int := i;
+!      R.Test := Int32ToUTF8(i);
+!      Check(Batch.Add(R,true)=i-10000);
+!    end;
+!    Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
+!  finally
+!    Batch.Free;
+!  end;
+The ability to handle several {\f1\fs20 TSQLRestBatch} classes in the same time will allow to implement the {\i @**Unit Of Work@} pattern. It can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems, especially in a complex @*SOA@ application with a huge number of connected clients.
+In a way, you can think of the {\i Unit of Work} as a place to dump all transaction-handling code.\line The responsibilities of the {\i Unit of Work} are to:
+- Manage transactions;
+- Order the database inserts, deletes, and updates;
+- Prevent concurrency problems;
+- Group requests to maximize the database performance.
+The value of using a {\i Unit of Work} pattern is to free the rest of your code from these concerns so that you can otherwise concentrate on business logic.
+:   Updating only the mapped fields
+In practice, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}). This is required for coherency of the retrieval/modification process.
 For instance, in the following code, {\f1\fs20 V.FillPrepare} will retrieve only {\f1\fs20 ID} and {\f1\fs20 YearOfBirth} fields of the {\f1\fs20 TSQLRecordPeople} table, so subsequent {\f1\fs20 BatchUpdate(V)} calls will only update the {\f1\fs20 YearOfBirth} field:
 !  // test BATCH update from partial FillPrepare
 !!  V.FillPrepare(ClientDist,'LastName=:("New"):','ID,YearOfBirth');
@@ -11901,7 +11927,7 @@ In all cases, when defining domain objects, we should always make the implicit {
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
 DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a @*KISS@ implementation.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
-@28@ is a convenient implementation of the @100@ - i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods. In fact, {\f1\fs20 Batch*} methods do work on both Client and Server sides: you may use them to implement safe and fast {\i @*Unit of Work@} object modification tracking in the {\i Application Layer} services.
+@28@ is a convenient implementation of the @100@ - i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods. In fact, {\f1\fs20 Batch*} methods do work on Client side, you you can define one or several {\f1\fs20 @*TSQLRestBatch@} instance on the Server side. You may use those {\f1\fs20 TSQLRestBatch} instances to implement safe and fast {\i @*Unit of Work@} object modification tracking in the {\i Application Layer} services - see @100@.
 :  Defining services
 In practice, {\i mORMot}'s Client-Server architecture may be used as such:
 - {\i @*Service@s via methods} - see @49@ - can be used to publish methods corresponding to your aggregate roots defined as {\f1\fs20 TSQLRecord}.\line This will make it pretty @*REST@ful compatible.
