@@ -164,23 +164,27 @@ type
     constructor Create(aInterface: PTypeInfo; aLogClass: TSynLogClass=nil;
       aExtensionForNotExistingTemplate: TFileName=''); overload;
     /// will add the supplied Expression Helpers definition
-    procedure RegisterExpressionHelpers(const aNames: array of RawUTF8;
-      const aEvents: array of TSynMustacheHelperEvent);
+    // - returns self so that may be called in a fluent interface
+    function RegisterExpressionHelpers(const aNames: array of RawUTF8;
+      const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
     /// will add Expression Helpers for some ORM tables 
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
     // then use the following Mustache tag
     // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
-    procedure RegisterExpressionHelpersForTables(aRest: TSQLRest;
-      const aTables: array of TSQLRecordClass); overload;
+    // - returns self so that may be called in a fluent interface
+    function RegisterExpressionHelpersForTables(aRest: TSQLRest;
+      const aTables: array of TSQLRecordClass): TMVCViewsMustache; overload;
     /// will add Expression Helpers for all ORM tables of the supplied model
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer);
     // then use the following Mustache tag
     // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
-    procedure RegisterExpressionHelpersForTables(aRest: TSQLRest); overload;
+    // - returns self so that may be called in a fluent interface
+    function RegisterExpressionHelpersForTables(
+      aRest: TSQLRest): TMVCViewsMustache; overload;
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -496,7 +500,7 @@ type
       aStatus: cardinal=HTML_TEMPORARYREDIRECT);
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(const aErrorMessage: string;
-      ErrorCode: integer=HTML_BADREQUEST); overload;
+      aErrorCode: integer=HTML_BADREQUEST); overload;
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(aHtmlErrorCode: integer); overload;
     /// same as calling TMVCApplication.GotoDefault
@@ -750,13 +754,6 @@ begin
   fViewPartials.Free;
 end;
 
-procedure TMVCViewsMustache.RegisterExpressionHelpers(
-  const aNames: array of RawUTF8; const aEvents: array of TSynMustacheHelperEvent);
-begin
-  if self<>nil then
-    TSynMustache.HelperAdd(fViewHelpers,aNames,aEvents);
-end;
-
 type
   THtmlTableStyleLabel = (labelFalse,labelTrue,labelOff,labelOn,labelValue);
   TExpressionHtmlTableStyle = class
@@ -946,22 +943,34 @@ begin
   WR.AddShort('<table class="table table-striped table-bordered">');
 end;
 
-procedure TMVCViewsMustache.RegisterExpressionHelpersForTables(
-  aRest: TSQLRest; const aTables: array of TSQLRecordClass);
+function TMVCViewsMustache.RegisterExpressionHelpers(
+  const aNames: array of RawUTF8;
+  const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
+begin
+  if self<>nil then
+    TSynMustache.HelperAdd(fViewHelpers,aNames,aEvents);
+  result := self;
+end;
+
+function TMVCViewsMustache.RegisterExpressionHelpersForTables(
+  aRest: TSQLRest; const aTables: array of TSQLRecordClass): TMVCViewsMustache;
 var t: integer;
 begin
   if (self<>nil) and (aRest<>nil) then
     for t := 0 to high(aTables) do
       if aRest.Model.GetTableIndex(aTables[t])>=0 then
         TExpressionHelperForTable.Create(aRest,aTables[t],fViewHelpers);
+  result := self;
 end;
 
-procedure TMVCViewsMustache.RegisterExpressionHelpersForTables(aRest: TSQLRest);
+function TMVCViewsMustache.RegisterExpressionHelpersForTables(
+  aRest: TSQLRest): TMVCViewsMustache;
 var t: integer;
 begin
   if (self<>nil) and (aRest<>nil) then
     for t := 0 to aRest.Model.TablesMax do
      TExpressionHelperForTable.Create(aRest,aRest.Model.Tables[t],fViewHelpers);
+  result := self;
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
@@ -1143,23 +1152,27 @@ end;
 
 constructor EMVCApplication.CreateDefault(aStatus: cardinal);
 begin
+  inherited CreateFmt('CreateDefault(%d)',[aStatus]);
   TMVCApplication.GotoDefault(fAction,aStatus);
 end;
 
 constructor EMVCApplication.CreateGotoError(const aErrorMessage: string;
-  ErrorCode: integer);
+  aErrorCode: integer);
 begin
-  TMVCApplication.GotoError(fAction,aErrorMessage,ErrorCode);
+  inherited CreateFmt('Error #%d: %s',[aErrorCode,aErrorMessage]);
+  TMVCApplication.GotoError(fAction,aErrorMessage,aErrorCode);
 end;
 
 constructor EMVCApplication.CreateGotoError(aHtmlErrorCode: integer);
 begin
+  inherited CreateFmt('Error=%d',[aHtmlErrorCode]);
   TMVCApplication.GotoError(fAction,aHtmlErrorCode);
 end;
 
 constructor EMVCApplication.CreateGotoView(const aMethod: RawUTF8;
   const aParametersNameValuePairs: array of const; aStatus: cardinal);
 begin
+  inherited CreateFmt('GotoView(''%s'',%d)',[aMethod,aStatus]);
   TMVCApplication.GotoView(fAction,aMethod,aParametersNameValuePairs,aStatus);
 end;
 
@@ -1687,6 +1700,7 @@ begin
   fOutput.Status := action.ReturnedStatus;
   result := true;
 end;
+
 
 initialization
   assert(sizeof(TMVCAction)=sizeof(TServiceCustomAnswer));
