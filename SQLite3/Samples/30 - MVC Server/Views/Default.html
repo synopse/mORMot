@@ -9,7 +9,7 @@
 {{#Scope}}
 {{>articlerow}}
 		{{#lastID}}
-		<p><a href="default?scope={{.}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
+		<p><a href="default?scope={lastID:{{.}},tag:{{tag}}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
 		{{/lastID}}
         </div>
         <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
@@ -21,7 +21,7 @@
             <h4>Archives</h4>
             <ol class="list-unstyled">
 			  {{#Archives}}
-              <li><a href="default?scope={{FirstID}}">{{MonthToText PublishedMonth}}</a></li>
+              <li><a href="default?scope={lastID:{{FirstID}}}">{{MonthToText PublishedMonth}}</a></li>
 			  {{/Archives}}
             </ol>
           </div>

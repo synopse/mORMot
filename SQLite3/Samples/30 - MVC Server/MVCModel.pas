@@ -70,13 +70,6 @@ type
     property Rights: TSQLAuthorRights read fRights write fRights;
   end;
 
-  TSQLCategory = class(TSQLRecord)
-  private
-    fIdent: RawUTF8;
-  published
-    property Ident: RawUTF8 read fIdent write fIdent;
-  end;
-
   TSQLContent = class(TSQLRecordTimeStamped)
   private
     fContent: RawUTF8;
@@ -94,13 +87,17 @@ type
   private
     fAbstract: RawUTF8;
     fPublishedMonth: Integer;
+    fTags: TIntegerDynArray;
   public
     class function CurrentPublishedMonth: Integer;
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
+    procedure TagsAddOrdered(aTagID: Integer; const AlphabeticalOrder: TCardinalDynArray);
   published
     property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
     property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+    // "index 1" below to allow writing e.g. aArticle.DynArray(1).Delete(aIndex)
+    property Tags: TIntegerDynArray index 1 read fTags write fTags;
   end;
 
   TSQLComment = class(TSQLContent)
@@ -110,7 +107,19 @@ type
     property Article: TSQLArticle read fArticle write fArticle;
   end;
 
-  
+  TSQLTag = class(TSQLRecord)
+  private
+    fIdent: RawUTF8;
+    fCreatedAt: TCreateTime;
+  public
+    class function ComputeTagIdentPerIDArray(aRest: TSQLRest;
+      out AlphabeticalOrder: TCardinalDynArray): TRawUTF8DynArray;
+  published
+    property Ident: RawUTF8 read fIdent write fIdent;
+    property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
+  end;
+
+
 function CreateModel: TSQLModel;
 
 
@@ -118,8 +127,8 @@ implementation
 
 function CreateModel: TSQLModel;
 begin
-  result := TSQLModel.Create([TSQLBlogInfo,TSQLCategory,TSQLAuthor,
-    TSQLArticle,TSQLComment],'blog');
+  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
+    TSQLTag,TSQLArticle,TSQLComment],'blog');
   TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
   TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
   TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
@@ -186,6 +195,65 @@ begin
   inherited;
   if (FieldName='') or (FieldName='PublishedMonth') then
     Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+end;
+
+procedure TSQLArticle.TagsAddOrdered(aTagID: Integer;
+  const AlphabeticalOrder: TCardinalDynArray);
+var sets: TByteDynArray;
+    i,n,max: integer;
+begin // add tag ID per alphabetic order - a bit complicated but works
+  max := length(AlphabeticalOrder);
+  if (aTagID=0) or (aTagID>max) then
+    exit;
+  n := length(fTags);
+  if n=0 then begin
+    SetLength(fTags,1);
+    fTags[0] := aTagID;
+    exit;
+  end;
+  SetLength(sets,(max shr 3)+1);
+  for i := 0 to n-1 do
+    SetBit(sets[0],fTags[i]-1);
+  if GetBit(sets[0],aTagID-1) then
+    exit; // duplicated aTagID
+  SetBit(sets[0],aTagID-1);
+  SetLength(fTags,n+1);
+  n := 0;
+  for i := 0 to max-1 do
+    if GetBit(sets[0],AlphabeticalOrder[i]) then begin
+      fTags[n] := AlphabeticalOrder[i]+1;
+      inc(n);
+    end;
+  assert(n=length(fTags));
+end;
+
+
+{ TSQLTag }
+
+class function TSQLTag.ComputeTagIdentPerIDArray(aRest: TSQLRest;
+  out AlphabeticalOrder: TCardinalDynArray): TRawUTF8DynArray;
+var tag: TSQLTag;
+    max: integer;
+begin
+  result := nil;
+  tag := TSQLTag.CreateAndFillPrepare(aRest,'','ID,Ident');
+  try
+    if tag.FillTable.RowCount=0 then
+      exit;
+    max := 0;
+    while tag.FillOne do
+      if tag.ID>max then
+        max := tag.ID;
+    SetLength(result,max);
+    tag.FillRewind;
+    while tag.FillOne do
+      result[tag.ID-1] := tag.Ident;
+    SetLength(AlphabeticalOrder,max);
+    FillIncreasing(pointer(AlphabeticalOrder),0,max);
+    QuickSortIndexedPUTF8Char(pointer(result),max,AlphabeticalOrder);
+  finally
+    tag.Free;
+  end;
 end;
 
 end.

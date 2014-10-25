@@ -25,7 +25,7 @@ type
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
-      var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
+      var ID: integer; out Author: TSQLAuthor; out Articles: variant);
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
@@ -52,6 +52,9 @@ type
   TBlogApplication = class(TMVCApplication,IBlogApplication)
   protected
     fBlogMainInfo: variant;
+    fTagsLookupLock: IAutoLocker;
+    fTagsLookup: TRawUTF8DynArray;
+    fTagsLookupOrder: TCardinalDynArray;
     fDefaultData: ILockedDocVariant;
     fDefaultLastID: integer;
     procedure ComputeMinimalData; virtual;
@@ -59,6 +62,7 @@ type
     function GetViewInfo(MethodIndex: integer): variant; override;
     function GetLoggedAuthorID(Rights: TSQLAuthorRights): integer;
     procedure MonthToText(const Value: variant; out result: variant);
+    procedure TagToText(const Value: variant; out result: variant);
   public
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
@@ -68,7 +72,7 @@ type
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
-      var ID: integer; out Author: TSQLAuthor; out Articles: RawJSON);
+      var ID: integer; out Author: TSQLAuthor; out Articles: variant);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
@@ -93,13 +97,22 @@ begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Create(aServer,TypeInfo(IBlogApplication));
   ComputeMinimalData;
+  with TSQLBlogInfo.Create(RestModel,'') do
+  try
+    fBlogMainInfo := GetSimpleFieldsAsDocVariant(false);
+  finally
+    Free;
+  end;
+  fTagsLookupLock := TAutoLocker.Create;
+  fTagsLookup := TSQLTag.ComputeTagIdentPerIDArray(RestModel,fTagsLookupOrder);
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
   fMainRunner := TMVCRunOnRestServer.Create(Self).
     SetCache('Default',cacheRootIfNoSession,15).
     SetCache('ArticleView',cacheWithParametersIfNoSession,60).
     SetCache('AuthorView',cacheWithParametersIgnoringSession,60);
   (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).
-    RegisterExpressionHelpers(['MonthToText'],[MonthToText]);
+    RegisterExpressionHelpers(['MonthToText'],[MonthToText]).
+    RegisterExpressionHelpers(['TagToText'],[TagToText]);
 end;
 
 procedure TBlogApplication.MonthToText(const Value: variant;
@@ -108,66 +121,87 @@ const MONTHS: array[0..11] of RawUTF8 = (
   'January','February','March','April','May','June','July','August',
   'September','October','November','December');
 var month: integer;
-    text: RawUTF8;
 begin
   if VariantToInteger(Value,month) and (month>0) then
-    text := MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12);
-  RawUTF8ToVariant(text,result);
+    RawUTF8ToVariant(MONTHS[month mod 12]+' '+UInt32ToUTF8(month div 12),result) else
+    SetVariantNull(result);
 end;
 
+procedure TBlogApplication.TagToText(const Value: variant;
+  out result: variant);
+var tag: integer;
+begin
+  fTagsLookupLock.Enter;
+  try
+    if VariantToInteger(Value,tag) and
+       (tag>0) and (tag<=length(fTagsLookup)) then
+      RawUTF8ToVariant(fTagsLookup[tag-1],result) else
+      SetVariantNull(result);
+  finally
+    fTagsLookupLock.Leave;
+  end;
+end;
+
+const
+  // just try with 200000 - and let your WordPress blog engine start to cry...
+  FAKEDATA_ARTICLESCOUNT = 200;
+  
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
     article: TSQLArticle;
     comment: TSQLComment;
-    n: integer;
-    res: TIntegerDynArray;
+    tag: TSQLTag;
+    batch: TSQLRestBatch;
+    n,t: integer;
+    articles,tags,comments: TIntegerDynArray;
 begin
-  info := TSQLBlogInfo.Create;
-  try
-    if not RestModel.Retrieve('',info) then begin // retrieve first item
-      info.Title := 'mORMot BLOG';
-      info.Language := 'en';
-      info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
-      info.Copyright := '&copy;2014 <a href=http://synopse.info>Synopse Informatique</a>';
-      info.About := TSynTestCase.RandomTextParagraph(30,'!');
-      RestModel.Add(info,true);
-    end;
-    fBlogMainInfo := info.GetSimpleFieldsAsDocVariant(false);
-  finally
-    info.Free;
+  TSQLRecord.AutoFree([ // avoid several try..finally
+    @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
+  if not RestModel.Retrieve('',info) then begin // retrieve first item
+    info.Title := 'mORMot BLOG';
+    info.Language := 'en';
+    info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
+    info.Copyright := '&copy;2014 <a href=http://synopse.info>Synopse Informatique</a>';
+    info.About := TSynTestCase.RandomTextParagraph(30,'!');
+    RestModel.Add(info,true);
   end;
   if not RestModel.TableHasRows(TSQLArticle) then begin
-    RestModel.BatchStart(TSQLArticle,1000);
-    article := TSQLArticle.Create;
+    batch := TSQLRestBatch.Create(RestModel,TSQLTag,100);
     try
+      for n := 1 to 32 do begin
+        tag.Ident := 'Tag'+UInt32ToUtf8(n);
+        tag.ID := n*2; // force ID to test TSQLTag.ComputeTagIdentPerIDArray
+        batch.Add(tag,true,true);
+      end;
+      RestModel.BatchSend(batch,tags);
+      fTagsLookup := TSQLTag.ComputeTagIdentPerIDArray(RestModel,fTagsLookupOrder);
+      batch.Reset(TSQLArticle,20000);
       article.Author := TSQLAuthor(1);
       article.AuthorName := 'synopse';
-      for n := 1 to 100 do begin
+      for n := 1 to FAKEDATA_ARTICLESCOUNT do begin
         article.PublishedMonth := 2014*12+(n div 10);
         article.Title := TSynTestCase.RandomTextParagraph(5,' ');
         article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
         article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
-        RestModel.BatchAdd(article,true);
+        article.Tags := nil;
+        for t := 1 to Random(6) do
+          article.TagsAddOrdered(tags[random(length(tags))],fTagsLookupOrder);
+        batch.Add(article,true);
       end;
-      if RestModel.BatchSend(res)=HTML_SUCCESS then begin
-        comment := TSQLComment.Create;
-        try
-          comment.Author := article.Author;
-          comment.AuthorName := article.AuthorName;
-          RestModel.BatchStart(TSQLComment,1000);
-          for n := 1 to 200 do begin
-            comment.Article := Pointer(res[random(length(res))]);
-            comment.Title := TSynTestCase.RandomTextParagraph(5,' ');
-            comment.Content := TSynTestCase.RandomTextParagraph(30,'.','http://mormot.net');
-            RestModel.BatchAdd(Comment,true);
-          end;
-          RestModel.BatchSend(res)
-        finally
-          comment.Free;
+      if RestModel.BatchSend(batch,articles)=HTML_SUCCESS then begin
+        comment.Author := article.Author;
+        comment.AuthorName := article.AuthorName;
+        batch.Reset(TSQLComment,20000);
+        for n := 1 to FAKEDATA_ARTICLESCOUNT*2 do begin
+          comment.Article := Pointer(articles[random(length(articles))]);
+          comment.Title := TSynTestCase.RandomTextParagraph(5,' ');
+          comment.Content := TSynTestCase.RandomTextParagraph(30,'.','http://mormot.net');
+          batch.Add(Comment,true);
         end;
+        RestModel.BatchSend(batch,comments)
       end;
     finally
-      article.Free;
+      batch.Free;
     end;
   end;
 end;
@@ -197,24 +231,37 @@ end;
 { TBlogApplication - Commands }
 
 const
-  ARTICLE_FIELDS = 'ID,Title,Abstract,Author,AuthorName,CreatedAt';
+  ARTICLE_FIELDS = 'ID,Title,Tags,Abstract,Author,AuthorName,CreatedAt';
+  ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by ID desc limit 20';
 
 procedure TBlogApplication.Default(var Scope: variant);
-var lastID: integer;
+var lastID,tag: integer;
+    whereClause: RawUTF8;
 begin
-  if VariantToInteger(Scope,lastID) and (lastID>0) then begin
-    _ObjAddProps(['articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'','ID<? order by ID desc limit 20',[lastID],ARTICLE_FIELDS,
-        nil,@lastID)],Scope);
-    if lastID>1 then
-      _ObjAddProps(['lastID',lastID],Scope);
-  end else begin
+  lastID := 0;
+  tag := 0;
+  with DocVariantDataSafe(Scope)^ do begin
+    if GetAsInteger('lastID',lastID) then
+      whereClause := 'ID<?' else
+      whereClause := 'ID>?'; // will search ID>0 so always true
+    if GetAsInteger('tag',tag) then // uses custom function to search in BLOB
+      whereClause := whereClause+' and IntegerDynArrayContains(Tags,?)';
+  end;
+  if (lastID=0) and (tag=0) then begin // use simple cache if no parameters
+    SetVariantNull(Scope);
     if not fDefaultData.AddExistingProp('Articles',Scope) then
       fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS,
-        nil,@fDefaultLastID),Scope);
-    _ObjAddProps(['lastID',fDefaultLastID],Scope);
-  end;
+        TSQLArticle,'',pointer(ARTICLE_DEFAULT_ORDER),[],
+        ARTICLE_FIELDS,nil,@fDefaultLastID),Scope);
+    lastID := fDefaultLastID;
+  end else // use more complex request using lastID + tag parameters
+    scope := _ObjFast(['Articles',RestModel.RetrieveDocVariantArray(
+        TSQLArticle,'',Pointer(whereClause+ARTICLE_DEFAULT_ORDER),[lastID,tag],
+        ARTICLE_FIELDS,nil,@lastID)]);
+  if lastID>1 then
+    _ObjAddProps(['lastID',lastID],Scope);
+  if tag>0 then
+    _ObjAddProps(['tag',tag],Scope);
   if not fDefaultData.AddExistingProp('Archives',Scope) then
     fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
@@ -245,13 +292,13 @@ begin
 end;
 
 procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
-  out Articles: RawJSON);
+  out Articles: variant);
 begin
   RestModel.Retrieve(ID,Author);
   Author.HashedPassword := ''; // no need to publish it
   if Author.ID<>0 then
-    Articles := RestModel.RetrieveListJSON(
-      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
+    Articles := RestModel.RetrieveDocVariantArray(
+      TSQLArticle,'','Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 
@@ -339,7 +386,6 @@ begin
 end;
 
 {$ifndef ISDELPHI2010}
-
 
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLAuthorRights));

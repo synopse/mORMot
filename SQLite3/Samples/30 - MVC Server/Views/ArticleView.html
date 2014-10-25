@@ -3,7 +3,8 @@
       <div class="blog-header">
         <h1 class="blog-title">{{article.title}}</h1>
         <div class="lead blog-description">
-		Written by <a href="authorView?id={{article.Author}}">{{article.AuthorName}}</a> ({{author.FirstName}} {{author.FamilyName}}) on {{TimeLogToText article.CreatedAt}}
+		Written by <a href="authorView?id={{article.Author}}">{{article.AuthorName}}</a> ({{author.FirstName}} {{author.FamilyName}}) on {{TimeLogToText article.CreatedAt}}<br />
+		{{#article.tags}}<a href="default?scope={tag:{{.}}}" class="label label-info">{{TagToText .}}</a> {{/article.tags}}
 		</div>
       </div>
       <div class="blog-main">
