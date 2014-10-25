@@ -2030,14 +2030,16 @@ var
 function GetInteger(P: PUTF8Char): PtrInt; overload;
 
 /// get the signed 32 bits integer value stored in P^
+// - if P if nil or not start with a valid numerical value, returns Default
+function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
+
+/// get the signed 32 bits integer value stored in P^
 // - this version return 0 in err if no error occured, and 1 if an invalid
 // character was found, not its exact index as for the val() function
-// - we use the PtrInt result type, even if expected to be 32 bits, to use
-// native CPU register size (don't want any 32 bits overflow here)
 function GetInteger(P: PUTF8Char; var err: integer): PtrInt; overload;
 
 /// get the unsigned 32 bits integer value stored in P^
-// - we use the PtrInt result type, even if expected to be 32 bits, to use
+// - we use the PtrUInt result type, even if expected to be 32 bits, to use
 // native CPU register size (don't want any 32 bits overflow here)
 function GetCardinal(P: PUTF8Char): PtrUInt;
 
@@ -9820,16 +9822,22 @@ type
     // is not a TDocVariant
     function GetValueOrDefault(const aName: RawUTF8; const aDefault: variant): variant;
     /// find an item in this document, and returns its value as TVarData
-    // - return false if aName is not found, or if the instance is not
-    // a TDocVariant
+    // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
     function GetVarData(const aName: RawUTF8; var aValue: TVarData): boolean; overload;
     /// find an item in this document, and returns its value as TVarData pointer
-    // - return nil if aName is not found, or if the instance is not
-    // a TDocVariant
+    // - return nil if aName is not found, or if the instance is not a TDocVariant
     // - return a pointer to the value if the name has been found
     function GetVarData(const aName: RawUTF8): PVarData; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in this document, and returns its value as integer
+    // - return false if aName is not found, or if the instance is not a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    function GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+    /// find an item in this document, and returns its value as RawUTF8
+    // - return false if aName is not found, or if the instance is not a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    function GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - it will return Unassigned if the path does not match the data
@@ -10359,6 +10367,67 @@ type
 
 {$endif DELPHI5OROLDER}
 {$endif MSWINDOWS}
+
+  /// interface for TAutoFree to register another TObject instance
+  // to an existing IAutoFree local variable
+  IAutoFree = interface
+    procedure Another(var objVar; obj: TObject);
+  end;
+
+  /// simple reference-counted storage for local objects
+  // - be aware that it won't implement a full ARC memory model, but may be
+  // just used to avoid writing some try ... finally blocks on local variables
+  // - use with caution, only on well defined local scope
+  TAutoFree = class(TInterfacedObject,IAutoFree)
+  protected
+    fObject: TObject;
+    fObjectList: array of TObject;
+  public
+    /// protect one local TObject variable instance
+    // - for instance, instead of writing:
+    // !var myVar: TMyClass;
+    // !begin
+    // !  myVar := TMyClass.Create;
+    // !  try
+    // !    ... use myVar
+    // !  finally
+    // !    myVar.Free;
+    // !  end;
+    // !end;
+    // - you may write:
+    // !var myVar: TMyClass;
+    // !begin
+    // !  TAutoFree.One(myVar,TMyClass.Create);
+    // !  ... use myVar
+    // !end; // here myVar will be released
+    constructor One(var localVariable; obj: TObject);
+    /// protect several local TObject variable instances
+    // - specified as localVariable/objectInstance pairs
+    // - you may write:
+    // !var var1,var2: TMyClass;
+    // !begin
+    // !  TAutoFree.Several([
+    // !    @var1,TMyClass.Create,
+    // !    @var2,TMyClass.Create]);
+    // !  ... use var1 and var2
+    // !end; // here var1 and var2 will be released
+    constructor Several(const varObjPairs: array of pointer);
+    /// protect another TObject variable to an existing IAutoFree instance
+    // - you may write:
+    // !var var1,var2: TMyClass;
+    // !    auto: TAutoFree;
+    // !begin
+    // !  auto := TAutoFree.One(var1,TMyClass.Create);,
+    // !  .... do something
+    // !  auto.Another(var2,TMyClass.Create);
+    // !  ... use var1 and var2
+    // !end; // here var1 and var2 will be released
+    procedure Another(var localVariable; obj: TObject);
+    /// will finalize the associated TObject instances
+    // - note that releasing the TObject instances won't be protected, so
+    // any exception may induce a memory leak
+    destructor Destroy; override;
+  end;
 
   /// an interface used by TAutoLocker to protect multi-thread execution
   IAutoLocker = interface
@@ -19763,6 +19832,14 @@ begin
     result := -result;
 end;
 
+function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
+var err: integer;
+begin
+  result := GetInteger(P,err);
+  if err<>0 then
+    result := Default;
+end;
+
 function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
 var c: PtrUInt;
 begin
@@ -28902,7 +28979,7 @@ var Dot: PUTF8Char;
 begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
-  if (TryCustomVariants<>nil) and (JSON<>nil) and (JSON^ in ['{',']']) then begin
+  if (TryCustomVariants<>nil) and (JSON<>nil) and (JSON^ in ['{','[']) then begin
     GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants);
     exit;
   end;
@@ -29578,6 +29655,26 @@ begin
   end;
 end;
 
+function TDocVariantData.GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found=nil then
+    result := false else
+    result := VariantToInteger(PVariant(found)^,aValue)
+end;
+
+function TDocVariantData.GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found=nil then
+    result := false else begin
+    aValue := VariantToUTF8(PVariant(found)^);
+    result := true;
+  end;
+end;
+
 function TDocVariantData.GetVarData(const aName: RawUTF8;
   var aValue: TVarData): boolean;
 var found: PVarData;
@@ -29706,9 +29803,7 @@ begin
     if wasString then
       RetrieveValueOrRaiseException(pointer(Name),length(Name),
         dvoNameCaseSensitive in VOptions,result,true) else
-      if dvoReturnNullForUnknownProperty in VOptions then
-        SetVariantNull(result) else
-        raise EDocVariant.CreateUTF8('Unexpected "%" property',[Name]);
+      RetrieveValueOrRaiseException(GetIntegerDef(pointer(Name),-1),result,true);
   end;
 end;
 
@@ -31512,7 +31607,7 @@ begin
   fTypeInfo := aTypeInfo;
   Value := @aValue;
   if Typ^.Kind<>tkDynArray then
-    raise ESynException.CreateUTF8('% is not a dynamic array',[PShortString(@Typ^.NameLen)^]);
+    raise ESynException.CreateUTF8('Not a dynamic array: %',[PShortString(@Typ^.NameLen)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   Typ := GetFPCAlignPtr(Typ);
   {$else}
