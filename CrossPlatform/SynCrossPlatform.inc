@@ -75,6 +75,7 @@
     {$ifdef UNICODE}
       {$ifdef CPUX64}
         {$define CPU64}
+        {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
       {$endif}
     {$else}
       {$define USEOBJECTINSTEADOFRECORD}
