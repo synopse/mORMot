@@ -2032,6 +2032,7 @@ function GetInteger(P: PUTF8Char): PtrInt; overload;
 /// get the signed 32 bits integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32 bits integer value stored in P^
 // - this version return 0 in err if no error occured, and 1 if an invalid

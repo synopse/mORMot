@@ -5539,7 +5539,7 @@ var JSON, JSON2: RawUTF8;
 begin
   Check(_JSON('["one",2,3]',aOptions)._JSON='["one",2,3]');
   Doc.InitObject(['name','John','birthyear',1972],
-    aOptions+[dvoReturnNullForUnknownProperty]);
+    aOptions+[dvoReturnNullForUnknownProperty,dvoReturnNullForOutOfRangeIndex]);
   CheckDoc(Doc);
   Check(Doc.Value['toto']=null);
   Check(variant(Doc).toto=null);
