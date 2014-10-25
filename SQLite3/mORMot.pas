@@ -2450,7 +2450,7 @@ type
     // both format supported by BlobToTSQLRawBlob() function
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with JSONToObject
     // - note that the supplied Value buffer won't be modified by this method:
-    // overriden implementation should create their own temporary copy 
+    // overriden implementation should create their own temporary copy
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); virtual; abstract;
     /// convert the property value into an UTF-8 encoded text
     // - if ToSQL is true, result is on SQL form (false->'0' e.g.)
@@ -2500,7 +2500,7 @@ type
     // - will set the Variant type to the best matching kind according to the
     // SQLFieldType type
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
-    procedure SetVariant(Instance: TObject; const Source: Variant); virtual; 
+    procedure SetVariant(Instance: TObject; const Source: Variant); virtual;
     {$endif}
     /// compare the content of the property of two objects
     // - not all kind of properties are handled: only main types (like GetHash)
@@ -2545,6 +2545,14 @@ type
     // class function CreateFrom()
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
       aSQLFieldType: TSQLFieldType); reintroduce; virtual;
+    {$ifndef NOVARIANTS}
+    /// retrieve the property value into a Variant
+    // - will set the Variant type to the best matching kind according to the
+    // SQLFieldType type
+    // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
+    // - dynamic array field is returned as a variant array
+    procedure GetVariant(Instance: TObject; var Dest: Variant); override;
+    {$endif}
     /// generic way of implementing it
     function GetFieldAddr(Instance: TObject): pointer; override;
     /// corresponding RTTI information
@@ -5532,7 +5540,7 @@ type
       ContentType: TSQLFieldType;
       // the field size in bytes; -1 means not computed yet
       ContentSize: integer;
-      // initialized for both sftEnumerate, sftSet and sftBlobDynArray fields
+      // used for sftEnumerate, sftSet and sftBlobDynArray fields
       ContentTypeInfo: pointer;
       // the corresponding index in fQueryTables[]
       TableIndex: integer;
@@ -5810,7 +5818,7 @@ type
      - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
        (X'53514C697465' e.g.)
      - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only }
-    function FieldType(Field: integer; TypeInfo: PPointer): TSQLFieldType; overload;
+    function FieldType(Field: integer; OutFieldTypeInfo: PPointer): TSQLFieldType; overload;
     {/ get the appropriate Sort comparaison function for a field,
       nil if not available (bad field index or field is blob)
       - field type is guessed from first data row }
@@ -5853,7 +5861,7 @@ type
     // - by default, column types and sizes will be retrieved from JSON content
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
-    // - aEnumTypeInfo can be specified for sets or enumerations, as such:
+    // - FieldTypeInfo can be specified for sets or enumerations, as such:
     // ! aTable.SetFieldType('Sample',sftEnumerate,TypeInfo(TEnumSample));
     // ! aTable.SetFieldType('Samples',sftSet,TypeInfo(TSetSamples));
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
@@ -13566,11 +13574,9 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 // - for sftObject, sftVariant, sftBlobDynArray and sftUTF8Custom, the
 // JSON buffer may be an array or an object, so createValueTempCopy can
 // create a temporary copy before parsing it in-place, to preserve the buffer
-// - dynArrayTypeInfo may be used for sftBlobDynArray serialization to a
-// TDocVariant array
-procedure ValueVarToVariant(Value: PUTF8Char; FT: TSQLFieldType;
-  var result: TVarData; createValueTempCopy: boolean;
-  dynArrayTypeInfo: pointer);
+// - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
+procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
+  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer);
 {$endif}
 
 const
@@ -14264,8 +14270,8 @@ const
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
 
 {$ifndef NOVARIANTS}
-procedure ValueVarToVariant(Value: PUTF8Char; FT: TSQLFieldType;
-  var result: TVarData; createValueTempCopy: boolean; dynArrayTypeInfo: pointer);
+procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
+  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer);
 const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
@@ -14274,17 +14280,17 @@ const
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
     varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
- // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
+ // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
     varString,      varString,    varEmpty, varInt64, varInt64);
-var tempCopy: RawUTF8;
+var tempCopy: RawByteString;
     err: integer;
 begin
   if not (result.VType in VTYPE_STATIC) then
     VarClear(variant(result));
-  result.VType := SQL_ELEMENTTYPES[FT];
-  case FT of
+  result.VType := SQL_ELEMENTTYPES[fieldType];
+  case fieldType of
   sftCurrency:
     result.VInt64 := StrToCurr64(Value);
   sftFloat: begin
@@ -14314,16 +14320,21 @@ begin
     pointer(result.VAny) := nil;
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
   end;
-  sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom: 
-    if (FT=sftBlobDynArray) and ( then begin
-
-    end else
+  sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom: begin
+    if (fieldType=sftBlobDynArray) and (typeInfo<>nil) then begin
+      tempCopy := BlobToTSQLRawBlob(Value);
+      if tempCopy<>'' then begin
+        Value := pointer(DynArraySaveJSON(typeInfo,tempCopy));
+        createValueTempCopy := false;
+      end;
+    end;
     if createValueTempCopy then begin
       tempCopy := Value;
       Value := pointer(tempCopy);
-      GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
     end;
-  else raise ESQLTableException.CreateUTF8('Unexpected type %',[ord(FT)]);
+    GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
+  end;
+  else raise ESQLTableException.CreateUTF8('Unexpected type %',[ord(fieldType)]);
   end;
 end;
 
@@ -14331,7 +14342,7 @@ procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
 var temp: RawUTF8;
 begin
   GetValueVar(Instance,true,temp,nil);
-  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false);
+  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false,nil);
 end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
@@ -14339,6 +14350,7 @@ begin
   SetValue(Instance,pointer(VariantToUTF8(Source)),
     not (TVarData(Source).VType in VTYPE_STATIC));
 end;
+
 {$endif NOVARIANTS}
 
 function TSQLPropInfo.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
@@ -14451,6 +14463,15 @@ begin
     result := nil else
     result := fPropInfo^.GetFieldAddr(Instance);
 end;
+
+{$ifndef NOVARIANTS}
+procedure TSQLPropInfoRTTI.GetVariant(Instance: TObject; var Dest: Variant);
+var temp: RawUTF8;
+begin
+  GetValueVar(Instance,true,temp,nil);
+  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false,fPropInfo);
+end;
+{$endif NOVARIANTS}
 
 constructor TSQLPropInfoRTTI.Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType);
 var attrib: TSQLPropInfoAttributes;
@@ -16738,7 +16759,8 @@ begin
   SetLength(Values,fFieldCount);
   V := @fResults[Row*FieldCount];
   for f := 0 to fFieldCount-1 do
-    ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true);
+    ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true,
+      fFieldType[f].ContentTypeInfo);
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,JSON_OPTIONS[true]);
 end;
 
@@ -16785,7 +16807,7 @@ begin
 end;
 
 function FieldPropFromTable(const aTable: TSQLRecordClass; const PropName: RawUTF8;
-  EnumTypeInfo: PPointer): TSQLFieldType;
+  out FieldTypeInfo: Pointer): TSQLFieldType;
 var f: TSQLPropInfo;
 begin
   if IsRowID(pointer(PropName)) then
@@ -16795,29 +16817,29 @@ begin
       if f=nil then
         result := sftUnknown else begin
         result := f.SQLFieldType;
-        if EnumTypeInfo<>nil then begin
-          EnumTypeInfo^ := nil;
-          if f.InheritsFrom(TSQLPropInfoRTTI) then
-          with TSQLPropInfoRTTI(f).PropInfo^.PropType^{$ifndef FPC}^{$endif} do
-          case result of
-            sftEnumerate:
-              EnumTypeInfo^ := EnumBaseType;
-            sftSet:
-              EnumTypeInfo^ := SetEnumType;
-          end;
+        FieldTypeInfo := nil;
+        if f.InheritsFrom(TSQLPropInfoRTTI) then
+        with TSQLPropInfoRTTI(f) do
+        case SQLFieldType of
+          sftBlobDynArray:
+            FieldTypeInfo := PropInfo^.PropType^;
+          sftEnumerate:
+            FieldTypeInfo := PropInfo^.PropType^{$ifndef FPC}^{$endif}.EnumBaseType;
+          sftSet:
+            FieldTypeInfo := PropInfo^.PropType^{$ifndef FPC}^{$endif}.SetEnumType;
         end;
       end;
     end;
 end;
 
 function FieldPropFromTables(const Tables: TSQLRecordClassDynArray;
-  const PropName: RawUTF8; EnumTypeInfo: PPointer; out TableIndex: integer): TSQLFieldType;
+  const PropName: RawUTF8; out FieldTypeInfo: Pointer; out TableIndex: integer): TSQLFieldType;
 var SubProp: RawUTF8;
     i,t: integer;
 begin
   TableIndex := -1;
   if length(Tables)=1 then begin
-    result := FieldPropFromTable(Tables[0],PropName,EnumTypeInfo);
+    result := FieldPropFromTable(Tables[0],PropName,FieldTypeInfo);
     if result<>sftUnknown then
       TableIndex := 0;
   end else begin
@@ -16825,7 +16847,7 @@ begin
     if i=0 then begin
       // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(Tables) do begin
-        result := FieldPropFromTable(Tables[t],PropName,EnumTypeInfo);
+        result := FieldPropFromTable(Tables[t],PropName,FieldTypeInfo);
         if result<>sftUnknown then begin
           TableIndex := t;
           exit;
@@ -16842,9 +16864,8 @@ begin
           // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
           PShortString(PPointer(PtrInt(Tables[t])+vmtClassName)^)^,
           pointer(PropName),i) then begin
-        //if Tables[t].ClassNameIs(SubClass) then begin // not Delphi 2009 OK
           TableIndex := t;
-          result := FieldPropFromTable(Tables[t],SubProp,EnumTypeInfo); // get property type
+          result := FieldPropFromTable(Tables[t],SubProp,FieldTypeInfo); 
           exit;
         end;
     end;
@@ -16853,7 +16874,7 @@ begin
 end;
 
 procedure TSQLTable.SetFieldType(Field: integer; FieldType: TSQLFieldType;
-   aEnumTypeinfo: pointer=nil; FieldSize: integer=-1);
+   FieldTypeInfo: pointer=nil; FieldSize: integer=-1);
 begin
   if (self=nil) or (cardinal(Field)>=cardinal(FieldCount)) then
     exit;
@@ -16863,29 +16884,31 @@ begin
     TableIndex := -1;
     ContentType := FieldType;
     ContentSize := FieldSize;
-    EnumTypeInfo := nil;
-    if aEnumTypeInfo<>nil then
+    ContentTypeInfo := nil;
+    if FieldTypeInfo<>nil then
       case FieldType of
       sftEnumerate:
-        if (PTypeInfo(aEnumTypeInfo)^.Kind=tkEnumeration) then
-          EnumTypeInfo := PTypeInfo(aEnumTypeInfo)^.EnumBaseType;
+        if (PTypeInfo(FieldTypeInfo)^.Kind=tkEnumeration) then
+          ContentTypeInfo := PTypeInfo(FieldTypeInfo)^.EnumBaseType;
       sftSet:
-        if (PTypeInfo(aEnumTypeInfo)^.Kind=tkSet) then
-          EnumTypeInfo := PTypeInfo(aEnumTypeInfo)^.SetEnumType;
+        if (PTypeInfo(FieldTypeInfo)^.Kind=tkSet) then
+          ContentTypeInfo := PTypeInfo(FieldTypeInfo)^.SetEnumType;
+      sftBlobDynArray:
+        ContentTypeInfo := FieldTypeInfo;
       end;
   end;
 end;
 
 procedure TSQLTable.SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
-   aEnumTypeinfo: pointer=nil; FieldSize: integer=-1);
+   FieldTypeInfo: pointer=nil; FieldSize: integer=-1);
 begin
-  SetFieldType(FieldIndex(FieldName),FieldType,aEnumTypeinfo,FieldSize);
+  SetFieldType(FieldIndex(FieldName),FieldType,FieldTypeInfo,FieldSize);
 end;
 
 procedure TSQLTable.InitFieldTypes;
 var f,i: integer;
-    T: TSQLFieldType;
-    P: pointer;
+    FieldType: TSQLFieldType;
+    FieldTypeInfo: pointer;
     TableInd: integer;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
@@ -16894,33 +16917,34 @@ begin
       [self,length(fQueryColumnTypes),FieldCount]);
   SetLength(fFieldType,FieldCount);
   for f := 0 to FieldCount-1 do begin
-    P := nil;
+    FieldTypeInfo := nil;
     TableInd := -1;
     // init fFieldType[] from fQueryTables/fQueryColumnTypes[]
     if Assigned(fQueryColumnTypes) then
-      T := fQueryColumnTypes[f] else
+      FieldType := fQueryColumnTypes[f] else
     if Assigned(QueryTables) then // retrieve column info from field name
-      T := FieldPropFromTables(QueryTables,fResults[f],@P,TableInd) else
-      T := sftUnknown;
-    if T=sftUnknown then
+      FieldType := FieldPropFromTables(QueryTables,fResults[f],FieldTypeInfo,TableInd) else
+      FieldType := sftUnknown;
+    if FieldType=sftUnknown then
       // not found from fQueryTables/fQueryColumnTypes[]: get from content
       if IsRowID(fResults[f]) then
-        T := sftInteger else
+        FieldType := sftInteger else
       for i := 1 to RowCount do begin
-        T := UTF8ContentType(fResults[i*FieldCount+f]);
-        if T<>sftUnknown then begin
-          if (T in [sftInteger,sftFloat]) and (f in fFieldParsedAsString) then
-            T := sftUTF8Text else // force string value not to be a number
-          if T=sftInteger then
-            T := sftCurrency; // we only checked the first field... best guess...
+        FieldType := UTF8ContentType(fResults[i*FieldCount+f]);
+        if FieldType<>sftUnknown then begin
+          if (FieldType in [sftInteger,sftFloat]) and
+             (f in fFieldParsedAsString) then
+            FieldType := sftUTF8Text else // force string value not to be a number
+          if FieldType=sftInteger then
+            FieldType := sftCurrency; // we only checked the first field... best guess...
           break; // get first non null field content
         end;
       end;
     with fFieldType[f] do begin
       TableIndex := TableInd;
-      ContentType := T;
+      ContentType := FieldType;
       ContentSize := -1;
-      EnumTypeInfo := P;
+      ContentTypeInfo := FieldTypeInfo;
     end;
   end;
 end;
@@ -16935,14 +16959,14 @@ begin
     result := sftUnknown;
 end;
 
-function TSQLTable.FieldType(Field: integer; EnumTypeInfo: PPointer): TSQLFieldType;
+function TSQLTable.FieldType(Field: integer; OutFieldTypeInfo: PPointer): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
     if not Assigned(fFieldType) then
       InitFieldTypes;
     result := fFieldType[Field].ContentType;
-    if EnumTypeInfo<>nil then
-      EnumTypeInfo^ := fFieldType[Field].EnumTypeInfo;
+    if OutFieldTypeInfo<>nil then
+      OutFieldTypeInfo^ := fFieldType[Field].ContentTypeInfo;
   end else
     result := sftUnknown;
 end;
@@ -18260,7 +18284,7 @@ begin
       with fFieldType[F] do
         case ContentType of
         sftEnumerate:
-          CalculateEnumerates(F,EnumTypeInfo);
+          CalculateEnumerates(F,ContentTypeInfo);
         end;
     end;
     Tot := RowCount;
@@ -18308,10 +18332,10 @@ begin
     if ContentSize>=0 then
       // return already computed value
       result := ContentSize else begin
-      if (EnumTypeInfo<>nil) and (ContentType=sftEnumerate) then begin
+      if (ContentTypeInfo<>nil) and (ContentType=sftEnumerate) then begin
         // compute maximum size from available captions
-        for i := 0 to PEnumType(EnumTypeInfo)^.MaxValue do begin
-          len := length(PEnumType(EnumTypeInfo)^.GetCaption(i));
+        for i := 0 to PEnumType(ContentTypeInfo)^.MaxValue do begin
+          len := length(PEnumType(ContentTypeInfo)^.GetCaption(i));
           if len>result then
             result := len;
         end;
@@ -18541,10 +18565,14 @@ begin
 end;
 
 procedure TSQLTable.GetVariant(Row,Field: integer; Client: TObject; var result: variant);
+var aType: TSQLFieldType;
+    aTypeInfo: pointer;
 begin
   if Row=0 then // Field Name
-    RawUTF8ToVariant(GetU(0,Field),result) else
-    ValueVarToVariant(Get(Row,Field),FieldType(Field),TVarData(result),true);
+    RawUTF8ToVariant(GetU(0,Field),result) else begin
+    aType := FieldType(Field,@aTypeInfo);
+    ValueVarToVariant(Get(Row,Field),aType,TVarData(result),true,aTypeInfo);
+  end;
 end;
 
 {$endif NOVARIANTS}
@@ -28077,7 +28105,7 @@ begin
     with TDocVariantData(result) do begin
       Init(JSON_OPTIONS[true]);
       for i := 0 to (length(fInput) shr 1)-1 do begin
-        GetVariantFromJSON(pointer(fInput[i*2+1]),false,v);
+        GetVariantFromJSON(pointer(fInput[i*2+1]),false,v,@JSON_OPTIONS[true]);
         AddValue(fInput[i*2],v);
       end;
     end;

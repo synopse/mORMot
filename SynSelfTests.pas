@@ -3529,16 +3529,17 @@ end;
 
 procedure TTestLowLevelTypes.Variants;
 var v: Variant;
+    t: pointer;
 begin
-  ValueVarToVariant(nil,sftBoolean,TVarData(v),false);
+  ValueVarToVariant(nil,sftBoolean,TVarData(v),false,t);
   Check(not boolean(v));
-  ValueVarToVariant('0',sftBoolean,TVarData(v),false);
+  ValueVarToVariant('0',sftBoolean,TVarData(v),false,t);
   Check(not boolean(v));
-  ValueVarToVariant('false',sftBoolean,TVarData(v),false);
+  ValueVarToVariant('false',sftBoolean,TVarData(v),false,t);
   Check(not boolean(v));
-  ValueVarToVariant('1',sftBoolean,TVarData(v),false);
+  ValueVarToVariant('1',sftBoolean,TVarData(v),false,t);
   Check(boolean(v));
-  ValueVarToVariant('true',sftBoolean,TVarData(v),false);
+  ValueVarToVariant('true',sftBoolean,TVarData(v),false,t);
   Check(boolean(v));
 end;
 
