@@ -492,6 +492,7 @@ unit SynCommons;
   - added TRawUTF8MethodList class (based on TRawUTF8ListHashed)
   - added TRawUTF8ListHashedLocked class (based on TRawUTF8ListHashed)
   - added TAutoLocker/IAutoLocker and TLockedDocVariant/ILockedDocVariant types
+  - added TAutoFree class, for automatic local variable lifetime management
   - added JSON_CONTENT_TYPE_HEADER and XML_CONTENT_TYPE[_HEADER] constants
   - new DateToSQL() overloaded function with direct Year/Month/Day parameters
   - added Base64MagicDecode(), Base64MagicCheckAndDecode() and SQLToDateTime()
@@ -2533,6 +2534,9 @@ function GotoNextNotSpace(P: PUTF8Char): PUTF8Char;
 /// go to the beginning of the SQL statement, ignoring all blanks and comments
 // - used to check the SQL statement command (e.g. is it a SELECT?)
 function SQLBegin(P: PUTF8Char): PUTF8Char;
+
+/// add a condition to a SQL WHERE clause, with an ' and ' if where is not void
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
 
 /// return true if the parameter is void or begin with a 'SELECT' SQL statement
 // - used to avoid code injection and to check if the cache must be flushed
@@ -15754,6 +15758,13 @@ begin
     else break;
  until false;
  result := P;
+end;
+
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
+begin
+  if where='' then
+    where := condition else
+    where := where+' and '+condition;
 end;
 
 procedure Base64MagicDecode(var ParamValue: RawUTF8);
@@ -36289,6 +36300,51 @@ end;
 
 {$endif DELPHI5OROLDER}
 {$endif MSWINDOWS}
+
+
+{ TAutoFree }
+
+constructor TAutoFree.One(var localVariable; obj: TObject);
+begin
+  fObject := obj;
+  TObject(localVariable) := obj;
+end;
+
+constructor TAutoFree.Several(const varObjPairs: array of pointer);
+var n,i: integer;
+begin
+  n := length(varObjPairs);
+  if (n=0) or (n and 1=1) then
+    exit;
+  n := n shr 1;
+  if n=0 then
+    exit;
+  SetLength(fObjectList,n);
+  for i := 0 to n-1 do begin
+    fObjectList[i] := varObjPairs[i*2+1];
+    PPointer(varObjPairs[i*2])^ := fObjectList[i];
+  end;
+end;
+
+procedure TAutoFree.Another(var localVariable; obj: TObject);
+var n: integer;
+begin
+  n := length(fObjectList);
+  SetLength(fObjectList,n+1);
+  fObjectList[n] := obj;
+  TObject(localVariable) := obj;
+end;
+
+destructor TAutoFree.Destroy;
+var i: integer;
+begin
+  if fObjectList<>nil then
+    for i := high(fObjectList) downto 0 do // release FILO
+      fObjectList[i].Free;
+  fObject.Free;
+  inherited;
+end;
+
 
 type
   /// used by TAutoLocker
