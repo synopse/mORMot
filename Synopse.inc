@@ -171,7 +171,7 @@
 
 {$ifdef FPC}
 
-  {.$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
+  {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKSET 1}
@@ -337,11 +337,8 @@
   {.$define SQLITE3_FASTCALL}
 {$endif}
 
-// Only Win32 supports SQLite3 static linked library by now 
+// Only Win32+Lin32 support SQLite3 static linked library by now 
 {$ifdef CPU64}  
-  {$define NOSQLITE3STATIC}
-{$endif}
-{$ifndef MSWINDOWS}  
   {$define NOSQLITE3STATIC}
 {$endif}
 
@@ -349,8 +346,8 @@
   // our proprietary crypto expects a patched SQlite3.c statically linked
   {$define NOSQLITE3ENCRYPT}
 {$endif}
-{$ifdef FPC}
-  // statically linked FPC as computed by c-fpcmingw.bat not yet working
+{$ifndef MSWINDOWS}
+  // works only with low-level SQLite3 structures as compiled under Windows
   {$define NOSQLITE3ENCRYPT}
 {$endif}
 

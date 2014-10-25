@@ -113,7 +113,12 @@ initialization
 
 {$else}
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  Types,
+  SynFPCLinux,
+  {$endif}
   SysUtils,
   SynCommons,
   SynSQLite3;
@@ -141,6 +146,7 @@ type
   end;
 
 
+{$ifndef NOSQLITE3ENCRYPT}
 /// use this procedure to change the password for an existing SQLite3 database file
 // - use this procedure instead of the "classic" sqlite3.rekey() API call
 // - conversion is done in-place, therefore this procedure can handle very big files
@@ -157,7 +163,7 @@ type
 // 'database disk image is malformed' (SQLITE_CORRUPT) at database opening 
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
-
+{$endif}
 
 implementation
 
@@ -178,6 +184,8 @@ const
  - FastCall use must be set with defining SQLITE3_FASTCALL above, and
      int __cdecl fts3CompareElemByTerm(const void *lhs, const void *rhs)
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -pr -u- sqlite3.c
+ - to compile for FPC using the MinGW compiler:
+     gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS sqlite3.c
  - the following defines must be added in the beginning of the sqlite3.c file:
 
 //#define SQLITE_ENABLE_FTS3
@@ -230,12 +238,41 @@ extern int winWrite(
   sqlite3.int64 offset      /* Offset into the file to begin writing at */
 );
 
+Under Linux (thanks Alf for the patch!), change the following lines of sqlite3.c:
+
+extern int unixRead(
+  sqlite3_file *id,
+  void *pBuf,
+  int amt,
+  sqlite3_int64 offset
+);
+
+extern int unixWrite(
+  sqlite3_file *id,
+  const void *pBuf,
+  int amt,
+  sqlite3_int64 offset
+);
+
+then compile this souce code using gcc:
+
+  gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
+
+copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
+
+For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
+
 }
 
 {$ifdef FPC}  // FPC expects coff32 .o
+{$ifdef MSWINDOWS}
 {$L sqlite3.o}
 {$linklib c:\progs\mingw\lib\libkernel32.a}
 {$linklib c:\progs\mingw\lib\gcc\mingw32\4.8.1\libgcc.a}
+{$else}
+{$L ..\..\..\linuxlibrary\sqlite3.o}
+{$linklib ..\..\..\linuxlibrary\gcc.a}
+{$endif}
 {$else}
 {$ifdef INCLUDE_FTS3}
 {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
@@ -531,21 +568,27 @@ var
 function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
   {$ifdef FPC}alias : '__localtime64';{$endif}
 // a fast full pascal version of the standard C library function
-var uTm: TFileTime;
+var {$ifdef MSWINDOWS}
+    uTm: TFileTime;
     lTm: TFileTime;
+    {$endif}
     S: TSystemTime;
 begin
+  {$ifdef MSWINDOWS}
   Int64(uTm) := (t+11644473600)*10000000; // unix time to dos file time
   FileTimeToLocalFileTime(uTM,lTM);
   FileTimeToSystemTime(lTM,S);
-  with atm do begin
-    tm_sec := S.wSecond;
-    tm_min := S.wMinute;
-    tm_hour := S.wHour;
-    tm_mday := S.wDay;
-    tm_mon := S.wMonth-1;
-    tm_year := S.wYear-1900;
-    tm_wday := S.wDayOfWeek;
+  {$else}
+  S:=FPCNowUTCSystem;
+  {$endif}
+  with atm,S do begin
+    tm_sec := {$ifdef MSWINDOWS}wSecond{$else}Second{$endif};
+    tm_min := {$ifdef MSWINDOWS}wMinute{$else}Minute{$endif};
+    tm_hour := {$ifdef MSWINDOWS}wHour{$else}Hour{$endif};
+    tm_mday := {$ifdef MSWINDOWS}wDay{$else}Day{$endif};
+    tm_mon := {$ifdef MSWINDOWS}wMonth-1{$else}Month-1{$endif};
+    tm_year := {$ifdef MSWINDOWS}wYear-1900{$else}Year-1900{$endif};
+    tm_wday := {$ifdef MSWINDOWS}wDayOfWeek{$else}Day{$endif};
   end;
   result := @atm;
 end;
@@ -625,6 +668,9 @@ begin
   until Count=0;
 end;
 
+
+{$ifndef NOSQLITE3ENCRYPT}
+
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 var F: THandle;
@@ -638,7 +684,12 @@ begin
   F := FileOpen(FileName,fmOpenReadWrite);
   if F=INVALID_HANDLE_VALUE then
     exit;
+  {$ifdef MSWINDOWS}
   Size.Lo := GetFileSize(F,@Size.Hi);
+  {$else}
+  Int64(Size) := GetLargeFileSize(FileName);
+  {$endif}
+
   if (Size.Lo<=1024) and (Size.Hi=0) then begin
     FileClose(F); // file is to small to be modified
     exit;
@@ -648,7 +699,11 @@ begin
   if NewPassword<>'' then
     CreateSQLEncryptTableBytes(NewPassWord,@NewP);
   Int64(Posi) := 1024; // don't change first page, which is uncrypted
+  {$ifdef MSWINDOWS}
   SetFilePointer(F,1024,nil,FILE_BEGIN); // move to first page after 1024
+  {$else}
+  FileSeek(F,Int64(1024),fsFromBeginning);
+  {$endif}
   while Int64(Posi)<Int64(Size) do begin
     R := FileRead(F,Buf,sizeof(Buf)); // read buffer
     if R<0 then
@@ -657,12 +712,18 @@ begin
       XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
     if NewPassword<>'' then
       XorOffset(@Buf,Posi.Lo,R,@NewP); // crypt with new key
+    {$ifdef MSWINDOWS}
     SetFilePointer(F,Posi.Lo,@Posi.Hi,FILE_BEGIN); // rewind
+    {$else}
+    FileSeek(F,Int64(Posi),fsFromBeginning);
+    {$endif}
     FileWrite(F,Buf,R); // update buffer
     inc(Int64(Posi),cardinal(R));
   end;
   FileClose(F);
 end;
+
+{$endif}
 
 // we override default WinRead() and WinWrite() functions below, in order
 // to add our proprietary (but efficient) encryption engine
@@ -678,7 +739,7 @@ type
 {$A4} // bcc32 default alignment is 4 bytes
 {$endif}
 {$endif}
-  TSQLFile = record // called winFile (expand sqlite3.file) in sqlite3.c
+  TSQLFile = packed record // called winFile (expand sqlite3.file) in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
@@ -743,9 +804,6 @@ function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$
 var Cyph: TSQLCypher;
     pass, buf: RawByteString;
 begin
-  {$ifdef FPC}  // FPC is not compatible with our custom encryption yet
-  raise ESQLite3Exception.Create('sqlite3_key() not compatible yet with FPC');
-  {$endif}
   result := SQLITE_OK;
   if (DB=0) or (key=nil) or (keyLen<=0) then
     exit;
@@ -782,10 +840,19 @@ begin
 end;
 
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
-
+{$ifdef MSWINDOWS}
 function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+{$else}
+function unixWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+{$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-  {$ifdef FPC}alias : '_winWrite';{$endif}
+  {$ifdef FPC}
+    {$ifdef MSWINDOWS}
+    alias : '_winWrite';
+    {$else}
+    alias : 'unixWrite'; export;
+    {$endif}
+  {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
 // or some other error code on failure
 var n, i: integer;
@@ -811,7 +878,11 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
+  {$else}
+  result := FileSeek(F.h,Int64(offset),fsFromBeginning);
+  {$endif}
   if result=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -832,7 +903,12 @@ begin
   b := buf;
   n := buflen;
   while n>0 do begin
+    {$ifdef MSWINDOWS}
     if not WriteFile(F.h,b^,n,cardinal(result),nil) then begin
+    {$else}
+    result := FileWrite(F.h,b^,n);
+    if result<>n then begin
+    {$endif}
 err:  F.lastErrno := GetLastError;
       result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
@@ -855,9 +931,19 @@ const
   SQLITE_IOERR_READ       = $010A;
   SQLITE_IOERR_SHORT_READ = $020A;
 
+{$ifdef MSWINDOWS}
 function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+{$else}
+function unixRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+{$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-  {$ifdef FPC}alias : '_winRead';{$endif}
+  {$ifdef FPC}
+    {$ifdef MSWINDOWS}
+      alias : '_winRead';
+    {$else}
+      alias : 'unixRead'; export;
+    {$endif}
+  {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
 var offset: Int64Rec absolute off;
@@ -880,7 +966,11 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
+  {$else}
+  result := FileSeek(F.h,Int64(offset),fsFromBeginning);
+  {$endif}
   if result=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -889,7 +979,12 @@ begin
       exit;
     end;
   end;
+  {$ifdef MSWINDOWS}
   if not ReadFile(F.h,buf^,buflen,cardinal(result),nil) then begin
+  {$else}
+  result := FileRead(F.h,buf^,buflen);
+  if result<>buflen then begin
+  {$endif}
     F.lastErrno := GetLastError;
     result := SQLITE_IOERR_READ;
     exit;

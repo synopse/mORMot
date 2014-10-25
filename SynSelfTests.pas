@@ -3531,6 +3531,7 @@ procedure TTestLowLevelTypes.Variants;
 var v: Variant;
     t: pointer;
 begin
+  t := nil; // makes the compiler happy
   ValueVarToVariant(nil,sftBoolean,TVarData(v),false,t);
   Check(not boolean(v));
   ValueVarToVariant('0',sftBoolean,TVarData(v),false,t);

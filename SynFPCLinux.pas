@@ -99,7 +99,16 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint; inline;
 
 /// returns the current UTC time
-function FPCNowUTC: TDateTime; inline;
+function FPCNowUTC: TDateTime; 
+
+/// returns the current UTC time as TSystemTime
+function FPCNowUTCSystem: TSystemTime;
+
+/// a wrapper around stat() to retrieve a file size
+function GetLargeFileSize(const aFile: string): int64;
+
+/// a wrapper around stat() to retrieve a file size
+function GetFileSize(const aFile: string): int32;
 
 {$endif Linux}
 
@@ -173,13 +182,21 @@ Begin
 End;
 
 function FPCNowUTC: TDateTime;
-var tz:timeval;
+var tz: timeval;
     SystemTime: TSystemTime;
 begin
   fpgettimeofday(@tz,nil);
   EpochToLocal(tz.tv_sec,SystemTime.year,SystemTime.month,SystemTime.day,SystemTime.hour,SystemTime.Minute,SystemTime.Second);
   SystemTime.MilliSecond:=tz.tv_usec div 1000;
   result := systemTimeToDateTime(SystemTime);
+end;
+
+function FPCNowUTCSystem: TSystemTime;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  EpochToLocal(tz.tv_sec,result.year,result.month,result.day,result.hour,result.Minute,result.Second);
+  result.MilliSecond := tz.tv_usec div 1000;
 end;
 
 {$if not defined(GetTickCountTimeOfDay)}
@@ -263,6 +280,24 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 begin
   result := WideCompareText(Pwidechar(lpString1),Pwidechar(lpString2));
+end;
+
+function GetLargeFileSize(const aFile: string): int64;
+var FileInfo:TStat;
+begin
+  if (fpStat(aFile,FileInfo) = 0) then
+    result:= FileInfo.st_size else
+    result:= -1;
+end;
+
+function GetFileSize(const aFile: string): int32;
+var fsize: int64;
+begin
+  fsize := GetLargeFileSize(aFile);
+  if fsize > high(int32) then
+    // error if file too big
+    result:= -1 else
+    result:= fsize;
 end;
 
 {$endif}

@@ -16822,7 +16822,7 @@ begin
         with TSQLPropInfoRTTI(f) do
         case SQLFieldType of
           sftBlobDynArray:
-            FieldTypeInfo := PropInfo^.PropType^;
+            FieldTypeInfo := PropInfo^.PropType{$ifndef FPC}^{$endif};
           sftEnumerate:
             FieldTypeInfo := PropInfo^.PropType^{$ifndef FPC}^{$endif}.EnumBaseType;
           sftSet:
