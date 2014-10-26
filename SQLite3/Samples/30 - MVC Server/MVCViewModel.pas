@@ -137,7 +137,7 @@ end;
 
 const
   // just try with 200000 - and let your WordPress blog engine start to cry...
-  FAKEDATA_ARTICLESCOUNT = 200;
+  FAKEDATA_ARTICLESCOUNT = 200000;
   
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
@@ -160,16 +160,15 @@ begin
   end;
   if RestModel.TableHasRows(TSQLArticle) then
     exit;
-  batch := TSQLRestBatch.Create(RestModel,TSQLTag,100);
+  SetLength(tags,32);
+  for n := 1 to length(tags) do begin
+    tag.Ident := 'Tag'+UInt32ToUtf8(n);
+    tag.ID := n*2; // force test TSQLTags layout
+    tags[n-1] := RestModel.Add(tag,true,true);
+  end;
+  fTagsLookup.Init(RestModel); // reload after initial fill
+  batch := TSQLRestBatch.Create(RestModel,TSQLArticle,20000);
   try
-    for n := 1 to 32 do begin
-      tag.Ident := 'Tag'+UInt32ToUtf8(n);
-      tag.ID := n*2; // force ID to test TSQLTag.ComputeTagIdentPerIDArray
-      batch.Add(tag,true,true);
-    end;
-    RestModel.BatchSend(batch,tags);
-    fTagsLookup.Init(RestModel); // reload after initial fill
-    batch.Reset(TSQLArticle,20000);
     article.Author := TSQLAuthor(1);
     article.AuthorName := 'synopse';
     for n := 1 to FAKEDATA_ARTICLESCOUNT do begin
@@ -271,6 +270,8 @@ begin
     fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
       'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
+  if not fDefaultData.AddExistingProp('Tags',Scope) then
+    fDefaultData.AddNewProp('Tags',fTagsLookup.GetAsDocVariantArray,Scope);
 end;
 
 procedure TBlogApplication.ArticleView(ID: integer;

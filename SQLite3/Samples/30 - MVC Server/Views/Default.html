@@ -25,6 +25,12 @@
 			  {{/Archives}}
             </ol>
           </div>
+          <div class="sidebar-module">
+            <h4>Tags</h4>
+			  {{#Tags}}
+              <a href="default?scope={tag:{{tagID}}}" class="btn btn-info btn-xs">{{ident}} <span class="badge">{{occurence}}</span></a>
+			  {{/Tags}}
+          </div>
 		</div>
 	  </div>
 {{/Scope}}

@@ -3190,9 +3190,14 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 
 /// fast binary search of an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
-// - return index of P^[index]=Value
+// - return index of P^[result]=Value
 // - return -1 if Value was not found
-function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt; overload;
+
+/// fast binary search of an integer value in a sorted integer array
+// - return index of Values[result]=Value
+// - return -1 if Value was not found
+function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
 
 /// retrieve the index where to insert an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -19696,6 +19701,11 @@ begin
       R := result - 1;
   until (L > R);
   result := -1
+end;
+
+function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
+begin
+  result := FastFindIntegerSorted(pointer(Values),length(Values)-1,Value);
 end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;

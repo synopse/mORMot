@@ -85,12 +85,16 @@ type
 
   TSQLTags = object
     Lock: IAutoLocker;
-    Lookup: TRawUTF8DynArray;
-    LookupOrder: TCardinalDynArray;
-    Occurence: TIntegerDynArray;
+    Lookup: array of record
+      Ident: RawUTF8;
+      Occurence: integer;
+    end;
+    OrderID: TIntegerDynArray;
     procedure Init(aRest: TSQLRest);
     function Get(tagID: integer): RawUTF8;
     procedure SaveOccurence(aRest: TSQLRest);
+    procedure SortTagsByIdent(var Tags: TIntegerDynArray);
+    function GetAsDocVariantArray: Variant;
   end;
 
   TSQLArticle = class(TSQLContent)
@@ -103,7 +107,7 @@ type
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
     // note: caller should call Tags.SaveOccurence() to update the DB
-    procedure TagsAddOrdered(aTagID: Integer; var Tags: TSQLTags);
+    procedure TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
   published
     property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
     property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
@@ -207,37 +211,15 @@ begin
     Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
 end;
 
-procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var Tags: TSQLTags);
-var sets: TByteDynArray;
-    i,n,max: integer;
-begin // add tag ID per alphabetic order - a bit complicated but works
-  Tags.Lock.ProtectMethod;
-  max := length(Tags.LookupOrder);
-  if (aTagID=0) or (aTagID>max) then
+procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
+begin
+  if aTagID>=length(aTags.Lookup) then
     exit;
-  n := length(fTags);
-  if n=0 then begin
-    SetLength(fTags,1);
-    fTags[0] := aTagID;
-    Tags.Occurence[aTagID-1] := 1;
-    exit;
-  end;
-  dec(aTagID);
-  SetLength(sets,(max shr 3)+1);
-  for i := 0 to n-1 do
-    SetBit(sets[0],fTags[i]-1);
-  if GetBit(sets[0],aTagID) then
-    exit; // duplicated aTagID
-  SetBit(sets[0],aTagID);
-  SetLength(fTags,n+1);
-  n := 0;
-  for i := 0 to max-1 do
-    if GetBit(sets[0],Tags.LookupOrder[i]) then begin
-      fTags[n] := Tags.LookupOrder[i]+1;
-      inc(n);
-    end;
-  assert(n=length(fTags));
-  inc(Tags.Occurence[aTagID]);
+  if not AddInteger(fTags,aTagID,true) then
+    exit; // already there
+  aTags.Lock.ProtectMethod;
+  inc(aTags.Lookup[aTagID-1].Occurence);
+  aTags.SortTagsByIdent(fTags);
 end;
 
 
@@ -246,37 +228,53 @@ end;
 function TSQLTags.Get(tagID: integer): RawUTF8;
 begin
   if (tagID>0) and (tagID<=Length(Lookup)) then
-    result := Lookup[tagID-1] else
+    result := Lookup[tagID-1].Ident else
     result := '';
+end;
+
+function TSQLTags.GetAsDocVariantArray: Variant;
+var i,ndx: Integer;
+begin
+  TDocVariant.NewFast(result);
+  for i := 0 to length(OrderID)-1 do begin
+    ndx := OrderID[i]-1;
+    with Lookup[ndx] do
+      if Occurence>0 then
+        TDocVariantData(result).AddItem(
+          _ObjFast(['tagID',ndx+1,'ident',Ident,'occurence',Occurence]));
+  end;
 end;
 
 procedure TSQLTags.Init(aRest: TSQLRest);
 var tag: TSQLTag;
-    max: integer;
+    ID,count,maxID: integer;
 begin
   Finalize(Lookup);
-  Finalize(LookupOrder);
-  Finalize(Occurence);
   if Lock=nil then
-    Lock := TAutoLocker.Create else
-    Lock.ProtectMethod;
-  TAutoFree.One(tag,TSQLTag.CreateAndFillPrepare(aRest,'','ID,Ident,Occurence'));
-  if tag.FillTable.RowCount=0 then
+    Lock := TAutoLocker.Create;
+  Lock.ProtectMethod;
+  TAutoFree.One(
+    tag,TSQLTag.CreateAndFillPrepare(aRest,'order by Ident','ID,Ident,Occurence'));
+  count := tag.FillTable.RowCount;
+  if count=0 then
     exit;
-  max := 0;
-  while tag.FillOne do
-    if tag.ID>max then
-      max := tag.ID;
-  SetLength(Lookup,max);
-  SetLength(Occurence,max);
-  tag.FillRewind;
+  SetLength(OrderID,count);
+  count := 0;
+  maxID := 0;
   while tag.FillOne do begin
-    Lookup[tag.ID-1] := tag.Ident;
-    Occurence[tag.ID-1] := tag.Occurence;
+    ID := tag.ID;
+    OrderID[count] := ID;
+    inc(count);
+    if ID>maxID then
+      maxID := ID;
   end;
-  SetLength(LookupOrder,max);
-  FillIncreasing(pointer(LookupOrder),0,max);
-  QuickSortIndexedPUTF8Char(pointer(Lookup),max,LookupOrder);
+  SetLength(Lookup,maxID);
+  tag.FillRewind;
+  while tag.FillOne do
+  with Lookup[tag.ID-1] do begin
+    Ident := tag.Ident;
+    Occurence := tag.Occurence;
+  end;
 end;
 
 procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
@@ -288,13 +286,32 @@ begin
     @tag,TSQLTag.CreateAndFillPrepare(aRest,'','ID,Occurence'),
     @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
   while tag.FillOne do begin
-    if tag.ID<=length(Occurence) then
-      if Occurence[tag.ID-1]<>tag.Occurence then begin
-        tag.Occurence := Occurence[tag.ID-1];
+    if tag.ID<=length(Lookup) then
+      if Lookup[tag.ID-1].Occurence<>tag.Occurence then begin
+        tag.Occurence := Lookup[tag.ID-1].Occurence;
         batch.Update(tag); // will update only Occurence field
       end;
   end;
   aRest.BatchSend(batch);
+end;
+
+procedure TSQLTags.SortTagsByIdent(var Tags: TIntegerDynArray);
+var new: TIntegerDynArray;
+    i,n: integer;
+begin
+  n := length(Tags);
+  if n=1 then
+    exit;
+  SetLength(new,n);
+  QuickSortInteger(pointer(Tags),0,n-1);
+  n := 0;
+  for i := 0 to length(OrderID)-1 do
+    if FastFindIntegerSorted(Tags,OrderID[i])>=0 then begin
+      new[n] := OrderID[i];
+      inc(n);
+    end;
+  assert(n=length(Tags));
+  Tags := new;
 end;
 
 end.
