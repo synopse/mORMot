@@ -10384,7 +10384,13 @@ type
     fObject: TObject;
     fObjectList: array of TObject;
   public
-    /// protect one local TObject variable instance
+    /// initialize the TAutoFree class for one local variable
+    // - do not call this constructor, but class function One() instead
+    constructor Create(var localVariable; obj: TObject); reintroduce; overload;
+    /// initialize the TAutoFree class for several local variables
+    // - do not call this constructor, but class function Several() instead
+    constructor Create(const varObjPairs: array of pointer); reintroduce; overload;
+    /// protect one local TObject variable instance life time
     // - for instance, instead of writing:
     // !var myVar: TMyClass;
     // !begin
@@ -10401,8 +10407,8 @@ type
     // !  TAutoFree.One(myVar,TMyClass.Create);
     // !  ... use myVar
     // !end; // here myVar will be released
-    constructor One(var localVariable; obj: TObject);
-    /// protect several local TObject variable instances
+    class function One(var localVariable; obj: TObject): IAutoFree;
+    /// protect several local TObject variable instances life time
     // - specified as localVariable/objectInstance pairs
     // - you may write:
     // !var var1,var2: TMyClass;
@@ -10412,8 +10418,8 @@ type
     // !    @var2,TMyClass.Create]);
     // !  ... use var1 and var2
     // !end; // here var1 and var2 will be released
-    constructor Several(const varObjPairs: array of pointer);
-    /// protect another TObject variable to an existing IAutoFree instance
+     class function Several(const varObjPairs: array of pointer): IAutoFree;
+    /// protect another TObject variable to an existing IAutoFree instance life time
     // - you may write:
     // !var var1,var2: TMyClass;
     // !    auto: TAutoFree;
@@ -10426,7 +10432,8 @@ type
     procedure Another(var localVariable; obj: TObject);
     /// will finalize the associated TObject instances
     // - note that releasing the TObject instances won't be protected, so
-    // any exception may induce a memory leak
+    // any exception here may induce a memory leak: use only with "safe"
+    // simple objects, e.g. mORMot's TSQLRecord
     destructor Destroy; override;
   end;
 
@@ -36400,13 +36407,23 @@ end;
 
 { TAutoFree }
 
-constructor TAutoFree.One(var localVariable; obj: TObject);
+constructor TAutoFree.Create(var localVariable; obj: TObject);
 begin
   fObject := obj;
   TObject(localVariable) := obj;
 end;
 
-constructor TAutoFree.Several(const varObjPairs: array of pointer);
+class function TAutoFree.One(var localVariable; obj: TObject): IAutoFree;
+begin
+  result := Create(localVariable,obj);
+end;
+
+class function TAutoFree.Several(const varObjPairs: array of pointer): IAutoFree;
+begin
+  result := Create(varObjPairs);
+end;
+
+constructor TAutoFree.Create(const varObjPairs: array of pointer);
 var n,i: integer;
 begin
   n := length(varObjPairs);

@@ -32,7 +32,7 @@
 		  <a name="addComment"></a>
           <form class="form-horizontal" action="ArticleComment#addComment" method="post">
 			<div class="form-group">
-			    {{#Scope}}<p class="bg-danger">{{CommentError}}</p>{{/Scope}}
+			    {{#Scope}}<div class="alert alert-danger">{{CommentError}}</div>{{/Scope}}
 				<input type="hidden" name="id" value={{Article.ID}}>
 				<input type="text" class="form-control" name="title" placeholder="Title" value="{{Scope.CommentTitle}}">
 				<textarea class="form-control" name="comment" rows="7" placeholder="Enter a new comment here">{{Scope.CommentContent}}</textarea>

@@ -83,6 +83,16 @@ type
     property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
   end;
 
+  TSQLTags = object
+    Lock: IAutoLocker;
+    Lookup: TRawUTF8DynArray;
+    LookupOrder: TCardinalDynArray;
+    Occurence: TIntegerDynArray;
+    procedure Init(aRest: TSQLRest);
+    function Get(tagID: integer): RawUTF8;
+    procedure SaveOccurence(aRest: TSQLRest);
+  end;
+
   TSQLArticle = class(TSQLContent)
   private
     fAbstract: RawUTF8;
@@ -92,7 +102,8 @@ type
     class function CurrentPublishedMonth: Integer;
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
-    procedure TagsAddOrdered(aTagID: Integer; const AlphabeticalOrder: TCardinalDynArray);
+    // note: caller should call Tags.SaveOccurence() to update the DB
+    procedure TagsAddOrdered(aTagID: Integer; var Tags: TSQLTags);
   published
     property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
     property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
@@ -110,14 +121,14 @@ type
   TSQLTag = class(TSQLRecord)
   private
     fIdent: RawUTF8;
+    fOccurence: integer;
     fCreatedAt: TCreateTime;
-  public
-    class function ComputeTagIdentPerIDArray(aRest: TSQLRest;
-      out AlphabeticalOrder: TCardinalDynArray): TRawUTF8DynArray;
   published
     property Ident: RawUTF8 read fIdent write fIdent;
+    property Occurence: Integer read fOccurence write fOccurence;
     property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
   end;
+
 
 
 function CreateModel: TSQLModel;
@@ -196,63 +207,94 @@ begin
     Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
 end;
 
-procedure TSQLArticle.TagsAddOrdered(aTagID: Integer;
-  const AlphabeticalOrder: TCardinalDynArray);
+procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var Tags: TSQLTags);
 var sets: TByteDynArray;
     i,n,max: integer;
 begin // add tag ID per alphabetic order - a bit complicated but works
-  max := length(AlphabeticalOrder);
+  Tags.Lock.ProtectMethod;
+  max := length(Tags.LookupOrder);
   if (aTagID=0) or (aTagID>max) then
     exit;
   n := length(fTags);
   if n=0 then begin
     SetLength(fTags,1);
     fTags[0] := aTagID;
+    Tags.Occurence[aTagID-1] := 1;
     exit;
   end;
+  dec(aTagID);
   SetLength(sets,(max shr 3)+1);
   for i := 0 to n-1 do
     SetBit(sets[0],fTags[i]-1);
-  if GetBit(sets[0],aTagID-1) then
+  if GetBit(sets[0],aTagID) then
     exit; // duplicated aTagID
-  SetBit(sets[0],aTagID-1);
+  SetBit(sets[0],aTagID);
   SetLength(fTags,n+1);
   n := 0;
   for i := 0 to max-1 do
-    if GetBit(sets[0],AlphabeticalOrder[i]) then begin
-      fTags[n] := AlphabeticalOrder[i]+1;
+    if GetBit(sets[0],Tags.LookupOrder[i]) then begin
+      fTags[n] := Tags.LookupOrder[i]+1;
       inc(n);
     end;
   assert(n=length(fTags));
+  inc(Tags.Occurence[aTagID]);
 end;
 
 
-{ TSQLTag }
+{ TSQLTags }
 
-class function TSQLTag.ComputeTagIdentPerIDArray(aRest: TSQLRest;
-  out AlphabeticalOrder: TCardinalDynArray): TRawUTF8DynArray;
+function TSQLTags.Get(tagID: integer): RawUTF8;
+begin
+  if (tagID>0) and (tagID<=Length(Lookup)) then
+    result := Lookup[tagID-1] else
+    result := '';
+end;
+
+procedure TSQLTags.Init(aRest: TSQLRest);
 var tag: TSQLTag;
     max: integer;
 begin
-  result := nil;
-  tag := TSQLTag.CreateAndFillPrepare(aRest,'','ID,Ident');
-  try
-    if tag.FillTable.RowCount=0 then
-      exit;
-    max := 0;
-    while tag.FillOne do
-      if tag.ID>max then
-        max := tag.ID;
-    SetLength(result,max);
-    tag.FillRewind;
-    while tag.FillOne do
-      result[tag.ID-1] := tag.Ident;
-    SetLength(AlphabeticalOrder,max);
-    FillIncreasing(pointer(AlphabeticalOrder),0,max);
-    QuickSortIndexedPUTF8Char(pointer(result),max,AlphabeticalOrder);
-  finally
-    tag.Free;
+  Finalize(Lookup);
+  Finalize(LookupOrder);
+  Finalize(Occurence);
+  if Lock=nil then
+    Lock := TAutoLocker.Create else
+    Lock.ProtectMethod;
+  TAutoFree.One(tag,TSQLTag.CreateAndFillPrepare(aRest,'','ID,Ident,Occurence'));
+  if tag.FillTable.RowCount=0 then
+    exit;
+  max := 0;
+  while tag.FillOne do
+    if tag.ID>max then
+      max := tag.ID;
+  SetLength(Lookup,max);
+  SetLength(Occurence,max);
+  tag.FillRewind;
+  while tag.FillOne do begin
+    Lookup[tag.ID-1] := tag.Ident;
+    Occurence[tag.ID-1] := tag.Occurence;
   end;
+  SetLength(LookupOrder,max);
+  FillIncreasing(pointer(LookupOrder),0,max);
+  QuickSortIndexedPUTF8Char(pointer(Lookup),max,LookupOrder);
+end;
+
+procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
+var tag: TSQLTag;
+    batch: TSQLRestBatch;
+begin
+  Lock.ProtectMethod;
+  TAutoFree.Several([
+    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','ID,Occurence'),
+    @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
+  while tag.FillOne do begin
+    if tag.ID<=length(Occurence) then
+      if Occurence[tag.ID-1]<>tag.Occurence then begin
+        tag.Occurence := Occurence[tag.ID-1];
+        batch.Update(tag); // will update only Occurence field
+      end;
+  end;
+  aRest.BatchSend(batch);
 end;
 
 end.

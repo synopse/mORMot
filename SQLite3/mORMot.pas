@@ -2404,6 +2404,7 @@ type
     fAttributes: TSQLPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
+    function GetNameDisplay: string; virtual;
     /// those two protected methods allow custom storage of binary content
     // as text
     // - default implementation is to use hexa (ToSQL=true) or Base64 encodings
@@ -2419,6 +2420,8 @@ type
       aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer); reintroduce; virtual;
     /// the property definition Name
     property Name: RawUTF8 read fName;
+    /// the property definition Name, afer un-camelcase and translation
+    property NameDisplay: string read GetNameDisplay;
     /// the property index in the RTTI
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
@@ -4841,6 +4844,7 @@ type
       aInvalidFieldIndex: PInteger=nil): string; overload;
     /// filter then validate the specified fields values of the current TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
+    // and display the field name at the beginning of the error message
     // - returns true if all field names were correct and processed, or false
     // and an explicit error message (translated in the current language) on error
     function FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
@@ -10017,6 +10021,10 @@ type
     // imply that all statements in the BATCH sequence were successfull
     // - note that the caller shall still free the supplied Batch instance
     function BatchSend(Batch: TSQLRestBatch; var Results: TIntegerDynArray): integer; overload; virtual;
+    /// execute a BATCH sequence prepared in a TSQLRestBatch instance
+    // - just a wrapper around the overloaded BatchSend() method without the
+    // Restuls: TIntegerDynArray parameter
+    function BatchSend(Batch: TSQLRestBatch): integer; overload;
 
     {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
     /// get an instance of one interface-based service
@@ -14146,6 +14154,11 @@ begin
   result := GetDisplayNameFromClass(ClassType);
   if IdemPChar(pointer(result),'PROPINFO') then
     delete(result,1,8);
+end;
+
+function TSQLPropInfo.GetNameDisplay: string;
+begin
+  GetCaptionFromPCharLen(pointer(Name),result);
 end;
 
 procedure TSQLPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
@@ -22688,17 +22701,17 @@ begin
     exit;
   for i := 0 to n-1 do
     varClassPairs[i*2+1] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
-  result := TAutoFree.Several(varClassPairs);
+  result := TAutoFree.Create(varClassPairs);
 end;
 
 class function TSQLRecord.AutoFree(var localVariable): IAutoFree;
 begin
-  result := TAutoFree.One(localVariable,Create);
+  result := TAutoFree.Create(localVariable,Create);
 end;
 
 class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest; ID: integer): IAutoFree;
 begin
-  result := TAutoFree.One(localVariable,Create(Rest,ID));
+  result := TAutoFree.Create(localVariable,Create(Rest,ID));
 end;
 
 class function TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
@@ -22772,10 +22785,17 @@ end;
 
 function TSQLRecord.FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
   const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean;
+var invalidField: Integer;
 begin
   Filter(aFields);
-  aErrorMessage := Validate(aRest,aFields);
-  result := aErrorMessage='';
+  aErrorMessage := Validate(aRest,aFields,@invalidField);
+  if aErrorMessage='' then
+    result := true else begin
+    if invalidField>=0 then
+      aErrorMessage := Format('"%s": %s',
+        [RecordProps.Fields.List[invalidField].GetNameDisplay,aErrorMessage]);
+    result := false;
+  end;
 end;
 
 function TSQLRecord.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
@@ -24498,6 +24518,12 @@ begin
         on Exception do // e.g. from TSQLRestServer.EngineBatchSend()
           result := HTML_NOTMODIFIED;
       end;
+end;
+
+function TSQLRest.BatchSend(Batch: TSQLRestBatch): integer;
+var Res: TIntegerDynArray;
+begin
+  result := BatchSend(Batch,Res);
 end;
 
 function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
