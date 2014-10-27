@@ -7,7 +7,8 @@
 		{{#article.tags}}<a href="default?scope={tag:{{.}}}" class="label label-info">{{TagToText .}}</a> {{/article.tags}}
 		</div>
       </div>
-      <div class="blog-main">
+      <div class="row">
+        <div class="col-sm-8 blog-main">
 		  {{{WikiToHtml article.abstract}}}
 		  <hr>
 		  {{{WikiToHtml article.content}}}
@@ -45,5 +46,4 @@
 		  {{^WithComments}}
 		  <p><a href="ArticleView?id={{Article.ID}}&withComments=true#comments" class="btn btn-primary btn-sm">Show Comments</a></p>
 		  {{/WithComments}}
-	  </div>
 {{>footer}}

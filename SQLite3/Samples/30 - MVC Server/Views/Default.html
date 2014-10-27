@@ -11,27 +11,5 @@
 		{{#lastID}}
 		<p><a href="default?scope={lastID:{{.}},tag:{{tag}}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
 		{{/lastID}}
-        </div>
-        <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
-          <div class="sidebar-module sidebar-module-inset">
-            <h4>About</h4>
-            {{{WikiToHtml main.blog.about}}}
-          </div>
-          <div class="sidebar-module">
-            <h4>Archives</h4>
-            <ol class="list-unstyled">
-			  {{#Archives}}
-              <li><a href="default?scope={lastID:{{FirstID}}}">{{MonthToText PublishedMonth}}</a></li>
-			  {{/Archives}}
-            </ol>
-          </div>
-          <div class="sidebar-module">
-            <h4>Tags</h4>
-			  {{#Tags}}
-              <a href="default?scope={tag:{{tagID}}}" class="btn btn-info btn-xs">{{ident}} <span class="badge">{{occurence}}</span></a>
-			  {{/Tags}}
-          </div>
-		</div>
-	  </div>
 {{/Scope}}
 {{>footer}}

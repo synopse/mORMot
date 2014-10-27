@@ -223,6 +223,12 @@ begin
   result := inherited GetViewInfo(MethodIndex);
   _ObjAddProps(['blog',fBlogMainInfo,
     'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
+  if not fDefaultData.AddExistingProp('archives',result) then
+    fDefaultData.AddNewProp('archives',RestModel.RetrieveDocVariantArray(
+      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+      'distinct(PublishedMonth),max(ID)+1 as FirstID'),result);
+  if not fDefaultData.AddExistingProp('tags',result) then
+    fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,result);
 end;
 
 procedure TBlogApplication.FlushAnyCache;
@@ -266,12 +272,6 @@ begin
     _ObjAddProps(['lastID',lastID],Scope);
   if tag>0 then
     _ObjAddProps(['tag',tag],Scope);
-  if not fDefaultData.AddExistingProp('Archives',Scope) then
-    fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
-      'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
-  if not fDefaultData.AddExistingProp('Tags',Scope) then
-    fDefaultData.AddNewProp('Tags',fTagsLookup.GetAsDocVariantArray,Scope);
 end;
 
 procedure TBlogApplication.ArticleView(ID: integer;
