@@ -254,7 +254,7 @@ begin
     Lock := TAutoLocker.Create;
   Lock.ProtectMethod;
   TAutoFree.One(
-    tag,TSQLTag.CreateAndFillPrepare(aRest,'order by Ident','ID,Ident,Occurence'));
+    tag,TSQLTag.CreateAndFillPrepare(aRest,'order by Ident','RowID,Ident,Occurence'));
   count := tag.FillTable.RowCount;
   if count=0 then
     exit;
@@ -283,7 +283,7 @@ var tag: TSQLTag;
 begin
   Lock.ProtectMethod;
   TAutoFree.Several([
-    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','ID,Occurence'),
+    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
     @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
   while tag.FillOne do begin
     if tag.ID<=length(Lookup) then

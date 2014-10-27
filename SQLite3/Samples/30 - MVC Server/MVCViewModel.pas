@@ -137,7 +137,7 @@ end;
 
 const
   // just try with 200000 - and let your WordPress blog engine start to cry...
-  FAKEDATA_ARTICLESCOUNT = 200000;
+  FAKEDATA_ARTICLESCOUNT = 20000;
   
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
@@ -226,7 +226,7 @@ begin
   if not fDefaultData.AddExistingProp('archives',result) then
     fDefaultData.AddNewProp('archives',RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
-      'distinct(PublishedMonth),max(ID)+1 as FirstID'),result);
+      'distinct(PublishedMonth),max(RowID)+1 as FirstID'),result);
   if not fDefaultData.AddExistingProp('tags',result) then
     fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,result);
 end;
@@ -241,8 +241,8 @@ end;
 { TBlogApplication - Commands }
 
 const
-  ARTICLE_FIELDS = 'ID,Title,Tags,Abstract,Author,AuthorName,CreatedAt';
-  ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by ID desc limit 20';
+  ARTICLE_FIELDS = 'RowID,Title,Tags,Abstract,Author,AuthorName,CreatedAt';
+  ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by RowID desc limit 20';
 
 procedure TBlogApplication.Default(var Scope: variant);
 var lastID,tag: integer;
@@ -252,8 +252,8 @@ begin
   tag := 0;
   with DocVariantDataSafe(Scope)^ do begin
     if GetAsInteger('lastID',lastID) then
-      whereClause := 'ID<?' else
-      whereClause := 'ID>?'; // will search ID>0 so always true
+      whereClause := 'RowID<?' else
+      whereClause := 'RowID>?'; // will search ID>0 so always true
     if GetAsInteger('tag',tag) then // uses custom function to search in BLOB
       whereClause := whereClause+' and IntegerDynArrayContains(Tags,?)';
   end;
@@ -279,16 +279,16 @@ procedure TBlogApplication.ArticleView(ID: integer;
   out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
 var newID: integer;
 const WHERE: array[1..2] of PUTF8Char = (
-  'ID<? order by id desc','ID>? order by id');
+  'RowID<? order by id desc','RowID>? order by id');
 begin
   if Direction in [1,2] then // allows fast paging using index on ID
-    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
+    if RestModel.OneFieldValue(TSQLArticle,'RowID',WHERE[Direction],[],[ID],newID) and
       (newID<>0) then
       ID := newID;
   RestModel.Retrieve(ID,Article);
   if Article.ID<>0 then begin
     Author := RestModel.RetrieveDocVariant(
-      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
+      TSQLAuthor,'RowID=?',[Article.Author.ID],'FirstName,FamilyName');
     if WithComments then begin
       Comments.Free; // we will override the TObjectList created at input
       Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
@@ -304,7 +304,7 @@ begin
   Author.HashedPassword := ''; // no need to publish it
   if Author.ID<>0 then
     Articles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
+      TSQLArticle,'','Author=? order by RowId desc limit 50',[ID],ARTICLE_FIELDS) else
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 
@@ -354,8 +354,8 @@ begin
   comm.Article := TSQLArticle(ID);
   if comm.FilterAndValidate(RestModel,error) and
      (RestModel.Add(comm,true)<>0) then
-    GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
-    GotoView(result,'ArticleView',['ID',ID,'withComments',true,'Scope',_ObjFast([
+    GotoView(result,'ArticleView',['RowID',ID,'withComments',true]) else
+    GotoView(result,'ArticleView',['RowID',ID,'withComments',true,'Scope',_ObjFast([
       'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
       HTML_BADREQUEST);
 end;
