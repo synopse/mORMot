@@ -9655,6 +9655,10 @@ type
     // our expanded / not expanded JSON format - so can be used with SOA methods
     // and RawJSON results, for direct process from the client side
     // - returns '' on error
+    // - the data is directly retrieved from raw JSON as returned by the database
+    // without any conversion, so this method would be the fastest, but complex
+    // types like dynamic array would be returned as Base64-encoded blob value -
+    // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): RawJSON;
@@ -9664,10 +9668,13 @@ type
     // - if ObjectName='', it will return a TDocVariant of dvArray kind
     // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
     // with one property containing the array of values: this returned variant
-    // can be pasted e.g. directly as parameter to TSynMustache.Render() 
+    // can be pasted e.g. directly as parameter to TSynMustache.Render()
     // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - the data will be converted to variants and TDocVariant following the
+    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
       LastRecordID: PInteger=nil): variant; overload;
@@ -9686,6 +9693,9 @@ type
     // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - the data will be converted to variants and TDocVariant following the
+    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
@@ -9693,6 +9703,9 @@ type
       LastRecordID: PInteger=nil): variant; overload;
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
+    // - the data will be converted to a TDocVariant variant following the
+    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // as a true array of values 
     function RetrieveDocVariant(Table: TSQLRecordClass;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant; 

@@ -9094,6 +9094,7 @@ Or if only the {\f1\fs20 TServiceCalculator.Add} method has to be protected, you
 ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
 !  SetOptions(['Add'],[optExecInMainThread]);
 In fact, the {\f1\fs20 SetOptions()} method follows a call signature similar to the one used for defining the service security.
+For best performance, you may define your service methods be called without any locking, but rely on some convenient classes defined in {\f1\fs20 SynCommons.pas} - as the {\f1\fs20 @*TAutoLocker@} class or the {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process.\line A similar thread safety concern also applies to @*MVVM@ methods - see @111@.
 :  Transmission content
 All data is transmitted as @*JSON@ arrays or objects, according to the requested URI.
 We'll discuss how data is expected to be transmitted, at the application level.
@@ -10558,7 +10559,7 @@ The fact that the {\i ViewModel} data context is transmitted as JSON content - {
 The next chapter will uncover how to build such solid MVC / MVVM @*Web Application@s using {\i mORMot}.
 :108MVC/MVVM Web applications
 %cartoon08.png
-We will now explain how to build a @*MVC@/@*MVVM@ @**web application@ using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample.
+We will now explain how to build a @*MVC@/@*MVVM@ @**web application@ using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample. Following explanations may be a bit unsynchronized from the current state of the sample source code in the "unstable" branch of the framework repository, but you will get here below the main intangible points.
 This little web application publishes a simple BLOG, not fully finished yet (this is a {\i Sample}, remember!). But you can still execute it in your desktop browser, or any mobile device (thanks to a simple {\i @*Bootstrap@}-based @*responsive design@), and see the articles list, view one article and its comments, view the author information, log in and out.
 This sample is implemented as such:
 |%15%22%63
@@ -10585,9 +10586,11 @@ The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f
 !    class function CurrentPublishedMonth: Integer;
 !    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
 !      Options: TSQLInitializeTableOptions); override;
+!    procedure TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
 !  published
 !    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
 !    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!    property Tags: TIntegerDynArray index 1 read fTags write fTags;
 !  end;
 !
 !  TSQLComment = class(TSQLContent)
@@ -10610,6 +10613,7 @@ As you can discover:
 - Some classes are {\i not} part of the model, since they are just {\f1\fs20 abstract} parents, e.g. {\f1\fs20 TSQLContent} is not part of the model, but {\f1\fs20 TSQLArticle} and {\f1\fs20 TSQLComment} are;
 - We defined some regular {\i one-to-one} relationships, e.g. every {\f1\fs20 Content} (which may be either an {\f1\fs20 Article} or a {\f1\fs20 Comment}) will be tied to one {\f1\fs20 Author} - see @70@;
 - We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
+- {\f1\fs20 Article} tags are stored as a dynamic array of integer within the record, and not in a separated pivot table: it would make the database smaller, and queries faster (since we avoid a JOIN);
 - Some properties are defined (and stored) twice, e.g. {\f1\fs20 TSQLContent} defines one {\f1\fs20 AuthorName} field in addition to the {\f1\fs20 Author} ID field, as a convenient direct access to the author name, therefore avoiding a JOINed query at each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
 - We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
 - Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterOrValidate()} method, which would be applied before an article is stored;
@@ -10652,7 +10656,7 @@ First of all, we defined an {\f1\fs20 interface}, with the expected methods corr
 !      out Article: TSQLArticle; out Author: TSQLAuthor;
 !      out Comments: TObjectList);
 !!    procedure AuthorView(
-!      var ID: integer; out Author: variant; out Articles: RawJSON);
+!      var ID: integer; out Author: variant; out Articles: variant);
 !!    function Login(
 !      const LogonName,PlainPassword: RawUTF8): TMVCAction;
 !!    function Logout: TMVCAction;
@@ -10735,7 +10739,7 @@ To build the application {\i Controller}, we would need to implement our {\f1\fs
 We defined a new class, inheriting from {\f1\fs20 TMVCApplication} - as defined in {\f1\fs20 mORMotMVC.pas}, and implementing our expected interface. {\f1\fs20 TMVCApplication} will do all the low-level plumbing for you, using a set of implementation classes.
 Let's implement a simple command:
 !procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
-!  out Articles: RawJSON);
+!  out Articles: variant);
 !begin
 !  RestModel.Retrieve(ID,Author);
 !  if Author.ID<>0 then
@@ -10743,7 +10747,7 @@ Let's implement a simple command:
 !      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
 !    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 !end;
-By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 RawJSON}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances.\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, which will return an error page, using the {\f1\fs20 Error.html} view template.
+By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 TDocVariant}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances, but with the {\f1\fs20 Tags} dynamic array published property returned as an array of integers (you may have used {\f1\fs20 TObjectList} or {\f1\fs20 RawJSON} instead, as will be detailed below).\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, which will return an error page, using the {\f1\fs20 Error.html} view template.
 Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
 !procedure TBlogApplication.ArticleView(
 !  ID: integer; var WithComments: boolean; Direction: integer;
@@ -10781,6 +10785,7 @@ In fact, there are several ways to retrieve your data, using the {\f1\fs20 RestM
 ! ...
 !    if WithComments then
 !      Comments := RestModel.RetrieveDocVariantArray(TSQLComment,'','Article=?',[Article.ID],'');
+In this case, data will be returned {\i per representation}, as {\f1\fs20 variant} values. Any {\i @*dynamic array@} properties would be identified in the {\f1\fs20 TSQLRecord}, and converted as proper array of values.
 Or with a {\f1\fs20 RawJSON} kind of output parameter:
 !procedure TBlogApplication.ArticleView(
 !  ID: integer; var WithComments: boolean; Direction: integer;
@@ -10788,7 +10793,9 @@ Or with a {\f1\fs20 RawJSON} kind of output parameter:
 ! ...
 !    if WithComments then
 !      Comments := RestModel.RetrieveListJSON(TSQLComment,'Article=?',[Article.ID],'');
-Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is just perfect. But having a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list; or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
+Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. But it will return the data directly from the database - as a consequence, dynamic arrays would be returned as a Base64-encoded blob.
+It is up to you to choose the method and encoding needed for your exact context.\line If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is fast, but a {\f1\fs20 TDocVariant} would also convert dynamic arrays to a proper JSON array. If you want to process the returned information with some business code, returning a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list.
+ or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
 !procedure TBlogApplication.Default(var Scope: variant);
 ! ...
 !  if not fDefaultData.AddExistingProp('Archives',Scope) then
@@ -10817,7 +10824,7 @@ $      },
 $      ...
 ... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
 I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
-:  Controller Thread Safety
+:111  Controller Thread Safety
 When run from a {\f1\fs20 TSQLRestServer} instance, our {\i MVC} application commands will be executed by default without any thread protection. When hosted within a {\f1\fs20 TSQLHttpServer} instance - see @88@ - several threads may execute the same {\i Controller} methods at the same time. It is therefore up to your application code to ensure that your {\f1\fs20 TMVCApplication} process is thread safe.
 Note that by design, all {\f1\fs20 TMVCApplication.RestModel} ORM methods are thread-safe.\line If your {\i Controller} business code only uses ORM methods, sending back the information to the {\i Views}, without storing any data locally, it will be perfectly thread safe.\line See for instance the {\f1\fs20 TBlogApplication.AuthorView} method we described above.
 But consider this method (simplified from the real "{\i 30 - MVC Server}" sample):
@@ -10844,7 +10851,7 @@ You could also lock explictly the {\i Controller} method, for instance:
 !!  Locker.ProtectMethod;
 !  if VarIsEmpty(fDefaultData) then
 ! ...
-Using the {\f1\fs20 TMVCApplication.Locker: IAutoLocker} is a simple and efficient way of protecting your method. In fact, {\f1\fs20 ProtectMethod} will return an {\f1\fs20 IUnknown} variable, which will let the compiler create an hidden {\f1\fs20 try .. finally} block in the method body, to release the lock when it quits. But this locker would be shared by the whole {\f1\fs20 TMVCApplication} instance, so will be like a giant lock on your {\i Controller} process.
+Using the {\f1\fs20 TMVCApplication.Locker: IAutoLocker} is a simple and efficient way of protecting your method. In fact, {\f1\fs20 @*TAutoLocker@} class' {\f1\fs20 ProtectMethod} will return an {\f1\fs20 IUnknown} variable, which will let the compiler create an hidden {\f1\fs20 try .. finally} block in the method body, to release the lock when it quits. But this locker would be shared by the whole {\f1\fs20 TMVCApplication} instance, so will be like a giant lock on your {\i Controller} process.
 A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant} instead of a plain {\f1\fs20 TDocVariant} for caching the data. You may therefore write:
 !type
 !  TBlogApplication = class(TMVCApplication,IBlogApplication)
@@ -10862,7 +10869,7 @@ A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant
 !    fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
 !      TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS),Scope);
 !end;
-Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) would take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample.
+Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) would take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample. Even @63@ may benefit from this {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process - see @72@.
 :  Web Sessions
 @*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the @*web application@, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows creating such sessions.
 You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
