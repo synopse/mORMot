@@ -118,8 +118,9 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
-  Types,
   SynFPCLinux,
+  BaseUnix,
+  syscall,
   {$endif}
   SysUtils,
   SynCommons,
@@ -272,8 +273,12 @@ For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193
 {$linklib c:\progs\mingw\lib\libkernel32.a}
 {$linklib c:\progs\mingw\lib\gcc\mingw32\4.8.1\libgcc.a}
 {$else}
-{$L ..\..\..\linuxlibrary\sqlite3.o}
-{$linklib ..\..\..\linuxlibrary\gcc.a}
+{$ifdef INCLUDE_FTS3}
+{$L ..\linuxlibrary\sqlite3fts3.o}
+{$else}
+{$L ..\linuxlibrary\sqlite3.o}
+{$endif}
+{$linklib ..\linuxlibrary\gcc.a}
 {$endif}
 {$else}
 {$ifdef INCLUDE_FTS3}
@@ -614,6 +619,23 @@ procedure _endthreadex(ExitCode: DWORD); cdecl;
 begin
   ExitThread(ExitCode);
 end;
+
+{$else MSWINDOWS}
+
+{$ifdef FPC}
+function newstat64(path: pchar; buf: PStat): cint; cdecl;
+  alias: 'stat64'; export;
+begin
+  result := Do_SysCall(syscall_nr_stat64,TSysParam(path),TSysParam(buf));
+end;
+
+function newfstat64(fd: cint; buf: PStat): cint; cdecl;
+  alias: 'fstat64'; export;
+begin
+  result := Do_SysCall(syscall_nr_fstat64,fd,TSysParam(buf));
+end;
+{$endif FPC}
+
 {$endif MSWINDOWS}
 
 procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
@@ -718,7 +740,7 @@ begin
   {$ifdef MSWINDOWS}
   SetFilePointer(F,1024,nil,FILE_BEGIN); // move to first page after 1024
   {$else}
-  FileSeek(F,Int64(1024),fsFromBeginning);
+  FPLseek(F,Int64(1024),Seek_Set);
   {$endif}
   while Int64(Posi)<Int64(Size) do begin
     R := FileRead(F,Buf,sizeof(Buf)); // read buffer
@@ -731,7 +753,7 @@ begin
     {$ifdef MSWINDOWS}
     SetFilePointer(F,Posi.Lo,@Posi.Hi,FILE_BEGIN); // rewind
     {$else}
-    FileSeek(F,Int64(Posi),fsFromBeginning);
+    FPLseek(F,Int64(Posi),Seek_Set);
     {$endif}
     FileWrite(F,Buf,R); // update buffer
     inc(Int64(Posi),cardinal(R));
@@ -755,6 +777,8 @@ type
 {$A4} // bcc32 default alignment is 4 bytes
 {$endif}
 {$endif}
+
+  {$ifdef MSWINDOWS}
   TSQLFile = packed record // called winFile (expand sqlite3.file) in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
@@ -770,6 +794,25 @@ type
     pMapRegion: PAnsiChar;
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
+  {$else}
+  TSQLFile = packed record 
+    pMethods: pointer;          // sqlite3.io_methods_ptr
+    pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
+    unixInodeInfo: pointer;     // Info about locks on this inode
+    h: cint;                    // Handle for accessing the file
+    eFileLock:cuchar;           // The type of lock held on this fd
+    ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
+    lastErrno: cint;            // The unix errno from the last I/O error
+    lockingContext : PAnsiChar; // Locking style specific state
+    UnixUnusedFd : pointer;     // unused
+    zPath: PAnsiChar;           // Name of the file
+    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
+    szChunk, nFetchOut: cint;
+    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
+    pMapRegion: PAnsiChar;
+  end;
+  {$endif}
+
   // those structures are used to retrieve the Windows file handle
   TSQLPager = record
     pVfs: pointer;
@@ -859,7 +902,7 @@ end;
 {$ifdef MSWINDOWS}
 function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
 {$else}
-function unixWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -897,7 +940,7 @@ begin
   {$ifdef MSWINDOWS}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
   {$else}
-  result := FileSeek(F.h,Int64(offset),fsFromBeginning);
+  result := FPLseek(F.h,Int64(offset),Seek_Set);
   {$endif}
   if result=-1 then begin
     result := GetLastError;
@@ -922,8 +965,8 @@ begin
     {$ifdef MSWINDOWS}
     if not WriteFile(F.h,b^,n,cardinal(result),nil) then begin
     {$else}
-    result := FileWrite(F.h,b^,n);
-    if result<>n then begin
+    result := FPWrite(F.h,b^,n);
+    if result=-1 then begin
     {$endif}
 err:  F.lastErrno := GetLastError;
       result := SQLITE_FULL;
@@ -950,7 +993,7 @@ const
 {$ifdef MSWINDOWS}
 function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
 {$else}
-function unixRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -985,7 +1028,7 @@ begin
   {$ifdef MSWINDOWS}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
   {$else}
-  result := FileSeek(F.h,Int64(offset),fsFromBeginning);
+  result := FPLseek(F.h,Int64(offset),Seek_Set);
   {$endif}
   if result=-1 then begin
     result := GetLastError;
@@ -998,8 +1041,8 @@ begin
   {$ifdef MSWINDOWS}
   if not ReadFile(F.h,buf^,buflen,cardinal(result),nil) then begin
   {$else}
-  result := FileRead(F.h,buf^,buflen);
-  if result<>buflen then begin
+  result := FPRead(F.h,buf^,buflen);
+  if result=-1 then begin
   {$endif}
     F.lastErrno := GetLastError;
     result := SQLITE_IOERR_READ;
