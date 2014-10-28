@@ -3977,6 +3977,41 @@ The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
 The {\f1\fs20 rank} internal @*SQL function@ has been implemented in {\i Delphi}, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
+:  FTS4 index tables without content
+Just as {\i SQlite3} allows, the framework permits FTS4 to forego storing the text being indexed, letting the indexed documents be stored in a database table created and managed by the user (an "external content" FTS4 table).
+Because the indexed documents themselves are usually much larger than the full-text index, this option can be used to achieve significant storage space savings. Contentless FTS4 tables still support {\f1\fs20 SELECT} statements. However, it is an error to attempt to retrieve the value of any table column other than the {\f1\fs20 docid} column. The auxiliary function {\f1\fs20 matchinfo()} may be used - so {\f1\fs20 TSQLRest.FTSMatch} method will work as expected, but {\f1\fs20 snippet()} and {\f1\fs20 offsets()} would cause an exception at execution.
+For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
+!  TSQLArticle = class(TSQLContent)
+!  private
+!    fContent: RawUTF8;
+!    fTitle: RawUTF8;
+!    fAbstract: RawUTF8;
+!    fPublishedMonth: Integer;
+!    fTags: TIntegerDynArray;
+!  published
+!    property Title: RawUTF8 index 80 read fTitle write fTitle;
+!    property Content: RawUTF8 read fContent write fContent;
+!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!    property Tags: TIntegerDynArray index 1 read fTags write fTags;
+!  end;
+!
+!  TSQLArticleSearch = class(TSQLRecordFTS4Porter)
+!  private
+!    fText: RawUTF8;
+!  published
+!    property Text: RawUTF8 read fText write fText;
+!  end;
+And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an expression to compute the indexed text from the concatenation of the {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
+!function CreateModel(WithExternalTables: boolean): TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
+!    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
+!  if not WithExternalTables then
+!!    result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle,
+!!      'new.title||'' ''||new.abstract||'' ''||new.content');
+!  ...
+The {\f1\fs20 TSQLModelRecordProperties.FTS4WithoutContent()} will in fact create the needed {\i SQLite3} triggers, to automatically populate the {\f1\fs20 ArticleSearch} Full Text indexes when the main {\f1\fs20 Article} row changes.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:

@@ -923,6 +923,8 @@ unit mORMot;
     - added TSQLRecordHistory and TSQLRestServer.TrackChanges() for [a78ffe992b] 
     - TSQLAuthUser and TSQLAuthGroup have now "index ..." attributes to their
       RawUTF8 properties, to allow direct handling in external databases
+    - added TSQLModelRecordProperties.FTS4WithoutContent() method to allow
+      TSQLRecordFTS4 tables let the content be store in another TSQLRecord table
     - new protected TSQLRestServer.InternalAdaptSQL method, extracted from URI()
       process to also be called by TSQLRestServer.MultiFieldValues() for proper
       TSQLRestStorage.AdaptSQLForEngineList(SQL) call
@@ -3717,8 +3719,7 @@ type
       - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
         the first RawUTF8 property is returned anyway
       - returns '' if no matching field was found }
-    function MainFieldName(Table: TSQLRecordClass;
-      ReturnFirstIfNoUnique: boolean=false): RawUTF8;
+    function MainFieldName(ReturnFirstIfNoUnique: boolean=false): RawUTF8;
     /// return the SQLite3 field datatype for each specified field
     // - set to '' for fields with no column created in the database (e.g. sftMany)
     // - equals e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
@@ -6567,7 +6568,8 @@ type
     fKind: TSQLRecordVirtualKind;
     fModel: TSQLModel;
     fTableIndex: integer;
-    fFTSWithoutContent: Boolean;
+    fFTSWithoutContentTableIndex: integer;
+    fFTSWithoutContentExpression: RawUTF8;
     procedure SetKind(Value: TSQLRecordVirtualKind);
   public
     /// pre-computed SQL statements for this TSQLRecord in this model
@@ -6590,6 +6592,14 @@ type
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
     function SQLFromSelectWhere(const SelectFields, Where: RawUTF8): RawUTF8;
+    /// define if a FTS4 virtual table not store its content
+    // - the virtual table willl be created with content=""
+    // - the indexed text will be computed, using triggers, as an expression
+    // from the original, e.g. 'new.contentfield' or something more complex like
+    // ! 'new.title||'' ''||new.abstract||'' ''||new.content'
+    // - note that FTS3 does not support this feature
+    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
+      const Expression: RawUTF8);
 
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
@@ -6602,8 +6612,6 @@ type
     // the expected ID/RowID column name expected (i.e. SQLTableSimpleFields[]
     // and SQLSelectAll[] - SQLUpdateSet and SQLInsertSet do not include ID)
     property Kind: TSQLRecordVirtualKind read fKind write SetKind;
-    /// define if a FTS3/FTS4 virtual table should be created with content=""
-    property FTSWithoutContent: Boolean read fFTSWithoutContent write fFTSWithoutContent;
   end;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
@@ -7020,7 +7028,13 @@ type
    usage or compatibility with older versions of SQLite are important, then
    TSQLRecordFTS3 will usually serve just as well.
   - see http://sqlite.org/fts3.html#section_1_1 }
-  TSQLRecordFTS4 = class(TSQLRecordFTS3);
+  TSQLRecordFTS4 = class(TSQLRecordFTS3)
+  public
+    /// this overriden method will create TRIGGERs for FTSWithoutContent()
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
+  end;
+
   /// this base class will create a FTS4 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   TSQLRecordFTS4Porter = class(TSQLRecordFTS4);
@@ -21903,7 +21917,7 @@ begin
     with Props.Props.Fields do
     case Props.Kind of
     rFTS3, rFTS4: begin
-      if Props.FTSWithoutContent then
+      if Props.fFTSWithoutContentExpression<>'' then
         result := result+'content="",';
       if Count=0 then
         raise EModelException.CreateUTF8(
@@ -23165,6 +23179,15 @@ function TSQLModelRecordProperties.SQLFromSelectWhere(
 begin
   result := SQLFromSelect(Props.SQLTableName,SelectFields,Where,
     SQL.TableSimpleFields[true,false]);
+end;
+
+procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass;
+  const Expression: RawUTF8);
+begin
+  if Kind<>rFTS4 then
+    raise EModelException.CreateFmt('% is not a FTS4 table',[Props.Table]);
+  fFTSWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
+  fFTSWithoutContentExpression := Expression;
 end;
 
 
@@ -24985,7 +25008,7 @@ function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: Integer;
 begin
   if (self=nil) or (Table=nil) or (ID<=0) then
     result := '' else begin
-    result := Table.RecordProps.MainFieldName(Table,ReturnFirstIfNoUnique);
+    result := Table.RecordProps.MainFieldName(ReturnFirstIfNoUnique);
     if result<>'' then
       result := OneFieldValue(Table,Result,ID);
   end;
@@ -34071,6 +34094,38 @@ begin
 end;
 
 
+{ TSQLRecordFTS4 }
+
+class procedure TSQLRecordFTS4.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+var Props: TSQLModelRecordProperties;
+    fts,main,ftsmainfield: RawUTF8;
+begin
+  inherited;
+  if FieldName<>'' then
+    exit;
+  Props := Server.Model.Props[self];
+  if (Props=nil) or (Props.fFTSWithoutContentExpression='') then
+    exit;
+  fts := Props.Props.SQLTableName;
+  main := Server.Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
+  // see http://www.sqlite.org/fts3.html#*fts4content
+  ftsmainfield := Props.Props.MainFieldName(true);
+  Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
+    'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
+    [main,main,fts]);
+  Server.ExecuteFmt('CREATE TRIGGER %_bd BEFORE DELETE ON % '+
+    'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
+    [main,main,fts]);
+  Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % '+
+    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid,%); END;',
+    [main,main,fts,ftsmainfield,Props.fFTSWithoutContentExpression]);
+  Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % '+
+    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid,%); END;',
+    [main,main,fts,ftsmainfield,Props.fFTSWithoutContentExpression]);
+end;
+
+
 { TSQLRecordRTree }
 
 class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
@@ -34868,8 +34923,7 @@ begin
     Text := Text+Fields.List[FieldIndex].Name;
 end;
 
-function TSQLRecordProperties.MainFieldName(Table: TSQLRecordClass;
-  ReturnFirstIfNoUnique: boolean=false): RawUTF8;
+function TSQLRecordProperties.MainFieldName(ReturnFirstIfNoUnique: boolean=false): RawUTF8;
 begin
   if (self=nil) or (Table=nil) or (MainField[ReturnFirstIfNoUnique]<0) then
     result := '' else
