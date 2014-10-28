@@ -5,8 +5,8 @@ program MVCServerPostgreSQL;
 
 
 // please select one of the two! :)
-{.$define USEZEOSPOSTGRESQL}
-{$define USEFIREDACPOSTGRESQL}
+{$define USEZEOSPOSTGRESQL}
+{.$define USEFIREDACPOSTGRESQL}
 
 // direct ZDBC/FireDAC driver needs only libpq.dll and libintl.dll e.g. from
 // http://www.enterprisedb.com/products-services-training/pgbindownload
@@ -24,7 +24,7 @@ uses
   SynDB,
   mORMotDB,
   {$ifdef USEZEOSPOSTGRESQL}
-  SynDBZeos,
+  SynDBZeos, // use at least R3435 testing-7.2 - see synopse.info/forum
   {$endif}
   {$ifdef USEFIREDACPOSTGRESQL}
   SynDBFireDAC,
@@ -35,7 +35,7 @@ uses
   SysUtils;
 
 var aModel: TSQLModel;
-    aExternalDB: TSQLDBConnectionProperties;
+    aExternalDB: TSQLDBConnectionPropertiesThreadSafe;
     aServer: TSQLRestServerDB;
     aApplication: TBlogApplication;
     aHTTPServer: TSQLHttpServer;
@@ -52,6 +52,7 @@ begin
     {$endif}
       'postgres','postgres','postgresPassword');
     try
+      aExternalDB.ThreadingMode := tmMainConnection; // force SINGLE connection
       VirtualTableExternalRegisterAll(aModel,aExternalDB);
       aServer := TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME);
       try // PostgreSQL uses one fork per connection -> better only two threads
