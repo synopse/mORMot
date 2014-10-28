@@ -643,6 +643,7 @@ unit SynCommons;
   - added GetTickCount64() function, native since Vista, emulated e.g. for XP
   - fixed TTextWriter.RegisterCustomJSONSerializer() method when unregistering
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
+  - fixed potential random GPF in TTextWriter after Flush - see [577ad95cfd0]
   - added TTextWriter.Add(const Values: array of const) method
   - added JSONToXML() JSONBufferToXML() and TTextWriter.JSONBufferToXML()
     for direct and fast conversion of any JSON into the corresponding <XML>
@@ -33830,8 +33831,10 @@ procedure TTextWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
 var BMax: PUTF8Char;
 begin
   BMax := BEnd-2;
-  if B>=BMax then
+  if B>=BMax then begin
     Flush;
+    BMax := BEnd-2;
+  end;
   B[1] := Quote;
   inc(B);
   if Text<>nil then
@@ -33849,8 +33852,11 @@ begin
           inc(B,2);
           inc(Text);
         end;
-      end else
+      end else begin
         Flush;
+        BMax := BEnd-2;
+      end;
+  end;
     until false;
   B[1] := Quote;
   inc(B);
@@ -34098,8 +34104,10 @@ begin
   BMax := BEnd-7; // ensure enough space for biggest Unicode glyph as UTF-8 
   if WideCharCount=0 then
     repeat
-      if B>=BMax then
+      if B>=BMax then begin
         Flush;
+        BMax := BEnd-7;
+      end;
       if WideChar^=0 then
         break;
       if WideChar^<=126 then begin
@@ -34111,8 +34119,10 @@ begin
     until false else begin
     PEnd := PtrUInt(WideChar)+PtrUInt(WideCharCount)*sizeof(WideChar^);
     repeat
-      if B>=BMax then
+      if B>=BMax then begin
         Flush;
+        BMax := BEnd-7;
+      end;
       if WideChar^=0 then
         break;
       if WideChar^<=126 then begin
