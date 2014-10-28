@@ -275,6 +275,8 @@ type
     class procedure DateToText(const Value: variant; out result: variant);
     class procedure TimeLogToText(const Value: variant; out result: variant);
     class procedure ToJSON(const Value: variant; out result: variant);
+    class procedure JSONQuote(const Value: variant; out result: variant);
+    class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
@@ -314,8 +316,8 @@ type
     class function HelperFind(const Helpers: TSynMustacheHelpers;
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
-    // - registered helpers are DateTimeToText,DateToText,TimeLogToText,ToJSON
-    // and WikiToHtml
+    // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
+    // JSONQuote, JSONQuoteURI, ToJSON and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -863,8 +865,10 @@ class function TSynMustache.HelpersGetStandardList: TSynMustacheHelpers;
 begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
-      ['DateTimeToText','DateToText','TimeLogToText','ToJSON','WikiToHtml'],
-      [DateTimeToText,DateToText,TimeLogToText,ToJSON,WikiToHtml]);
+      ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
+       'ToJSON','WikiToHtml'],
+      [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
+       ToJSON,WikiToHtml]);
   result := HelpersStandardList;
 end;
 
@@ -911,8 +915,21 @@ begin
   RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
 end;
 
-class procedure TSynMustache.WikiToHtml(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.JSONQuote(const Value: variant; out result: variant);
+var json: RawUTF8;
+begin
+  QuotedStrJSON(VariantToUTF8(Value),json);
+  RawUTF8ToVariant(json,result);
+end;
+
+class procedure TSynMustache.JSONQuoteURI(const Value: variant; out result: variant);
+var json: RawUTF8;
+begin
+  QuotedStrJSON(VariantToUTF8(Value),json);
+  RawUTF8ToVariant(UrlEncode(json),result);
+end;
+
+class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
 var txt: RawUTF8;
 begin
   with TTextWriter.CreateOwnedStream do
