@@ -1630,13 +1630,16 @@ procedure VariantDynArrayClear(var Value: TVariantDynArray);
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
-function VariantToInteger(const V: Variant; var Value: integer): boolean; 
+function VariantToInteger(const V: Variant; var Value: integer): boolean;
 
 /// convert any numerical Variant into a 64 bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
+
+/// convert any numerical Variant into a floating point value
+function VariantToDouble(const V: Variant; var Value: double): boolean;
 
 /// convert any numerical Variant into an integer
 // - it will expect true numerical Variant and won't convert any string nor
@@ -9840,6 +9843,10 @@ type
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
     function GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+    /// find an item in this document, and returns its value as floating point
+    // - return false if aName is not found, or if the instance is not a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    function GetAsDouble(const aName: RawUTF8; out aValue: double): Boolean;
     /// find an item in this document, and returns its value as RawUTF8
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -14546,6 +14553,33 @@ begin
     end;
   end;
   result := true;
+end;
+
+function VariantToDouble(const V: Variant; var Value: double): boolean;
+var i64: Int64;
+begin
+  with TVarData(V) do
+  if VType=varVariant or varByRef then
+    result := VariantToDouble(PVariant(VPointer)^,Value) else
+  if VariantToInt64(V,i64) then begin
+    Value := i64;
+    result := true;
+  end else
+  case VType of
+  varDouble,varDate: begin
+    Value := VDouble;
+    result := true;
+  end;
+  varSingle: begin
+    Value := VSingle;
+    result := true;
+  end;
+  varCurrency: begin
+    Value := VCurrency;
+    result := true;
+  end else
+    result := false;
+  end;
 end;
 
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
@@ -29680,6 +29714,15 @@ begin
   if found=nil then
     result := false else
     result := VariantToInteger(PVariant(found)^,aValue)
+end;
+
+function TDocVariantData.GetAsDouble(const aName: RawUTF8; out aValue: double): Boolean;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found=nil then
+    result := false else
+    result := VariantToDouble(PVariant(found)^,aValue);
 end;
 
 function TDocVariantData.GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
