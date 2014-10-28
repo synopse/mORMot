@@ -380,10 +380,13 @@ begin
     {$endif}
   end;
   dFirebird: begin
-    if (fURL.HostName='') and // Firebird embedded: create db file if needed
-       (fURL.Database<>'') and not FileExists(fURL.Database) then
-      fURL.Properties.Add('createNewDatabase='+UTF8ToString(
-        SQLCreateDatabase(StringToUTF8(fURL.Database))));
+    if (fURL.HostName='') and // Firebird embedded
+       (fURL.Database<>'') then begin
+      ThreadingMode := tmMainConnection; // force SINGLE connection
+      if not FileExists(fURL.Database) then // create local DB file if needed
+        fURL.Properties.Add('createNewDatabase='+UTF8ToString(
+          SQLCreateDatabase(StringToUTF8(fURL.Database))));
+    end;
     fURL.Properties.Add('codepage=UTF8');
     fUseCache := true; // caching rocks with Firebird ZDBC provider :)
     if Assigned(OnBatchInsert) then begin

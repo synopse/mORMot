@@ -141,8 +141,8 @@ end;
 
 const
   // just try with 100000 - and let your WordPress blog engine start to cry...
-  // note that the process includes FullText indexation!
-  FAKEDATA_ARTICLESCOUNT = 200;
+  // note that it includes FullText indexation if you use SQLite3 as database!
+  FAKEDATA_ARTICLESCOUNT = 10000;
   
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
