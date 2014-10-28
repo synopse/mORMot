@@ -6592,14 +6592,20 @@ type
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
     function SQLFromSelectWhere(const SelectFields, Where: RawUTF8): RawUTF8;
-    /// define if a FTS4 virtual table not store its content
-    // - the virtual table willl be created with content=""
+    /// define if a FTS4 virtual table will not store its content
+    // - the virtual table will be created with content=""
     // - the indexed text will be computed, using triggers, as an expression
     // from the original, e.g. 'new.contentfield' or something more complex like
     // ! 'new.title||'' ''||new.abstract||'' ''||new.content'
     // - note that FTS3 does not support this feature
     procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
-      const Expression: RawUTF8);
+      const Expression: RawUTF8); overload;
+    // - the virtual table will be created with content=""
+    // - the indexed text will be computed, using triggers, as an expression
+    // from the original, using the supplied field names
+    // - note that FTS3 does not support this feature
+    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
+      const ContentTableFieldNames: array of RawUTF8); overload;
 
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
@@ -11214,6 +11220,7 @@ type
     function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
       out Kind: TSQLRestServerKind): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
+    function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
     function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
@@ -23190,6 +23197,22 @@ begin
   fFTSWithoutContentExpression := Expression;
 end;
 
+procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass;
+  const ContentTableFieldNames: array of RawUTF8);
+var i: integer;
+    exp: RawUTF8;
+begin
+  with ContentTable.RecordProps do
+    for i := 0 to high(ContentTableFieldNames) do
+      if Fields.IndexByName(ContentTableFieldNames[i])<0 then
+        raise EModelException.CreateFmt('FTS4WithoutContent(%,"%") not a field',
+          [ContentTable,ContentTableFieldNames[i]]) else
+      if exp='' then
+        exp := 'new.'+ContentTableFieldNames[i] else
+        exp := exp+'||'' ''||new.'+ContentTableFieldNames[i];
+  FTS4WithoutContent(ContentTable,exp);
+end;
+
 
 { TSQLModel }
 
@@ -26924,6 +26947,14 @@ begin
     if (i>=0) and (Model.TableProps[i].Kind in IS_CUSTOM_VIRTUAL) then
       result := fStaticVirtualTable[i];
   end;
+end;
+
+function TSQLRestServer.IsInternalSQLite3Table(aTableIndex: integer): boolean;
+begin
+  result := ((cardinal(aTableIndex)>=cardinal(length(fStaticData))) or
+             (fStaticData[aTableIndex]=nil)) and
+            ((cardinal(aTableIndex)>=cardinal(length(fStaticVirtualTable))) or
+             (fStaticVirtualTable[aTableIndex]=nil));
 end;
 
 function TSQLRestServer.StaticDataAdd(aStaticData: TSQLRestStorage): boolean;
@@ -34105,12 +34136,13 @@ begin
   if FieldName<>'' then
     exit;
   Props := Server.Model.Props[self];
-  if (Props=nil) or (Props.fFTSWithoutContentExpression='') then
+  if (Props=nil) or (Props.fFTSWithoutContentExpression='') or
+     not Server.IsInternalSQLite3Table(Props.fFTSWithoutContentTableIndex) then
     exit;
   fts := Props.Props.SQLTableName;
   main := Server.Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
-  // see http://www.sqlite.org/fts3.html#*fts4content
   ftsmainfield := Props.Props.MainFieldName(true);
+  // see http://www.sqlite.org/fts3.html#*fts4content
   Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
     'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
     [main,main,fts]);

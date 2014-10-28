@@ -144,9 +144,10 @@
   - FTS3 is an SQLite module implementing full-text search
   - will include also FTS4 extension module since 3.7.4
   - see http://www.sqlite.org/fts3.html for documentation
-  - is defined by default, but can be unset by definine EXCLUDE_FTS3 conditional
+  - is defined by default, but can be unset by defining EXCLUDE_FTS3 conditional
     to save about 50 KB of code size (is it worth it nowdays?)
-  - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units }
+  - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units,
+    so a global condition in this Synopse.inc does make sense }
 
 {$ifdef EXCLUDE_FTS3}
   {$undef INCLUDE_FTS3}
@@ -337,7 +338,7 @@
   {.$define SQLITE3_FASTCALL}
 {$endif}
 
-// Only Win32+Lin32 support SQLite3 static linked library by now 
+// Only Win32+Linux32 do support our SQLite3 static linked library  
 {$ifdef CPU64}  
   {$define NOSQLITE3STATIC}
 {$endif}

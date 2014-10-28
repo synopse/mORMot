@@ -1588,7 +1588,6 @@ begin
 end;
 
 
-
 { TMVCRendererReturningData }
 
 constructor TMVCRendererReturningData.Create(aRun: TMVCRunWithViews);

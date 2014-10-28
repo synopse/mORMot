@@ -142,18 +142,17 @@ type
 
 
 
-function CreateModel(WithExternalTables: boolean=false): TSQLModel;
+function CreateModel: TSQLModel;
 
 
 implementation
 
-function CreateModel(WithExternalTables: boolean): TSQLModel;
+function CreateModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
     TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
-  if not WithExternalTables then
-    result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle,
-      'new.title||'' ''||new.abstract||'' ''||new.content');
+  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+    TSQLArticle,['title','abstract','content']);
   TSQLArticle.AddFilterNotVoidText(['Title','Content']);
   TSQLComment.AddFilterNotVoidText(['Title','Content']);
   TSQLTag.AddFilterNotVoidText(['Ident']);

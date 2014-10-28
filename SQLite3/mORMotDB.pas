@@ -443,7 +443,14 @@ type
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8=''): boolean;
+  aExternalDB: TSQLDBConnectionProperties;
+  const aExternalTableName: RawUTF8=''): boolean; overload;
+
+/// register several tables of the model to be external
+// - just a wrapper over the overloaded VirtualTableExternalRegister() method
+function VirtualTableExternalRegister(aModel: TSQLModel;
+  const aClass: array of TSQLRecordClass;
+  aExternalDB: TSQLDBConnectionProperties): boolean; overload;
 
 /// register all tables of the model to be external
 // - by default, all tables are handled by the SQLite3 engine, unless they
@@ -481,6 +488,17 @@ begin
     ExternalTableName := aExternalTableName;
   result := aModel.VirtualTableRegister(aClass,TSQLVirtualTableExternal,
     aExternalDB.SQLFullTableName(ExternalTableName),aExternalDB);
+end;
+
+function VirtualTableExternalRegister(aModel: TSQLModel;
+  const aClass: array of TSQLRecordClass;
+  aExternalDB: TSQLDBConnectionProperties): boolean;
+var i: integer;
+begin
+  result := true;
+  for i := 0 to High(aClass) do
+    if not VirtualTableExternalRegister(aModel,aClass[i],aExternalDB) then
+      result := false;
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;

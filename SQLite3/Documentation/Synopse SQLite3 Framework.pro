@@ -4003,15 +4003,15 @@ For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
 !    property Text: RawUTF8 read fText write fText;
 !  end;
 And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an expression to compute the indexed text from the concatenation of the {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
-!function CreateModel(WithExternalTables: boolean): TSQLModel;
+!function CreateModel: TSQLModel;
 !begin
 !  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
 !    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
-!  if not WithExternalTables then
-!!    result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle,
-!!      'new.title||'' ''||new.abstract||'' ''||new.content');
+!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+!!    TSQLArticle,['title','abstract','content']);
 !  ...
 The {\f1\fs20 TSQLModelRecordProperties.FTS4WithoutContent()} will in fact create the needed {\i SQLite3} triggers, to automatically populate the {\f1\fs20 ArticleSearch} Full Text indexes when the main {\f1\fs20 Article} row changes.
+Since this FTS4 feature is specific to {\i SQlite3}, and triggers do not work on virtual tables (by now), this method won't do anything if the {\f1\fs20 TSQLArticleSearch} or {\f1\fs20 TSQLArticle} are on an external database - see @27@. Both need to be stored in the main {\i SQLite3} DB.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
