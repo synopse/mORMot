@@ -7153,6 +7153,31 @@ $ UPDATE People SET YearOfBirth=? WHERE RowID=?
 $ ... with bound parameters: [324,1000]
 As a result, BATCH process could be seen as a good way of implementing {\i @*Unit Of Work@} for your business layer - see @102@.\line You will be able to modify all your objects as requested, with high-level OOP methods, then have all data transmitted and processed at once when {\f1\fs20 BatchSend()} is called. The {\f1\fs20 BatchStart} - {\f1\fs20 BatchSend} - {\f1\fs20 BatchAbort} commands will induce a safe transactional model, relying on the client side for tracking the object modifications, and optimizing the database process on the server side as a simple "save and forget" task, to any SQL or @*NoSQL@ engine.
 Note that if several {\f1\fs20 ClientDist.BatchUpdate(V)} commands are executed within the same {\f1\fs20 FillPrepare()} context, they will contain the same fields ({\f1\fs20 RowID} and {\f1\fs20 YearOfBirth}). They will therefore generate the same statement ({\f1\fs20 UPDATE People SET YearOfBirth=? WHERE RowID=?}), which would benefit of {\i Array Binding} on the database side - see @78@ - if available.
+Here is some code, extracted from "web blog" sample "{\i 30 - MVC Server}", which will update an integer array mapped into a table. All {\f1\fs20 TSQLTag.Occurence} integers are stored in a local {\f1\fs20 TSQLTags.Lookup[].Occurence} dynamic array, which will be used to display the occurence count of each tag of the articles.\line The following method will first retrieve ID and Occurence from the database, and update the {\f1\fs20 TSQLTag.Occurence} if the internal dynamic array contains a new value.
+!procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
+!var tag: TSQLTag;
+!    batch: TSQLRestBatch;
+!begin
+!  Lock.ProtectMethod;
+!  TAutoFree.Several([
+!    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
+!    @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
+!  while tag.FillOne do begin
+!    if tag.ID<=length(Lookup) then
+!      if Lookup[tag.ID-1].Occurence<>tag.Occurence then begin
+!        tag.Occurence := Lookup[tag.ID-1].Occurence;
+!        batch.Update(tag); // will update only Occurence field
+!      end;
+!  end;
+!  aRest.BatchSend(batch);
+!end;
+In the above code, you can identify:
+- {\f1\fs20 CreateAndFillPrepare} + {\f1\fs20 FillOne} methods are able to retrieve all values of the {\f1\fs20 TSQLTag} class, and iterate easily over them;
+- A local {\f1\fs20 TSQLRestBatch} is prepared, and will store locally - via {\f1\fs20 batch.Update()} - any modification; as we already stated, only the retrieved field (i.e. {\f1\fs20 'Occurence'}) will be marked as to be updated;
+- {\f1\fs20 aRest.BatchSend(batch)} will send all new values (if any) to the server, in a single network round trip, and a single transaction;
+- This method is made thread safe by using {\f1\fs20 Lock.ProtectMethod} ({\f1\fs20 Lock} is a mutex private to the {\f1\fs20 TSQLTags} instance);
+- Local variables are allocated and automatically relased when the method exits, using {\f1\fs20 TAutoFree.Several()} - which avoid to write two nested {\f1\fs20 try .. finally Free end} loops.
+Such a pattern is very common in {\i mORMot}, and illustrate how high-level ORM methods can be used instead of manual SQL. With the potential benefit of a much better performance, and cleaner code.
 :  Local network as bottleneck
 When using a remote database on a physical network, a {\i round-trip} delay occurs for each request, this time between the ORM server side and the external Database engine.
 \graph BATCHRoundTrip2 BATCH mode latency issue on external DB
