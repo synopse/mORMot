@@ -33856,7 +33856,6 @@ begin
         Flush;
         BMax := BEnd-2;
       end;
-  end;
     until false;
   B[1] := Quote;
   inc(B);

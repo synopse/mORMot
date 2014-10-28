@@ -631,7 +631,7 @@ end;
 function newfstat64(fd: cint; buf: PStat): cint; cdecl;
   alias: 'fstat64'; export;
 begin
-  result := fpfstat(path,buf^);
+  result := fpfstat(fd,buf^);
 end;
 {$endif FPC}
 
