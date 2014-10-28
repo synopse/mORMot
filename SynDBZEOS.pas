@@ -191,10 +191,16 @@ type
     // i.e. '[zdbc:]PROTOCOL://HOST:PORT[/DATABASE][?paramname=value]'
     // - you can define the TZConnection.LibraryLocation property by setting a
     // '?LibLocation=...' parameter within the aServerName URL value
-    // - or simple use TSQLDBZEOSConnectionProperties.URI() class method
+    // - or simply use TSQLDBZEOSConnectionProperties.URI() class method
     // - aDatabaseName, aUserID, aPassword are used if not already set as URI
     // in aServerName value
     // - you can use Protocols property to retrieve all available protocol names
+    // - note that when run from mORMot's ORM, this class will by default
+    // create one connection per thread, which makes some clients (e.g.
+    // PostgreSQL) unstable and consuming a lot of resources - you should better
+    // maintain one single connection, by setting after Create:
+    // ! aExternalDBProperties.ThreadingMode := tmMainConnection;
+    // or by adding 'syndb_singleconnection=true' as URI property
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// finalize properties internal structures
     destructor Destroy; override;
@@ -369,6 +375,8 @@ begin
   StringToUTF8(fURL.Protocol,fDBMSName);
   fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName),PCHARS)];
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
+  if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'],false) then
+    ThreadingMode := tmMainConnection;
   fURL.Properties.Add('controls_cp=CP_UTF8');
   fUseCache := false; // caching disabled by default - enabled if stable enough
   case fDBMS of
@@ -432,6 +440,10 @@ begin
     // actually it's not realy faster.. just a hint:
     // http://dev.mysql.com/doc/refman/5.0/en/c-api-prepared-statement-problems.html
     //fStatementParams.Add('preferprepared=True');
+  end;
+  dPostgreSQL: begin
+    // see http://synopse.info/forum/viewtopic.php?pid=13260#p13260
+    fURL.Properties.Add('NoTableInfoCache=true');
   end;
   end;
   if fDBMS in [dOracle,dPostgreSQL,dMySQL] then begin
