@@ -346,8 +346,5 @@
   // our proprietary crypto expects a patched SQlite3.c statically linked
   {$define NOSQLITE3ENCRYPT}
 {$endif}
-{$ifndef MSWINDOWS}
-  // works only with low-level SQLite3 structures as compiled under Windows
-  {$define NOSQLITE3ENCRYPT}
-{$endif}
+
 

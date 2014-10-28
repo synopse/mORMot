@@ -120,7 +120,6 @@ uses
   {$else}
   SynFPCLinux,
   BaseUnix,
-  syscall,
   {$endif}
   SysUtils,
   SynCommons,
@@ -626,13 +625,13 @@ end;
 function newstat64(path: pchar; buf: PStat): cint; cdecl;
   alias: 'stat64'; export;
 begin
-  result := Do_SysCall(syscall_nr_stat64,TSysParam(path),TSysParam(buf));
+  result := fpstat(path,buf^);
 end;
 
 function newfstat64(fd: cint; buf: PStat): cint; cdecl;
   alias: 'fstat64'; export;
 begin
-  result := Do_SysCall(syscall_nr_fstat64,fd,TSysParam(buf));
+  result := fpfstat(path,buf^);
 end;
 {$endif FPC}
 
@@ -657,8 +656,9 @@ begin
   end;
 end;
 
-procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
-// XorOffset: fast and simple Cypher using Index (= offset in file):
+// XorOffset: fast and simple Cypher using Index (= offset in file)
+// -> not to be set as local proc for FPC
+// see http://bugs.freepascal.org/view.php?id=24061
 procedure Xor64(PI, P: PPtrIntArray; Count: cardinal); // fast xor
 {$ifdef PUREPASCAL}
 var i: cardinal;
@@ -686,6 +686,8 @@ asm // eax=PI edx=P ecx=bytes count
   pop ebx
 end;
 {$endif}
+
+procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
 var i, Len, L: integer;
 begin
   if Count>0 then
