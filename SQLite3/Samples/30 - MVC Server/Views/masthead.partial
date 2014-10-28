@@ -9,18 +9,19 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="default">{{main.blog.title}}</a>
+			<div class="navbar-left">
+              <a class="navbar-brand" href="default">{{main.blog.title}}</a>
+			</div>
+			<div class="navbar-form navbar-right">
+			  <form action="articleMatch" method="post">
+				<div class="form-group">
+				<input type="text" class="form-control" name="match" placeholder="Search Expression">
+				</div>
+			  </form>
+			</div>
         </div>
         <center>
             <div class="navbar-collapse collapse" id="navbar-main">
-                <ul class="nav navbar-nav">
-                    <li class="active"><a href="#">Link 0</a>
-                    </li>
-                    <li><a href="#">Link 1</a>
-                    </li>
-                    <li><a href="#">Link 2</a>
-                    </li>
-                </ul>
 				{{#main.session}}
 				<div class="navbar-right">
 					<form class="navbar-form" action="logout">

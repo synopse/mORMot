@@ -6518,8 +6518,11 @@ type
     // - will define such a generic TObject, to avoid any unecessary dependency
     // to the SynDB unit in mORMot.pas
     // - in practice, will be assigned by VirtualTableExternalRegister() to
-    // a TSQLDBConnectionProperties instance in mORMotDB.pas
-    // - or by StaticMongoDBRegister() to a TMongoCollection instance
+    // a TSQLDBConnectionProperties instance in mORMotDB.pas, or by
+    // StaticMongoDBRegister() to a TMongoCollection instance
+    // - equals nil if the table is internal to SQLite3:
+    // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties=nil then
+    // !   // here we now that this is not an external table 
     property ConnectionProperties: TObject read fConnectionProperties;
     /// the associated TSQLModelRecordProperties
     property Properties: TSQLModelRecordProperties read fProps;
@@ -6564,6 +6567,7 @@ type
     fKind: TSQLRecordVirtualKind;
     fModel: TSQLModel;
     fTableIndex: integer;
+    fFTSWithoutContent: Boolean;
     procedure SetKind(Value: TSQLRecordVirtualKind);
   public
     /// pre-computed SQL statements for this TSQLRecord in this model
@@ -6598,6 +6602,8 @@ type
     // the expected ID/RowID column name expected (i.e. SQLTableSimpleFields[]
     // and SQLSelectAll[] - SQLUpdateSet and SQLInsertSet do not include ID)
     property Kind: TSQLRecordVirtualKind read fKind write SetKind;
+    /// define if a FTS3/FTS4 virtual table should be created with content=""
+    property FTSWithoutContent: Boolean read fFTSWithoutContent write fFTSWithoutContent;
   end;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
@@ -9484,7 +9490,8 @@ type
     // $ SELECT RowID FROM Documents WHERE Documents MATCH 'linu*'
     // $ ORDER BY rank(matchinfo(Documents),1.0,0.5) DESC
     function FTSMatch(Table: TSQLRecordFTS3Class; const MatchClause: RawUTF8;
-      var DocID: TIntegerDynArray; const PerFieldWeight: array of double): boolean; overload;
+      var DocID: TIntegerDynArray; const PerFieldWeight: array of double;
+      limit: integer=0; offset: integer=0): boolean; overload;
     /// get the CSV-encoded UTF-8 encoded values of an unique field with a Where Clause
     // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith")',Data)
     // (using inlined parameters via :(...): is always a good idea)
@@ -18906,6 +18913,10 @@ var EndOfObject: AnsiChar;
               FieldValues[ndx] := QuotedStr(res,'''');
           end;
         end else
+          if res=nil then begin
+            FieldValues[ndx] := ''; // avoid GPF, but will return invalid SQL
+            exit;
+          end else
           // non string params (numeric or false/true) are passed untouched
           if PInteger(res)^=FALSE_LOW then begin
             FieldValues[ndx] := '0';
@@ -18947,8 +18958,9 @@ begin
       FieldValueLen := Length(FieldValues[0]);
       DecodedRowID := RowID;
     end;
-    if P<>nil then
     repeat
+      if P=nil then
+        break;
       FieldName := GetJSONPropName(P);
       if (FieldName='') or (P=nil) then
         break; // invalid JSON field name
@@ -21166,7 +21178,8 @@ begin
     result := '' else
   if IdemPChar(pointer(Where),'ORDER BY ') or
      IdemPChar(pointer(Where),'GROUP BY ') or
-     IdemPChar(pointer(Where),'LIMIT ') then
+     IdemPChar(pointer(Where),'LIMIT ') or
+     IdemPChar(pointer(Where),'JOIN ') then
     result := ' '+Where else
     result := ' WHERE '+Where;
 end;
@@ -21867,28 +21880,36 @@ begin
   if aModel=nil then
     raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call',[self]);
   Props := aModel.Props[self];
-  with Props.Props do
   if Props.Kind<>rSQLite3 then begin
     // create a FTS3/FTS4/RTREE virtual table
     result := 'CREATE VIRTUAL TABLE '+SQLTableName+' USING ';
     case Props.Kind of
-    rFTS3:  result := result+'fts3(';
-    rFTS4:  result := result+'fts4(';
+    rFTS3:
+      result := result+'fts3(';
+    rFTS4:
+      result := result+'fts4(';
     rRTree: result := result+'rtree(RowID,';
     rCustomForcedID, rCustomAutoID: begin
       M := aModel.VirtualTableModule(self);
       if M=nil then
         raise EModelException.CreateUTF8('No registered module for %',[self]);
-      if Fields.Count=0 then
+      if Props.Props.Fields.Count=0 then
         raise EModelException.CreateUTF8(
           'Virtual % class % should have published properties',[M.ModuleName,self]);
-      result := result+M.ModuleName+'('+GetVirtualTableSQLCreate(RecordProps);
+      result := result+M.ModuleName+'(';
+      result := result+GetVirtualTableSQLCreate(Props.Props);
     end;
     end;
+    with Props.Props.Fields do
     case Props.Kind of
     rFTS3, rFTS4: begin
-      for i := 0 to Fields.Count-1 do
-        with Fields.List[i] do
+      if Props.FTSWithoutContent then
+        result := result+'content="",';
+      if Count=0 then
+        raise EModelException.CreateUTF8(
+          'Virtual FTS class % should have published properties',[self]);
+      for i := 0 to Count-1 do
+        with List[i] do
         if SQLFieldType<>sftUTF8Text then
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
@@ -21899,12 +21920,12 @@ begin
         result := result+' tokenize=simple)';
     end;
     rRTree: begin
-      if (Fields.Count<2) or (Fields.Count>RTREE_MAX_DIMENSION*2) or
-         (Fields.Count and 2<>0) then
+      if (Count<2) or (Count>RTREE_MAX_DIMENSION*2) or
+         (Count and 2<>0) then
         raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..%',
-          [self,Fields.Count,RTREE_MAX_DIMENSION*2]);
-      for i := 0 to Fields.Count-1 do
-        with Fields.List[i] do
+          [self,Count,RTREE_MAX_DIMENSION*2]);
+      for i := 0 to Count-1 do
+        with List[i] do
         if SQLFieldType<>sftFloat then
           raise EModelException.CreateUTF8('%.%: RTREE field must be double',[self,Name]) else
           result := result+Name+',';
@@ -21917,6 +21938,7 @@ begin
       '(ID INTEGER PRIMARY KEY AUTOINCREMENT, ';
     // we always add an ID field which is an INTEGER PRIMARY KEY
     // column, as it is always created (as hidden ROWID) by the SQLite3 engine
+    with Props.Props do
     for i := 0 to Fields.Count-1 do
     with Fields.List[i] do begin
       SQL := SQLFieldTypeToSQL(i);
@@ -25012,7 +25034,7 @@ end;
 
 function TSQLRest.FTSMatch(Table: TSQLRecordFTS3Class;
   const MatchClause: RawUTF8; var DocID: TIntegerDynArray;
-  const PerFieldWeight: array of double): boolean;
+  const PerFieldWeight: array of double; limit,offset: integer): boolean;
 var WhereClause: RawUTF8;
     i: integer;
 begin
@@ -25020,11 +25042,14 @@ begin
   with Table.RecordProps do
     if length(PerFieldWeight)<>length(SimpleFields) then
       exit else
-    WhereClause := FormatUTF8('% MATCH :(''%''): ORDER BY rank(matchinfo(%)',
-      [SQLTableName,MatchClause,SQLTableName]);
+    WhereClause := FormatUTF8('% MATCH ? ORDER BY rank(matchinfo(%)',
+      [SQLTableName,SQLTableName],[MatchClause]);
   for i := 0 to high(PerFieldWeight) do
-    WhereClause := FormatUTF8('%,:(%):',[WhereClause,PerFieldWeight[i]]);
-  result := FTSMatch(Table,WhereClause+') DESC',DocID);
+    WhereClause := FormatUTF8('%,?',[WhereClause],[PerFieldWeight[i]]);
+  WhereClause := WhereClause+') DESC';
+  if limit>0 then
+    WhereClause := FormatUTF8('% LIMIT % OFFSET %',[WhereClause,limit,offset]);
+  result := FTSMatch(Table,WhereClause,DocID);
 end;
 
 function TSQLRest.GetServerTimeStamp: TTimeLog;

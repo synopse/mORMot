@@ -11,5 +11,8 @@
 		{{#lastID}}
 		<p><a href="default?scope={lastID:{{.}},tag:{{tag}}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
 		{{/lastID}}
-{{/Scope}}
+		{{#lastrank}}
+		<p><a href="default?scope={lastrank:{{.}},match:{{{JSONQuoteURI match}}}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
+		{{/lastrank}}
+		{{/Scope}}
 {{>footer}}

@@ -115,6 +115,16 @@ type
     property Tags: TIntegerDynArray index 1 read fTags write fTags;
   end;
 
+  TSQLArticleSearch = class(TSQLRecordFTS4Porter)
+  private
+    fText: RawUTF8;
+  public
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
+  published
+    property Text: RawUTF8 read fText write fText;
+  end;
+
   TSQLComment = class(TSQLContent)
   private
     fArticle: TSQLArticle;
@@ -143,7 +153,8 @@ implementation
 function CreateModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
-    TSQLTag,TSQLArticle,TSQLComment],'blog');
+    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
+  result.Props[TSQLArticleSearch].FTSWithoutContent := true;
   TSQLArticle.AddFilterNotVoidText(['Title','Content']);
   TSQLComment.AddFilterNotVoidText(['Title','Content']);
   TSQLTag.AddFilterNotVoidText(['Ident']);
@@ -220,6 +231,29 @@ begin
   aTags.Lock.ProtectMethod;
   inc(aTags.Lookup[aTagID-1].Occurence);
   aTags.SortTagsByIdent(fTags);
+end;
+
+
+{ TSQLArticleSearch }
+
+class procedure TSQLArticleSearch.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+begin
+  inherited;
+  if (FieldName='') and
+     (Server.StaticVirtualTable[TSQLArticle]=nil) then begin
+    // see http://www.sqlite.org/fts3.html#*fts4content
+    Server.Execute('CREATE TRIGGER Article_bu BEFORE UPDATE ON Article '+
+      'BEGIN DELETE FROM ArticleSearch WHERE docid=old.rowid; END;');
+    Server.Execute('CREATE TRIGGER Article_bd BEFORE DELETE ON Article '+
+      'BEGIN DELETE FROM ArticleSearch WHERE docid=old.rowid; END;');
+    Server.Execute('CREATE TRIGGER Article_au AFTER UPDATE ON Article '+
+      'BEGIN INSERT INTO ArticleSearch(docid,text) VALUES('+
+      'new.rowid,new.title||'' ''||new.abstract||'' ''||new.content); END;');
+    Server.Execute('CREATE TRIGGER Article_ai AFTER INSERT ON Article '+
+      'BEGIN INSERT INTO ArticleSearch(docid,text) VALUES('+
+      'new.rowid,new.title||'' ''||new.abstract||'' ''||new.content); END;');
+  end;
 end;
 
 

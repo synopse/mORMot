@@ -30,6 +30,7 @@ type
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
     function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
+    function ArticleMatch(const Match: RawUTF8): TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
@@ -56,6 +57,7 @@ type
     fTagsLookup: TSQLTags;
     fDefaultData: ILockedDocVariant;
     fDefaultLastID: integer;
+    fHasFTS: boolean;
     procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
@@ -75,6 +77,7 @@ type
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
     function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
+    function ArticleMatch(const Match: RawUTF8): TMVCAction;
     procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
@@ -96,6 +99,7 @@ constructor TBlogApplication.Create(aServer: TSQLRestServer);
 begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Create(aServer,TypeInfo(IBlogApplication));
+  fHasFTS := aServer.StaticVirtualTable[TSQLArticle]=nil;
   ComputeMinimalData;
   with TSQLBlogInfo.Create(RestModel,'') do
   try
@@ -136,8 +140,9 @@ begin
 end;
 
 const
-  // just try with 200000 - and let your WordPress blog engine start to cry...
-  FAKEDATA_ARTICLESCOUNT = 20000;
+  // just try with 100000 - and let your WordPress blog engine start to cry...
+  // note that the process includes FullText indexation!
+  FAKEDATA_ARTICLESCOUNT = 200;
   
 procedure TBlogApplication.ComputeMinimalData;
 var info: TSQLBlogInfo;
@@ -242,23 +247,44 @@ end;
 
 const
   ARTICLE_FIELDS = 'RowID,Title,Tags,Abstract,Author,AuthorName,CreatedAt';
-  ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by RowID desc limit 20';
+  ARTICLE_DEFAULT_LIMIT = ' limit 20';
+  ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by RowID desc'+ARTICLE_DEFAULT_LIMIT;
 
 procedure TBlogApplication.Default(var Scope: variant);
-var lastID,tag: integer;
-    whereClause: RawUTF8;
+var scop: PDocVariantData;
+    lastID,tag: integer;
+    whereClause,match: RawUTF8;
+    articles: variant;
+    rank: double;
 begin
   lastID := 0;
   tag := 0;
-  with DocVariantDataSafe(Scope)^ do begin
-    if GetAsInteger('lastID',lastID) then
+  rank := 0;
+  scop := DocVariantDataSafe(Scope);
+  if scop^.GetAsRawUTF8('match',match) and fHasFTS then begin
+    if scop^.GetAsDouble('lastrank',rank) then
+      whereClause := 'and rank<? ';
+    whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1) as rank '+
+      'from ArticleSearch where ArticleSearch match ? '+whereClause+
+      'order by rank desc'+ARTICLE_DEFAULT_LIMIT+')as r on (r.docid=Article.id)';
+    articles := RestModel.RetrieveDocVariantArray(
+      TSQLArticle,'',pointer(whereClause),[match,rank],'id,title,tags,abstract,rank');
+    with DocVariantDataSafe(articles)^do
+      if (Kind=dvArray) and (Count>0) then
+        rank := Values[Count-1].rank else
+        rank := 0;
+    scope := _ObjFast(['Articles',articles,'lastrank',rank,'match',match]);
+    exit;
+  end else begin
+    if scop^.GetAsInteger('lastID',lastID) then
       whereClause := 'RowID<?' else
       whereClause := 'RowID>?'; // will search ID>0 so always true
-    if GetAsInteger('tag',tag) then // uses custom function to search in BLOB
+    if scop^.GetAsInteger('tag',tag) and (tag>0) then
+      // uses custom function to search in BLOB
       whereClause := whereClause+' and IntegerDynArrayContains(Tags,?)';
   end;
+  SetVariantNull(Scope);
   if (lastID=0) and (tag=0) then begin // use simple cache if no parameters
-    SetVariantNull(Scope);
     if not fDefaultData.AddExistingProp('Articles',Scope) then
       fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
         TSQLArticle,'',pointer(ARTICLE_DEFAULT_ORDER),[],
@@ -268,10 +294,10 @@ begin
     scope := _ObjFast(['Articles',RestModel.RetrieveDocVariantArray(
         TSQLArticle,'',Pointer(whereClause+ARTICLE_DEFAULT_ORDER),[lastID,tag],
         ARTICLE_FIELDS,nil,@lastID)]);
-  if lastID>1 then
+  if lastID>1 then begin
     _ObjAddProps(['lastID',lastID],Scope);
-  if tag>0 then
-    _ObjAddProps(['tag',tag],Scope);
+    _ObjAddProps(['tag',tag],Scope); // should be there for a valid Scope object 
+  end;
 end;
 
 procedure TBlogApplication.ArticleView(ID: integer;
@@ -345,10 +371,14 @@ var AuthorID: integer;
 begin
   TSQLComment.AutoFree(comm);
   AuthorID := GetLoggedAuthorID(canComment,comm);
-  if AuthorID=0 then
-    raise EMVCApplication.CreateGotoError(sErrorNeedValidAuthorSession);
-  if not RestModel.MemberExists(TSQLArticle,ID) then
-    raise EMVCApplication.CreateGotoError(HTML_UNAVAILABLE);
+  if AuthorID=0 then begin
+    GotoError(result,sErrorNeedValidAuthorSession);
+    exit;
+  end;
+  if not RestModel.MemberExists(TSQLArticle,ID) then begin
+    GotoError(result,HTML_UNAVAILABLE);
+    exit;
+  end;
   comm.Title := Title;
   comm.Content := Comment;
   comm.Article := TSQLArticle(ID);
@@ -358,6 +388,13 @@ begin
     GotoView(result,'ArticleView',['RowID',ID,'withComments',true,'Scope',_ObjFast([
       'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
       HTML_BADREQUEST);
+end;
+
+function TBlogApplication.ArticleMatch(const Match: RawUTF8): TMVCAction;
+begin
+  if Match='' then
+    GotoError(result,HTML_NOTMODIFIED) else
+    GotoView(result,'Default',['scope',_ObjFast(['match',Match])]);
 end;
 
 procedure TBlogApplication.ArticleEdit(var ID: integer;
