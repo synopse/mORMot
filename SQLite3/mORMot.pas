@@ -708,6 +708,7 @@ unit mORMot;
       you need to explicitely set this flag for the User's TSQLAuthGroup - note
       that SELECT with a simple table name in its FROM clause will now be
       checked againsts TSQLAccessRight.GET[] access rights
+    - BREAKING CHANGE: added aSentData parameter to TNotifySQLEvent/OnUpdateEvent
     - remove some unused TPropInfo methods, which were duplicates of the
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
@@ -878,7 +879,7 @@ unit mORMot;
     - TInterfaceFactory instances are now shared among all interface-based
       features (e.g. services, callbacks or mocks/stubs), in a thread-safe cache
     - added dedicated EInterfaceFactoryException
-    - added TServiceFactoryServer.TimeoutSec / SetTimeoutSec() property / method 
+    - added TServiceFactoryServer.TimeoutSec / SetTimeoutSec() property / method
     - TServiceFactoryServer.ExecuteInMainThread() method is now replaced by
       a more generic TServiceFactoryServer.SetOptions() method
     - new optFreeInMainThread execution options for the service, allowing server
@@ -10377,7 +10378,7 @@ type
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
   TNotifySQLEvent = function(Sender: TSQLRestServer; Event: TSQLEvent;
-    aTable: TSQLRecordClass; aID: integer): boolean of object;
+    aTable: TSQLRecordClass; aID: integer; const aSentData: RawUTF8): boolean of object;
   ///  used to define how to trigger Events on record field update
   // - see TSQLRestServer.OnBlobUpdateEvent property and InternalUpdateEvent() method
   // - returns true on success, false if an error occured (but action must continue)
@@ -11259,6 +11260,9 @@ type
     InternalState: Cardinal;
     /// a method can be specified here to trigger events after any table update
     // - is called BEFORE deletion, and AFTER insertion or update
+    // - note that the aSentData parameter does not contain all record fields,
+    // but only transmitted information: e.g. if only one field is updated, only
+    // this single field (and the ID) is available
     // - to be used only server-side, not to synchronize some clients: the framework
     // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
     // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
@@ -29375,8 +29379,9 @@ begin
   end;
 end;
 
-function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
-  const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
+function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent;
+  aTableIndex, aID: integer; const aSentData: RawUTF8;
+  aIsBlobFields: PSQLFieldBits): boolean;
 procedure DoTrackChanges;
 var TableHistoryIndex: integer;
     JSON: RawUTF8;
@@ -29420,7 +29425,7 @@ begin
          (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
         DoTrackChanges;
       if Assigned(OnUpdateEvent) then
-        result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID) else
+        result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID,aSentData) else
         result := true; // true on success, false if error (but action continues)
     end;
 end;

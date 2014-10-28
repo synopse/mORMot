@@ -34,7 +34,8 @@ type
 	  /// database server-side trigger which will add an event to the
   	// TSQLAuditTrail table
     function OnDatabaseUpdateEvent(Sender: TSQLRestServer;
-      Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer): boolean;
+      Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer;
+      const aSentData: RawUTF8): boolean;
   published
     /// a RESTful service used from the client side to add an event
   	// to the TSQLAuditTrail table
@@ -103,7 +104,8 @@ begin
 end;
 
 function TFileServer.OnDatabaseUpdateEvent(Sender: TSQLRestServer;
-  Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer): boolean;
+  Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer;
+  const aSentData: RawUTF8): boolean;
 const EVENT_FROM_SQLEVENT: array[low(TSQLEvent)..seDelete] of TFileEvent = (
   feRecordCreated, feRecordModified, feRecordDeleted);
 begin
