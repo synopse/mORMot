@@ -244,6 +244,7 @@ end;
 function TSQLTags.GetAsDocVariantArray: Variant;
 var i,ndx: Integer;
 begin
+  Lock.ProtectMethod;
   TDocVariant.NewFast(result);
   for i := 0 to length(OrderID)-1 do begin
     ndx := OrderID[i]-1;
@@ -307,7 +308,7 @@ end;
 procedure TSQLTags.SortTagsByIdent(var Tags: TIntegerDynArray);
 var new: TIntegerDynArray;
     i,n: integer;
-begin
+begin // Lock.ProtectMethod made by caller
   n := length(Tags);
   if n=1 then
     exit;
