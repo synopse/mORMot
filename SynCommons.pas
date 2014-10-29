@@ -627,6 +627,7 @@ unit SynCommons;
   - added function GetJSONFieldOrObjectOrArray() in unit's interface section  
   - function GotoNextJSONField() renamed GotoNextJSONItem(), and fixed to
     handle nested JSON array or objects in addition to string/numbers
+  - added GotoEndJSONItem() and GetJSONItemAsRawJSON() functions
   - added function JSONRetrieveIDField() for fast retrieval of a "ID":.. value
   - added function JSONRetrieveStringField() for retrieval of a string field
     name or value from JSON buffer
@@ -6586,9 +6587,15 @@ function GetJSONPropName(var P: PUTF8Char): PUTF8Char;
 // or copy), for faster process - so take care that it is an unique string
 // - PDest points to the next field to be decoded, or nil on any unexpected end
 // - wasString is set to true if the JSON value was a "string"
-// - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
+// - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean=nil;
   EndOfObject: PUTF8Char=nil; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char;
+
+/// retrieve the next JSON item as a RawJSON variable
+// - buffer can be either any JSON item, i.e. a string, a number or even a
+// JSON array (ending with ]) or a JSON object (ending with })
+// - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
+function GetJSONItemAsRawJSON(var P: PUTF8Char; EndOfObject: PAnsiChar=nil): RawJSON;
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
@@ -6604,12 +6611,21 @@ function IsString(P: PUTF8Char): boolean;
 // '0' is excluded at the begining of a number) and '123' is not a string
 function IsStringJSON(P: PUTF8Char): boolean;
 
+/// reach positon just after the current JSON item in the supplied UTF-8 buffer
+// - buffer can be either any JSON item, i.e. a string, a number or even a
+// JSON array (ending with ]) or a JSON object (ending with })
+// - returns nil if the specified buffer is not valid JSON content
+// - returns the position in buffer just after the item excluding the separator
+// character - i.e. result^ may be ',','}',']'
+function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
+
 /// reach the positon of the next JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - returns nil if the specified number of items is not available in buffer
-// - returns the position in buffer after the item, and optionaly the separator
-// character in EndOfObject - i.e. may be ',','}',']'
+// - returns the position in buffer after the item including the separator
+// character (optionally in EndOfObject) - i.e. result will be at the start of
+// the next object, and EndOfObject may be ',','}',']'
 function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal=1;
   EndOfObject: PAnsiChar=nil): PUTF8Char;
 
@@ -27751,15 +27767,8 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
         if not Base64MagicCheckAndDecode(PropValue,PRawByteString(Data)^) then
           exit;
     end;
-    ptRawJSON: begin
-      PropValue := P;
-      P := GotoNextJSONItem(PropValue,1,@EndOfObject);
-      if P=nil then
-        exit;
-      if P[-1]<>EndOfObject then
-        raise ESynException.CreateUTF8('%.ReadOneLevel: Unexpected RawJSON end',[self]);
-      SetString(PRawJSON(Data)^,PAnsiChar(PropValue),P-PropValue-1);
-    end;
+    ptRawJSON:
+      PRawJSON(Data)^ := GetJSONItemAsRawJSON(P,@EndOfObject);
     else begin
       PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
       if (PropValue<>nil) and // PropValue=nil for null
@@ -35427,6 +35436,53 @@ begin
     exit;
   end else
     result := true; // don't begin with a numerical value -> must be a string
+end;
+
+function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
+label next;
+begin
+ result := nil; // to notify unexpected end
+ if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+ // get a field
+ case P^ of
+ #0: exit;
+ '"': begin
+   P := GotoEndOfJSONString(P);
+   if P^<>'"' then
+     exit; // P^ should be '"' here -> execute repeat.. below
+ end;
+ '[','{': begin
+   P := GotoNextJSONObjectOrArray(P);
+   if P=nil then
+     exit;
+   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+   goto next;
+ end;
+ end;
+ repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+   inc(P);
+   if P^=#0 then exit; // unexpected end
+ until P^ in [':',',',']','}'];
+next:
+ if P^=#0 then
+   exit;
+ result := P;
+end;
+
+function GetJSONItemAsRawJSON(var P: PUTF8Char; EndOfObject: PAnsiChar=nil): RawJSON;
+var B: PUTF8Char;
+begin
+  result := '';
+  B := P;
+  P := GotoEndJSONItem(B);
+  if P=nil then
+    exit;
+  SetString(result,PAnsiChar(B),P-B);
+  P := GotoNextNotSpace(P);
+  if EndOfObject<>nil then
+    EndOfObject^ := P^;
+  if P^<>#0 then //if P^=',' then
+    repeat inc(P) until not(P^ in [#1..' ']);
 end;
 
 function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal;

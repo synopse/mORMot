@@ -37194,11 +37194,9 @@ begin
           IgnoreComma(R);
         end;
         smvRawJSON: begin
-          Val := R;
-          R := GotoNextJSONItem(R);
-          if R<=Val then
+          PRawUTF8(V)^ := GetJSONItemAsRawJSON(R);
+          if R=nil then
             RaiseError('returned RawJSON',[]);
-          SetString(PRawUTF8(V)^,PAnsiChar(Val),R-Val);
         end;
         smvDynArray: begin
           R := DynArrays[IndexVar].LoadFromJSON(R);
@@ -39827,13 +39825,8 @@ begin
             exit;
           IgnoreComma(Par);
         end;
-        smvRawJSON: begin
-          Val := Par;
-          Par := GotoNextJSONItem(Par);
-          if Par<=Val then
-            exit;
-          SetString(RawUTF8s[IndexVar],PAnsiChar(Val),Par-Val);
-        end;
+        smvRawJSON:
+          RawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
         smvDynArray: begin
           Par := DynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
           IgnoreComma(Par);
