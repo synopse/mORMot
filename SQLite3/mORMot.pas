@@ -793,6 +793,7 @@ unit mORMot;
       get and set BLOB fields values with usual Add/Update/Retrieve methods for
       a particular table (more tuned than existing ForceBlobTransfert property)
     - added TSQLRestClientURI.SessionID property
+    - added TSQLRestClientURI.CallBack() method allowing any HTTP verb
     - added new TSQLRestClientURI.RetryOnceOnTimeout property
     - fixed TServiceFactoryClient.Get() not working properly in sicPerSession,
       sicPerUser or sicPerGroup modes - ticket [3fafb53be4]
@@ -4435,7 +4436,7 @@ type
   // ModelRoot/TableName[/TableID]/MethodName) a custom public or protected method,
   // calling TSQLRestClientURI.URL with the appropriate parameters, and named
   // (by convention) as MethodName; TSQLRestClientURI has dedicated methods
-  // like CallBackGetResult, CallBackGet, and CallBackPut; see also
+  // like CallBackGetResult, CallBackGet, CallBackPut and CallBack; see also
   // TSQLModel.getURICallBack and JSONDecode function
   // ! function TSQLRecordPeople.Sum(aClient: TSQLRestClientURI; a, b: double): double;
   // ! var err: integer;
@@ -12788,13 +12789,13 @@ type
       !  Client.RollBack; // in case of error
       !end; }
     function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer=10): boolean;
-    {/ end a transaction
-    - implements REST END collection
-     - write all pending SQL statements to the disk }
+    /// end a transaction
+    // - implements REST END collection
+    // - write all pending SQL statements to the disk }
     procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
-    {/ abort a transaction
-     - implements REST ABORT collection
-     - restore the previous state of the database, before the call to TransactionBegin }
+    /// abort a transaction
+    // - implements REST ABORT collection
+    // - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
 
     /// begin a BATCH sequence to speed up huge database change
@@ -12842,29 +12843,36 @@ type
     // - will Free the TSQLRestBatch stored in this TSQLRestClientURI instance
     procedure BatchAbort;
 
-    {/ wrapper to the protected URI method to call a method on the server, using
-      a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
-      - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
-      - this version will use a GET with supplied parameters (which will be encoded
-        with the URL) }
+    /// wrapper to the protected URI method to call a method on the server, using
+    // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
+    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - this version will use a GET with supplied parameters (which will be encoded
+    // with the URL)
     function CallBackGet(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
       out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
       aResponseHead: PRawUTF8=nil): integer;
-    {/ wrapper to the protected URI method to call a method on the server, using
-      a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
-      - returns the UTF-8 decoded JSON result (server must reply with one
-        "result":"value" JSON object)
-      - this version will use a GET with supplied parameters (which will be encoded
-        with the URL) }
+    /// wrapper to the protected URI method to call a method on the server, using
+    // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
+    // - returns the UTF-8 decoded JSON result (server must reply with one
+    // "result":"value" JSON object)
+    // - this version will use a GET with supplied parameters (which will be encoded
+    // with the URL) 
     function CallBackGetResult(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
       aTable: TSQLRecordClass=nil; aID: integer=0): RawUTF8;
-    {/ wrapper to the protected URI method to call a method on the server, using
-      a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
-      - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
-      - this version will use a PUT with the supplied raw UTF-8 data }
+    /// wrapper to the protected URI method to call a method on the server, using
+    //  a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
+    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - this version will use a PUT with the supplied raw UTF-8 data 
     function CallBackPut(const aMethodName, aSentData: RawUTF8;
+      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
+      aResponseHead: PRawUTF8=nil): integer;
+    /// wrapper to the protected URI method to call a method on the server, using
+    //  a ModelRoot/[TableName/[ID/]]MethodName RESTful with any kind of request
+    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - for GET/PUT methods, you should better use CallBackGet/CallBackPut
+    function CallBack(method: TSQLURIMethod; const aMethodName,aSentData: RawUTF8;
       out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
       aResponseHead: PRawUTF8=nil): integer;
     /// register one or several Services on the client side via their interfaces
@@ -26207,13 +26215,22 @@ function TSQLRestClientURI.CallBackPut(const aMethodName,
   aSentData: RawUTF8; out aResponse: RawUTF8; aTable: TSQLRecordClass;
   aID: integer; aResponseHead: PRawUTF8): integer;
 begin
-  if self=nil then
+  result := CallBack(mPUT,aMethodName,aSentData,aResponse,aTable,aID,aResponseHead);
+end;
+
+function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
+  const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
+  aTable: TSQLRecordClass; aID: integer; aResponseHead: PRawUTF8): integer;
+const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
+  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+begin
+  if (self=nil) or (method<Low(NAME)) then
     result := HTML_UNAVAILABLE else begin
 {$ifdef WITHLOG}
     fLogClass.Enter(self,pointer(aMethodName),true);
 {$endif}
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
-      'PUT',@aResponse,aResponseHead,@aSentData).Lo;
+      NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
 {$ifdef WITHLOG}
     fLogFamily.SynLog.Log(sllServiceReturn,'result=% resplen=%',
       [result,length(aResponse)]);
