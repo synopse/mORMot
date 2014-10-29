@@ -26232,8 +26232,8 @@ begin
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
       NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
 {$ifdef WITHLOG}
-    fLogFamily.SynLog.Log(sllServiceReturn,'result=% resplen=%',
-      [result,length(aResponse)]);
+    fLogFamily.SynLog.Log(sllServiceReturn,'% result=% resplen=%',
+      [NAME[method],result,length(aResponse)]);
 {$endif}
   end;
 end;
