@@ -274,6 +274,7 @@ type
     class procedure DateTimeToText(const Value: variant; out result: variant);
     class procedure DateToText(const Value: variant; out result: variant);
     class procedure TimeLogToText(const Value: variant; out result: variant);
+    class procedure BlobToBase64(const Value: variant; out result: variant);
     class procedure ToJSON(const Value: variant; out result: variant);
     class procedure JSONQuote(const Value: variant; out result: variant);
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
@@ -317,7 +318,7 @@ type
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
-    // JSONQuote, JSONQuoteURI, ToJSON and WikiToHtml
+    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -866,9 +867,9 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml'],
+       'ToJSON','WikiToHtml','BlobToBase64'],
       [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml]);
+       ToJSON,WikiToHtml,BlobToBase64]);
   result := HelpersStandardList;
 end;
 
@@ -941,6 +942,20 @@ begin
     Free;
   end;
   RawUTF8ToVariant(txt,result);
+end;
+
+class procedure TSynMustache.BlobToBase64(const Value: variant;
+  out result: variant);
+var tmp: RawUTF8;
+    wasString: boolean;
+begin
+  VariantToUTF8(Value,tmp,wasString);
+  if wasString and (pointer(tmp)<>nil) then begin
+    if PInteger(tmp)^ and $00ffffff=JSON_BASE64_MAGIC then
+      delete(tmp,1,3);
+    RawUTF8ToVariant(tmp,result);
+  end else
+    result := Value;
 end;
 
 
