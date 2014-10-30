@@ -24485,6 +24485,9 @@ begin
   Readln;
 end;
 
+const
+  _SC_PAGE_SIZE = $1000;
+
 {$endif MSWINDOWS}
 
 
@@ -24508,17 +24511,16 @@ begin
   end;
 end;
 {$else}
-var SysPageSize, PageSize, AlignedAddr: PtrInt;
+var PageSize, AlignedAddr: PtrInt;
     i: integer;
 begin
   if Backup<>nil then
     for i := 0 to Size-1 do  // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-  SysPageSize := $1000;
-  PageSize := SysPageSize;
+  PageSize := _SC_PAGE_SIZE;
   AlignedAddr := PtrInt(Old) and not (PageSize - 1);
   while PtrInt(Old) + Size >= AlignedAddr + PageSize do
-    Inc(PageSize, SysPageSize);
+    Inc(PageSize,_SC_PAGE_SIZE);
   {$ifndef FPC}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
   {$endif}
@@ -38205,7 +38207,12 @@ begin
     CloseHandle(fMap);
     fMap := 0;
   {$else}
-  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0);
+  if aCustomOffset<>0 then
+    if aCustomOffset and (_SC_PAGE_SIZE-1)<>0 then
+      raise ESynException.CreateFmt('fpmmap(aCustomOffset=%d) with pagesize=%d',
+        [aCustomOffset,_SC_PAGE_SIZE]) else
+      aCustomOffset := aCustomOffset div _SC_PAGE_SIZE;
+  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0,aCustomOffset);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
   {$endif}
