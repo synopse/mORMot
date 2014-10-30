@@ -137,6 +137,8 @@ unit mORMotHttpServer;
       - added optional aAdditionalURL parameter to TSQLHttpServer.Create(), to
         be used e.g. to registry an URI to server static file content in addition
         to TSQLRestServer instances - need to override TSQLHttpServer.Request()
+      - added optional parameter to TSQLHttpServer.Create(), to specify a
+        name for the THttpApiServer HTTP queue
       - COMPRESSDEFLATE conditional will use gzip (and not deflate/zip)
       - added TSQLHTTPRemoteLogServer class for easy remote log serving
       - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
@@ -301,12 +303,13 @@ type
     // pdf), or to secSynShaAes if you want our proprietary SHA-256 /
     // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
     // - optional aAdditionalURL parameter can be used e.g. to registry an URI
-    // to server static file content, by overriding TSQLHttpServer.Request 
+    // to server static file content, by overriding TSQLHttpServer.Request
+    // - for THttpApiServer, you can specify an optional name for the HTTP queue
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; ServerThreadPoolCount: Integer=32;
       aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
-      const aAdditionalURL: AnsiString=''); reintroduce; overload;
+      const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
     // - raise a EHttpServer exception if binding failed
     // - specify one TSQLRestServer server class to be used
@@ -318,11 +321,12 @@ type
     // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
     // - optional aAdditionalURL parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TSQLHttpServer.Request
+    // - for THttpApiServer, you can specify an optional name for the HTTP queue
     constructor Create(const aPort: AnsiString; aServer: TSQLRestServer;
       const aDomainName: AnsiString='+';
       aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; aRestAccessRights: PSQLAccessRights=nil;
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
-      const aAdditionalURL: AnsiString=''); reintroduce; overload;
+      const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -502,7 +506,8 @@ end;
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
-  aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString);
+  aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString;
+  const aQueueName: SynUnicode);
 procedure RegURL(const URI: RawByteString);
 var err: integer;
     ErrMsg: RawUTF8;
@@ -559,7 +564,7 @@ begin
   if aHttpServerKind in [useHttpApi,useHttpApiRegisteringURI] then
   try
     // first try to use fastest http.sys
-    fHttpServer := THttpApiServer.Create(false);
+    fHttpServer := THttpApiServer.Create(false,aQueueName);
     for i := 0 to high(aServers) do
       RegURL(aServers[i].Model.Root);
     if aAdditionalURL<>'' then
@@ -608,10 +613,10 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aServer: TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; aRestAccessRights: PSQLAccessRights;
   ServerThreadPoolCount: integer; aHttpServerSecurity: TSQLHttpServerSecurity;
-  const aAdditionalURL: AnsiString);
+  const aAdditionalURL: AnsiString; const aQueueName: SynUnicode);
 begin
   Create(aPort,[aServer],aDomainName,aHttpServerKind,ServerThreadPoolCount,
-    aHttpServerSecurity,aAdditionalURL);
+    aHttpServerSecurity,aAdditionalURL,aQueueName);
   if aRestAccessRights<>nil then
     DBServerAccessRight[0] := aRestAccessRights;
 end;
