@@ -384,8 +384,8 @@ begin
   comm.Article := TSQLArticle(ID);
   if comm.FilterAndValidate(RestModel,error) and
      (RestModel.Add(comm,true)<>0) then
-    GotoView(result,'ArticleView',['RowID',ID,'withComments',true]) else
-    GotoView(result,'ArticleView',['RowID',ID,'withComments',true,'Scope',_ObjFast([
+    GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
+    GotoView(result,'ArticleView',['ID',ID,'withComments',true,'Scope',_ObjFast([
       'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
       HTML_BADREQUEST);
 end;
