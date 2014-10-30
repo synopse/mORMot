@@ -146,6 +146,9 @@ type
       FileTimeStampCheckTick: Int64;
     end;
     function GetRenderer(methodIndex: integer; out ContentType: RawUTF8): TSynMustache;
+    class procedure md5(const Value: variant; out result: variant);
+    class procedure sha1(const Value: variant; out result: variant);
+    class procedure sha256(const Value: variant; out result: variant);
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); override;
   public
@@ -185,6 +188,11 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(
       aRest: TSQLRest): TMVCViewsMustache; overload;
+    /// will add some Expression Helpers for hashing 
+    // - i.e. md5, sha1 and sha256 hashing
+    // - would allow e.g. to compute a Gravatar URI via:
+    // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
+    function RegisterExpressionHelpersForCrypto: TMVCViewsMustache;
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -971,6 +979,29 @@ begin
     for t := 0 to aRest.Model.TablesMax do
      TExpressionHelperForTable.Create(aRest,aRest.Model.Tables[t],fViewHelpers);
   result := self;
+end;
+
+function TMVCViewsMustache.RegisterExpressionHelpersForCrypto: TMVCViewsMustache;
+begin
+  result := RegisterExpressionHelpers(['md5','sha1','sha256'],[md5,sha1,sha256]);
+end;
+
+class procedure TMVCViewsMustache.md5(const Value: variant;
+  out result: variant);
+begin
+  RawUTF8ToVariant(SynCrypto.MD5(VariantToUTF8(Value)),result);
+end;
+
+class procedure TMVCViewsMustache.sha1(const Value: variant;
+  out result: variant);
+begin
+  RawUTF8ToVariant(SynCrypto.SHA1(VariantToUTF8(Value)),result);
+end;
+
+class procedure TMVCViewsMustache.sha256(const Value: variant;
+  out result: variant);
+begin
+  RawUTF8ToVariant(SynCrypto.SHA256(VariantToUTF8(Value)),result);
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
