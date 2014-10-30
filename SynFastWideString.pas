@@ -72,6 +72,12 @@ interface
 
    Then the patch will be applied at runtime. Nothing to recompile!
 
+  NOTE:
+
+   Since we add a trailing 0 byte at the end of the buffer, we need the
+   memory manager to let enough place for it: oldest Borland MM does not :(
+   SO IF YOU WORK WITH A VERSION PRIOR TO DELPHI 2006, ADD FASTMM4 TO YOUR .DPR  
+
   WARNING:
 
    ------------------------------------------------------------------

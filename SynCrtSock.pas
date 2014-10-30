@@ -135,6 +135,7 @@ unit SynCrtSock;
   - converted any AnsiString type into a more neutral RawByteString (this is
     correct for URIs or port numbers, and avoid any dependency to SynCommons)
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
+  - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
   - added THttpApiServer.HTTPQueueLength property (for HTTP API 2.0 only)
   - added THttpApiServer.MaxBandwidth and THttpApiServer.MaxConnections
@@ -915,7 +916,7 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to FALSE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: Boolean);
+    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode='');
     /// release all associated memory and handles
     destructor Destroy; override;
     /// will clone this thread into multiple other threads
@@ -1842,20 +1843,17 @@ begin
   end;
 end;
 
-function BinToHexDisplayW(Bin: PByte; BinBytes: integer): RawByteString;
+procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SynUnicode);
 var j: cardinal;
-    P: PAnsiChar;
+    P: PWideChar;
 begin
-  SetString(Result,nil,BinBytes*4+1);
+  SetString(Result,nil,BinBytes*2);
   P := pointer(Result);
   for j := BinBytes-1 downto 0 do begin
-    P[j*4] := HexChars[Bin^ shr 4];
-    P[j*4+1] := #0;
-    P[j*4+2] := HexChars[Bin^ and $F];
-    P[j*4+3] := #0;
+    P[j*2] := WideChar(HexChars[Bin^ shr 4]);
+    P[j*2+1] := WideChar(HexChars[Bin^ and $F]);
     inc(Bin);
   end;
-  P[BinBytes*4] := #0;
 end;
 
 function Ansi7ToUnicode(const Ansi: RawByteString): RawByteString;
@@ -4930,7 +4928,7 @@ begin
   result := Format('HTTP API %d.%d',[Http.Version.MajorVersion,Http.Version.MinorVersion]);
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: Boolean);
+constructor THttpApiServer.Create(CreateSuspended: Boolean; QueueName: SynUnicode);
 var bindInfo: HTTP_BINDING_INFO;
 begin
   inherited Create(true);
@@ -4942,9 +4940,10 @@ begin
       Http.Version,fServerSessionID));
     EHttpApiServer.RaiseOnError(hCreateUrlGroup,Http.CreateUrlGroup(
       fServerSessionID,fUrlGroupID));
+    if QueueName='' then
+      BinToHexDisplayW(@fServerSessionID,SizeOf(fServerSessionID),QueueName);
     EHttpApiServer.RaiseOnError(hCreateRequestQueue,Http.CreateRequestQueue(
-      Http.Version,pointer(BinToHexDisplayW(@fServerSessionID,SizeOf(fServerSessionID))),
-      nil,0,fReqQueue));
+      Http.Version,pointer(QueueName),nil,0,fReqQueue));
     bindInfo.Flags := 1;
     bindInfo.RequestQueueHandle := FReqQueue;
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,Http.SetUrlGroupProperty(
