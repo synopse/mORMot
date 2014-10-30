@@ -30,7 +30,7 @@ unit SynCommons;
 
   Contributor(s):
    - Aleksandr (sha)
-   - Alfred Glaenzer
+   - Alfred Glaenzer (alf)
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -22457,9 +22457,8 @@ end;
 
 type TWordRec = packed record YDiv100, YMod100: byte; end;
 
-{$ifdef PUREPASCAL}
-function Div100(Y: PtrUInt): TWordRec;
-{$ifdef HASINLINE}inline;{$endif}
+{$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
+function Div100(Y: PtrUInt): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
   result.YDiv100 := Y div 100;
   result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
