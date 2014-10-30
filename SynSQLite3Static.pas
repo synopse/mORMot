@@ -781,7 +781,7 @@ type
 {$endif}
 
   {$ifdef MSWINDOWS}
-  TSQLFile = packed record // called winFile (expand sqlite3.file) in sqlite3.c
+  TSQLFile = packed record // see struct winFile in 3.8.7 sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
@@ -797,7 +797,7 @@ type
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
   {$else}
-  TSQLFile = packed record 
+  TSQLFile = record             // see struct unixFile in 3.8.7 sqlite3.c
     pMethods: pointer;          // sqlite3.io_methods_ptr
     pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
     unixInodeInfo: pointer;     // Info about locks on this inode
@@ -815,18 +815,17 @@ type
   end;
   {$endif}
 
-  // those structures are used to retrieve the Windows file handle
-  TSQLPager = record
+  // those structures are used to retrieve the Windows/Linux file handle
+  TSQLPager = record            // see struct Pager in 3.8.7 sqlite3.c
     pVfs: pointer;
     exclusiveMode, journalMode, useJournal, noSync, fullSync,
-    ckptSyncFlags, walsyncFlags, syncFlags, tempFile, readOnly, memDb: byte;
-    eState, eLock, changeCountDone, setMaster, doNotSpill, doNotSyncSpill,
-    subjInMemory: Byte;
+    ckptSyncFlags, walsyncFlags, syncFlags, tempFile, noLock, readOnly, memDb,
+    eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory: Byte;
     dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
     nSubRec: cardinal;
     pInJournal: pointer;
-    fd: ^TSQLFile; // File descriptor for database
-    jfd: ^TSQLFile; // File descriptor for main journal
+    fd: ^TSQLFile;   // File descriptor for database
+    jfd: ^TSQLFile;  // File descriptor for main journal
     sjfd: ^TSQLFile; // File descriptor for sub-journal
   end;
   TSQLBtShared = record
