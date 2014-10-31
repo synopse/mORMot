@@ -186,6 +186,8 @@ unit SynDB;
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)
   - enhanced TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection speed
+  - introducing TSQLDBColumnCreate(DynArray) types used when creating columns,
+    allowing to create 32 bit integer fields (identified as ftUnknown) if needed
   - declared all TSQLDBConnectionProperties.SQL*() methods as virtual
   - TSQLDBConnectionProperties.SQLAddIndex() will now generate IF NOT EXISTS
     statements, if the corresponding DBMS supports it (only SQLite3 AFAIK),
@@ -299,7 +301,7 @@ type
   
   /// an array of RawUTF8, for each existing column type
   // - used e.g. by SQLCreate method
-  // - ftUnknown maps ID field (as integer), ftNull maps RawUTF8 index # field,
+  // - ftUnknown maps int32 field (e.g. ID), ftNull maps RawUTF8 index # field,
   // ftUTF8 maps RawUTF8 blob field, other types map their default kind 
   // - for UTF-8 text, ftUTF8 will define the BLOB field, whereas ftNull will
   // expect to be formated with an expected field length in ColumnAttr
@@ -456,6 +458,26 @@ type
 
   /// used to define a table/field column layout
   TSQLDBColumnPropertyDynArray = array of TSQLDBColumnProperty;
+
+  /// used to define how a column to be created
+  TSQLDBColumnCreate = record
+    /// the data type
+    // - here, ftUnknown is used for Int32 values, ftInt64 for Int64 values,
+    // as expected by TSQLDBFieldTypeDefinition
+    DBType: TSQLDBFieldType;
+    /// the column name
+    Name: RawUTF8;
+    /// the width, e.g. for VARCHAR() types
+    Width: cardinal;
+    /// if the column should be unique
+    Unique: boolean;
+    /// if the column should be non null
+    NonNullable: boolean;
+    /// if the column is the ID primary key
+    PrimaryKey: boolean;
+  end;
+  /// used to define how a table is to be created
+  TSQLDBColumnCreateDynArray = array of TSQLDBColumnCreate;
 
   /// identify a CRUD mode of a statement
   TSQLDBStatementCRUD = (
@@ -745,7 +767,7 @@ type
     {/ bind an array of fields from an existing SQL statement
      - can be used e.g. after ColumnsToSQLInsert() method call for fast data
        conversion between tables }
-    procedure BindFromRows(const Fields: TSQLDBColumnPropertyDynArray;
+    procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
       Rows: TSQLDBStatement);
     {/ bind a special CURSOR parameter to be returned as a SynDB result set
      - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -952,7 +974,7 @@ type
     fStoreVoidStringAsNull: boolean;
     fForeignKeys: TSynNameValue;
     fSQLCreateField: TSQLDBFieldTypeDefinition;
-    fSQLCreateFieldMax: PtrUInt;
+    fSQLCreateFieldMax: cardinal;
     fSQLGetServerTimeStamp: RawUTF8;
     fEngineName: RawUTF8;
     fDBMS: TSQLDBDefinition;
@@ -998,8 +1020,11 @@ type
     procedure GetForeignKeys; virtual; abstract;
     /// will use fSQLCreateField[Max] to create the SQL column definition
     // - this default virtual implementation will handle properly all supported
-    // database engines, assuming aField.ColumnType=ftUnknown for ID
-    function SQLFieldCreate(const aField: TSQLDBColumnProperty): RawUTF8; virtual;
+    // database engines, assuming aField.ColumnType as in TSQLDBFieldTypeDefinition
+    // - if the field is a primary key, aAddPrimaryKey may be modified to contain
+    // some text to be appended at the end of the ALTER/CREATE TABLE statement
+    function SQLFieldCreate(const aField: TSQLDBColumnCreate;
+      var aAddPrimaryKey: RawUTF8): RawUTF8; virtual;
     /// wrapper around GetIndexes() + set Fields[].ColumnIndexed in consequence
     // - used by some overridden versions of GetFields() method
     procedure GetIndexesAndSetFieldsColumnIndexed(const aTableName: RawUTF8;
@@ -1177,7 +1202,7 @@ type
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSQLCreateField* content or override this method
     function SQLCreate(const aTableName: RawUTF8;
-      const aFields: TSQLDBColumnPropertyDynArray; aAddID: boolean): RawUTF8; virtual;
+      const aFields: TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8; virtual;
     /// returns the SQL statement used to add a column to a Table
     // - should return the SQL "ALTER TABLE" statement needed to add a column to
     // an existing table
@@ -1186,7 +1211,7 @@ type
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSQLCreateField* content or override this method
     function SQLAddColumn(const aTableName: RawUTF8;
-      const aField: TSQLDBColumnProperty): RawUTF8; virtual;
+      const aField: TSQLDBColumnCreate): RawUTF8; virtual;
     /// returns the SQL statement used to add an index to a Table
     // - should return the SQL "CREATE INDEX" statement needed to add an index
     // to the specified column names of an existing table
@@ -1612,7 +1637,7 @@ type
     {/ bind an array of fields from an existing SQL statement
      - can be used e.g. after ColumnsToSQLInsert() method call for fast data
        conversion between tables }
-    procedure BindFromRows(const Fields: TSQLDBColumnPropertyDynArray;
+    procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
       Rows: TSQLDBStatement);
     {/ bind a special CURSOR parameter to be returned as a SynDB result set
      - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -1900,7 +1925,7 @@ type
     $ insert into TableName (Col1,Col2) values (?,N)
     - used e.g. to convert some data on the fly from one database to another }
     function ColumnsToSQLInsert(const TableName: RawUTF8;
-      var Fields: TSQLDBColumnPropertyDynArray): RawUTF8; virtual;
+      var Fields: TSQLDBColumnCreateDynArray): RawUTF8; virtual;
     // Append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -3702,10 +3727,12 @@ end;
 
 function TSQLDBConnection.NewTableFromRows(const TableName: RawUTF8;
   Rows: TSQLDBStatement; WithinTransaction: boolean): integer;
-var Fields: TSQLDBColumnPropertyDynArray;
+var Fields: TSQLDBColumnCreateDynArray;
+    Types: TSQLDBFieldTypeDynArray;
     aTableName, SQL: RawUTF8;
     Tables: TRawUTF8DynArray;
     Ins: TSQLDBStatement;
+    i,n: integer;
 begin
   result := 0;
   if (self=nil) or (Rows=nil) or (Rows.ColumnCount=0) then
@@ -3721,6 +3748,12 @@ begin
         // init when first row of data is available
         if Ins=nil then begin
           SQL := Rows.ColumnsToSQLInsert(aTableName,Fields);
+          n := length(Fields);
+          SetLength(Types,n);
+          for i := 0 to n-1 do
+            if Fields[i].DBType=ftUnknown then
+              Types[n] := ftInt64 else
+              Types[n] := Fields[i].DBType;
           Properties.GetTableNames(Tables);
           if FindRawUTF8(Tables,TableName,false)<0 then
             with Properties do
@@ -3729,7 +3762,7 @@ begin
           Ins.Prepare(SQL,false);
         end;
         // write row data
-        Ins.BindFromRows(Fields,Rows);
+        Ins.BindFromRows(Types,Rows);
         Ins.ExecutePrepared;
         Ins.Reset;
         inc(result);
@@ -4433,58 +4466,64 @@ begin
 end;
 
 function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
-  const aFields: TSQLDBColumnPropertyDynArray; aAddID: boolean): RawUTF8;
+  const aFields: TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8;
 var i: integer;
     F: RawUTF8;
+    FieldID: TSQLDBColumnCreate;
     AddPrimaryKey: RawUTF8;
 const EXE_FMT: PUTF8Char = 'CREATE TABLE % (ID % PRIMARY KEY, %)'; // Delphi 5
 begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   result := '';
   if high(aFields)<0 then
     exit; // nothing to create
+  if aAddID then begin
+    FieldID.DBType := ftUnknown;
+    FieldID.Name := 'ID';
+    FieldID.Unique := true;
+    FieldID.NonNullable := true;
+    FieldID.PrimaryKey := true;
+    result := SQLFieldCreate(FieldID,AddPrimaryKey)+',';
+  end;
   for i := 0 to high(aFields) do begin
-    if (not aAddID) and (aFields[i].ColumnType=ftUnknown) then begin
-      F := aFields[i].ColumnName+' '+fSQLCreateField[ftUnknown]+' NOT NULL';
-      case DBMS of
-      dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB:
-        F := F+' PRIMARY KEY';
-      dDB2, dMySQL:
-        AddPrimaryKey := aFields[i].ColumnName;
-      end;
-    end else
-      F := SQLFieldCreate(aFields[i]);
+    F := SQLFieldCreate(aFields[i],AddPrimaryKey);
     if i<>high(aFields) then
       F := F+',';
     result := result+F;
   end;
   if AddPrimaryKey<>'' then
     result := result+', PRIMARY KEY('+AddPrimaryKey+')';
-  if not aAddID then
-    result := 'CREATE TABLE '+aTableName+' ('+result+')' else
-    // fSQLCreateField[ftUnknown] is the datatype for ID field
-    result := FormatUTF8(EXE_FMT,[aTableName,fSQLCreateField[ftUnknown],result]);
+  result := 'CREATE TABLE '+aTableName+' ('+result+')';
   case DBMS of
   dDB2: result := result+' CCSID Unicode';
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLFieldCreate(const aField: TSQLDBColumnProperty): RawUTF8;
+function TSQLDBConnectionProperties.SQLFieldCreate(const aField: TSQLDBColumnCreate;
+  var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
-  if (aField.ColumnType=ftUTF8) and (aField.ColumnAttr-1<fSQLCreateFieldMax) then
-    result := FormatUTF8(pointer(fSQLCreateField[ftNull]),[aField.ColumnAttr]) else
-    result := fSQLCreateField[aField.ColumnType];
-  if aField.ColumnNonNullable or aField.ColumnUnique then
+  if (aField.DBType=ftUTF8) and (aField.Width-1<fSQLCreateFieldMax) then
+    result := FormatUTF8(pointer(fSQLCreateField[ftNull]),[aField.Width]) else
+    result := fSQLCreateField[aField.DBType];
+  if aField.NonNullable or aField.Unique or aField.PrimaryKey then
     result := result+' NOT NULL';
-  if aField.ColumnUnique then
+  if aField.Unique and not aField.PrimaryKey then
     result := result+' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp 
-  result := aField.ColumnName+result;
+  if aField.PrimaryKey then
+    case DBMS of
+    dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB:
+      result := result+' PRIMARY KEY';
+    dDB2, dMySQL:
+      aAddPrimaryKey := aField.Name;
+    end;
+  result := aField.Name+result;
 end;
 
 function TSQLDBConnectionProperties.SQLAddColumn(const aTableName: RawUTF8;
-  const aField: TSQLDBColumnProperty): RawUTF8;
+  const aField: TSQLDBColumnCreate): RawUTF8;
+var AddPrimaryKey: RawUTF8;
 const EXE_FMT: PUTF8Char = 'ALTER TABLE % ADD %'; // Delphi 5
 begin
-  result := FormatUTF8(EXE_FMT,[aTableName,SQLFieldCreate(aField)]);
+  result := FormatUTF8(EXE_FMT,[aTableName,SQLFieldCreate(aField,AddPrimaryKey)]);
 end;
 
 function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
@@ -6073,7 +6112,7 @@ begin
 end;
 
 function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
-  var Fields: TSQLDBColumnPropertyDynArray): RawUTF8;
+  var Fields: TSQLDBColumnCreateDynArray): RawUTF8;
 var F: integer;
 begin
   Result := '';
@@ -6083,18 +6122,17 @@ begin
   if Fields=nil then
     exit;
   Result := 'insert into '+TableName+' (';
-  for F := 0 to high(Fields) do
-    with Fields[F] do begin
-      ColumnName := self.ColumnName(F);
-      ColumnType := self.ColumnType(F);
-      case ColumnType of
-      ftNull:
-        ColumnType := ftUTF8; // if not identified, we'll set a flexible content
+  for F := 0 to high(Fields) do begin
+    Fields[F].Name := ColumnName(F);
+    Fields[F].DBType := ColumnType(F);
+    case Fields[F].DBType of
+    ftNull:
+      Fields[F].DBType := ftUTF8; // if not identified, we'll set a flexible content
       ftUnknown:
         raise ESQLDBException.CreateUTF8(
-          '%.ColumnsToSQLInsert: Invalid column %',[self,ColumnName]);
+        '%.ColumnsToSQLInsert: Invalid column %',[self,Fields[F].Name]);
       end;
-      Result := Result+ColumnName+',';
+    Result := Result+Fields[F].Name+',';
     end;
   Result[length(Result)] := ')';
   Result := Result+' values (';
@@ -6104,14 +6142,14 @@ begin
 end;
 
 procedure TSQLDBStatement.BindFromRows(
-  const Fields: TSQLDBColumnPropertyDynArray; Rows: TSQLDBStatement);
+  const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
 var F: integer;
 begin
   if (self<>nil) and (Fields<>nil) and (Rows<>nil) then
     for F := 0 to high(Fields) do
       if Rows.ColumnNull(F) then
         BindNull(F+1) else
-      case Fields[F].ColumnType of
+      case Fields[F] of
         ftNull:     BindNull(F+1);
         ftInt64:    Bind(F+1,Rows.ColumnInt(F));
         ftDouble:   Bind(F+1,Rows.ColumnDouble(F));
