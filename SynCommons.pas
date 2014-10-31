@@ -38212,7 +38212,7 @@ begin
       raise ESynException.CreateFmt('fpmmap(aCustomOffset=%d) with pagesize=%d',
         [aCustomOffset,_SC_PAGE_SIZE]) else
       aCustomOffset := aCustomOffset div _SC_PAGE_SIZE;
-  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,0,aCustomOffset);
+  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,aCustomOffset);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
   {$endif}

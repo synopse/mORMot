@@ -100,6 +100,7 @@ unit SynSelfTests;
   - included testing of TSQLRestServerAuthenticationNone
   - added TTestMultiThreadProcess test cases over all communication protocols
   - added PDF-1.5 and page orientation testing
+  - now default HTTP port would be 8888 under Linux (888 needs root rights)
 
 }
 
@@ -169,9 +170,12 @@ uses
 const
   {$ifdef MSWINDOWS}
   HTTP_DEFAULTOPTIONS = useHttpApi;
+  HTTP_DEFAULTPORT = '888';
   {$else}
   HTTP_DEFAULTOPTIONS = useHttpSocket;
+  HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
   {$endif}
+
 
 type
   // a record mapping used in the test classes of the framework
@@ -7472,7 +7476,7 @@ end;
 procedure TTestClientServerAccess._TSQLHttpClient;
 var Resp: TSQLTable;
 begin
-  Client := TSQLHttpClient.Create('127.0.0.1','888',Model);
+  Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
   (Client as TSQLHttpClientGeneric).Compression := [];
   Resp := Client.List([TSQLRecordPeople],'*');
   if CheckFailed(Resp<>nil) then
@@ -7489,7 +7493,7 @@ end;
 {$ifdef MSWINDOWS}
 class function TTestClientServerAccess.RegisterAddUrl(OnlyDelete: boolean): string;
 begin
-  result := THttpApiServer.AddUrlAuthorize('root','888',false,'+',OnlyDelete);
+  result := THttpApiServer.AddUrlAuthorize('root',HTTP_DEFAULTPORT,false,'+',OnlyDelete);
 end;
 {$endif}
 
@@ -7502,7 +7506,7 @@ begin
     DataBase := TSQLRestServerDB.Create(Model,'test.db3');
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
-    Server := TSQLHttpServer.Create('888',[DataBase],'+',HTTP_DEFAULTOPTIONS,16,secSynShaAes);
+    Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[DataBase],'+',HTTP_DEFAULTOPTIONS,16,secSynShaAes);
     fRunConsole := fRunConsole+'using '+Server.HttpServer.APIVersion;
     Database.NoAJAXJSON := true; // expect not expanded JSON from now on
   except
@@ -7705,13 +7709,13 @@ begin
       DataBase.CreateMissingTables;
     end;
     // launch one HTTP server for all TSQLRestServerDB instances
-    Server := TSQLHttpServer.Create('888',
+    Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,
       [Instance[0].Database,Instance[1].Database,Instance[2].Database],
       '+',HTTP_DEFAULTOPTIONS,4,secNone);
     // initialize the clients
     for i := 0 to high(Instance) do
     with Instance[i] do
-      Client := TSQLHttpClient.Create('127.0.0.1','888',Model);
+      Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
     // fill remotely all TSQLRestServerDB instances
     for i := 0 to high(Instance) do
     with Instance[i] do begin
@@ -7768,7 +7772,7 @@ begin
   if (self=nil) or (Server=nil) or (Server.HttpServer is THttpServer) then
     exit; // if already Delphi code, nothing to test
   Server.Free;
-  Server := TSQLHttpServer.Create('888',[DataBase],'+',true);
+  Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[DataBase],'+',true);
   (Client as TSQLHttpClientGeneric).KeepAliveMS := 10000;
   ClientTest;
 end;
@@ -10797,11 +10801,11 @@ var HTTPServer: TSQLHttpServer;
 begin
   fClient.Server.ServicesRouting := TSQLRestRoutingREST; // back to default
   GlobalInterfaceTestMode := itmHttp;
-  HTTPServer := TSQLHttpServer.Create('888',[fClient.Server],'+',
+  HTTPServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fClient.Server],'+',
     useHttpApiRegisteringURI,16,secNone);
   try
     fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
-    HTTPClient := TSQLHttpClient.Create('127.0.0.1','888',fModel);
+    HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
     try
       //HTTPClient.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
       // HTTPClient.Compression := [hcSynShaAes]; // 350ms (300ms for [])
@@ -11419,9 +11423,9 @@ begin
     TSQLRestClientURIMessage(result).DoNotProcessMessages := true;
   end else
   if fTestClass=TSQLHttpClientWinSock then
-    result := TSQLHttpClientWinSock.Create(ClientIP,'888',fModel) else
+    result := TSQLHttpClientWinSock.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
   if fTestClass=TSQLHttpClientWinHTTP then
-    result := TSQLHttpClientWinHTTP.Create(ClientIP,'888',fModel) else
+    result := TSQLHttpClientWinHTTP.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
   {$endif}
     raise Exception.Create('Invalid fTestClass');
 end;
@@ -11481,7 +11485,7 @@ begin
       fDatabase.ExportServerMessage('test') else
     {$endif}
     if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then
-      fHttpServer := TSQLHttpServer.Create('888',[fDataBase],'+',aHttp);
+      fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fDataBase],'+',aHttp);
   end;
   // 2. Perform the tests
   fRunningThreadCount := fMinThreads;
