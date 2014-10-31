@@ -135,7 +135,7 @@ type
     fOccurence: integer;
     fCreatedAt: TCreateTime;
   published
-    property Ident: RawUTF8 read fIdent write fIdent;
+    property Ident: RawUTF8 index 80 read fIdent write fIdent;
     property Occurence: Integer read fOccurence write fOccurence;
     property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
   end;

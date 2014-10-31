@@ -96,6 +96,8 @@ unit mORMotDB;
   - now TSQLRestStorageExternal won't create any columns for external
     tables with unsupported published property types (sftUnknown or sftMany),
     just like TSQLRecord.GetSQLCreate() method
+  - TSQLRestStorageExternal will create sftID/sftRecord/sftEnumerate/sftBoolean
+    columns as 32 bit integer instead of 64 bit integer
   - now handles TSQLDBConnectionProperties.ForcedSchemaName as expected
   - fixed issue in TSQLRestStorageExternal.EngineDeleteWhere() when
     calling commands like MyDB.Delete(TSQLMyClass, 'PLU < ?', [20000])
@@ -561,18 +563,19 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
     result := -1;
   end;
   function PropInfoToExternalField(Prop: TSQLPropInfo;
-    var Column: TSQLDBColumnProperty): boolean;
+    var Column: TSQLDBColumnCreate): boolean;
   const
     mORMotType: array[TSQLFieldType] of TSQLDBFieldType =
+      // ftUnknown is used for Int32 values, ftInt64 for Int64 values
       (ftUnknown,   // sftUnknown
        ftUTF8,      // sftAnsiText
        ftUTF8,      // sftUTF8Text
-       ftInt64,     // sftEnumerate
+       ftUnknown,   // sftEnumerate
        ftInt64,     // sftSet
        ftInt64,     // sftInteger
-       ftInt64,     // sftID
-       ftInt64,     // sftRecord
-       ftInt64,     // sftBoolean
+       ftUnknown,   // sftID
+       ftUnknown,   // sftRecord
+       ftUnknown,   // sftBoolean
        ftDouble,    // sftFloat
        ftDate,      // sftDateTime
        ftInt64,     // sftTimeLog
@@ -589,21 +592,23 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftInt64,     // sftModTime
        ftInt64);    // sftCreateTime
   begin
-    result := false;
-    Column.ColumnType := mORMotType[Prop.SQLFieldType];
-    if Column.ColumnType=ftUnknown then
+    if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
+      result := false;
       exit; // ignore unkwnown fields
-    Column.ColumnName := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
-    Column.ColumnAttr := Prop.FieldWidth;
-    Column.ColumnUnique := aIsUnique in Prop.Attributes;
+    end;
+    Column.DBType := mORMotType[Prop.SQLFieldType];
+    Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
+    Column.Width := Prop.FieldWidth;
+    Column.Unique := aIsUnique in Prop.Attributes;
+    Column.PrimaryKey := false;
     result := true;
   end;
 
 var SQL: RawUTF8;
     i,f: integer;
-    Field: TSQLDBColumnProperty;
+    Field: TSQLDBColumnCreate;
     FieldAdded: Boolean;
-    CreateColumns: TSQLDBColumnPropertyDynArray;
+    CreateColumns: TSQLDBColumnCreateDynArray;
 begin
   inherited Create(aClass,aServer);
   // initialize external DB properties
@@ -624,9 +629,11 @@ begin
     // table is not yet existing -> try to create it
     with aClass.RecordProps do begin
       SetLength(CreateColumns,Fields.Count+1);
-      CreateColumns[0].ColumnName := StoredClassProps.ExternalDB.RowIDFieldName;
-      CreateColumns[0].ColumnType := ftUnknown;
-      CreateColumns[0].ColumnUnique := true;
+      CreateColumns[0].Name := StoredClassProps.ExternalDB.RowIDFieldName;
+      CreateColumns[0].DBType := ftUnknown;
+      CreateColumns[0].Unique := true;
+      CreateColumns[0].NonNullable := true;
+      CreateColumns[0].PrimaryKey := true;
       f := 1;
       for i := 0 to Fields.Count-1 do
         if PropInfoToExternalField(Fields.List[i],CreateColumns[f]) then
