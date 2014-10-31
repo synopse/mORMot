@@ -190,6 +190,8 @@ type // Delphi 5 doesn't have those base types defined :(
   PInteger = ^Integer;            
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;
+const
+  soCurrent = soFromCurrent;
 {$endif}
 
 {/ in-memory ZLib DEFLATE compression }
