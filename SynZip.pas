@@ -129,6 +129,7 @@ unit SynZip;
      log files as for EventArchiveZip)
 
    Version 1.18
+   - introducing new TZipWriteToStream class, able to create a zip without file
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
    - added DestDirIsFileName optional parameter to TZipRead.UnZip() methods
@@ -618,7 +619,7 @@ type
     // - returns -1 on success, or the index in Entry[] of the failing file
     function UnZipAll(DestDir: TFileName): integer;
     /// retrieve information about a file
-    // - in some cases (e.g. for a .zip created by latest Java JRE), 
+    // - in some cases (e.g. for a .zip created by latest Java JRE),
     // infoLocal^.zzipSize/zfullSize/zcrc32 may equal 0: this method is able
     // to retrieve the information either from the ending "central directory",
     // or by searching the "data descriptor" block
@@ -628,19 +629,15 @@ type
   end;
 {$endif Linux}
 
-  /// write-only access for creating a .zip archive file
-  // - not to be used to update a .zip file, but to create a new one
-  // - update can be done manualy by using a TZipRead instance and the
-  // AddFromZip() method
-  TZipWrite = class
+  /// abstract write-only access for creating a .zip archive
+  TZipWriteAbstract = class
   protected
     fAppendOffset: cardinal;
-    fFileName: TFileName;
     fMagic: cardinal;
     function InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+    function InternalWritePosition: cardinal; virtual; abstract;
+    procedure InternalWrite(const buf; len: cardinal); virtual; abstract;
   public
-    /// the associated file handle
-    Handle: integer;
     /// the total number of entries
     Count: integer;
     /// the resulting file entries, ready to be written as a .zip catalog
@@ -651,6 +648,38 @@ type
       /// the corresponding file header
       fhr: TFileHeader;
     end;
+    /// initialize the .zip archive
+    // - a new .zip file content is prepared
+    constructor Create; 
+    /// compress (using the deflate method) a memory buffer, and add it to the zip file
+    // - by default, the 1st of January, 2010 is used if not date is supplied
+    procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
+      CompressLevel: integer=6; FileAge: integer=1+1 shl 5+30 shl 9); overload;
+    /// add a memory buffer to the zip file, without compression
+    // - content is stored, not deflated
+    // (in that case, no deflate code is added to the executable)
+    // - by default, the 1st of January, 2010 is used if not date is supplied
+    procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
+      FileAge: integer=1+1 shl 5+30 shl 9);
+    /// append a file content into the destination file
+    // - useful to add the initial Setup.exe file, e.g.
+    procedure Append(const Content: RawByteString);
+    /// release associated memory, and close destination archive
+    destructor Destroy; override;
+  end;
+
+  /// write-only access for creating a .zip archive file
+  // - not to be used to update a .zip file, but to create a new one
+  // - update can be done manualy by using a TZipRead instance and the
+  // AddFromZip() method
+  TZipWrite = class(TZipWriteAbstract)
+  protected
+    fFileName: TFileName;
+    function InternalWritePosition: cardinal; override;
+    procedure InternalWrite(const buf; len: cardinal); override;
+  public
+    /// the associated file handle
+    Handle: integer;
     /// initialize the .zip file
     // - a new .zip file content is created
     constructor Create(const aFileName: TFileName); overload;
@@ -661,26 +690,25 @@ type
     {$ifndef Linux}
     constructor CreateFrom(const aFileName: TFileName);
     {$endif}
-    /// compress (using the deflate method) a memory buffer, and add it to the zip file
-    // - by default, the 1st of January, 2010 is used if not date is supplied
-    procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
-      CompressLevel: integer=6; FileAge: integer=1+1 shl 5+30 shl 9); overload;
     /// compress (using the deflate method) a file, and add it to the zip file
     procedure AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
       CompressLevel: integer=6); overload;
-    /// add a memory buffer to the zip file, without compression
-    // - content is stored, not deflated
-    // (in that case, no deflate code is added to the executable)
-    // - by default, the 1st of January, 2010 is used if not date is supplied
-    procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
-      FileAge: integer=1+1 shl 5+30 shl 9);
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipEntry);
-    /// append a file content into the destination file
-    // - useful to add the initial Setup.exe file, e.g.
-    procedure Append(const Content: RawByteString);
     /// release associated memory, and close destination file
     destructor Destroy; override;
+  end;
+
+  /// write-only access for creating a .zip archive into a stream
+  TZipWriteToStream = class(TZipWriteAbstract)
+  protected
+    fDest: TStream;
+    function InternalWritePosition: cardinal; override;
+    procedure InternalWrite(const buf; len: cardinal); override;
+  public
+    /// initialize the .zip archive
+    // - a new .zip file content is prepared
+    constructor Create(aDest: TStream); 
   end;
 
 /// a TSynLogArchiveEvent handler which will compress older .log files
@@ -728,6 +756,148 @@ begin
   end;
 end;
 {$endif}
+
+function Is7BitAnsi(P: PChar): boolean;
+begin
+  if P<>nil then
+    while true do
+      if ord(P^)=0 then
+        break else
+      if ord(P^)<=126 then
+        inc(P) else begin
+        result := false;
+        exit;
+      end;
+  result := true;
+end;
+
+
+{ TZipWriteAbstract }
+
+constructor TZipWriteAbstract.Create;
+begin
+  fMagic := (FIRSTHEADER_SIGNATURE+1); // +1 to avoid finding it in the exe generated code
+  dec(fMagic);
+end;
+
+function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+begin
+  with Entry[Count] do begin
+    fHr.signature := $02014b51;
+    dec(fHr.signature); // +1 to avoid finding it in the exe
+    fHr.madeBy := $14;
+    fHr.fileInfo.neededVersion := $14;
+    result := InternalWritePosition;
+    fHr.localHeadOff := result-fAppendOffset;
+    {$ifndef DELPHI5OROLDER}
+    // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
+    if Is7BitAnsi(pointer(zipName)) then begin
+    {$endif}
+      {$ifdef UNICODE}
+      intName := AnsiString(zipName);
+      {$else}  // intName := zipName -> error reference count under Delphi 6
+      SetString(intName,PAnsiChar(pointer(zipName)),length(zipName));
+      {$endif}
+      fHr.fileInfo.UnSetUTF8FileName;
+    {$ifndef DELPHI5OROLDER}
+    end else begin
+      intName := UTF8Encode(WideString(zipName));
+      fHr.fileInfo.SetUTF8FileName;
+    end;
+    {$endif}
+    fHr.fileInfo.nameLen := length(intName);
+    InternalWrite(fMagic,sizeof(fMagic));
+    InternalWrite(fhr.fileInfo,sizeof(fhr.fileInfo));
+    InternalWrite(pointer(intName)^,fhr.fileInfo.nameLen);
+  end;
+  if Buf<>nil then begin
+    InternalWrite(Buf^,Size); // write stored data
+    inc(Count);
+  end;
+end;
+
+procedure TZipWriteAbstract.AddDeflated(const aZipName: TFileName; Buf: pointer;
+  Size, CompressLevel, FileAge: integer);
+var tmp: pointer;
+    tmpsize: integer;
+begin
+  if self=nil then
+    exit;
+  if Count>=length(Entry) then
+    SetLength(Entry,length(Entry)+20);
+  with Entry[Count] do begin
+    with fhr.fileInfo do begin
+      zcrc32 := SynZip.crc32(0,Buf,Size);
+      zfullSize := Size;
+      zzipMethod := Z_DEFLATED;
+      zlastMod := FileAge;
+      tmpsize := (Int64(Size)*11) div 10+12;
+      Getmem(tmp,tmpSize);
+      zzipSize := CompressMem(Buf,tmp,Size,tmpSize,CompressLevel);
+      InternalAdd(aZipName,tmp,zzipSize); // write stored data
+      Freemem(tmp);
+    end;
+  end;
+end;
+
+procedure TZipWriteAbstract.AddStored(const aZipName: TFileName; Buf: pointer;
+  Size, FileAge: integer);
+begin
+  if self=nil then
+    exit;
+  if Count>=length(Entry) then
+    SetLength(Entry,length(Entry)+20);
+  with Entry[Count], fhr.fileInfo do begin
+    zcrc32 := SynZip.crc32(0,Buf,Size);
+    zfullSize := Size;
+    zzipSize := Size;
+    zlastMod := FileAge;
+    InternalAdd(aZipName,Buf,Size);
+  end;
+end;
+
+procedure TZipWriteAbstract.Append(const Content: RawByteString);
+begin
+  if (self=nil) or (fAppendOffset<>0) then
+    exit;
+  fAppendOffset := length(Content);
+  InternalWrite(pointer(Content)^,fAppendOffset);
+end;
+
+destructor TZipWriteAbstract.Destroy;
+var lhr: TLastHeader;
+    i: integer;
+begin
+  fillchar(lhr,sizeof(lhr),0);
+  lhr.signature := LASTHEADER_SIGNATURE+1;
+  dec(lhr.signature); // +1 to avoid finding it in the exe
+  lhr.thisFiles := Count;
+  lhr.totalFiles := Count;
+  lhr.headerOffset := InternalWritePosition-fAppendOffset;
+  for i := 0 to Count-1 do
+  with Entry[i] do begin
+    assert(fhr.fileInfo.nameLen=length(intName));
+    inc(lhr.headerSize,sizeof(TFileHeader)+fhr.fileInfo.nameLen);
+    InternalWrite(fhr,sizeof(fhr));
+    InternalWrite(pointer(IntName)^,fhr.fileInfo.nameLen);
+  end;
+  InternalWrite(lhr,sizeof(lhr));
+  inherited;
+end;
+
+
+
+{ TZipWrite }
+
+function TZipWrite.InternalWritePosition: cardinal;
+begin
+  result := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif});
+end;
+
+procedure TZipWrite.InternalWrite(const buf; len: cardinal);
+begin
+  FileWrite(Handle,buf,len);
+end;
 
 procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
       CompressLevel: integer=6);
@@ -790,80 +960,6 @@ begin
   end;
 end;
 
-function Is7BitAnsi(P: PChar): boolean;
-begin
-  if P<>nil then
-    while true do
-      if ord(P^)=0 then
-        break else
-      if ord(P^)<=126 then
-        inc(P) else begin
-        result := false;
-        exit;
-      end;
-  result := true;
-end;
-
-function TZipWrite.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
-begin
-  with Entry[Count] do begin
-    fHr.signature := $02014b51;
-    dec(fHr.signature); // +1 to avoid finding it in the exe
-    fHr.madeBy := $14;
-    fHr.fileInfo.neededVersion := $14;
-    result := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif});
-    fHr.localHeadOff := result-fAppendOffset;
-    {$ifndef DELPHI5OROLDER}
-    // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
-    if Is7BitAnsi(pointer(zipName)) then begin
-    {$endif}
-      {$ifdef UNICODE}
-      intName := AnsiString(zipName);
-      {$else}  // intName := zipName -> error reference count under Delphi 6
-      SetString(intName,PAnsiChar(pointer(zipName)),length(zipName));
-      {$endif}
-      fHr.fileInfo.UnSetUTF8FileName;
-    {$ifndef DELPHI5OROLDER}
-    end else begin
-      intName := UTF8Encode(WideString(zipName));
-      fHr.fileInfo.SetUTF8FileName;
-    end;
-    {$endif}
-    fHr.fileInfo.nameLen := length(intName);
-    FileWrite(Handle,fMagic,sizeof(fMagic));
-    FileWrite(Handle,fhr.fileInfo,sizeof(fhr.fileInfo));
-    FileWrite(Handle,pointer(intName)^,fhr.fileInfo.nameLen);
-  end;
-  if Buf<>nil then begin
-    FileWrite(Handle,Buf^,Size); // write stored data
-    inc(Count);
-  end;
-end;
-
-procedure TZipWrite.AddDeflated(const aZipName: TFileName; Buf: pointer;
-  Size, CompressLevel, FileAge: integer);
-var tmp: pointer;
-    tmpsize: integer;
-begin
-  if (self=nil) or (Handle<=0) then
-    exit;
-  if Count>=length(Entry) then
-    SetLength(Entry,length(Entry)+20);
-  with Entry[Count] do begin
-    with fhr.fileInfo do begin
-      zcrc32 := SynZip.crc32(0,Buf,Size);
-      zfullSize := Size;
-      zzipMethod := Z_DEFLATED;
-      zlastMod := FileAge;
-      tmpsize := (Int64(Size)*11) div 10+12;
-      Getmem(tmp,tmpSize);
-      zzipSize := CompressMem(Buf,tmp,Size,tmpSize,CompressLevel);
-      InternalAdd(aZipName,tmp,zzipSize); // write stored data
-      Freemem(tmp);
-    end;
-  end;
-end;
-
 procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
 begin
   if (self=nil) or (Handle<=0) then
@@ -876,35 +972,10 @@ begin
   end;
 end;
 
-procedure TZipWrite.AddStored(const aZipName: TFileName; Buf: pointer;
-  Size, FileAge: integer);
-begin
-  if (self=nil) or (Handle<=0) then
-    exit;
-  if Count>=length(Entry) then
-    SetLength(Entry,length(Entry)+20);
-  with Entry[Count], fhr.fileInfo do begin
-    zcrc32 := SynZip.crc32(0,Buf,Size);
-    zfullSize := Size;
-    zzipSize := Size;
-    zlastMod := FileAge;
-    InternalAdd(aZipName,Buf,Size);
-  end;
-end;
-
-procedure TZipWrite.Append(const Content: RawByteString);
-begin
-  if (self=nil) or (Handle<=0) or (fAppendOffset<>0) then
-    exit;
-  fAppendOffset := length(Content);
-  FileWrite(Handle,pointer(Content)^,fAppendOffset);
-end;
-
 constructor TZipWrite.Create(const aFileName: TFileName);
 begin
+  Create;
   fFileName := aFileName;
-  fMagic := (FIRSTHEADER_SIGNATURE+1); // +1 to avoid finding it in the exe generated code
-  dec(fMagic);
   if Handle=0 then
     Handle := FileCreate(aFileName);
 end;
@@ -940,27 +1011,34 @@ end;
 {$endif}
 
 destructor TZipWrite.Destroy;
-var lhr: TLastHeader;
-    i: integer;
 begin
-  fillchar(lhr,sizeof(lhr),0);
-  lhr.signature := LASTHEADER_SIGNATURE+1;
-  dec(lhr.signature); // +1 to avoid finding it in the exe
-  lhr.thisFiles := Count;
-  lhr.totalFiles := Count;
-  lhr.headerOffset := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif})-fAppendOffset;
-  for i := 0 to Count-1 do
-  with Entry[i] do begin
-    assert(fhr.fileInfo.nameLen=length(intName));
-    inc(lhr.headerSize,sizeof(TFileHeader)+fhr.fileInfo.nameLen);
-    FileWrite(Handle,fhr,sizeof(fhr));
-    FileWrite(Handle,pointer(IntName)^,fhr.fileInfo.nameLen);
-  end;
-  FileWrite(Handle,lhr,sizeof(lhr));
+  inherited;
   SetEndOfFile(Handle);
   FileClose(Handle);
   inherited;
 end;
+
+
+{ TZipWriteToStream }
+
+constructor TZipWriteToStream.Create(aDest: TStream);
+begin
+  fDest := aDest;
+  inherited Create;
+end;
+
+function TZipWriteToStream.InternalWritePosition: cardinal;
+begin
+  result := fDest.Seek(0,soCurrent);
+end;
+
+procedure TZipWriteToStream.InternalWrite(const buf; len: cardinal); 
+begin
+  fDest.Write(buf,len);
+end;
+
+
+{ TZipRead }
 
 {$ifndef Linux}
 

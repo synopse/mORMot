@@ -6477,12 +6477,13 @@ end;
 
 procedure TTestCompression.ZipFormat;
 var FN: TFileName;
-procedure Test(aCount: integer);
+    S: TRawByteStringStream;
+procedure Test(Z: TZipRead; aCount: integer);
 var i: integer;
     tmp: RawByteString;
     crc: Cardinal;
 begin
-  with TZipRead.Create(FN) do
+  with Z do
   try
     Check(Count=aCount);
     i := NameToIndex('REP1\ONE.exe');
@@ -6514,22 +6515,35 @@ begin
     Free;
   end;
 end;
+procedure Prepare(Z: TZipWriteAbstract);
 begin
-  FN := ChangeFileExt(paramstr(0),'.zip');
-  with TZipWrite.Create(FN) do
+  with Z do
   try
     AddDeflated('rep1\one.exe',pointer(Data),length(Data));
     Check(Count=1);
     AddDeflated('rep2\ident.gz',M.Memory,M.Position);
     Check(Count=2);
-    AddDeflated(ParamStr(0));
+    if Z is TZipWrite then
+      TZipWrite(Z).AddDeflated(ParamStr(0)) else
+      Z.AddDeflated(ExtractFileName(paramstr(0)),pointer(Data),length(Data));
     Check(Count=3,'direct zip file');
     AddStored('rep2\ident2.gz',M.Memory,M.Position);
     Check(Count=4);
   finally
     Free;
   end;
-  Test(4);
+end;
+begin
+  FN := ChangeFileExt(paramstr(0),'.zip');
+  Prepare(TZipWrite.Create(FN));
+  Test(TZipRead.Create(FN),4);
+  S := TRawByteStringStream.Create;
+  try
+    Prepare(TZipWriteToStream.Create(S));
+    Test(TZipRead.Create(pointer(S.DataString),length(S.DataString)),4);
+  finally
+    S.Free;
+  end;
   with TZipWrite.CreateFrom(FN) do
   try
     Check(Count=4);
@@ -6538,7 +6552,7 @@ begin
   finally
     Free;
   end;
-  Test(5);
+  Test(TZipRead.Create(FN),5);
   DeleteFile(FN);
 end;
 
