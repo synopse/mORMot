@@ -4471,7 +4471,6 @@ var i: integer;
     F: RawUTF8;
     FieldID: TSQLDBColumnCreate;
     AddPrimaryKey: RawUTF8;
-const EXE_FMT: PUTF8Char = 'CREATE TABLE % (ID % PRIMARY KEY, %)'; // Delphi 5
 begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   result := '';
   if high(aFields)<0 then
@@ -4507,7 +4506,7 @@ begin
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
     result := result+' NOT NULL';
   if aField.Unique and not aField.PrimaryKey then
-    result := result+' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp 
+    result := result+' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
     case DBMS of
     dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB:
@@ -6128,12 +6127,12 @@ begin
     case Fields[F].DBType of
     ftNull:
       Fields[F].DBType := ftUTF8; // if not identified, we'll set a flexible content
-      ftUnknown:
-        raise ESQLDBException.CreateUTF8(
+    ftUnknown:
+      raise ESQLDBException.CreateUTF8(
         '%.ColumnsToSQLInsert: Invalid column %',[self,Fields[F].Name]);
-      end;
-    Result := Result+Fields[F].Name+',';
     end;
+    Result := Result+Fields[F].Name+',';
+  end;
   Result[length(Result)] := ')';
   Result := Result+' values (';
   for F := 0 to high(Fields) do
@@ -6486,6 +6485,7 @@ procedure TSQLDBStatementWithParams.Reset;
 begin
   inherited Reset;
   fParam.Clear;
+  fParamsArrayCount := 0;
 end;
 
 
