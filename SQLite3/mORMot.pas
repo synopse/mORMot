@@ -39929,7 +39929,7 @@ begin
           Val := GetJSONField(Par,Par,@wasString,@EndOfObject);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
             exit;  // 'null' will set Val=nil and Par<>nil 
-          if (Val<>nil) and (wasString<>(vIsString in ValueKindAsm)) then
+          if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
             exit;
           case ValueType of
           smvBoolean:
