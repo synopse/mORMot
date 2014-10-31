@@ -221,6 +221,10 @@ cd "\dev\lib\sqlite3\Samples\28 - Simple RESTful ORM Server"
 %DCC% RESTclient.dpr %Switches%
 @if errorlevel 1 pause
 
+cd "\dev\lib\sqlite3\Samples\30 - MVC Server"
+%DCC% MVCServer.dpr %Switches%
+@if errorlevel 1 pause
+
 
 cd "\dev\lib\sqlite3\Samples\MainDemo"
 call FileMainRes.bat
