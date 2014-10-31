@@ -7498,6 +7498,7 @@ begin
   try
     Check(Resp.InheritsFrom(TSQLTableJSON));
     Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$F11CEAC0);
+    //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
   end;
