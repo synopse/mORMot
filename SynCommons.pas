@@ -641,6 +641,7 @@ unit SynCommons;
   - added DateTimeToIso8601ExpandedPChar() and Iso8601CheckAndDecode() functions
   - added TTimeLogBits.FromUTCTime method and NowUTC / TimeLogNowUTC functions
   - added TTimeLogBits.FromUnixTime/FromUnixMSTime/ToUnixTime/ToUnixMSTime
+  - added TTimeLogBits.Year/Month/Day/Hour/Minute/Second functions
   - added GetTickCount64() function, native since Vista, emulated e.g. for XP
   - fixed TTextWriter.RegisterCustomJSONSerializer() method when unregistering
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
@@ -1924,6 +1925,11 @@ function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
 function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
+
+/// a non case-sensitive version of Pos()
+// - uppersubstr is expected to be already in upper case
+// - this version handle only 7 bit ASCII (no accentuated characters)
+function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
 
 /// a non case-sensitive RawUTF8 version of Pos()
 // - substr is expected to be already in upper case
@@ -7705,6 +7711,18 @@ type
     // - FromNow uses local time: this function retrieves the system time
     // expressed in Coordinated Universal Time (UTC)
     procedure FromUTCTime;
+    /// get the year (e.g. 2014) of the TTimeLog value
+    function Year: Integer; {$ifdef HASINLINE}inline;{$endif}
+    /// get the month (1..12) of the TTimeLog value
+    function Month: Integer; {$ifdef HASINLINE}inline;{$endif}
+    /// get the day (1..31) of the TTimeLog value
+    function Day: Integer; {$ifdef HASINLINE}inline;{$endif}
+    /// get the hour (0..23) of the TTimeLog value
+    function Hour: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// get the minute (0..59) of the TTimeLog value
+    function Minute: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// get the second (0..59) of the TTimeLog value
+    function Second: integer; {$ifdef HASINLINE}inline;{$endif}
   end;
 
 
@@ -15616,6 +15634,23 @@ begin
   result := 0;
 end;
 
+function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
+var C: AnsiChar;
+begin
+  if (uppersubstr<>nil) and (str<>nil) then begin
+    C := uppersubstr^;
+    result := str;
+    while result^<>#0 do begin
+      if NormToUpperAnsi7[result^]=C then
+        if IdemPChar(result+1,PAnsiChar(uppersubstr)+1) then
+          exit;
+      inc(result);
+    end;
+  end;
+  result := nil;
+end;
+
+
 function PosIU(substr: PUTF8Char; const str: RawUTF8): Integer;
 var p: PUTF8Char;
 begin
@@ -18545,6 +18580,8 @@ asm // eax=source edx=search
     jz @0
     cmp dl,10
     jne @1
+    cmp byte [ecx],13
+    jbe @1
     jmp @4
 @e: cmp byte ptr [ecx],10 // jump #13#10
     jne @4
@@ -23065,6 +23102,36 @@ begin
     result := result+Time;
 end;
 
+function TTimeLogBits.Year: Integer;
+begin
+  result := (Value shr (6+6+5+5+4)) and 4095;
+end;
+
+function TTimeLogBits.Month: Integer;
+begin
+  result := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
+end;
+
+function TTimeLogBits.Day: Integer;
+begin
+  result := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+end;
+
+function TTimeLogBits.Hour: Integer;
+begin
+  result := (Int64Rec(Value).Lo shr (6+6)) and 31;
+end;
+
+function TTimeLogBits.Minute: Integer;
+begin
+  result := (Int64Rec(Value).Lo shr 6) and 63;
+end;
+
+function TTimeLogBits.Second: Integer;
+begin
+  result := Int64Rec(Value).Lo and 63;
+end;
+            
 function TTimeLogBits.ToUnixTime: Int64;
 begin
   result := DateTimeToUnixTime(ToDateTime);
@@ -43952,8 +44019,11 @@ begin
     end else begin
       if Instance<>nil then
         fWriter.AddInstancePointer(Instance,' ');
-      if length(Text)>TextTruncateAtLength then
-        fWriter.AddOnSameLine(pointer(Text),TextTruncateAtLength) else
+      if length(Text)>TextTruncateAtLength then begin
+        fWriter.AddOnSameLine(pointer(Text),TextTruncateAtLength);
+        fWriter.AddShort('... (truncated) length=');
+        fWriter.AddU(length(Text));
+      end else
         fWriter.AddOnSameLine(pointer(Text));
     end;
     if LastError<>0 then
