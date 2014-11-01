@@ -1047,6 +1047,7 @@ unit mORMot;
       not thread-safe when run directly on server side
     - fixed ticket [027bb9678d] - now TSQLRecordRTree class works as expected
     - fixed ticket [876a097316] about TSQLRest.Add() when ForcedID<>0
+    - added DoNotAutoComputeFields optional parameter to TSQLRest(Batch).Add()
     - implement ticket [e3f9742865] for enhanced JSON in woHumanReadable mode
     - fixed GPF issue in TServiceFactoryServer after instance time-out deletion
     - added TSQLPropInfo.PropertyIndex member
@@ -4648,7 +4649,7 @@ type
     // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
     // - this method will always compute and send TCreateTime/TModTime fields
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      const CustomFields: TSQLFieldBits=[]): integer;
+      const CustomFields: TSQLFieldBits=[]; DoNotAutoComputeFields: boolean=false): integer;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -5639,6 +5640,10 @@ type
        in a sftVariant column) - so you should better set the exact field types
        (e.g. from ORM) before calling this method }
     procedure GetVariant(Row,Field: integer; Client: TObject; var result: variant); overload;
+    /// read-only access to a particular field, via a lookup field name
+    // - will call GetVariant() on the corresponding field
+    // - returns null if the lookup did not have any match
+    function GetValue(const aLookupFieldName,aLookupValue,aValueFieldName: RawUTF8): variant;
     {$endif}
     {/ read-only access to a particular field value, as VCL string text
      - the global UTF8ToString() function will be used for the conversion:
@@ -9794,7 +9799,8 @@ type
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
     // - this method will call EngineAdd() to perform the request
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; overload; virtual;
+    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
+      DoNotAutoComputeFields: boolean=false): integer; overload; virtual;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
@@ -12432,7 +12438,8 @@ type
     // - on success, Value.ID is updated with the new ROWID
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
     // - this overridden method will send BLOB fields, if ForceBlobTransfert is set
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; override;
+    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
+      DoNotAutoComputeFields: boolean=false): integer; override;
     /// update a member
     // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
@@ -18611,7 +18618,7 @@ begin
       GetCaptionFromPCharLen(pointer(EnumValue),s);
       EnumValue := StringToUTF8(s);
       if ((Lang<>sndxNone) and SoundEx.UTF8(pointer(EnumValue))) or
-         ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then 
+         ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
         include(EnumValues,Value);
       inc(PtrUInt(P),ord(P^[0])+1);
       // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
@@ -18736,6 +18743,19 @@ begin
     aType := FieldType(Field,@aTypeInfo);
     ValueVarToVariant(Get(Row,Field),aType,TVarData(result),true,aTypeInfo);
   end;
+end;
+
+function TSQLTable.GetValue(const aLookupFieldName,aLookupValue,aValueFieldName: RawUTF8): variant;
+var f,r,v: integer;
+begin
+  SetVariantNull(result);
+  f := FieldIndex(aLookupFieldName);
+  v := FieldIndex(aValueFieldName);
+  if (f<0) or (v<0) then
+    exit;
+  r := SearchFieldEquals(aLookupValue,f);
+  if r>0 then
+    GetVariant(r,v,nil,Result);
 end;
 
 {$endif NOVARIANTS}
@@ -23944,8 +23964,8 @@ begin
     result := fBatchCount;
 end;
 
-function TSQLRestBatch.Add(Value: TSQLRecord; SendData,
-  ForceID: boolean; const CustomFields: TSQLFieldBits): integer;
+function TSQLRestBatch.Add(Value: TSQLRecord; SendData,ForceID: boolean;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var Props: TSQLRecordProperties;
     FieldBits: TSQLFieldBits;
 begin
@@ -23971,7 +23991,8 @@ begin
       fTablePreviousSendData<>PSQLRecordClass(Value)^,
       (Value.ID<>0) and ForceID,FieldBits);
     fTablePreviousSendData := PSQLRecordClass(Value)^;
-    Value.ComputeFieldsBeforeWrite(fRest,seAdd); // update TModTime/TCreateTime fields
+    if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+      Value.ComputeFieldsBeforeWrite(fRest,seAdd);
     Value.GetJSONValues(fBatch);
     if fCalledWithinRest and ForceID then
       fRest.fCache.Notify(Value,soInsert);
@@ -24833,7 +24854,7 @@ end;
 {$endif NOVARIANTS}
 
 function TSQLRest.Add(Value: TSQLRecord; SendData: boolean;
-  ForceID: boolean=false): integer;
+  ForceID,DoNotAutoComputeFields: boolean): integer;
 var JSONValues: RawUTF8;
     TableIndex: integer;
 begin
@@ -24843,7 +24864,8 @@ begin
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
   if SendData then begin
-    Value.ComputeFieldsBeforeWrite(self,seAdd); // update TModTime/TCreateTime fields
+    if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+      Value.ComputeFieldsBeforeWrite(self,seAdd);
     if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
       ForceID := true;
     JSONValues := Value.GetJSONValues(true, // true=expanded
@@ -32420,9 +32442,10 @@ begin
   fForceBlobTransfert[i] := aValue;
 end;
 
-function TSQLRestClient.Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer;
+function TSQLRestClient.Add(Value: TSQLRecord; SendData: boolean;
+  ForceID,DoNotAutoComputeFields: boolean): integer;
 begin
-  result := inherited Add(Value,SendData,ForceID);
+  result := inherited Add(Value,SendData,ForceID,DoNotAutoComputeFields);
   if (result>0) and (fForceBlobTransfert<>nil) and
      fForceBlobTransfert[fModel.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
      UpdateBlobFields(Value);
