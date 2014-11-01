@@ -110,6 +110,11 @@ begin
     RegisterExpressionHelpers(['MonthToText'],[MonthToText]).
     RegisterExpressionHelpers(['TagToText'],[TagToText]);
   ComputeMinimalData;
+  aServer.Cache.SetCache(TSQLAuthor);
+  aServer.Cache.SetCache(TSQLArticle);
+  aServer.Cache.SetCache(TSQLComment);
+  aServer.Cache.SetTimeOut(TSQLArticle,60000);
+  aServer.Cache.SetTimeOut(TSQLComment,60000);
   with TSQLBlogInfo.Create(RestModel,'') do
   try
     fBlogMainInfo := GetSimpleFieldsAsDocVariant(false);

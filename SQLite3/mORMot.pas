@@ -5616,11 +5616,16 @@ type
     constructor CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType; const aSQL: RawUTF8);
     /// free associated memory and owned records
     destructor Destroy; override;
-    {/ read-only access to a particular field value, as UTF-8 encoded buffer
-     - points to memory buffer allocated by Init() }
-    function Get(Row,Field: integer): PUTF8Char;
-    {/ read-only access to a particular field value, as RawUTF8 text }
-    function GetU(Row,Field: integer): RawUTF8;
+    /// read-only access to a particular field value, as UTF-8 encoded buffer
+    // - points to memory buffer allocated by Init()
+    function Get(Row,Field: integer): PUTF8Char; overload;
+    /// read-only access to a particular field value, as RawUTF8 text
+    function GetU(Row,Field: integer): RawUTF8; overload;
+    /// read-only access to a particular field value, as UTF-8 encoded buffer
+    // - points to memory buffer allocated by Init()
+    function Get(Row: integer; const FieldName: RawUTF8): PUTF8Char; overload;
+    /// read-only access to a particular field value, as RawUTF8 text
+    function GetU(Row: integer; const FieldName: RawUTF8): RawUTF8; overload;
     {/ read-only access to a particular field value, as Win Ansi text }
     function GetA(Row,Field: integer): WinAnsiString;
     {/ read-only access to a particular field value, as Win Ansi text shortstring}
@@ -5662,29 +5667,43 @@ type
       - its content is allocated to contain all WideChars (not trimed to 255,
         like GetWP() above }
     function GetW(Row,Field: integer): RawUnicode;
-    {/ read-only access to a particular field value, as integer value }
-    function GetAsInteger(Row,Field: integer): integer;
+    /// read-only access to a particular field value, as integer value 
+    function GetAsInteger(Row,Field: integer): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {/ read-only access to a particular field value, as Int64 value }
-    function GetAsInt64(Row,Field: integer): Int64;
+    /// read-only access to a particular field value, as integer value
+    function GetAsInteger(Row: integer; const FieldName: RawUTF8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {/ read-only access to a particular field value, as extended value }
-    function GetAsFloat(Row,Field: integer): extended;
+    /// read-only access to a particular field value, as Int64 value
+    function GetAsInt64(Row,Field: integer): Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {/ read-only access to a particular field value, as TDateTime value
-    - explicit sftDateTime will be converted from ISO-8601 text
-    - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
-      encoded as a TTimeLog Int64 value - as sftInteger may have been
-      identified by TSQLTable.InitFieldTypes
-    - for sftTimeLog, sftModTime, sftCreateTime fields, you may have to force
-      the column type, since it may be identified as sftCurrency by default
-      from its JSON number content, e.g. via:
-      ! aTable.SetFieldType('FieldName',sftModTime);
-    - sftCurrency,sftFloat will return the corresponding double value
-    - any other types will try to convert ISO-8601 text }
-    function GetAsDateTime(Row,Field: integer): TDateTime;
-    {/ read-only access to a particular field value, as currency value }
-    function GetAsCurrency(Row,Field: integer): currency;
+    /// read-only access to a particular field value, as Int64 value
+    function GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as extended value
+    function GetAsFloat(Row,Field: integer): extended; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as extended value
+    function GetAsFloat(Row: integer; const FieldName: RawUTF8): extended; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as TDateTime value
+    // - explicit sftDateTime will be converted from ISO-8601 text
+    // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
+    // encoded as a TTimeLog Int64 value - as sftInteger may have been
+    // identified by TSQLTable.InitFieldTypes
+    // - for sftTimeLog, sftModTime, sftCreateTime fields, you may have to force
+    // the column type, since it may be identified as sftCurrency by default
+    // from its JSON number content, e.g. via:
+    // ! aTable.SetFieldType('FieldName',sftModTime);
+    // - sftCurrency,sftFloat will return the corresponding double value
+    // - any other types will try to convert ISO-8601 text }
+    function GetAsDateTime(Row,Field: integer): TDateTime; overload;
+    /// read-only access to a particular field value, as TDateTime value
+    function GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime; overload;
+    /// read-only access to a particular field value, as currency value
+    function GetAsCurrency(Row,Field: integer): currency; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as currency value
+    function GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency; overload;
       {$ifdef HASINLINE}inline;{$endif}
     {/ read-only access to a particular field value, ready to be displayed
       - mostly used with Row=0, i.e. to get a display value from a field name
@@ -5817,25 +5836,33 @@ type
     // - see @http://synopse.info/forum/viewtopic.php?id=2133
     function GetODSDocument: RawByteString;
 
-    {/ get the Field index of a FieldName
-     - return -1 if not found, index (0..FieldCount-1) if found }
+    /// get the Field index of a FieldName
+    // - return -1 if not found, index (0..FieldCount-1) if found 
     function FieldIndex(FieldName: PUTF8Char): integer; overload;
-    {/ get the Field index of a FieldName
-     - return -1 if not found, index (0..FieldCount-1) if found }
+    /// get the Field index of a FieldName
+    // - return -1 if not found, index (0..FieldCount-1) if found 
     function FieldIndex(const FieldName: RawUTF8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {/ get the Field content (encoded as UTF-8 text) from a property name
-     - return nil if not found }
+    /// get the Field index of a FieldName
+    // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found 
+    function FieldIndexExisting(const FieldName: RawUTF8): integer; 
+    /// get the Field content (encoded as UTF-8 text) from a property name
+    // - return nil if not found 
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
-    {/ sort result Rows, according to a specific field
-     - default is sorting by ascending order (Asc=true)
-     - you can specify a Row index to be updated during the sort in PCurrentRow
-     - sort is very fast, even for huge tables (more faster than any indexed
-       SQL query): 500,000 rows are sorted instantly
-     - this optimized sort implementation does the comparaison first by the
-     designed field, and, if the field value is identical, the ID value is
-     used (it will therefore sort by time all identical values) }
+    /// sort result Rows, according to a specific field
+    // - default is sorting by ascending order (Asc=true)
+    // - you can specify a Row index to be updated during the sort in PCurrentRow
+    // - sort is very fast, even for huge tables (more faster than any indexed
+    // SQL query): 500,000 rows are sorted instantly
+    // - this optimized sort implementation does the comparaison first by the
+    // designed field, and, if the field value is identical, the ID value is
+    // used (it will therefore sort by time all identical values) 
     procedure SortFields(Field: integer; Asc: boolean=true;
+      PCurrentRow: PInteger=nil; FieldType: TSQLFieldType=sftUnknown;
+      CustomCompare: TUTF8Compare=nil); overload;
+    /// sort result Rows, according to a specific field
+    // - overloaded method allowing to specify the field by its name
+    procedure SortFields(const FieldName: RawUTF8; Asc: boolean=true;
       PCurrentRow: PInteger=nil; FieldType: TSQLFieldType=sftUnknown;
       CustomCompare: TUTF8Compare=nil); overload;
     /// sort result Rows, according to some specific fields
@@ -9110,17 +9137,17 @@ type
   // entry per TSQLRecord class in the data model
   TSQLRestCacheEntryDynArray = array of TSQLRestCacheEntry;
 
-  {/ implement a fast TSQLRecord cache, per ID, at the TSQLRest level
-   - purpose of this caching mechanism is to speed up retrieval of some common
-     values at either Client or Server level (like configuration settings)
-   - only caching synchronization is about the following RESTful basic commands:
-     RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
-     or via TSQLRecordMany pattern won't be taken in account)
-   - only Simple fields are cached: e.g. the BLOB fields are not stored
-   - this cache is thread-safe (access is locked per table)
-   - this caching will be located at the TSQLRest level, that is no automated
-     synchronization is implemented between TSQLRestClient and TSQLRestServer:
-     you shall ensure that your code won't fail due to this restriction }
+  /// implement a fast TSQLRecord cache, per ID, at the TSQLRest level
+  // - purpose of this caching mechanism is to speed up retrieval of some common
+  // values at either Client or Server level (like configuration settings)
+  // - only caching synchronization is about the following RESTful basic commands:
+  // RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
+  // or via TSQLRecordMany pattern won't be taken in account)
+  // - only Simple fields are cached: e.g. the BLOB fields are not stored
+  // - this cache is thread-safe (access is locked per table)
+  // - this caching will be located at the TSQLRest level, that is no automated
+  // synchronization is implemented between TSQLRestClient and TSQLRestServer:
+  // you shall ensure that your code won't fail due to this restriction
   TSQLRestCache = class(TObject)
   protected
     fRest: TSQLRest;
@@ -9160,28 +9187,30 @@ type
     // - this will flush all stored JSON content, AND destroy the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
     procedure Clear;
-    {/ activate the internal caching for a whole Table
-     - any cached item of this table will be flushed
-     - return true on success }
+    /// activate the internal caching for a whole Table
+    // - any cached item of this table will be flushed
+    // - return true on success
     function SetCache(aTable: TSQLRecordClass): boolean; overload;
-     {/ activate the internal caching for a given TSQLRecord
-     - if this item is already cached, do nothing
-     - return true on success }
+    /// activate the internal caching for a given TSQLRecord
+    // - if this item is already cached, do nothing
+    // - return true on success
     function SetCache(aTable: TSQLRecordClass; aID: Integer): boolean; overload;
-     {/ activate the internal caching for a set of specified TSQLRecord
-     - if these items are already cached, do nothing
-     - return true on success }
+    /// activate the internal caching for a set of specified TSQLRecord
+    // - if these items are already cached, do nothing
+    // - return true on success
     function SetCache(aTable: TSQLRecordClass; const aIDs: array of Integer): boolean; overload;
-     {/ activate the internal caching for a given TSQLRecord
-     - will cache the specified aRecord.ID item
-     - if this item is already cached, do nothing
-     - return true on success }
+    /// activate the internal caching for a given TSQLRecord
+    // - will cache the specified aRecord.ID item
+    // - if this item is already cached, do nothing
+    // - return true on success
     function SetCache(aRecord: TSQLRecord): boolean; overload;
-    {/ set the internal caching time out delay (in ms) for a given table
-     - time out setting is common to all items of the table
-     - if aTimeOut is left to its default 0 value, caching will never expire
-     - return true on success }
+    /// set the internal caching time out delay (in ms) for a given table
+    // - time out setting is common to all items of the table
+    // - if aTimeOut is left to its default 0 value, caching will never expire
+    // - return true on success
     function SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
+    /// returns TRUE if the table is part of the current caching policy
+    function IsCached(aTable: TSQLRecordClass): boolean;
     /// returns the number of JSON serialization records within this cache
     function CachedEntries: cardinal;
     /// returns the memory used by JSON serialization records within this cache
@@ -16581,6 +16610,13 @@ begin
   result := FieldIndex(Pointer(FieldName));
 end;
 
+function TSQLTable.FieldIndexExisting(const FieldName: RawUTF8): integer;
+begin
+  result := FieldIndex(Pointer(FieldName));
+  if result<0 then
+    raise ESQLTableException.CreateUTF8('%.FieldIndexExisting("%")',[self,FieldName]);
+end;
+
 function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
 var Index: integer;
 begin
@@ -17098,6 +17134,16 @@ begin
   end;
 end;
 
+function TSQLTable.Get(Row: integer; const FieldName: RawUTF8): PUTF8Char;
+begin
+  result := Get(Row,FieldIndex(FieldName));
+end;
+
+function TSQLTable.GetU(Row: integer; const FieldName: RawUTF8): RawUTF8; 
+begin
+  result := GetU(Row,FieldIndex(FieldName));
+end;
+
 function TSQLTable.GetA(Row, Field: integer): WinAnsiString;
 begin
   result := Utf8ToWinAnsi(Get(Row,Field));
@@ -17108,9 +17154,19 @@ begin
   result := GetInteger(Get(Row,Field));
 end;
 
+function TSQLTable.GetAsInteger(Row: integer; const FieldName: RawUTF8): integer;
+begin
+  result := GetInteger(Get(Row,FieldIndex(FieldName)));
+end;
+
 function TSQLTable.GetAsInt64(Row, Field: integer): Int64;
 begin
   SetInt64(Get(Row,Field),result);
+end;
+
+function TSQLTable.GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64;
+begin
+  SetInt64(Get(Row,FieldIndex(FieldName)),result);
 end;
 
 function TSQLTable.GetAsFloat(Row,Field: integer): extended;
@@ -17118,9 +17174,19 @@ begin
   result := GetExtended(Get(Row,Field));
 end;
 
+function TSQLTable.GetAsFloat(Row: integer; const FieldName: RawUTF8): extended;
+begin
+  result := GetExtended(Get(Row,FieldIndex(FieldName)));
+end;
+
 function TSQLTable.GetAsCurrency(Row,Field: integer): currency;
 begin
   result := StrToCurrency(Get(Row,Field));
+end;
+
+function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency;
+begin
+  result := StrToCurrency(Get(Row,FieldIndex(FieldName)));
 end;
 
 function TSQLTable.GetAsDateTime(Row,Field: integer): TDateTime;
@@ -17141,6 +17207,11 @@ begin
   else // sftDateTime and any other kind will try from ISO-8601 text
     result := Iso8601ToDateTimePUTF8Char(P);  
   end;
+end;
+
+function TSQLTable.GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime;
+begin
+  result := GetAsDateTime(Row,FieldIndex(FieldName));
 end;
 
 function TSQLTable.GetS(Row, Field: integer): shortstring;
@@ -18038,6 +18109,13 @@ begin
     I := P;
     L := P;
   until I>=R;
+end;
+
+procedure TSQLTable.SortFields(const FieldName: RawUTF8; Asc: boolean=true;
+  PCurrentRow: PInteger=nil; FieldType: TSQLFieldType=sftUnknown;
+  CustomCompare: TUTF8Compare=nil);
+begin
+  SortFields(FieldIndex(FieldName),Asc,PCurrentRow,FieldType,CustomCompare);
 end;
 
 procedure TSQLTable.SortFields(Field: integer; Asc: boolean=true;
@@ -24552,9 +24630,31 @@ function TSQLRest.RetrieveDocVariant(Table: TSQLRecordClass;
   FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8): variant;
 var T: TSQLTable;
+    bits: TSQLFieldBits;
+    Rec: TSQLRecord;
+    len: integer;
 begin
   SetVariantNull(result);
   if (self<>nil) and (Table<>nil) then begin
+    with Table.RecordProps do
+    if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
+       (BoundsSQLWhere[0].VType=vtInteger) and
+       FieldIndexsFromCSV(CustomFieldsCSV,bits) then
+      if IsZero(bits) then
+        exit else
+      if bits-SimpleFieldsBits[soSelect]=[] then begin
+        len := StrLen(FormatSQLWhere);
+        if IdemPropNameU('RowID=?',FormatSQLWhere,len) or
+           IdemPropNameU('ID=?',FormatSQLWhere,len) then begin
+          Rec := Table.Create(self,BoundsSQLWhere[0].VInteger);
+          try
+            result := Rec.GetAsDocVariant(True,bits);
+          finally
+            Rec.Free;
+          end;
+          exit;
+        end;
+      end;
     T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try
@@ -24588,8 +24688,11 @@ begin // this version handles locking and use fast EngineRetrieve() method
   if Resp='' then begin
     // get JSON object '{...}' in Resp from corresponding EngineRetrieve() method
     Resp := EngineRetrieve(TableIndex,aID);
-    if Resp='' then
+    if Resp='' then begin
+      fCache.NotifyDeletion(TableIndex,aID);
       exit;
+    end;
+    fCache.Notify(Tableindex,aID,Resp,soSelect);
   end;
   // fill Value from JSON if was correctly retrieved
   Value.FillFrom(Resp);
@@ -25488,6 +25591,18 @@ begin
         LeaveCriticalSection(Mutex);
         result := true;
       end;
+end;
+
+function TSQLRestCache.IsCached(aTable: TSQLRecordClass): boolean;
+var i: cardinal;
+begin
+  result := false;
+  if (self=nil) or (aTable=nil) then
+    exit;
+  i := Rest.Model.GetTableIndexExisting(aTable);
+  if i<Cardinal(Length(fCache)) then
+    if fCache[i].CacheEnable then
+      result := true;
 end;
 
 function TSQLRestCache.SetCache(aTable: TSQLRecordClass): boolean;
@@ -32481,6 +32596,8 @@ begin
   end;
   try
     if ClientRetrieve(TableIndex,aID,ForUpdate,Value.fInternalState,Resp) then begin
+      if not ForUpdate then
+        fCache.Notify(TableIndex,aID,Resp,soSelect);
       Value.FillFrom(Resp);
       Value.fID := aID; // JSON object may not contain the ID
       if (fForceBlobTransfert<>nil) and fForceBlobTransfert[TableIndex] then

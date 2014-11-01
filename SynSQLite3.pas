@@ -2424,6 +2424,7 @@ type
   private
     fDB: TSQLite3DB;
     fFileName: TFileName;
+    fIsMemory: boolean;
     fPassword: RawUTF8;
     fTransactionActive: boolean;
     fLock: TRTLCriticalSection;
@@ -2695,10 +2696,13 @@ type
     // - will also increment the global InternalState property value (if set) 
     procedure CacheFlush;
 
-    {/ read-only access to the SQLite3 database handle }
+    /// read-only access to the SQLite3 database handle
     property DB: TSQLite3DB read fDB;
-    {/ read-only access to the SQLite3 database filename opened }
+    /// read-only access to the SQLite3 database filename opened
     property FileName: TFileName read fFileName;
+    /// equals TRUE if the SQLite3 database was created as ':memory:'
+    // (i.e. SQLITE_MEMORY_DATABASE_NAME)
+    property IsMemory: boolean read fIsMemory;
     /// if this property is set, all ExecuteJSON() responses will be cached
     // - cache is flushed on any write access to the DB (any not SELECT statement)
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
@@ -3258,6 +3262,8 @@ begin
     raise ESQLite3Exception.Create('Your version of SQLite3 does not support custom OpenV2Flags');
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
+  if fFileName=SQLITE_MEMORY_DATABASE_NAME then
+    fIsMemory := true;
   fPassword := aPassword;
   fSQLFunctions := TObjectList.Create;
   result := DBOpen;
@@ -3817,7 +3823,8 @@ begin
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
   // tune up execution speed
-  ExecuteNoException('PRAGMA cache_size=10000');
+  if not fIsMemory then
+    CacheSize := 10000;
 end;
 
 

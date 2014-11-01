@@ -448,7 +448,7 @@ var T,tagTable,postTable: TDotClearTable;
     tagsCount: integer;
     batch: TSQLRestBatch;
     PublicFolder: TFileName;
-    r,f,f1,f2,ftag,postID,fPostID: integer;
+    r,post_url,meta_id,meta_type,tag_post_id,postID,post_id: integer;
 function FixLinks(P: PUTF8Char): RawUTF8;
 var B,H: PUTF8Char;
     url: RawUTF8;
@@ -526,17 +526,17 @@ begin
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   T := data.GetObjectByName('setting') as TDotClearTable;
   Rest.Retrieve('',info);
-  info.Copyright := T.GetValue('setting_id','copyright_notice','setting_value');
+  info.Copyright := VariantToUTF8(T.GetValue('setting_id','copyright_notice','setting_value'));
   if info.ID=0 then
     Rest.Add(info,true) else
     Rest.Update(info);
   tagTable := data.GetObjectByName('meta') as TDotClearTable;
   tagsCount := 0;
-  f1 := tagTable.FieldIndex('meta_id');
-  f2 := tagTable.FieldIndex('meta_type');
+  meta_id := tagTable.FieldIndexExisting('meta_id');
+  meta_type := tagTable.FieldIndexExisting('meta_type');
   for r := 1 to tagTable.RowCount do
-    if tagTable.GetU(r,f2)='tag' then
-      AddSortedRawUTF8(tags,tagsCount,tagTable.GetU(r,f1),nil,-1,@StrIComp);
+    if tagTable.GetU(r,meta_type)='tag' then
+      AddSortedRawUTF8(tags,tagsCount,tagTable.GetU(r,meta_id),nil,-1,@StrIComp);
   for r := 0 to tagsCount-1 do begin
     tag.Ident := tags[r];
     batch.Add(tag,true);
@@ -544,37 +544,37 @@ begin
   Rest.BatchSend(batch,tagID);
   aTagsLookup.Init(Rest); // reload after initial fill
   batch.Reset(TSQLArticle,5000);
-  ftag := tagTable.FieldIndex('post_id');
-  T.SortFields(ftag,true,nil,sftInteger);
+  tag_post_id := tagTable.FieldIndexExisting('post_id');
+  T.SortFields(tag_post_id,true,nil,sftInteger);
   postTable := data.GetObjectByName('post') as TDotClearTable;
-  postTable.SortFields(postTable.FieldIndex('post_creadt'),true,nil,sftDateTime);
-  fPostID := postTable.FieldIndex('post_id');
-  f := postTable.FieldIndex('post_url');
+  postTable.SortFields('post_creadt',true,nil,sftDateTime);
+  post_id := postTable.FieldIndexExisting('post_id');
+  post_url := postTable.FieldIndexExisting('post_url');
   if postTable.Step(true) then
     repeat
-      urls.Add(postTable.FieldBuffer(f));
+      urls.Add(postTable.FieldBuffer(post_url));
     until not postTable.Step;
   article.Author := TSQLAuthor(1);
   article.AuthorName := 'synopse';
   article.ContentHtml := true;
   for r := 1 to postTable.RowCount do begin
-    article.Title := postTable.GetU(r,postTable.FieldIndex('post_title'));
-    article.Abstract := FixLinks(postTable.Get(r,postTable.FieldIndex('post_excerpt_xhtml')));
-    article.Content := FixLinks(postTable.Get(r,postTable.FieldIndex('post_content_xhtml')));
+    article.Title := postTable.GetU(r,'post_title');
+    article.Abstract := FixLinks(postTable.Get(r,'post_excerpt_xhtml'));
+    article.Content := FixLinks(postTable.Get(r,'post_content_xhtml'));
     if article.Abstract='' then begin
       article.Abstract := article.Content;
       article.Content := '';
     end;
-    article.CreatedAt := Iso8601ToTimeLog(postTable.GetU(r,postTable.FieldIndex('post_creadt')));
-    article.ModifiedAt := Iso8601ToTimeLog(postTable.GetU(r,postTable.FieldIndex('post_upddt')));
+    article.CreatedAt := Iso8601ToTimeLog(postTable.GetU(r,'post_creadt'));
+    article.ModifiedAt := Iso8601ToTimeLog(postTable.GetU(r,'post_upddt'));
     article.SetPublishedMonth(article.CreatedAt);
-    postID := postTable.GetAsInteger(r,fPostID);
+    postID := postTable.GetAsInteger(r,post_id);
     article.Tags := nil;
     if tagTable.Step(true) then
       repeat
-        if GetInteger(tagTable.FieldBuffer(ftag))=postID then
+        if GetInteger(tagTable.FieldBuffer(tag_post_id))=postID then
           article.TagsAddOrdered(tagID[FastFindPUTF8CharSorted(pointer(tags),high(tags),
-            Pointer(tagTable.FieldBuffer(f1)),@StrIComp)],aTagsLookup);
+            tagTable.FieldBuffer(meta_id),@StrIComp)],aTagsLookup);
       until not tagTable.Step;
     batch.Add(article,true,false,[],true);
   end;
