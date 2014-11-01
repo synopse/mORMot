@@ -832,7 +832,7 @@ begin
   Log := SynDBLog.Enter(Self);
   with Log.Instance do
     if sllSQL in Family.Level then
-      LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+      Log(sllSQL,SQLWithInlinedParams,self,2048);
   if fStatement=nil then
     raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() invalid call',[self]);
   if fResultSet<>nil then

@@ -464,7 +464,7 @@ begin
   Log := SynDBLog.Enter(Self);
   with Log.Instance do
     if sllSQL in Family.Level then
-      LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+      Log(sllSQL,SQLWithInlinedParams,self,2048);
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
     raise ESQLDBDataset.CreateUTF8(

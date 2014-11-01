@@ -3306,7 +3306,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,4096);
 {$endif}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
@@ -3322,7 +3322,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL); // run one statement -> we can trust isSelect()
   try
@@ -3340,7 +3340,7 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   end;
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL);
   try
@@ -3356,7 +3356,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL);
   try
@@ -3372,7 +3372,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL);
   try
@@ -3418,7 +3418,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);;
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   result := LockJSON(aSQL,aResultCount); // lock and try getting the request from the cache
   if result='' then // only Execute the DB request if not got from cache
@@ -3439,7 +3439,7 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   end;
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL);
+  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL);
   try
@@ -3588,7 +3588,7 @@ begin
       if result<>'' then begin
         {$ifdef WITHLOG}
         if fLog<>nil then begin
-          fLog.Add.Log(sllSQL,aSQL,self);
+          fLog.Add.Log(sllSQL,aSQL,self,2048);
           fLog.Add.Log(sllCache,'from cache',self);
           fLog.Add.Log(sllResult,result,self,fLogResultMaximumSize);
         end;

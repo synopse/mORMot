@@ -1534,7 +1534,7 @@ begin
   inherited;
   with SynDBLog.Add do
   if sllSQL in Family.Level then
-    LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+    Log(sllSQL,SQLWithInlinedParams,self,2048);
   with OleDBConnection do begin
     if not IsConnected then
       Connect;
