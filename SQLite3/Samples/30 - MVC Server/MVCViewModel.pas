@@ -100,13 +100,6 @@ begin
   fDefaultData := TLockedDocVariant.Create;
   inherited Create(aServer,TypeInfo(IBlogApplication));
   fHasFTS := aServer.StaticVirtualTable[TSQLArticle]=nil;
-  ComputeMinimalData;
-  with TSQLBlogInfo.Create(RestModel,'') do
-  try
-    fBlogMainInfo := GetSimpleFieldsAsDocVariant(false);
-  finally
-    Free;
-  end;
   fTagsLookup.Init(RestModel);
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)
   fMainRunner := TMVCRunOnRestServer.Create(Self).
@@ -116,6 +109,13 @@ begin
   (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).
     RegisterExpressionHelpers(['MonthToText'],[MonthToText]).
     RegisterExpressionHelpers(['TagToText'],[TagToText]);
+  ComputeMinimalData;
+  with TSQLBlogInfo.Create(RestModel,'') do
+  try
+    fBlogMainInfo := GetSimpleFieldsAsDocVariant(false);
+  finally
+    Free;
+  end;
 end;
 
 procedure TBlogApplication.MonthToText(const Value: variant;
@@ -152,6 +152,7 @@ var info: TSQLBlogInfo;
     batch: TSQLRestBatch;
     n,t: integer;
     articles,tags,comments: TIntegerDynArray;
+    tmp: RawUTF8;
 begin
   TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
@@ -165,6 +166,12 @@ begin
   end;
   if RestModel.TableHasRows(TSQLArticle) then
     exit;
+  tmp := StringFromFile('d:\download\2014-10-31-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
+  if tmp<>'' then begin
+    DotClearFlatImport(RestModel,tmp,fTagsLookup,'http://blog.synopse.info',
+      (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).ViewStaticFolder);
+    exit;
+  end;  
   SetLength(tags,32);
   for n := 1 to length(tags) do begin
     tag.Ident := 'Tag'+UInt32ToUtf8(n);
@@ -230,7 +237,7 @@ begin
     'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
   if not fDefaultData.AddExistingProp('archives',result) then
     fDefaultData.AddNewProp('archives',RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 100',[],
       'distinct(PublishedMonth),max(RowID)+1 as FirstID'),result);
   if not fDefaultData.AddExistingProp('tags',result) then
     fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,result);
@@ -246,7 +253,7 @@ end;
 { TBlogApplication - Commands }
 
 const
-  ARTICLE_FIELDS = 'RowID,Title,Tags,Abstract,Author,AuthorName,CreatedAt';
+  ARTICLE_FIELDS = 'RowID,Title,Tags,Abstract,ContentHtml,Author,AuthorName,CreatedAt';
   ARTICLE_DEFAULT_LIMIT = ' limit 20';
   ARTICLE_DEFAULT_ORDER: RawUTF8 = 'order by RowID desc'+ARTICLE_DEFAULT_LIMIT;
 
@@ -268,7 +275,8 @@ begin
       'from ArticleSearch where ArticleSearch match ? '+whereClause+
       'order by rank desc'+ARTICLE_DEFAULT_LIMIT+')as r on (r.docid=Article.id)';
     articles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'',pointer(whereClause),[match,rank],'id,title,tags,abstract,rank');
+      TSQLArticle,'',pointer(whereClause),[match,rank],
+      'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
     with DocVariantDataSafe(articles)^do
       if (Kind=dvArray) and (Count>0) then
         rank := Values[Count-1].rank else

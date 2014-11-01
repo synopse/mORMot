@@ -92,6 +92,7 @@ type
     fLogClass: TSynLogClass;
     fViewTemplateFolder: TFileName;
     fFactoryErrorIndex: integer;
+    function GetViewStaticFolder: TFileName;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); virtual; abstract;
   public
@@ -101,6 +102,8 @@ type
     property Factory: TInterfaceFactory read fFactory;
     /// read-only access to the local folder containing the Mustache views
     property ViewTemplateFolder: TFileName read fViewTemplateFolder;
+    /// retrieve the .static local folder name
+    property ViewStaticFolder: TFileName read GetViewStaticFolder;
   end;
 
   /// general parameters defining the Mustache Views process
@@ -617,6 +620,11 @@ begin
   if aLogClass=nil then
     fLogClass := TSQLLog else
     fLogClass := aLogClass;
+end;
+
+function TMVCViewsAbtract.GetViewStaticFolder: TFileName;
+begin
+  result := ViewTemplateFolder+STATIC_URI;
 end;
 
 
@@ -1573,9 +1581,9 @@ begin
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
     static := fStaticCache.Value(rawFormat,#0);
     if static=#0 then begin
-      if (PosEx('\',rawFormat)>0) or (PosEx('/',rawFormat)>0) then // avoid injection
+      if PosEx('..',rawFormat)>0 then // avoid injection
         static := '' else begin
-        staticFileName := UTF8ToString(rawFormat);
+        staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/','\'));
         static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+'\'+staticFileName);
         if static<>'' then
           static := GetMimeContentType(nil,0,staticFileName)+#0+static;

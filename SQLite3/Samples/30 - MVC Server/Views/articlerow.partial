@@ -5,7 +5,8 @@
 			{{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a><br />
 			{{#Tags}}<a href="default?scope={tag:{{.}}}" class="label label-info">{{TagToText .}}</a> {{/Tags}}
 			</p>
-            {{{WikiToHtml Abstract}}}
+			{{#ContentHtml}}{{{Abstract}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml Abstract}}}{{/ContentHtml}}
+			<p><a href=articleView?id={{id}} class="label label-primary">Read More</a></p>
 		  </div>
         {{/articles}}
         {{^articles}}

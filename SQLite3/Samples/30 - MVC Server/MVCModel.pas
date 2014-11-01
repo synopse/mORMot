@@ -76,9 +76,11 @@ type
     fTitle: RawUTF8;
     fAuthor: TSQLAuthor;
     fAuthorName: RawUTF8;
+    fContentHtml: boolean;
   published
-    property Title: RawUTF8 index 80 read fTitle write fTitle;
+    property Title: RawUTF8 index 120 read fTitle write fTitle;
     property Content: RawUTF8 read fContent write fContent;
+    property ContentHtml: boolean read fContentHtml write fContentHtml;
     property Author: TSQLAuthor read fAuthor write fAuthor;
     property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
   end;
@@ -106,11 +108,12 @@ type
     class function CurrentPublishedMonth: Integer;
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
+    procedure SetPublishedMonth(FromTime: TTimeLog);
     // note: caller should call Tags.SaveOccurence() to update the DB
     procedure TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
   published
     property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
-    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+    property Abstract: RawUTF8 read fAbstract write fAbstract;
     // "index 1" below to allow writing e.g. aArticle.DynArray(1).Delete(aIndex)
     property Tags: TIntegerDynArray index 1 read fTags write fTags;
   end;
@@ -144,9 +147,16 @@ type
 
 function CreateModel: TSQLModel;
 
+procedure DotClearFlatImport(Rest: TSQLRest; const aFlatFile: RawUTF8;
+  var aTagsLookup: TSQLTags; const aDotClearRoot: RawUTF8;
+  const aStaticFolder: TFileName);
+
 
 implementation
 
+uses
+  SynCrtSock; // for DotClearFlatImport() below
+  
 function CreateModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
@@ -218,6 +228,11 @@ begin
   inherited;
   if (FieldName='') or (FieldName='PublishedMonth') then
     Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+end;
+
+procedure TSQLArticle.SetPublishedMonth(FromTime: TTimeLog);
+begin
+  fPublishedMonth := TTimeLogBits(FromTime).Year*12+TTimeLogBits(FromTime).Month-1;
 end;
 
 procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
@@ -323,5 +338,250 @@ begin // Lock.ProtectMethod made by caller
   assert(n=length(Tags));
   Tags := new;
 end;
+
+type
+  /// used to store a DotClear flat export data section
+  TDotClearTable = class(TSQLTable)
+  protected
+    fText: RawUTF8;
+    fFields: TRawUTF8DynArray;
+    fJSONResults: array of PUTF8Char;
+    fName: RawUTF8;
+  public
+    /// compute a section content
+    constructor Create(var Text: PUTF8Char);
+    /// parse a DotClear flat export text file, and create a list of sections
+    // - you can later on use aList.GetObjectByName('post') as TDotClearTable
+    // to access a given section
+    class function Parse(const aFlatExport: RawUTF8): TRawUTF8List;
+    /// the name of the section, e.g. 'category' or 'post'
+    property Name: RawUTF8 read fName;
+  end;
+
+constructor TDotClearTable.Create(var Text: PUTF8Char);
+var P,D: PUTF8Char;
+    f,r: integer;
+begin
+  fName := GetNextItem(Text,' ');
+  CSVToRawUTF8DynArray(Pointer(GetNextItem(Text,']')),fFields);
+  fFieldCount := length(fFields);
+  GetNextLineBegin(Text,Text);
+  P := pointer(Text);
+  while (Text<>nil) and (Text^='"') do begin
+    GetNextLineBegin(Text,Text);
+    inc(fRowCount);
+  end;
+  if Text=nil then
+    fText := P else
+    SetString(fText,PAnsiChar(P),Text-P);
+  SetLength(fJSONResults,fFieldCount*(fRowCount+1));
+  fResults := pointer(fJSONResults);
+  for f := 0 to fFieldCount-1 do begin
+    fResults[f] := pointer(fFields[f]);
+    SetFieldType(f,sftUTF8Text);
+  end;
+  for r := 1 to fRowCount do begin
+    assert(P^='"');
+    inc(P);
+    for f := 0 to fFieldCount-1 do begin
+      fResults[r*fFieldCount+f] := P;
+      D := P;
+      while P^<>'"' do
+        if P^=#0 then
+          exit else begin
+          if P^='\' then begin
+            inc(P);
+            case P^ of
+            'r': D^ := #13;
+            'n': D^ := #10;
+            '\': D^ := '\';
+            '"': D^ := '"';
+            else begin
+              D^ := '\';
+              inc(D);
+              D^ := P^;
+            end;
+            end;
+          end else
+            D^ := P^;
+          inc(P);
+          inc(D);
+        end;
+      D^ := #0;
+      inc(P);
+      if (P[0]=',')and(P[1]='"') then
+        inc(P,2);
+    end;
+    GetNextLineBegin(P,P);
+  end;
+end;
+
+class function TDotClearTable.Parse(const aFlatExport: RawUTF8): TRawUTF8List;
+var P: PUTF8Char;
+    T: TDotClearTable;
+begin
+  result := TRawUTF8List.Create(true);
+  P := pointer(aFlatExport);
+  repeat
+    while (P<>nil) and (P^<>'[') do
+      GetNextLineBegin(P,P);
+    if P=nil then
+      exit;
+    inc(P);
+    T := TDotClearTable.Create(P);
+    result.AddObject(T.Name,T);
+    //FileFromString(T.GetODSDocument,TFileName(T.Name)+'.ods');
+  until P=nil;
+end;
+
+procedure DotClearFlatImport(Rest: TSQLRest; const aFlatFile: RawUTF8;
+  var aTagsLookup: TSQLTags; const aDotClearRoot: RawUTF8;
+  const aStaticFolder: TFileName);
+var T,tagTable,postTable: TDotClearTable;
+    data,urls: TRawUTF8List;
+    info: TSQLBlogInfo;
+    article: TSQLArticle;
+    comment: TSQLComment;
+    tag: TSQLTag;
+    tags: TRawUTF8DynArray;
+    tagID: TIntegerDynArray;
+    tagsCount: integer;
+    batch: TSQLRestBatch;
+    PublicFolder: TFileName;
+    r,f,f1,f2,ftag,postID,fPostID: integer;
+function FixLinks(P: PUTF8Char): RawUTF8;
+var B,H: PUTF8Char;
+    url: RawUTF8;
+    i,urlLen: integer;
+    FN: TFileName;
+procedure GetUrl(H: PUTF8Char);
+begin
+  url := GetNextItem(H,'"');
+  urlLen := length(url);
+  url := UrlDecode(url);
+end;
+begin
+  with TTextWriter.CreateOwnedStream(16384) do
+  try
+    B := P;
+    while P<>nil do begin
+      while P^<>' ' do
+        if P^=#0 then
+          break else
+          inc(P);
+      if P^=#0 then
+        break;
+      inc(P);
+      if IdemPChar(P,'HREF=') then
+        H := P+5 else
+      if IdemPChar(P,'SRC=') then
+        H := P+4 else
+        continue;
+      if H^='"' then inc(H);
+      AddNoJSONEscape(B,H-B);
+      P := H;
+      if P^='/' then
+        if IdemPChar(P+1,'POST/') then begin
+          GetUrl(P+6);
+          i := PosEx('?',url);
+          if i>0 then
+            SetLength(url,i-1);
+          i := urls.IndexOf(url);
+          if i>=0 then begin
+            AddShort('articleView?id=');
+            Add(i+1);
+            inc(P,urlLen+6);
+          end else
+            AddString(aDotClearRoot);
+        end else
+        if IdemPChar(P+1,'PUBLIC/') then begin
+          if PublicFolder<>'' then begin
+            GetUrl(P+8);
+            FN := PublicFolder+UTF8ToString(StringReplaceChars(url,'/','\'));
+            EnsureDirectoryExists(ExtractFilePath(FN));
+            if not FileExists(FN) then
+              FileFromString(TWinHTTP.Get(aDotClearRoot+'/public/'+url),FN);
+            AddShort('.static');
+          end else
+            AddString(aDotClearRoot);
+        end;
+      B := P;
+    end;
+    AddNoJSONEscape(B);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+begin
+  if aStaticFolder<>'' then begin
+    PublicFolder := IncludeTrailingPathDelimiter(aStaticFolder)+'public\';
+    EnsureDirectoryExists(PublicFolder);
+  end;
+  TAutoFree.Several([
+    @data,TDotClearTable.Parse(aFlatFile),
+    @urls,TRawUTF8ListHashed.Create,
+    @batch,TSQLRestBatch.Create(Rest,TSQLTag,5000)]);
+  TSQLRecord.AutoFree([ // avoid several try..finally
+    @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
+  T := data.GetObjectByName('setting') as TDotClearTable;
+  Rest.Retrieve('',info);
+  info.Copyright := T.GetValue('setting_id','copyright_notice','setting_value');
+  if info.ID=0 then
+    Rest.Add(info,true) else
+    Rest.Update(info);
+  tagTable := data.GetObjectByName('meta') as TDotClearTable;
+  tagsCount := 0;
+  f1 := tagTable.FieldIndex('meta_id');
+  f2 := tagTable.FieldIndex('meta_type');
+  for r := 1 to tagTable.RowCount do
+    if tagTable.GetU(r,f2)='tag' then
+      AddSortedRawUTF8(tags,tagsCount,tagTable.GetU(r,f1),nil,-1,@StrIComp);
+  for r := 0 to tagsCount-1 do begin
+    tag.Ident := tags[r];
+    batch.Add(tag,true);
+  end;
+  Rest.BatchSend(batch,tagID);
+  aTagsLookup.Init(Rest); // reload after initial fill
+  batch.Reset(TSQLArticle,5000);
+  ftag := tagTable.FieldIndex('post_id');
+  T.SortFields(ftag,true,nil,sftInteger);
+  postTable := data.GetObjectByName('post') as TDotClearTable;
+  postTable.SortFields(postTable.FieldIndex('post_creadt'),true,nil,sftDateTime);
+  fPostID := postTable.FieldIndex('post_id');
+  f := postTable.FieldIndex('post_url');
+  if postTable.Step(true) then
+    repeat
+      urls.Add(postTable.FieldBuffer(f));
+    until not postTable.Step;
+  article.Author := TSQLAuthor(1);
+  article.AuthorName := 'synopse';
+  article.ContentHtml := true;
+  for r := 1 to postTable.RowCount do begin
+    article.Title := postTable.GetU(r,postTable.FieldIndex('post_title'));
+    article.Abstract := FixLinks(postTable.Get(r,postTable.FieldIndex('post_excerpt_xhtml')));
+    article.Content := FixLinks(postTable.Get(r,postTable.FieldIndex('post_content_xhtml')));
+    if article.Abstract='' then begin
+      article.Abstract := article.Content;
+      article.Content := '';
+    end;
+    article.CreatedAt := Iso8601ToTimeLog(postTable.GetU(r,postTable.FieldIndex('post_creadt')));
+    article.ModifiedAt := Iso8601ToTimeLog(postTable.GetU(r,postTable.FieldIndex('post_upddt')));
+    article.SetPublishedMonth(article.CreatedAt);
+    postID := postTable.GetAsInteger(r,fPostID);
+    article.Tags := nil;
+    if tagTable.Step(true) then
+      repeat
+        if GetInteger(tagTable.FieldBuffer(ftag))=postID then
+          article.TagsAddOrdered(tagID[FastFindPUTF8CharSorted(pointer(tags),high(tags),
+            Pointer(tagTable.FieldBuffer(f1)),@StrIComp)],aTagsLookup);
+      until not tagTable.Step;
+    batch.Add(article,true,false,[],true);
+  end;
+  Rest.BatchSend(batch);
+  aTagsLookup.SaveOccurence(Rest);
+end;
+
+
 
 end.

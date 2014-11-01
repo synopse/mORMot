@@ -9,9 +9,11 @@
       </div>
       <div class="row">
         <div class="col-sm-8 blog-main">
-		  {{{WikiToHtml article.abstract}}}
+		  {{#article}}
+		  {{#ContentHtml}}{{{abstract}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml abstract}}}{{/ContentHtml}}
 		  <hr>
-		  {{{WikiToHtml article.content}}}
+		  {{#ContentHtml}}{{{content}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml content}}}{{/ContentHtml}}
+		  {{/article}}
 		  <hr>
 		  <ul class="pager">
 			<li class="previous"><a href="ArticleView?id={{Article.ID}}&withComments={{withComments}}&direction=1">&larr; Previous</a></li>
@@ -22,7 +24,7 @@
 		  {{#Comments}}
 		  <blockquote>
 			<p><strong>{{Title}}</strong></p>
-			<p>{{{WikiToHtml Content}}}</p>
+			<p>{{#ContentHtml}}{{{Content}}}{{/ContentHtml}}{{^ContentHtml}}{{{WikiToHtml Content}}}{{/ContentHtml}}</p>
 			<footer>Commented on {{TimeLogToText CreatedAt}} by <a href="authorView?id={{Author}}">{{AuthorName}}</a></<footer>
 		  </blockquote>
 		  <hr>
