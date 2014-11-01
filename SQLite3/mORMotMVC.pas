@@ -145,7 +145,7 @@ type
       FileTimeStamp: TDateTime;
       FileTimeStampCheckTick: Int64;
     end;
-    function GetRenderer(methodIndex: integer; out ContentType: RawUTF8): TSynMustache;
+    function GetRenderer(methodIndex: integer; out aContentType: RawUTF8): TSynMustache;
     class procedure md5(const Value: variant; out result: variant);
     class procedure sha1(const Value: variant; out result: variant);
     class procedure sha256(const Value: variant; out result: variant);
@@ -1005,7 +1005,7 @@ begin
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
-  out ContentType: RawUTF8): TSynMustache;
+  out aContentType: RawUTF8): TSynMustache;
 var age: TDateTime;
 begin
   if cardinal(methodIndex)>=fFactory.MethodsCount then
@@ -1039,6 +1039,7 @@ begin
             Int64(fViewTemplateFileTimestampMonitor)*Int64(1000);
       end;
     end;
+    aContentType := ContentType;
     result := Mustache;
   end;
 end;
