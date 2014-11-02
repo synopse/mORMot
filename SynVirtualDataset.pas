@@ -29,6 +29,7 @@ unit SynVirtualDataSet;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - mingda
     
   Alternatively, the contents of this file may be used under the terms of
@@ -56,13 +57,12 @@ unit SynVirtualDataSet;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   SynCommons,
   DB,
   Forms;

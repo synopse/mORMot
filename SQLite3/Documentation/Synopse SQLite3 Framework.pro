@@ -570,8 +570,8 @@ DisplayName=mORMot Framework Overview
 The main features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
 - {\i SOA}: organize your business logic into @*REST@ services;
-- {\i Clients}: consume your services from any platform;
-- {\i Web MVC}: publish your ORM/SOA process as @*Web Application@s.
+- {\i Clients}: consume your data or services from any platform, via ORM classes or SOA interfaces;
+- {\i Web MVC}: publish your ORM/SOA process as responsive @*Web Application@s.
 With local or remote access, via an auto-configuring Client-Server @*REST@ design.
 \graph mORMotDesignORMSOA General mORMot architecture
 subgraph cluster_0 {
@@ -619,9 +619,9 @@ label="         Featuring";
 =Featured=User Management - Security & Rights¤Sessions - Logging - Performance - Profiling¤http.sys - MultiCore - Unit Testing - Mocks/Stubs¤Templates (MVC) - JavaScript Engine - JSON¤Reporting - PDF - Automated UI
 \
 {\i mORMot} offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.
-For storing some data, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
-For creating a service, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
-For building a MVC web site, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
+For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
+For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
+For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
 If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
 The table content of this document makes it clear: this is no ordinary piece of software.
 %IamLost.png

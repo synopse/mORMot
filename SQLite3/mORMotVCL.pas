@@ -29,6 +29,7 @@ unit mORmotVCL;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -61,7 +62,6 @@ unit mORmotVCL;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,

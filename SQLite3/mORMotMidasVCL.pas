@@ -29,6 +29,7 @@ unit mORMotMidasVCL;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - mingda
 
   Alternatively, the contents of this file may be used under the terms of
@@ -58,16 +59,29 @@ unit mORMotMidasVCL;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
-  Contnrs,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
+  {$ifndef FPC}
   MidasLib,
-{$endif}
+  {$endif}
+  {$endif}
   SynCommons, mORmot,
-  DB, DBClient;
+  DB
+  {$ifdef FPC}
+  ,BufDataset
+  {$else}
+  ,Contnrs
+  ,DBClient
+  {$endif}
+  ;
+
+{$ifdef FPC}
+type
+  /// FPC's pure pascal in-memory buffer is used instead of TClientDataSet
+  TClientDataSet = TBufDataset;
+{$endif}
 
 /// convert a TSQLTable result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from
@@ -201,7 +215,9 @@ begin
   fillchar(Previous,sizeof(Previous),0);
   if aDataSet.Active then begin
     Previous.Active := true;
+    {$ifndef FPC}
     Previous.LogChanges := aDataSet.LogChanges;
+    {$endif}
     Previous.ReadOnly := aDataSet.ReadOnly;
     Previous.AfterScroll := aDataSet.AfterScroll;
     aDataSet.AfterScroll := nil;
@@ -209,10 +225,18 @@ begin
     aDataSet.DisableControls;
   end;
   if aMode=cdsReplace then begin
+    {$ifndef FPC}
     if Previous.LogChanges then
       aDataSet.LogChanges := false;
     aDataSet.EmptyDataSet;
+    {$else}
+    aDataSet.MergeChangeLog;
+    aDataSet.Close;
+    aDataSet.Open;
+    {$endif}
   end;
+
+
   // handle columns
   {$ifndef UNICODE}
   if not aForceWideString then
@@ -275,7 +299,9 @@ begin
     end;
   // append data
   try
+    {$ifndef FPC}
     aDataSet.LogChanges := aLogChange;
+    {$endif}
     for i := 1 to aTable.RowCount do begin
       aDataSet.Append;
       for F := 0 to high(Columns) do
@@ -332,7 +358,9 @@ begin
     result := True;
   finally
     if Previous.Active then begin
+      {$ifndef FPC}
       aDataSet.LogChanges := Previous.LogChanges;
+      {$endif}
       aDataSet.ReadOnly := Previous.ReadOnly;
       aDataSet.AfterScroll := Previous.AfterScroll;
       if Assigned(Previous.AfterScroll) then

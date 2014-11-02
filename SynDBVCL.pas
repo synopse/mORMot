@@ -29,6 +29,8 @@ unit SynDBVCL;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -49,7 +51,7 @@ unit SynDBVCL;
   Version 1.18
   - now uses read/only TSynVirtualDataSet class for much faster process
     and lower resource use - see SynDBMidasVCL.pas unit if you need
-	a TClientDataset writable (but slower) instance
+  	a TClientDataset writable (but slower) instance
 
 
 }
@@ -59,7 +61,6 @@ unit SynDBVCL;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,

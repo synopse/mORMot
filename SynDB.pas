@@ -29,6 +29,7 @@ unit SynDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - delphinium
   - Joe (at jokusoftware)
 
