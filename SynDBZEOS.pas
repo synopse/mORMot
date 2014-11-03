@@ -1030,13 +1030,13 @@ procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter;
 var col: integer;
     P: PAnsiChar;
     Len: NativeUInt;
-procedure WriteBlob;
+procedure WriteIZBlob;
 var blob: IZBlob;
 begin
-  blob := fResultSet.GetBlob(col+1);  // use IZBLob
-  WR.WrBase64(blob.GetBuffer,Blob.Length,true); // withMagic=true
+  blob := fResultSet.GetBlob(col+1);  
+  WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
 end;
-begin
+begin // take care of the layout of internal ZDBC buffers for each provider 
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do begin
@@ -1069,17 +1069,21 @@ begin
         WR.Add('"');
       end;
       ftUTF8: begin
-        P := fResultSet.GetPAnsiChar(Col+1, Len);
+        P := fResultSet.GetPAnsiChar(Col+1,Len);
         WR.Add('"');
         WR.AddJSONEscape(P,Len);
         WR.Add('"');
       end;
       ftBlob:
-      if DoNotFletchBlobs then
-        WR.AddShort('null') else
-        WriteBlob;
+        if DoNotFletchBlobs then
+          WR.AddShort('null') else
+        if fDBMS in [dMySQL,dSQLite] then begin
+          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          WR.WrBase64(p,Len,true); // withMagic=true
+        end else
+          WriteIZBlob;
       else raise ESQLDBException.CreateUTF8(
-        '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(ColumnType(col))]);
+        '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(fColumns[col].ColumnType)]);
     end; end;
     WR.Add(',');
   end;
