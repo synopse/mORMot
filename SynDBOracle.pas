@@ -429,7 +429,7 @@ type
        faster when run over high number of data rows) 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
     {/ return a special CURSOR Column content as a SynDB result set
      - Cursors are not handled internally by mORMot, but Oracle usually use
        such structures to get data from strored procedures
@@ -2119,7 +2119,7 @@ begin
   result := GetCol(Col,C)=nil;
 end;
 
-procedure TSQLDBOracleStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TSQLDBOracleStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
 var V: pointer;
     col, indicator: integer;
     tmp: array[0..31] of AnsiChar;
@@ -2165,7 +2165,7 @@ begin // dedicated version to avoid as much memory allocation than possible
          WR.Add('"');
        end;
        ftBlob:
-         if DoNotFletchBlobs then
+         if DoNotFetchBlobs then
            WR.AddShort('null') else
            if ColumnValueInlined then
              SetString(U,PAnsiChar(V),ColumnValueDBSize) else begin

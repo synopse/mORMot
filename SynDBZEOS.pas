@@ -310,7 +310,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
     {$endif}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
@@ -1026,7 +1026,7 @@ end;
 
 {$ifdef ZEOS72UP}
 procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter;
-  DoNotFletchBlobs: boolean);
+  DoNotFetchBlobs: boolean);
 var col: integer;
     P: PAnsiChar;
     Len: NativeUInt;

@@ -303,7 +303,7 @@ begin
               Frame.MemoSQL.Lines.Text := U2S(SQL);
             end;
             with Frame do begin
-              fJSONBuffer := Rows.FetchAllAsJSON(false,nil,true); // DoNotFletchBlobs=true
+              fJSONBuffer := Rows.FetchAllAsJSON(false,nil,true); // DoNotFetchBlobs=true
               Stop := Timer.Stop;
               Table := TSQLTableJSON.Create('',pointer(fJSONBuffer),length(fJSONBuffer));
               fGrid := TSQLTableToGrid.Create(DrawGrid,Table,nil);

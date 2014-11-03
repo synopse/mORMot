@@ -2276,7 +2276,7 @@ type
      - will use WR.Expand to guess the expected output format
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure FieldsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean=false);
+    procedure FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean=false);
     {/ the column/field count of the current ROW
      - fields numerotation starts with 0 }
     property FieldCount: integer read fFieldCount;
@@ -4469,7 +4469,7 @@ begin
   result := sqlite3.stmt_readonly(Request);
 end;
 
-procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
 var i: integer;
 begin
   if Request=0 then
@@ -4481,7 +4481,7 @@ begin
       WR.AddString(WR.ColNames[i]); // '"'+ColNames[]+'":'
     case sqlite3.column_type(Request,i) of // fast evaluation: type may vary
       SQLITE_BLOB:
-        if DoNotFletchBlobs then
+        if DoNotFetchBlobs then
           WR.AddShort('null') else
           WR.WrBase64(sqlite3.column_blob(Request,i),
             sqlite3.column_bytes(Request,i),true); // withMagic=true
