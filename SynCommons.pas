@@ -1835,18 +1835,18 @@ function Trim(const S: RawUTF8): RawUTF8;
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 {$endif FPC}
 
-{$ifdef UNICODE}
-/// our fast RawUTF8 version of Pos(), for Unicode only compiler
-// - this Pos() is seldom used, but this RawUTF8 specific version is needed
-// by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
-function Pos(const substr, str: RawUTF8): Integer; overload; inline;
-{$endif UNICODE}
-
 {$endif LVCL}
 {$endif PUREPASCAL}
 
 {$endif ENHANCEDRTL}
 
+{$ifdef UNICODE}
+/// our fast RawUTF8 version of Pos(), for Unicode only compiler
+// - this Pos() is seldom used, but this RawUTF8 specific version is needed
+// by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
+// - just a wrapper around PosEx(substr,str,1)
+function Pos(const substr, str: RawUTF8): Integer; overload; inline;
+{$endif UNICODE}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
