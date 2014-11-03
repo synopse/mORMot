@@ -17658,14 +17658,14 @@ end;
 function TSQLTable.GetODSDocument: RawByteString;
 const
   ODSmimetype: RawUTF8 = 'application/vnd.oasis.opendocument.spreadsheet';
-  ODSContentHeader: RawUTF8 = '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'+
+  ODSContentHeader: RawUTF8 = '<office:document-content office:version="1.2" xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'+
   ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'+
   ' xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" ><office:body><office:spreadsheet><table:table table:name="Sheet1" >'+
   '<table:table-column table:number-columns-repeated="';
   ODSContentFooter = '</table:table><table:named-expressions/></office:spreadsheet></office:body></office:document-content>';
   ODSstyles: RawUTF8 = XMLUTF8_HEADER+'<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"></office:document-styles>';
   ODSmeta: RawUTF8 = XMLUTF8_HEADER+'<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"></office:document-meta>';
-  ODSsettings: RawUTF8 = XMLUTF8_HEADER+'<office:document-settings xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"><office:settings>';
+  ODSsettings: RawUTF8 = XMLUTF8_HEADER+'<office:document-settings xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"></office:document-settings>';
   ODSmanifest: RawUTF8 = XMLUTF8_HEADER+'<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"'+
   ' manifest:version="1.2"><manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>'+
   '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/>'+
@@ -17690,7 +17690,7 @@ begin
       try
         W.AddShort(XMLUTF8_HEADER);
         W.AddString(ODSContentHeader);
-        W.Add(RowCount);
+        W.Add(FieldCount);
         W.AddShort('" />');
         U := pointer(fResults);
         for R := 0 to RowCount do begin
