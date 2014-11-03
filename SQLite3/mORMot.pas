@@ -3921,9 +3921,13 @@ type
   PServiceRunningContext = ^TServiceRunningContext;
 
   TSQLRestServerURIContext = class;
-  
+
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
+  // - to access the current TSQLRestServer instance (and e.g. its ORM/CRUD
+  // or SOA methods), use Request.Server and not Factory.Server, which may not
+  // be available e.g. if you run the service from the server side (so no
+  // factory is involved)
   TServiceRunningContext = record
     /// the currently running service factory
     // - it can be used within server-side implementation to retrieve the
@@ -3933,6 +3937,7 @@ type
     // - make available e.g. current session or authentication parameters
     // (including e.g. user details via Factory.RestServer.SessionGetUser)
     // - low-level RESTful context is also available in its Call member
+    // - Request.Server is the safe access point to the underlying TSQLRestServer
     Request: TSQLRestServerURIContext;
     /// the thread which launched the request
     // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
