@@ -1036,6 +1036,12 @@ begin
   blob := fResultSet.GetBlob(col+1);  
   WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
 end;
+procedure WriteUTF8;
+var tmp: RawUTF8;
+begin
+  tmp := fResultSet.GetUTF8String(Col+1);
+  WR.AddJSONEscape(pointer(tmp),length(tmp));
+end;
 begin // take care of the layout of internal ZDBC buffers for each provider 
   if WR.Expand then
     WR.Add('{');
@@ -1049,13 +1055,13 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         WR.AddShort('null');
       ftInt64:
         if fDBMS in [dMySQL,dPostgreSQL] then begin
-          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+1,Len);
           WR.AddNoJSONEscape(P,Len);
         end else
           WR.Add(fResultSet.GetLong(col+1));
       ftDouble:
         if fDBMS in [dMySQL,dPostgreSQL] then begin
-          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+1,Len);
           WR.AddNoJSONEscape(P,Len);
         end else
           WR.Add(fResultSet.GetDouble(col+1));
@@ -1069,21 +1075,25 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         WR.Add('"');
       end;
       ftUTF8: begin
-        P := fResultSet.GetPAnsiChar(Col+1,Len);
         WR.Add('"');
-        WR.AddJSONEscape(P,Len);
+        if fDBMS in [dMSSQL] then
+          WriteUTF8 else begin
+          P := fResultSet.GetPAnsiChar(col+1,Len);
+          WR.AddJSONEscape(P,Len);
+        end;
         WR.Add('"');
       end;
       ftBlob:
-        if DoNotFletchBlobs then
+        if DoNotFetchBlobs then
           WR.AddShort('null') else
         if fDBMS in [dMySQL,dSQLite] then begin
-          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+1,Len);
           WR.WrBase64(p,Len,true); // withMagic=true
         end else
           WriteIZBlob;
       else raise ESQLDBException.CreateUTF8(
-        '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(fColumns[col].ColumnType)]);
+        '%.ColumnsToJSON: invalid ColumnType(#% "%")=%',
+         [self,col,fColumns[col].ColumnName,ord(fColumns[col].ColumnType)]);
     end; end;
     WR.Add(',');
   end;
