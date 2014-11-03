@@ -158,7 +158,7 @@ uses
   ZDbcPooled,
   {$ENDIF}
   // main ZDBC units
-  ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet;
+  ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet;
 
 
 
@@ -305,6 +305,13 @@ type
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBZeos on any error }
     procedure ExecutePrepared; override;
+    {$ifdef ZEOS72UP}
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - this overriden implementation will call fReultSet methods to avoid
+    // creating most temporary variable
+    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    {$endif}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
     {/ Reset the previous prepared statement
@@ -1016,5 +1023,70 @@ begin
     result:= fStatement.GetUpdateCount else
     result:= inherited UpdateCount; // returns 0
 end;
+
+{$ifdef ZEOS72UP}
+procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter;
+  DoNotFletchBlobs: boolean);
+var col: integer;
+    P: PAnsiChar;
+    Len: NativeUInt;
+procedure WriteBlob;
+var blob: IZBlob;
+begin
+  blob := fResultSet.GetBlob(col+1);  // use IZBLob
+  WR.WrBase64(blob.GetBuffer,Blob.Length,true); // withMagic=true
+end;
+begin
+  if WR.Expand then
+    WR.Add('{');
+  for col := 0 to fColumnCount-1 do begin
+    if WR.Expand then
+      WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
+    if fResultSet.IsNull(col+1) then
+      WR.AddShort('null') else begin
+    case fColumns[col].ColumnType of
+      ftNull:
+        WR.AddShort('null');
+      ftInt64:
+        if fDBMS in [dMySQL,dPostgreSQL] then begin
+          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          WR.AddNoJSONEscape(P,Len);
+        end else
+          WR.Add(fResultSet.GetLong(col+1));
+      ftDouble:
+        if fDBMS in [dMySQL,dPostgreSQL] then begin
+          P := fResultSet.GetPAnsiChar(Col+1,Len);
+          WR.AddNoJSONEscape(P,Len);
+        end else
+          WR.Add(fResultSet.GetDouble(col+1));
+      ftCurrency:
+        if fDBMS in [dSQLite] then
+          WR.Add(fResultSet.GetDouble(col+1)) else
+          WR.AddCurr64(fResultSet.GetCurrency(col+1));
+      ftDate: begin
+        WR.Add('"');
+        WR.AddDateTime(fResultSet.GetTimeStamp(col+1));
+        WR.Add('"');
+      end;
+      ftUTF8: begin
+        P := fResultSet.GetPAnsiChar(Col+1, Len);
+        WR.Add('"');
+        WR.AddJSONEscape(P,Len);
+        WR.Add('"');
+      end;
+      ftBlob:
+      if DoNotFletchBlobs then
+        WR.AddShort('null') else
+        WriteBlob;
+      else raise ESQLDBException.CreateUTF8(
+        '%.ColumnsToJSON: invalid ColumnType(%)=%',[self,col,ord(ColumnType(col))]);
+    end; end;
+    WR.Add(',');
+  end;
+  WR.CancelLastComma; // cancel last ','
+  if WR.Expand then
+    WR.Add('}');
+end;
+{$endif ZEOS72UP}
 
 end.

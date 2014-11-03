@@ -1534,6 +1534,7 @@ type
     fTotalRowsRetrieved: Integer;
     fCurrentRow: Integer;
     fSQLWithInlinedParams: RawUTF8;
+    fDBMS: TSQLDBDefinition;
     function GetSQLWithInlinedParams: RawUTF8;
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
@@ -1556,7 +1557,7 @@ type
     /// return the associated statement instance for a ISQLDBRows interface
     function Instance: TSQLDBStatement;
   public
-    {/ create a statement instance }
+    /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
 
     {/ bind a NULL value to a parameter
@@ -1906,19 +1907,19 @@ type
     function RowData: Variant; virtual;
     {$endif}
     {$endif}
-    {/ return a special CURSOR Column content as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such columns are mapped as ftNull internally - so this method is the only
-       one giving access to the data rows
-     - this default method will raise an exception about unexpected behavior }
+    /// return a special CURSOR Column content as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such columns are mapped as ftNull internally - so this method is the only
+    // one giving access to the data rows
+    // - this default method will raise an exception about unexpected behavior 
     function ColumnCursor(const ColName: RawUTF8): ISQLDBRows; overload;
-    {/ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - this default implementation will call Column*() methods above, but you
-       should also implement a custom version with no temporary variable
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - this default implementation will call Column*() methods above, but you
+    // should also implement a custom version with no temporary variable
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); virtual;
     {/ compute the SQL INSERT statement corresponding to this columns row
     - and populate the Fields[] array with columns information (type and name)
@@ -4646,7 +4647,7 @@ begin
   prevrowcount := rowcount;
   with TTextWriter.CreateOwnedStream(8192) do
   try
-    case Props.DBMS of
+    case Props.fDBMS of
     dFirebird: begin
       AddShort('execute block('#10);
       p := 0;
@@ -4759,7 +4760,7 @@ begin
       [self,TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
-  case Props.DBMS of
+  case Props.fDBMS of
   // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
   // see http://stackoverflow.com/a/6582902/458259 for theoritical high limits
   dSQlite:     paramCountLimit := 200;  // theoritical=999
@@ -4835,7 +4836,7 @@ var W: TTextWriter;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) or
-     (Props.DBMS<>dFirebird) then
+     (Props.fDBMS<>dFirebird) then
     raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsertFirebird(%,%)',
       [self,Props,TableName]);
   sqllenwitoutvalues := 3*maxf+24;
@@ -5411,6 +5412,7 @@ begin
   // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
+  fDBMS := aConnection.Properties.DBMS;
 end;
 
 function TSQLDBStatement.ColumnCount: integer;
