@@ -209,20 +209,20 @@ type
 
   /// GDI+ integer coordinates rectangles
   // - use width and height instead of right and bottom
-  TGdipRect = packed record
+  TGdipRect = record
     X, Y, Width, Height: Integer;
   end;
   PGdipRectF = ^TGdipRectF;
 
   /// GDI+ floating point coordinates rectangles
   // - use width and height instead of right and bottom
-  TGdipRectF = packed record
+  TGdipRectF = record
     X, Y, Width, Height: Single;
   end;
   PGdipPointF = ^TGdipPointF;
 
   /// GDI+ floating point coordinates for a point
-  TGdipPointF = packed record
+  TGdipPointF = record
     X,Y: Single;
   end;
   PGdipPointFArray = ^TGdipPointFArray;
@@ -231,7 +231,7 @@ type
   TGdipPointFArray = array[0..1000] of TGdipPointF;
 
   /// data as retrieved by GdipFull.BitmapLockBits
-  TGdipBitmapData = packed record
+  TGdipBitmapData = record
     Width: Cardinal;
     Height: Cardinal;
     Stride: Integer;
@@ -299,7 +299,7 @@ type
     SelectActiveFrame: function(image: THandle; dimensionID: PGUID; frameIndex: UINT): TGdipStatus; stdcall;
   protected
     fToken: THandle;
-    fStartupHook: packed record
+    fStartupHook: record
       Hook: TGDIPlusHookProc;
       Unhook: TGDIPlusUnhookProc;
     end;
@@ -881,7 +881,7 @@ end;
 
 {$ifdef USEENCODERS}
 type
-  ImageCodecInfo = packed record
+  ImageCodecInfo = record
     Clsid             : TGUID;
     FormatID          : TGUID;
     CodecName         : PWCHAR;
@@ -985,7 +985,7 @@ const
      nil);
 
 constructor TGDIPlus.Create(const aDllFileName: TFileName);
-var Input: packed record
+var Input: record
       Version: Integer;               // Must be one
       DebugEventCallback: Pointer;    // Only for debug builds
       SuppressBackgroundThread: Bool; // True if replacing GDI+ background processing
@@ -1353,7 +1353,7 @@ begin
 end;
 
 type
-  EncoderParameter = packed record
+  EncoderParameter = record
     Guid           : TGUID;   // GUID of the parameter
     NumberOfValues : ULONG;   // Number of the parameter values
     Type_          : ULONG;   // Value type, like ValueTypeLONG  etc.
@@ -1361,7 +1361,7 @@ type
   end;
   TEncoderParameter = EncoderParameter;
   PEncoderParameter = ^TEncoderParameter;
-  EncoderParameters = packed record
+  EncoderParameters = record
     Count     : UINT;               // Number of parameters in this structure
     Parameter : array[0..0] of TEncoderParameter;  // Parameter values
   end;
