@@ -3459,7 +3459,7 @@ From the {\i @*Domain-Driven@} / @*SOA@ point of view, it is now an established 
 :  Several ORMs at once
 To be clear, {\i mORMot} offers several kind of table definitions:
 - Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
-- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / ZDBC provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
+- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / @*ZDBC@ provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
 - Via {\f1\fs20 @*TSQLRecord@} "external @*ODM@-managed" classes: after registration via a call to the {\f1\fs20 @*StaticMongoDBRegister@()} function, external {\i @*MongoDB@} collections are created and managed via @82@. In this case, no {\f1\fs20 index} attribute for setting text column length is necessary.
 - Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
 Why have several database back-end at the same time?
@@ -3590,16 +3590,16 @@ Here we insert 5,000 rows of data, with diverse scenarios:
 Here are some insertion speed values, in objects/second:
 |%30%15%15%15%15
 ||\b Direct|Batch|Trans|Batch Trans\b0
-|{\b SQLite3 (file full)}|462|28123|78099|172872
-|{\b SQLite3 (file off)}|2102|83093|81756|188309
-|{\b SQLite3 (file off exc)}|28847|182862|84051|186971
-|{\b SQLite3 (mem)}|89456|210544|104249|203020
+|{\b SQLite3 (file full)}|462|28123|84823|181455
+|{\b SQLite3 (file off)}|2102|83093|88006|202667
+|{\b SQLite3 (file off exc)}|28847|193453|89451|207615
+|{\b SQLite3 (mem)}|89456|236540|104249|239165
 |{\b TObjectList (static)}|314465|543892|326370|542652
 |{\b TObjectList (virtual)}|325393|545672|298846|545018
 |{\b SQLite3 (ext full)}|424|14523|102049|164636
 |{\b SQLite3 (ext off)}|2245|47961|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
-|{\b SQLite3 (ext mem)}|101440|183884|113530|190142
+|{\b SQLite3 (ext mem)}|101440|211389|113530|209713
 |{\b MongoDB (ack)}|10081|84585|9800|85232
 |{\b MongoDB (no ack)}|33223|273672|34665|274393
 |{\b ODBC SQLite3}|492|11746|35367|82425
@@ -3607,7 +3607,7 @@ Here are some insertion speed values, in objects/second:
 |{\b FireDAC SQlite3}|20605|38853|40042|113752
 |{\b UniDAC SQlite3}|477|8725|26552|38756
 |{\b ODBC Firebird}|1495|18056|13485|17731
-|{\b ZEOS Firebird}|9733|52214|26348|52616
+|{\b ZEOS Firebird}|10452|62851|22003|63708
 |{\b FireDAC Firebird}|18147|46877|18922|46353
 |{\b UniDAC Firebird}|5986|14809|6522|14948
 |{\b Jet}|4235|4424|4954|5094
@@ -3635,7 +3635,7 @@ Here are some insertion speed values, in objects/second:
 |%
 Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
 So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows. In {\i SQLite3} direct mode, BATCH process benefits of multi-INSERT statements (just llike external databases): it explain why {\f1\fs20 BatchAdd()} is faster than plain {\f1\fs20 Add()}, even in the slowest and safest "{\i file full}" mode.
-For our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, and for {\f1\s20 SynDBZeos.pas} or {\f1\fs20 SynDBFireDAC.pas} (known as {\i Array DML} in {\i FireDAC/AnyDAC}) libraries, BATCH process benefits of the @*array bind@ing feature a lot.
+For our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, and for {\f1\fs20 SynDBZeos.pas} or {\f1\fs20 SynDBFireDAC.pas} (known as {\i Array DML} in {\i FireDAC/AnyDAC}) libraries, BATCH process benefits of the @*array bind@ing feature a lot.
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
 - {\i SQlite3, @*MySQL@, @*PostgreSQL@, MSSQL 2008, @*DB2@, @*MySQL@} or {\i @*NexusDB@} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 INSERT INTO .. VALUES (..),(..),(..)..};
 - {\i Oracle} handles {\f1\fs20 INSERT INTO .. INTO .. SELECT 1 FROM DUAL} (weird syntax, isn't it?);
@@ -3649,8 +3649,8 @@ Now the same data is retrieved via the ORM layer:
 Here are some reading speed values, in objects/second:
 |%30%15%15%15
 ||\b By one|All Virtual|All Direct\b0
-|{\b SQLite3 (file full)}|27284|558721|550842
-|{\b SQLite3 (file off)}|26896|549450|526149
+|{\b SQLite3 (file full)}|127284|558721|550842
+|{\b SQLite3 (file off)}|126896|549450|526149
 |{\b SQLite3 (file off exc)}|128077|557537|535905
 |{\b SQLite3 (mem)}|127106|557537|563316
 |{\b TObjectList (static)}|300012|912408|913742
@@ -3666,7 +3666,7 @@ Here are some reading speed values, in objects/second:
 |{\b FireDAC SQlite3}|7683|83532|112470
 |{\b UniDAC SQlite3}|2522|74030|96420
 |{\b ODBC Firebird}|3446|69607|97585
-|{\b ZEOS Firebird}|20296|114676|17210
+|{\b ZEOS Firebird}|20296|114676|117210
 |{\b FireDAC Firebird}|2376|46276|56269
 |{\b UniDAC Firebird}|2189|66886|88102
 |{\b Jet}|2640|166112|258277
@@ -3693,7 +3693,7 @@ Here are some reading speed values, in objects/second:
 |{\b UniDAC MySQL}|4798|99940|146968
 |%
 The {\i @*SQLite3@} layer gives amazing reading results, which makes it a perfect fit for most typical ORM use. When running with {\f1\fs20 DB.LockingMode := lmExclusive} defined (i.e. "off exc" rows), reading speed is very high, and benefits from exclusive access to the database file - see @60@. External database access is only required when data is expected to be shared with other processes, or for better scaling: e.g. for physical n-Tier installation with dedicated database server(s).
-In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling.
+In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling, via a dedicated {\f1\fs20 ColumnsToJSON()} method.
 For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestStorageInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored AS_UNIQUE} properties.
 As a consequence, search of non-unique values may be slow: the engine has to loop through all rows of data. But for unique values (defined as {\f1\fs20 stored AS_UNIQUE}), both insertion and search speed is awesome, due to its optimized O(1) hash algorithm - see the following benchmark, especially the "{\i By name}" row for "{\i TObjectList}" columns, which correspond to a search of an unique {\f1\fs20 RawUTF8} property value via this hashing method.
 |%9%10%10%10%10%10%10%10%10%9%9
@@ -4545,7 +4545,7 @@ The current list of available external RDBMS database classes is:
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
 In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party {\i Delphi} library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
-Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
+Since revision 1.18, any {\i ZeosLib} / {\i ZDBC@} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
 An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
 Thanks to the design of our classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
 \graph SynDBLayers SynDB Architecture
@@ -4855,7 +4855,8 @@ Most {\i OleDB / ODBC} providers are free (even maintained by the database owner
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i OleDB} or {\i ODBC} remote access expects only the database instance to be reachable on the Server side. Clients could communicate via standard HTTP, so won't need any specific port forwarding or other IT configuration to work as expected.
 :94  ZEOS via direct ZDBC
 :   The mORMot's best friend
-{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i @*FreePascal@}.\line It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API. The latest 7.x branch was deeply re-factored, and new methods and performance optimization were introduced.
+{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i @*FreePascal@}.\line It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API.
+The latest 7.x branch was deeply re-factored, and new methods and performance optimization were introduced. In fact, we worked hand by hand with Michael (the main contributor of {\i ZeosLib}) to ensure that the maximum performance would be achieved. The result is an impressive synergy of {\i mORMot} and {\i ZeosLib}, for both reading or writing data.
 Since revision 1.18 of the framework, we included direct integration of {\i ZeosLib} into {\i mORMot} persistence layer, with direct access to the {\i ZDBC} layer. That is, our {\f1\fs20 SynDBZeos} unit does not reference {\f1\fs20 DB.pas}, but access directly to the {\i ZDBC} interfaces.
 \graph SynDBZeos SynDB and Zeos / ZDBC
 \SynDB\ZDBC
@@ -4872,7 +4873,7 @@ Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20
 :   Recommended version
 We recommend that you download the 7.2 branch of {\i Zeos}/ZDBC, which is the current {\i trunk}, at the time of this writing.
 A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
-At writing, {\i @*Array bind@ing} suport has been added to the 7.2 branch, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true} - which will be the case for {\i @*Oracle@} and {\i @FireBird@} providers, at time of this writing.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library, in case of single record retrieval.
+When writing data (i.e. {\i Add/Update/Delete} operations), {\i @*Array bind@ing} suport has been added to the {\i Zeos}/ZDBC 7.2 branch, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true} - which will be the case for {\i @*Oracle@} and {\i @FireBird@} providers by now. Our ORM would benefit from it, when processing in BATCH mode, even letting ZDBC creates the optimized SQL - see @99@.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library, in case of single record retrieval. For instance, {\f1\fs20 TSQLDBZEOSStatement.ColumnsToJSON()} will avoid most temporary memory allocation, and is able to create the JSON directly from the low-level ZDBC binary buffers.
 If you need to stick to a version prior to 7.2, and want to work as expected with a {\i @*SQlite3@} back-end (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}?), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
 :   Connection samples
 If you want e.g. to connect to @*MySQL@ via Zeos/ZDBC, follow those steps:
