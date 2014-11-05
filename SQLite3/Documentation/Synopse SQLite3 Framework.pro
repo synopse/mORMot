@@ -24,7 +24,7 @@ NoConfidential=Yes
 ; so that no "Confidential" text will appear in page footer - seems convenient for a GPL document ;)
 HeaderWithLogo=Yes
 ; custom page header with the synopse logo
-HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_112,Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate
+HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate
 ; the sidebar first link, for html export
 
 {\b Document License}
@@ -4824,7 +4824,7 @@ From the {\f1\fs20 SynDB} logical point of view, here is how databases can be ac
 \
 Of course, the physical implementation is more complicated, as was stated in @%%SynDBLayers@.
 We will now detail how these available database connections are interfaced as {\f1\fs20 SynDB} classes.
-:  OleDB or ODBC to rule them all
+:118  OleDB or ODBC to rule them all
 {\i @**OleDB@} (Object Linking and Embedding, Database, sometimes written as OLE DB or OLE-DB) is an API designed by Microsoft for accessing data from a variety of sources in a uniform manner.
 \graph SynDBOleDB SynDB and OleDB
 \SynDB\OleDB
@@ -4903,7 +4903,7 @@ You may therefore use the {\f1\fs20 TSQLDBZEOSConnectionProperties.URI()} method
 !     'c:\Firebird_2_5\bin\fbclient.dll',false),
 !  '3camadas', 'sysdba', 'masterkey');
 See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further information about the expected syntax, and available abilities of this great open source library.
-:  Oracle via OCI
+:117  Oracle via OCI
 For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
 {\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
@@ -4952,7 +4952,7 @@ When used within the {\i mORMot} ORM, you have therefore two ways of accessing t
 \SynDB\SQLite3
 \
 If your {\i mORMot}-based application purpose is to only use one centralized {\i SQLite3} database, it does not make sense to use {\f1\fs20 SynDBSQLite3} external tables. But if you want, in the future, to be able to connect to any external database, or to split your data in several database files, using those external {\i SQLite3} tables do make sense. Of course, the {\i SQlite3} engine library itself will be shared with both internal and external process.
-:  DB.pas libraries
+:119  DB.pas libraries
 Since revision 1.18 of the framework, a new {\f1\fs20 SynDBDataset.pas} unit has been introduced, able to interface any {\f1\fs20 DB.pas} based library to our {\f1\fs20 SynDB} classes, using {\f1\fs20 TDataset} to retrieve the results. Due to the {\f1\fs20 TDataset} design, performance is somewhat degraded in respect to direct {\f1\fs20 SynDB} connection (e.g. results for {\i SQLite3} or {\i @*Oracle@}), but it also opens the potential database access.
 Some dedicated providers have been published in the {\f1\fs20 SynDBDataset} sub-folder of the {\i mORMot} source code repository. Up to now, {\i @*FireDAC@} (formerly {\i @*AnyDAC@}), {\i @*UniDAC@} and {\i @*BDE@} libraries are interfaced, and a direct connection to the {\i @*NexusDB@} engine is available.
 Since there are a lot of potential combinations here - see @%%SynDBLayers@ - feedback is welcome. Due to our Agile process, we will first stick to the providers we need and use. It is up to {\i mORMot} users to ask for additional features, and provide wrappers, if possible, or at least testing abilities. Of course, {\i DBExpress} would benefit to be integrated, even if {\i Embarcadero} just acquired {\i AnyDAC} and revamped/renamed it as {\i FireDAC} - to make it the new official platform.
@@ -5171,7 +5171,7 @@ The only specific instruction is the global {\f1\fs20 @*VirtualTableExternalRegi
 In order to work as expected, {\f1\fs20 VirtualTableExternalRegister()} shall be called {\i before} {\f1\fs20 TSQLRestServer.Create} constructor: when the server initializes, the ORM server must know whenever an {\i internal} or {\i external} database shall be managed. In the above code, {\f1\fs20 TSQLRestClientDB.Create()} will instantiate its own embedded {\f1\fs20 TSQLRestServerDB} instance.
 Note that the {\f1\fs20 TSQLRecordExternal.LastChange} field was defined as a {\f1\fs20 TModTime}: in fact, the current date and time will be stored each time the record is updated, i.e. for each {\f1\fs20 aExternalClient.Add} or {\f1\fs20 aExternalClient.Update} calls. This is tested by both {\f1\fs20 RExt.LastChange>=Start} and {\f1\fs20 RExt.LastChange<=Updated} checks in the latest loop. The time used is the "server-time", i.e. the current time and date on the server (not on the client), and, in the case of external databases, the time of the remote server (it will execute e.g. a {\f1\fs20 select getdate()} under @*MS SQL@ to synchronize the date to be inserted for {\f1\fs20 LastChange}). In order to retrieve this server-side time stamp, we use {\f1\fs20 Start := aExternalClient.ServerTimeStamp} instead of the local {\f1\fs20 TimeLogNow} function.
 A similar feature is tested for the {\f1\fs20 CreatedAt} published field, which was defined as {\f1\fs20 TCreateTime}: it will be set automatically to the current server time at record creation (and not changed on modifications). This is the purpose of the {\f1\fs20 RExt.CreatedAt<=Updated} check in the above code.
-:  Database-first ORM
+:120  Database-first ORM
 As we have just seen, the following line initializes the ORM to let {\f1\fs20 TSQLRecordPeopleExt} data be accessed via SQL, over an external database connection {\f1\fs20 fProperties}:
 !VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal');
 We also customized the name of the external table, from its default {\f1\fs20 'PeopleExt'} (computed by timing {\f1\fs20 TSQLRecord} prefix from {\f1\fs20 TSQLRecordPeopleExt}) into {\f1\fs20 'PeopleExternal'}.
@@ -6577,7 +6577,7 @@ As stated above, there is still a potential performance issue to use the direct 
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
 Note that even if {\i WinHTTP} does not share by default any proxy settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a global lock. See @25@.
-:  HTTPS server
+:122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL encryption yet.
 In order to let the SSL layer work as expected, you need first to create and import a set of certificates. Here are the needed steps, as detailed in @http://www.codeproject.com/Articles/24027/SSL-with-Self-hosted-WCF-Service and @http://msdn.microsoft.com/en-us/library/ms733791.aspx
@@ -6794,7 +6794,7 @@ Typical results are the following:
 During all tests, no assertion failed, meaning that no concurrency problem did occur, nor any remote command lost. The {\i @*SQlite3@} core, exposes via the {\i mORMot} server, outputs data at an amazing pace of 6000 op/sec - i.e. comparable to most high-end databases. It is worth noting that when run several times in a row, the same set of input parameters give the very same speed results: it indicates that the architecture is pretty stable and could be considered as safe. The system is even {\i able to serve 50000 connected clients at once}, with no data loss - in this case, performance is lower (2152 insert/second in the above table), but we clearly reached the CPU and network limit of our client hardware configuration; in the meanwhile, server CPU resources on the Notebook server did have still some potential, and RAM consumption was pretty slow.
 Average performance is pretty good, even more if we consider that we are inserting one object per request, with no transaction. In fact, it sounds like if our little {\i SQLite3} server is faster than most database servers, even when accessed in highly concurrent mode! In batch mode - see @28@ - we may achieve amazing results.
 Feel free to send your own benchmark results and feedback, e.g. with concurrent clients on several workstations, or long-running tests, on our forums.
-:Client-Server ORM
+:114Client-Server ORM
 %cartoon08.png
 As stated above, all ORM features can be accessible either stand-alone, or remotely via some dedicated @35@.
 That is, CRUD operations can be executed either at the database level, or remotely, from the same methods defined in {\f1\fs20 TSQLRest} abstract class.
@@ -10037,7 +10037,7 @@ As with regular {\i mORMot} client code, a {\f1\fs20 TServiceCalculator} instanc
 The service-side contract of the {\f1\fs20 ICalculator} signature is retrieved and checked within {\f1\fs20 TServiceCalculator.Create}, and would raise an {\f1\fs20 ERestException} if it does not match the contract identified in {\f1\fs20 mORMotClient.pas}.
 The cross-platform clients are able to manage the service instance life-time, especially the {\f1\fs20 sicPerClient} mode. In this case, an implementation class instance will be created on the server for each client, until the corresponding {\f1\fs20 interface} instance will released (i.e. out of scope or assigned to {\f1\fs20 nil}), which will release the server-side instance - just like with a regular {\i mORMot} client code.
 Note that all process here is executed {\i synchronously}, i.e. in blocking mode. It is up to you to ensure that your application is able to still be responsive, even if the server does a lot of process, so may be late to answer. A dedicated thread may help in this case.
-:  Smart Mobile Studio client samples
+:116  Smart Mobile Studio client samples
 In addition to {\i Delphi} and {\i FreePascal} clients, our framework is able to access any {\i mORMot} server from HTML5 / AJAX rich client, thanks to {\i @*Smart Mobile Studio@}.
 :   Adding two numbers in AJAX
 You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 @*web application@, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i @*Linux@}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
@@ -11087,7 +11087,7 @@ We could identify several implementation patterns of a {\i mORMot} server and it
 - Mixed hosting, using @*CDN@ network services to cache most of the requests of your {\i mORMot} server.
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
-:111 Windows and Linux hosted
+:112 Windows and Linux hosted
 The current version of the framework fully supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable.
 Preliminary {\i @**Linux@} support (via @**FPC@ 2.7.1) is available, but we face some FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774 - so that the SOA and MVC features are not working yet; but you can use remote @*REST@ful @*ORM@ process hosted on a Linux server.
 For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the {\i Delphi} compiler (which is planned, but not scheduled).
@@ -11450,7 +11450,7 @@ $ root/People/6?session_signature=0000004C000F6DD02E24541C
 For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA-256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA-256, to enhance security with no performance penalty.
 In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a {\i Delphi} Client or from a @*AJAX@ / {\i JavaScript} client.
 On practice, this scheme is secure and very fast, perfect for a {\i Delphi} client, or an AJAX application.
-:   Authentication using Windows credentials
+:121   Authentication using Windows credentials
 :    Windows Authentication
 By default, the {\i hash} of the user password is stored safely on the server side. This may be an issue for corporate applications, since a new user name / password pair is to be defined by each client, which may be annoying.
 Since revision 1.18 of the framework, {\i mORMot} is able to use {\i @*Windows Authentication@} to identify any user. That is, the user does not need to enter any name nor password, but her/his Windows credentials, as entered at Windows session startup, will be used.
@@ -12277,7 +12277,7 @@ Follow these steps:
 The framework source code tree will compile and is tested for the following platforms:
 - {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE, with @*FPC@ 2.7.1 support;
 - Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
-- Preliminary @*Linux@ platform for @*ORM@ servers using the FPC compiler - not yet stable enough to be used on production, and @*SOA@ or Web @*MVC@ not yet working due to a FPC bug - see @111@;
+- Preliminary @*Linux@ platform for @*ORM@ servers using the FPC compiler - not yet stable enough to be used on production, and @*SOA@ or Web @*MVC@ not yet working due to a FPC bug - see @112@;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
@@ -12418,7 +12418,7 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
 \page
-:112 Installation
+:113 Installation
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
@@ -12922,7 +12922,7 @@ The @!Lib\SQLite3\mORMoti18n.pas@ unit is able to parse all those {\f1\fs20 reso
 Creating a report from code does make sense in an ORM. Since we have most useful data at hand as {\i Delphi} classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
 Note that the {\f1\fs20 mORMotReport.pas} unit uses UTF-16 encoded string, i.e. our {\f1\fs20 SynUnicode} type, which is either {\f1\fs20 UnicodeString} since Delphi 2009, or {\f1\fs20 WideString} for older versions. {\f1\fs20 WideString} is known to have performance issues, due to use of slow BSTR API calls - so if you want to create huge reports with pre-Unicode versions of Delphi and our report engine, consider adding a reference to our {\f1\fs20 @*SynFastWideString@.pas} unit at first place of your {\f1\fs20 .dpr} uses clause, for potential huge speed enhancement. See @32@ for more details, especially the restriction of use, since it would break any attempt to use BSTR parameters with any OLE/COM object.
 \page
-: Application i18n and L10n
+:115 Application i18n and L10n
 In computing, internationalization and localization (also spelled internationalisation and localisation) are means of adapting computer software to different languages, regional differences and technical requirements of a target market:
 - {\i Internationalization} (@**i18n@) is the process of designing a software application so that it can be adapted to various languages;
 - {\i Localization} (@**L10n@) is the process of adapting internationalized software for a specific region or language by adding locale-specific components and translating text, e.g. for dates display.
