@@ -24,10 +24,13 @@ NoConfidential=Yes
 ; so that no "Confidential" text will appear in page footer - seems convenient for a GPL document ;)
 HeaderWithLogo=Yes
 ; custom page header with the synopse logo
+HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_112,Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate
+; the sidebar first link, for html export
 
 {\b Document License}
 THE ATTACHED DOCUMENTS DESCRIBE INFORMATION RELEASED BY SYNOPSE INFORMATIQUE UNDER A GPL 3.0 LICENSE.
 {\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2014 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 This document is free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 The {\i Synopse mORMot Framework Documentation} is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with this documentation. If not, see @http://www.gnu.org/licenses
@@ -566,6 +569,7 @@ TitleOffset=0
 DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
+%IamLost.png
 {\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to XE7 and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
 The main features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
@@ -624,7 +628,6 @@ For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 
 For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
 If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
 The table content of this document makes it clear: this is no ordinary piece of software.
-%IamLost.png
 The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
@@ -12260,7 +12263,7 @@ As a true {\i Open Source} project, all source code of the framework is availabl
 As an alternative, you can monitor or fork our projects from our @*GitHub@ repository, at @http://github.com/synopse/mORMot
 The source has been commented following the scheme used by our {\i @*SynProject@} documentation tool. That is all interface definition of the units have special comments, which were extracted then incorporated into this @SAD@, in the following pages.
 :  Obtaining the Source Code
-Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official http://synopse.info web site, but you may want to use the latest version available.
+Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official @http://synopse.info web site, but you may want to use the latest version available.
 The easiest is to download a nightly-generated archive of the latest version of the trunk, from @http://synopse.info/files/mORMotNightlyBuild.zip
 As an alternative, you can manually obtain a {\f1\fs20 .zip} archive containing a snapshot of the latest version of the whole source code tree directly from this repository.
 Follow these steps:
@@ -12415,7 +12418,7 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
 \page
-: Installation
+:112 Installation
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
@@ -12926,7 +12929,7 @@ In computing, internationalization and localization (also spelled internationali
 Our framework handles both features, via the @!Lib\SQLite3\mORMoti18n.pas@ unit. We just saw above how {\f1\fs20 @*resourcestring@} defined in the source code are retrieved from the executable and can be translated on the fly. The unit extends this to visual forms, and even captions generated from @*RTTI@ - see @5@.
 The unit expects all textual content (both {\f1\fs20 resourcestring} and RTTI derived captions) to be correct English text. A list of all used textual elements will be retrieved then hashed into an unique numerical value. When a specific locale is set for the application, the unit will search for a {\f1\fs20 @*.msg@} text file in the executable folder matching the expected locale definition. For instance, it will search for {\f1\fs20 FR.msg} for translation into French.
 In order to translate all the user interface, a corresponding {\f1\fs20 .msg} file is to be supplied in the executable folder. Neither the source code, nor the executable is to be rebuild to add a new language. And since this file is indeed a plain textual file, even a non developer (e.g. an end-user) is able to add a new language, starting from another {\f1\fs20 .msg}.
-:   Creating the reference file
+:  Creating the reference file
 In order to begin a translation task, the {\f1\fs20 mORMoti18n.pas} unit is able to extract all textual resource from the executable, and create a reference text file, containing all English sentences and words to be translated, associated with their numerical hash value.
 It will in fact:
 - Extract all {\f1\fs20 resourcestring} text;
@@ -12986,7 +12989,7 @@ $388288630=Signed,By %s on %s
 $ (...)
 The main section of this text file is named {\f1\fs20 [Messages]}. In fact, it contains all English extracted texts, as {\f1\fs20 NumericalKey=EnglishText} pairs. Note this will reflect the exact content of {\f1\fs20 resourcestring} or RTTI captions, including formating characters (like {\f1\fs20 %d}), and replacing line feeds ({\f1\fs20 #13}) by the special {\f1\fs20 |} character (a line feed is not expected on a one-line-per-pair file layout). Some other text lines are separated by a comma. This is usual for instance for hint values, as expected by the code.
 As requested, each application form has its own section (e.g. {\f1\fs20 [TEditForm]}, {\f1\fs20 [TMainForm]}), proposing some default translation, specified by a numerical key (for instance {\f1\fs20 Label1.Caption} will use the text identified by 1741937413 in the {\f1\fs20 [Messages]} section). The underline character before the numerical key is used to refers to this value. Note that if no {\f1\fs20 _NumericalKey} is specified, a plain text can be specified, in order to reflect a specific use of the generic text on the screen.
-:   Adding a new language
+:  Adding a new language
 In order to translate the whole application into French, the following {\f1\fs20 FR.msg} file could be made available in the {\f1\fs20 SynFile.exe} folder:
 $[Messages]
 $2784453965=Texte
@@ -13008,7 +13011,7 @@ $388288630=Signé,Par %s le %s
 $ (....)
 Since no form-level custom captions (e.g. {\f1\fs20 [TLoginForm]}) have been defined in this {\f1\fs20 FR.msg} file, the default numerical values will be used. In our case, {\f1\fs20 Name.EditLabel.Caption} will be displayed using the text specified by 2817614158, i.e. {\f1\fs20 'Nom'}. You can specify a custom translation for a given field on any form: sometimes, the text should be adapted with a given context.
 Note that the special characters {\f1\fs20 %s %d , |} markup was preserved: only the plain English text has been translated to the corresponding French.
-:   Language selection
+:  Language selection
 User Interface language can be specified at execution.
 There are two ways to change the application language:
 - Manual translation of every form;
@@ -13021,7 +13024,7 @@ In manual translation mode:
 - You do not need to modify your code, since it will be global to the application;
 - It will work also for any third-party dialog, even if you do not have the source of it;
 - But you can't change the language on the fly: you need to restart the application.
-:    Manual transaction
+:  Manual translation
 Once for the application, you should call {\f1\fs20 SetCurrentLanguage()} to set the global {\f1\fs20 Language} object and all related {\i Delphi} locale settings.
 The, in each {\f1\fs20 OnShow} event of any form, you should call {\f1\fs20 FormTranslateOne()} e.g.
 !procedure TMyForm.FormShow(Sender: TObject);
@@ -13033,14 +13036,14 @@ Another possibility may be to translate all already allocated forms at once, e.g
 Note that a list of already translated forms is maintained by the unit, when you call {\f1\fs20 FormTranslate()}.\line Therefore:
 - All specified forms will be translated again by any further {\f1\fs20 SetCurrentLanguage()} call;
 - But none of these forms must be freed after a {\f1\fs20 FormTranslate([])} call - use {\f1\fs20 FormTranslateOne()} instead to translate a given form once, e.g. for all temporary created forms.
-:   TForm / TFrame hook
+:  TForm / TFrame hook
 If the {\f1\fs20 USEFORMCREATEHOOK} conditional is defined, the {\f1\fs20 mORMoti18n.pas} unit will hook {\f1\fs20 TCustomForm.OnCreate} method to translate all its nested components. It will also intercept {\f1\fs20 TCustomFrame.Create()} to allow automatic translation of its content.
 Since the language must be known at program startup, before any {\f1\fs20 TForm} is actually created, the language will be set in the Operating System registry.\line The {\f1\fs20 HKEY_CURRENT_USER\\Software\\[CompanyName]i18n\\} key should contain one value per application (i.e. the lowercase .exe file name without its path), which will identify the abbreviation of the expected language. If there is no entry in this registration key for the given application, the current Windows local will be used.
 For instance, if you define {\f1\fs20 USEFORMCREATEHOOK} conditional for your project, and run at least e.g. once in @!TMainForm.FormShow!Lib\SQLite3\Samples\MainDemo\FileMain.pas@, for the framework main demo:
 !  i18nLanguageToRegistry(lngFrench);
 .. then it will set the main application language as French. At next startup, the unit will search for a {\f1\fs20 FR.msg} file, which will be used to translate all screen layout, including all RTTI-generated captions.
 Of course, for a final application, you'll need to change the language by a common setting. See {\f1\fs20 i18nAddLanguageItems, i18nAddLanguageMenu} and {\f1\fs20 i18nAddLanguageCombo} functions and procedures to create your own language selection dialog, using a menu or a combo box, for instance.
-:   Localization
+:  Localization
 Take a look at the {\f1\fs20 TLanguageFile} class. After the main language has been set, you can use the global {\f1\fs20 Language} instance in order to localize your application layout.
 The {\f1\fs20 mORMoti18n} unit will register itself to some methods of {\f1\fs20 mORMot.pas}, in order to translate the RTTI-level text into the current selected language. See for instance {\f1\fs20 i18nDateText}.
 
