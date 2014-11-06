@@ -24,13 +24,13 @@ NoConfidential=Yes
 ; so that no "Confidential" text will appear in page footer - seems convenient for a GPL document ;)
 HeaderWithLogo=Yes
 ; custom page header with the synopse logo
-HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate
-; the sidebar first link, for html export
+HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,FAQ/Frequently Asked Questions:TITL_123,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate
+; the sidebar first links, for html export
 
 {\b Document License}
 THE ATTACHED DOCUMENTS DESCRIBE INFORMATION RELEASED BY SYNOPSE INFORMATIQUE UNDER A GPL 3.0 LICENSE.
 {\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2014 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
-This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
+;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 This document is free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 The {\i Synopse mORMot Framework Documentation} is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with this documentation. If not, see @http://www.gnu.org/licenses
@@ -739,16 +739,18 @@ Due to its modular design, you can integrate some framework bricks to your exist
 {\i mORMot} implements the needed techniques for introducing what Michael Feathers calls, in his book {\i Working Effectively With Legacy Code}, a @**seam@. A seam is an area where you can start to cleave off some legacy code and begin to introduce changes. Even mocking abilities of {\i mORMot} - see @62@ - will help you in this delicate task - see @http://www.infoq.com/articles/Utilizing-Logging
 Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit and support for such a migration. The sooner, the better.
 \page
-: FAQ
+:123 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
 First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries targets the main article about a given concept or technical term.
 Feel free to give your feedback in the very same forum, asking new questions or improving answers!
 {\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes!
+{\b Where should I start?}\line Take a look at the {\i Architecture principles} @40@, then download and install the sources and compile and run the {\f1\fs20 TestSQL3.dpr} program as stated @113@. Check about @*ORM@ @3@, @*SOA@ @63@ and @*MVC@ @108@, then test the various samples (from the {\f1\fs20 SQLite3\\Samples} folder), especially 01, 02, 04, 11, 12, 14, 17, 26, 28, 30 and the {\f1\fs20 MainDemo}.
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services and "manual" SQL statements - in this case, you have at hand @27@ classes in {\i mORMot}, which allow very high performance and direct export to JSON.
+{\b I am tempted by using an ORM, but {\i mORMot} forces you to inherit from a root {\f1\fs20 @*TSQLRecord@} type, whereas I'd like to use any kind of object.}\line Adding attributes to an existing class is tempting, but would pollute your code at the end, mixing persistence and business logic: see {\i @*Persistence Ignorance@} and {\i @*Aggregates@} @124@. Our ORM does not rely on {\i generics}, but on the power of the object pascal {\f1\fs20 class} used with {\i @*convention over configuration@} - so our code is faster, and works with older versions of Delphi, or FreePascal.
 {\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can use standard {\i Delphi} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
-{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database and linked to VCL components, you would find in the {\f1\fs20 mORMotVCL.pas} unit a way to map JSON results, as returned by a {\i mORMot} server, to a {\f1\fs20 TDataSet} fast in-memory instance. See also sample "{\i 17 - TClientDataset use}".
+{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see @77@ or @72@. If you used {\i DataSnap} to access a remote database and linked to VCL components, see the {\f1\fs20 mORMotVCL.pas} unit which can publish a data source for your UI.
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see @81@ - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See @108@ for more details, and discovering a sample "blog" application.
 {\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
@@ -1367,7 +1369,7 @@ Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used 
 !function UTF8ToString(const Text: RawUTF8): string;
 Of course, the {\f1\fs20 StringToUTF8} method or function are available to send back some text to the @*ORM@ layer.\line A lot of dedicated conversion functions (including to/from numerical values) are included in {\f1\fs20 SynCommons.pas}. Those were optimized for speed and multi-thread capabilities, and to avoid implicit conversions involving a temporary {\f1\fs20 string} variable.
 Warning during the compilation process are not allowed, especially under Unicode version of {\i Delphi} (e.g. {\i Delphi} 2010): all string conversion from the types above are made explicitly in the framework's code, to avoid any unattended data loss.
-If you are using older version of Delphi, and have an existing code base involving a lot of {\f1\fs20 @*WideString@} variables, you may take a look at the {\f1\fs20 @*SynFastWideString@.pas} unit. Adding this unit in the top of your {\f1\fs20 .dpr} uses clauses would let all {\f1\fs20 WideString} process use the Delphi heap and its very efficient {\i @*FastMM4@} memory manager, instead of the much slower BSTR Windows API. Performance gain can be more than 50 times, if you existinc code use a lot of {\f1\fs20 WideString} variables. Note that using this unit would break the compatibility with BSTR/COM/OLE kind of string, so is not to be used with COM objects. In all cases, if you need {\i Unicode} support with older versions of Delphi, consider using our {\f1\fs20 RawUTF8} type instead, which is much better integrated with our framework.
+If you are using older version of Delphi, and have an existing code base involving a lot of {\f1\fs20 @*WideString@} variables, you may take a look at the {\f1\fs20 @*SynFastWideString.pas@} unit. Adding this unit in the top of your {\f1\fs20 .dpr} uses clauses would let all {\f1\fs20 WideString} process use the Delphi heap and its very efficient {\i @*FastMM4@} memory manager, instead of the much slower BSTR Windows API. Performance gain can be more than 50 times, if you existinc code use a lot of {\f1\fs20 WideString} variables. Note that using this unit would break the compatibility with BSTR/COM/OLE kind of string, so is not to be used with COM objects. In all cases, if you need {\i Unicode} support with older versions of Delphi, consider using our {\f1\fs20 RawUTF8} type instead, which is much better integrated with our framework.
 :33 Currency handling
 Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly to map the variables to their internal {\f1\fs20 Int64} binary representation, as such:
 !function CompCurrency(var A,B: currency): Int64;
@@ -1938,7 +1940,7 @@ An easier possibility is to inherit your custom exception class from {\f1\fs20 E
 !  end;
 See {\f1\fs20 TSynLogExceptionContext} to check the execution context, and the implementation of the {\f1\fs20 function DefaultSynLogExceptionToStr()} function.
 :  Serialization
-{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynCommons} unit - see @48@.
+{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynCommons.pas} unit - see @48@.
 The {\f1\fs20 TSQLLog} class (using the enhanced @*RTTI@ methods defined in {\f1\fs20 mORMot.pas} unit) is even able to serialize {\f1\fs20 @*TSQLRecord@, @*TPersistent@, TList} and {\f1\fs20 @*TCollection@} instances as JSON, or any other class instance, after call to {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@}.
 For instance, the following code:
 !procedure TestPeopleProc;
@@ -2023,7 +2025,7 @@ Log archives can be created with the following settings:
 The {\f1\fs20 ArchivePath} property can be set to several functions, taking a timeout delay from the {\f1\fs20 ArchiveAfterDays} property value:
 - {\f1\fs20 nil} is the default value, and won't do anything: the {\f1\fs20 .log} will remain on disk until they will be deleted by hand;
 - {\f1\fs20 EventArchiveDelete} in order to delete deprecated {\f1\fs20 .log} files;
-- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
+- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons.pas} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
 - {\f1\fs20 SynZip.EventArchiveZip} will archive the {\f1\fs20 .log} files in {\f1\fs20 ArchivePath\\log\\YYYYMM.zip} files, grouping every .
 {\i SynLZ} files are less compressed, but created much faster than {\f1\fs20 .zip} files. However, {\f1\fs20 .zip} files are more standard, and on a regular application, compression speed won't be an issue for the application.
 :  Log files rotation
@@ -4548,7 +4550,7 @@ The current list of available external RDBMS database classes is:
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
 In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party {\i Delphi} library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
-Since revision 1.18, any {\i ZeosLib} / {\i ZDBC@} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
+Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
 An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
 Thanks to the design of our classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
 \graph SynDBLayers SynDB Architecture
@@ -4669,7 +4671,7 @@ Here are the units implementing the external database-agnostic features:
 |{\f1\fs20 SynDBSQLite3.pas}|@*SQLite3@ direct access classes
 |{\f1\fs20 SynDBDataset.pas}\line {\f1\fs20 SynDBFireDAC.pas}\line {\f1\fs20 SynDBUniDAC.pas}\line {\f1\fs20 SynDBNexusDB.pas}\line {\f1\fs20 SynDBBDE.pas}|{\f1\fs20 @*TDataset@} ({\f1\fs20 DB.pas}) access classes
 |%
-It is worth noting that those units only depend on {\f1\fs20 SynCommons}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB}, switching from one database engine to another is just a matter of changing a class type.
+It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB}, switching from one database engine to another is just a matter of changing a class type.
 :  Classes
 The data is accessed via three families of classes:
 - {\i Connection properties}, which store the database high-level properties (like database implementation classes, server and database name, user name and password);
@@ -4805,7 +4807,7 @@ In all cases, using the textual version of the column name ({\f1\fs20 'AccountNu
 !end;
 But to be honest, after profiling, most of the time is spend in the {\f1\fs20 Step} method, especially in {\f1\fs20 fRowSet.GetData}. In practice, I was not able to notice any speed increase worth mentioning, with the code above.
 Our name lookup via a hashing function (i.e. {\f1\fs20 TDynArrayHashed}) just does its purpose very well.
-On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
+On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons.pas} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
 \page
 : Database access
 From the {\f1\fs20 SynDB} logical point of view, here is how databases can be accessed:
@@ -5298,7 +5300,7 @@ It gives access to any @**BSON@ data, including documents, arrays, and {\i Mongo
 - Generation of BSON content from any {\i Delphi} types (via {\f1\fs20 TBSONWriter});
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
 - A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
-- Interaction with the {\f1\fs20 SynCommons}' @80@ as document storage and late-binding access;
+- Interaction with the {\f1\fs20 SynCommons.pas}' @80@ as document storage and late-binding access;
 - Marshalling BSON to and from @*JSON@, with the {\i MongoDB} extended syntax for handling its custom types.
 This unit defines some objects able to connect and manage databases and collections of documents on any {\i MongoDB} servers farm:
 - Connection to one or several servers, including secondary hosts, via the {\f1\fs20 TMongoClient} class;
@@ -5850,7 +5852,7 @@ Note that any custom serialization (either via callbacks, or via text definition
 On any version of the compiler prior to {\i Delphi} 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
 A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
 $ { "MyRecord": "￰w6nDoMOnYQ==" }
-You will find in {\f1\fs20 SynCommons} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
+You will find in {\f1\fs20 SynCommons.pas} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
 When working with most part of the framework, you do not have anything to do: any record will by default follow this {\i Base64} serialization, so you will be able e.g. to publish or consume interface-based services with records.
 :    Custom serialization
 {\i Base64} encoding is pretty convenient for a computer (it is a compact and efficient format), but it is very limited about its interoperability. Our format is proprietary, and will use the internal {\i Delphi} serialization scheme: it means that it won't be readable nor writable outside the scope of your own {\i mORMot} applications. In a @*REST@ful/@*SOA@ world, this sounds not like a feature, but a limitation.
@@ -10477,7 +10479,7 @@ Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} tem
 - It allows the data context to be supplied as JSON or our @80@;
 - Almost no memory allocation is performed during the rendering;
 - It is natively UTF-8, from the ground up, with optimized conversion of any string data;
-- Performance has been tuned and grounded in {\f1\fs20 SynCommons}'s optimized code;
+- Performance has been tuned and grounded in {\f1\fs20 SynCommons.pas}'s optimized code;
 - Each parsed template is thread-safe and re-entrant;
 - It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
 - It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
@@ -11888,7 +11890,7 @@ The main difference between {\i Value Objects} and {\i Entities} is that instanc
 {\i Value objects are immutable} by definition, so should be handled as read-only. In other words, they are incapable of change once they are created.\line Why is it important that they be immutable? With {\i Value objects}, you're seeking side-effect-free functions, yet another concept borrowed by DDD to functional languages (and not available in most @*OOP@ languages, until latest concurrent object definition like in {\i Rust} or {\i Immutable Collections} introduced in C#/.NET 4.5). When you add $10 to $20, are you changing $20? No, you are creating a new money descriptor of $30. A similar behavior should be visible at code level.
 {\i Entities} will very likely have an {\f1\fs20 ID} field, able to identify a given reality, and model the so-called {\i thread of continuity} of this identity. But this {\f1\fs20 ID} is an implementation detail, only used at {\i Persistence Layer} level: at the {\i Domain Layer} level, you should not access {\i Entities} individually, but via a special {\i Entity} bounded to a specific context, called {\i Aggregate Root} (see next paragraph).
 When we define some objects, we should focus on making the implicit become {\i explicit}. For instance, if we have to store a phone number, we won't use a plain {\f1\fs20 string} type for it, but we will create a dedicated {\i Value object} type, making explicit all the behavior of its associated reality. Then we will be free to combine all types into explicit grouped types, on need.
-:  Aggregates
+:124  Aggregates
 {\i @**Aggregates@} are a particular case of {\i Entities}, defined as collection of objects (nested {\i Values} and/or {\i Entities}) that are grouped together by a {\i root Entity}, otherwise known as an {\i @**Aggregate Root@}, which scope has been defined by a given execution context - see "{\i Composition}" above.
 Typically, {\i Aggregates} are persisted in a database, and guarantee the consistency of changes by isolating its members from external objects (i.e. you can link to an aggregate via its ID, but you can not directly access to its internal objects). See @29@ which sounds like @http://martinfowler.com/bliki/AggregateOrientedDatabase.html
 In practice, {\i Aggregates} may be the only kind of objects which will be persisted at the {\i Application layer}, before calling the domain methods: even if each nested {\i Entity} may have its own persistence method (e.g. one RDBMS table per Entity), {\i Aggregates} may be the unique access point to retrieve or update a given state. It will ensure so-called @*Persistence Ignorance@, meaning that domain should remain uncoupled to any low-level storage implementation detail.
@@ -12205,7 +12207,7 @@ This test program has been uploaded in the {\f1\fs20 SQLite3\\Sample\\07 - SynTe
 :  Implemented tests
 The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 35,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
 Before any release all unitary regression tests are performed with the following compilers:
-- {\i Delphi} 5 (for a limited scope, including {\i SynCommons}, {\i SynPdf} and {\i SynDB});
+- {\i Delphi} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
 - {\i Delphi} 6;
 - {\i Delphi} 7, with and without our Enhanced Run Time Library;
 - {\i Delphi} 2007;
@@ -12216,7 +12218,7 @@ Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBE
 You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
 \page
 :73 Logging
-The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynCommons} unit - see @16@.
+The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynCommons.pas} unit - see @16@.
 In its current implementation, the framework is able to log on request:
 - Any exceptions triggered during process, via {\f1\fs20 sllException} and {\f1\fs20 sllExceptionOS} levels;
 - Client and server @*REST@ful {\f1\fs20 URL} methods via {\f1\fs20 sllClient} and {\f1\fs20 sllServer} levels;
@@ -12443,10 +12445,10 @@ To properly upgrade to the latest revision:
 1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
 2. Download latest 1.18 revision files as stated just above.
 3. Change your references to {\i mORMot} units:
-- Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot};
-- Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3};
+- Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot.pas};
+- Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3.pas};
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
-- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static} unit (for {\i Win32}).
+- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static.pas} unit (for {\i Win32}).
 4. Consult the units' headers about 1.18 for breaking changes, mainly:
 - Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 TTimeLogBits};
 - {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
@@ -12920,7 +12922,7 @@ You perhaps did notice that textual constant were defined as {\f1\fs20 @*resourc
 !  sPictureN = '%s Picture';
 The @!Lib\SQLite3\mORMoti18n.pas@ unit is able to parse all those {\f1\fs20 resourcestring} from a running executable, via its {\f1\fs20 ExtractAllResources} function, and create a reference text file to be translated into any handled language.
 Creating a report from code does make sense in an ORM. Since we have most useful data at hand as {\i Delphi} classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
-Note that the {\f1\fs20 mORMotReport.pas} unit uses UTF-16 encoded string, i.e. our {\f1\fs20 SynUnicode} type, which is either {\f1\fs20 UnicodeString} since Delphi 2009, or {\f1\fs20 WideString} for older versions. {\f1\fs20 WideString} is known to have performance issues, due to use of slow BSTR API calls - so if you want to create huge reports with pre-Unicode versions of Delphi and our report engine, consider adding a reference to our {\f1\fs20 @*SynFastWideString@.pas} unit at first place of your {\f1\fs20 .dpr} uses clause, for potential huge speed enhancement. See @32@ for more details, especially the restriction of use, since it would break any attempt to use BSTR parameters with any OLE/COM object.
+Note that the {\f1\fs20 mORMotReport.pas} unit uses UTF-16 encoded string, i.e. our {\f1\fs20 SynUnicode} type, which is either {\f1\fs20 UnicodeString} since Delphi 2009, or {\f1\fs20 WideString} for older versions. {\f1\fs20 WideString} is known to have performance issues, due to use of slow BSTR API calls - so if you want to create huge reports with pre-Unicode versions of Delphi and our report engine, consider adding a reference to our {\f1\fs20 @*SynFastWideString.pas@} unit at first place of your {\f1\fs20 .dpr} uses clause, for potential huge speed enhancement. See @32@ for more details, especially the restriction of use, since it would break any attempt to use BSTR parameters with any OLE/COM object.
 \page
 :115 Application i18n and L10n
 In computing, internationalization and localization (also spelled internationalisation and localisation) are means of adapting computer software to different languages, regional differences and technical requirements of a target market:
