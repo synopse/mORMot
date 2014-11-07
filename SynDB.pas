@@ -5412,7 +5412,8 @@ begin
   // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
-  fDBMS := aConnection.Properties.DBMS;
+  if aConnection<>nil then
+    fDBMS := aConnection.fProperties.DBMS;
 end;
 
 function TSQLDBStatement.ColumnCount: integer;
