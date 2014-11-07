@@ -5,28 +5,35 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  Messages,
+  Graphics,
   {$endif}
-  Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls,
-  SynCommons, mORMot,
+  Classes, SysUtils, Forms, Controls, Dialogs, StdCtrls,
+  SynCommons,
+  mORMot,
   SampleData;
 
 type
+
+  { TForm1 }
+
   TForm1 = class(TForm)
-    QuestionMemo: TMemo;
-    NameEdit: TEdit;
+    AddButton: TButton;
     Label1: TLabel;
     Label2: TLabel;
-    AddButton: TButton;
     QuitButton: TButton;
     FindButton: TButton;
+    QuestionMemo: TMemo;
+    NameEdit: TEdit;
+    procedure AddButtonClick(Sender: TObject);
+    procedure FindButtonClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure AddButtonClick(Sender: TObject);
     procedure QuitButtonClick(Sender: TObject);
-    procedure FindButtonClick(Sender: TObject);
   private
+    { private declarations }
   public
+    { public declarations }
     Database: TSQLRest;
     Model: TSQLModel;
   end;
@@ -36,17 +43,17 @@ var
 
 implementation
 
+{$ifdef FPC}
+{$R *.lfm}
+{$else}
 {$R *.dfm}
+{$endif}
+
+{ TForm1 }
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   Model := CreateSampleModel; // from SampleData unit
-end;
-
-procedure TForm1.FormDestroy(Sender: TObject);
-begin
-  Database.Free;
-  Model.Free;
 end;
 
 procedure TForm1.AddButtonClick(Sender: TObject);
@@ -69,11 +76,6 @@ begin
   end;
 end;
 
-procedure TForm1.QuitButtonClick(Sender: TObject);
-begin
-  Close;
-end;
-
 procedure TForm1.FindButtonClick(Sender: TObject);
 var Rec: TSQLSampleRecord;
 begin
@@ -87,4 +89,16 @@ begin
   end;
 end;
 
+procedure TForm1.FormDestroy(Sender: TObject);
+begin
+  Database.Free;
+  Model.Free;
+end;
+
+procedure TForm1.QuitButtonClick(Sender: TObject);
+begin
+  Close;
+end;
+
 end.
+

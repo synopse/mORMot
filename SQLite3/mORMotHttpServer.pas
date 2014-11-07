@@ -208,11 +208,6 @@ uses
   SynCommons,
   mORMot;
 
-
-const
-  /// the default access rights used by the HTTP server if none is specified
-  HTTP_DEFAULT_ACCESS_RIGHTS: PSQLAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
-
 type
   /// available running options for TSQLHttpServer.Create() constructor
   // - useHttpApi to use kernel-mode HTTP.SYS server (THttpApiServer) with an
@@ -229,6 +224,7 @@ type
   // useHttpApiRegisteringURI option is set
   // - useHttpSocket will use the standard Sockets library (e.g. WinSock) - it
   // will trigger the Windows firewall popup UAC window at first run
+  // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TSQLHttpServerOptions =
     ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}useHttpSocket);
 
@@ -240,6 +236,15 @@ type
   TSQLHttpServerSecurity =
     (secNone, secSSL, secSynShaAes);
 
+const
+  /// the default access rights used by the HTTP server if none is specified
+  HTTP_DEFAULT_ACCESS_RIGHTS: PSQLAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
+
+  /// the kind of HTTP server to be used by default
+  // - will define the best available server class, depending on the platform
+  HTTP_DEFAULT_MODE = low(TSQLHttpServerOptions);
+
+type
   /// HTTP/1.1 RESTFUL JSON mORMot Server class
   // - this server is multi-threaded and not blocking
   // - will first try to use fastest http.sys kernel-mode server (i.e. create a
@@ -307,7 +312,7 @@ type
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
     constructor Create(const aPort: AnsiString;
       const aServers: array of TSQLRestServer; const aDomainName: AnsiString='+';
-      aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; ServerThreadPoolCount: Integer=32;
+      aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; ServerThreadPoolCount: Integer=32;
       aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
@@ -324,7 +329,7 @@ type
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
     constructor Create(const aPort: AnsiString; aServer: TSQLRestServer;
       const aDomainName: AnsiString='+';
-      aHttpServerKind: TSQLHttpServerOptions={$ifndef ONLYUSEHTTPSOCKET}useHttpApi{$else}useHttpSocket{$endif}; aRestAccessRights: PSQLAccessRights=nil;
+      aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; aRestAccessRights: PSQLAccessRights=nil;
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
@@ -416,7 +421,6 @@ type
     procedure RemoteLog(Ctxt: TSQLRestServerURIContext);
   end;
   {$M-}
-
 
 
 implementation
@@ -773,7 +777,7 @@ begin
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('',self);
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
-  inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',{$ifndef ONLYUSEHTTPSOCKET}useHttpApiRegisteringURI{$else}useHttpSocket{$endif},nil,1);
+  inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',HTTP_DEFAULT_MODE,nil,1);
   fEvent := aEvent;
   AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS 
 end;

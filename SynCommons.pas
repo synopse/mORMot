@@ -33454,8 +33454,17 @@ begin
   else
   if VType=varVariant or varByRef then
     AddVariantJSON(PVariant(VPointer)^,Escape) else
-  if (VType=varByRef or varOleStr)
-     {$ifdef UNICODE}or (VType=varByRef or varUString){$endif} then begin
+  if VType=varByRef or varString then begin
+    Add('"');
+    {$ifdef UNICODE}
+    AddAnyAnsiString(PRawByteString(VAny)^,twJSONEscape);
+    {$else}
+    AddJSONEscape(PPointer(VAny)^); // VString is expected to be a RawUTF8
+    {$endif}
+    Add('"');
+  end else
+  if {$ifdef UNICODE}(VType=varByRef or varUString) or {$endif}
+     (VType=varByRef or varOleStr) then begin
     Add('"');
     AddW(PPointer(VAny)^,0,Escape);
     Add('"');

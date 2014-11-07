@@ -1781,7 +1781,7 @@ begin
 end;
 {$else}
 asm
-  lea ecx,eax+TBlobData.databuf
+  lea ecx,[eax+TBlobData.databuf]
   mov eax,[eax].TBlobData.datasize
   add eax,ecx
 end;

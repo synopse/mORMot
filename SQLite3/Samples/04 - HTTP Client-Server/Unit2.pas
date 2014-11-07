@@ -3,7 +3,11 @@ unit Unit2;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  {$ifdef MSWINDOWS}
+  Windows,
+  Messages,
+  {$endif}
+  SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
   SynCommons, mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer, SampleData;
 
@@ -40,7 +44,7 @@ begin
   Model := CreateSampleModel;
   DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'),true);
   DB.CreateMissingTables;
-  Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
+  Server := TSQLHttpServer.Create('8080',[DB],'+',HTTP_DEFAULT_MODE);
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
 end;
 
@@ -56,4 +60,4 @@ begin
   Label1.Caption := Caption;
 end;
 
-end.
+end.

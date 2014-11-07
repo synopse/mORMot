@@ -169,10 +169,8 @@ uses
 
 const
   {$ifdef MSWINDOWS}
-  HTTP_DEFAULTOPTIONS = useHttpApi;
   HTTP_DEFAULTPORT = '888';
   {$else}
-  HTTP_DEFAULTOPTIONS = useHttpSocket;
   HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
   {$endif}
 
@@ -705,7 +703,7 @@ type
     fClientOnlyServerIP: RawByteString;
     fTimer: TPrecisionTimer;
     procedure DatabaseClose;
-    procedure Test(aClass: TSQLRestClass; aHttp: TSQLHttpServerOptions=HTTP_DEFAULTOPTIONS;
+    procedure Test(aClass: TSQLRestClass; aHttp: TSQLHttpServerOptions=HTTP_DEFAULT_MODE;
       aWriteMode: TSQLRestServerAcquireMode=amLocked);
     function CreateClient: TSQLRest;
   public
@@ -7521,7 +7519,7 @@ begin
     DataBase := TSQLRestServerDB.Create(Model,'test.db3');
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
-    Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[DataBase],'+',HTTP_DEFAULTOPTIONS,16,secSynShaAes);
+    Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[DataBase],'+',HTTP_DEFAULT_MODE,16,secSynShaAes);
     fRunConsole := fRunConsole+'using '+Server.HttpServer.APIVersion;
     Database.NoAJAXJSON := true; // expect not expanded JSON from now on
   except
@@ -7726,7 +7724,7 @@ begin
     // launch one HTTP server for all TSQLRestServerDB instances
     Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,
       [Instance[0].Database,Instance[1].Database,Instance[2].Database],
-      '+',HTTP_DEFAULTOPTIONS,4,secNone);
+      '+',HTTP_DEFAULT_MODE,4,secNone);
     // initialize the clients
     for i := 0 to high(Instance) do
     with Instance[i] do
@@ -11577,23 +11575,23 @@ end;
 
 procedure TTestMultiThreadProcess.Locked;
 begin
-  Test(TSQLRestClientDB,HTTP_DEFAULTOPTIONS,amLocked);
+  Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amLocked);
 end;
 
 procedure TTestMultiThreadProcess.Unlocked;
 begin
-  Test(TSQLRestClientDB,HTTP_DEFAULTOPTIONS,amUnlocked);
+  Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amUnlocked);
 end;
 
 procedure TTestMultiThreadProcess.BackgroundThread;
 begin
-  Test(TSQLRestClientDB,HTTP_DEFAULTOPTIONS,amBackgroundThread);
+  Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amBackgroundThread);
 end;
 
 {$ifndef LVCL}
 procedure TTestMultiThreadProcess.MainThread;
 begin
-  Test(TSQLRestClientDB,HTTP_DEFAULTOPTIONS,amMainThread);
+  Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amMainThread);
 end;
 {$endif}
 
