@@ -5872,7 +5872,7 @@ begin
 {$endif}
 end;
 {$ifndef NOVARIANTS}
-procedure CheckVariantWith(const V: Variant; i: Integer; offset: integer=0);
+procedure CheckVariantWith(V: Variant; i: Integer; offset: integer=0);
 begin
   Check(V.ID=i);
   Check(V.Int=i);

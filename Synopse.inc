@@ -188,7 +188,9 @@
   {$ifdef CPU64}
     {$define PUREPASCAL}
   {$else}
-    {$ifndef CPUARM}
+    {$ifdef CPUARM}
+    {$define PUREPASCAL}
+    {$else}
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
     {$endif}
   {$endif CPU64}
@@ -204,7 +206,7 @@
      // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
      // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
      // => this will change the TInvokeableVariantType.SetProperty() signature
-     {.$define FPC_VARIANTSETVAR}
+     {$define FPC_VARIANTSETVAR}
    {$endif}
 
 {$else FPC}

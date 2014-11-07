@@ -185,7 +185,7 @@ unit SynCrtSock;
   - made exception error messages more explicit (tuned per module)
   - fixed several issues when releasing THttpApiServer and THttpServer instances
   - allow to use any Unicode content for SendEmail() - also includes
-    SendEmailSubject() function, for feature request [0a5fdf9129]  
+    SendEmailSubject() function, for feature request [0a5fdf9129]
 
 }
 
@@ -225,7 +225,7 @@ uses
   Types,
   {$endif}
   Sockets,
-  synsock, // needs ssfpc.inc , synafpc.pas and synsock (from Ararat Synapse) 
+  SynFPCSock,
   SynFPCLinux,
 {$endif}
 {$ifndef LVCL}
@@ -325,7 +325,7 @@ type
   // SockRecv() thanks to its internal buffer, even on multi-threaded app
   // (at least under Windows, it may be up to 10 times faster)
   // - but you can decide whatever to use none, one or both SockIn/SockOut
-  // - our classes are much faster than the Indy or Synapse implementation
+  // - our classes are (much) faster than the Indy or Synapse implementation
   TCrtSocket = class
   protected
     /// raise an ECrtSocket exception on error (called by Open/Bind constructors)
@@ -5925,7 +5925,7 @@ initialization
     (ord(reqUserAgent)=40) and
     (ord(respLocation)=23) and (sizeof(THttpHeader)=4));
     {$endif}
-  if InitSocketInterface{$ifndef MSWINDOWS}(''){$endif} then
+  if InitSocketInterface then
     WSAStartup(WinsockLevel, WsaDataOnce) else
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
 

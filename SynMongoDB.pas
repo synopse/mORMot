@@ -5100,7 +5100,8 @@ function TMongoClient.GetServerBuildInfoNumber: cardinal;
   procedure ComputeIt;
   var vArr: variant;
   begin
-    vArr := ServerBuildInfo.versionArray;
+    GetServerBuildInfo; // circumvent a FPC compilation issue
+    vArr := fServerBuildInfo.versionArray;
     if vArr._Count=4 then
       fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
         vArr._(0)*1000000+vArr._(1)*10000+vArr._(2)*100+vArr._(3);
