@@ -19015,7 +19015,6 @@ begin
   FileFromString(Content,FileName);
 end;
 
-
 function StringFromFile(const FileName: TFileName): RawByteString;
 var F: THandle;
     Size: integer;

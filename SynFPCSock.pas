@@ -727,8 +727,8 @@ end;
 function GetSinPort(Sin: TVarSin): Integer;
 begin
   if (Sin.sin_family=AF_INET6) then
-    result := synsock.ntohs(Sin.sin6_port) else
-    result := synsock.ntohs(Sin.sin_port);
+    result := ntohs(Sin.sin6_port) else
+    result := ntohs(Sin.sin_port);
 end;
 
 procedure ResolveNameToIP(const Name: string;
@@ -745,7 +745,7 @@ begin
       a4[1] := StrTonetAddr(name);
       if a4[1].s_addr=INADDR_ANY then
         if GetHostByName(name,he) then begin
-          a4[1]:=HostToNet(he.Addr);
+          a4[1] := HostToNet(he.Addr);
           x := 1;
         end else
           x := Resolvename(name,a4) else
@@ -773,7 +773,7 @@ function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer):
 var ProtoEnt: TProtocolEntry;
     ServEnt: TServiceEntry;
 begin
-  result := synsock.htons(StrToIntDef(Port,0));
+  result := htons(StrToIntDef(Port,0));
   if result=0 then begin
     ProtoEnt.Name := '';
     GetProtocolByNumber(SockProtocol,ProtoEnt);
@@ -823,7 +823,5 @@ initialization
 
 finalization
   SynSockCS.Free;
-{$ENDIF}
 
-
-end.
+end.

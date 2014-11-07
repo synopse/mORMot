@@ -81,11 +81,13 @@ unit SynDBODBC;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   Classes,
   Contnrs,
   SynCommons,
@@ -1917,4 +1919,4 @@ begin
   Dest^ := '"';
 end;
 
-end.
+end.

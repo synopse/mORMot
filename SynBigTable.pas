@@ -938,10 +938,11 @@ type
     procedure _TSynBigTableRecord;
   end;
 
-
+{$ifndef FPC}
 /// unitary test function of the TSynBigTable class
 // - return TRUE if test was OK, FALSE on any error
 function TestBigTable: boolean;
+{$endif}
 
 const
   /// will flush the in-memory data to disk when reached 256 MB of data in RAM
@@ -950,7 +951,7 @@ const
 
 implementation
 
-
+{$ifndef FPC}
 function TestBigTable: boolean;
 procedure SetS(var s: RawUTF8; i: cardinal);
 var p: array[0..3] of Word;
@@ -1591,6 +1592,7 @@ begin
     TS.Free;
   end;
 end;
+{$endif FPC}
 
 
 { TSynBigTable }
@@ -3869,4 +3871,4 @@ end;
 {$endif}
 
 end.
-
+

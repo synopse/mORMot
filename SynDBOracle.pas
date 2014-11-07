@@ -141,11 +141,13 @@ unit SynDBOracle;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   Classes,
   Contnrs,
   SynCommons,
@@ -3255,4 +3257,4 @@ end;
 
 
 end.
-
+

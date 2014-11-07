@@ -69,7 +69,7 @@ uses
   // USEPDF: under Windows: get ZLib 1.2.3 functions from libpdf.dll
   {$ifdef USEPDF}pdf,{$endif}
 {$else}
-  Libc, Types,
+  SynFPCLinux, Types,
 {$endif}
   SynCommons,
   Classes, SysUtils, SynZip;
@@ -467,12 +467,16 @@ begin
       break; // not handled yet: use SynZip's TZipRead to access this archive
     end;
     with Entry[i] do begin
+      {$ifdef MSWINDOWS}
       if FileInfo.GetUTF8FileName then
         SetString(ZipName,PAnsiChar(H)+sizeof(H^),fileInfo.nameLen) else begin
         SetLength(tmp,fileInfo.nameLen); // convert from DOS/OEM into WinAnsi
         OemToCharBuffA(PAnsiChar(H)+sizeof(H^),pointer(tmp),fileInfo.nameLen);
         ZipName := WinAnsiToUtf8(tmp);
       end;
+      {$else}
+      SetString(ZipName,PAnsiChar(H)+sizeof(H^),fileInfo.nameLen);
+      {$endif}
       ZipName := StringReplaceChars(ZipName,'/','\');
       Header := H^;
     end; // next entry is after the ZipNname and some extra/comment
@@ -1411,7 +1415,7 @@ begin
   ZipCreate(aZipName,CompressionLevel,0,Algorithm); // initialize Zip object
   Entry[Count].Header.fileInfo.zlastMod :=
     {$ifdef MSWINDOWS}FileGetDate(Map._file){$else}
-    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map._file)){$endif};
+    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map._file))){$endif};
   Zip.WriteOnce(Map.buf^,Map._size);
   Map.UnMap;
   ZipClose;
@@ -1851,6 +1855,7 @@ var T: TTime_T;
     UT: TUnixTime;
 begin
   __time(@T);
+  localtime_r(
   localtime_r(@T, UT);
   Y := UT.tm_year + 1900;
   M := UT.tm_mon + 1;
@@ -2093,4 +2098,4 @@ end;
 initialization
   fillchar(BlobDataNull,sizeof(TBlobData),0);
 
-end.
+end.

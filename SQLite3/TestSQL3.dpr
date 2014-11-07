@@ -90,6 +90,12 @@ uses
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   {$endif}
+  {$ifdef Linux}
+  cthreads,
+  // widestring manager for Linux !!
+  // could also be put in another unit ... but doc states: as early as possible
+  cwstring,
+  {$endif}
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   mORMotSelfTests in 'mORMotSelfTests.pas',
   SynLZ in '..\SynLZ.pas',
@@ -111,7 +117,9 @@ uses
   {$endif FPC}
   {$endif NOVARIANTS}
   {$endif LVCL}
+  {$ifdef MSWINDOWS}
   SynBigTable in '..\SynBigTable.pas',
+  {$endif}
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
   mORMot in 'mORMot.pas',
@@ -130,14 +138,16 @@ uses
   SynGdiPlus in '..\SynGdiPlus.pas',
 {$endif FPC}
   SynDB in '..\SynDB.pas',
-  SynOleDB in '..\SynOleDB.pas',
-  SynDBOracle in '..\SynDBOracle.pas',
-  SynDBODBC in '..\SynDBODBC.pas',
   SynDBSQLite3 in '..\SynDBSQLite3.pas',
+  {$ifdef MSWINDOWS}
+  SynDBOracle in '..\SynDBOracle.pas',
+  SynOleDB in '..\SynOleDB.pas',
+  SynDBODBC in '..\SynDBODBC.pas',
+  SynZipFiles in '..\SynZipFiles.pas',
+  {$endif}
 {$ifndef DELPHI5OROLDER}
   mORMotDB in 'mORMotDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
-  SynZipFiles in '..\SynZipFiles.pas',
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   SynZip in '..\SynZip.pas',
@@ -150,4 +160,4 @@ begin
   {$endif}
   {$endif}
   SQLite3ConsoleTests;
-end.
+end.

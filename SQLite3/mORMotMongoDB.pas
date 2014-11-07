@@ -67,7 +67,9 @@ unit mORMotMongoDB;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
   Classes,
   Variants,
@@ -957,4 +959,4 @@ begin
 end;
 
 
-end.
+end.
