@@ -15960,7 +15960,7 @@ begin
       if CaseInsensitive then
         result := crc32c(0,Up,UTF8UpperCopy255(Up,RawUTF8(VString))-Up) else
         result := crc32c(0,VString,length(RawUTF8(VString)));
-    varOleStr {$ifdef UNICODE}, varUString{$endif}:
+    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       if CaseInsensitive then
         result := crc32c(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
         result := crc32c(0,VAny,StrLenW(VOleStr)*2);

@@ -2593,9 +2593,9 @@ st2:ElementBytes := Data.TextLen+1;
       Data.InternalStorage := 1 else
       Element := nil; // special case handled by TBSONWriter.BSONWrite()
   end;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   varUString: begin
-    aTemp := UnicodeStringToUtf8(UnicodeString(aVarData.VAny));
+    RawUnicodeToUtf8(aVarData.VAny,length(UnicodeString(aVarData.VAny)),RawUTF8(aTemp));
     goto str;
   end;
   {$endif}
@@ -3112,7 +3112,7 @@ begin
     varDate:     BSONWriteDateTime(Name,VDate);
     varCurrency: BSONWrite(Name,VCurrency);
     varString:   BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     varUString: begin
       RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),temp);
       BSONWrite(Name,temp);

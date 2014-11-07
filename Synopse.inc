@@ -136,6 +136,7 @@
 
 {$ifdef UNICODE}
   {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
+  {$define HASVARUSTRING}
 {$endif}
 
 
@@ -196,6 +197,16 @@
   // exceptions interception code in FPC differs from Delphi
   {$define NOEXCEPTIONINTERCEPT}
 
+   {$ifdef VER2_7_1}
+     {$define ISFPC271}
+     {$define HASVARUSTRING}
+     {$define HASVARUSTRARG}
+     // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
+     // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
+     // => this will change the TInvokeableVariantType.SetProperty() signature
+     {.$define FPC_VARIANTSETVAR}
+   {$endif}
+
 {$else FPC}
 
   {$ifdef CPUX64}
@@ -237,7 +248,7 @@
     {$ifend}
     {$if CompilerVersion >= 18}
       {$define HASNEWFILEAGE} // Delphi 2006 or newer
-      {$define HASINLINE}     
+      {$define HASINLINE}
     {$ifend}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
@@ -261,6 +272,7 @@
       // Delphi XE2 has some cross-platform features
       // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
       {$define ISDELPHIXE2}
+      {$define HASVARUSTRARG}
     {$ifend}
     {$if CompilerVersion >= 24.0}
       {$define ISDELPHIXE3}

@@ -1654,8 +1654,8 @@ begin
     SetWideString(cx,WideString(VAny));
   varString:
     SetAnsiChar(cx,VAny,length(RawByteString(VAny)),
-  {$ifndef UNICODE}   CP_UTF8);
-  {$else}             StringCodePage(RawByteString(VAny)));
+  {$ifndef HASVARUSTRING} CP_UTF8);
+  {$else}                 StringCodePage(RawByteString(VAny)));
   varUString:
     SetSynUnicode(cx,UnicodeString(VAny));
   {$endif}
@@ -1664,7 +1664,7 @@ begin
     SetVariant(cx,PVariant(VPointer)^) else
   if VType=varByRef or varOleStr then
     SetWideString(cx,PWideString(VAny)^) else
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   if VType=varByRef or varUString then
     SetSynUnicode(cx,PUnicodeString(VAny)^) else
   {$endif}

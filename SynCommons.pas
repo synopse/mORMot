@@ -1560,12 +1560,10 @@ procedure UnicodeBufferToWinAnsi(source: PWideChar; out Dest: WinAnsiString);
 /// convert an Unicode buffer into a generic VCL string
 function UnicodeBufferToString(source: PWideChar): string;
 
-{$ifdef UNICODE}
-/// convert a Delphi 2009+ Unicode string into our UTF-8 string
-function UnicodeStringToUtf8(const S: string): RawUTF8; inline;
+{$ifdef HASVARUSTRING}
 
-/// convert a Delphi 2009+ Unicode string into a WinAnsi (code page 1252) string
-function UnicodeStringToWinAnsi(const S: string): WinAnsiString; inline;
+/// convert a Delphi 2009+ or FPC Unicode string into our UTF-8 string
+function UnicodeStringToUtf8(const S: UnicodeString): RawUTF8; inline;
 
 // this function is the same as direct RawUTF8=AnsiString(CP_UTF8) assignment
 // but is faster, since it uses no Win32 API call
@@ -1574,12 +1572,19 @@ function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString; overload; i
 /// convert our UTF-8 encoded buffer into a Delphi 2009+ Unicode string
 // - this function is the same as direct assignment, since RawUTF8=AnsiString(CP_UTF8),
 // but is faster, since use no Win32 API call
-function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString; overload; inline;
+procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
+
+{$endif}
+
+{$ifdef UNICODE}
+
+/// convert a Delphi 2009+ Unicode string into a WinAnsi (code page 1252) string
+function UnicodeStringToWinAnsi(const S: string): WinAnsiString; inline;
 
 /// convert our UTF-8 encoded buffer into a Delphi 2009+ Unicode string
 // - this function is the same as direct assignment, since RawUTF8=AnsiString(CP_UTF8),
 // but is faster, since use no Win32 API call
-procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
+function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString; overload; inline;
 
 /// convert a Win-Ansi encoded buffer into a Delphi 2009+ Unicode string
 // - this function is faster than default RTL, since use no Win32 API call
@@ -9126,7 +9131,7 @@ const
 
   /// this variant type will map the current SynUnicode type
   // - depending on the compiler version
-  varSynUnicode = {$ifdef UNICODE}varUString{$else}varOleStr{$endif};
+  varSynUnicode = {$ifdef HASVARUSTRING}varUString{$else}varOleStr{$endif};
 
   /// this variant type will map the current string type
   // - depending on the compiler version
@@ -9181,8 +9186,13 @@ type
       const Name: String): Boolean; override;
     /// set the field/column value
     // - this method will call protected IntSet abstract method
+    {$ifdef FPC_VARIANTSETVAR} // see http://mantis.freepascal.org/view.php?id=26773
+    function SetProperty(var V: TVarData; const Name: string;
+      const Value: TVarData): Boolean; override;
+    {$else}
     function SetProperty(const V: TVarData; const Name: string;
       const Value: TVarData): Boolean; override;
+    {$endif}
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -13501,25 +13511,15 @@ begin
   result := TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUTF8(P,L);
 end;
 
-{$ifdef UNICODE}
-function UnicodeStringToUtf8(const S: string): RawUTF8;
+{$ifdef HASVARUSTRING}
+function UnicodeStringToUtf8(const S: UnicodeString): RawUTF8;
 begin
   RawUnicodeToUtf8(pointer(S),length(S),result);
-end;
-
-function UnicodeStringToWinAnsi(const S: string): WinAnsiString;
-begin
-  result := RawUnicodeToWinAnsi(pointer(S),length(S));
 end;
 
 function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString;
 begin
   UTF8DecodeToUnicodeString(pointer(S),length(S),result);
-end;
-
-function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString; 
-begin
-  UTF8DecodeToUnicodeString(P,L,result);
 end;
 
 procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString);
@@ -13534,6 +13534,18 @@ begin
     SetString(result,U,UTF8ToWideChar(U,P,L) shr 1);
     FreeMem(U);
   end;
+end;
+{$endif}
+
+{$ifdef UNICODE}
+function UnicodeStringToWinAnsi(const S: string): WinAnsiString;
+begin
+  result := RawUnicodeToWinAnsi(pointer(S),length(S));
+end;
+
+function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString;
+begin
+  UTF8DecodeToUnicodeString(P,L,result);
 end;
 
 function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: integer): UnicodeString;
@@ -14716,13 +14728,14 @@ begin
     wasString := true;
   {$ifdef UNICODE}
     AnyAnsiToUTF8(RawByteString(VString),result);
+  {$else}
+    result := RawUTF8(VString);
+  {$endif}
   end;
+  {$ifdef HASVARUSTRING}
   varUString: begin
     wasString := true;
     RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),result);
-  end;
-  {$else}
-    result := RawUTF8(VString);
   end;
   {$endif}
   varOleStr: begin
@@ -14736,10 +14749,10 @@ begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PWideString(VAny)^),length(PWideString(VAny)^),result);
   end else
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   if VType=varByRef or varUString then begin
     wasString := true;
-    StringToUTF8(PUnicodeString(VUString)^,result);
+    RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),result);
   end else
   {$endif}
     VariantSaveJSON(V,twJSONEscape,result); // will handle also custom types
@@ -28557,7 +28570,7 @@ begin
       RawUTF8(Value.VAny) := Txt;
     varOleStr:
       UTF8ToWideString(Txt,WideString(Value.VAny));
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     varUString:
       UTF8DecodeToUnicodeString(pointer(Txt),length(Txt),UnicodeString(Value.VAny));
     {$endif}
@@ -28602,11 +28615,11 @@ begin
       PInt64(Dest)^ := VInt64;
       inc(Dest,sizeof(VInt64));
     end;
-    varString, varOleStr {$ifdef UNICODE}, varUString{$endif}: begin
+    varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
       if VAny=nil then
         LenBytes := 0 else begin
         LenBytes := PInteger(PtrUInt(VAny)-sizeof(integer))^; // fast length() of string type
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         if VType=varUString then
           LenBytes := LenBytes*2; // stored length is in bytes, not (wide)chars
         {$endif}
@@ -28643,7 +28656,7 @@ begin
       result := 1+sizeof(VType) else
       result := ToVarUInt32LengthWithData(PInteger(PtrUInt(VAny)-sizeof(integer))^)
         +sizeof(VType);
-   {$ifdef UNICODE}
+   {$ifdef HASVARUSTRING}
    varUString:
     if VAny=nil then // stored length is in bytes, not (wide)chars
       result := 1+sizeof(VType) else
@@ -28717,7 +28730,7 @@ begin
       VInt64 := PInt64(Source)^;
       inc(Source,sizeof(VInt64));
     end;
-    varString, varOleStr {$ifdef UNICODE}, varUString{$endif}: begin
+    varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
       LenBytes := FromVarUInt32(PByte(Source));
       case VType of
@@ -28725,7 +28738,7 @@ begin
         SetString(AnsiString(VAny),Source,LenBytes);
       varOleStr:
         SetString(WideString(VAny),PWideChar(Source),LenBytes shr 1);
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       varUString:
         SetString(UnicodeString(VAny),PWideChar(Source),LenBytes shr 1);
       {$endif}
@@ -28953,8 +28966,13 @@ begin
   result := True;
 end;
 
+{$ifdef FPC_VARIANTSETVAR} // see http://mantis.freepascal.org/view.php?id=26773
+function TSynInvokeableVariantType.SetProperty(var V: TVarData;
+  const Name: string; const Value: TVarData): Boolean;
+{$else}
 function TSynInvokeableVariantType.SetProperty(const V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
+{$endif}
 var ValueSet: TVarData;
     WS: PWideString;
     PropName: PAnsiChar;
@@ -29277,7 +29295,7 @@ begin // this code should copy parameters without any reference count handling
     Value.VType := varString;
     Value.VString := PPointer(P)^;
   end;
-  {$ifdef ISDELPHIXE2}
+  {$ifdef HASVARUSTRARG}
   varUStrArg: begin
     if ByRef then
       Value.VType := varUString or varByRef else
@@ -33446,7 +33464,7 @@ begin
     {$endif}
     Add('"');
   end;
-  varOleStr {$ifdef UNICODE}, varUString{$endif}: begin
+  varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
     Add('"');
     AddW(VAny,0,Escape);
     Add('"');
@@ -33463,7 +33481,7 @@ begin
     {$endif}
     Add('"');
   end else
-  if {$ifdef UNICODE}(VType=varByRef or varUString) or {$endif}
+  if {$ifdef HASVARUSTRING}(VType=varByRef or varUString) or {$endif}
      (VType=varByRef or varOleStr) then begin
     Add('"');
     AddW(PPointer(VAny)^,0,Escape);

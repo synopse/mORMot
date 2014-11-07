@@ -2501,7 +2501,7 @@ const
   /// conversion matrix from TSQLDBFieldType into variant type
   MAP_FIELDTYPE2VARTYPE: array[TSQLDBFieldType] of Word = (
     varEmpty, varNull, varInt64, varDouble, varCurrency, varDate,
-  {$ifdef UNICODE}varUString{$else}varOleStr{$endif}, varString);
+    varSynUnicode, varString);
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
 
@@ -3098,7 +3098,9 @@ begin
     varDouble:   result := DoubleToString(VDouble);
     varDate:     result := Ansi7ToString(DateTimeToIso8601Text(VDate,' '));
     varString:   result := string(AnsiString(VAny));
-    {$ifdef UNICODE}varUString: result := UnicodeString(VAny);{$endif}
+    {$ifdef HASVARUSTRING}
+    varUString:  result := UnicodeString(VAny);
+    {$endif}
     varOleStr:   result := WideString(VAny);
     else result := fValue;
   end;
@@ -5331,12 +5333,12 @@ begin
       BindCurrency(Param,TVarData(Data).VCurrency,IO);
     varOleStr: // handle special case if was bound explicitely as WideString
       BindTextW(Param,WideString(TVarData(Data).VAny),IO);
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     varUString:
       if DataIsBlob then
         raise ESQLDBException.CreateUTF8(
           '%.BindVariant: BLOB should not be UnicodeString',[self]) else
-        BindTextU(Param,StringToUTF8(UnicodeString(TVarData(Data).VAny)),IO);
+        BindTextU(Param,UnicodeStringToUtf8(UnicodeString(TVarData(Data).VAny)),IO);
     {$endif}
     varString:
       if DataIsBlob then
