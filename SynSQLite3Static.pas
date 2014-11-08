@@ -1,4 +1,4 @@
-/// SQLite3 Database engine - statically linked .obj for Windows 32 bit
+/// SQLite3 Database engine - statically linked .obj for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -60,7 +60,8 @@ unit SynSQLite3Static;
   
   To compile our patched SQlite3.c version, available in this source folder:
   - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
-  - Run c-fpcmingw.bat to compile the sqlite3*.o for Win32/FPC
+  - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
+  - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
@@ -181,13 +182,19 @@ const
 {
   Code below will link all database engine, from amalgamation source file:
 
- - compiled with free Borland C++ compiler 5.5.1 from the command line:
+ - to compile with free Borland C++ compiler 5.5.1 from the command line:
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -u- sqlite3.c
- - FastCall use must be set with defining SQLITE3_FASTCALL above, and
+    FastCall use must be set with defining SQLITE3_FASTCALL above, and
      int __cdecl fts3CompareElemByTerm(const void *lhs, const void *rhs)
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -pr -u- sqlite3.c
- - to compile for FPC using the MinGW compiler:
-     gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS sqlite3.c
+ - to compile for FPC using the MinGW compiler: run c-fpcmingw.bat
+    gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS sqlite3.c
+    and copy libgcc.a and libkernel32.a from your MinGW folders
+ - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
+    gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
+    and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
+    For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
+
  - the following defines must be added in the beginning of the sqlite3.c file:
 
 //#define SQLITE_ENABLE_FTS3
@@ -256,30 +263,18 @@ extern int unixWrite(
   sqlite3_int64 offset
 );
 
-then compile this souce code using gcc:
-
-  gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
-
-copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
-
-For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
-
 }
 
-{$ifdef FPC}  // FPC expects coff32 .o
+{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
 {$ifdef MSWINDOWS}
-{$L sqlite3.o}
-{$linklib c:\progs\mingw\lib\libkernel32.a}
-{$linklib c:\progs\mingw\lib\gcc\mingw32\4.8.1\libgcc.a}
+{$L fpc-win32\sqlite3.o}
+{$linklib fpc-win32\libkernel32.a}
+{$linklib fpc-win32\libgcc.a}
 {$else}
-{$ifdef INCLUDE_FTS3}
-{$L ..\linuxlibrary\sqlite3fts3.o}
-{$else}
-{$L ..\linuxlibrary\sqlite3.o}
+{$L fpc-linux32\sqlite3.o}
+{$linklib fpc-linux32\gcc.a}
 {$endif}
-{$linklib ..\linuxlibrary\gcc.a}
-{$endif}
-{$else}
+{$else} // Delphi
 {$ifdef INCLUDE_FTS3}
 {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
 {$else}
@@ -1281,4 +1276,4 @@ initialization
   sqlite3 := TSQLite3LibraryStatic.Create;
 {$endif NOSQLITE3STATIC}
 
-end.
+end.

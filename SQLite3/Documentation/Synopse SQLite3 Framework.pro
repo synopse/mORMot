@@ -3982,7 +3982,7 @@ The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
 The {\f1\fs20 rank} internal @*SQL function@ has been implemented in {\i Delphi}, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
-:  FTS4 index tables without content
+:   FTS4 index tables without content
 Just as {\i SQlite3} allows, the framework permits FTS4 to forego storing the text being indexed, letting the indexed documents be stored in a database table created and managed by the user (an "external content" FTS4 table).
 Because the indexed documents themselves are usually much larger than the full-text index, this option can be used to achieve significant storage space savings. Contentless FTS4 tables still support {\f1\fs20 SELECT} statements. However, it is an error to attempt to retrieve the value of any table column other than the {\f1\fs20 docid} column. The auxiliary function {\f1\fs20 matchinfo()} may be used - so {\f1\fs20 TSQLRest.FTSMatch} method will work as expected, but {\f1\fs20 snippet()} and {\f1\fs20 offsets()} would cause an exception at execution.
 For instance, in sample "{\i 30 - MVC Server}", we define those two tables:

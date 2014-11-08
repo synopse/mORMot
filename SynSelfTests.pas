@@ -122,6 +122,7 @@ uses
   Windows,
   {$else}
   SynFPCLinux,
+  BaseUnix,
   {$endif}
   Classes,
 {$ifndef NOVARIANTS}
@@ -2051,20 +2052,35 @@ type TR = record
        Three: byte;
        S2: WideString;
        Five: boolean;
-{$ifndef LINUX}{$ifndef LVCL}
-       V: Variant; {$endif}{$endif}
+       {$ifndef LINUX}
+       {$ifndef LVCL}
+       V: Variant;
+       {$endif}
+       {$endif}
        R: Int64Rec;
        Arr: array[0..10] of AnsiString;
        Dyn: array of integer;
        Bulk: array[0..9] of byte;
      end;
 var A,B,C: TR;
+    {$ifdef LINUX}
+    uts: UtsName;
+    {$endif}
 begin
+  {$ifdef LINUX}
+  FPUname(uts);
+  {$endif}
   if PosEx('Synopse framework',RawUTF8(Owner.CustomVersions),1)=0 then
     Owner.CustomVersions := Owner.CustomVersions+#13#10'Synopse framework used: '+
-      SYNOPSE_FRAMEWORK_VERSION{$ifdef MSWINDOWS}+#13#10'Running on '+
-      string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
-      ' with code page '+IntToString(GetACP){$endif};
+      SYNOPSE_FRAMEWORK_VERSION
+    {$ifdef MSWINDOWS}
+    +#13#10'Running on '+string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
+    ' with code page '+IntToString(GetACP)
+    {$else}
+    {$ifdef LINUX}
+    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)
+    {$endif}
+    {$endif};
   fillchar(A,sizeof(A),0);
   A.S1 := 'one';
   A.S2 := 'two';

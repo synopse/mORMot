@@ -241,17 +241,15 @@ const
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
 procedure QueryPerformanceCounter(var Value: Int64);
-var
-  r : TTimeSpec;
+var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
 function QueryPerformanceFrequency(var Value: Int64):boolean;
-var
-  r : TTimeSpec;
-  FIsHighResolution : boolean;
+var r : TTimeSpec;
+    FIsHighResolution : boolean;
 begin
   FIsHighResolution := (clock_getres(CLOCK_MONOTONIC,@r) = 0);
   FIsHighResolution := FIsHighResolution and (r.tv_nsec <> 0);
