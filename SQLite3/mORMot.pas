@@ -16982,8 +16982,7 @@ end;
 
 function FieldPropFromTables(const Tables: TSQLRecordClassDynArray;
   const PropName: RawUTF8; out FieldTypeInfo: Pointer; out TableIndex: integer): TSQLFieldType;
-var SubProp: RawUTF8;
-    i,t: integer;
+var i,t: integer;
 begin
   TableIndex := -1;
   if length(Tables)=1 then begin
@@ -16991,28 +16990,23 @@ begin
     if result<>sftUnknown then
       TableIndex := 0;
   end else begin
-    i := PosEx('.',PropName); 
-    if i=0 then begin
-      // no 'ClassName.PropertyName' format: find first exact property name
+    i := PosEx('.',PropName)-1;
+    if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(Tables) do begin
         result := FieldPropFromTable(Tables[t],PropName,FieldTypeInfo);
         if result<>sftUnknown then begin
           TableIndex := t;
           exit;
         end;
-      end;
-    end else begin
-      // we expect property names as 'ClassName.PropertyName'
-      dec(i);
-      SubProp := copy(PropName,i+2,255); 
+      end
+    else // handle property names as 'ClassName.PropertyName'
       for t := 0 to high(Tables) do
         if Tables[t]<>nil then // avoid GPF
         if IdemPropNameU(Tables[t].RecordProps.SQLTableName,pointer(PropName),i) then begin
           TableIndex := t;
-          result := FieldPropFromTable(Tables[t],SubProp,FieldTypeInfo); 
+          result := FieldPropFromTable(Tables[t],copy(PropName,i+2,255),FieldTypeInfo);
           exit;
         end;
-    end;
     result := sftUnknown;
   end;
 end;
