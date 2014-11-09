@@ -7156,7 +7156,7 @@ The transmitted JSON will be computed as such on the client side:
 $  ....,"PUT",{"RowID":324,"YearOfBirth":1000},...
 And the generated SQL on the server side would be:
 $ UPDATE People SET YearOfBirth=? WHERE RowID=?
-$ ... with bound parameters: [324,1000]
+$ ... with bound parameters: [1000,324]
 As a result, BATCH process could be seen as a good way of implementing {\i @*Unit Of Work@} for your business layer - see @102@.\line You will be able to modify all your objects as requested, with high-level OOP methods, then have all data transmitted and processed at once when {\f1\fs20 BatchSend()} is called. The {\f1\fs20 BatchStart} - {\f1\fs20 BatchSend} - {\f1\fs20 BatchAbort} commands will induce a safe transactional model, relying on the client side for tracking the object modifications, and optimizing the database process on the server side as a simple "save and forget" task, to any SQL or @*NoSQL@ engine.
 Note that if several {\f1\fs20 ClientDist.BatchUpdate(V)} commands are executed within the same {\f1\fs20 FillPrepare()} context, they will contain the same fields ({\f1\fs20 RowID} and {\f1\fs20 YearOfBirth}). They will therefore generate the same statement ({\f1\fs20 UPDATE People SET YearOfBirth=? WHERE RowID=?}), which would benefit of {\i Array Binding} on the database side - see @78@ - if available.
 Here is some code, extracted from "web blog" sample "{\i 30 - MVC Server}", which will update an integer array mapped into a table. All {\f1\fs20 TSQLTag.Occurence} integers are stored in a local {\f1\fs20 TSQLTags.Lookup[].Occurence} dynamic array, which will be used to display the occurence count of each tag of the articles.\line The following method will first retrieve ID and Occurence from the database, and update the {\f1\fs20 TSQLTag.Occurence} if the internal dynamic array contains a new value.
@@ -12438,6 +12438,8 @@ Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
 \page
+:125 FreePascal / Lazarus use
+
 : Upgrading from a 1.17 revision
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
