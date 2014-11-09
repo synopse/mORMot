@@ -2078,7 +2078,8 @@ begin
     ' with code page '+IntToString(GetACP)
     {$else}
     {$ifdef LINUX}
-    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)
+    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)+' '+
+    string(uts.version)
     {$endif}
     {$endif};
   fillchar(A,sizeof(A),0);
@@ -8779,6 +8780,8 @@ begin
       for i := 0 to high(BatchIDJoined) do begin
         RJoin := TSQLRecordTestJoin.CreateJoined(aExternalClient,BatchIDJoined[i]);
         try
+          Check(RJoin.FillTable.FieldType(0)=sftInteger);
+          Check(RJoin.FillTable.FieldType(3)=sftUTF8Text);
           Check(RJoin.ID=BatchIDJoined[i]);
           Check(PtrUInt(RJoin.People)>1000);
           Check(GetInteger(pointer(RJoin.Name))=RJoin.People.ID);
@@ -11752,4 +11755,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+

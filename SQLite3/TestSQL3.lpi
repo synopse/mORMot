@@ -44,7 +44,7 @@
     <SearchPaths>
       <IncludeFiles Value="..;$(ProjOutDir)"/>
       <OtherUnitFiles Value=".."/>
-      <UnitOutputDirectory Value="fpc\debug"/>
+      <UnitOutputDirectory Value="fpc\debug\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
       <SyntaxOptions>
@@ -80,4 +80,4 @@
       </Item3>
     </Exceptions>
   </Debugging>
-</CONFIG>
+</CONFIG>

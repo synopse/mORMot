@@ -527,12 +527,22 @@ end;
 
 function Send(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
 begin
-  result := fpSend(s,pointer(Buf),len,flags);
+  repeat
+    result := fpSend(s,pointer(Buf),len,flags);
+    if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
+      break;
+    sleep(0);
+  until false;
 end;
 
 function Recv(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
 begin
-  result := fpRecv(s,pointer(Buf),len,flags);
+  repeat
+    result := fpRecv(s,pointer(Buf),len,flags);
+    if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
+      break;
+    sleep(0);
+  until false;
 end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;

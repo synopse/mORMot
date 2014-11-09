@@ -2085,7 +2085,7 @@ begin
 end;
 
 
-{ ************ WinSock API access - TCrtSocket and THttp*Socket }
+{ ************ Socket API access - TCrtSocket and THttp*Socket }
 
 function ResolveName(const Name: RawByteString): RawByteString;
 var l: TStringList;
@@ -2144,7 +2144,11 @@ begin
     end;
     else exit; // make this stupid compiler happy
   end;
-  IP := ResolveName(Server);
+  {$ifndef MSWINDOWS}
+  if (Server='') and not doBind then
+    IP := cLocalHost else
+  {$endif}
+    IP := ResolveName(Server);
   //IP := cAnyHost;
   // use AF_INET+PF_INET instead of AF_UNSPEC+PF_UNSPEC: IP6 is buggy!
   if SetVarSin(Sin, IP, Port, AF_INET, PF_INET, SOCK_TYPE, true)<>0 then
@@ -2153,11 +2157,12 @@ begin
   if result=-1 then
     exit;
   if doBind then begin
+    {$ifdef MSWINDOWS}
     // Socket should remain open for 5 seconds after a closesocket() call
     li.l_onoff := Ord(true);
     li.l_linger := 5;
     SetSockOpt(result, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
-    {$ifndef MSWINDOWS}
+    {$else}
     SO_True := 1;
     SetSockOpt(result, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
     {$endif}
@@ -2189,7 +2194,7 @@ begin
       exit; // file closed
     Index := 0;
     repeat
-      Size := Send(Sock.Sock, @F.BufPtr[Index], F.BufPos, 0);
+      Size := Send(Sock.Sock, @F.BufPtr[Index], F.BufPos, MSG_NOSIGNAL);
       if Size<=0 then
         exit;
       inc(Sock.BytesOut, Size);
@@ -2301,8 +2306,7 @@ end;
 
 procedure TCrtSocket.SetInt32OptionByIndex(OptName, OptVal: integer);
 {$ifndef MSWINDOWS}
-var
-  timeval: TTimeval;
+var timeval: TTimeval;
 {$endif}
 begin
   if (self=nil) or (Sock<=0) then
@@ -2322,16 +2326,17 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: RawByteString;
   doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
 const BINDTXT: array[boolean] of string = ('open','bind');
 begin
-  if aPort='' then
-    Port := '80' else // default port is 80 (HTTP)
-    Port := aPort;
-  if aSock<0 then
-    Sock := CallServer(aServer,Port,doBind,aLayer) else // OPEN or BIND
+  if aSock<0 then begin
+    if aPort='' then
+      Port := '80' else // default port is 80 (HTTP)
+      Port := aPort;
+    Server := aServer;
+    Sock := CallServer(aServer,Port,doBind,aLayer); // OPEN or BIND
+  end else
     Sock := aSock; // ACCEPT mode -> socket is already created by caller
-  if Sock=-1 then
+  if Sock<0 then
     raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
       [BINDTXT[doBind],aServer,Port,WSAGetLastError]);
-  Server := aServer;
   if (aSock<0) and (TimeOut>0) then begin // set timeout in OPEN/BIND modes
     ReceiveTimeout := TimeOut;
     SendTimeout := TimeOut;
@@ -2392,7 +2397,7 @@ begin
   if (self=nil) or (Len<0) or (P=nil) then
     exit;
   repeat
-    SentLen := Send(Sock, P, Len, 0);
+    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL);
     if SentLen<0 then
       exit;
     dec(Len,SentLen);
@@ -2511,7 +2516,7 @@ begin
     exit;
   if (Buffer<>nil) and (Length>0) then
     repeat
-      Size := Recv(Sock, Buffer, Length, 0);
+      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL);
       if Size<=0 then
         exit;
       inc(BytesIn, Size);
@@ -2684,7 +2689,7 @@ begin
   Content := '';
   {$ifdef DEBUG2}system.write(#13#10,method,' ',url);
   if Retry then system.Write(' RETRY');{$endif}
-  if Sock=-1 then
+  if Sock<0 then
     DoRetry(404) else // socket closed (e.g. KeepAlive=0) -> reconnect
   try
   try
@@ -2705,8 +2710,10 @@ begin
     SockSend(['User-Agent: ',UserAgent]);
     aData := Data; // need var for Data to be eventually compressed
     CompressDataAndWriteHeaders(DataType,aData);
+    {$ifdef MSWINDOWS} // keep alive still buggy under Linux
     if KeepAlive>0 then
       SockSend(['Keep-Alive: ',KeepAlive,#13#10'Connection: Keep-Alive']) else
+    {$endif}
       SockSend('Connection: Close');
     if header<>'' then
       SockSend(header);
@@ -2932,8 +2939,10 @@ begin
   DeleteCriticalSection(fProcessCS);
 end;
 
-{.$define MONOTHREAD}
-// define this not to create a thread at every connection (not recommended)
+{$ifndef MSWINDOWS}
+  {.$define MONOTHREAD}
+  // define this not to create a thread at every connection (not recommended)
+{$endif}
 
 procedure THttpServer.Execute;
 var ClientSock: TSocket;
@@ -2948,8 +2957,13 @@ label abort;
 begin
   // main server process loop
   if Sock.Sock>0 then
+  try
     while not Terminated do begin
       ClientSock := Accept(Sock.Sock,Sin);
+      if ClientSock<0 then begin
+        sleep(0);
+        continue;
+      end;
       if Terminated or (Sock=nil) then begin
 abort:  Shutdown(ClientSock,1);
         CloseSocket(ClientSock);
@@ -2961,7 +2975,7 @@ abort:  Shutdown(ClientSock,1);
       try
         ClientCrtSock.InitRequest(ClientSock);
         if ClientCrtSock.GetRequest then
-          Process(ClientCrtSock);
+          Process(ClientCrtSock,self);
         OnDisconnect;
         Shutdown(ClientSock,1);
         CloseSocket(ClientSock)
@@ -2985,6 +2999,10 @@ abort:  Shutdown(ClientSock,1);
 {$endif}
 {$endif}
       end;
+  except
+    on Exception do
+      ; // any exception would break and release the thread
+  end;
 end;
 
 procedure THttpServer.OnConnect;
@@ -3109,8 +3127,8 @@ end;
 
 constructor THttpServerResp.Create(aSock: TSocket; aServer: THttpServer);
 begin
+  fClientSock := aSock; // ensure it is set ASAP: on Linux, Execute raises immediately
   Create(THttpServerSocket.Create(aServer),aServer{$ifdef USETHREADPOOL},nil{$endif});
-  fClientSock := aSock;
 end;
 
 constructor THttpServerResp.Create(aServerSock: THttpServerSocket;
@@ -3150,7 +3168,7 @@ begin
       repeat // within this loop, break=wait for next command, exit=quit
         if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
           exit; // server is down -> close connection
-        Size := Recv(fServerSock.Sock,@c,1,MSG_PEEK);
+        Size := Recv(fServerSock.Sock,@c,1,MSG_PEEK or MSG_NOSIGNAL);
         // Recv() may return Size=0 if no data is pending, but no TCP/IP error
         if (fServer=nil) or fServer.Terminated then
           exit; // server is down -> disconnect the client
@@ -3186,14 +3204,14 @@ begin
           exit; // reached time out -> close connection
        until false;
     until false;
+    {$ifdef USETHREADPOOL}
+    if fThreadPool<>nil then
+      InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
+    {$endif}
   except
     on E: Exception do
       ; // any exception will silently disconnect the client
   end;
-  {$ifdef USETHREADPOOL}
-  if fThreadPool<>nil then
-    InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
-  {$endif}
 end;
 var aSock: TSocket;
     i: integer;
@@ -3480,6 +3498,7 @@ begin
   {$ifndef MSWINDOWS}
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
+  SO_True := 1;
   {$endif}
   {$ifdef darwin}
   SO_True := 1;
@@ -3518,7 +3537,9 @@ begin
     P := pointer(Command);
     Method := GetNextItem(P,' '); // 'GET'
     URL := GetNextItem(P,' ');    // '/path'
+    {$ifdef MSWINDOWS} // we still have an issue with keep alive under linux
     KeepAliveClient := IdemPChar(P,'HTTP/1.1');
+    {$endif}
     Content := '';
     // get headers and content
     GetHeader;
@@ -4784,7 +4805,7 @@ begin
         FreeLibrary(Http.Module);
         Http.Module := 0;
       end;
-      raise E;
+      raise;
     end;
   end;
 end;
