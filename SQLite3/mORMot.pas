@@ -17007,11 +17007,7 @@ begin
       SubProp := copy(PropName,i+2,255); 
       for t := 0 to high(Tables) do
         if Tables[t]<>nil then // avoid GPF
-        if IdemPropName( // found class?
-          // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
-          // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-          PShortString(PPointer(PtrInt(Tables[t])+vmtClassName)^)^,
-          pointer(PropName),i) then begin
+        if IdemPropNameU(Tables[t].RecordProps.SQLTableName,pointer(PropName),i) then begin
           TableIndex := t;
           result := FieldPropFromTable(Tables[t],SubProp,FieldTypeInfo); 
           exit;
