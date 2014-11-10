@@ -94,7 +94,7 @@ object MainForm: TMainForm
   object btnGitSynch: TButton
     Left = 304
     Top = 425
-    Width = 113
+    Width = 81
     Height = 41
     Anchors = [akLeft, akBottom]
     Caption = 'Git Synch'
@@ -112,9 +112,9 @@ object MainForm: TMainForm
     OnClick = btnRefreshStatusClick
   end
   object btnGitShell: TButton
-    Left = 304
+    Left = 232
     Top = 473
-    Width = 75
+    Width = 49
     Height = 25
     Anchors = [akLeft, akBottom]
     Caption = 'Git Shell'
@@ -122,9 +122,9 @@ object MainForm: TMainForm
     OnClick = btnGitShellClick
   end
   object btnFossilShell: TButton
-    Left = 208
+    Left = 168
     Top = 473
-    Width = 75
+    Width = 65
     Height = 25
     Anchors = [akLeft, akBottom]
     Caption = 'Fossil Shell'
@@ -152,9 +152,9 @@ object MainForm: TMainForm
     OnClick = btnCopyLinkClick
   end
   object btnGitAll: TButton
-    Left = 384
+    Left = 304
     Top = 472
-    Width = 73
+    Width = 41
     Height = 25
     Hint = 
       'Git Commit mORMot + SynPDF + SynMustache + LVCL + SynProject rep' +
@@ -163,6 +163,54 @@ object MainForm: TMainForm
     ParentShowHint = False
     ShowHint = True
     TabOrder = 10
+    OnClick = btnGitSynchClick
+  end
+  object btnSynProject: TButton
+    Left = 392
+    Top = 424
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit SynProject Repository'
+    Caption = 'SynProject'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 11
+    OnClick = btnGitSynchClick
+  end
+  object btnSynPdf: TButton
+    Left = 392
+    Top = 448
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit SynPdf Repository'
+    Caption = 'SynPdf'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 12
+    OnClick = btnGitSynchClick
+  end
+  object btnDMustache: TButton
+    Left = 392
+    Top = 472
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit dmustache Repository'
+    Caption = 'dmustache'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 13
+    OnClick = btnGitSynchClick
+  end
+  object btnLVCL: TButton
+    Left = 344
+    Top = 472
+    Width = 41
+    Height = 25
+    Hint = 'Git Commit LVCL Repository'
+    Caption = 'LVCL'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 14
     OnClick = btnGitSynchClick
   end
 end

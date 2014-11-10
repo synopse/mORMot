@@ -25,6 +25,10 @@ type
     btnTests: TButton;
     btnCopyLink: TButton;
     btnGitAll: TButton;
+    btnSynProject: TButton;
+    btnSynPdf: TButton;
+    btnDMustache: TButton;
+    btnLVCL: TButton;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -175,6 +179,14 @@ begin
   FileFromString(Desc,DescFile);
   if Sender=btnGitAll then
     BatchFile := 'GitCommitAll.bat' else
+  if Sender=btnSynProject then
+    BatchFile := 'GitCommitSynProject.bat' else
+  if Sender=btnSynPdf then
+    BatchFile := 'GitCommitSynPdf.bat' else
+  if Sender=btnDMustache then
+    BatchFile := 'GitCommitDMustache.bat' else
+  if Sender=btnLVCL then
+    BatchFile := 'GitCommitLVCL.bat' else
     BatchFile := 'GitCommit.bat';
   WinExecAndWait32(format('%s%s "%s" "%s" "%s" "%s"',
       [fBatPath,BatchFile,fFossilRepository,fGitRepository,fGitExe,DescFile]),
