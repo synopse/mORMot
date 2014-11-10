@@ -22697,6 +22697,8 @@ begin
     result := fID;
     // was called from a real TSQLRecord instance
   {$else}
+  if PtrUInt(self)<$100000 then // rough estimation, but works in practice
+    result := PtrUInt(self) else
   try
     result := fID;
   except

@@ -90,11 +90,14 @@ uses
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   {$endif}
+  {$ifdef FPC}
   {$ifdef Linux}
-  cthreads,
+  //cmem, // told to be faster in multi-thread, but triggers GPF! :( 
+  cthreads, // we need it to use TThread
   // widestring manager for Linux !!
   // could also be put in another unit ... but doc states: as early as possible
   cwstring,
+  {$endif}
   {$endif}
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   mORMotSelfTests in 'mORMotSelfTests.pas',
