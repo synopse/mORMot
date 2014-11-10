@@ -806,6 +806,8 @@ unit mORMot;
     - TSQLRecord.[CreateAnd]FillPrepare() will now handle aCustomFieldsCSV='*'
       parameter as a all fields selection, including BLOBs (whereas default ''
       value will continue to return simple fields, excluding BLOBs)
+    - TSQLRecord.CreateAndFillPrepareMany() will raise an exception when run
+      on a TSQLRecord with no many-to-many published field
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
     - added TSQLRecord.GetAsDocVariant/GetSimpleFieldsAsDocVariant methods
@@ -22468,7 +22470,12 @@ constructor TSQLRecord.CreateAndFillPrepareMany(aClient: TSQLRest;
   aFormatSQLJoin: PUTF8Char; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 begin
   Create;
-  FillPrepareMany(aClient,aFormatSQLJoin,aParamsSQLJoin,aBoundsSQLJoin);
+  if Length(RecordProps.ManyFields)=0 then
+    raise EModelException.CreateUTF8(
+      '%.CreateAndFillPrepareMany() with no many-to-many fields',[self]);
+  if not FillPrepareMany(aClient,aFormatSQLJoin,aParamsSQLJoin,aBoundsSQLJoin) then
+    raise EModelException.CreateUTF8(
+      '%.CreateAndFillPrepareMany(): FillPrepareMany() failure',[self]);
 end;
 
 function TSQLRecord.FillPrepareMany(aClient: TSQLRest;
@@ -22573,6 +22580,8 @@ begin
   SetLength(SQLFields,MAX_SQLFIELDS);
   Props := RecordProps;
   n := Length(Props.ManyFields);
+  if n=0 then
+    exit;
   SetLength(Objects,n*2+1);
   SetLength(ObjectsClass,n*2+1);
   Objects[0] := self;
