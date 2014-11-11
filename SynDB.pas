@@ -182,7 +182,8 @@ unit SynDB;
   - added TSQLDBConnectionProperties.SQLTableName() method
   - added TSQLDBConnectionProperties.SQLSplitTableName() and SQLFullTableName()
   - now TSQLDBConnectionProperties.SQLAddIndex() will handle schema name and
-    will ensure that the generated identifier won't be too long 
+    will ensure that the generated identifier won't be too long
+  - added TSQLDBConnectionProperties.IsSQLKeyword() method for [7fbbd53966]
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)
@@ -1283,6 +1284,8 @@ type
     // - return e.g. property type information as:
     // ! 'Name: RawUTF8 read fName write fName index 20;';
     class function GetFieldORMDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
+    /// check if the supplied text word is not a keyword for a given database engine
+    class function IsSQLKeyword(aDB: TSQLDBDefinition; aWord: RawUTF8): boolean; virtual;
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
@@ -2915,7 +2918,9 @@ const
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
 
   /// the known database engines handling CREATE INDEX on BLOB columns
-  DB_HANDLEINDEXONBLOBS = [dSQLite];
+  // - SQLite3 does not have any issue about indexing any column
+  // - PostgreSQL is able to index TEXT columns, which are some kind of CLOB
+  DB_HANDLEINDEXONBLOBS = [dSQLite,dPostgreSQL];
 
   /// where the DESC clause shall be used for a CREATE INDEX statement
   // - only identified syntax exception is for FireBird
@@ -2924,7 +2929,6 @@ const
     posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
     posWithColumn, posWithColumn, posGlobalBefore, posWithColumn, posWithColumn,
     posWithColumn);
-
 
 
 implementation
@@ -4040,7 +4044,183 @@ begin // 'Name: RawUTF8 index 20 read fName write fName;';
       result := FormatUTF8(EXE_FMT2,[result,ColumnLength]);
     result := FormatUTF8(EXE_FMT3,[result,ColumnName,ColumnName]);
   end;
-end;  
+end;
+
+var
+  DB_KEYWORDS: array[TSQLDBDefinition] of TRawUTF8DynArray;
+
+class function TSQLDBConnectionProperties.IsSQLKeyword(
+  aDB: TSQLDBDefinition; aWord: RawUTF8): boolean;
+const
+  /// the known reserved keywords per database engine, in alphabetic order
+  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char = (
+  // dUnknown
+  '',
+  // dDefault = ODBC / SQL-92 keywords
+  'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,'+
+  'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,'+
+  'char_length,character,character_length,check,close,coalesce,collate,collation,'+
+  'column,commit,connect,connection,constraint,constraints,continue,convert,'+
+  'corresponding,count,create,cross,current,current_date,current_time,'+
+  'current_timestamp,current_user,cursor,date,day,deallocate,dec,decimal,declare,'+
+  'default,deferrable,deferred,delete,desc,describe,descriptor,diagnostics,disconnect,'+
+  'distinct,domain,double,drop,else,end,end-exec,escape,except,exception,exec,execute,'+
+  'exists,external,extract,false,fetch,first,float,for,foreign,fortran,found,from,full,get,'+
+  'global,go,goto,grant,group,having,hour,identity,immediate,in,include,index,indicator,'+
+  'initially,inner,input,insensitive,insert,int,integer,intersect,interval,into,is,'+
+  'isolation,join,key,language,last,leading,left,level,like,local,lower,match,max,min,minute,'+
+  'module,month,n,names,national,natural,nchar,next,no,none,not,null,nullif,numeric,'+
+  'octet_length,of,on,only,open,option,or,order,outer,output,overlaps,pad,partial,pascal,'+
+  'position,precision,prepare,preserve,primary,prior,privileges,procedure,public,read,'+
+  'real,references,relative,restrict,revoke,right,rollback,rows,schema,scroll,second,'+
+  'section,select,session,session_user,set,size,smallint,some,space,sql,sqlca,sqlcode,'+
+  'sqlerror,sqlstate,sqlwarning,substring,sum,system_user,table,temporary,then,time,'+
+  'timestamp,timezone_hour,timezone_minute,to,trailing,transaction,translate,'+
+  'translation,trim,true,union,unique,unknown,update,upper,usage,user,using,value,values,'+
+  'varchar,varying,view,when,whenever,where,with,work,write,year,zone',
+  // dOracle
+  'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,'+
+  'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,'+
+  'pctfree',
+  // dMSSQL
+  'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,'+
+  'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,'+
+  'clustered,collect,completion,compute,condition,constructor,contains,containstable,'+
+  'corr,covar_pop,covar_samp,cube,cume_dist,current_catalog,'+
+  'current_default_transform_group,current_path,current_role,current_schema,'+
+  'current_transform_group_for_type,cycle,data,database,dbcc,deny,depth,deref,destroy,'+
+  'destructor,deterministic,dictionary,disk,distributed,dump,dynamic,each,element,'+
+  'equals,errlvl,every,exit,file,fillfactor,filter,free,freetext,freetexttable,'+
+  'fulltexttable,function,fusion,general,grouping,hold,holdlock,host,identity_insert,'+
+  'identitycol,if,ignore,initialize,inout,intersection,iterate,kill,large,lateral,less,'+
+  'like_regex,limit,lineno,ln,load,localtime,localtimestamp,locator,map,member,merge,'+
+  'method,mod,modifies,modify,multiset,nclob,new,nocheck,nonclustered,normalize,object,'+
+  'occurrences_regex,off,offsets,old,opendatasource,openquery,openrowset,openxml,'+
+  'operation,ordinality,out,over,overlay,parameter,parameters,partition,path,percent,'+
+  'percent_rank,percentile_cont,percentile_disc,pivot,plan,position_regex,postfix,'+
+  'prefix,preorder,print,proc,raiserror,range,reads,readtext,reconfigure,recursive,ref,'+
+  'referencing,regr_avgx,regr_avgy,regr_count,regr_intercept,regr_r2,regr_slope,'+
+  'regr_sxx,regr_sxy,regr_syy,release,replication,restore,result,return,returns,revert,'+
+  'role,rollup,routine,row,rowcount,rowguidcol,rule,save,savepoint,scope,search,'+
+  'securityaudit,semantickeyphrasetable,semanticsimilaritydetailstable,'+
+  'semanticsimilaritytable,sensitive,sequence,sets,setuser,shutdown,similar,specific,'+
+  'specifictype,sqlexception,start,state,statement,static,statistics,stddev_pop,'+
+  'stddev_samp,structure,submultiset,substring_regex,symmetric,system,tablesample,'+
+  'terminate,textsize,than,top,tran,translate_regex,treat,trigger,truncate,try_convert,'+
+  'tsequal,uescape,under,unnest,unpivot,updatetext,use,var_pop,var_samp,variable,waitfor,'+
+  'while,width_bucket,window,within,within group,without,writetext,xmlagg,'+
+  'xmlattributes,xmlbinary,xmlcast,xmlcomment,xmlconcat,xmldocument,xmlelement,'+
+  'xmlexists,xmlforest,xmliterate,xmlnamespaces,xmlparse,xmlpi,xmlquery,xmlserialize,'+
+  'xmltable,xmltext,xmlvalidate',
+  // dJet
+  'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,'+
+  'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,'+
+  'varbinary,varp,yesno',
+  // dMySQL
+  'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,'+
+  'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,'+
+  'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,'+
+  'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,'+
+  'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,'+
+  'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,'+
+  'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,'+
+  'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,'+
+  'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,'+
+  'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,'+
+  'read_only,read_only,read_write,read_write,reads,regexp,release,rename,repeat,replace,'+
+  'require,resignal signal,return,rlike,schemas,second_microsecond,sensitive,'+
+  'separator,show,slow,spatial,specific,sql_big_result,sql_calc_found_rows,'+
+  'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,'+
+  'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,'+
+  'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
+  // dSQLite
+  'abort,after,attach,before,cluster,conflict,copy,database,delimiters,detach,each,'+
+  'explain,fail,glob,ignore,instead,isnull,limit,notnull,offset,pragma,raise,replace,row,'+
+  'statement,temp,trigger,vacuum',
+  // dFirebird
+  'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,'+
+  'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,'+
+  'entry_point,exit,file,filter,function,gdscode,gen_id,generator,'+
+  'group_commit_wait_time,if,inactive,input_type,log_buffer_size,logfile,manual,'+
+  'maximum_segment,merge,message,module_name,num_log_buffers,output_type,over,'+
+  'overflow,page,page_size,pages,parameter,parent,password,plan,post_event,protected,'+
+  'raw_partitions,rdb$db_key,record_version,reserv,reserving,retain,return,'+
+  'returning_values,returns,segment,shadow,shared,singular,snapshot,sort,stability,'+
+  'start,starting,starts,statistics,sub_type,suspend,trigger,type,variable,wait,while',
+  // dNexusDB
+  'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,'+
+  'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,'+
+  'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,'+
+  'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
+  // dPostgreSQL
+  'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,'+
+  'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,'+
+  'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,'+
+  'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,'+
+  'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,'+
+  'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,'+
+  'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,'+
+  'including,increment,indexes,inherit,inherits,inout,instead,invoker,isnull,'+
+  'lancompiler,large,least,limit,listen,load,localtime,localtimestamp,location,lock,'+
+  'login,mapping,maxvalue,minvalue,mode,move,new,nocreatedb,nocreaterole,nocreateuser,'+
+  'noinherit,nologin,nosuperuser,nothing,notify,notnull,nowait,nulls,object,off,offset,'+
+  'oids,old,operator,out,overlay,owned,owner,parser,password,placing,plans,prepared,'+
+  'procedural,quote,reassign,recheck,reindex,release,rename,repeatable,replace,replica,'+
+  'reset,restart,returning,returns,role,row,rule,savepoint,search,security,sequence,'+
+  'serializable,setof,share,show,similar,simple,stable,standalone,start,statement,'+
+  'statistics,stdin,stdout,storage,strict,strip,superuser,symmetric,sysid,system,'+
+  'tablespace,temp,template,text,treat,trigger,truncate,trusted,type,uncommitted,'+
+  'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,'+
+  'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,'+
+  'xmlroot,xmlserialize,yes',
+  // dDB2
+  'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,'+
+  'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,'+
+  'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,'+
+  'including,inclusive,increment,inf,infinity,inherit,inout,integrity,isobid,iterate,jar,'+
+  'java,keep,label,lateral,lc_ctype,leave,linktype,localdate,locale,localtime,'+
+  'localtimestamp,locator,locators,lock,lockmax,locksize,long,loop,maintained,'+
+  'materialized,maxvalue,microsecond,microseconds,minutes,minvalue,mode,modifies,'+
+  'months,nan,new,new_table,nextval,nocache,nocycle,nodename,nodenumber,nomaxvalue,'+
+  'nominvalue,noorder,normalized,nulls,numparts,obid,old,old_table,optimization,'+
+  'optimize,out,over,overriding,package,padded,pagesize,parameter,part,partition,'+
+  'partitioned,partitioning,partitions,password,path,piecesize,plan,prevval,priqty,'+
+  'program,psid,query,queryno,range,rank,reads,recovery,referencing,refresh,release,'+
+  'rename,repeat,reset,resignal,restart,result,result_set_locator,return,returns,role,'+
+  'round_ceilingadd,round_downafter,round_flooralias,round_half_downall,'+
+  'round_half_evenallocate,round_half_upallow,round_upalter,routineand,'+
+  'row_numberas,rowany,rownumberasensitive,rowsassociate,rowsetasutime,rrnat,'+
+  'runattributes,savepointaudit,schemaauthorization,scratchpadaux,scrollauxiliary,'+
+  'searchbefore,secondbegin,secondsbetween,secqtybinary,securitybufferpool,selectby,'+
+  'sensitivecache,sequencecall,session_usercapture,sessioncalled,setcardinality,'+
+  'signalcascaded,simplecase,snancast,someccsid,sourcechar,specificcharacter,'+
+  'sqlcheck,sqlidclone,stackedclose,standardcluster,startcollection,startingcollid,'+
+  'statementcolumn,staticcomment,statmentcommit,stayconcat,stogroupcondition,'+
+  'storesconnect,styleconnection,substringconstraint,summarycontains,'+
+  'synonymcontinue,sysfuncount,sysibmcount_big,sysproccreate,system_usercurrent,'+
+  'systemcross,tablecurrent_date,tablespacecurrent_lc_ctype,thencurrent_path,'+
+  'timecurrent_schema,timestampcurrent_server,tocurrent_time,'+
+  'transactioncurrent_timestamp,triggercurrent_timezone,trimcurrent_user,'+
+  'truncatecursor,typecycle,undodata,uniondatabase,uniquedatapartitionname,'+
+  'untildatapartitionnum,updatedate,usageday,userdays,usingdb2general,'+
+  'validprocdb2genrl,valuedb2sql,valuesdbinfo,variabledbpartitionname,'+
+  'variantdbpartitionnum,vcatdeallocate,versiondeclare,viewdefault,'+
+  'volatiledefaults,volumesdefinition,whendelete,wheneverdense_rank,wheredenserank,'+
+  'whiledescribe,withdescriptor,withoutdeter');
+var db: TSQLDBDefinition;
+begin
+  if DB_KEYWORDS[dDefault]=nil then
+    for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
+      CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db],DB_KEYWORDS[db]);
+  aWord := Trim(LowerCase(aWord));
+  if FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+      high(DB_KEYWORDS[dDefault]),pointer(aWord))<0 then
+    if aDB<=dDefault then
+      result := false else
+      result := FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[aDB]),
+        high(DB_KEYWORDS[aDB]),pointer(aWord))>=0 else
+    result := true;
+end;
 
 procedure TSQLDBConnectionProperties.GetFieldDefinitions(const aTableName: RawUTF8;
   var Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
@@ -6440,7 +6620,7 @@ begin
         ftUTF8:
           if (VArray[fParamsArrayCount]='') and
              fConnection.Properties.StoreVoidStringAsNull then
-          VArray[fParamsArrayCount] := 'null' else   
+          VArray[fParamsArrayCount] := 'null' else
           VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
         ftDate:
           VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
@@ -7062,8 +7242,6 @@ end;
 
 
 {$endif DELPHI5OROLDER}
-
-
 
 initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);

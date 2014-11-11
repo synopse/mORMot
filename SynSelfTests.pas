@@ -8166,6 +8166,12 @@ begin
     Test(DBMS,true,Expected);
 end;
 begin
+  check(TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'SELEct'));
+  check(not TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'toto'));
+  check(TSQLDBConnectionProperties.IsSQLKeyword(dOracle,'SELEct'));
+  check(not TSQLDBConnectionProperties.IsSQLKeyword(dOracle,'toto'));
+  check(TSQLDBConnectionProperties.IsSQLKeyword(dOracle,' auDIT '));
+  check(not TSQLDBConnectionProperties.IsSQLKeyword(dMySQL,' auDIT '));
   Test2('select rowid,firstname from PeopleExt where rowid=2',
         'select id,firstname from SampleRecord where id=2');
   Test2('select rowid,firstname from PeopleExt where rowid=?',
