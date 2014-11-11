@@ -34713,6 +34713,12 @@ begin
   end;
 end;
 
+const
+  SQLITE3_KEYWORDS =
+  ' abort after and attach before cluster conflict copy database delete delimiters'+
+  ' detach each explain fail from glob ignore insert instead isnull limit not notnull'+
+  ' offset or pragma raise replace row select statement temp trigger vacuum where ';
+
 constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
 
   procedure AddParentsFirst(aClassType: TClass);
@@ -34785,7 +34791,13 @@ begin
   nBlobCustom := 0;
   for i := 0 to Fields.Count-1  do begin
     F := Fields.List[i];
-    include(HasTypeFields,F.SQLFieldType);
+    // check field name
+    if IsRowID(pointer(F.Name)) then
+      raise EORMException.CreateUTF8('ID is already defined in TSQLRecord: '+
+        '%.% field name is not allowed as published property',[Table,F.Name]);
+    if PosEx(' '+LowerCase(F.Name)+' ',SQLITE3_KEYWORDS)>0 then
+      raise EORMException.CreateUTF8('%.% field name conflicts with a SQL keyword',
+        [Table,F.Name]);                    
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then begin
       include(IsUniqueFieldsBits,i);
@@ -34795,6 +34807,7 @@ begin
       AddFilterOrValidate(i,TSynValidateUniqueField.Create);
     end;
     // get corresponding properties content
+    include(HasTypeFields,F.SQLFieldType);
     case F.SQLFieldType of
       sftUnknown: ;
       sftUTF8Text: begin
