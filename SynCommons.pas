@@ -551,6 +551,7 @@ unit SynCommons;
   - introducing TSynLogFamily.RotateFileCount and associated RotateFileSizeKB,
     RotateFileDailyAtHour and OnRotate properties, to enable log file rotation 
     by size or at given hour - request [72feb66d45] + [b3e8cc8424]
+  - added TSynLog.CustomFileName property - see [d8fbc10bf8]
   - added TSynLog.ComputeFileName virtual method and TSynLogFamily.FileExistsAction
     property for feature request [d029051dcb]
   - added TSynLog/ISynLog.LogLines() method for direct multi-line text logging
@@ -699,7 +700,7 @@ uses
   Windows,
   Messages,
 {$endif}
-{$ifdef LINUX} // for Kylix
+{$ifdef KYLIX}
   Types,
 {$endif}
   Classes,
@@ -707,9 +708,7 @@ uses
   SyncObjs, // for TEvent
   Contnrs,  // for TObjectList
 {$ifdef HASINLINE}
-{$ifndef LINUX} // for Kylix
   Types,
-{$endif}
 {$endif}
 {$endif}
 {$ifndef NOVARIANTS}
@@ -11108,6 +11107,7 @@ type
     fOnRotate: TSynLogRotateEvent;
     fPerThreadLog: TSynLogPerThreadMode;
     fIncludeComputerNameInFileName: boolean;
+    fCustomFileName: TFileName;
     fGlobalLog: TSynLog;
     fSynLogClass: TSynLogClass;
     fIdent: integer;
@@ -11224,6 +11224,15 @@ type
     /// the file extension to be used
     // - is '.log' by default
     property DefaultExtension: TFileName read fDefaultExtension write fDefaultExtension;
+    /// if TRUE, the log file name will contain the Computer name - as '(MyComputer)'
+    property IncludeComputerNameInFileName: boolean read fIncludeComputerNameInFileName write fIncludeComputerNameInFileName;
+    /// can be used to customized the default file name
+    // - by default, the log file name is computed from the executable name
+    // (and the computer name if IncludeComputerNameInFileName is true)
+    // - you can specify your own file name here, to be used instead
+    // - this file name should not contain any folder, nor file extension (which
+    // are set by DestinationPath and DefaultExtension properties) 
+    property CustomFileName: TFileName read fCustomFileName write fCustomFileName;
     /// the folder where old log files must be compressed
     // - by default, is in the executable folder, i.e. the same as DestinationPath
     // - the 'log\' sub folder name will always be appended to this value
@@ -11249,8 +11258,6 @@ type
     // - if RotateFileCount and RotateFileSizeKB/RotateFileDailyAtHour are set,
     // will be ignored (internal thread list shall be defined for one process)
     property PerThreadLog: TSynLogPerThreadMode read fPerThreadLog write fPerThreadLog;
-    /// if TRUE, the log file name will contain the Computer name - as '(MyComputer)'
-    property IncludeComputerNameInFileName: boolean read fIncludeComputerNameInFileName write fIncludeComputerNameInFileName;
     /// if TRUE, will log high-resolution time stamp instead of ISO 8601 date and time
     // - this is less human readable, but allows performance profiling of your
     // application on the customer side (using TSynLog.Enter methods)
@@ -23319,7 +23326,8 @@ begin
     if Msg='' then
       exit;
   end;
-  AppendToTextFile(Msg,ChangeFileExt(paramstr(0),'.log'));
+  AppendToTextFile(Msg,{$ifndef MSWINDOWS}ExtractFileName{$endif}
+    (ChangeFileExt(paramstr(0),'.log')));
 end;
 
 {$ifndef FPC}
@@ -43080,7 +43088,9 @@ begin
   if SynLogFamily=nil then
     GarbageCollectorFreeAndNil(SynLogFamily,TList.Create);
   fIdent := SynLogFamily.Add(self);
+  {$ifdef MSWINDOWS}
   fDestinationPath := ExtractFilePath(paramstr(0)); // use .exe path
+  {$endif}
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
@@ -44090,21 +44100,18 @@ end;
 
 procedure TSynLog.ComputeFileName;
 var timeNow,hourRotate,timeBeforeRotate: TDateTime;
-    {$ifndef MSWINDOWS}
-    i: integer;
-    {$endif}
 begin
-  {$ifdef MSWINDOWS}
-  ExeVersionRetrieve;
-  fFileName := UTF8ToString(ExeVersion.ProgramName);
-  if fFamily.IncludeComputerNameInFileName then
-    fFileName := fFileName+' ('+UTF8ToString(ExeVersion.Host)+')';
-  {$else}
-  fFileName := ExtractFileName(ParamStr(0));
-  i := Pos('.',fFileName);
-  if i>0 then
-    SetLength(fFileName,i-1);
-  {$endif}
+  fFileName := fFamily.fCustomFileName;
+  if fFileName='' then begin
+    {$ifdef MSWINDOWS}
+    ExeVersionRetrieve;
+    fFileName := UTF8ToString(ExeVersion.ProgramName);
+    if fFamily.IncludeComputerNameInFileName then
+      fFileName := fFileName+' ('+UTF8ToString(ExeVersion.Host)+')';
+    {$else}
+    split(ExtractFileName(ParamStr(0)),'.',fFileName);
+    {$endif}
+  end;
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount>0 then begin
     if fFamily.fRotateFileSize>0 then
@@ -44120,8 +44127,8 @@ begin
   end;
   if (fFileRotationSize=0) and (fFileRotationNextHour=0) then
     fFileName := fFileName+' '+Ansi7ToString(NowToString(false));
-   {$ifdef MSWINDOWS}
-  if IsLibrary then
+  {$ifdef MSWINDOWS}
+  if IsLibrary and (fFamily.fCustomFileName='') then
     fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
   {$endif}
   if fFamily.fPerThreadLog=ptOneFilePerThread then
@@ -45675,4 +45682,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
