@@ -176,6 +176,7 @@ unit SynDB;
     allow automatic recreation of all connections after an idle period of
     time, to avoid potential broken connection issues - see [f024266c08]
   - added TSQLDBConnectionProperties.ForcedSchemaName optional property
+  - added TSQLDBConnectionProperties.DBMSEngineName property
   - added TSQLDBConnectionProperties.SQLGetIndex() and GetIndexes() methods
     to retrieve advanced information about database indexes (e.g. for indexes
     created after multiple columns)
@@ -988,6 +989,7 @@ type
     // this default implementation just returns the fDBMS value or dDefault
     // (never returns dUnknwown)
     function GetDBMS: TSQLDBDefinition; virtual;
+    function GetDBMSName: RawUTF8; virtual;
     function GetForeignKeysData: RawByteString;
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
@@ -1285,7 +1287,10 @@ type
     // ! 'Name: RawUTF8 read fName write fName index 20;';
     class function GetFieldORMDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
     /// check if the supplied text word is not a keyword for a given database engine
-    class function IsSQLKeyword(aDB: TSQLDBDefinition; aWord: RawUTF8): boolean; virtual;
+    class function IsSQLKeyword(aDB: TSQLDBDefinition; aWord: RawUTF8): boolean; overload; virtual;
+    /// check if the supplied text word is not a keyword for the current database engine
+    // - just a wrapper around the overloaded class function
+    function IsSQLKeyword(aWord: RawUTF8): boolean; overload;
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
@@ -1367,6 +1372,8 @@ type
     /// the remote DBMS type, as stated by the inheriting class itself, or
     //  retrieved at connecton time (e.g. for ODBC)
     property DBMS: TSQLDBDefinition read GetDBMS;
+    /// the remote DBMS type name, retrieved as text from the DBMS property
+    property DBMSEngineName: RawUTF8 read GetDBMSName;
     /// the abilities of the database for batch sending
     // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
     property BatchSendingAbilities: TSQLDBStatementCRUDs read fBatchSendingAbilities;
@@ -4134,9 +4141,9 @@ const
   'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,'+
   'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
   // dSQLite
-  'abort,after,attach,before,cluster,conflict,copy,database,delimiters,detach,each,'+
-  'explain,fail,glob,ignore,instead,isnull,limit,notnull,offset,pragma,raise,replace,row,'+
-  'statement,temp,trigger,vacuum',
+  'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,'+
+  'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,'+
+  'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
   // dFirebird
   'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,'+
   'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,'+
@@ -4213,13 +4220,18 @@ begin
     for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db],DB_KEYWORDS[db]);
   aWord := Trim(LowerCase(aWord));
-  if FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
-      high(DB_KEYWORDS[dDefault]),pointer(aWord))<0 then
+  if (aDB=dSQLite) or (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+      high(DB_KEYWORDS[dDefault]),pointer(aWord))<0) then
     if aDB<=dDefault then
       result := false else
       result := FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[aDB]),
         high(DB_KEYWORDS[aDB]),pointer(aWord))>=0 else
     result := true;
+end;
+
+function TSQLDBConnectionProperties.IsSQLKeyword(aWord: RawUTF8): boolean;
+begin
+  result := IsSQLKeyword(DBMS,aWord);
 end;
 
 procedure TSQLDBConnectionProperties.GetFieldDefinitions(const aTableName: RawUTF8;
@@ -5138,6 +5150,13 @@ begin
   if fDBMS=dUnknown then
     result := dDefault else
     result := fDBMS;
+end;
+
+function TSQLDBConnectionProperties.GetDBMSName: RawUTF8;
+var PS: PShortString;
+begin
+  PS := GetEnumName(TypeInfo(TSQLDBDefinition),ord(DBMS));
+  result := Ansi7ToString(@PS^[2],ord(PS^[0])-1);
 end;
 
 function TSQLDBConnectionProperties.AdaptSQLLimitForEngineList(

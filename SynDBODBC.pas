@@ -1043,8 +1043,7 @@ begin
         [self,DBMSName,DriverName,DBMSVersion]);
     {$ifndef DELPHI5OROLDER}
     Log.Log(sllDebug,'Connected to % using % % recognized as %',
-      [DBMSName,DriverName,DBMSVersion,
-       GetEnumName(TypeInfo(TSQLDBDefinition),ord(fDBMS))^]);
+      [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
     {$endif}
     // notify any re-connection
     inherited Connect;
