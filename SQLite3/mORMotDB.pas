@@ -124,6 +124,9 @@ unit mORMotDB;
     method of ISQLDBStatement as expected by TSQLDBProxyStatement
   - optimized TSQLRestStorageExternal.UpdateBlobFields()/RetrieveBlobFields()
     methods, updating/retrieving all BLOB fields at once in the same SQL statement
+  - added VirtualTableExternalMap() function for easier mapping definition
+  - handle TSQLModelRecordPropertiesExternal.MapAutoKeywordFields for automatic
+    maping of field which name conflicts with a SQL keyword - see [7fbbd53966] 
   - this unit will now set SynDBLog := TSQLLog during its initialization
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
     shared with SynDB and mORMot units (includes methods refactoring)
@@ -454,6 +457,13 @@ function VirtualTableExternalRegister(aModel: TSQLModel;
   const aClass: array of TSQLRecordClass;
   aExternalDB: TSQLDBConnectionProperties): boolean; overload;
 
+/// register one table of the model to be external, with optional mapping
+// - this method would allow to chain MapField() or MapAutoKeywordFields
+// definitions, in a fluent interface:
+function VirtualTableExternalMap(aModel: TSQLModel;
+  aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
+  const aExternalTableName: RawUTF8=''): PSQLModelRecordPropertiesExternal;
+
 /// register all tables of the model to be external
 // - by default, all tables are handled by the SQLite3 engine, unless they
 // are explicitely declared as external via VirtualTableExternalRegister: this
@@ -520,6 +530,14 @@ begin
       result := false;
 end;
 
+function VirtualTableExternalMap(aModel: TSQLModel;
+  aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
+  const aExternalTableName: RawUTF8=''): PSQLModelRecordPropertiesExternal;
+begin
+  if VirtualTableExternalRegister(aModel,aClass,aExternalDB,aExternalTableName) then
+    result := @aModel.Props[aClass].ExternalDB else
+    result := nil;
+end;
 
 { TSQLRestStorageExternal }
 
@@ -606,9 +624,11 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
 
 var SQL: RawUTF8;
     i,f: integer;
+    nfo: TSQLPropInfo;
     Field: TSQLDBColumnCreate;
     FieldAdded: Boolean;
     CreateColumns: TSQLDBColumnCreateDynArray;
+    log: TSynLog;
 begin
   inherited Create(aClass,aServer);
   // initialize external DB properties
@@ -617,12 +637,31 @@ begin
   if fProperties=nil then
     raise EBusinessLayerException.CreateUTF8(
       '%.Create: No external DB defined for %',[self,StoredClass]);
+  // try to connect to the remote DB, and synchronize local Rest time
   if Owner<>nil then
     try
       Owner.ServerTimeStamp := fProperties.ThreadSafeConnection.ServerTimeStamp;
     except
       on E: Exception do ; // ignore any error here
     end;
+  // ensure external field names are compatible with the external DB keywords
+  for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
+    nfo := StoredClassRecordProps.Fields.List[f];
+    if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
+      SQL := fStoredClassProps.ExternalDB.FieldNames[f];
+      if fProperties.IsSQLKeyword(SQL) then begin
+        log := Owner.LogClass.Add;
+        log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
+          [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName]);
+        if fStoredClassProps.ExternalDB.AutoMapKeywordFields then begin
+          log.Log(sllWarning,'-> %.% mapped to "_%"',
+            [fStoredClass,nfo.Name,SQL]);
+          fStoredClassProps.ExternalDB.MapField(nfo.Name,'_'+SQL);
+        end else
+          log.Log(sllWarning,'-> you should better call MapAutoKeywordFields');
+      end;
+    end;
+  end;
   // create corresponding external table if necessary, and retrieve its fields info
   fProperties.GetFields(fTableName,fFieldsExternal);
   if fFieldsExternal=nil then begin

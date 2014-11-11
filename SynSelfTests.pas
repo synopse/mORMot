@@ -8172,6 +8172,9 @@ begin
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dOracle,'toto'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dOracle,' auDIT '));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dMySQL,' auDIT '));
+  check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'SELEct'));
+  check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'clustER'));
+  check(not TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'value'));
   Test2('select rowid,firstname from PeopleExt where rowid=2',
         'select id,firstname from SampleRecord where id=2');
   Test2('select rowid,firstname from PeopleExt where rowid=?',
@@ -8540,15 +8543,15 @@ begin
   fProperties := TSQLDBSQLite3ConnectionProperties.Create('extdata.db3','','','');
   fProperties.ExecuteNoResult('PRAGMA synchronous=0',[]);
   fProperties.ExecuteNoResult('PRAGMA locking_mode=EXCLUSIVE',[]);
-  Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal'));
+  Check(VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal').
+    MapField('ID','Key').
+    MapField('YearOfDeath','YOD').
+    MapAutoKeywordFields<>nil);
   Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordOnlyBlob,fProperties,'OnlyBlobExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordTestJoin,fProperties,'TestJoinExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLASource,fProperties,'SourceExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADest,fProperties,'DestExternal'));
   Check(VirtualTableExternalRegister(fExternalModel,TSQLADests,fProperties,'DestsExternal'));
-  fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
-    MapField('ID','Key').
-    MapField('YearOfDeath','YOD');
   DeleteFile('testExternal.db3'); // need a file for backup testing
   if TrackChanges and StaticVirtualTableDirect then begin
     DeleteFile('history.db3');

@@ -6499,6 +6499,7 @@ type
     fFieldNames: TRawUTF8DynArray;
     fSQL: TSQLModelRecordPropertiesSQL;
     fFieldNamesMatchInternal: TSQLFieldBits;
+    fMapAutoKeywordFields: boolean;
     /// fill fRowIDFieldName/fSQL with the current information
     procedure ComputeSQL;
   public
@@ -6510,6 +6511,18 @@ type
     // - since it returns a PSQLModelRecordPropertiesExternal instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
     function MapField(const InternalName, ExternalName: RawUTF8): PSQLModelRecordPropertiesExternal;
+    /// call this method to ensure that all fields won't conflict with a SQL
+    // keyword for the given database
+    // - by default, no check is performed: you can use this method to ensure
+    // that all field names won't conflict with a SQL reserved keyword: such
+    // fields will be identified and automatically mapped as _fieldname 
+    // - can be used e.g. as
+    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // !   MapField('IntField','ExtField').
+    // !   MapAutoKeywordFields;
+    // - since it returns a PSQLModelRecordPropertiesExternal instance, you can
+    // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
+    function MapAutoKeywordFields: PSQLModelRecordPropertiesExternal;
     /// add several custom field mappings
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
@@ -6596,6 +6609,8 @@ type
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
     property FieldNamesMatchInternal: TSQLFieldBits read fFieldNamesMatchInternal;
+    /// equals TRUE if MapAutoKeywordFields has been defined
+    property AutoMapKeywordFields: boolean read fMapAutoKeywordFields;
   end;
 
   /// dynamic array of TSQLModelRecordProperties
@@ -23132,6 +23147,14 @@ begin
     end;
   end;
   ComputeSQL;
+end;
+
+function TSQLModelRecordPropertiesExternal.MapAutoKeywordFields:
+  PSQLModelRecordPropertiesExternal;
+begin
+  if @self<>nil then
+    fMapAutoKeywordFields := True;
+  result := @self;
 end;
 
 procedure TSQLModelRecordPropertiesExternal.ComputeSQL;

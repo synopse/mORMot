@@ -5156,7 +5156,7 @@ function TSQLDBConnectionProperties.GetDBMSName: RawUTF8;
 var PS: PShortString;
 begin
   PS := GetEnumName(TypeInfo(TSQLDBDefinition),ord(DBMS));
-  result := Ansi7ToString(@PS^[2],ord(PS^[0])-1);
+  SetString(result,PAnsiChar(@PS^[2]),ord(PS^[0])-1);
 end;
 
 function TSQLDBConnectionProperties.AdaptSQLLimitForEngineList(
