@@ -235,13 +235,14 @@ begin
             _ObjAddProps(['toVariant','byte'],field);
         end;
         end;
-        fields.AddItem(field);
         if nfo.InheritsFrom(TSQLPropInfoCustomJSON) then begin
           parser := TSQLPropInfoCustomJSON(nfo).CustomParser;
           if (parser<>nil) and (parser.PropertyType in [ptRecord,ptCustom]) then begin
             hasRecord := true;
-            if (typ<>ptGuid) and typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
-              parsersPropInfo.AddObjectIfNotExisting(nfoSQLFieldRTTITypeName,nfo);
+            if typ=ptGuid then
+              _ObjAddProps(['fromVariant','VariantToGUID','toVariant','GUIDToVariant'],field) else
+              if typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
+                parsersPropInfo.AddObjectIfNotExisting(nfoSQLFieldRTTITypeName,nfo);
           end;
         end else
         if nfo.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
@@ -256,6 +257,7 @@ begin
               [TSQLPropInfoRTTISet(nfo).SetEnumType^.GetEnumNameAll(true)],
               [nfoSQLFieldRTTITypeName]));
         end;
+        fields.AddItem(field);
       end;
       with aServer.Model.TableProps[t] do
         rec := _JsonFastFmt('{tableName:?,className:?,fields:?,isInMormotPas:%,comma:%}',
