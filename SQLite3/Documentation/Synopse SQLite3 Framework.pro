@@ -5227,7 +5227,7 @@ Introducing @*SOA@ is mandatory to interface new kind of clients to your applica
 If your application is likely to be run on several databases, it may be difficult to handle any potential field name conflict, when you switch from one engine to another. The ORM allows you therefore to ensure that no field name would conflict with a SQL keyword of the underlying database.
 In code-first mode, you can use the following method to ensure that no such conflict would occur:
 !  fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB.MapAutoKeywordFields;
-For a database-first database, the following syntax is to be used so that field names would be
+For a database-first database, the following syntax is to be used so that field names would be checked:
 !  fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
 !    MapField('ID','Key').
 !    MapField('YearOfDeath','YOD').
@@ -5237,8 +5237,9 @@ or, if you want to full fluent interface definition:
 !    MapField('ID','Key').
 !    MapField('YearOfDeath','YOD').
 !!    MapAutoKeywordFields
+It is a good idea to call the {\f1\fs20 @**MapAutoKeywordFields@} method after any manual field mapping for a database-first database, since even your custom field names may conflict with a SQL keyword.
 If any field name is likely to conflict with a SQL keyword, it will be mapped with a trailing '_'. For instance, a {\f1\fs20 'Select'} published property would be mapped into a {\f1\fs20 _SELECT} column in the table.
-Even if this option is disabled by default, a warning message will appear in the log proposing to use this {\f1\fs20 @*MapAutoKeywordFields@} method, and would help you to identify such issues.
+Even if this option is disabled by default, a warning message will appear in the log proposing to use this {\f1\fs20 MapAutoKeywordFields} method, and would help you to identify such issues.
 :30  External database ORM internals
 The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@}-based external database for the framework.
 In fact, this feature will use {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes, defined as such:
