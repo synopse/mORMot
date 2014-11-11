@@ -1981,9 +1981,11 @@ function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Cha
 
 /// use our fast version of StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
+  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
+  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// slower version of StrLen(), but which will never read over the buffer
 // - to be used instead of StrLen() on a memory protected buffer
@@ -2002,12 +2004,15 @@ function StrLenW(S: PWideChar): PtrInt;
 
 /// use our fast version of StrComp(), to be used with PWideChar
 function StrCompW(Str1, Str2: PWideChar): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast version of StrCompL(), to be used with PUTF8Char
 function StrCompL(P1,P2: PUTF8Char; L, Default: Integer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast version of StrCompIL(), to be used with PUTF8Char
 function StrCompIL(P1,P2: PUTF8Char; L: Integer; Default: Integer=0): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef USENORMTOUPPER}
 {$ifdef OWNNORMTOUPPER}
