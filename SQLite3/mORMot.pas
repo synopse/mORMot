@@ -4255,8 +4255,12 @@ type
     // that the file content will be sent back to the server only if it changed
     // - if ContentType is left to default '', method will guess the expected
     // mime-type from the file name extension
+    // - you can also specify the resulting file name, as downloaded and written
+    // by the client browser, in the optional AttachmentFileName parameter, if
+    // the URI does not match the expected file name
     procedure ReturnFile(const FileName: TFileName;
-      Handle304NotModified: boolean=false; const ContentType: RawUTF8='');
+      Handle304NotModified: boolean=false; const ContentType: RawUTF8='';
+      const AttachmentFileName: RawUTF8='');
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTML_TEMPORARYREDIRECT status with the specified location,
     // or HTML_MOVEDPERMANENTLY if PermanentChange is TRUE
@@ -28665,7 +28669,7 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
-  Handle304NotModified: boolean; const ContentType: RawUTF8);
+  Handle304NotModified: boolean; const ContentType,AttachmentFileName: RawUTF8);
 var FileTime: TDateTime;
     clientHash, serverHash: RawUTF8;
 begin
@@ -28687,7 +28691,10 @@ begin
     end;
     // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
     Call.OutHead := STATICFILE_CONTENT_TYPE_HEADER+#13#10+Call.OutHead;
-    StringToUTF8(FileName,Call.OutBody);
+    StringToUTF8(FileName,Call.OutBody); // body=filename for STATICFILE_CONTENT
+    if AttachmentFileName<>'' then
+      Call.OutHead := Call.OutHead+
+        #13#10'Content-Disposition: attachment; filename="'+AttachmentFileName+'"';
   end;
 end;
 
