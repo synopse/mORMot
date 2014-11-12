@@ -26,6 +26,7 @@ unit SynBigTable;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -209,6 +210,7 @@ unit SynBigTable;
 
   Version 1.18
   - unit fixed and tested with Delphi XE2/XE7 64-bit compiler
+  - added TSynBigTable.FileSizeOnDisk property for [e4a1e76a32ab]
   - fixed ticket [b9320499ae] about TBigTableRecord saving updated tables with
     indexed fields
 
@@ -234,6 +236,10 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
   {$endif}
   Classes,
   SysUtils,
@@ -336,6 +342,7 @@ type
     fReadBuffer: TFileBufferReader;
     fOnAfterPack: TSynBigTableAfterPackEvent;
     function GetCount: integer; virtual;
+    function GetFileSizeOnDisk: Int64; virtual;
     /// this default implementation can be slow, because it must loop through all
     // items in case of deleted or updated items
     function GetID(Index: integer): integer; virtual;
@@ -505,11 +512,13 @@ type
     property Count: integer read GetCount;
     /// the associated filename storing the database
     property FileName: TFileName read fFileName;
-    /// contain the current in memory data size (in bytes)
+    /// returns the current in memory data size (in bytes)
     // - i.e. the data size not written yet to the disk
     // - can be used to flush regularely the data to disk by calling UpdateToFile
     // method when this value reach a certain limit
     property CurrentInMemoryDataSize: Int64 read fCurrentInMemoryDataSize;
+    /// returns the current data size stored on disk
+    property FileSizeOnDisk: Int64 read GetFileSizeOnDisk;
     /// retrieve an offset for a specified physical ID
     // - read from either fOffset32[] either fOffset64[]
     property Offset[Index: integer]: Int64 read GetOffset;
@@ -2712,6 +2721,23 @@ begin
       FlushFileBuffers(fFile);
     if not dontReopenReadBuffer then
       fReadBuffer.Open(fFile);
+{$ifdef THREADSAFE}
+  finally
+    fLock.EndWrite;
+  end;
+{$endif}
+end;
+
+function TSynBigTable.GetFileSizeOnDisk: Int64;
+begin
+  result := 0;
+  if fFile=0 then
+   exit;
+{$ifdef THREADSAFE}
+  fLock.BeginWrite;
+  try
+{$endif}
+    PInt64Rec(@result)^.Lo := GetFileSize(fFile,@PInt64Rec(@result)^.Hi);
 {$ifdef THREADSAFE}
   finally
     fLock.EndWrite;

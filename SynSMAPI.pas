@@ -92,7 +92,7 @@ const
   {$endif}
 {$endif}
 
-{$ifdef LINUX} // for Kylix
+{$ifdef LINUX} // for Kylix/FPC (not tested yet)
   SpiderMonkeyLib = 'mozjs.so';
 {$endif}
 

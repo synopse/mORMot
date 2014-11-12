@@ -69,7 +69,12 @@ uses
   // USEPDF: under Windows: get ZLib 1.2.3 functions from libpdf.dll
   {$ifdef USEPDF}pdf,{$endif}
 {$else}
-  SynFPCLinux, Types,
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  {$endif}
 {$endif}
   SynCommons,
   Classes, SysUtils, SynZip;

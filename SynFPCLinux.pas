@@ -88,6 +88,9 @@ function QueryPerformanceFrequency(var Value: Int64): boolean;
 /// compatibility function, wrapping Win32 API file position change
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff; lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff; inline;
 
+/// compatibility function, wrapping Win32 API file size retrieval
+function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
+
 /// compatibility function, wrapping Win32 API file truncate at current position
 procedure SetEndOfFile(hFile: cInt); inline;
 
@@ -228,8 +231,8 @@ begin
     if FileExists(Target) then
       exit else
       DeleteFile(Target);
-  SourceF:= TFileStream.Create(Source, fmOpenRead);
-  DestF:= TFileStream.Create(Target, fmCreate);
+  SourceF := TFileStream.Create(Source, fmOpenRead);
+  DestF := TFileStream.Create(Target, fmCreate);
   DestF.CopyFrom(SourceF, SourceF.Size);
   SourceF.Free;
   DestF.Free;
@@ -261,12 +264,12 @@ end;
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
 begin
-  result := FpLseek( hFile, lDistanceToMove, SEEK_CUR );
+  result := FpLseek(hFile,lDistanceToMove,SEEK_CUR );
 end;
 
 procedure SetEndOfFile(hFile: cInt);
 begin
-  FileSeek(hFile,0,soFromEnd);
+  FpFtruncate(hFile,FPLseek(hFile,0,SEEK_CUR));
 end;
 
 function GetLastError: longint;
@@ -280,10 +283,21 @@ begin
   result := WideCompareText(Pwidechar(lpString1),Pwidechar(lpString2));
 end;
 
-function GetLargeFileSize(const aFile: string): int64;
-var FileInfo:TStat;
+function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
+var FileInfo: TStat;
 begin
-  if (fpStat(aFile,FileInfo) = 0) then
+  if fpFstat(hFile,FileInfo)=0 then begin
+    result := Int64Rec(FileInfo.st_Size).Lo;
+    if lpFileSizeHigh<>nil then
+      lpFileSizeHigh^ := Int64Rec(FileInfo.st_Size).Hi;
+  end else
+    result := 0;
+end;
+
+function GetLargeFileSize(const aFile: string): int64;
+var FileInfo: TStat;
+begin
+  if fpStat(aFile,FileInfo)=0 then
     result:= FileInfo.st_size else
     result:= -1;
 end;
@@ -292,7 +306,7 @@ function GetFileSize(const aFile: string): int32;
 var fsize: int64;
 begin
   fsize := GetLargeFileSize(aFile);
-  if fsize > high(int32) then
+  if fsize>high(int32) then
     // error if file too big
     result:= -1 else
     result:= fsize;

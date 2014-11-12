@@ -1137,7 +1137,7 @@ uses
   Windows,
   Messages,
 {$endif}
-{$ifdef LINUX} // for Kylix
+{$ifdef KYLIX3}
   Types,
 {$endif}
 {$ifdef UNICODE}
