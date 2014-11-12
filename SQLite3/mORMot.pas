@@ -3254,7 +3254,7 @@ function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString):
 /// execute an instance method from its RTTI per-interface information
 // - calling this function with a pre-computed PInterfaceEntry value is faster
 // than calling the TObject.GetInterface() method, especially when the class
-// implements several interfaces
+// implements several interfaces, since it avoid a slow GUID lookup
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry; out Obj): boolean;
 
 /// retrieve the ready to be displayed text of an enumeration
@@ -3934,6 +3934,8 @@ type
     /// the currently running service factory
     // - it can be used within server-side implementation to retrieve the
     // associated TSQLRestServer instance
+    // - note that TServiceFactoryServer.Get() won't override this value, when
+    // called within another service (i.e. if Factory is not nil)
     Factory: TServiceFactoryServer;
     /// the currently runnning context which launched the method
     // - make available e.g. current session or authentication parameters
@@ -8538,7 +8540,9 @@ type
     /// retrieve an instance of this interface
     // - this virtual method will be overridden to reflect the expected
     // behavior of client or server side
-    // - can be used as such to resolve an I: ICalculator interface
+    // - can be used as such to resolve an I: ICalculator interface:
+    // ! var I: ICalculator;
+    // ! begin
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     function Get(out Obj): Boolean; virtual; abstract;
@@ -8841,6 +8845,10 @@ type
     // - all other kind of instance creation will behave the same as sicSingle
     // when accessed directly from this method, i.e. from server side: in fact,
     // on the server side, there is no notion of client, session, user nor group
+    // - if ServiceContext.Factory is nil (i.e. if there is no other
+    // service context currently associated), this method will also update
+    // ServiceContext.Factory, so that the implementation method would be able
+    // to access the associated TSQLRestServer instance if needed
     function Get(out Obj): Boolean; override;
     /// retrieve the published signature of this interface
     // - is always available on TServiceFactoryServer, but TServiceFactoryClient
@@ -8941,7 +8949,7 @@ type
     /// finalize the service provider used instance
     // - e.g. the shared fake implementation instance
     destructor Destroy; override;
-    /// retrieve an instance of this interface from the server side
+    /// retrieve an instance of this interface from the client side
     function Get(out Obj): Boolean; override;
     /// retrieve the published signature of this interface
     // - TServiceFactoryClient will be able to retrieve it only if
@@ -39345,25 +39353,30 @@ function TServiceFactoryServer.Get(out Obj): Boolean;
 var Inst: TServiceFactoryServerInstance;
 begin
   result := false;
-  if Self<>nil then
-    case fInstanceCreation of
-    sicShared:
-    if fSharedInterface<>nil then begin
-      IInterface(Obj) := fSharedInterface; // copy implementation interface
-      result := true;
-    end;
-    sicPerThread: begin
-      Inst.Instance := nil;
-      Inst.InstanceID := GetCurrentThreadId;
-      if not InternalInstanceRetrieve(Inst,0) and (Inst.Instance<>nil) then
-        result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
-    end;
-    else begin // no user/group/session on pure server-side -> always sicSingle
-      Inst.Instance := CreateInstance(false);
-      if Inst.Instance<>nil then
-        result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
-    end;
-    end;
+  if self=nil then
+    exit;
+  case fInstanceCreation of
+  sicShared:
+  if fSharedInterface<>nil then begin
+    IInterface(Obj) := fSharedInterface; // copy implementation interface
+    result := true;
+  end;
+  sicPerThread: begin
+    Inst.Instance := nil;
+    Inst.InstanceID := GetCurrentThreadId;
+    if not InternalInstanceRetrieve(Inst,0) and (Inst.Instance<>nil) then
+      result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
+  end;
+  else begin // no user/group/session on pure server-side -> always sicSingle
+    Inst.Instance := CreateInstance(false);
+    if Inst.Instance<>nil then
+      result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
+  end;
+  end;
+  if result then
+    with PServiceRunningContext(@ServiceContext)^ do
+      if Factory=nil then
+        Factory := self;
 end;
 
 function TServiceFactoryServer.RetrieveSignature: RawUTF8;
