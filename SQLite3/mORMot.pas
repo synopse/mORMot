@@ -34715,8 +34715,8 @@ end;
 
 const
   SQLITE3_KEYWORDS =
-  ' abort after and attach before cluster conflict copy database delete delimiters'+
-  ' detach each explain fail from glob ignore insert instead isnull limit not notnull'+
+  ' abort after and attach before cluster conflict copy delete delimiters detach'+
+  ' each explain fail from glob ignore insert instead isnull limit not notnull'+
   ' offset or pragma raise replace row select statement temp trigger vacuum where ';
 
 constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
