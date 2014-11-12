@@ -102,16 +102,16 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint; inline;
 
 /// returns the current UTC time
-function FPCNowUTC: TDateTime; 
+function GetNowUTC: TDateTime;
 
 /// returns the current UTC time as TSystemTime
-function FPCNowUTCSystem: TSystemTime;
+function GetNowUTCSystem: TSystemTime;
+
+/// a wrapper around stat() to retrieve a file age
+function GetFileAgeAsDateTime(const FileName: string): TDateTime;
 
 /// a wrapper around stat() to retrieve a file size
 function GetLargeFileSize(const aFile: string): int64;
-
-/// a wrapper around stat() to retrieve a file size
-function GetFileSize(const aFile: string): int32;
 
 {$endif Linux}
 
@@ -155,36 +155,36 @@ const
 Procedure JulianToGregorian(JulianDN:LongInt;out Year,Month,Day:Word);
 Var YYear,XYear,Temp,TempMonth : LongInt;
 Begin
-  Temp:=((JulianDN-D2) shl 2)-1;
-  JulianDN:=Temp Div D1;
-  XYear:=(Temp Mod D1) or 3;
-  YYear:=(XYear Div D0);
-  Temp:=((((XYear mod D0)+4) shr 2)*5)-3;
-  Day:=((Temp Mod 153)+5) Div 5;
-  TempMonth:=Temp Div 153;
+  Temp := ((JulianDN-D2) shl 2)-1;
+  JulianDN := Temp Div D1;
+  XYear := (Temp Mod D1) or 3;
+  YYear := (XYear Div D0);
+  Temp := ((((XYear mod D0)+4) shr 2)*5)-3;
+  Day := ((Temp Mod 153)+5) Div 5;
+  TempMonth := Temp Div 153;
   If TempMonth>=10 Then Begin
      inc(YYear);
      dec(TempMonth,12);
    End;
   inc(TempMonth,3);
   Month := TempMonth;
-  Year:=YYear+(JulianDN*100);
+  Year := YYear+(JulianDN*100);
 end;
 
 Procedure EpochToLocal(epoch:longint;out year,month,day,hour,minute,second:Word);
 { Transforms Epoch time into local time (hour, minute,seconds) }
 Var DateNum: LongInt;
 Begin
-  Datenum:=(Epoch Div 86400) + c1970;
+  Datenum := (Epoch Div 86400) + c1970;
   JulianToGregorian(DateNum,Year,Month,day);
-  Epoch:=Abs(Epoch Mod 86400);
-  Hour:=Epoch Div 3600;
-  Epoch:=Epoch Mod 3600;
-  Minute:=Epoch Div 60;
-  Second:=Epoch Mod 60;
+  Epoch := Abs(Epoch Mod 86400);
+  Hour := Epoch Div 3600;
+  Epoch := Epoch Mod 3600;
+  Minute := Epoch Div 60;
+  Second := Epoch Mod 60;
 End;
 
-function FPCNowUTC: TDateTime;
+function GetNowUTC: TDateTime;
 var tz: timeval;
     SystemTime: TSystemTime;
 begin
@@ -194,7 +194,7 @@ begin
   result := systemTimeToDateTime(SystemTime);
 end;
 
-function FPCNowUTCSystem: TSystemTime;
+function GetNowUTCSystem: TSystemTime;
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
@@ -283,6 +283,14 @@ begin
   result := WideCompareText(Pwidechar(lpString1),Pwidechar(lpString2));
 end;
 
+function GetFileAgeAsDateTime(const FileName: string): TDateTime;
+var FileInfo: TStat;
+begin
+  if fpStat(FileName,FileInfo)=0 then
+    result := FileDateToDateTime(FileInfo.st_mtime) else
+    result := 0;
+end;
+
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;
 begin
@@ -298,18 +306,8 @@ function GetLargeFileSize(const aFile: string): int64;
 var FileInfo: TStat;
 begin
   if fpStat(aFile,FileInfo)=0 then
-    result:= FileInfo.st_size else
-    result:= -1;
-end;
-
-function GetFileSize(const aFile: string): int32;
-var fsize: int64;
-begin
-  fsize := GetLargeFileSize(aFile);
-  if fsize>high(int32) then
-    // error if file too big
-    result:= -1 else
-    result:= fsize;
+    result := FileInfo.st_size else
+    result := 0;
 end;
 
 {$endif}

@@ -579,18 +579,23 @@ begin
   Int64(uTm) := (t+11644473600)*10000000; // unix time to dos file time
   FileTimeToLocalFileTime(uTM,lTM);
   FileTimeToSystemTime(lTM,S);
+  atm.tm_sec := S.wSecond;
+  atm.tm_min := S.wMinute;
+  atm.tm_hour := S.wHour;
+  atm.tm_mday := S.wDay;
+  atm.tm_mon := S.wMonth-1;
+  atm.tm_year := S.wYear-1900;
+  atm.tm_wday := S.wDayOfWeek;
   {$else}
-  S:=FPCNowUTCSystem;
+  S := GetNowUTCSystem;
+  atm.tm_sec := S.Second;
+  atm.tm_min := S.Minute;
+  atm.tm_hour := S.Hour;
+  atm.tm_mday := S.Day;
+  atm.tm_mon := S.Month-1;
+  atm.tm_year := S.Year-1900;
+  atm.tm_wday := S.Day;
   {$endif}
-  with atm,S do begin
-    tm_sec := {$ifdef MSWINDOWS}wSecond{$else}Second{$endif};
-    tm_min := {$ifdef MSWINDOWS}wMinute{$else}Minute{$endif};
-    tm_hour := {$ifdef MSWINDOWS}wHour{$else}Hour{$endif};
-    tm_mday := {$ifdef MSWINDOWS}wDay{$else}Day{$endif};
-    tm_mon := {$ifdef MSWINDOWS}wMonth-1{$else}Month-1{$endif};
-    tm_year := {$ifdef MSWINDOWS}wYear-1900{$else}Year-1900{$endif};
-    tm_wday := {$ifdef MSWINDOWS}wDayOfWeek{$else}Day{$endif};
-  end;
   result := @atm;
 end;
 

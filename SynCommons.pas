@@ -19216,13 +19216,17 @@ begin
   if PtrInt(F)>=0 then begin
     PInt64Rec(@result)^.Lo := GetFileSize(F,@PInt64Rec(@result)^.Hi);
     FileClose(F);
-  end
-  else
+  end else
     result := 0;
 end;
 {$endif}
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
+{$ifdef LINUX}
+begin
+  result := GetFileAgeAsDateTime(FileName);
+end;
+{$else}
 {$ifdef HASNEWFILEAGE}
 begin
   if not FileAge(FileName,result) then
@@ -19235,6 +19239,7 @@ begin
 {$endif}
     result := 0;
 end;
+{$endif}
 
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
   DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
@@ -22574,7 +22579,7 @@ begin
 end;
 {$else}
 begin
-  Result := FPCNowUTC;
+  Result := GetNowUTC;
 end;
 {$endif}
 
@@ -45684,4 +45689,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
