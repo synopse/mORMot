@@ -70,6 +70,8 @@ unit mORMotService;
       a service from the command line
     - check the executable file in TServiceController.CreateNewService()
     - use SQLite3Log instead of TSQLLog - see [779d773e966]
+    - ensure TServiceController.CreateNewService() won't allow to install
+      the service on a network drive - see [f487d3de45]
 
 }
 
@@ -413,10 +415,20 @@ begin
   inherited Create;
   if Path='' then begin
     {$ifndef NOMORMOTKERNEL}
-    SQLite3Log.Add.Log(sllError,'OpenSCManager(%,%) with Path=""',
-      [TargetComputer,DatabaseName]);
+    SQLite3Log.Add.Log(sllError,'CreateNewService("%","%") with Path=""',
+      [Name,DisplayName]);
     {$endif}
     Exit;
+  end;
+  if TargetComputer='' then
+  case GetDriveType(pointer(ExtractFileDrive(Path))) of
+  DRIVE_REMOTE: begin
+    {$ifndef NOMORMOTKERNEL}
+    SQLite3Log.Add.Log(sllError,'CreateNewService("%","%") on remote drive: Path="%"',
+      [Name,DisplayName,Path]);
+    {$endif}
+    Exit;
+  end;
   end;
   StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
@@ -424,7 +436,8 @@ begin
   if FSCHandle=0 then begin
     {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SQLite3Log.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+      [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
     {$endif}
     Exit;
@@ -436,7 +449,7 @@ begin
   {$ifndef NOMORMOTKERNEL}
   if FHandle=0 then begin
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'CreateService("%","%")',[Name,DisplayName]);
+    SQLite3Log.Add.Log(sllLastError,'CreateService("%","%","%")',[Name,DisplayName,Path]);
     SetLastError(backupError);
   end;
   {$endif}
@@ -455,7 +468,8 @@ begin
   if FSCHandle = 0 then begin
     {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'OpenSCManager(%,%)',[TargetComputer,DatabaseName]);
+    SQLite3Log.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+      [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
     {$endif}
     Exit;
@@ -480,7 +494,7 @@ begin
     end
     {$ifndef NOMORMOTKERNEL}
     else
-      SQLite3Log.Add.Log(sllLastError,'DeleteService(%)',[FName]);
+      SQLite3Log.Add.Log(sllLastError,'DeleteService("%")',[FName]);
     {$endif}
 end;
 
