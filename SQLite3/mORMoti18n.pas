@@ -1946,6 +1946,7 @@ function TLanguageFile.PropToString(Prop: TSQLPropInfo; Instance: TSQLRecord;
    Client: TSQLRest): string;
 var Value: RawUTF8;
     Time: TTimeLogBits;
+    ref: RecordRef;
 begin
   Result := '';
   if (Prop=nil) or (Instance=nil) then
@@ -1970,10 +1971,10 @@ begin
     sftID: if Client<>nil then
       result := UTF8ToString(Client.MainFieldValue(
         TSQLRecordClass((Prop as TSQLPropInfoRTTIID).ObjectClass),
-        GetInteger(pointer(Value)),true));
-    sftRecord: if Client<>nil then
-    with RecordRef(GetCardinal(pointer(Value))) do begin
-      result := UTF8ToString(Client.MainFieldValue(Table(Client.Model),ID,true));
+        GetInt64(pointer(Value)),true));
+    sftRecord: if Client<>nil then begin
+      SetInt64(pointer(Value),Int64(ref.Value));
+      result := UTF8ToString(Client.MainFieldValue(ref.Table(Client.Model),ref.ID,true));
       if result='' then
         result := Instance.CaptionName else
         result := Instance.CaptionName+': '+result;

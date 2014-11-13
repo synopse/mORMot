@@ -263,7 +263,7 @@ type
     /// text of this column/field name has been truncated
     fFieldNameTruncated: Int64;
     /// used by OnTableUpdate() event
-    fOnTableUpdateID: TIntegerDynArray;
+    fOnTableUpdateID: TIDDynArray;
     /// return true if a GPF may occur
     function NotDefined: boolean;
   public
@@ -315,7 +315,7 @@ type
     procedure SortForce(ACol: integer; Ascending: boolean; ARow: integer=-1);
     /// get the ID of the first selected row, 0 on error (no ID field e.g.)
     // - useful even if ID column was hidden with IDColumnHide
-    function SelectedID: integer;
+    function SelectedID: TID;
     /// retrieve the record content of the first selected row, nil on error
     // - record type is retrieved via Table.QueryTables[0] (if defined)
     // - warning: it's up to the caller to Free the created instance after use
@@ -368,7 +368,7 @@ type
     /// call this procedure after a refresh of the data
     // - current Row will be set back to aID
     // - called internal by Refresh function above
-    procedure AfterRefresh(aID: integer; AutoResizeColumns: boolean);
+    procedure AfterRefresh(const aID: TID; AutoResizeColumns: boolean);
     /// you can call this method when the list is no more on the screen
     // - it will hide any pending popup Hint windows, for example
     procedure PageChanged;
@@ -1170,7 +1170,7 @@ end;
 
 procedure TSQLTableToGrid.SortForce(ACol: integer; Ascending: boolean;
   ARow: integer=-1);
-var MIDs: TIntegerDynArray;
+var MIDs: TIDDynArray;
 begin
   if NotDefined or (ACol>=Table.FieldCount) then // we allow ACol<0 (see below)
     exit;
@@ -1432,7 +1432,7 @@ begin
   SortChange(0);
 end;
 
-function TSQLTableToGrid.SelectedID: integer;
+function TSQLTableToGrid.SelectedID: TID;
 begin
   if NotDefined then
     result := 0 else
@@ -1540,7 +1540,7 @@ begin
   end;
 end;
 
-procedure TSQLTableToGrid.AfterRefresh(aID: integer; AutoResizeColumns: boolean);
+procedure TSQLTableToGrid.AfterRefresh(const aID: TID; AutoResizeColumns: boolean);
 var CurrentRow: integer;
     Bulk: boolean;
 begin

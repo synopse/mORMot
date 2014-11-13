@@ -36,7 +36,7 @@ type
   TFileRibbon = class(TSQLRibbon)
   public
     /// overridden method used customize the report content
-    procedure CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+    procedure CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
       AlreadyBegan: boolean=false); override;
   end;
 
@@ -92,7 +92,7 @@ resourcestring
   sSignedN = 'Signed,By %s on %s';
   sPictureN = '%s Picture';
 
-procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
   AlreadyBegan: boolean=false);
 var Rec: TSQLFile;
     Pic: TBitmap;

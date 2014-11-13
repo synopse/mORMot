@@ -304,13 +304,12 @@ type
   
   /// an array of RawUTF8, for each existing column type
   // - used e.g. by SQLCreate method
-  // - ftUnknown maps int32 field (e.g. ID), ftNull maps RawUTF8 index # field,
+  // - ftUnknown maps int32 field (e.g. boolean), ftNull maps RawUTF8 index # field,
   // ftUTF8 maps RawUTF8 blob field, other types map their default kind 
   // - for UTF-8 text, ftUTF8 will define the BLOB field, whereas ftNull will
   // expect to be formated with an expected field length in ColumnAttr
   // - the RowID definition will expect the ORM to create an unique identifier,
-  // and will use the ftUnknown type definition for this (may be not the same
-  // as ftInt64, e.g. for SQLite3 it should be INTEGER and not BIGINT)
+  // and will use the ftInt64 type definition for this
   // and send it with the INSERT statement (some databases, like Oracle, do not
   // support standard's IDENTITY attribute) - see http://troels.arvin.dk/db/rdbms
   TSQLDBFieldTypeDefinition = array[TSQLDBFieldType] of RawUTF8;
@@ -2842,7 +2841,7 @@ const
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
   // - see TSQLDBFieldTypeDefinition documentation to find out the mapping
   DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition = (
-  // ftUnknown=ID, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+  // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
   // dUnknown
   (' INT',' NVARCHAR(%)',' BIGINT',' DOUBLE',' NUMERIC(19,4)',' TIMESTAMP',' CLOB',' BLOB'),
   // dDefault
@@ -4672,7 +4671,7 @@ begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   if high(aFields)<0 then
     exit; // nothing to create
   if aAddID then begin
-    FieldID.DBType := ftUnknown;
+    FieldID.DBType := ftInt64;
     FieldID.Name := 'ID';
     FieldID.Unique := true;
     FieldID.NonNullable := true;

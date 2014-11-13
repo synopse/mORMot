@@ -444,7 +444,7 @@ var T,tagTable,postTable: TDotClearTable;
     comment: TSQLComment;
     tag: TSQLTag;
     tags: TRawUTF8DynArray;
-    tagID: TIntegerDynArray;
+    tagID: TIDDynArray;
     tagsCount: integer;
     batch: TSQLRestBatch;
     PublicFolder: TFileName;

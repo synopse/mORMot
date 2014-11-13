@@ -427,7 +427,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
     Stat: TStat;
     Start: TTimeLog;
     Timer: TPrecisionTimer;
-    Res: TIntegerDynArray;
+    Res: TIDDynArray;
     U, Server,DBName, MainDBName, Num, Time: RawUTF8;
     Rate, i: integer;
     {$ifdef USEMONGODB}

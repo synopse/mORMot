@@ -682,6 +682,9 @@ unit mORMot;
   Version 1.18
     - full Windows 64 bit compatibility, including RTTI and services
     - renamed SQLite3Commons.pas to mORMot.pas
+    - BREAKING CHANGE: all ORM IDs are now declared as TID (=Int64) instead of
+      integer - also added a new TIDDynArray type to be used e.g. for BatchSend,
+      and declared the TRecordReference type as Int64 - whole API is impacted
     - BREAKING CHANGE in TSQLRestServerCallBackParams which is replaced by the
       TSQLRestServerURIContext class: in addition, all method-based services
       should be a procedure, and use Ctxt.Results()/Error() methods to return
@@ -1200,6 +1203,15 @@ const
 
 
 type
+  /// this is the type to be used for our ORM primary key, i.e. TSQLRecord.ID
+  // - it maps the SQLite3 RowID definition
+  // - when converted to plain TSQLRecord published properties, you may loose
+  // some information under Win32 when stored as a 32 bit pointer
+  TID = type Int64;
+
+  /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  TIDDynArray = array of TID;
+
   /// used to store bit set for all available Tables in a Database Model
   TSQLFieldTables = set of 0..MAX_SQLTABLES-1;
 
@@ -1216,7 +1228,7 @@ type
   TSQLRawBlob = type RawByteString;
 
   /// a reference to another record in any table in the database Model
-  // - stored as an 32 bits unsigned integer (i.e. a pointer=TObject)
+  // - stored as a 64 bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TSQLRest.Retrieve(Reference) to get a record value
@@ -1224,10 +1236,10 @@ type
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, this property will be set to 0
   // by TSQLRestServer.AfterDeleteForceCoherency()
-  TRecordReference = type PtrUInt;
+  TRecordReference = type Int64;
 
   /// a reference to another record in any table in the database Model
-  // - stored as an 32 bits unsigned integer (i.e. a pointer=TObject)
+  // - stored as a 64 bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TSQLRest.Retrieve(Reference) to get a record value
@@ -1473,7 +1485,7 @@ type
     // - either FieldNames, either Fields[] array as defined in Decode()
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
-    DecodedRowID: integer;
+    DecodedRowID: TID;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
     // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
@@ -1485,13 +1497,13 @@ type
     // - FieldValues[] strings will be quoted and/or inlined depending on Params
     // - if RowID is set, a RowID column will be added within the returned content
     procedure Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-      Params: TJSONObjectDecoderParams; RowID: integer=0; ReplaceRowIDWithID: Boolean=false); overload;
+      Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - overloaded method expecting a RawUTF8 buffer, making a private copy
     // of the JSON content to avoid unexpected in-place modification, then
     // calling Decode(P: PUTF8Char) to perform the process
     procedure Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
-      Params: TJSONObjectDecoderParams; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false); overload;
+      Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// encode as a SQL-ready INSERT or UPDATE statement
     // - after a successfull call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
@@ -1531,7 +1543,7 @@ type
 // 'COL1=:("VAL1"):, COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
 function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Update, InlinedParams: boolean; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
+  Update, InlinedParams: boolean; RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - is used e.g. by TSQLRestServerDB.EngineAdd/EngineUpdate methods
@@ -1542,7 +1554,7 @@ function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
 // - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
 function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
-  RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
+  RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 
 /// get the FIRST field value of the FIRST row, from a JSON content
 // - e.g. useful to get an ID without converting a JSON content into a TSQLTableJSON
@@ -1735,7 +1747,7 @@ type
 // Delphi 2009+)
 // - TList won't be handled since it may leak memory when calling TList.Clear
 // - won't handle TObjectList (even if ObjectToJSON is able to serialize
-// them) since has now way of knowing the object type to add (TCollection.Add
+// them) since has no way of knowing the object type to add (TCollection.Add
 // is missing), unless: 1. you set the TObjectListItemClass property as expected,
 // and provide a TObjectList object, or 2. woStoreClassName option has been
 // used at ObjectToJSON() call and the corresponding classes have been previously
@@ -4009,7 +4021,7 @@ type
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
-    procedure ServiceResultEnd(WR: TTextWriter; ID: integer); virtual;
+    procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
     procedure InternalSetTableFromTableName(const TableName: RawUTF8); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
     /// initialize the execution context
@@ -4084,7 +4096,7 @@ type
     /// the associated TSQLRecord.ID, as decoded from URI scheme
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
-    TableID: integer;
+    TableID: TID;
     /// the index of the callback published method within the internal class list
     MethodIndex: integer;
     /// the service identified by an interface-based URI
@@ -4147,7 +4159,7 @@ type
     SessionGroup: integer;
     /// the corresponding TAuthSession.User.ID value
     // - is undefined if Session is 0 or 1 (no authentication running)
-    SessionUser: integer;
+    SessionUser: TID;
     /// the corresponding TAuthSession.User.LogonName value
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionUserName: RawUTF8;
@@ -4604,7 +4616,7 @@ type
     fTablePreviousSendData: TSQLRecordClass;
     fTableIndex: integer;
     fBatchCount: integer;
-    fDeletedRecordRef: TIntegerDynArray;
+    fDeletedRecordRef: TIDDynArray;
     fDeletedCount: integer;
     /// close a BATCH sequence started by Start method
     // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
@@ -4685,13 +4697,13 @@ type
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     // - deleted record class is the TSQLRecordClass used at BatchStart()
     // call: it will fail if no class was specified for this BATCH sequence
-    function Delete(ID: integer): integer; overload;
+    function Delete(ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     // - with this overloaded method, the deleted record class is specified:
     // no TSQLRecordClass shall have been set at BatchStart() call
-    function Delete(Table: TSQLRecordClass; ID: integer): integer; overload;
+    function Delete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// retrieve the current number of pending transactions in the BATCH sequence
     function Count: integer;
     /// read only access to the associated TSQLRest instance
@@ -4721,7 +4733,7 @@ type
     function GetTable: TSQLTable;
   protected
     fInternalState: cardinal;
-    fID: integer;
+    fID: TID;
     /// virtual method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
     // properties, by adding some TSQLPropInfo instances to Props.Fields list,
@@ -4734,7 +4746,7 @@ type
   public
   {$endif}{$endif}
     /// trick to get the ID even in case of a sftID published property
-    function GetID: integer;
+    function GetID: TID;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// trick to typecast the ID on 64 bit platform
     function GetIDAsPointer: pointer;
@@ -4798,7 +4810,7 @@ type
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
-    class function AutoFree(var localVariable; Rest: TSQLRest; ID: integer): IAutoFree; overload;
+    class function AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree; overload;
 
     {/ get the captions to be used for this class
      - if Action is nil, return the caption of the table name
@@ -4891,13 +4903,13 @@ type
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
     // - will raise an EORMException in case of wrong supplied values
-    constructor Create(const aSimpleFields: array of const; aID: integer); overload;
+    constructor Create(const aSimpleFields: array of const; aID: TID); overload;
     {/ this constructor initializes the object as above, and fills its content
       from a client or server connection
      - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
       the corresponding record, then retrieve its content; caller has to call
       UnLock() method after Value usage, to release the record }
-    constructor Create(aClient: TSQLRest; aID: integer;
+    constructor Create(aClient: TSQLRest; aID: TID;
       ForUpdate: boolean=false); overload;
     {/ this constructor initializes the object and fills its content from a client
       or server connection, from a TSQLRecord published property content
@@ -5032,7 +5044,7 @@ type
         you want to Update the retrieved record content later, since any
         missing fields will be left with previous values - but BatchUpdate() can be
         safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: array of integer;
+    constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object, and prepares itself to loop
        through a specified JSON table
@@ -5042,7 +5054,6 @@ type
       - you should then loop for all rows using 'while Rec.FillOne do ...'
       - the TSQLTableJSON will be freed by TSQLRecord.Destroy }
     constructor CreateAndFillPrepare(const aJSON: RawUTF8); overload;
-
     /// this constructor initializes the object from its ID, including all
     // nested TSQLRecord properties, through a JOINed statement
     // - by default, Create(aClient,aID) will return only the one-to-one
@@ -5053,7 +5064,7 @@ type
     // - Free/Destroy will release these instances
     // - warning: if you call Update() after it, only the main object will be
     // updated, not the nested TSQLRecord properties
-    constructor CreateJoined(aClient: TSQLRest; aID: integer);
+    constructor CreateJoined(aClient: TSQLRest; aID: TID);
     /// this constructor initializes the object, and prepares itself to loop
     // nested TSQLRecord properties, through a JOINed statement and a WHERE clause
     // - by default, CreateAndFillPrepare() will return only the one-to-one
@@ -5070,7 +5081,6 @@ type
     // updated, not the nested TSQLRecord properties
     constructor CreateAndFillPrepareJoined(aClient: TSQLRest;
       const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
-
     {/ this constructor initializes the object including all TSQLRecordMany properties,
       and prepares itself to loop through a JOINed statement
       - the created instance will have all its TSQLRecordMany Dest property allocated
@@ -5360,7 +5370,7 @@ type
        you want to Update the retrieved record content later, since any
        missing fields will be left with previous values - but BatchUpdate() can be
        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    function FillPrepare(aClient: TSQLRest; const aIDs: array of integer;
+    function FillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to loop through a JOINed statement including TSQLRecordMany fields
      - all TSQLRecordMany.Dest published fields will now contain a true TSQLRecord
@@ -5519,7 +5529,7 @@ type
       - notice: the Setter should not be used usualy; you should not have to write
         aRecord.ID := someID in your code, since the ID is set during Retrieve or
         Add of the record }
-    property ID: integer read GetID write fID;
+    property ID: TID read GetID write fID;
     /// this read-only property can be used to retrieve the ID as a TSQLRecord object
     // - published properties of type TSQLRecord (one-to-many relationship) do not
     // store real class instances (only exception is if they inherit from
@@ -5781,7 +5791,7 @@ type
      - don't perform any conversion, but just create an array of raw PUTF8Char data }
     procedure GetRowValues(Field: integer; out Values: TRawUTF8DynArray); overload;
     {/ get all values for a specified field into a dynamic Integer array }
-    procedure GetRowValues(Field: integer; out Values: TIntegerDynArray); overload;
+    procedure GetRowValues(Field: integer; out Values: TInt64DynArray); overload;
     {/ get all values for a specified field as CSV
      - don't perform any conversion, but create a CSV from raw PUTF8Char data }
     function GetRowValues(Field: integer; Sep: AnsiChar=','): RawUTF8; overload;
@@ -6006,19 +6016,19 @@ type
     // - return true is ID was succesfully hidden, false if not possible
     function IDColumnHide: boolean;
     /// return the (previously hidden) ID value, 0 on error
-    function IDColumnHiddenValue(Row: integer): integer;
+    function IDColumnHiddenValue(Row: integer): TID;
     /// return all (previously hidden) ID values
-    procedure IDColumnHiddenValues(var IDs: TIntegerDynArray);
+    procedure IDColumnHiddenValues(var IDs: TIDDynArray);
     /// get all IDs where individual bit in Bits are set
-    procedure IDArrayFromBits(const Bits; var IDs: TIntegerDynArray);
+    procedure IDArrayFromBits(const Bits; var IDs: TIDDynArray);
     /// get all individual bit in Bits corresponding to the supplied IDs
     // - warning: IDs integer array will be sorted within this method call
-    procedure IDArrayToBits(var Bits; var IDs: TIntegerDynArray);
+    procedure IDArrayToBits(var Bits; var IDs: TIDDynArray);
     /// get the Row index corresponding to a specified ID
     // - return the Row number, from 1 to RowCount
     // - return RowCount (last row index) if this ID was not found or no
     // ID field is available
-    function RowFromID(aID: integer): integer;
+    function RowFromID(aID: TID): integer;
 
     /// delete the specified data Row from the Table
     // - only overwrite the internal fResults[] pointers, don't free any memory,
@@ -6251,7 +6261,7 @@ type
     Count: integer;
     /// contains the locked record ID
     // - an empty position is marked with 0 after UnLock()
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
     /// contains the time and date of the lock
     // - filled internally by the fast GetTickCount64() function (faster than
     // TDateTime or TSystemTime/GetLocalTime)
@@ -6259,12 +6269,12 @@ type
     Ticks64s: TInt64DynArray;
     /// lock a record, specified by its ID
     // - returns true on success, false if was already locked
-    function Lock(aID: integer): boolean;
+    function Lock(aID: TID): boolean;
     /// unlock a record, specified by its ID
     // - returns true on success, false if was not already locked
-    function UnLock(aID: integer): boolean;
+    function UnLock(aID: TID): boolean;
     /// return true if a record, specified by its ID, is locked
-    function isLocked(aID: integer): boolean;
+    function isLocked(aID: TID): boolean;
     /// delete all the locked IDs entries, after a specified time
     // - to be used to release locked records if the client crashed
     // - default value is 30 minutes, which seems correct for common database usage
@@ -6315,7 +6325,7 @@ type
   // returning true indicates that this custom query is available for this table
   // - for custom query (from TSQLQueryCustom below), the event is called with
   // FieldType := TSQLFieldType(TSQLQueryCustom.EnumIndex)+64
-  TSQLQueryEvent = function(aTable: TSQLRecordClass; aID: integer;
+  TSQLQueryEvent = function(aTable: TSQLRecordClass; aID: TID;
     FieldType: TSQLFieldType; Value: PUTF8Char; Operator: integer;
     Reference: PUTF8Char): boolean of object;
 
@@ -6733,8 +6743,8 @@ type
     function GetTableExactIndex(const TableName: RawUTF8): integer;
     function GetTableExactClass(const TableName: RawUTF8): TSQLRecordClass;
     function getURI(aTable: TSQLRecordClass): RawUTF8;
-    function getURIID(aTable: TSQLRecordClass; aID: integer): RawUTF8;
-    function getURICallBack(const aMethodName: RawUTF8; aTable: TSQLRecordClass; aID: integer): RawUTF8;
+    function getURIID(aTable: TSQLRecordClass; aID: TID): RawUTF8;
+    function getURICallBack(const aMethodName: RawUTF8; aTable: TSQLRecordClass; aID: TID): RawUTF8;
   public
     /// initialize the Database Model
     // - set the Tables to be associated with this Model, as TSQLRecord classes
@@ -6783,8 +6793,10 @@ type
     /// return the UTF-8 encoded SQL source to add the corresponding field
     // via a "ALTER TABLE" statement
     function GetSQLAddField(aTableIndex, aFieldIndex: integer): RawUTF8;
-    {/ return the TRecordReference pointing to the specified record }
-    function RecordReference(Table: TSQLRecordClass; ID: integer): TRecordReference;
+    /// return the TRecordReference pointing to the specified record 
+    function RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference;
+    /// return the table class correspondig to a TRecordReference
+    function RecordReferenceTable(const Ref: TRecordReference): TSQLRecordClass;
     /// return TRUE if the specified field of this class was marked as unique
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
@@ -6857,26 +6869,26 @@ type
 
     /// lock a record
     // - returns true on success, false if was already locked
-    function Lock(aTable: TSQLRecordClass; aID: integer): boolean; overload;
+    function Lock(aTable: TSQLRecordClass; aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
-    function Lock(aTableIndex, aID: integer): boolean; overload;
+    function Lock(aTableIndex, aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
     function Lock(aRec: TSQLRecord): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
-    function UnLock(aTable: TSQLRecordClass; aID: integer): boolean; overload;
+    function UnLock(aTable: TSQLRecordClass; aID: TID): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
-    function UnLock(aTableIndex: integer; aID: integer): boolean; overload;
+    function UnLock(aTableIndex: integer; aID: TID): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
     function UnLock(aRec: TSQLRecord): boolean; overload;
     /// unlock all previously locked records
     procedure UnLockAll;
     /// return true if a specified record is locked
-    function isLocked(aTable: TSQLRecordClass; aID: integer): boolean; overload;
+    function isLocked(aTable: TSQLRecordClass; aID: TID): boolean; overload;
     /// return true if a specified record is locked
     function isLocked(aRec: TSQLRecord): boolean; overload;
     /// delete all the locked IDs entries, after a specified time
@@ -6929,8 +6941,8 @@ type
   // - use RecordRef(Reference).TableIndex/Table/ID/Text methods to retrieve
   // the details of a TRecordReference encoded value
   // - use TSQLRest.Retrieve(Reference) to get a record content from DB
-  // - but since Value is a copied member, do not use RecordRef(Reference).From()
-  // but rather TSQLRecord.RecordReference(Model) or TSQLModel.RecordReference()
+  // - instead of From(Reference).From(), you could use the more explicit
+  // TSQLRecord.RecordReference(Model) or TSQLModel.RecordReference()
   // methods or RecordReference() function to encode the value
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type
@@ -6945,22 +6957,20 @@ type
     // - we use this coding and not the opposite (Table in MSB) to minimize
     // integer values; but special UTF8CompareRecord() function has to be used
     // for sorting
-    // - type definition matches TRecordReference (i.e. PtrUInt) to allow
+    // - type definition matches TRecordReference (i.e. Int64/TID) to allow
     // typecast as such:
-    // ! aClass := RecordRef(Reference).Table(Model);
-    Value: PtrUInt;
+    // ! aClass := PRecordRef(@Reference)^.Table(Model);
+    Value: TID;
     /// return the index of the content Table in the TSQLModel
-    function TableIndex: integer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function TableIndex: integer;  {$ifdef HASINLINE}inline;{$endif}
     /// return the class of the content in a specified TSQLModel
     function Table(Model: TSQLModel): TSQLRecordClass;
     /// return the ID of the content
-    function ID: integer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function ID: TID;              {$ifdef HASINLINE}inline;{$endif}
     /// fill Value with the corresponding parameters
     // - since 6 bits are used for the table index, aTable MUST appear in the
     // first 64 items of the associated TSQLModel.Tables[] array
-    procedure From(Model: TSQLModel; aTable: TSQLRecordClass; aID: integer);
+    procedure From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID); overload;
     /// get a ready to be displayed text from the stored Table and ID
     // - display 'Record 2301' e.g.
     function Text(Model: TSQLModel): RawUTF8; overload;
@@ -6989,7 +6999,7 @@ type
     - any record which inherits from this class must have only sftFloat
       (double) fields, grouped by pairs, each as minimum- and maximum-value,
       up to 5 dimensions (i.e. 11 columns, including the ID property)
-    - the ID: integer property must be set before adding a TSQLRecordRTree to
+    - the ID: TID property must be set before adding a TSQLRecordRTree to
       the database, e.g. to link a R-Tree representation to a regular
       TSQLRecord table
     - queries against the ID or the coordinate ranges are almost immediate: so
@@ -7040,7 +7050,7 @@ type
       user has specified. See http://sqlite.org/fts3.html
     - any record which inherits from this class must have only sftUTF8Text
       (RawUTF8) fields - with Delphi 2009+, you can have string fields
-    - this record has its fID: integer property which may be published
+    - this record has its fID: TID property which may be published
       as DocID, to be consistent with SQLite3 praxis, and reflect that it
       points to an ID of another associated TSQLRecord
     - a good approach is to store your data in a regular TSQLRecord table, then
@@ -7062,7 +7072,7 @@ type
       method, with the MATCH operator (you can use regular queries, but you must
       specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
       table specificity):
-       ! var IDs: TIntegerDynArray;
+       ! var IDs: TIDDynArray;
        ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
        !  // you've all matching IDs in IDs[]  }
   TSQLRecordFTS3 = class(TSQLRecordVirtual)
@@ -7080,7 +7090,7 @@ type
      // - ID property is read-only, but this DocID property can be written/set
      // - internaly, we use RowID in the SQL statements, which is compatible
      // with both TSQLRecord and TSQLRecordFTS3 kind of table
-     property DocID: integer read GetID write fID;
+     property DocID: TID read GetID write fID;
   end;
 
   /// this base class will create a FTS3 table using the Porter Stemming algorithm
@@ -7179,8 +7189,8 @@ type
     fSourceID: PPtrInt;
     fDestID: PPtrInt;
     /// retrieve the TSQLRecordMany ID from a given source+dest IDs pair
-    function InternalIDFromSourceDest(aClient: TSQLRest; aSourceID, aDestID: integer): integer;
-    function InternalFillMany(aClient: TSQLRest; aID: integer;
+    function InternalIDFromSourceDest(aClient: TSQLRest; aSourceID, aDestID: TID): TID;
+    function InternalFillMany(aClient: TSQLRest; aID: TID;
       const aAndWhereSQL: RawUTF8; isDest: boolean): integer;
   public
     /// initialize this instance, and needed internal fields
@@ -7204,7 +7214,7 @@ type
     // according to TSQLRecordMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
     // ! aRec.FillMany(Client,0,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
-    function FillMany(aClient: TSQLRest; aSourceID: integer=0;
+    function FillMany(aClient: TSQLRest; aSourceID: TID=0;
       const aAndWhereSQL: RawUTF8=''): integer;
     /// retrieve all records associated to a particular Dest record, which
     // has a TSQLRecordMany property
@@ -7216,17 +7226,17 @@ type
     // according to TSQLRecordMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
     // ! aRec.FillManyFromDest(Client,DestID,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
-    function FillManyFromDest(aClient: TSQLRest; aDestID: integer;
+    function FillManyFromDest(aClient: TSQLRest; aDestID: TID;
       const aAndWhereSQL: RawUTF8=''): integer;
     /// retrieve all Dest items IDs associated to the specified Source
-    function DestGet(aClient: TSQLRest; aSourceID: integer; out DestIDs: TIntegerDynArray): boolean; overload;
+    function DestGet(aClient: TSQLRest; aSourceID: TID; out DestIDs: TIDDynArray): boolean; overload;
     /// retrieve all Dest items IDs associated to the current Source ID
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
-    function DestGet(aClient: TSQLRest; out DestIDs: TIntegerDynArray): boolean; overload;
+    function DestGet(aClient: TSQLRest; out DestIDs: TIDDynArray): boolean; overload;
     /// retrieve all Source items IDs associated to the specified Dest ID
-    function SourceGet(aClient: TSQLRest; aDestID: integer; out SourceIDs: TIntegerDynArray): boolean;
+    function SourceGet(aClient: TSQLRest; aDestID: TID; out SourceIDs: TIDDynArray): boolean;
     /// retrieve all Dest items IDs associated to the current or
     // specified Source ID, adding a WHERE condition against the Dest rows
     // - if aSourceID is 0, the value is taken from current fSourceID field
@@ -7239,7 +7249,7 @@ type
     // - this is faster than a manual FillMany() then loading each Dest,
     // because the condition is executed in the SQL statement by the server
     function DestGetJoined(aClient: TSQLRest; const aDestWhereSQL: RawUTF8;
-      aSourceID: Integer; out DestIDs: TIntegerDynArray): boolean; overload;
+      aSourceID: TID; out DestIDs: TIDDynArray): boolean; overload;
     /// create a Dest record, then FillPrepare() it to retrieve all Dest items
     // associated to the current or specified Source ID, adding a WHERE condition
     // against the Dest rows
@@ -7250,7 +7260,7 @@ type
     // properties - note that you should better use such inlined parameters as
     // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
     function DestGetJoined(aClient: TSQLRest; const aDestWhereSQL: RawUTF8;
-      aSourceID: Integer): TSQLRecord; overload;
+      aSourceID: TID): TSQLRecord; overload;
     /// create a TSQLTable, containing all specified Fields, after a JOIN
     // associated to the current or specified Source ID
     // - the Table will have the fields specified by the JoinKind parameter
@@ -7263,7 +7273,7 @@ type
     // properties - note that you should better use such inlined parameters as
     // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
     function DestGetJoinedTable(aClient: TSQLRest; const aDestWhereSQL: RawUTF8;
-      aSourceID: Integer; JoinKind: TSQLRecordManyJoinKind;
+      aSourceID: TID; JoinKind: TSQLRecordManyJoinKind;
       const aCustomFieldsCSV: RawUTF8=''): TSQLTable;
     /// add a Dest record to the Source record list
     // - returns TRUE on success, FALSE on error
@@ -7275,35 +7285,35 @@ type
     // newly created content (i.e. all published properties of this record)
     // - if aUseBatch is set, it will use this TSQLRestBach.Add() instead
     // of the slower aClient.Add() method
-    function ManyAdd(aClient: TSQLRest; aSourceID, aDestID: Integer;
+    function ManyAdd(aClient: TSQLRest; aSourceID, aDestID: TID;
       NoDuplicates: boolean=false; aUseBatch: TSQLRestBatch=nil): boolean; overload;
     /// add a Dest record to the current Source record list
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
-    function ManyAdd(aClient: TSQLRest; aDestID: Integer;
+    function ManyAdd(aClient: TSQLRest; aDestID: TID;
       NoDuplicates: boolean=false): boolean; overload;
     /// will delete the record associated with a particular Source/Dest pair
     // - will return TRUE if the pair was found and successfully deleted
     // - if aUseBatch is set, it will use this TSQLRestBach.Delete() instead
     // of the slower aClient.Delete() method
-    function ManyDelete(aClient: TSQLRest; aSourceID, aDestID: Integer;
+    function ManyDelete(aClient: TSQLRest; aSourceID, aDestID: TID;
       aUseBatch: TSQLRestBatch=nil): boolean; overload;
     /// will delete the record associated with the current source and a specified Dest
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
-    function ManyDelete(aClient: TSQLRest; aDestID: Integer): boolean; overload;
+    function ManyDelete(aClient: TSQLRest; aDestID: TID): boolean; overload;
     /// will retrieve the record associated with a particular Source/Dest pair
     // - will return TRUE if the pair was found
     // - in this case, all "through" columns are available in the TSQLRecordMany
     // field instance
-    function ManySelect(aClient: TSQLRest; aSourceID, aDestID: Integer): boolean; overload;
+    function ManySelect(aClient: TSQLRest; aSourceID, aDestID: TID): boolean; overload;
     /// will retrieve the record associated with the current source and a specified Dest
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
-    function ManySelect(aClient: TSQLRest; aDestID: Integer): boolean; overload;
+    function ManySelect(aClient: TSQLRest; aDestID: TID): boolean; overload;
 
     // get the SQL WHERE statement to be used to retrieve the associated
     // records according to a specified ID
@@ -7314,7 +7324,7 @@ type
     // according to TSQLRecordMany properties - note that you should better use
     // such inlined parameters e.g. calling
     // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
-    function IDWhereSQL(aClient: TSQLRest; aID: integer; isDest: boolean;
+    function IDWhereSQL(aClient: TSQLRest; aID: TID; isDest: boolean;
       const aAndWhereSQL: RawUTF8=''): RawUTF8;
   end;
 
@@ -8547,7 +8557,7 @@ type
     // - can be used as such to resolve an I: ICalculator interface:
     // ! var I: ICalculator;
     // ! begin
-    // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
+    // !   if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     function Get(out Obj): Boolean; virtual; abstract;
     /// retrieve the published signature of this interface
@@ -8681,7 +8691,7 @@ type
     fInstances: TServiceFactoryServerInstanceDynArray;
     fInstance: TDynArray;
     fInstancesCount: integer;
-    fInstanceCurrentID: integer;
+    fInstanceCurrentID: TID;
     fInstanceTimeOut: cardinal;
     fInstanceLock: TRTLCriticalSection;
     fImplementationClass: TInterfacedClass;
@@ -8759,7 +8769,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function AllowAllByID(const aGroupID: array of integer): TServiceFactoryServer;
+    function AllowAllByID(const aGroupID: array of TID): TServiceFactoryServer;
     /// allow all methods execution for the specified TSQLAuthGroup names
     // - is just a wrapper around the other AllowAllByID() method, retrieving the
     // Group ID from its main field
@@ -8778,7 +8788,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function DenyAllByID(const aGroupID: array of integer): TServiceFactoryServer;
+    function DenyAllByID(const aGroupID: array of TID): TServiceFactoryServer;
     /// dent all methods execution for the specified TSQLAuthGroup names
     // - is just a wrapper around the other DenyAllByID() method, retrieving the
     // Group ID from its main field
@@ -8799,7 +8809,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function AllowByID(const aMethod: array of RawUTF8; const aGroupID: array of integer): TServiceFactoryServer;
+    function AllowByID(const aMethod: array of RawUTF8; const aGroupID: array of TID): TServiceFactoryServer;
     /// allow specific methods execution for the specified TSQLAuthGroup name(s)
     // - is just a wrapper around the other AllowByID() method, retrieving the
     // Group ID from its main field
@@ -8821,7 +8831,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function DenyByID(const aMethod: array of RawUTF8; const aGroupID: array of integer): TServiceFactoryServer; overload;
+    function DenyByID(const aMethod: array of RawUTF8; const aGroupID: array of TID): TServiceFactoryServer; overload;
     /// deny specific methods execution for the specified TSQLAuthGroup name(s)
     // - is just a wrapper around the other DenyByID() method, retrieving the
     // Group ID from its main field
@@ -9112,7 +9122,7 @@ type
   /// for TSQLRestCache, stores a table values
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
-    ID: integer;
+    ID: TID;
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
     /// GetTickCount64() value when this cached value was stored
@@ -9155,15 +9165,15 @@ type
     /// flush cache for all Value[]
     procedure FlushCacheAllEntries;
     /// add the supplied ID to the Value[] array
-    procedure SetCache(aID: integer);
+    procedure SetCache(aID: TID);
     /// update/refresh the cached JSON serialization of a given ID 
-    procedure SetJSON(aID: integer; const aJSON: RawUTF8); overload;
+    procedure SetJSON(aID: TID; const aJSON: RawUTF8); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
     procedure SetJSON(aRecord: TSQLRecord); overload;
     /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJSON(aID: integer; var aJSON: RawUTF8): boolean; overload;
+    function RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean; overload;
     /// unserialize a JSON cached record of a given ID
-    function RetrieveJSON(aID: integer; aValue: TSQLRecord): boolean; overload;
+    function RetrieveJSON(aID: TID; aValue: TSQLRecord): boolean; overload;
   end;
 
   /// for TSQLRestCache, stores all table settings and values
@@ -9189,12 +9199,12 @@ type
     fCache: TSQLRestCacheEntryDynArray;
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
-    function Retrieve(aTableIndex, aID: integer): RawUTF8; overload;
+    function Retrieve(aTableIndex, aID: TID): RawUTF8; overload;
     /// fill a record specified by its ID from cache into a new TSQLRecord instance
     // - return false if the item is not in cache
     // - this method will call RetrieveJSON method, unserializing the cached
     // JSON content into the supplied aValue instance
-    function Retrieve(aID: Integer; aValue: TSQLRecord): boolean; overload;
+    function Retrieve(aID: TID; aValue: TSQLRecord): boolean; overload;
   public
     /// create a cache instance
     // - the associated TSQLModel will be used internaly
@@ -9212,11 +9222,11 @@ type
     /// flush the cache for a given record
     // - this will flush the stored JSON content for this record (and table
     // settings will be kept)
-    procedure Flush(aTable: TSQLRecordClass; aID: integer); overload;
+    procedure Flush(aTable: TSQLRecordClass; aID: TID); overload;
     /// flush the cache for a set of specified records
     // - this will flush the stored JSON content for these record (and table
     // settings will be kept)
-    procedure Flush(aTable: TSQLRecordClass; const aIDs: array of integer); overload;
+    procedure Flush(aTable: TSQLRecordClass; const aIDs: array of TID); overload;
     /// flush the cache, and destroy all settings
     // - this will flush all stored JSON content, AND destroy the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
@@ -9228,11 +9238,11 @@ type
     /// activate the internal caching for a given TSQLRecord
     // - if this item is already cached, do nothing
     // - return true on success
-    function SetCache(aTable: TSQLRecordClass; aID: Integer): boolean; overload;
+    function SetCache(aTable: TSQLRecordClass; aID: TID): boolean; overload;
     /// activate the internal caching for a set of specified TSQLRecord
     // - if these items are already cached, do nothing
     // - return true on success
-    function SetCache(aTable: TSQLRecordClass; const aIDs: array of Integer): boolean; overload;
+    function SetCache(aTable: TSQLRecordClass; const aIDs: array of TID): boolean; overload;
     /// activate the internal caching for a given TSQLRecord
     // - will cache the specified aRecord.ID item
     // - if this item is already cached, do nothing
@@ -9254,13 +9264,13 @@ type
   public { TSQLRest low level methods which are not to be called usualy: } 
     /// TSQLRest instance shall call this method when a record is added or updated
     // - this overloaded method expects the content to be specified as JSON object
-    procedure Notify(aTable: TSQLRecordClass; aID: integer; const aJSON: RawUTF8;
+    procedure Notify(aTable: TSQLRecordClass; aID: TID; const aJSON: RawUTF8;
      aAction: TSQLOccasion); overload;
     /// TSQLRest instance shall call this method when a record is retrieved,
     // added or updated
     // - this overloaded method expects the content to be specified as JSON object,
     // and TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
-    procedure Notify(aTableIndex: integer; aID: integer; const aJSON: RawUTF8;
+    procedure Notify(aTableIndex: integer; aID: TID; const aJSON: RawUTF8;
       aAction: TSQLOccasion); overload;
     /// TSQLRest instance shall call this method when a record is added or updated
     // - this overloaded method will call the other Trace method, serializing
@@ -9268,11 +9278,11 @@ type
     procedure Notify(aRecord: TSQLRecord; aAction: TSQLOccasion); overload;
     /// TSQLRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
-    procedure NotifyDeletion(aTable: TSQLRecordClass; aID: integer); overload;
+    procedure NotifyDeletion(aTable: TSQLRecordClass; aID: TID); overload;
     /// TSQLRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
-    procedure NotifyDeletion(aTableIndex, aID: integer); overload;
+    procedure NotifyDeletion(aTableIndex, aID: TID); overload;
   end;
 
   /// how a TSQLRest class may execute read or write operations
@@ -9320,7 +9330,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// internal method used by Delete(Table,SQLWhere) method
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-      var IDs: TIntegerDynArray): boolean; 
+      var IDs: TIDDynArray): boolean; 
     /// retrieve the server time stamp
     // - default implementation will use fServerTimeStampOffset to compute
     // the value from PC time (i.e. Now+fServerTimeStampOffset as TTimeLog)
@@ -9367,7 +9377,7 @@ type
     // - this method will be implemented for TSQLRestClient and TSQLRestServer only
     // - this default implementation will trigger an EORMException
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
-       var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer; virtual;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
  protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -9394,7 +9404,7 @@ type
     // - returns the data of this object as JSON
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; virtual; abstract;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; virtual; abstract;
     /// create a new member
     // - implements REST POST collection
     // - SentData can contain the JSON object with field values to be added
@@ -9404,20 +9414,20 @@ type
     // value as insertion ID
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; virtual; abstract;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; virtual; abstract;
     /// update a member
     // - implements REST PUT collection
     // - SentData can contain the JSON object with field values to be added
     // - returns true on success
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; virtual; abstract;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; virtual; abstract;
     /// delete a member
     // - implements REST DELETE collection
     // - returns true on success
     // - override this method for proper calling the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineDelete(TableModelIndex, ID: integer): boolean; virtual; abstract;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; virtual; abstract;
     /// delete several members, from a WHERE clause
     // - IDs[] contains the already-computed matching IDs for SQLWhere
     // - returns true on success
@@ -9425,14 +9435,14 @@ type
     // using either IDs[] or a faster SQL statement
     // - this method must be implemented in a thread-safe manner
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; virtual; abstract;
+      const IDs: TIDDynArray): boolean; virtual; abstract;
     /// get a blob field content from its member ID and field name
     // - implements REST GET member with a supplied blob field name
     // - returns TRUE on success
     // - returns the data of this blob as raw binary (not JSON) in BlobData
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; virtual; abstract; 
     /// update a blob field content from its member ID and field name
     // - implements REST PUT member with a supplied blob field name
@@ -9440,7 +9450,7 @@ type
     // - the data of this blob must be specified as raw binary (not JSON) in BlobData
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; virtual; abstract;
     /// update an individual record field value from a specified ID or Value
     // - return true on success
@@ -9490,7 +9500,7 @@ type
     // @http://stackoverflow.com/questions/8988915
     function TableHasRows(Table: TSQLRecordClass): boolean; virtual;
     /// check if a given ID do exist for a given table
-    function MemberExists(Table: TSQLRecordClass; ID: integer): boolean;
+    function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - example of use - including inlined parameters via :(...):
     // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=:(23):')
@@ -9525,12 +9535,12 @@ type
     // - this overloaded function will return the field value as integer
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
       WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
-      out Data: integer): boolean; overload;
+      out Data: Int64): boolean; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
     // - example of use: OneFieldValue(TSQLRecord,'Name',23)
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass;
-      const FieldName: RawUTF8; WhereID: integer): RawUTF8; overload;
+      const FieldName: RawUTF8; WhereID: TID): RawUTF8; overload;
     /// get the UTF-8 encoded value of some fields with a Where Clause
     // - example of use: MultiFieldValue(TSQLRecord,['Name'],Name,'ID=:(23):')
     // (using inlined parameters via :(...): is always a good idea)
@@ -9547,7 +9557,7 @@ type
     // - call internaly ExecuteList() to get the list
     function MultiFieldValue(Table: TSQLRecordClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
-      WhereID: integer): boolean; overload;
+      WhereID: TID): boolean; overload;
     /// get the UTF-8 encoded values of an unique field with a Where Clause
     // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
@@ -9562,7 +9572,7 @@ type
     // - leave WhereClause void to get all records
     // - call internaly ExecuteList() to get the list
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8; var Data: TIntegerDynArray; SQL: PRawUTF8=nil): boolean; overload;
+      const WhereClause: RawUTF8; var Data: TInt64DynArray; SQL: PRawUTF8=nil): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs
     // - this method will work for both TSQLRecordFTS3 and TSQLRecordFTS4
     // - this method expects the column/field names to be supplied in the MATCH
@@ -9570,7 +9580,7 @@ type
     // - example of use:  FTSMatch(TSQLMessage,'Body MATCH :("linu*"):',IntResult)
     // (using inlined parameters via :(...): is always a good idea)
     function FTSMatch(Table: TSQLRecordFTS3Class; const WhereClause: RawUTF8;
-      var DocID: TIntegerDynArray): boolean; overload;
+      var DocID: TIDDynArray): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs with
     // enhanced ranking information
     // - this method will work for both TSQLRecordFTS3 and TSQLRecordFTS4
@@ -9586,7 +9596,7 @@ type
     // $ SELECT RowID FROM Documents WHERE Documents MATCH 'linu*'
     // $ ORDER BY rank(matchinfo(Documents),1.0,0.5) DESC
     function FTSMatch(Table: TSQLRecordFTS3Class; const MatchClause: RawUTF8;
-      var DocID: TIntegerDynArray; const PerFieldWeight: array of double;
+      var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer=0; offset: integer=0): boolean; overload;
     /// get the CSV-encoded UTF-8 encoded values of an unique field with a Where Clause
     // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith")',Data)
@@ -9650,13 +9660,13 @@ type
     // - return '' if no such field or record exists
     // - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
     // the first RawUTF8 property is returned anyway
-    function MainFieldValue(Table: TSQLRecordClass; ID: Integer;
+    function MainFieldValue(Table: TSQLRecordClass; ID: TID;
       ReturnFirstIfNoUnique: boolean=false): RawUTF8;
     /// return the ID of the record which main field match the specified value
     // - search field is mainly the "Name" property, i.e. the one with
     // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
     // - returns 0 if no matching record was found }
-    function MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): integer;
+    function MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
     /// return the IDs of the record which main field match the specified values
     // - search field is mainly the "Name" property, i.e. the one with
     // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
@@ -9664,7 +9674,7 @@ type
     // IDs[] array - e.g. it will return [] if no matching record was found
     // - returns TRUE if any matching ID was found (i.e. if length(IDs)>0) }
     function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
-      var IDs: TIntegerDynArray): boolean;
+      var IDs: TIDDynArray): boolean;
   public // here are REST basic direct calls (works with Server or Client)
     /// get a member from a SQL statement
     // - implements REST GET collection
@@ -9705,7 +9715,7 @@ type
     // - the TSQLRecordMany fields are not retrieved either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
-   function Retrieve(aID: integer; Value: TSQLRecord;
+   function Retrieve(aID: TID; Value: TSQLRecord;
       ForUpdate: boolean=false): boolean; overload; virtual;
     /// get a member from its TRecordReference property content
     // - instead of the other Retrieve() methods, this implementation Create an
@@ -9840,7 +9850,7 @@ type
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
     // - use our custom UNLOCK REST-like verb
     // - returns true on success
-    function UnLock(Table: TSQLRecordClass; aID: integer): boolean; overload; virtual; abstract;
+    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; overload; virtual; abstract;
     /// unlock the corresponding record
     // - record should have been locked previously e.g. with Retrieve() and
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
@@ -9863,7 +9873,7 @@ type
     // access to the separated pivot table
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      DoNotAutoComputeFields: boolean=false): integer; overload; virtual;
+      DoNotAutoComputeFields: boolean=false): TID; overload; virtual;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
@@ -9873,9 +9883,9 @@ type
     // there are "simple fields" in the published properties
     // - if ForcedID is set to non null, client sends this ID to be used
     // when adding the record (instead of a database-generated ID)
-    // - on success, returns the new ROWID value; on error, returns 0
+    // - on success, returns the new RowID value; on error, returns 0
     // - call internaly the Add virtual method above
-    function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const; ForcedID: integer=0): integer; overload;
+    function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const; ForcedID: TID=0): TID; overload;
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
@@ -9905,7 +9915,7 @@ type
     // TSQLRawBlob and TSQLRecordMany kind (i.e. only so called "simple fields")
     // - return true on success
     // - call internaly the Update() / EngineUpdate() virtual methods 
-    function Update(aTable: TSQLRecordClass; aID: integer; const aSimpleFields: array of const): boolean; overload;
+    function Update(aTable: TSQLRecordClass; aID: TID; const aSimpleFields: array of const): boolean; overload;
     /// update one field/column value a given member
     // - implements REST PUT collection with one field value
     // - only one single field shall be specified in FieldValue, but could
@@ -9914,7 +9924,7 @@ type
     // - call internaly the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update()
-    function UpdateField(Table: TSQLRecordClass; ID: integer;
+    function UpdateField(Table: TSQLRecordClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
     /// update one field in one or several members, depending on a WHERE clause
     // - implements REST PUT collection with one field value on a one where value
@@ -9939,7 +9949,7 @@ type
     // - call internaly the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update()
-    function UpdateField(Table: TSQLRecordClass; ID: integer;
+    function UpdateField(Table: TSQLRecordClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
     /// update one field in one or several members, depending on a WHERE clause,
     // with both update and where values specified as variant
@@ -9959,14 +9969,14 @@ type
     // - e.g. you can add digital signature to a record to disallow record editing
     // - the ErrorMsg can be set to a variable, which will contain an explicit
     // error message
-    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
+    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action: TSQLEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; virtual;
 {$endif NOVARIANTS}
     /// delete a member
     // - implements REST DELETE collection
     // - return true on success
     // - call internaly the EngineDelete() abstract method
-    function Delete(Table: TSQLRecordClass; ID: integer): boolean; overload; virtual;
+    function Delete(Table: TSQLRecordClass; ID: TID): boolean; overload; virtual;
     /// delete a member with a WHERE clause
     // - implements REST DELETE collection
     // - return true on success
@@ -10011,14 +10021,14 @@ type
     // GET ModelRoot/TableName/TableID/BlobFieldName request for example
     // - this method retrieve the blob data as a TSQLRawBlob string using
     // EngineRetrieveBlob()
-    function RetrieveBlob(Table: TSQLRecordClass; aID: integer;
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID;
       const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean; overload; virtual;
     /// get a blob field content from its record ID and supplied blob field name
     // - implements REST GET collection with a supplied member ID and field name
     // - return true on success
     // - this method will create a TStream instance (which must be freed by the
     // caller after use) and fill it with the blob data
-    function RetrieveBlob(Table: TSQLRecordClass; aID: integer;
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID;
       const BlobFieldName: RawUTF8; out BlobStream: THeapMemoryStream): boolean; overload;
     /// update a blob field from its record ID and supplied blob field name
     // - implements REST PUT collection with a supplied member ID and field name
@@ -10026,7 +10036,7 @@ type
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as TSQLRawBlob, using
     // EngineUpdateBlob()
-    function UpdateBlob(Table: TSQLRecordClass; aID: integer;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
       const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean; overload; virtual;
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
@@ -10035,7 +10045,7 @@ type
     // - this method expect the Blob data to be supplied as a TStream: it will
     // send the whole stream content (from its beginning position upto its
     // current size) to the database engine
-    function UpdateBlob(Table: TSQLRecordClass; aID: integer;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
@@ -10043,7 +10053,7 @@ type
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as direct memory pointer
     // and size
-    function UpdateBlob(Table: TSQLRecordClass; aID: integer;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
     /// update all BLOB fields of the supplied Value
     // - call several REST PUT collection (one for each BLOB) for the member
@@ -10138,10 +10148,10 @@ type
     // (the main URI Status is 200 if about communication success, and won't
     // imply that all statements in the BATCH sequence were successfull
     // - note that the caller shall still free the supplied Batch instance
-    function BatchSend(Batch: TSQLRestBatch; var Results: TIntegerDynArray): integer; overload; virtual;
+    function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload; virtual;
     /// execute a BATCH sequence prepared in a TSQLRestBatch instance
     // - just a wrapper around the overloaded BatchSend() method without the
-    // Restuls: TIntegerDynArray parameter
+    // Results: TIDDynArray parameter
     function BatchSend(Batch: TSQLRestBatch): integer; overload;
 
     {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
@@ -10281,7 +10291,7 @@ type
     // already uppercase
     // - for qoSoundsLike* operators, Reference is not a PUTF8Char, but a
     // typecase of a prepared TSynSoundEx object instance (i.e. pointer(@SoundEx))
-    class function QueryIsTrue(aTable: TSQLRecordClass; aID: integer;
+    class function QueryIsTrue(aTable: TSQLRecordClass; aID: TID;
       FieldType: TSQLFieldType; Value: PUTF8Char; Operator: integer;
       Reference: PUTF8Char): boolean;
     /// add a custom query
@@ -10482,7 +10492,7 @@ type
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
   TNotifySQLEvent = function(Sender: TSQLRestServer; Event: TSQLEvent;
-    aTable: TSQLRecordClass; aID: integer; const aSentData: RawUTF8): boolean of object;
+    aTable: TSQLRecordClass; const aID: TID; const aSentData: RawUTF8): boolean of object;
   ///  used to define how to trigger Events on record field update
   // - see TSQLRestServer.OnBlobUpdateEvent property and InternalUpdateEvent() method
   // - returns true on success, false if an error occured (but action must continue)
@@ -10490,7 +10500,7 @@ type
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
   TNotifyFieldSQLEvent = function(Sender: TSQLRestServer; Event: TSQLEvent;
-    aTable: TSQLRecordClass; aID: integer; const aAffectedFields: TSQLFieldBits): boolean of object;
+    aTable: TSQLRecordClass; const aID: TID; const aAffectedFields: TSQLFieldBits): boolean of object;
   /// session-related callbacks triggered by TSQLRestServer
   // - for OnSessionCreate, returning TRUE will abort the session creation -
   // and you can set Ctxt.Call^.OutStatus to a corresponding error code
@@ -11083,7 +11093,7 @@ type
   // a new property) would break the internal data format, so will void the table
   TSQLRecordHistory = class(TSQLRecord)
   protected
-    fModifiedRecord: PtrInt;
+    fModifiedRecord: TID;
     fEvent: TSQLHistoryEvent;
     fSentData: RawUTF8;
     fTimeStamp: TModTime;
@@ -11102,7 +11112,7 @@ type
     /// load the change history of a given record
     // - then you can use HistoryGetLast, HistoryCount or HistoryGet() to access
     // all previous stored versions
-    constructor CreateHistory(aClient: TSQLRest; aTable: TSQLRecordClass; aID: integer);
+    constructor CreateHistory(aClient: TSQLRest; aTable: TSQLRecordClass; aID: TID);
     /// finalize any internal memory
     destructor Destroy; override;
     /// returns the modified record table, as stored in ModifiedRecord
@@ -11110,7 +11120,7 @@ type
     /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
     function ModifiedTableIndex: integer;
     /// returns the modified record ID, as stored in ModifiedRecord
-    function ModifiedID: PtrInt;
+    function ModifiedID: TID;
     /// called when the associated table is created in the database
     // - create index on History(ModifiedRecord,History) for process speed-up
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
@@ -11122,7 +11132,7 @@ type
     // layout changed): caller shall flush all previous history
     function HistoryOpen(Model: TSQLModel): boolean;
     /// returns how many revisions are stored in the History BLOB
-    // - HistoryOpen() or CreateHistory() should have been called before 
+    // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
     function HistoryCount: integer;
     /// retrieve an historical version
@@ -11179,7 +11189,7 @@ type
     // - in case of the record deletion, all matching TSQLRecordHistory won't
     // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
     // property is a plain integer, not a TRecordReference field
-    property ModifiedRecord: PtrInt read fModifiedRecord write fModifiedRecord;
+    property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
     // - otherwise, SentDataJSON may contain the latest values as JSON
@@ -11325,33 +11335,33 @@ type
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; override;
     /// overridden methods which will perform CRUD operations
     // - will call any static TSQLRestStorage, or call MainEngine*() virtual methods
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override; 
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
-       var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer; override;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
 
     /// virtual methods which will perform CRUD operations on the main DB
-    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; virtual; abstract;
-    function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; virtual; abstract;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; virtual; abstract;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; virtual; abstract;
     function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; virtual; abstract;
-    function MainEngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; virtual; abstract;
-    function MainEngineDelete(TableModelIndex, ID: integer): boolean; virtual; abstract;
+    function MainEngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; virtual; abstract;
+    function MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; virtual; abstract;
     function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; virtual; abstract;
-    function MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; virtual; abstract;
+    function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; virtual; abstract;
-    function MainEngineUpdateBlob(TableModelIndex, aID: integer;
+    function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; virtual; abstract;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
@@ -11398,7 +11408,7 @@ type
     // - call corresponding fStaticData[] if necessary
     // - this record is also erased in all available TRecordReference properties
     // in the database Model, for relational database coherency
-    function Delete(Table: TSQLRecordClass; ID: integer): boolean; override;
+    function Delete(Table: TSQLRecordClass; ID: TID): boolean; override;
     /// implement Server-Side TSQLRest deletion with a WHERE clause
     // - will process all ORM-level validation, coherency checking and
     // notifications together with a low-level SQL deletion work (if possible)
@@ -11415,7 +11425,7 @@ type
     // - you can override this method to implement a server-wide notification,
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
-    function InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex, aID: integer;
+    function InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex: integer; aID: TID;
       const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean; virtual;
     /// initialize change tracking for the given tables
     // - by default, it will use the TSQLRecordHistory table to store the
@@ -11461,7 +11471,7 @@ type
     // - important notice: we don't use FOREIGN KEY constraints in this framework,
     // and handle all integrity check within this method (it's therefore less
     // error-prone, and more cross-database engine compatible)
-    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; virtual;
+    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: TID): boolean; virtual;
     /// update all BLOB fields of the supplied Value
     // - this overridden method will execute the direct static class, if any
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
@@ -11473,7 +11483,7 @@ type
     // - implements our custom UNLOCK REST-like verb
     // - locking is handled by TSQLServer.Model
     // - returns true on success
-    function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
+    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; override;
     {/ end a transaction
      - implements REST END collection
      - write all pending TSQLVirtualTableJSON data to the disk }
@@ -11936,10 +11946,10 @@ type
     // - to be called e.g. after a Retrieve() with forupdate=TRUE
     // - locking is handled at (Owner.)Model level
     // - returns true on success
-    function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
+    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; override;
     /// overridden method calling the owner (if any) to guess if this record
     // can be updated or deleted
-    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
+    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action: TSQLEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; override;
     /// create one index for all specific FieldNames at once
     // - do nothing method: will return FALSE (aka error)
@@ -11951,14 +11961,14 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     // - this default implementation will call the overloaded SearchField()
     // value after conversion of the FieldValue into RawUTF8
-    function SearchField(const FieldName: RawUTF8; FieldValue: Integer;
-      var ResultID: TIntegerDynArray): boolean; overload; virtual;
+    function SearchField(const FieldName: RawUTF8; FieldValue: Int64;
+      var ResultID: TIDDynArray): boolean; overload; virtual;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIntegerDynArray): boolean; overload; virtual; abstract;
+      var ResultID: TIDDynArray): boolean; overload; virtual; abstract;
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
@@ -11980,15 +11990,15 @@ type
   /// abstract REST storage exposing some internal TSQLRecord-based methods
   TSQLRestStorageRecordBased = class(TSQLRestStorage)
   protected
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
   public
     /// manual Add of a TSQLRecord
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
-    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): integer; virtual; abstract;
+    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; virtual; abstract;
     /// manual Retrieval of a TSQLRecord field values
     // - an instance of the associated static class is created
     // - and all its properties are filled from the Items[] values
@@ -11998,7 +12008,7 @@ type
     // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function GetOne(aID: integer): TSQLRecord; virtual; abstract;
+    function GetOne(aID: TID): TSQLRecord; virtual; abstract;
     /// manual Update of a TSQLRecord field values
     // - Rec.ID specifies which record is to be updated
     // - will update all properties, including BLOB fields and such
@@ -12013,7 +12023,7 @@ type
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     // - this default implementation will create a temporary TSQLRecord instance
     // with the supplied Values[], and will call overloaded UpdateOne() method
-    function UpdateOne(ID: integer; const Values: TSQLVarDynArray): boolean; overload; virtual;
+    function UpdateOne(ID: TID; const Values: TSQLVarDynArray): boolean; overload; virtual;
   end;
 
   /// class able to handle a O(1) hashed-based search of a property in a TList
@@ -12086,7 +12096,7 @@ type
     function GetCount: integer;
     function GetItem(Index: integer): TSQLRecord;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetID(Index: integer): integer;
+    function GetID(Index: integer): TID;
     // optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8; 
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt;
@@ -12103,15 +12113,15 @@ type
     // - overridden method to handle basic queries as handled by EngineList()
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     /// overridden methods for direct in-memory database engine thread-safe process
-    function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: Integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
+      const IDs: TIDDynArray): boolean; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
   public
     /// initialize the table storage data, reading it from a file if necessary
@@ -12162,13 +12172,13 @@ type
     /// retrieve the index in Items[] of a particular ID
     // - return -1 if this ID was not found
     // - use fast binary search algorithm (since Items[].ID should be increasing)
-    function IDToIndex(ID: integer): integer;
+    function IDToIndex(ID: TID): integer;
     /// manual Add of a TSQLRecord
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
-    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): integer; override;
+    function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; override;
     /// manual Retrieval of a TSQLRecord field values
     // - an instance of the associated static class is created
     // - and all its properties are filled from the Items[] values
@@ -12178,7 +12188,7 @@ type
     // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function GetOne(aID: integer): TSQLRecord; override;
+    function GetOne(aID: TID): TSQLRecord; override;
     /// manual Update of a TSQLRecord field values
     // - Rec.ID specifies which record is to be updated
     // - will update all properties, including BLOB fields and such
@@ -12191,11 +12201,11 @@ type
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function UpdateOne(ID: integer; const Values: TSQLVarDynArray): boolean; override;
+    function UpdateOne(ID: TID; const Values: TSQLVarDynArray): boolean; override;
     /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
@@ -12214,7 +12224,7 @@ type
     // - store the results into the ResultID dynamic array
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIntegerDynArray): boolean; override;
+      var ResultID: TIDDynArray): boolean; override;
     /// read-only access to the number of TSQLRecord values
     property Count: integer read GetCount;
     /// read-only access to the TSQLRecord values, storing the data
@@ -12223,7 +12233,7 @@ type
     // DO NOT change the ID values, unless you may have unexpected behavior
     property Items[Index: integer]: TSQLRecord read GetItem; default;
     /// read-only access to the ID of a TSQLRecord values
-    property ID[Index: integer]: integer read GetID;
+    property ID[Index: integer]: TID read GetID;
     /// read only access to the file name specified by constructor
     // - you can call the TSQLRestServer.StaticDataCreate method to
     // update the file name of an already instanciated static table
@@ -12274,17 +12284,17 @@ type
   protected
     fRemoteRest: TSQLRest;
     fRemoteTableIndex: integer;
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
@@ -12322,29 +12332,29 @@ type
     fStorage: TSQLRestStorageInMemoryDynArray;
     function GetStorage(aTable: TSQLRecordClass): TSQLRestStorageInMemory;
     /// overridden methods which will call fStorage[TableModelIndex] directly
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// overridden methods which will return error (no main DB here)
-    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function MainEngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
-    function MainEngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function MainEngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function MainEngineUpdate(TableModelIndex: integer; aID: TID; const SentData: RawUTF8): boolean; override;
+    function MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function MainEngineUpdateBlob(TableModelIndex, aID: integer;
+    function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
@@ -12416,17 +12426,17 @@ type
   protected
     fRemoteRest: TSQLRest;
     fRemoteTableIndex: TIntegerDynArray;
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
@@ -12443,7 +12453,7 @@ type
     // ensure relational database coherency
     // - this overridden method will just return TRUE: in this remote access,
     // true coherency will be performed on the ORM server side
-    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: integer): boolean; override;
+    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: TID): boolean; override;
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;
@@ -12478,7 +12488,7 @@ type
     // - returns the data of this object as JSON
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
-    function ClientRetrieve(TableModelIndex: integer; ID: integer;
+    function ClientRetrieve(TableModelIndex: integer; ID: TID;
       ForUpdate: boolean; var InternalState: cardinal; var Resp: RawUTF8): boolean; virtual; abstract;
     /// this method is called before updating any record
     // - should return FALSE to force no update
@@ -12487,7 +12497,7 @@ type
     // - this default method just return TRUE (i.e. OK to update)
     function BeforeUpdateEvent(Value: TSQLRecord): Boolean; virtual;
     /// overridden method which will call ClientRetrieve()
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
   public
     /// create a new member
     // - implements REST POST collection
@@ -12502,7 +12512,7 @@ type
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
     // - this overridden method will send BLOB fields, if ForceBlobTransfert is set
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      DoNotAutoComputeFields: boolean=false): integer; override;
+      DoNotAutoComputeFields: boolean=false): TID; override;
     /// update a member
     // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
@@ -12517,13 +12527,13 @@ type
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
-    function Retrieve(aID: integer; Value: TSQLRecord; ForUpdate: boolean=false): boolean; override;
+    function Retrieve(aID: TID; Value: TSQLRecord; ForUpdate: boolean=false): boolean; override;
     /// get a member from its ID
     // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
     // - returns true on server returned 200/HTML_SUCCESS OK success, false on error
     // - set Refreshed to true if the content changed
-    function Refresh(aID: integer; Value: TSQLRecord; var Refreshed: boolean): boolean;
+    function Refresh(aID: TID; Value: TSQLRecord; var Refreshed: boolean): boolean;
 
     /// retrieve a list of members as a TSQLTable
     // - implements REST GET collection
@@ -12571,7 +12581,7 @@ type
     // !   aMapData.BlobField,ResultID);
     function RTreeMatch(DataTable: TSQLRecordClass;
       const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
-      const DataTableBlobField: RawByteString; var DataID: TIntegerDynArray): boolean;
+      const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
     /// begin a transaction (calls REST BEGIN Member)
     // - by default, Client transaction will use here a pseudo session
     // - in aClient-Server environment with multiple Clients connected at the
@@ -12680,26 +12690,26 @@ type
     /// calls 'ModelRoot/TableName/TableID' with appropriate REST method
     // - uses GET method if ForUpdate is false
     // - uses LOCK method if ForUpdate is true
-    function URIGet(Table: TSQLRecordClass; ID: integer; var Resp: RawUTF8;
+    function URIGet(Table: TSQLRecordClass; ID: TID; var Resp: RawUTF8;
       ForUpdate: boolean=false): Int64Rec;
     // overridden methods
-    function ClientRetrieve(TableModelIndex, ID: integer; ForUpdate: boolean;
+    function ClientRetrieve(TableModelIndex: integer; ID: TID; ForUpdate: boolean;
       var InternalState: cardinal; var Resp: RawUTF8): boolean; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineExecute(const SQL: RawUTF8): boolean; override;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
-       var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer; override;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
   public
     /// initialize REST client instance
     constructor Create(aModel: TSQLModel); override;
@@ -12755,7 +12765,7 @@ type
     /// unlock the corresponding record
     // - URI is 'ModelRoot/TableName/TableID' with UNLOCK method
     // - returns true on success
-    function UnLock(Table: TSQLRecordClass; aID: integer): boolean; override;
+    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; override;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - URI is 'ModelRoot' with GET method, and SQL statement sent as UTF-8
     // - return a result table on success, nil on failure
@@ -12784,7 +12794,7 @@ type
     // - ServerCacheFlush() with no parameter will flush all stored JSON content
     // - ServerCacheFlush(aTable) will flush the cache for a given table
     // - ServerCacheFlush(aTable,aID) will flush the cache for a given record
-    function ServerCacheFlush(aTable: TSQLRecordClass=nil; aID: integer=0): boolean; virtual;
+    function ServerCacheFlush(aTable: TSQLRecordClass=nil; aID: TID=0): boolean; virtual;
     /// you can call this method to call the remote URI root/TimeStamp
     // - this can be an handy way of testing the connection, since this method
     // is always available, even without authentication
@@ -12895,11 +12905,11 @@ type
     /// delete a member in current BATCH sequence
     // - is a wrapper around TSQLRestBatch.Update() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread safe
-    function BatchDelete(ID: integer): integer; overload;
+    function BatchDelete(ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
     // - is a wrapper around TSQLRestBatch.Update() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread safe
-    function BatchDelete(Table: TSQLRecordClass; ID: integer): integer; overload;
+    function BatchDelete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// retrieve the current number of pending transactions in the BATCH sequence
     // - every call to BatchAdd/Update/Delete methods increases this count
     function BatchCount: integer;
@@ -12913,7 +12923,7 @@ type
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
     // imply that all statements in the BATCH sequence were successfull
-    function BatchSend(var Results: TIntegerDynArray): integer; overload;
+    function BatchSend(var Results: TIDDynArray): integer; overload;
     /// abort a BATCH sequence started by BatchStart method
     // - in short, nothing is sent to the remote server, and current BATCH
     // sequence is closed
@@ -12927,7 +12937,7 @@ type
     // with the URL)
     function CallBackGet(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
-      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
+      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: TID=0;
       aResponseHead: PRawUTF8=nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
@@ -12937,20 +12947,20 @@ type
     // with the URL) 
     function CallBackGetResult(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
-      aTable: TSQLRecordClass=nil; aID: integer=0): RawUTF8;
+      aTable: TSQLRecordClass=nil; aID: TID=0): RawUTF8;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
     // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
     // - this version will use a PUT with the supplied raw UTF-8 data 
     function CallBackPut(const aMethodName, aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
+      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: TID=0;
       aResponseHead: PRawUTF8=nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful with any kind of request
     // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
     // - for GET/PUT methods, you should better use CallBackGet/CallBackPut
     function CallBack(method: TSQLURIMethod; const aMethodName,aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: integer=0;
+      out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: TID=0;
       aResponseHead: PRawUTF8=nil): integer;
     /// register one or several Services on the client side via their interfaces
     // - this methods expects a list of interfaces to be registered to the client
@@ -13814,14 +13824,14 @@ const
 
 
 /// create a TRecordReference with the corresponding parameters
-function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: integer): TRecordReference; overload;
+function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID): TRecordReference; overload;
 
 /// create a TRecordReference with the corresponding parameters
-function RecordReference(aTableIndex,aID: integer): TRecordReference; overload;
+function RecordReference(aTableIndex,aID: TID): TRecordReference; overload;
   {$ifdef HASINLINE}inline;{$endif}
-  
+
 /// convert a dynamic array of TRecordReference into its corresponding IDs
-procedure RecordRefToID(var aArray: TPtrUIntDynArray);
+procedure RecordRefToID(var aArray: TInt64DynArray);
 
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
@@ -14394,7 +14404,7 @@ begin
   aValue.VType := SQLFieldTypeToDB[fSQLFieldType];
   case aValue.VType of
     ftInt64:
-      aValue.VInt64 := GetInt64(pointer(temp));
+      SetInt64(pointer(temp),aValue.VInt64);
     ftDouble:
       aValue.VDouble := GetExtended(pointer(temp));
     ftDate:
@@ -14449,7 +14459,7 @@ const
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInteger,varInteger,varBoolean,varDouble,varDate,  varInt64, varCurrency,
+    varInt64,varInt64,varBoolean,varDouble,varDate,  varInt64, varCurrency,
  // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
@@ -14476,10 +14486,10 @@ begin
   sftBoolean:
     result.VBoolean :=
       not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
-  sftEnumerate, sftID, sftRecord, sftInteger:
+  sftEnumerate, sftInteger:
     result.VInteger := GetInteger(Value);
-  sftSet, sftTimeLog, sftModTime, sftCreateTime:
-    result.VInt64 := GetInt64(Value);
+  sftID, sftRecord, sftSet, sftTimeLog, sftModTime, sftCreateTime:
+    SetInt64(Value,result.VInt64);
   sftMany:
     exit;
   sftAnsiText, sftUTF8Text: begin
@@ -15094,7 +15104,7 @@ begin
     result := 1 else begin
     if fPropInfo.GetterIsField then begin
       V1 := PCurrency(fPropInfo.GetterAddr(Item1))^;
-      V2 := PCurrency(fPropInfo.GetterAddr(Item1))^;
+      V2 := PCurrency(fPropInfo.GetterAddr(Item2))^;
     end else begin
       V1 := fPropInfo.GetCurrencyProp(Item1);
       V2 := fPropInfo.GetCurrencyProp(Item2);
@@ -16743,20 +16753,18 @@ begin
   fResults := @fNotIDColumn[0];
 end;
 
-function TSQLTable.IDColumnHiddenValue(Row: integer): integer;
+function TSQLTable.IDColumnHiddenValue(Row: integer): TID;
 begin
   if (self=nil) or (fResults=nil) or (Row<=0) or (Row>RowCount) then
     result := 0 else
     if Assigned(fIDColumn) then // get hidden ID column UTF-8 content
-      result := GetInteger(fIDColumn[Row]) else begin
-      result := fFieldIndexID;  // get ID column field index
-      if result>=0 then
-        result := GetInteger(fResults[Row*FieldCount+result]) else
+      SetInt64(fIDColumn[Row],Int64(result)) else
+      if fFieldIndexID>=0 then // get ID column field index
+        SetInt64(fResults[Row*FieldCount+fFieldIndexID],Int64(result)) else
         result := 0;
-    end;
 end;
 
-procedure TSQLTable.IDArrayFromBits(const Bits; var IDs: TIntegerDynArray);
+procedure TSQLTable.IDArrayFromBits(const Bits; var IDs: TIDDynArray);
 var n, i, FID: integer;
 begin
   if not Assigned(fIDColumn) then begin
@@ -16777,20 +16785,20 @@ begin
   if Assigned(fIDColumn) then begin
     for i := 1 to RowCount do
     if GetBit(Bits,i-1) then begin
-      IDs[n] := GetInteger(fIDColumn[i]); // get hidden ID column UTF-8 content
+      IDs[n] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
       inc(n);
     end;
   end else begin
     inc(FID,FieldCount); // [i*FieldCount+FID] = [(i+1)*FieldCount+FID] below
     for i := 0 to RowCount-1 do
     if GetBit(Bits,i) then begin
-      IDs[n] := GetInteger(fResults[i*FieldCount+FID]); // get ID column UTF-8 content
+      IDs[n] := GetInt64(fResults[i*FieldCount+FID]); // get ID column UTF-8 content
       inc(n);
     end;
   end;
 end;
 
-procedure TSQLTable.IDColumnHiddenValues(var IDs: TIntegerDynArray);
+procedure TSQLTable.IDColumnHiddenValues(var IDs: TIDDynArray);
 var n, i, FID: integer;
     U: PPUTF8Char;
 begin
@@ -16806,22 +16814,22 @@ begin
     exit;
   if Assigned(fIDColumn) then begin
     for i := 1 to RowCount do
-      IDs[i-1] := GetInteger(fIDColumn[i]); // get hidden ID column UTF-8 content
+      IDs[i-1] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
     for i := 0 to RowCount-1 do begin
-      IDs[i] := GetInteger(U^);
+      IDs[i] := GetInt64(U^);
       inc(U,FieldCount);
     end;
   end;
 end;
 
-procedure TSQLTable.IDArrayToBits(var Bits; var IDs: TIntegerDynArray);
+procedure TSQLTable.IDArrayToBits(var Bits; var IDs: TIDDynArray);
 var i,FID: integer;
     U: PPUTF8Char;
     ID: Pointer;
     IDn: integer;
-//    AllID: TIntegerDynArray;
+//    AllID: : TIDDynArray;
 begin
   if length(IDs)=RowCount then begin
     fillchar(Bits,(RowCount shr 3)+1,255); // all selected -> all bits set to 1
@@ -16833,7 +16841,7 @@ begin
   // we sort IDs to use FastFindIntegerSorted() and its fast binary search
   ID := @IDs[0];
   IDn := high(IDs);
-  QuickSortInteger(ID,0,IDn);
+  QuickSortInt64(ID,0,IDn);
   if not Assigned(fIDColumn) then begin
     FID := fFieldIndexID; // get ID column field index
     if FID<0 then
@@ -16842,12 +16850,12 @@ begin
     FID := 0; // make compiler happy
   if Assigned(fIDColumn) then begin
     for i := 1 to RowCount do
-      if FastFindIntegerSorted(ID,IDn,GetInteger(fIDColumn[i]))>=0 then
+      if FastFindInt64Sorted(ID,IDn,GetInt64(fIDColumn[i]))>=0 then
         SetBit(Bits,i-1);
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
     for i := 0 to RowCount-1 do begin
-      if FastFindIntegerSorted(ID,IDn,GetInteger(U^))>=0 then
+      if FastFindInt64Sorted(ID,IDn,GetInt64(U^))>=0 then
         SetBit(Bits,i);
       inc(U,FieldCount);
     end;
@@ -16860,7 +16868,7 @@ begin
   assert(comparemem(@AllID[0],@IDs[0],length(AllID)*4)); }
 end;
 
-function TSQLTable.RowFromID(aID: integer): integer;
+function TSQLTable.RowFromID(aID: TID): integer;
 var ID: RawUTF8;
     FID: integer;
     U: PPUTF8Char;
@@ -16871,7 +16879,7 @@ begin
   end;
   if (fResults<>nil) and (aID>0) then begin
     // search aID as UTF-8 in fIDColumn[] or fResults[]
-    UInt32ToUtf8(aID,ID);
+    Int64ToUtf8(aID,ID);
     if Assigned(fIDColumn) then begin // get hidden ID column UTF-8 content
       for result := 1 to RowCount do
         if StrComp(fIDColumn[result],pointer(ID))=0 then
@@ -17446,7 +17454,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.GetRowValues(Field: integer; out Values: TIntegerDynArray);
+procedure TSQLTable.GetRowValues(Field: integer; out Values: TInt64DynArray);
 var i: integer;
     U: PPUTF8Char;
 begin
@@ -17456,7 +17464,7 @@ begin
   SetLength(Values,RowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   for i := 0 to RowCount-1 do begin
-    Values[i] := GetInteger(U^);
+    SetInt64(U^,Values[i]);
     inc(U,FieldCount); // go to next row
   end;
 end;
@@ -17838,15 +17846,16 @@ begin
 end;
 
 function UTF8CompareRecord(P1,P2: PUTF8Char): PtrInt;
-var V1,V2,T1,T2: PtrUInt;
+var V1,V2: Int64;
+    T1,T2: cardinal;
 label er;
 begin
   if P1=P2 then begin
     result := 0;
     exit;
   end;
-  V1 := GetCardinal(P1);
-  V2 := GetCardinal(P2);
+  SetInt64(P1,V1);
+  SetInt64(P2,V2);
   if V1=V2 then
     result := 0 else begin
     // special RecordRef / TRecordReference INTEGER sort
@@ -17935,7 +17944,7 @@ var
     UTF8CompareUInt32,   // Enumerate
     UTF8CompareUInt32,   // Set
     UTF8CompareInt64,    // Integer
-    UTF8CompareUInt32,   // ID
+    UTF8CompareInt64,    // ID
     UTF8CompareRecord,   // Record
     UTF8CompareBoolean,  // Boolean
     UTF8CompareDouble,   // Float
@@ -18267,7 +18276,7 @@ begin
         ndx := fFieldIndexID;  // use the ID column
         if ndx<0 then
           exit; // no ID column available
-        Comp := @UTF8CompareUInt32;
+        Comp := @UTF8CompareInt64;
       end;
       continue;
     end;
@@ -18677,9 +18686,8 @@ var U: PPUTF8Char;
     UpperUnicode: RawUnicode;
     UpperUnicodeLen: integer;
     EnumType: PEnumType;
-    Value: PtrInt;
-    err: integer;
-    TimeLog: Int64;
+    Val64: Int64;
+    i,err: integer;
     EnumValue: RawUTF8;
     s: string;
     P: PShortString;
@@ -18715,21 +18723,21 @@ begin
     // for enumerates: first search in all available values
     Int64(EnumValues) := 0;
     P := @EnumType^.NameList;
-    for Value := 0 to EnumType^.MaxValue do begin
+    for i := 0 to EnumType^.MaxValue do begin
       EnumValue := TrimLeftLowerCaseShort(P);
       GetCaptionFromPCharLen(pointer(EnumValue),s);
       EnumValue := StringToUTF8(s);
       if ((Lang<>sndxNone) and SoundEx.UTF8(pointer(EnumValue))) or
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
-        include(EnumValues,Value);
+        include(EnumValues,i);
       inc(PtrUInt(P),ord(P^[0])+1);
       // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
     while cardinal(result)<=cardinal(RowCount) do begin
-      Value := GetInteger(U^,err);
-      if (err=0) and (Value in EnumValues) then
+      i := GetInteger(U^,err);
+      if (err=0) and (i in EnumValues) then
         exit; // we found a matching field
       inc(U,FieldCount); // ignore all other fields -> jump to next row data
       inc(Result);
@@ -18740,9 +18748,9 @@ begin
   // special cases: conversion from INTEGER to text before search
   if Kind in [sftTimeLog,sftModTime,sftCreateTime] then
     while cardinal(result)<=cardinal(RowCount) do begin
-      SetInt64(U^,TimeLog);
-      if TimeLog<>0 then begin
-        tmp[TTimeLogBits(TimeLog).Text(tmp,true,' ')] := #0;
+      SetInt64(U^,Val64);
+      if Val64<>0 then begin
+        tmp[TTimeLogBits(Val64).Text(tmp,true,' ')] := #0;
         if FindAnsi(tmp,Search) then
           exit;
       end;
@@ -18753,10 +18761,10 @@ begin
   if ((Kind in [sftRecord,sftID]) and
      (Client<>nil) and Client.InheritsFrom(TSQLRest) and (CL.Model<>nil)) then
     while cardinal(result)<=cardinal(RowCount) do begin
-      Value := GetInteger(U^);
-      if Value<>0 then begin
+      SetInt64(U^,Val64);
+      if Val64<>0 then begin
         if Kind=sftRecord then
-          EnumValue := RecordRef(Value).Text(CL.Model) else
+          EnumValue := RecordRef(Val64).Text(CL.Model) else
           EnumValue := U^; // sftID -> display ID number -> no sounded
         if Lang=sndxNone then begin
           if FindUTF8(pointer(EnumValue),Search) then exit;
@@ -19058,7 +19066,7 @@ begin
 end;
 
 procedure TJSONObjectDecoder.Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Params: TJSONObjectDecoderParams; RowID: integer; ReplaceRowIDWithID: boolean);
+  Params: TJSONObjectDecoderParams; RowID: TID; ReplaceRowIDWithID: boolean);
 var EndOfObject: AnsiChar;
 
   procedure GetSQLValue(ndx: integer);
@@ -19173,7 +19181,7 @@ begin
       if ReplaceRowIDWithID then
         FieldNames[0] := 'ID' else
         FieldNames[0] := 'RowID';
-      Int32ToUtf8(RowID,FieldValues[0]);
+      Int64ToUtf8(RowID,FieldValues[0]);
       FieldCount := 1;
       FieldNameLen := Length(FieldNames[0]);
       FieldValueLen := Length(FieldValues[0]);
@@ -19198,7 +19206,7 @@ begin
       FieldNames[FieldCount] := FieldName;
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
-        DecodedRowID := GetInteger(pointer(FieldValues[FieldCount]));
+        SetInt64(pointer(FieldValues[FieldCount]),Int64(DecodedRowID));
       inc(FieldCount);
       if FieldCount=MAX_SQLFIELDS then
         raise EParsingException.Create('Too many inlines in TJSONObjectDecoder');
@@ -19221,7 +19229,7 @@ begin
 end;
 
 procedure TJSONObjectDecoder.Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
-  Params: TJSONObjectDecoderParams; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false);
+  Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false);
 var P: PUTF8Char;
 begin
   if JSON='' then
@@ -19379,7 +19387,7 @@ const
     pQuoted, pInlined);
 
 function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Update, InlinedParams: boolean; RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8;
+  Update, InlinedParams: boolean; RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(P,Fields,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -19387,7 +19395,7 @@ begin
 end;
 
 function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
- RowID: Integer=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
+ RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(JSON,nil,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -19425,6 +19433,25 @@ begin
       if c>9 then
         break;
       result := result*10+PtrInt(c);
+      inc(P);
+    until false;
+  end;
+end;
+
+function GetJSONInt64Var(var P: PUTF8Char): Int64;
+var c: PtrUInt;
+begin
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  c := byte(P^)-48;
+  if c>9 then
+    result := 0 else begin
+    result := c;
+    inc(P);
+    repeat
+      c := byte(P^)-48;
+      if c>9 then
+        break;
+      result := result*10+Int64(c);
       inc(P);
     until false;
   end;
@@ -21592,7 +21619,7 @@ begin
       ManyFields[i].SetInstance(self,TSQLRecordClass(ManyFields[i].ObjectClass).Create);
 end;
 
-constructor TSQLRecord.Create(const aSimpleFields: array of const; aID: integer);
+constructor TSQLRecord.Create(const aSimpleFields: array of const; aID: TID);
 begin
   Create;
   fID := aID;
@@ -21616,7 +21643,7 @@ begin
       CopiableFields[i].CopyValue(self,Result);
 end;
 
-constructor TSQLRecord.Create(aClient: TSQLRest; aID: integer; ForUpdate: boolean=false);
+constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID; ForUpdate: boolean=false);
 begin
   Create;
   if aClient<>nil then
@@ -21833,13 +21860,13 @@ begin
       FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
 end;
 
-function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: array of integer;
+function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
   const aCustomFieldsCSV: RawUTF8=''): boolean;
 begin
   if high(aIDs)<0 then
     result := false else
     result := FillPrepare(aClient,
-      IntegerDynArrayToCSV(aIDs,length(aIDs),'ID in (',')'),aCustomFieldsCSV);
+      Int64DynArrayToCSV(aIDs,length(aIDs),'ID in (',')'),aCustomFieldsCSV);
 end;
 
 procedure TSQLRecord.FillRow(aRow: integer; aDest: TSQLRecord=nil);
@@ -21942,7 +21969,7 @@ var W: TFileBufferWriter;
 begin
   W := TFileBufferWriter.Create(TRawByteStringStream);
   try
-    W.WriteVarUInt32(fID);
+    W.WriteVarUInt64(fID);
     GetBinaryValues(W);
     W.Flush;
     result := (W.Stream as TRawByteStringStream).DataString;
@@ -21953,7 +21980,7 @@ end;
 
 function TSQLRecord.SetBinary(P: PAnsiChar): Boolean;
 begin
-  fID := FromVarUInt32(PByte(P));
+  fID := FromVarUInt64(PByte(P));
   result := SetBinaryValues(P);
 end;
 
@@ -22437,7 +22464,7 @@ begin
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
-  const aIDs: array of integer; const aCustomFieldsCSV: RawUTF8='');
+  const aIDs: array of Int64; const aCustomFieldsCSV: RawUTF8='');
 begin
   Create;
   FillPrepare(aClient,aIDs,aCustomFieldsCSV);
@@ -22487,7 +22514,7 @@ begin
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
 end;
 
-constructor TSQLRecord.CreateJoined(aClient: TSQLRest; aID: integer);
+constructor TSQLRecord.CreateJoined(aClient: TSQLRest; aID: TID);
 begin
   CreateAndFillPrepareJoined(aClient,'%.RowID=?',[RecordProps.SQLTableName],[aID]);
   FillOne;
@@ -22714,7 +22741,7 @@ begin
   result := true;
 end;
 
-function TSQLRecord.GetID: integer;
+function TSQLRecord.GetID: TID;
 begin
   {$ifdef MSWINDOWS}
   if PtrUInt(self)<PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
@@ -22742,18 +22769,12 @@ begin
     // (will return 0 if current instance is nil)
     result := self else
     // was called from a real TSQLRecord instance
-    {$ifdef CPU64}
-    PtrInt(result) := fId;
-    {$else}
     result := pointer(fID);
-    {$endif}
   {$else}
+  if PtrUInt(self)<$100000 then // rough estimation, but works in practice
+    result := self else
   try
-    {$ifdef CPU64}
-    PtrInt(result) := fId;
-    {$else}
     result := pointer(fID);
-    {$endif}
   except
     result := self;
   end;
@@ -22978,7 +22999,7 @@ begin
   result := TAutoFree.Create(localVariable,Create);
 end;
 
-class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest; ID: integer): IAutoFree;
+class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable,Create(Rest,ID));
 end;
@@ -23856,7 +23877,7 @@ begin
     result := TableProps[aTableIndex].Props.SQLAddField(aFieldIndex);
 end;
 
-function TSQLModel.isLocked(aTable: TSQLRecordClass; aID: integer): boolean;
+function TSQLModel.isLocked(aTable: TSQLRecordClass; aID: TID): boolean;
 begin
   result := GetLocks(aTable)^.isLocked(aID);
 end;
@@ -23868,7 +23889,7 @@ begin
     result := isLocked(PSQLRecordClass(aRec)^,aRec.fID);
 end;
 
-function TSQLModel.Lock(aTable: TSQLRecordClass; aID: integer): boolean;
+function TSQLModel.Lock(aTable: TSQLRecordClass; aID: TID): boolean;
 begin
   if self=nil then
     result := false else begin
@@ -23878,7 +23899,7 @@ begin
   end;
 end;
 
-function TSQLModel.Lock(aTableIndex, aID: integer): boolean;
+function TSQLModel.Lock(aTableIndex, aID: TID): boolean;
 begin
   if (self=nil) or (Cardinal(aTableIndex)>cardinal(fTablesMax)) then
     result := false else begin
@@ -23903,14 +23924,14 @@ begin
      fLocks[i].PurgeOlderThan(MinutesFromNow);
 end;
 
-function TSQLModel.UnLock(aTable: TSQLRecordClass; aID: integer): boolean;
+function TSQLModel.UnLock(aTable: TSQLRecordClass; aID: TID): boolean;
 begin
   if (self=nil) or (fLocks=nil) then
     result := false else
     result := GetLocks(aTable)^.UnLock(aID);
 end;
 
-function TSQLModel.UnLock(aTableIndex: integer; aID: integer): boolean;
+function TSQLModel.UnLock(aTableIndex: integer; aID: TID): boolean;
 begin
   if (self=nil) or (cardinal(aTableIndex)>=cardinal(length(fLocks))) then
     result := false else
@@ -23938,14 +23959,14 @@ begin
     fLocks[i].Count := 0;
 end;
 
-function TSQLModel.getURIID(aTable: TSQLRecordClass; aID: integer): RawUTF8;
+function TSQLModel.getURIID(aTable: TSQLRecordClass; aID: TID): RawUTF8;
 begin
   result := getURI(aTable);
   if aID>0 then
-    result := result+'/'+{$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(aID);
+    result := result+'/'+Int64ToUtf8(aID);
 end;
 
-function TSQLModel.getURICallBack(const aMethodName: RawUTF8; aTable: TSQLRecordClass; aID: integer): RawUTF8;
+function TSQLModel.getURICallBack(const aMethodName: RawUTF8; aTable: TSQLRecordClass; aID: TID): RawUTF8;
 begin
   result := getURIID(aTable,aID)+'/'+aMethodName;
 end;
@@ -23964,7 +23985,7 @@ begin
     result := TSQLRecord.CaptionNameFromRTTI(fEvents^.GetEnumName(byte(Event)));
 end;
 
-function TSQLModel.RecordReference(Table: TSQLRecordClass; ID: integer): TRecordReference;
+function TSQLModel.RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference;
 begin
   if (self=nil) or (ID<=0) then
     result := 0 else begin
@@ -23973,6 +23994,15 @@ begin
       result := 0 else
       inc(result,ID shl 6);
   end;
+end;
+
+function TSQLModel.RecordReferenceTable(const Ref: TRecordReference): TSQLRecordClass;
+var i: integer;
+begin
+  i := Ref and 63;
+  if i<=fTablesMax then
+    result := fTables[i] else
+    result := nil;
 end;
 
 function TSQLModel.VirtualTableRegister(aClass: TSQLRecordClass;
@@ -24123,14 +24153,15 @@ begin
 end;
 
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
-  ID: integer): integer;
+  ID: TID): integer;
 begin
   if (self=nil) or (fBatch=nil) or (Table=nil) or
      (ID<=0) or not fRest.RecordCanBeUpdated(Table,ID,seDelete) then begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddInteger(fDeletedRecordRef,fDeletedCount,fRest.Model.RecordReference(Table,ID));
+  AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
+    fRest.Model.RecordReference(Table,ID));
   fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table",ID,...]}'
   fBatch.AddString(Table.RecordProps.SQLTableName);
   fBatch.Add('"',',');
@@ -24140,14 +24171,15 @@ begin
   inc(fBatchCount);
 end;
 
-function TSQLRestBatch.Delete(ID: integer): integer;
+function TSQLRestBatch.Delete(ID: TID): integer;
 begin
   if (self=nil) or (fTable=nil) or
      (ID<=0) or not fRest.RecordCanBeUpdated(fTable,ID,seDelete) then begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddInteger(fDeletedRecordRef,fDeletedCount,RecordReference(fTableIndex,ID));
+  AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
+    RecordReference(fTableIndex,ID));
   fBatch.AddShort('"DELETE",'); // '{"Table":[...,"DELETE",ID,...]}'
   fBatch.Add(ID);
   fBatch.Add(',');
@@ -24212,7 +24244,8 @@ begin
      (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
     fRest.Cache.Notify(Value,soUpdate) else
     // may not contain all cached fields -> delete from cache
-    AddInteger(fDeletedRecordRef,fDeletedCount,RecordReference(tableIndex,ID));
+    AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
+      RecordReference(tableIndex,ID));
   result := fBatchCount;
   inc(fBatchCount);
 end;
@@ -24299,10 +24332,10 @@ end;
 
 function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
-  WhereID: integer): boolean;
+  WhereID: TID): boolean;
 begin
-  result := MultiFieldValue(Table,FieldName,FieldValue,'RowID=:('+
-    {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(WhereID)+'):');
+  result := MultiFieldValue(Table,FieldName,FieldValue,
+    'RowID=:('+Int64ToUtf8(WhereID)+'):');
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName,
@@ -24328,30 +24361,30 @@ begin
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; WhereID: integer): RawUTF8;
+  const FieldName: RawUTF8; WhereID: TID): RawUTF8;
 var Res: array[0..0] of RawUTF8;
 begin
-  if (WhereID>0) and MultiFieldValue(Table,[FieldName],Res,'RowID=:('+
-    {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(WhereID)+'):') then
+  if (WhereID>0) and
+     MultiFieldValue(Table,[FieldName],Res,'RowID=:('+Int64ToUtf8(WhereID)+'):') then
     result := Res[0] else
     result := '';
 end;
 
-function TSQLRest.MemberExists(Table: TSQLRecordClass; ID: integer): boolean;
+function TSQLRest.MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
 begin
   result := OneFieldValue(Table,'RowID',ID)<>'';
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
   WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
-  out Data: integer): boolean;
+  out Data: Int64): boolean;
 var Res: array[0..0] of RawUTF8;
     err: integer;
 begin
   result := false;
   if MultiFieldValue(Table,[FieldName],Res,FormatUTF8(WhereClauseFmt,Args,Bounds)) then
     if Res[0]<>'' then begin
-      Data := GetInteger(pointer(Res[0]),err);
+      Data := GetInt64(pointer(Res[0]),err);
       if err=0 then
         result := true;
     end;
@@ -24381,7 +24414,8 @@ end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PInteger=nil): Boolean;
-var Row, aID: integer;
+var Row: integer;
+    aID: TID;
     T: TSQLTableJSON;
 begin
   result := false;
@@ -24397,7 +24431,7 @@ begin
     try
       if (T.FieldCount=2) and (T.RowCount>0) then begin
         for Row := 1 to T.RowCount do begin // ignore Row 0 i.e. field names
-          aID := GetInteger(T.Get(Row,0));
+          aID := GetInt64(T.Get(Row,0));
           Strings.AddObject(UTF8ToString(T.GetU(Row,1)),pointer(aID));
           if (IDToIndex<>nil) and (aID=IDToIndex^) then begin
             IDToIndex^ := Row-1;
@@ -24457,7 +24491,7 @@ begin
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8; var Data: TIntegerDynArray; SQL: PRawUTF8=nil): boolean;
+  WhereClause: RawUTF8; var Data: TInt64DynArray; SQL: PRawUTF8=nil): boolean;
 var T: TSQLTableJSON;
     V,err: integer;
     Prop: RawUTF8;
@@ -24474,7 +24508,7 @@ begin
         inc(P);
         if PWord(P)^=ord(':')+ord('(')shl 8 then
           inc(P,2); // handle inlined parameters
-        V := GetInteger(P,err);
+        V := GetInt64(P,err);
         if err=0 then begin
           SetLength(Data,1);
           Data[0] := V;
@@ -24485,7 +24519,7 @@ begin
       'i','I': if P[1] in ['n','N'] then begin
         P := GotoNextNotSpace(P+2);
         if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
-          CSVToIntegerDynArray(P+1,Data);
+          CSVToInt64DynArray(P+1,Data);
           if Data<>nil then begin
             result := true;
             exit;
@@ -24708,7 +24742,7 @@ end;
 
 {$endif}
 
-function TSQLRest.Retrieve(aID: integer; Value: TSQLRecord;
+function TSQLRest.Retrieve(aID: TID; Value: TSQLRecord;
   ForUpdate: boolean): boolean;
 var TableIndex: integer; // used by EngineRetrieve() for SQL statement caching
     Resp: RawUTF8;
@@ -24831,7 +24865,7 @@ begin
 end;
 
 function TSQLRest.BatchSend(Batch: TSQLRestBatch;
-  var Results: TIntegerDynArray): integer;
+  var Results: TIDDynArray): integer;
 var Data: RawUTF8;
 begin
   result := HTML_BADREQUEST;
@@ -24849,18 +24883,18 @@ begin
 end;
 
 function TSQLRest.BatchSend(Batch: TSQLRestBatch): integer;
-var Res: TIntegerDynArray;
+var Res: TIDDynArray;
 begin
   result := BatchSend(Batch,Res);
 end;
 
-function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: integer; Action: TSQLEvent;
+function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action: TSQLEvent;
   ErrorMsg: PRawUTF8 = nil): boolean;
 begin
   result := true; // accept by default -> override this method to customize this
 end;
 
-function TSQLRest.Delete(Table: TSQLRecordClass; ID: integer): boolean;
+function TSQLRest.Delete(Table: TSQLRecordClass; ID: TID): boolean;
 var TableIndex: integer;
 begin
   TableIndex := Model.GetTableIndexExisting(Table);
@@ -24872,11 +24906,11 @@ begin
 end;
 
 function TSQLRest.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-  var IDs: TIntegerDynArray): boolean;
+  var IDs: TIDDynArray): boolean;
 var i: integer;
 begin
   result := false;
-  if (not OneFieldValues(Table,'RowID',SQLWhere,IDs)) or
+  if (not OneFieldValues(Table,'RowID',SQLWhere,TInt64DynArray(IDs))) or
      (IDs=nil) then
     exit;
   for i := 0 to high(IDs) do
@@ -24888,7 +24922,7 @@ begin
 end;
 
 function TSQLRest.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
 begin
   if InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs) then
     result := EngineDeleteWhere(Model.GetTableIndexExisting(Table),SQLWhere,IDs) else
@@ -24938,7 +24972,7 @@ begin
     result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields));
 end;
 
-function TSQLRest.Update(aTable: TSQLRecordClass; aID: integer;
+function TSQLRest.Update(aTable: TSQLRecordClass; aID: TID;
   const aSimpleFields: array of const): boolean;
 var Value: TSQLRecord;
 begin
@@ -24956,7 +24990,7 @@ begin
   end;
 end;
 
-function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 begin
   result := UpdateField(Table,'RowID',[ID],FieldName,FieldValue);
@@ -24978,7 +25012,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: integer;
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: Variant): boolean;
 begin
   result := UpdateField(Table,'RowID',ID,FieldName,FieldValue);
@@ -24998,7 +25032,7 @@ end;
 {$endif NOVARIANTS}
 
 function TSQLRest.Add(Value: TSQLRecord; SendData: boolean;
-  ForceID,DoNotAutoComputeFields: boolean): integer;
+  ForceID,DoNotAutoComputeFields: boolean): TID;
 var JSONValues: RawUTF8;
     TableIndex: integer;
 begin
@@ -25025,7 +25059,7 @@ begin
 end;
 
 function TSQLRest.Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
-  ForcedID: integer=0): integer;
+  ForcedID: TID=0): TID;
 var Value: TSQLRecord;
 begin
   result := 0; // means error
@@ -25063,7 +25097,7 @@ begin
     end;
 end;
 
-class function TSQLRest.QueryIsTrue(aTable: TSQLRecordClass; aID: integer;
+class function TSQLRest.QueryIsTrue(aTable: TSQLRecordClass; aID: TID;
   FieldType: TSQLFieldType; Value: PUTF8Char; Operator: integer;
   Reference: PUTF8Char): boolean;
 begin // use mostly the same fast comparison functions as for sorting  
@@ -25108,7 +25142,7 @@ begin // use mostly the same fast comparison functions as for sorting
   end;
 end;
 
-function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: integer;
+function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobStream: THeapMemoryStream): boolean;
 var BlobData: TSQLRawBlob;
 begin
@@ -25120,7 +25154,7 @@ begin
   BlobStream.Seek(0,soFromBeginning); // rewind
 end;
 
-function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: integer;
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
 var Blob: TSQLRawBlob;
     L: integer;
@@ -25136,7 +25170,7 @@ begin
   result := UpdateBlob(Table,aID,BlobFieldName,Blob);
 end;
 
-function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: integer;
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
 var Blob: TSQLRawBlob;
 begin
@@ -25147,7 +25181,7 @@ begin
   end;
 end;
 
-function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: integer;
+function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean;
 var BlobField: PPropInfo;
 begin
@@ -25161,7 +25195,7 @@ begin
     Model.GetTableIndexExisting(Table),aID,BlobField,BlobData);
 end;
 
-function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: integer;
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean;
 var BlobField: PPropInfo;
 begin
@@ -25270,7 +25304,7 @@ begin
   result := EngineExecute(FormatUTF8(SQLFormat,Args,Bounds));
 end;
 
-function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: Integer;
+function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
    ReturnFirstIfNoUnique: boolean=false): RawUTF8;
 begin
   if (self=nil) or (Table=nil) or (ID<=0) then
@@ -25281,7 +25315,7 @@ begin
   end;
 end;
 
-function TSQLRest.MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): integer;
+function TSQLRest.MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
 var aMainField: integer;
 begin
   result := 0;
@@ -25289,14 +25323,14 @@ begin
   with Table.RecordProps do begin
     aMainField := MainField[false];
     if aMainField>=0 then
-      result := GetInteger(pointer(OneFieldValue(Table,'RowID',
+      result := GetInt64(pointer(OneFieldValue(Table,'RowID',
         Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')));
   end;
 end;
 
 function TSQLRest.MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
-  var IDs: TIntegerDynArray): boolean;
-var aMainField, id: integer;
+  var IDs: TIDDynArray): boolean;
+var aMainField, id: TID;
 begin
   SetLength(IDs,0);
   if (self<>nil) and (high(Values)>=0) and (Table<>nil) then
@@ -25311,19 +25345,19 @@ begin
       aMainField := MainField[false];
       if aMainField>=0 then
         OneFieldValues(Table,'RowID',Fields.List[aMainField].Name+' in ('+
-          RawUTF8ArrayToQuotedCSV(Values)+')',IDs);
+          RawUTF8ArrayToQuotedCSV(Values)+')',TInt64DynArray(IDs));
     end;
   result := IDs<>nil;
 end;
 
 function TSQLRest.FTSMatch(Table: TSQLRecordFTS3Class;
-  const WhereClause: RawUTF8; var DocID: TIntegerDynArray): boolean;
+  const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
 begin // FTS3 tables don't have any ID, but RowID or DocID
-  result := OneFieldValues(Table,'RowID',WhereClause,DocID);
+  result := OneFieldValues(Table,'RowID',WhereClause,TInt64DynArray(DocID));
 end;
 
 function TSQLRest.FTSMatch(Table: TSQLRecordFTS3Class;
-  const MatchClause: RawUTF8; var DocID: TIntegerDynArray;
+  const MatchClause: RawUTF8; var DocID: TIDDynArray;
   const PerFieldWeight: array of double; limit,offset: integer): boolean;
 var WhereClause: RawUTF8;
     i: integer;
@@ -25408,7 +25442,7 @@ begin
 end;
 
 function TSQLRest.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
-  var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer;
+  var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
   raise EORMException.CreateUTF8('BATCH not supported by %',[self]);
 end;
@@ -25504,7 +25538,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetCache(aID: integer);
+procedure TSQLRestCacheEntry.SetCache(aID: TID);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
@@ -25525,7 +25559,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aID: integer; const aJSON: RawUTF8);
+procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
@@ -25551,7 +25585,7 @@ begin  // soInsert = include all fields
   SetJSON(aRecord.fID,aRecord.GetJSONValues(true,false,soInsert));
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: integer; var aJSON: RawUTF8): boolean;
+function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean;
 var i: integer;
 begin
   EnterCriticalSection(Mutex);
@@ -25571,7 +25605,7 @@ begin
   end;
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: integer; aValue: TSQLRecord): boolean;
+function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord): boolean;
 var JSON: RawUTF8;
 begin
   if RetrieveJSON(aID,JSON) then begin
@@ -25669,7 +25703,7 @@ begin
       end;
 end;
 
-function TSQLRestCache.SetCache(aTable: TSQLRecordClass; aID: Integer): boolean;
+function TSQLRestCache.SetCache(aTable: TSQLRecordClass; aID: TID): boolean;
 var i: integer;
 begin
   result := false;
@@ -25683,7 +25717,7 @@ begin
   result := True;
 end;
 
-function TSQLRestCache.SetCache(aTable: TSQLRecordClass; const aIDs: array of Integer): boolean;
+function TSQLRestCache.SetCache(aTable: TSQLRecordClass; const aIDs: array of TID): boolean;
 var i,j: integer;
 begin
   result := false;
@@ -25746,7 +25780,7 @@ begin
     fCache[fRest.Model.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
 end;
 
-procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; aID: integer);
+procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; aID: TID);
 begin
   if self<>nil then
     with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
@@ -25760,7 +25794,7 @@ begin
     end;
 end;
 
-procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of integer);
+procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of TID);
 var i: integer;
 begin
   if (self<>nil) and (length(aIDs)>0) then
@@ -25776,7 +25810,7 @@ begin
     end;
 end;
 
-procedure TSQLRestCache.Notify(aTable: TSQLRecordClass; aID: integer;
+procedure TSQLRestCache.Notify(aTable: TSQLRecordClass; aID: TID;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
 begin
   if (self<>nil) and (aTable<>nil) and (aID>0) then
@@ -25796,7 +25830,7 @@ begin
         SetJSON(aRecord);
 end;
 
-procedure TSQLRestCache.Notify(aTableIndex: integer; aID: integer;
+procedure TSQLRestCache.Notify(aTableIndex: integer; aID: TID;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
 begin
   if (self<>nil) and (aID>0) and (aAction in [soSelect,soInsert,soUpdate]) and
@@ -25806,7 +25840,7 @@ begin
         SetJSON(aID,aJSON);
 end;
 
-procedure TSQLRestCache.NotifyDeletion(aTableIndex, aID: integer);
+procedure TSQLRestCache.NotifyDeletion(aTableIndex, aID: TID);
 begin
   if (self<>nil) and (aID>0) and
      (Cardinal(aTableIndex)<Cardinal(Length(fCache))) then
@@ -25821,13 +25855,13 @@ begin
     end;
 end;
 
-procedure TSQLRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: integer);
+procedure TSQLRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
 begin
   if (self<>nil) and (aTable<>nil) and (aID>0) then
     NotifyDeletion(fRest.Model.GetTableIndex(aTable),aID);
 end;
 
-function TSQLRestCache.Retrieve(aID: Integer; aValue: TSQLRecord): boolean;
+function TSQLRestCache.Retrieve(aID: TID; aValue: TSQLRecord): boolean;
 var TableIndex: cardinal;
 begin
   result := false;
@@ -25840,7 +25874,7 @@ begin
       result := true;
 end;
 
-function TSQLRestCache.Retrieve(aTableIndex, aID: integer): RawUTF8;
+function TSQLRestCache.Retrieve(aTableIndex, aID: TID): RawUTF8;
 begin
   result := '';
   if (self<>nil) and (aID>0) and
@@ -25858,14 +25892,14 @@ begin
   result := URI(Model.Root,'POST',nil,nil,@SQL).Lo=HTML_SUCCESS;
 end;
 
-function TSQLRestClientURI.URIGet(Table: TSQLRecordClass; ID: integer;
+function TSQLRestClientURI.URIGet(Table: TSQLRecordClass; ID: TID;
   var Resp: RawUTF8; ForUpdate: boolean=false): Int64Rec;
 const METHOD: array[boolean] of RawUTF8 = ('GET','LOCK');
 begin
   result := URI(Model.getURIID(Table,ID),METHOD[ForUpdate],@Resp,nil,nil);
 end;
 
-function TSQLRestClientURI.UnLock(Table: TSQLRecordClass; aID: integer): boolean;
+function TSQLRestClientURI.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
 begin
   if (self=nil) or not Model.UnLock(Table,aID) then
     result := false else // was not locked by the client
@@ -25895,7 +25929,7 @@ begin
     result := URI(Model.Root,'STATE').Hi;
 end;
 
-function TSQLRestClientURI.ServerCacheFlush(aTable: TSQLRecordClass; aID: integer): boolean;
+function TSQLRestClientURI.ServerCacheFlush(aTable: TSQLRecordClass; aID: TID): boolean;
 var aResp: RawUTF8;
 begin
   if (Self=nil) or (Model=nil) then // avoid GPF
@@ -26187,7 +26221,8 @@ begin
 end;
 
 destructor TSQLRestClientURI.Destroy;
-var t,i,aID: integer;
+var t,i: integer;
+    aID: TID;
     Table: TSQLRecordClass;
 begin
   {$ifdef WITHLOG}
@@ -26274,7 +26309,7 @@ const
 
 function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; out aResponse: RawUTF8;
-  aTable: TSQLRecordClass; aID: integer; aResponseHead: PRawUTF8): integer;
+  aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var url, header: RawUTF8;
 begin
   if self=nil then
@@ -26451,7 +26486,7 @@ DoRetry:
 end;
 
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
-  const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: integer): RawUTF8;
+  const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: TID): RawUTF8;
 var aResponse: RawUTF8;
 begin
   if CallBackGet(aMethodName,aNameValueParameters,aResponse,aTable,aID)=HTML_SUCCESS then
@@ -26461,14 +26496,14 @@ end;
 
 function TSQLRestClientURI.CallBackPut(const aMethodName,
   aSentData: RawUTF8; out aResponse: RawUTF8; aTable: TSQLRecordClass;
-  aID: integer; aResponseHead: PRawUTF8): integer;
+  aID: TID; aResponseHead: PRawUTF8): integer;
 begin
   result := CallBack(mPUT,aMethodName,aSentData,aResponse,aTable,aID,aResponseHead);
 end;
 
 function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
-  aTable: TSQLRecordClass; aID: integer; aResponseHead: PRawUTF8): integer;
+  aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
   'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
 begin
@@ -26532,7 +26567,7 @@ begin
 end;
 
 function TSQLRestClientURI.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 var P: PUTF8Char;
     url, Head: RawUTF8;
 begin
@@ -26550,7 +26585,7 @@ begin
       P^ := #0; // make line asciiz, even if ended with #13
       while P[-1] in ['0'..'9'] do dec(P); // get all number chars
       if P[-1]='-' then dec(P); 
-      result := GetInteger(P); // get numerical value at the end of the URI
+      result := GetInt64(P); // get numerical value at the end of the URI
       exit;
     end;
     while not (P^ in [#0,#13]) do inc(P);
@@ -26559,7 +26594,7 @@ begin
   until false;
 end;
 
-function TSQLRestClientURI.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestClientURI.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 var url: RawUTF8;
 begin
   url := Model.getURIID(Model.Tables[TableModelIndex],ID);
@@ -26567,7 +26602,7 @@ begin
 end;
 
 function TSQLRestClientURI.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var url: RawUTF8;
 begin  // ModelRoot/TableName?where=WhereClause to delete members
   url := Model.getURI(Model.Tables[TableModelIndex])+'?where='+UrlEncode(SQLWhere);
@@ -26582,7 +26617,7 @@ begin
     result := '';
 end;
 
-function TSQLRestClientURI.ClientRetrieve(TableModelIndex, ID: integer;
+function TSQLRestClientURI.ClientRetrieve(TableModelIndex: integer; ID: TID;
   ForUpdate: boolean; var InternalState: cardinal; var Resp: RawUTF8): boolean;
 begin
   if cardinal(TableModelIndex)<=cardinal(Model.fTablesMax) then
@@ -26595,7 +26630,7 @@ begin
       result := false;
 end;
 
-function TSQLRestClientURI.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestClientURI.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var url: RawUTF8;
 begin
@@ -26607,7 +26642,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestClientURI.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var url: RawUTF8;
 begin
@@ -26615,7 +26650,7 @@ begin
   result := URI(url,'PUT',nil,nil,@SentData).Lo=HTML_SUCCESS;
 end;
 
-function TSQLRestClientURI.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestClientURI.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var url, Head: RawUTF8;
 begin
@@ -26643,7 +26678,7 @@ begin
 end;
 
 function TSQLRestClientURI.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
-  var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer;
+  var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var Resp: RawUTF8;
     R: PUTF8Char;
     i: integer;
@@ -26668,7 +26703,7 @@ begin // TSQLRest.BatchSend() ensured that Batch contains some data
     end else begin
       inc(R); // jump first '['
       for i := 0 to ExpectedResultsCount-1 do begin
-        Results[i] := GetJSONIntegerVar(R);
+        Results[i] := GetJSONInt64Var(R);
         while R^ in [#1..' '] do inc(R);
         case R^ of
           ',': inc(R);
@@ -26707,14 +26742,14 @@ begin
     result := fBatchCurrent.Count;
 end;
 
-function TSQLRestClientURI.BatchDelete(ID: integer): integer;
+function TSQLRestClientURI.BatchDelete(ID: TID): integer;
 begin
   if self=nil then
     result := -1 else
     result := fBatchCurrent.Delete(ID);
 end;
 
-function TSQLRestClientURI.BatchDelete(Table: TSQLRecordClass; ID: integer): integer;
+function TSQLRestClientURI.BatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 begin
   if self=nil then
     result := -1 else
@@ -26741,7 +26776,7 @@ begin
     result := fBatchCurrent.Update(Value,CustomFields);
 end;
 
-function TSQLRestClientURI.BatchSend(var Results: TIntegerDynArray): integer;
+function TSQLRestClientURI.BatchSend(var Results: TIDDynArray): integer;
 begin
   if self<>nil then
   try
@@ -27329,7 +27364,7 @@ begin
     result := '';
 end;
 
-function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: integer): boolean;
+function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
 begin
   result := Model.UnLock(Table,aID);
 end;
@@ -27346,7 +27381,7 @@ begin
         UpdateFile; // will do nothing if not Modified
 end;
 
-function TSQLRestServer.Delete(Table: TSQLRecordClass; ID: integer): boolean;
+function TSQLRestServer.Delete(Table: TSQLRecordClass; ID: TID): boolean;
 begin
   result := inherited Delete(Table,ID); // call EngineDelete
   if result then
@@ -27355,7 +27390,7 @@ begin
 end;
 
 function TSQLRestServer.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
     i: integer;
 begin
   result := false;
@@ -27411,10 +27446,10 @@ begin // overridden method to update all BLOB fields at once
 end;
 
 function TSQLRestServer.AfterDeleteForceCoherency(Table: TSQLRecordClass;
-  aID: integer): boolean;
+  aID: TID): boolean;
 var T: integer;
     Tab: TSQLRecordClass;
-    Where: PtrUInt;
+    Where: Int64;
     RecRef: TRecordReference;
     Rest: TSQLRest;
     ToDo: (toVoidField, toDeleteRecord);
@@ -27443,7 +27478,7 @@ begin
     else continue;
     end;
     // set Field=0 where Field references aID
-    UInt32ToUTF8(Where,W);
+    Int64ToUTF8(Where,W);
     Tab := Model.Tables[TableIndex];
     case ToDo of
     toVoidField: begin
@@ -27960,7 +27995,7 @@ begin // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
   WR.AddString(JSONSTART[ForceServiceResultAsJSONObject]);
 end;
 
-procedure TSQLRestServerURIContext.ServiceResultEnd(WR: TTextWriter; ID: integer);
+procedure TSQLRestServerURIContext.ServiceResultEnd(WR: TTextWriter; ID: TID);
 const JSONSEND_WITHID: array[boolean] of RawUTF8 = ('],"id":','},"id":');
       JSONSEND_NOID: array[boolean] of AnsiChar = (']','}');
 begin // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
@@ -28292,8 +28327,7 @@ begin
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
         Call.OutStatus := HTML_CREATED; // 201 Created
-        Call.OutHead := 'Location: '+URI+'/'+
-          {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(TableID);
+        Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
         Server.fCache.Notify(TableIndex,TableID,Call.InBody,soInsert);
         inc(Server.fStats.fModified);
       end;
@@ -29093,7 +29127,7 @@ begin
 end;
 
 procedure TSQLRestServer.Batch(Ctxt: TSQLRestServerURIContext);
-var Results: TIntegerDynArray;
+var Results: TInt64DynArray;
     i: integer;
 begin 
   if not (Ctxt.Method in [mPUT,mPOST]) then begin
@@ -29101,7 +29135,7 @@ begin
     exit;
   end;
   try
-    EngineBatchSend(Ctxt.Table,Ctxt.Call.InBody,Results,0);
+    EngineBatchSend(Ctxt.Table,Ctxt.Call.InBody,TIDDynArray(Results),0);
   except
     on E: Exception do begin
       Ctxt.Error('Exception % "%" did break % BATCH process',
@@ -29113,7 +29147,7 @@ begin
   Ctxt.Call.OutStatus := HTML_SUCCESS;
   for i := 0 to length(Results)-1 do
     if Results[i]<>HTML_SUCCESS then begin
-      Ctxt.Call.OutBody := IntegerDynArrayToCSV(Results,length(Results),'[',']');
+      Ctxt.Call.OutBody := Int64DynArrayToCSV(Results,length(Results),'[',']');
       exit;
     end;
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
@@ -29322,6 +29356,7 @@ begin
         RunningThread := nil;
 end;
 
+
 { TSQLRecordHistory }
 
 function TSQLRecordHistory.ModifiedTableIndex: integer;
@@ -29338,7 +29373,7 @@ begin
     result := RecordRef(fModifiedRecord).Table(Model);
 end;
 
-function TSQLRecordHistory.ModifiedID: PtrInt;
+function TSQLRecordHistory.ModifiedID: TID;
 begin
   if self=nil then
     result := 0 else
@@ -29360,7 +29395,7 @@ begin
 end;
 
 constructor TSQLRecordHistory.CreateHistory(aClient: TSQLRest;
-  aTable: TSQLRecordClass; aID: integer);
+  aTable: TSQLRecordClass; aID: TID);
 var Reference: RecordRef;
     Rec: TSQLRecord;
     HistJson: TSQLRecordHistory;
@@ -29585,7 +29620,7 @@ begin
       fHistory := SynLZCompress(fHistoryUncompressed);
       if (Server<>nil) and (fID<>0) then begin
         Server.EngineUpdateField(TableHistoryIndex,
-          'TimeStamp',Int64ToUTF8(Server.ServerTimeStamp),'RowID',UInt32ToUtf8(fID));
+          'TimeStamp',Int64ToUTF8(Server.ServerTimeStamp),'RowID',Int64ToUtf8(fID));
         Server.EngineUpdateBlob(TableHistoryIndex,fID,
           RecordProps.BlobFields[0].PropInfo,fHistory);
       end;
@@ -29602,13 +29637,12 @@ begin
   end;
 end;
 
-
 procedure TSQLRestServer.TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass);
 var HistBlob: TSQLRecordHistory;
     Rec: TSQLRecord;
     HistJson: TSQLRecordHistory;
     WhereClause, JSON: RawUTF8;
-    HistID, ModifiedRecord: TIntegerDynArray;
+    HistID, ModifiedRecord: TInt64DynArray;
     TableHistoryIndex,i,HistIDCount,n: integer;
     ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
 begin
@@ -29630,7 +29664,7 @@ begin
     finally
       Free;
     end;
-    QuickSortInteger(pointer(ModifiedRecord),pointer(HistID),0,high(ModifiedRecord));
+    QuickSortInt64(pointer(ModifiedRecord),pointer(HistID),0,high(ModifiedRecord));
     ModifRecord := 0;
     ModifRecordCount := 0;
     n := 0;
@@ -29654,8 +29688,8 @@ begin
       HistIDCount := n;
     if HistIDCount=0 then
       exit; // nothing to compress
-    QuickSortInteger(Pointer(HistID),0,HistIDCount-1);
-    WhereClause := IntegerDynArrayToCSV(HistID,HistIDCount,'RowID in (',')');
+    QuickSortInt64(Pointer(HistID),0,HistIDCount-1);
+    WhereClause := Int64DynArrayToCSV(HistID,HistIDCount,'RowID in (',')');
     { following SQL is much slower with external tables, and won't work
       with TSQLRestStorageInMemory -> manual process instead
     WhereClause := FormatUTF8('ModifiedRecord in (select ModifiedRecord from '+
@@ -29715,7 +29749,7 @@ begin
       if HistBlob.ModifiedRecord<>0 then
         HistBlob.HistorySave(self,Rec);
       SetLength(HistID,HistIDCount);
-      EngineDeleteWhere(TableHistoryIndex,WhereClause,HistID);
+      EngineDeleteWhere(TableHistoryIndex,WhereClause,TIDDynArray(HistID));
     finally
       HistJson.Free;
       HistBlob.Free;
@@ -29726,9 +29760,8 @@ begin
   end;
 end;
 
-function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent;
-  aTableIndex, aID: integer; const aSentData: RawUTF8;
-  aIsBlobFields: PSQLFieldBits): boolean;
+function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex: integer;
+  aID: TID; const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
 procedure DoTrackChanges;
 var TableHistoryIndex: integer;
     JSON: RawUTF8;
@@ -29815,7 +29848,7 @@ begin
      (fTrackChangesHistoryTableIndex[aTableIndex]>=0)));
 end;
 
-function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
+function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID;
 var Rest: TSQLRest;
 begin
   Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
@@ -29824,7 +29857,7 @@ begin
     result := Rest.EngineAdd(TableModelIndex,SentData);
 end;
 
-function TSQLRestServer.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestServer.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var Rest: TSQLRest;
 begin
   Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
@@ -29845,7 +29878,7 @@ begin
     result := Rest.EngineList(StaticSQL,ForceAJAX,ReturnedRowCount);
 end;
 
-function TSQLRestServer.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestServer.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var Rest: TSQLRest;
 begin
@@ -29855,7 +29888,7 @@ begin
     result := Rest.EngineUpdate(TableModelIndex,ID,SentData);
 end;
 
-function TSQLRestServer.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestServer.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 var Rest: TSQLRest;
 begin
   Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
@@ -29865,7 +29898,7 @@ begin
 end;
 
 function TSQLRestServer.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var Rest: TSQLRest;
 begin
   Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
@@ -29874,7 +29907,7 @@ begin
     result := Rest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
 end;
 
-function TSQLRestServer.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestServer.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var Rest: TSQLRest;
 begin
@@ -29884,7 +29917,7 @@ begin
     result := Rest.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
-function TSQLRestServer.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestServer.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var Rest: TSQLRest;
 begin
@@ -29910,7 +29943,7 @@ type
   EORMBatchException = class(EORMException);
 
 function TSQLRestServer.EngineBatchSend(Table: TSQLRecordClass;
-  const Data: RawUTF8; var Results: TIntegerDynArray; ExpectedResultsCount: integer): integer;
+  const Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
@@ -30745,7 +30778,7 @@ end;
 { TSQLRestStorageRecordBased }
 
 function TSQLRestStorageRecordBased.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 var Rec: TSQLRecord;
 begin
   result := 0; // mark error
@@ -30766,7 +30799,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageRecordBased.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestStorageRecordBased.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var Rec: TSQLRecord;
 begin
@@ -30792,7 +30825,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageRecordBased.UpdateOne(ID: integer;
+function TSQLRestStorageRecordBased.UpdateOne(ID: TID;
   const Values: TSQLVarDynArray): boolean;
 var Rec: TSQLRecord;
 begin
@@ -30863,7 +30896,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 var ndx,i: integer;
 begin
   if (self=nil) or (Rec=nil) then begin
@@ -30922,7 +30955,7 @@ begin
   result := nil;
 end;
 
-function TSQLRestStorageInMemory.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestStorageInMemory.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 var i,F: integer;
 begin
   if (self=nil) or (ID<=0) or (TableModelIndex<0) or
@@ -30950,7 +30983,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var ndx: TIntegerDynArray;
     n,i: integer;
 begin // RecordCanBeUpdated() has already been called
@@ -31002,7 +31035,7 @@ begin
     result := 0;
 end;
 
-function TSQLRestStorageInMemory.GetID(Index: integer): integer;
+function TSQLRestStorageInMemory.GetID(Index: integer): TID;
 begin
   with fValue do
     if (self=nil) or (cardinal(Index)>=cardinal(Count)) then
@@ -31206,7 +31239,8 @@ function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
 var i,KnownRowsCount: integer;
     {$ifndef NOVARIANTS}
-    j,id: integer;
+    j: integer;
+    id: Int64;
     {$endif}
     W: TJSONSerializer;
     IsNull: boolean;
@@ -31247,7 +31281,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
         goto err else
         with TDocVariantData(Stmt.WhereValueVariant) do
           for i := 0 to Count-1 do
-            if VariantToInteger(Values[i],id) then begin
+            if VariantToInt64(Values[i],id) then begin
               j := IDToIndex(id);
               if j>=0 then begin
                 TSQLRecord(fValue.List[j]).GetJSONValues(W);
@@ -31294,8 +31328,9 @@ err:  W.CancelAll;
   end;
 end;
 
-function TSQLRestStorageInMemory.IDToIndex(ID: integer): integer;
-var L, R, cmp: integer;
+function TSQLRestStorageInMemory.IDToIndex(ID: TID): integer;
+var L, R: integer;
+    cmp: TID;
 begin
   if self<>nil then
   with fValue do begin
@@ -31500,7 +31535,7 @@ function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
     MS: TMemoryStream;
     i, f: integer;
-    IDs: TIntegerDynArray;
+    IDs: TIntegerDynArray; // format limitation: IDs are stored as Int32
     P: PAnsiChar;
     aRecord: TSQLRecord;
 begin
@@ -31546,7 +31581,7 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
-    IDs: TIntegerDynArray;
+    IDs: TIntegerDynArray; // format limitation: IDs are stored as Int32
     i, f: integer;
 begin
   result := 0;
@@ -31583,7 +31618,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestStorageInMemory.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var i: integer;
 begin // TableModelIndex is not useful here
   StorageLock(false);
@@ -31597,7 +31632,7 @@ begin // TableModelIndex is not useful here
   end;
 end;
 
-function TSQLRestStorageInMemory.GetOne(aID: integer): TSQLRecord;
+function TSQLRestStorageInMemory.GetOne(aID: TID): TSQLRecord;
 var i: integer;
 begin
   StorageLock(false);
@@ -31614,7 +31649,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestStorageInMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var i: integer;
     Orig,Rec: TSQLRecord;
@@ -31679,7 +31714,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.UpdateOne(ID: integer;
+function TSQLRestStorageInMemory.UpdateOne(ID: TID;
   const Values: TSQLVarDynArray): boolean;
 var i: integer;
     Orig,Rec: TSQLRecord;
@@ -31715,7 +31750,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageInMemory.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var i: integer;
 begin
@@ -31757,7 +31792,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageInMemory.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageInMemory.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var i: integer;
     AffectedField: TSQLFieldBits;
@@ -31929,7 +31964,8 @@ begin
   {$endif}
 end;
 
-function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8; var ResultID: TIntegerDynArray): boolean;
+function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
+  var ResultID: TIDDynArray): boolean;
 var n, WhereField: integer;
     {$ifdef CPU64}i: integer;{$endif}
     Where: TList;
@@ -31999,18 +32035,18 @@ begin
 end;
 
 function TSQLRestStorageRemote.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 begin
   result := fRemoteRest.EngineAdd(fRemoteTableIndex,SentData);
 end;
 
-function TSQLRestStorageRemote.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestStorageRemote.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   result := fRemoteRest.EngineDelete(fRemoteTableIndex,ID);
 end;
 
 function TSQLRestStorageRemote.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 begin
   result := fRemoteRest.EngineDeleteWhere(fRemoteTableIndex,SQLWhere,IDs);
 end;
@@ -32026,12 +32062,12 @@ begin
   result := fRemoteRest.EngineList(SQL,ForceAJAX,ReturnedRowCount);
 end;
 
-function TSQLRestStorageRemote.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestStorageRemote.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 begin
   result := fRemoteRest.EngineRetrieve(fRemoteTableIndex,ID);
 end;
 
-function TSQLRestStorageRemote.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageRemote.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 begin
   if (self=nil) or (BlobField=nil) then
@@ -32039,13 +32075,13 @@ begin
     result := fRemoteRest.EngineRetrieveBlob(fRemoteTableIndex,aID,BlobField,BlobData);
 end;
 
-function TSQLRestStorageRemote.EngineUpdate(TableModelIndex,
-  ID: integer; const SentData: RawUTF8): boolean;
+function TSQLRestStorageRemote.EngineUpdate(TableModelIndex: integer;
+  ID: TID; const SentData: RawUTF8): boolean;
 begin
   result := fRemoteRest.EngineUpdate(fRemoteTableIndex,ID,SentData);
 end;
 
-function TSQLRestStorageRemote.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageRemote.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 begin
   if (self=nil) or (BlobField=nil) then
@@ -32150,13 +32186,13 @@ begin
 end;
 
 function TSQLRestStorage.SearchField(const FieldName: RawUTF8;
-  FieldValue: Integer; var ResultID: TIntegerDynArray): boolean;
+  FieldValue: Int64; var ResultID: TIDDynArray): boolean;
 begin
-  result := SearchField(FieldName,Int32ToUTF8(FieldValue),ResultID);
+  result := SearchField(FieldName,Int64ToUTF8(FieldValue),ResultID);
 end;
 
 function TSQLRestStorage.RecordCanBeUpdated(Table: TSQLRecordClass;
-  ID: integer; Action: TSQLEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+  ID: TID; Action: TSQLEvent; ErrorMsg: PRawUTF8 = nil): boolean;
 begin
   result := ((Owner=nil) or Owner.RecordCanBeUpdated(Table,ID,Action,ErrorMsg));
 end;
@@ -32182,7 +32218,7 @@ begin
   LeaveCriticalSection(fStorageCriticalSection);
 end;
 
-function TSQLRestStorage.UnLock(Table: TSQLRecordClass; aID: integer): boolean;
+function TSQLRestStorage.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
 begin
   result := Model.UnLock(Table,aID);
 end;
@@ -32372,41 +32408,41 @@ end;
 
 // Engine*() methods will have direct access to static fStorage[])
 
-function TSQLRestServerFullMemory.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
+function TSQLRestServerFullMemory.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID;
 begin
   result := fStorage[TableModelIndex].EngineAdd(TableModelIndex,SentData);
   InternalState := InternalState+1;
 end;
 
-function TSQLRestServerFullMemory.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestServerFullMemory.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 begin
  result := fStorage[TableModelIndex].EngineRetrieve(TableModelIndex,ID);
 end;
 
-function TSQLRestServerFullMemory.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestServerFullMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 begin
   result := fStorage[TableModelIndex].EngineUpdate(TableModelIndex,ID,SentData);
 end;
 
-function TSQLRestServerFullMemory.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestServerFullMemory.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   result := fStorage[TableModelIndex].EngineDelete(TableModelIndex,ID);
 end;
 
 function TSQLRestServerFullMemory.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 begin
   result := fStorage[TableModelIndex].EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
 end;
 
-function TSQLRestServerFullMemory.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestServerFullMemory.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 begin
   result := fStorage[TableModelIndex].EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
 end;
 
-function TSQLRestServerFullMemory.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestServerFullMemory.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 begin
   result := fStorage[TableModelIndex].EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
@@ -32422,13 +32458,13 @@ end;
 // MainEngine*() methods should return error (only access via static fStorage[])
 
 function TSQLRestServerFullMemory.MainEngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer; 
+  const SentData: RawUTF8): TID;
 begin 
   result := 0; 
 end;
 
 function TSQLRestServerFullMemory.MainEngineRetrieve(TableModelIndex: integer; 
-  ID: integer): RawUTF8; 
+  ID: TID): RawUTF8; 
 begin 
   result := ''; 
 end;
@@ -32439,30 +32475,30 @@ begin
   result := ''; 
 end;
 
-function TSQLRestServerFullMemory.MainEngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestServerFullMemory.MainEngineUpdate(TableModelIndex: integer; aID: TID;
   const SentData: RawUTF8): boolean; 
 begin 
   result := false; 
 end;
 
-function TSQLRestServerFullMemory.MainEngineDelete(TableModelIndex, ID: integer): boolean; 
+function TSQLRestServerFullMemory.MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; 
 begin 
   result := false; 
 end;
 
 function TSQLRestServerFullMemory.MainEngineDeleteWhere(TableModelIndex: integer; 
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean; 
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean; 
 begin 
   result := false; 
 end;
 
-function TSQLRestServerFullMemory.MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestServerFullMemory.MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; 
 begin 
   result := false; 
 end;
 
-function TSQLRestServerFullMemory.MainEngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestServerFullMemory.MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; 
 begin 
   result := false; 
@@ -32491,18 +32527,18 @@ begin
 end;
 
 function TSQLRestServerRemoteDB.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 begin
   result := fRemoteRest.EngineAdd(fRemoteTableIndex[TableModelIndex],SentData);
 end;
 
-function TSQLRestServerRemoteDB.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestServerRemoteDB.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   result := fRemoteRest.EngineDelete(fRemoteTableIndex[TableModelIndex],ID);
 end;
 
 function TSQLRestServerRemoteDB.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 begin
   result := fRemoteRest.EngineDeleteWhere(fRemoteTableIndex[TableModelIndex],SQLWhere,IDs);
 end;
@@ -32518,12 +32554,12 @@ begin
   result := fRemoteRest.EngineList(SQL,ForceAJAX,ReturnedRowCount);
 end;
 
-function TSQLRestServerRemoteDB.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestServerRemoteDB.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 begin
   result := fRemoteRest.EngineRetrieve(fRemoteTableIndex[TableModelIndex],ID);
 end;
 
-function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestServerRemoteDB.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 begin
   if (self=nil) or (BlobField=nil) then
@@ -32531,13 +32567,13 @@ begin
     result := fRemoteRest.EngineRetrieveBlob(fRemoteTableIndex[TableModelIndex],aID,BlobField,BlobData);
 end;
 
-function TSQLRestServerRemoteDB.EngineUpdate(TableModelIndex,
-  ID: integer; const SentData: RawUTF8): boolean;
+function TSQLRestServerRemoteDB.EngineUpdate(TableModelIndex: integer;
+  ID: TID; const SentData: RawUTF8): boolean;
 begin
   result := fRemoteRest.EngineUpdate(fRemoteTableIndex[TableModelIndex],ID,SentData);
 end;
 
-function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestServerRemoteDB.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 begin
   if (self=nil) or (BlobField=nil) then
@@ -32552,7 +32588,7 @@ begin
 end;
 
 function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(Table: TSQLRecordClass;
-  aID: integer): boolean;
+  aID: TID): boolean;
 begin
   result := true; // coherency will be performed on the server side
 end;
@@ -32602,7 +32638,7 @@ begin
 end;
 
 function TSQLRestClient.Add(Value: TSQLRecord; SendData: boolean;
-  ForceID,DoNotAutoComputeFields: boolean): integer;
+  ForceID,DoNotAutoComputeFields: boolean): TID;
 begin
   result := inherited Add(Value,SendData,ForceID,DoNotAutoComputeFields);
   if (result>0) and (fForceBlobTransfert<>nil) and
@@ -32610,14 +32646,14 @@ begin
      UpdateBlobFields(Value);
 end;
 
-function TSQLRestClient.EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8;
+function TSQLRestClient.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var dummy: cardinal;
 begin
   if not ClientRetrieve(TableModelIndex,ID,false,dummy,result) then
     result := '';
 end;
 
-function TSQLRestClient.Retrieve(aID: integer; Value: TSQLRecord;
+function TSQLRestClient.Retrieve(aID: TID; Value: TSQLRecord;
   ForUpdate: boolean=false): boolean;
 var Resp: RawUTF8;
     TableIndex: integer;
@@ -32672,7 +32708,7 @@ begin
   Result := true; // by default, just allow the update to proceed
 end;
 
-function TSQLRestClient.Refresh(aID: integer; Value: TSQLRecord;
+function TSQLRestClient.Refresh(aID: TID; Value: TSQLRecord;
   var Refreshed: boolean): boolean;
 var Resp, Original: RawUTF8;
 begin
@@ -32723,7 +32759,7 @@ end;
 
 function TSQLRestClient.RTreeMatch(DataTable: TSQLRecordClass;
   const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
-  const DataTableBlobField: RawByteString; var DataID: TIntegerDynArray): boolean;
+  const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
 var Blob: PPropInfo;
     Res: TSQLTableJSON;
     B: TSQLRecordTreeCoords;
@@ -32753,7 +32789,7 @@ begin
   try
     if (Res.FieldCount<>1) or (Res.RowCount<=0) then
       exit;
-    Res.GetRowValues(0,DataID);
+    Res.GetRowValues(0,TInt64DynArray(DataID));
     result := true;
   finally
     Res.Free;
@@ -32851,7 +32887,7 @@ end;
 
 { RecordRef }
 
-function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: integer): TRecordReference;
+function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID): TRecordReference;
 begin
   if aID=0 then
     result := 0 else begin
@@ -32862,21 +32898,21 @@ begin
   end;
 end;
 
-function RecordReference(aTableIndex,aID: integer): TRecordReference;
+function RecordReference(aTableIndex,aID: TID): TRecordReference;
 begin
   if (aID=0) or (aTableIndex>63) then
     result := 0 else
     result := aTableIndex+aID shl 6;
 end;
 
-procedure RecordRefToID(var aArray: TPtrUIntDynArray);
+procedure RecordRefToID(var aArray: TInt64DynArray);
 var i: Integer;
 begin
   for i := 0 to high(aArray) do
     aArray[i] := aArray[i] shr 6;
 end;
 
-procedure RecordRef.From(Model: TSQLModel; aTable: TSQLRecordClass; aID: integer);
+procedure RecordRef.From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID);
 begin
   Value := Model.GetTableIndexExisting(aTable);
   if Value>63 then // TRecordReference handle up to 64=1 shl 6 tables
@@ -32884,7 +32920,7 @@ begin
     inc(Value,aID shl 6); // 64=1 shl 6
 end;
 
-function RecordRef.ID: integer;
+function RecordRef.ID: TID;
 begin
   result := Value shr 6;  // 64=1 shl 6
 end;
@@ -32895,7 +32931,7 @@ begin
   if (Model=nil) or (Value=0) then
     result := nil else begin
     V := Value and 63;
-    if V>high(Model.Tables) then
+    if V>Model.TablesMax then
       result := nil else
       result := Model.Tables[V];
   end;
@@ -32915,14 +32951,14 @@ begin
     aTable := Table(Model);
     if aTable=nil then
       result := '' else
-      result := Model.TableProps[Value and 63].Props.SQLTableName+' '+
-        {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(Value shr 6);
+      result := Model.TableProps[Value and 63].Props.SQLTableName+
+        ' '+Int64ToUtf8(Value shr 6);
   end;
 end;
 
 function RecordRef.Text(Rest: TSQLRest): RawUTF8;
 var T: TSQLRecordClass;
-    aID: integer;
+    aID: TID;
 begin
   result := '';
   if ((Value shr 6)=0) or (Rest=nil) then
@@ -32944,24 +32980,24 @@ end;
 
 { TSQLLocks }
 
-function TSQLLocks.isLocked(aID: integer): boolean;
+function TSQLLocks.isLocked(aID: TID): boolean;
 begin
   result := (@self<>nil) and (Count<>0) and (aID<>0) and
-    IntegerScanExists(pointer(IDs),Count,aID);
+    Int64ScanExists(pointer(IDs),Count,aID);
 end;
 
-function TSQLLocks.Lock(aID: integer): boolean;
-var P: PCardinal;
+function TSQLLocks.Lock(aID: TID): boolean;
+var P: PInt64;
 begin
   if (@self=nil) or (aID=0) then
     // void or full
     result := false else begin
-    P := IntegerScan(pointer(IDs),Count,aID);
+    P := Int64Scan(pointer(IDs),Count,aID);
     if P<>nil then
       // already locked
       result := false else begin
       // add to ID[] and Ticks[]
-      P := IntegerScan(pointer(IDs),Count,0);
+      P := Int64Scan(pointer(IDs),Count,0);
       if P=nil then begin
         // no free entry -> add at the end
         if Count>=length(IDs) then begin
@@ -32974,7 +33010,7 @@ begin
       end else begin
         // store at free entry
         P^ := aID;
-        Ticks64s[(PtrUInt(P)-PtrUInt(IDs))shr 2] := GetTickCount64;
+        Ticks64s[(PtrUInt(P)-PtrUInt(IDs))shr 3] := GetTickCount64;
       end;
       result := true;
     end;
@@ -32997,16 +33033,16 @@ begin
   Count := LastEntry+1; // update count (may decrease list length)
 end;
 
-function TSQLLocks.UnLock(aID: integer): boolean;
-var P: PCardinal;
+function TSQLLocks.UnLock(aID: TID): boolean;
+var P: PInt64;
 begin
   if (@self=nil) or (Count=0) or (aID=0) then
     result := false else begin
-    P := IntegerScan(pointer(IDs),Count,aID);
+    P := Int64Scan(pointer(IDs),Count,aID);
     if P=nil then
       result := false else begin
       P^ := 0; // 0 marks free entry
-      if ((PtrUInt(P)-PtrUInt(IDs))shr 2>=PtrUInt(Count-1)) then
+      if ((PtrUInt(P)-PtrUInt(IDs))shr 3>=PtrUInt(Count-1)) then
         dec(Count); // freed last entry -> decrease list length
       result := true;
     end;
@@ -33080,13 +33116,12 @@ begin
     case P^.PropType^.Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}:
         UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
-          {$ifndef ENHANCEDRTL}Int64ToUtf8{$else}IntToStr{$endif}(
-            P^.GetInt64Prop(Value)));
+          Int64ToUtf8(P^.GetInt64Prop(Value)));
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
         V := P^.GetOrdProp(Value);
         //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
         UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
-          {$ifndef ENHANCEDRTL}Int32ToUtf8{$else}IntToStr{$endif}(V));
+          Int32ToUtf8(V));
       end;
       {$ifdef FPC}tkAString,{$endif} tkLString:
         UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
@@ -34468,7 +34503,7 @@ begin
     end;
 end;
 
-function TSQLRecordMany.ManyAdd(aClient: TSQLRest; aSourceID, aDestID: Integer;
+function TSQLRecordMany.ManyAdd(aClient: TSQLRest; aSourceID, aDestID: TID;
   NoDuplicates: boolean; aUseBatch: TSQLRestBatch): boolean;
 begin
   result := false;
@@ -34485,7 +34520,7 @@ begin
     result := aClient.Add(self,true)<>0;
 end;
 
-function TSQLRecordMany.ManyAdd(aClient: TSQLRest; aDestID: Integer;
+function TSQLRecordMany.ManyAdd(aClient: TSQLRest; aDestID: TID;
   NoDuplicates: boolean): boolean;
 begin
   if (self=nil) or (fSourceID=nil) then
@@ -34493,26 +34528,26 @@ begin
     result := ManyAdd(aClient,fSourceID^,aDestID,NoDuplicates);
 end;
 
-function TSQLRecordMany.DestGet(aClient: TSQLRest; aSourceID: integer;
-  out DestIDs: TIntegerDynArray): Boolean;
+function TSQLRecordMany.DestGet(aClient: TSQLRest; aSourceID: TID;
+  out DestIDs: TIDDynArray): Boolean;
 var Where: RawUTF8;
 begin
   Where := IDWhereSQL(aClient,aSourceID,False);
   if Where='' then
     result := False else
-    result := aClient.OneFieldValues(RecordClass,'Dest',Where,DestIDs);
+    result := aClient.OneFieldValues(RecordClass,'Dest',Where,TInt64DynArray(DestIDs));
 end;
 
 function TSQLRecordMany.DestGetJoined(aClient: TSQLRest;
-  const aDestWhereSQL: RawUTF8; aSourceID: Integer;
-  out DestIDs: TIntegerDynArray): boolean;
+  const aDestWhereSQL: RawUTF8; aSourceID: TID;
+  out DestIDs: TIDDynArray): boolean;
 var aTable: TSQLTable;
 begin
   aTable := DestGetJoinedTable(aClient,aDestWhereSQL,aSourceID,jkDestID);
   if aTable=nil then
     Result := False else
     try
-      aTable.GetRowValues(0,DestIDs);
+      aTable.GetRowValues(0,TInt64DynArray(DestIDs));
       Result := true;
     finally
       aTable.Free;
@@ -34520,7 +34555,7 @@ begin
 end;
 
 function TSQLRecordMany.DestGetJoined(aClient: TSQLRest;
-  const aDestWhereSQL: RawUTF8; aSourceID: Integer): TSQLRecord;
+  const aDestWhereSQL: RawUTF8; aSourceID: TID): TSQLRecord;
 var aTable: TSQLTable;
 begin
   aTable := DestGetJoinedTable(aClient,aDestWhereSQL,aSourceID,jkDestFields);
@@ -34533,7 +34568,7 @@ begin
 end;
 
 function TSQLRecordMany.DestGetJoinedTable(aClient: TSQLRest;
-  const aDestWhereSQL: RawUTF8; aSourceID: Integer; JoinKind: TSQLRecordManyJoinKind;
+  const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TSQLRecordManyJoinKind;
   const aCustomFieldsCSV: RawUTF8): TSQLTable;
 var Select, SQL: RawUTF8;
     SelfProps, DestProps: TSQLModelRecordProperties;
@@ -34592,7 +34627,7 @@ begin
 end;
 
 function TSQLRecordMany.DestGet(aClient: TSQLRest;
-  out DestIDs: TIntegerDynArray): boolean;
+  out DestIDs: TIDDynArray): boolean;
 begin
   if fSourceID=nil then
     result := false else // avoid GPF
@@ -34600,9 +34635,9 @@ begin
    // fSourceID has been set by TSQLRecord.Create
 end;
 
-function TSQLRecordMany.ManyDelete(aClient: TSQLRest; aSourceID, aDestID: Integer;
+function TSQLRecordMany.ManyDelete(aClient: TSQLRest; aSourceID, aDestID: TID;
   aUseBatch: TSQLRestBatch): boolean;
-var aID: integer;
+var aID: TID;
 begin
   result := false;
   if (self=nil) or (aClient=nil) or (aSourceID=0) or (aDestID=0) then
@@ -34614,14 +34649,14 @@ begin
       result := aClient.Delete(RecordClass,aID);
 end;
 
-function TSQLRecordMany.ManyDelete(aClient: TSQLRest; aDestID: Integer): boolean;
+function TSQLRecordMany.ManyDelete(aClient: TSQLRest; aDestID: TID): boolean;
 begin
   if fSourceID=nil then
     result := false else // avoid GPF
     result := ManyDelete(aClient,fSourceID^,aDestID,nil);
 end;
 
-function TSQLRecordMany.ManySelect(aClient: TSQLRest; aSourceID, aDestID: Integer): boolean;
+function TSQLRecordMany.ManySelect(aClient: TSQLRest; aSourceID, aDestID: TID): boolean;
 begin
   if (self=nil) or (aClient=nil) or (aSourceID=0) or (aDestID=0) then
     result := false else // invalid parameters
@@ -34629,7 +34664,7 @@ begin
       [aSourceID,aDestID]),Self);
 end;
 
-function TSQLRecordMany.ManySelect(aClient: TSQLRest; aDestID: Integer): boolean;
+function TSQLRecordMany.ManySelect(aClient: TSQLRest; aDestID: TID): boolean;
 begin
   if (self=nil) or (fSourceID=nil) then
     result := false else // avoid GPF
@@ -34637,7 +34672,7 @@ begin
 end;
 
 function TSQLRecordMany.InternalFillMany(aClient: TSQLRest;
-  aID: integer; const aAndWhereSQL: RawUTF8; isDest: boolean): integer;
+  aID: TID; const aAndWhereSQL: RawUTF8; isDest: boolean): integer;
 var aTable: TSQLTable;
     Where: RawUTF8;
 begin
@@ -34658,19 +34693,19 @@ begin
   result := aTable.RowCount;
 end;
 
-function TSQLRecordMany.FillMany(aClient: TSQLRest; aSourceID: integer;
+function TSQLRecordMany.FillMany(aClient: TSQLRest; aSourceID: TID;
   const aAndWhereSQL: RawUTF8): integer;
 begin
   result := InternalFillMany(aclient,aSourceID,aAndWhereSQL,false);
 end;
 
-function TSQLRecordMany.FillManyFromDest(aClient: TSQLRest; aDestID: integer;
+function TSQLRecordMany.FillManyFromDest(aClient: TSQLRest; aDestID: TID;
   const aAndWhereSQL: RawUTF8): integer;
 begin
   result := InternalFillMany(aclient,aDestID,aAndWhereSQL,true);
 end;
 
-function TSQLRecordMany.IDWhereSQL(aClient: TSQLRest; aID: integer; isDest: boolean;
+function TSQLRecordMany.IDWhereSQL(aClient: TSQLRest; aID: TID; isDest: boolean;
   const aAndWhereSQL: RawUTF8=''): RawUTF8;
 const FieldName: array[boolean] of RawUTF8 = ('Source=','Dest=');
 begin
@@ -34686,20 +34721,21 @@ begin
   end;
 end;
 
-function TSQLRecordMany.SourceGet(aClient: TSQLRest; aDestID: integer;
-  out SourceIDs: TIntegerDynArray): boolean;
+function TSQLRecordMany.SourceGet(aClient: TSQLRest; aDestID: TID;
+  out SourceIDs: TIDDynArray): boolean;
 var Where: RawUTF8;
 begin
   Where := IDWhereSQL(aClient,aDestID,True);
   if Where='' then
     Result := false else
-    Result := aClient.OneFieldValues(RecordClass,'Source',Where,SourceIDs);
+    Result := aClient.OneFieldValues(RecordClass,'Source',Where,TInt64DynArray(SourceIDs));
 end;
 
-function TSQLRecordMany.InternalIDFromSourceDest(aClient: TSQLRest; aSourceID, aDestID: integer): integer;
+function TSQLRecordMany.InternalIDFromSourceDest(aClient: TSQLRest;
+  aSourceID, aDestID: TID): TID;
 begin
-  result := GetInteger(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
-    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))));
+  SetInt64(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
+    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))),Int64(result));
 end;
 
 
@@ -35288,7 +35324,7 @@ end;
 
 function TSynValidateUniqueField.Process(aFieldIndex: integer; const Value: RawUTF8;
   var ErrorMsg: string): boolean;
-var aID: integer;
+var aID: TID;
 begin
   result := false;
   if Value='' then
@@ -39609,7 +39645,7 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServer.AllowAllByID(const aGroupID: array of integer): TServiceFactoryServer;
+function TServiceFactoryServer.AllowAllByID(const aGroupID: array of TID): TServiceFactoryServer;
 var m,g: integer;
 begin
   if self<>nil then
@@ -39621,7 +39657,7 @@ begin
 end;
 
 function TServiceFactoryServer.AllowAllByName(const aGroup: array of RawUTF8): TServiceFactoryServer;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
 begin
   if self<>nil then
     if RestServer.MainFieldIDs(RestServer.fSQLAuthGroupClass,aGroup,IDs) then
@@ -39638,7 +39674,7 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServer.DenyAllByID(const aGroupID: array of integer): TServiceFactoryServer;
+function TServiceFactoryServer.DenyAllByID(const aGroupID: array of TID): TServiceFactoryServer;
 var m,g: integer;
 begin
   if self<>nil then
@@ -39650,7 +39686,7 @@ begin
 end;
 
 function TServiceFactoryServer.DenyAllByName(const aGroup: array of RawUTF8): TServiceFactoryServer;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
 begin
   if self<>nil then
     if RestServer.MainFieldIDs(RestServer.fSQLAuthGroupClass,aGroup,IDs) then
@@ -39668,7 +39704,8 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServer.AllowByID(const aMethod: array of RawUTF8; const aGroupID: array of integer): TServiceFactoryServer;
+function TServiceFactoryServer.AllowByID(const aMethod: array of RawUTF8;
+  const aGroupID: array of TID): TServiceFactoryServer;
 var m,g: integer;
 begin
   if self<>nil then 
@@ -39681,7 +39718,7 @@ begin
 end;
 
 function TServiceFactoryServer.AllowByName(const aMethod: array of RawUTF8; const aGroup: array of RawUTF8): TServiceFactoryServer;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
 begin
   if self<>nil then
     if RestServer.MainFieldIDs(RestServer.fSQLAuthGroupClass,aGroup,IDs) then
@@ -39699,7 +39736,8 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServer.DenyByID(const aMethod: array of RawUTF8; const aGroupID: array of integer): TServiceFactoryServer;
+function TServiceFactoryServer.DenyByID(const aMethod: array of RawUTF8;
+  const aGroupID: array of TID): TServiceFactoryServer;
 var m,g: integer;
 begin
   if self<>nil then
@@ -39711,7 +39749,7 @@ begin
 end;
 
 function TServiceFactoryServer.DenyByName(const aMethod: array of RawUTF8; const aGroup: array of RawUTF8): TServiceFactoryServer;
-var IDs: TIntegerDynArray;
+var IDs: TIDDynArray;
 begin
   if self<>nil then
     if RestServer.MainFieldIDs(RestServer.fSQLAuthGroupClass,aGroup,IDs) then
@@ -40671,4 +40709,4 @@ initialization
 end.
 
 
-
+

@@ -362,15 +362,15 @@ type
     {$endif}
     /// overridden methods for direct sqlite3 database engine call:
     function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8; override;
-    function MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
-    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function MainEngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
-    function MainEngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function MainEngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     function MainEngineDeleteWhere(TableModelIndex: Integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
-    function MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+      const IDs: TIDDynArray): boolean; override;
+    function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function MainEngineUpdateBlob(TableModelIndex, aID: integer;
+    function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
@@ -697,7 +697,7 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer;
+function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID;
 var SQL: RawUTF8;
     LastID: Int64;
 begin
@@ -880,7 +880,7 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.MainEngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestServerDB.MainEngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   if (TableModelIndex<0) or (ID<=0) then
     result := false else begin
@@ -892,7 +892,7 @@ begin
 end;
 
 function TSQLRestServerDB.MainEngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var i: integer;
     aSQLWhere: RawUTF8;
 begin
@@ -905,7 +905,7 @@ begin
        IdemPChar(pointer(SQLWhere),'ORDER BY ') then
       // LIMIT is not handled by SQLite3 when built from amalgamation
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
-      aSQLWhere := IntegerDynArrayToCSV(IDs,length(IDs),'RowID IN (',')') else
+      aSQLWhere := Int64DynArrayToCSV(TInt64DynArray(IDs),length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
     result := ExecuteFmt('DELETE FROM % WHERE %',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,aSQLWhere]);
@@ -1085,7 +1085,7 @@ begin
     ReturnedRowCount^ := RowCount;
 end;
 
-function TSQLRestServerDB.MainEngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestServerDB.MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var aSQL: RawUTF8;
 begin
   if (ID<0) or (TableModelIndex<0) or (result<>'') then
@@ -1102,7 +1102,7 @@ begin
       result := copy(result,2,length(result)-3);
 end;
 
-function TSQLRestServerDB.MainEngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestServerDB.MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
     Req: PSQLRequest;
@@ -1179,7 +1179,7 @@ begin
   fDB.Cache.Reset; // we changed the JSON format -> cache must be updated
 end;
 
-function TSQLRestServerDB.MainEngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestServerDB.MainEngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 begin
   if (TableModelIndex<0) or (ID<=0) then
@@ -1194,7 +1194,7 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.MainEngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestServerDB.MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
     AffectedField: TSQLFieldBits;
@@ -1227,9 +1227,10 @@ end;
 
 function TSQLRestServerDB.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var WhereID,i: integer;
+var WhereID: TID;
+    i: integer;
     JSON: RawUTF8;
-    ID: TIntegerDynArray;
+    ID: TIDDynArray;
 begin
   result := false;
   if (TableModelIndex<0) or (SetFieldName='') then
@@ -1238,7 +1239,7 @@ begin
   if Fields.IndexByName(SetFieldName)>=0 then begin
     WhereID := 0;
     if IsRowID(pointer(WhereFieldName)) then begin
-      WhereID := GetInteger(Pointer(WhereValue));
+      WhereID := GetInt64(Pointer(WhereValue));
       if WhereID<=0 then
         exit; // limitation: will only check for update from RowID
     end else
@@ -1263,7 +1264,8 @@ begin
         result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
           [SQLTableName,SetFieldName,SetValue,ID[0]]) else
         result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
-          [SQLTableName,SetFieldName,SetValue,IntegerDynArrayToCSV(ID,length(ID))]);
+          [SQLTableName,SetFieldName,SetValue,
+           Int64DynArrayToCSV(TInt64DynArray(ID),length(ID))]);
       if not result then
         exit;
       JSON := '{"'+SetFieldName+'":'+SetValue+'}';
@@ -1271,7 +1273,7 @@ begin
         InternalUpdateEvent(seUpdate,TableModelIndex,ID[i],JSON,nil);
     end else begin
       if IsRowID(pointer(WhereFieldName)) then begin
-        WhereID := GetInteger(Pointer(WhereValue));
+        WhereID := GetInt64(Pointer(WhereValue));
         if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
           exit; // limitation: will only check for update from RowID
       end;

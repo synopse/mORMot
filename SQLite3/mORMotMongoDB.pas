@@ -89,38 +89,38 @@ type
   protected
     /// the associated MongoDB collection
     fCollection: TMongoCollection;
-    fEngineLastID: integer;
+    fEngineLastID: TID;
     fBSONProjectionSimpleFields: variant;
     fBSONProjectionBlobFields: variant;
     fBSONProjectionBlobFieldsNames: TRawUTF8DynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
     fBatchWriter: TBSONWriter;
-    fBatchIDs: TIntegerDynArray;
+    fBatchIDs: TIDDynArray;
     fBatchIDsCount: integer;
     fIndexesCreated: Boolean;
-    function EngineNextID: Integer;
+    function EngineNextID: TID;
     procedure CreateIndexes;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
-      var Doc: TDocVariantData): integer;
+      var Doc: TDocVariantData): TID;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
     function BSONProjectionSet(var Projection: variant; WithID: boolean;
       const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
     function GetJSONValues(const Res: TBSONDocument;
       const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
     // overridden methods calling the MongoDB external server
-    function EngineRetrieve(TableModelIndex: integer; ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: Integer;const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
+      const IDs: TIDDynArray): boolean; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
@@ -165,7 +165,7 @@ type
     /// delete a row, calling the current MongoDB server
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     /// create one index for all specific FieldNames at once
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; override;
@@ -344,7 +344,7 @@ begin
     result := fCollection.Count;
 end;
 
-function TSQLRestStorageMongoDB.EngineNextID: Integer;
+function TSQLRestStorageMongoDB.EngineNextID: TID;
 procedure ComputeMax_ID;
 var res: variant;
 begin
@@ -352,7 +352,7 @@ begin
     CreateIndexes;
   res := fCollection.AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]);
   if DocVariantType.IsOfType(res) then
-    fEngineLastID := VariantToIntegerDef(res.max,0);
+    fEngineLastID := VariantToInt64Def(res.max,0);
   {$ifdef WITHLOG}
   fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
   {$endif}
@@ -360,11 +360,14 @@ end;
 begin
   if fEngineLastID=0 then
     ComputeMax_ID;
-  result := InterlockedIncrement(fEngineLastID);
+  EnterCriticalSection(fStorageCriticalSection);
+  inc(fEngineLastID);
+  result := fEngineLastID;
+  LeaveCriticalSection(fStorageCriticalSection);
 end;
 
 function TSQLRestStorageMongoDB.DocFromJSON(const JSON: RawUTF8;
-  Occasion: TSQLOccasion; var Doc: TDocVariantData): integer;
+  Occasion: TSQLOccasion; var Doc: TDocVariantData): TID;
 var i, ndx: integer;
     blob: RawByteString;
     info: TSQLPropInfo;
@@ -384,7 +387,7 @@ begin
     if IsRowID(pointer(doc.Names[i])) then begin
       MissingID := false;
       doc.Names[i] := fStoredClassProps.ExternalDB.RowIDFieldName;
-      VariantToInteger(doc.Values[i],result);
+      VariantToInt64(doc.Values[i],Int64(result));
       if Occasion=soUpdate then
         doc.Delete(i); // update does not expect any $set:{_id:..}
     end else begin
@@ -434,7 +437,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.EngineAdd(TableModelIndex: integer; 
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 var doc: TDocVariantData;
 begin
   if (fCollection=nil) or (TableModelIndex<0) or 
@@ -459,7 +462,7 @@ begin
     end;
 end;
 
-function TSQLRestStorageMongoDB.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestStorageMongoDB.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var doc: TDocVariantData;
     query,update: variant; // use explicit TBSONVariant for type safety
@@ -514,7 +517,7 @@ begin
     end;
 end;
 
-function TSQLRestStorageMongoDB.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageMongoDB.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var query,update,blob: variant; // use explicit TBSONVariant for type safety
     FieldName: RawUTF8;
@@ -578,7 +581,7 @@ begin
     end;
 end;
 
-function TSQLRestStorageMongoDB.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestStorageMongoDB.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   result := false;
   if (fCollection<>nil) and (TableModelIndex>=0) and
@@ -587,7 +590,7 @@ begin
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDelete then
         exit else
-        AddInteger(fBatchIDs,fBatchIDsCount,ID) else begin
+        AddInt64(TInt64DynArray(fBatchIDs),fBatchIDsCount,ID) else begin
       if Owner<>nil then begin // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
         Owner.FlushInternalDBCache;
@@ -601,7 +604,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.EngineDeleteWhere(TableModelIndex: Integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var i: integer;
 begin // here we use the pre-computed IDs[]
   result := false;
@@ -612,7 +615,7 @@ begin // here we use the pre-computed IDs[]
         for i := 0 to high(IDs) do
           Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
       fCollection.Remove(BSONVariant(
-        ['_id',BSONVariant(['$in',BSONVariantFromIntegers(IDs)])]));
+        ['_id',BSONVariant(['$in',BSONVariantFromInt64s(TInt64DynArray(IDs))])]));
       if Owner<>nil then
         Owner.FlushInternalDBCache;
       result := true;
@@ -651,8 +654,8 @@ begin
   end;
 end;
 
-function TSQLRestStorageMongoDB.EngineRetrieve(TableModelIndex,
-  ID: integer): RawUTF8;
+function TSQLRestStorageMongoDB.EngineRetrieve(TableModelIndex: integer;
+  ID: TID): RawUTF8;
 var doc: variant;
 begin
   result := '';
@@ -662,7 +665,7 @@ begin
   JSONFromDoc(TDocVariantData(doc),result);
 end;
 
-function TSQLRestStorageMongoDB.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageMongoDB.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var doc: variant;
     data: TVarData;
@@ -943,7 +946,7 @@ begin
     mDELETE: begin
       SetLength(fBatchIDs,fBatchIDsCount);
       fCollection.Remove(BSONVariant(
-        ['_id',BSONVariant(['$in',BSONVariantFromIntegers(fBatchIDs)])]));
+        ['_id',BSONVariant(['$in',BSONVariantFromInt64s(TInt64DynArray(fBatchIDs))])]));
     end;
     else
       raise EORMException.CreateUTF8('%.InternalBatchStop(%) with BatchMethod=%',

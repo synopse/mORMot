@@ -568,6 +568,8 @@ type
     procedure BSONWriteArray(const Items: array of const);
     /// write an array of integers as a BSON Document
     procedure BSONWriteArrayOfInteger(const Integers: array of integer);
+    /// write an array of integers as a BSON Document
+    procedure BSONWriteArrayOfInt64(const Integers: array of Int64);
     /// write some BSON document from a supplied (extended) JSON array or object
     // - warning: the incoming JSON buffer will be modified in-place: so you
     // should make a private copy before running this method
@@ -761,6 +763,10 @@ function BSON(const doc: TDocVariantData): TBSONDocument; overload;
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
 function BSONFromIntegers(const Integers: array of integer): TBSONDocument;
 
+/// store an array of 64 bit integer into BSON encoded binary
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONFromInt64s(const Integers: array of Int64): TBSONDocument;
+
 /// store some object content, supplied as (extended) JSON into BSON binary
 // - warning: the supplied JSON buffer will be modified in-place, if necessary:
 // so you should create a temporary copy before calling this function, or call
@@ -833,6 +839,10 @@ function BSONVariant(doc: TDocVariantData): variant; overload;
 /// store an array of integer into a TBSONVariant betArray type instance
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
 function BSONVariantFromIntegers(const Integers: array of integer): variant;
+
+/// store an array of 64 bit integer into a TBSONVariant betArray type instance
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONVariantFromInt64s(const Integers: array of Int64): variant;
 
 /// parse the header of a BSON encoded binary buffer, and return its length
 // - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
@@ -3205,6 +3215,16 @@ begin
   BSONDocumentEnd(Start);
 end;
 
+procedure TBSONWriter.BSONWriteArrayOfInt64(const Integers: array of Int64);
+var Start: cardinal;
+    i: integer;
+begin
+  Start := BSONDocumentBegin;
+  for i := 0 to high(Integers) do
+    BSONWrite(UInt32ToUtf8(i),Integers[i]);
+  BSONDocumentEnd(Start);
+end;
+
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; DoNotTryExtendedMongoSyntax: boolean);
 var tmp: variant; // we use a local variant for only BSONVariant values
@@ -3358,7 +3378,7 @@ var
     MachineID: array[0..2] of byte;
     // we use the Thread ID, so that ComputeNew will be thread-safe
     ProcessID: word;
-    // bswap24-encoded
+    // bswap24-encoded (ending the ObjectID 12 bytes)
     Counter: integer;
     // naive but very efficient UnixCreateTime cache
     LastTick: cardinal;
@@ -3889,6 +3909,17 @@ begin
   end;
 end;
 
+function BSONFromInt64s(const Integers: array of Int64): TBSONDocument;
+begin
+  with TBSONWriter.Create(TRawByteStringStream) do
+  try
+    BSONWriteArrayOfInt64(Integers);
+    ToBSONDocument(result);
+  finally
+    Free;
+  end;
+end;
+
 function BSON(const NameValuePairs: array of const): TBSONDocument;
 var W: TBSONWriter;
     name: RawUTF8;
@@ -4081,6 +4112,11 @@ end;
 function BSONVariantFromIntegers(const Integers: array of integer): variant;
 begin
   BSONVariantType.FromBSONDocument(BSONFromIntegers(Integers),result,betArray);
+end;
+
+function BSONVariantFromInt64s(const Integers: array of Int64): variant;
+begin
+  BSONVariantType.FromBSONDocument(BSONFromInt64s(Integers),result,betArray);
 end;
 
 

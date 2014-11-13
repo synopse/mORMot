@@ -389,7 +389,7 @@ procedure TTestORM.InsertInBatchMode;
 var R: TSQLORM;
     i: integer;
     bytes: Int64;
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
 begin
   Check(fClient.TableRowCount(TSQLORM)=0);
   bytes := fMongoClient.BytesTransmitted;
@@ -654,7 +654,7 @@ procedure TTestORM.DeleteInBatchMode;
 var i,n: integer;
     ExpectedCount: integer;
     bytes: Int64;
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
     R: TSQLORM;
 begin
   bytes := fMongoClient.BytesTransmitted;

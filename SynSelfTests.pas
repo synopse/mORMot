@@ -3963,7 +3963,7 @@ type
 {$ifdef DELPHI5OROLDER} // mORMot.pas not linked yet
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
-    ID: integer;
+    ID: Int64;
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
     /// GetTickCount value when this cached value was stored
@@ -4087,7 +4087,7 @@ const // convention may be to use __ before the type name
     'TRRMK RawUTF8]';
   __TTestCustomDiscogs = 'pagination{per_page,items,page Integer}'+
     'releases[status,title,format,label,artist RawUTF8 year,id integer]';
-  __TSQLRestCacheEntryValue = 'ID: integer; JSON: RawUTF8; TimeStamp64: Int64';
+  __TSQLRestCacheEntryValue = 'ID: Int64; JSON: RawUTF8; TimeStamp64: Int64';
   __TSubAB = 'a : RawUTF8; b : integer;';
   __TSubCD = 'c : byte; d : RawUTF8;';
   __TAggregate = 'abArr : array of TSubAB; cdArr : array of TSubCD;';
@@ -5855,7 +5855,7 @@ var Model: TSQLModel;
     {$endif}
     R: TSQLRecordTest;
     Batch: TSQLRestBatch;
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
     i: integer;
     dummy: RawUTF8;
 procedure FillRWith(i: Integer);
@@ -7998,7 +7998,7 @@ var MS: TSQLASource;
     MD, MD2: TSQLADest;
     i: integer;
     sID, dID: array[1..100] of Integer;
-    res: TIntegerDynArray;
+    res: TIDDynArray;
   procedure CheckOK;
   begin
     if Test.CheckFailed(MS.FillTable<>nil) then
@@ -8370,7 +8370,7 @@ var R,R2: TSQLRecordPeople;
     Model: TSQLModel;
     aID: integer;
     Client, Client2: TSQLRestClientDB;
-    Res: TIntegerDynArray;
+    Res: TIDDynArray;
 procedure CheckFilledRow;
 begin
   Check(R.FillRewind);
@@ -8491,7 +8491,7 @@ var RInt,RInt1: TSQLRecordPeople;
     Tables: TRawUTF8DynArray;
     i,n, aID: integer;
     ok: Boolean;
-    BatchID,BatchIDUpdate,BatchIDJoined: TIntegerDynArray;
+    BatchID,BatchIDUpdate,BatchIDJoined: TIDDynArray;
     aExternalClient: TSQLRestClientDB;
     fProperties: TSQLDBConnectionProperties;
     {$ifndef NOVARIANTS}
@@ -8917,7 +8917,8 @@ var V,V2: TSQLRecordPeople;
     Refreshed: boolean;
     J: TSQLTableJSON;
     i, n, nupd, ndx: integer;
-    IntArray, Results: TIntegerDynArray;
+    IntArray: TInt64DynArray;
+    Results: TIDDynArray;
     List: TObjectList;
     Data: TSQLRawBlob;
     DataS: THeapMemoryStream;
@@ -8937,7 +8938,7 @@ begin
 end;
 procedure TestDynArray(aClient: TSQLRestClient);
 var i, j, k, l: integer;
-    IDs: TIntegerDynArray;
+    IDs: TInt64DynArray;
 begin
   VA.ClearProperties;
   for i := 1 to n do begin
@@ -9031,7 +9032,7 @@ end;
 procedure TestFTS3(aClient: TSQLRestClient);
 var FTS: TSQLFTSTest;
     StartID, i: integer;
-    IntResult: TIntegerDynArray;
+    IntResult: TIDDynArray;
     c: Char;
 const COUNT=400;
 begin
@@ -10781,9 +10782,9 @@ begin
   Test([1,2,3,4,5],'restore allowed for everybody');
   S.DenyAllByID([GroupID+1]);
   Test([1,2,3,4,5],'this group ID won''t affect the current user');
-  S.DenyByID(['Add'],GroupID);
+  S.DenyByID(['Add'],[GroupID]);
   Test([2,3,4,5],'exclude a specific method for the current user');
-  S.DenyByID(['totext'],GroupID);
+  S.DenyByID(['totext'],[GroupID]);
   Test([2,3,5],'exclude another method for the current user');
   S.AllowByID(['Add'],[GroupID+1]);
   Test([2,3,5],'this group ID won''t affect the current user');

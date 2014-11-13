@@ -182,7 +182,7 @@ type
     fBatchCapacity, fBatchCount, fBatchFirstAddedID: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchValues: TRawUTF8DynArray;
-    fBatchIDs: TIntegerDynArray;
+    fBatchIDs: TIDDynArray;
     /// get fFieldsExternal[] index using fFieldsExternalToInternal[] mapping
     // - do handle ID/RowID fields and published methods
     function InternalFieldNameToFieldExternalIndex(const InternalFieldName: RawUTF8): integer;
@@ -207,21 +207,21 @@ type
     function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
        var Params: TSQLVarDynArray; LastIntegerParam: integer; ParamsMatchCopiableFields: boolean): boolean;
     // overridden methods calling the external engine with SQL via Execute
-    function EngineRetrieve(TableModelIndex, ID: integer): RawUTF8; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
     function EngineLockedNextID: Integer; virtual;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): integer; override;
-    function EngineUpdate(TableModelIndex, ID: integer; const SentData: RawUTF8): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
-      const IDs: TIntegerDynArray): boolean; override;
+      const IDs: TIDDynArray): boolean; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
-    function EngineRetrieveBlob(TableModelIndex, aID: integer;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
-    function EngineUpdateBlob(TableModelIndex, aID: integer;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
-      const FieldValue: array of const; var ResultID: TIntegerDynArray): boolean;
+      const FieldValue: array of const; var ResultID: TIDDynArray): boolean;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete 
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with external DB (syntax are too much specific)
@@ -231,7 +231,7 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    function InternalBatchAdd(const aValue: RawUTF8; aID: integer): integer;
+    function InternalBatchAdd(const aValue: RawUTF8; aID: TID): integer;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -248,7 +248,7 @@ type
     // the real external table columns (e.g. as TEXT for variant)
     // - returns 0 on error, or the Updated/Inserted ID 
     function ExecuteFromJSON(const SentData: RawUTF8; Occasion: TSQLOccasion;
-      UpdatedID: integer): integer;
+      UpdatedID: TID): integer;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
@@ -263,17 +263,17 @@ type
     /// delete a row, calling the external engine with SQL
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
-    function EngineDelete(TableModelIndex, ID: integer): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     /// search for a numerical field value
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
-    function SearchField(const FieldName: RawUTF8; FieldValue: Integer;
-      var ResultID: TIntegerDynArray): boolean; overload; override;
+    function SearchField(const FieldName: RawUTF8; FieldValue: Int64;
+      var ResultID: TIDDynArray): boolean; overload; override;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIntegerDynArray): boolean; overload; override;
+      var ResultID: TIDDynArray): boolean; overload; override;
     /// overridden method for direct external database engine call
     function TableRowCount(Table: TSQLRecordClass): integer; override;
     /// overridden method for direct external database engine call
@@ -591,8 +591,8 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftUnknown,   // sftEnumerate
        ftInt64,     // sftSet
        ftInt64,     // sftInteger
-       ftUnknown,   // sftID
-       ftUnknown,   // sftRecord
+       ftInt64,     // sftID
+       ftInt64,     // sftRecord
        ftUnknown,   // sftBoolean
        ftDouble,    // sftFloat
        ftDate,      // sftDateTime
@@ -606,7 +606,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftBlob,      // sftBlobDynArray
        ftBlob,      // sftBlobCustom
        ftUTF8,      // sftUTF8Comp
-       ftUnknown,   // sftMany
+       ftInt64,     // sftMany
        ftInt64,     // sftModTime
        ftInt64);    // sftCreateTime
   begin
@@ -669,7 +669,7 @@ begin
     with aClass.RecordProps do begin
       SetLength(CreateColumns,Fields.Count+1);
       CreateColumns[0].Name := StoredClassProps.ExternalDB.RowIDFieldName;
-      CreateColumns[0].DBType := ftUnknown;
+      CreateColumns[0].DBType := ftInt64;
       CreateColumns[0].Unique := true;
       CreateColumns[0].NonNullable := true;
       CreateColumns[0].PrimaryKey := true;
@@ -1068,7 +1068,7 @@ begin
           for j := 0 to high(Fields) do
             Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
           if Occasion=soUpdate then // ?=ID parameter
-            UInt32ToUtf8(fBatchIDs[i],Values[length(Fields),n]);
+            Int64ToUtf8(fBatchIDs[i],Values[length(Fields),n]);
           BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
           if n+1>=max then
             break; // do not send too much items at once, for better speed
@@ -1085,7 +1085,7 @@ begin
         SetLength(Values,1);
         SetLength(Values[0],n);
         for i := 0 to n-1 do
-          UInt32ToUTF8(fBatchIDs[BatchBegin+i],Values[0,i]);
+          Int64ToUTF8(fBatchIDs[BatchBegin+i],Values[0,i]);
       end;
       end;
       n := BatchEnd-BatchBegin+1;
@@ -1117,7 +1117,7 @@ begin
         if fBatchMethod=mDelete then
           for i := 0 to high(Values) do
             Owner.AfterDeleteForceCoherency(
-              fStoredClass,GetInteger(pointer(Values[i])));
+              fStoredClass,GetInt64(pointer(Values[i])));
       end;
       Fields := nil; // force new sending block
       BatchBegin := BatchEnd+1;
@@ -1147,7 +1147,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.InternalBatchAdd(
-  const aValue: RawUTF8; aID: integer): integer;
+  const aValue: RawUTF8; aID: TID): integer;
 begin
   result := fBatchFirstAddedID+fBatchCount;
   if fBatchCount>=fBatchCapacity then begin
@@ -1165,7 +1165,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): integer;
+  const SentData: RawUTF8): TID;
 begin
   if (TableModelIndex<0) or (fModel.Tables[TableModelIndex]<>fStoredClass) then
     result := 0 else // avoid GPF
@@ -1182,7 +1182,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.EngineUpdate(TableModelIndex, ID: integer;
+function TSQLRestStorageExternal.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 begin
   if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
@@ -1199,7 +1199,7 @@ begin
     end;
 end;
 
-function TSQLRestStorageExternal.EngineDelete(TableModelIndex, ID: integer): boolean;
+function TSQLRestStorageExternal.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 begin
   if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
@@ -1217,10 +1217,10 @@ begin
 end;
 
 function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIntegerDynArray): boolean;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var i,n: integer;
     aSQLWhereUpper: RawUTF8;
-    InClause: TIntegerDynArray;
+    InClause: TIDDynArray;
 begin
   result := false;
   if (IDs=nil) or (SQLWhere='') or
@@ -1247,7 +1247,7 @@ begin
           n := length(InClause);
         Move(IDs[i*length(InClause)],InClause[0],n*sizeof(Integer));
         if ExecuteInlined('delete from % where %',[fTableName,
-            IntegerDynArrayToCSV(InClause,n,'RowID in (',')')],false)=nil then
+            Int64DynArrayToCSV(TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
       end;
       exit;
@@ -1274,7 +1274,7 @@ begin
       ForceAJAX or (Owner=nil) or (not Owner.NoAJAXJSON),result);
 end;
 
-function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex, ID: integer): RawUTF8;
+function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var Stmt: ISQLDBStatement;
 begin // TableModelIndex is not useful here
   result := '';
@@ -1323,7 +1323,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.EngineRetrieveBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var Rows: ISQLDBRows;
 begin
@@ -1400,7 +1400,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex, aID: integer;
+function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var Statement: ISQLDBStatement;
     AffectedField: TSQLFieldBits;
@@ -1436,7 +1436,8 @@ begin
 end;
 
 function TSQLRestStorageExternal.UpdateBlobFields(Value: TSQLRecord): boolean;
-var f, aID: integer;
+var f: integer;
+    aID: TID;
     temp: array of RawByteString;
     Params: TSQLVarDynArray;
 begin
@@ -1585,7 +1586,7 @@ end;
 
 function TSQLRestStorageExternal.EngineSearchField(
   const FieldName: ShortString; const FieldValue: array of const;
-  var ResultID: TIntegerDynArray): boolean;
+  var ResultID: TIDDynArray): boolean;
 var n: Integer;
     Rows: ISQLDBRows;
 begin
@@ -1594,19 +1595,19 @@ begin
     [StoredClassProps.ExternalDB.RowIDFieldName,fTableName,FieldName],FieldValue,true);
   if Rows<>nil then
     while Rows.Step do
-      AddInteger(ResultID,n,Rows.ColumnInt(0));
+      AddInt64(TInt64DynArray(ResultID),n,Rows.ColumnInt(0));
   SetLength(ResultID,n);
   result := n>0;
 end;
 
 function TSQLRestStorageExternal.SearchField(const FieldName: RawUTF8;
-  FieldValue: Integer; var ResultID: TIntegerDynArray): boolean;
+  FieldValue: Int64; var ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;
 
 function TSQLRestStorageExternal.SearchField(const FieldName, FieldValue: RawUTF8;
-  var ResultID: TIntegerDynArray): boolean;
+  var ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;
@@ -1708,7 +1709,7 @@ begin
 end;
   
 function TSQLRestStorageExternal.ExecuteFromJSON(
-  const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: integer): integer;
+  const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: TID): integer;
 var Decoder: TJSONObjectDecoder;
     SQL: RawUTF8;
     Types: TSQLDBFieldTypeArray;
@@ -1744,7 +1745,7 @@ begin
     // compute SQL statement and associated bound parameters
     SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
     if Occasion=soUpdate then
-      UInt32ToUTF8(UpdatedID,Decoder.FieldValues[Decoder.FieldCount-1]);
+      Int64ToUTF8(UpdatedID,Decoder.FieldValues[Decoder.FieldCount-1]);
     // execute statement
     Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
     if Query=nil then

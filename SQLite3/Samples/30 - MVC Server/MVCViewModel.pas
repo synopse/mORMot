@@ -156,7 +156,7 @@ var info: TSQLBlogInfo;
     tag: TSQLTag;
     batch: TSQLRestBatch;
     n,t: integer;
-    articles,tags,comments: TIntegerDynArray;
+    articles,tags,comments: TIDDynArray;
     tmp: RawUTF8;
 begin
   TSQLRecord.AutoFree([ // avoid several try..finally
@@ -316,7 +316,7 @@ end;
 procedure TBlogApplication.ArticleView(ID: integer;
   var WithComments: boolean; Direction: integer; var Scope: variant;
   out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
-var newID: integer;
+var newID: Int64;
 const WHERE: array[1..2] of PUTF8Char = (
   'RowID<? order by id desc','RowID>? order by id');
 begin
