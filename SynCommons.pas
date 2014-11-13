@@ -476,6 +476,9 @@ unit SynCommons;
     allowing easy implementation of a dynamic list of callbacks
   - added QuickSortIndexedPUTF8Char() and FastFindIndexedPUTF8Char()
   - added overloaded QuickSortInteger() for synchronous sort of two arrays
+  - added GetNextItem64() Int64Scan() Int64ScanExists() QuickSortInt64()
+    FastFindInt64Sorted() AddInt64() CSVToInt64DynArray() Int64DynArrayToCSV()
+    and VariantToInt64() functions (used during TID=Int64 introduction in ORM)
   - added RawUnicodeToUtf8() and UTF8ToSynUnicode() overloaded procedures
   - added UrlDecodeNextValue() and UrlDecodeNextNameValue() functions
   - added Utf8DecodeToRawUnicodeUI() overloaded function returning text as var
@@ -1645,6 +1648,11 @@ function VariantToInteger(const V: Variant; var Value: integer): boolean;
 // Value variable content
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 
+/// convert any numerical Variant into a 64 bit integer
+// - it will expect true numerical Variant and won't convert any string nor
+// floating-pointer Variant, which will return the supplied DefaultValue
+function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
+
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 
@@ -2623,6 +2631,9 @@ function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
 /// return next CSV string as signed integer from P, 0 if no more
 function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
 
+/// return next CSV string as 64 bit signed integer from P, 0 if no more
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - P^ will point to the first non digit character (the item separator, e.g.
 // ',' for CSV)
@@ -3170,10 +3181,21 @@ procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
 // - returns nil if Value was not found
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 
-/// fast search of an unsigned integer position in an integer array
+/// fast search of an integer position in a 64 bit integer array
+// - Count is the number of Int64 entries in P^
+// - returns P where P^=Value
+// - returns nil if Value was not found
+function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
+
+/// fast search of an unsigned integer in an integer array
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+
+/// fast search of an integer value in a 64 bit integer array
+// - returns true if P^=Value within Count entries
+// - returns false if Value was not found
+function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 
 /// fast search of an unsigned integer position in an integer array
 // - Count is the number of integer entries in P^
@@ -3204,6 +3226,12 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 /// sort an Integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
+/// sort a 64 bit Integer array, low values first
+procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
+
+/// sort a 64 bit Integer array, low values first
+procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
+
 /// copy an integer array, then sort it, low values first
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
   var Dest: TIntegerDynArray);
@@ -3218,6 +3246,12 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return index of Values[result]=Value
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
+
+/// fast binary search of a 64 bit integer value in a sorted array
+// - R is the last index of available integer entries in P^ (i.e. Count-1)
+// - return index of P^[result]=Value
+// - return -1 if Value was not found
+function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
 /// retrieve the index where to insert an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -3257,6 +3291,9 @@ function AddInteger(var Values: TIntegerDynArray; Value: integer;
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean=false): boolean; overload;
 
+/// add a 64 bit integer value at the end of a dynamic array of integers
+procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64);
+
 /// delete any integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
@@ -3280,9 +3317,17 @@ procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: 
 /// add the strings in the specified CSV text into a dynamic array of integer
 procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray);
 
+/// add the strings in the specified CSV text into a dynamic array of integer
+procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray);
+
 /// return the corresponding CSV text from a dynamic array of integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+
+/// return the corresponding CSV text from a dynamic array of 64 bit integers
+// - you can set some custom Prefix and Suffix text
+function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 
 type
@@ -14684,6 +14729,12 @@ begin
   result := true;
 end;
 
+function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
+begin
+  if not VariantToInt64(V,result) then
+    result := DefaultValue;
+end;
+
 function VariantToIntegerDef(const V: Variant; DefaultValue: integer): integer;
 begin
   if not VariantToInteger(V,result) then
@@ -19422,6 +19473,23 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 {$endif}
 
+function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
+var i: PtrInt; 
+begin
+  if P<>nil then begin
+    result := true;
+    for i := 1 to (Count shr 2) do   // 4 DWORD by loop - aligned read
+      if (P^[0]=Value) or (P^[1]=Value) or
+         (P^[2]=Value) or (P^[3]=Value) then
+        exit else
+        inc(PtrUInt(P),16);
+    for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
+      if P^[i]=Value then
+        exit;
+  end;
+  result := false;
+end;
+
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 {$ifdef PUREPASCAL}
 var i: PtrInt;
@@ -19492,6 +19560,37 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 {$endif}
 
+function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
+var i: PtrInt;
+begin 
+  if P<>nil then begin
+    for i := 1 to Count shr 2 do      // 4 DWORD by loop - aligned read
+      if P^[0]<>Value then
+      if P^[1]<>Value then
+      if P^[2]<>Value then
+      if P^[3]=Value then begin
+        result := @P^[3];
+        exit;
+      end else
+        inc(PtrUInt(P),16) else begin
+        result := @P^[2];
+        exit;
+      end else begin
+        result := @P^[1];
+        exit;
+      end else begin
+        result := pointer(P);
+        exit;
+      end;
+    for i := 0 to (Count and 3)-1 do  // last 0..3 DWORD
+      if P^[i]=Value then begin
+        result := @P^[i];
+        exit;
+      end;
+  end;
+  result := nil;
+end;
+
 function AddInteger(var Values: TIntegerDynArray; Value: integer;
   NoDuplicates: boolean=false): boolean;
 var n: PtrInt;
@@ -19518,6 +19617,14 @@ begin
   Values[ValuesCount] := Value;
   inc(ValuesCount);
   result := true
+end;
+
+procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64);
+begin
+  if ValuesCount=length(Values) then
+    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+  Values[ValuesCount] := Value;
+  inc(ValuesCount);
 end;
 
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt);
@@ -19594,7 +19701,15 @@ procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray);
 begin
   while CSV<>nil do begin
     SetLength(Result,length(Result)+1);
-    Result[high(Result)] := GetNextItemCardinal(CSV);
+    Result[high(Result)] := GetNextItemInteger(CSV);
+  end;
+end;
+
+procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray);
+begin
+  while CSV<>nil do begin
+    SetLength(Result,length(Result)+1);
+    Result[high(Result)] := GetNextItemInt64(CSV);
   end;
 end;
 
@@ -19621,6 +19736,50 @@ begin
       L := @tmp[15]-P;
       if i<ValuesCount then
         inc(L); // append tmp[15]=','
+      inc(Len,L);
+      SetString(ints[i],P,L);
+    end;
+    // create result
+    SetLength(result,Len);
+    P := pointer(result);
+    if Prefix<>'' then begin
+      move(pointer(Prefix)^,P^,length(Prefix));
+      inc(P,length(Prefix));
+    end;
+    for i := 0 to ValuesCount do begin
+      Move(ints[i][1],P^,ord(ints[i][0]));
+      inc(P,ord(ints[i][0]));
+    end;
+    if Suffix<>'' then
+      move(pointer(Suffix)^,P^,length(Suffix));
+  finally
+    FreeMem(ints);
+  end;
+end;
+
+function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+type
+  TInts23 = packed array[word] of string[23]; // shortstring are faster
+var i, L, Len: PtrInt;
+    tmp: array[0..23] of AnsiChar;
+    ints: ^TInts23;
+    P: PAnsiChar;
+begin
+  result := '';
+  if ValuesCount=0 then
+    exit;
+  GetMem(ints,ValuesCount*sizeof(ints[0])); // getmem is faster than a dynamic array
+  try
+     // compute whole result length at once
+    dec(ValuesCount);
+    Len := length(Prefix)+length(Suffix);
+    tmp[23] := ',';
+    for i := 0 to ValuesCount do begin
+      P := StrInt64(@tmp[23],Values[i]);
+      L := @tmp[23]-P;
+      if i<ValuesCount then
+        inc(L); // append tmp[23]=','
       inc(Len,L);
       SetString(ints[i],P,L);
     end;
@@ -19794,6 +19953,55 @@ begin
   until I >= R;
 end;
 
+procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
+var I, J, P: PtrInt;
+    pivot, Tmp: Int64;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortInt64(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
+procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
+var I, J, P: PtrInt;
+    pivot, Tmp: Int64;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        Tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortInt64(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
   var Dest: TIntegerDynArray);  
 begin
@@ -19806,6 +20014,24 @@ end;
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var L: PtrInt;
     cmp: integer;
+begin
+  L := 0;
+  if 0<=R then
+  repeat
+    result := (L + R) shr 1;
+    cmp := P^[result]-Value;
+    if cmp=0 then
+      exit;
+    if cmp<0 then
+      L := result + 1 else
+      R := result - 1;
+  until (L > R);
+  result := -1
+end;
+
+function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
+var L: PtrInt;
+    cmp: Int64;
 begin
   L := 0;
   if 0<=R then
@@ -20082,9 +20308,9 @@ begin
       repeat
         c := byte(P^)-48;
         if c>9 then
-          break else
-          result := result shl 3+result+result; // fast result := result*10
-          inc(result,c);
+          break;
+        result := result shl 3+result+result; // fast result := result*10
+        inc(result,c);
         inc(P);
       until false;
       break;
@@ -21384,21 +21610,49 @@ begin
 end;
 
 function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
-var sign: PtrInt;
+var minus: boolean;
 begin
   if P=nil then begin
     result := 0;
     exit;
   end;
   if (P^ in ['+','-']) then begin
-    if P^='-' then
-      sign := -1 else
-      sign := 1;
+    minus := P^='-';
     inc(P);
   end else
-    sign := 1;
-  result := sign*PtrInt(GetNextItemCardinal(P,Sep));
+    minus := false;
+  result := PtrInt(GetNextItemCardinal(P,Sep));
+  if minus then
+    result := -result;
 end;
+
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+{$ifdef CPU64}
+begin
+  result := GetNextItemInteger(P,Sep);
+end;
+{$else}
+var tmp: array[0..63] of AnsiChar;
+    i: integer;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  i := 0;
+  while (P[i]<>#0) and (P[i]<>Sep) do begin
+    tmp[i] := P[i];
+    inc(i);
+    if i>=sizeof(tmp) then
+      exit;
+  end;
+  tmp[i] := #0;
+  inc(P,i); // P[i]=Sep or #0
+  if P^=#0 then
+    P := nil else
+    inc(P);
+  SetInt64(tmp,result);
+end;
+{$endif}
 
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
 var tmp: array[0..63] of AnsiChar;
@@ -21415,7 +21669,10 @@ begin
       exit;
   end;
   tmp[i] := #0;
-  inc(P,i+1); // P[i]=Sep
+  inc(P,i); // P[i]=Sep or #0
+  if P^=#0 then
+    P := nil else
+    inc(P);
   result := GetExtended(tmp,err);
   if err<>0 then
     result := 0;
