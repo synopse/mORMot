@@ -15929,7 +15929,7 @@ begin
     P := SQLBegin(P);
     result :=
       ((IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
-       (P[6] in [#0..' ',';'])) or 
+       (P[6] in [#0..' ',';'])) or IdemPChar(P,'EXPLAIN ') or
       (((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';'])) and
         not (ContainsUTF8(P,'INSERT') or ContainsUTF8(P,'UPDATE') or
              ContainsUTF8(P,'DELETE')));
