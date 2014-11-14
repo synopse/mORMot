@@ -8493,12 +8493,12 @@ In case of mocking, you may add additional verifications within the implementati
 !end;
 Here, an additional callback-private parameter containing {\f1\fs20 'toto'} has been specified at {\f1\fs20 TInterfaceMock} definition. Then its content is checked on the associated test case via {\f1\fs20 Ctxt.Sender} instance. If the caller is not a {\f1\fs20 TInterfaceMock}, it will raise an exception when accessing the {\f1\fs20 Ctxt.TestCase} property.
 :  Calls tracing
-As stated above, {\i mORMot} is able to log all interface calls into internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
+As stated above, {\i mORMot} is able to log all interface calls into its internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
 !  Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
 !!    SetOptions([imoLogMethodCallsAndResults]);
 !  Check(I.Add(10,20)=0,'Default result');
 !!  Check(Stub.LogAsText='Add(10,20)=[0]');
-Here above, we retrieved the whole call stack, including returned results, as an easy to read text content. We found out that JSON is a very convenient way of defining method trace, both efficient for the computer and the human being hardly testing the code.
+Here above, we retrieved the whole call stack, including input parameters and returned results, as an easy-to-read JSON content. We found out that JSON is a very convenient way of tracing the method calls, both efficient for the computer and the human being hardly testing the code.
 A more complex trace verification could be defined for instance, in the context of an interface {\i mock}:
 !  TInterfaceMock.Create(TypeInfo(ICalculator),I,self).
 !    Returns('Add','30').
@@ -8521,8 +8521,8 @@ A more complex trace verification could be defined for instance, in the context 
 !  Check(I.Multiply(2,35)=70);
 !  Check(I.Subtract(2.3,1.2)=0,'Default result');
 !  Check(I.ToTextFunc(2.3)='default');
-The {\f1\fs20 ExpectsTrace()} methods are able to add some checks non only about the number of calls of a method, but the order of the command executed, and all retrieved result values. They can check one the trace of one specific method (optionally with a filter against the incoming parameters), or globally for the whole mocked interface.
-Note that internally, those methods will internally call the {\f1\fs20 Hash32()} function to compute the hash value of the expected trace, which is a good way of minimizing data in memory or re-use a value retrieved at execution time for further regression testing. Some {\i overloaded} signatures are indeed available to directly specify the expected {\f1\fs20 Hash32()} value.
+The overloaded {\f1\fs20 ExpectsTrace()} methods are able to add some checks not only about the number of calls of a given method, but the exact order of the executed commands, with associated parameters and all retrieved result values. They can validate the trace of one specific method (optionally with a filter against the incoming parameters), or globally for the whole mocked interface.
+Note that internally, those methods will compute a {\f1\fs20 Hash32()} hash value of the expected trace, which is a good way of minimizing data in memory or re-use a value retrieved at execution time for further regression testing. Some {\i overloaded} signatures are indeed available to directly specify the expected {\f1\fs20 Hash32()} value, in case of huge regression scenarios: run the test once, debugging all expected behavior by hand, then store the hash value to ensure that no expected step would be broken in the future.
 You have even a full access to the internal execution trace, via the two {\f1\fs20 TInterfaceStub.Log} and {\f1\fs20 LogCount} properties. This will allow any validation of mocked {\f1\fs20 interface} calls logic, beyond {\f1\fs20 ExpectsTrace()} possibilities.
 You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs} regression tests, for a whole coverage of all the internal features.
 :63Client-Server services via interfaces

@@ -1123,6 +1123,8 @@ type
     fCompressHeader: THttpSocketCompressSet;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
+    /// ignore SSL certifcate errors
+    fIgnoreSSLCertificateErrors: Boolean;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
     procedure InternalRequest(const method, aURL: RawByteString); virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
@@ -1131,7 +1133,8 @@ type
     function InternalGetInfo(Info: DWORD): RawByteString; virtual; abstract;
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
     function InternalReadData(var Data: RawByteString; Read: integer): cardinal; virtual; abstract;
-    class function InternalREST(const url,method,data,header: RawByteString): RawByteString;
+    class function InternalREST(const url,method,data,header: RawByteString; 
+      aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
   public
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
@@ -1158,35 +1161,39 @@ type
     /// wrapper method to retrieve a resource via an HTTP GET
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
+    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Get() but either TWinHTTP.Get() or TWinINet.Get() methods
     class function Get(const aURI: RawByteString;
-      const aHeader: RawByteString=''): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
+    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is POSTed to the server, with an optional
     // aHeader content
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Post() but either TWinHTTP.Post() or TWinINet.Post() methods
     class function Post(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
+    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is PUT to the server, with an optional
     // aHeader content
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Put() but either TWinHTTP.Put() or TWinINet.Put() methods
     class function Put(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
+    // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Delete() but either TWinHTTP.Delete() or TWinINet.Delete()
     class function Delete(const aURI: RawByteString;
-      const aHeader: RawByteString=''): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -1209,6 +1216,10 @@ type
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
     property ProxyByPass: RawByteString read fProxyByPass;
+    /// allows to ignore untrusted SSL certificates
+    // - similar to adding a security exception for a domain in the browser
+    property IgnoreSSLCertificateErrors: boolean
+      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
   end;
 
   {/ a class to handle HTTP/1.1 request using the WinINet API
@@ -1263,7 +1274,6 @@ type
      back-end server applications that require access to an HTTP client stack }
   TWinHTTP = class(TWinHttpAPI)
   protected
-    fIgnoreSSLCertificates: boolean;
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalRequest(const method, aURL: RawByteString); override;
@@ -1276,10 +1286,6 @@ type
   public
     /// relase the connection
     destructor Destroy; override;
-    /// allows to ignore untrusted SSL certificates
-    // - similar to adding a security exception for a domain in the browser
-    property IgnoreSSLCertificates: boolean
-      read fIgnoreSSLCertificates write fIgnoreSSLCertificates;
   end;
         
   /// type of a TWinHttpAPI class
@@ -3498,7 +3504,6 @@ begin
   {$ifndef MSWINDOWS}
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
-  SO_True := 1;
   {$endif}
   {$ifdef darwin}
   SO_True := 1;
@@ -5596,7 +5601,8 @@ begin
   end;
 end;
 
-class function TWinHttpAPI.InternalREST(const url,method,data,header: RawByteString): RawByteString;
+class function TWinHttpAPI.InternalREST(const url,method,data,header: RawByteString;
+  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
 var URI: TURI;
     outHeaders: RawByteString;
 begin
@@ -5606,6 +5612,7 @@ begin
   try
     with self.Create(Server,Port,Https) do
     try
+      fIgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
       Request(Address,method,0,header,data,'',outHeaders,result);
     finally
       Free;
@@ -5615,27 +5622,28 @@ begin
   end;
 end;
 
-class function TWinHttpAPI.Get(const aURI, aHeader: RawByteString): RawByteString;
+class function TWinHttpAPI.Get(const aURI,aHeader: RawByteString;
+  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
 begin
-  result := InternalREST(aURI,'GET','',aHeader);
+  result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function TWinHttpAPI.Post(const aURI, aData: RawByteString;
-  const aHeader: RawByteString=''): RawByteString;
+class function TWinHttpAPI.Post(const aURI, aData, aHeader: RawByteString;
+  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
 begin
-  result := InternalREST(aURI,'POST',aData,aHeader);
+  result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function TWinHttpAPI.Put(const aURI, aData: RawByteString;
-  const aHeader: RawByteString=''): RawByteString;
+class function TWinHttpAPI.Put(const aURI, aData, aHeader: RawByteString;
+  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
 begin
-  result := InternalREST(aURI,'PUT',aData,aHeader);
+  result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function TWinHttpAPI.Delete(const aURI: RawByteString;
-  const aHeader: RawByteString=''): RawByteString;
+class function TWinHttpAPI.Delete(const aURI, aHeader: RawByteString;
+  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
 begin
-  result := InternalREST(aURI,'DELETE','',aHeader);
+  result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors);
 end;
 
 
@@ -5905,7 +5913,7 @@ const
 procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
 var L: integer;
 begin
-  if fHTTPS and fIgnoreSSLCertificates then 
+  if fHTTPS and IgnoreSSLCertificateErrors then 
     if not WinHttpSetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
