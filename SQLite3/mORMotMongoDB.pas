@@ -242,7 +242,7 @@ begin
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
-    fStoredClassRecordProps.BlobFieldsBits,@fBSONProjectionBlobFieldsNames);
+    fStoredClassRecordProps.FieldBits[sftBlob],@fBSONProjectionBlobFieldsNames);
   CreateIndexes;
 end;
     
@@ -572,7 +572,7 @@ begin
       fCollection.Update(query,BSONVariant(['$set',variant(update)]));
       if Owner<>nil then begin
         Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
-          @fStoredClassRecordProps.BlobFieldsBits);
+          @fStoredClassRecordProps.FieldBits[sftBlob]);
         Owner.FlushInternalDBCache;
       end;
       result := true;

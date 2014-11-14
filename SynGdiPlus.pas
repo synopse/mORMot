@@ -1801,7 +1801,8 @@ const GdiPFullProcNames: array[0..70] of PChar =
    'GdipAddPathRectangleI','GdipClosePathFigure',
    'GdipDrawArcI','GdipDrawBezierI','GdipDrawPieI',
    'GdipCreateBitmapFromScan0', 'GdipBitmapLockBits', 'GdipBitmapUnlockBits',
-   'GdipGetClip','GdipSetClipRegion', 'GdipSetClipRectI', 'GdipResetClip', 'GdipCreateRegion', 'GdipDeleteRegion',
+   'GdipGetClip','GdipSetClipRegion', 'GdipSetClipRectI', 'GdipResetClip',
+   'GdipCreateRegion', 'GdipDeleteRegion',
    nil);
 {$ifndef WIN64}
    Office2003Version= $B0000; // Office 2003 = Office 11 ($B)

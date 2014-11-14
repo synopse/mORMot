@@ -1057,8 +1057,8 @@ unit mORMot;
     - fixed GPF issue in TServiceFactoryServer after instance time-out deletion
     - added TSQLPropInfo.PropertyIndex member
     - added TSQLRecordProperties.SimpleFieldsCount[] array
-    - added TSQLRecordProperties.BlobFieldsBits field index map and new
-      TSQLRecordProperties.FieldIndexsFromBlobField() method
+    - added TSQLRecordProperties.FieldBits[] field index map for all kinds 
+      and a new TSQLRecordProperties.FieldIndexsFromBlobField() method
     - added TSQLRecordProperties.FieldIndexsFromCSV()/FieldIndexsFromRawUTF8()
       methods (with functions ready to be used e.g. in BatchAdd/BatchUpdate)
     - added TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty() and
@@ -1208,6 +1208,9 @@ type
   // - when converted to plain TSQLRecord published properties, you may loose
   // some information under Win32 when stored as a 32 bit pointer
   TID = type Int64;
+
+  /// a pointer to a ORM primary key, i.e. TSQLRecord.ID: TID 
+  PID = ^TID;
 
   /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
   TIDDynArray = array of TID;
@@ -1380,7 +1383,15 @@ type
     // SQL statements (like 'INSERT INTO Table ...') won't set its content
     // - note also that this is automated on Delphi client side, so only within
     // TSQLRecord ORM use (an AJAX application should handle this explicitely)
-    sftCreateTime);
+    sftCreateTime,
+    /// an INTEGER field containing a TID pointing to another record
+    // - regular TSQLRecord published properties (i.e. sftID kind of field)
+    // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
+    // Win32, so defining TID published properties would allow to store the ID
+    // as signed 64 bit, e.g. up to 9,223,372,036,854,775,808
+    // - despite to sftID kind of record, coherency is NOT ensured: after a
+    // delete, all values pointing to are NOT reset to 0
+    sftTID);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -1629,7 +1640,7 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // - sftFloat is returned for any floating point value, even if it was
 // declared as sftCurrency type
 // - sftInteger is returned for any INTEGER stored value, even if it was declared
-// as sftEnumerate, sftSet, sftID, sftRecord, sftBoolean or
+// as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftBoolean or
 // sftModTime / sftCreateTime / sftTimeLog type
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 
@@ -3490,6 +3501,11 @@ type
     property ObjectClass: TClass read fObjectClass;
   end;
 
+  /// information about a TID published property
+  // - identified as a sftTID kind of property
+  TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIInt64)
+  end;
+
   /// information about a TSQLRecord class TSQLRecord property
   // - kind sftID, which are pointer(RecordID), not any true class instance
   // - will store the content just as an integer value
@@ -3637,13 +3653,8 @@ type
     // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
     // sftBlobRecord)
     BlobFields: array of TSQLPropInfoRTTI;
-    /// bit set to 1 for indicating BLOB fields of this TSQLRecord
-    // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
-    // sftBlobRecord)
-    BlobFieldsBits: TSQLFieldBits;
-    /// bit set to 1 for indicating TModTime fields of this TSQLRecord
-    // - i.e. sftModTime fields
-    ModTimeFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
+    FieldBits: array[TSQLFieldType] of TSQLFieldBits;
     /// bit set to 1 for indicating TModTime and TCreateTime fields
     // of this TSQLRecord
     // - i.e. sftModTime and sftCreateTime fields
@@ -4499,10 +4510,12 @@ type
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
+  // - itoNoIndex4TID won't create indexes for TID fields
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoIndex4ID, itoNoIndex4UniqueField,
-    itoNoIndex4NestedRecord, itoNoIndex4RecordReference);
+    itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
+    itoNoIndex4TID);
 
   /// the options to be specified for TSQLRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
@@ -5520,15 +5533,15 @@ type
     // will be TRUE
     function DynArray(DynArrayFieldIndex: integer): TDynArray; overload;
 
-    {/ this property stores the record's integer ID
-      - if this TSQLRecord is not a instance, but a field value in a published
-        property of type sftID (i.e. TSQLRecord(aID)), this method will try
-        to retrieve it; but prefered method is to typecast it via PtrInt(aProperty),
-        because GetID() relies on some low-level Windows memory mapping trick, and
-        will recognize an ID value up to 1,048,576 (i.e. $100000)
-      - notice: the Setter should not be used usualy; you should not have to write
-        aRecord.ID := someID in your code, since the ID is set during Retrieve or
-        Add of the record }
+    /// this property stores the record's integer ID
+    // - if this TSQLRecord is not a instance, but a field value in a published
+    //  property of type sftID (i.e. TSQLRecord(aID)), this method will try
+    //  to retrieve it; but prefered method is to typecast it via PtrInt(aProperty),
+    //  because GetID() relies on some low-level Windows memory mapping trick, and
+    //  will recognize an ID value up to 1,048,576 (i.e. $100000)
+    // - notice: the Setter should not be used usualy; you should not have to write
+    //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
+    //  Add of the record 
     property ID: TID read GetID write fID;
     /// this read-only property can be used to retrieve the ID as a TSQLRecord object
     // - published properties of type TSQLRecord (one-to-many relationship) do not
@@ -5758,7 +5771,7 @@ type
      - returns the Field Type
      - return generic string Text, i.e. UnicodeString for Delphi 2009+,
        ready to be displayed to the VCL, for sftEnumerate, sftTimeLog
-       and sftRecord/sftID
+       and sftRecord/sftID/sftTID
      - returns '' as string Text, if text can by displayed directly
        with Get*() methods above
      - returns '' for other properties kind, if UTF8ToString is nil,
@@ -6443,7 +6456,7 @@ type
     EditFieldNameWidth: integer;
     /// a CSV list of field names to be hidden in both editor and default report
     // - handy to hide fields containing JSON data or the name of another
-    // sftRecord/sftID (i.e. TRecordReference/TSQLRecord published propet) fields
+    // sftRecord/sftID/sftTID (i.e. TRecordReference/TSQLRecord props) fields 
     // - list is to be separated by commas (e.g. "RunLogJSON,OrdersJSON" or
     // "ConnectionName")
     EditFieldNameToHideCSV: RawUTF8;
@@ -9616,7 +9629,7 @@ type
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function OneFieldValues(Table: TSQLRecordClass;
       const FieldName, WhereClause: RawUTF8; Strings: TStrings;
-      IDToIndex: PInteger=nil): Boolean; overload;
+      IDToIndex: PID=nil): Boolean; overload;
     /// Execute directly a SQL statement, expecting a list of resutls
     // - return a result table on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
@@ -13726,7 +13739,7 @@ function UTF8CompareBoolean(P1,P2: PUTF8Char): PtrInt;
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareUInt32(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftInteger or
+/// special comparaison function for sorting sftInteger, sftTID, or
 // sftTimeLog / sftModTime / sftCreateTime UTF-8 encoded values in the SQLite3
 // database or JSON content
 function UTF8CompareInt64(P1,P2: PUTF8Char): PtrInt;
@@ -14389,7 +14402,8 @@ const
      ftUTF8,      // sftUTF8Custom
      ftUnknown,   // sftMany
      ftInt64,     // sftModTime
-     ftInt64);    // sftCreateTime
+     ftInt64,     // sftCreateTime
+     ftInt64);    // sftTID
 
 
 function TSQLPropInfo.SQLDBFieldType: TSQLDBFieldType;
@@ -14456,14 +14470,14 @@ const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
   SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
- // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    varEmpty,    varString,  varString,   varInteger,   varInt64, varInteger,
+ // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
+    varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInt64,varInt64,varBoolean,varDouble,varDate,  varInt64, varCurrency,
+    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
  // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
- // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
-    varString,      varString,    varEmpty, varInt64, varInt64);
+ // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID
+    varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64);
 var tempCopy: RawByteString;
     err: integer;
 begin
@@ -14486,9 +14500,10 @@ begin
   sftBoolean:
     result.VBoolean :=
       not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
-  sftEnumerate, sftInteger:
+  sftEnumerate:
     result.VInteger := GetInteger(Value);
-  sftID, sftRecord, sftSet, sftTimeLog, sftModTime, sftCreateTime:
+  sftInteger, sftID, sftTID, sftRecord, sftSet,
+  sftTimeLog, sftModTime, sftCreateTime:
     SetInt64(Value,result.VInt64);
   sftMany:
     exit;
@@ -14576,6 +14591,8 @@ begin
       C := TSQLPropInfoRTTIDateTime;
     sftID:
       C := TSQLPropInfoRTTIID;
+    sftTID:
+      C := TSQLPropInfoRTTITID;
     sftRecord:
       C := TSQLPropInfoRTTIInstance;
     sftMany:
@@ -17233,7 +17250,7 @@ begin
   case FieldType(Field) of
   sftCurrency,sftFloat:
     result := GetExtended(P);
-  sftInteger, // TSQLTable.InitFieldTypes may have recognized a sftInteger 
+  sftInteger, // TSQLTable.InitFieldTypes may have recognized an integer 
   sftTimeLog, sftModTime, sftCreateTime:
     result := TimeLogToDateTime(GetInt64(P));
   else // sftDateTime and any other kind will try from ISO-8601 text
@@ -17936,11 +17953,11 @@ var
   SQLFieldTypeComp: array[TSQLFieldType] of TUTF8Compare  =
    (nil,                  // unknown
     nil,    // AnsiText will be set to AnsiIComp in initialization block below
-{$ifdef USENORMTOUPPER}
+    {$ifdef USENORMTOUPPER}
     UTF8IComp,           // UTF8Text, 8 bits case insensitive compared
-{$else}
+    {$else}
     nil,    // UTF8Text will be set to AnsiIComp in initialization block below
-{$endif}
+    {$endif}
     UTF8CompareUInt32,   // Enumerate
     UTF8CompareUInt32,   // Set
     UTF8CompareInt64,    // Integer
@@ -17948,20 +17965,21 @@ var
     UTF8CompareRecord,   // Record
     UTF8CompareBoolean,  // Boolean
     UTF8CompareDouble,   // Float
-    UTF8CompareISO8601,  // DateTime
-    UTF8CompareInt64,    // TimeLog
+    UTF8CompareISO8601,  // TDateTime
+    UTF8CompareInt64,    // TTimeLog
     UTF8CompareCurr64,   // Currency
     nil,                 // Object (TEXT serialization)
-{$ifndef NOVARIANTS}
+    {$ifndef NOVARIANTS}
     nil,                 // Variant (TEXT serialization)
-{$endif}
+    {$endif}
     nil,                 // Blob
     nil,                 // BlobDynArray
     nil,                 // BlobCustom
     nil,                 // UTF8Custom
     nil,
-    UTF8CompareInt64,    // ModTime
-    UTF8CompareInt64);   // CreateTime
+    UTF8CompareInt64,    // TModTime
+    UTF8CompareInt64,    // TCreateTime
+    UTF8CompareInt64);   // TID
 
 type
   /// a static object is used for smaller recursive stack size and faster code
@@ -18553,7 +18571,7 @@ begin
       for F := 0 to FieldCount-1 do begin
         case fFieldType[F].ContentType of
         sftInteger, sftBlob, sftBlobCustom, sftUTF8Custom, sftRecord,
-        sftID, sftSet, sftCurrency:
+        sftID, sftTID, sftSet, sftCurrency:
           inc(aResult[F],8);
         else inc(aResult[F],Utf8FirstLineToUnicodeLength(U^));
         end;
@@ -18758,14 +18776,14 @@ begin
       inc(Result);
     end
   else
-  if ((Kind in [sftRecord,sftID]) and
+  if ((Kind in [sftRecord,sftID,sftTID]) and
      (Client<>nil) and Client.InheritsFrom(TSQLRest) and (CL.Model<>nil)) then
     while cardinal(result)<=cardinal(RowCount) do begin
       SetInt64(U^,Val64);
       if Val64<>0 then begin
         if Kind=sftRecord then
           EnumValue := RecordRef(Val64).Text(CL.Model) else
-          EnumValue := U^; // sftID -> display ID number -> no sounded
+          EnumValue := U^; // sftID/sftTID -> display ID number -> no sounded
         if Lang=sndxNone then begin
           if FindUTF8(pointer(EnumValue),Search) then exit;
         end else
@@ -18928,7 +18946,8 @@ IsDateTime:
       on {$ifdef LVCL}Exception{$else}EConvertError{$endif} do
         Text := '';
     end;
-  sftEnumerate, sftSet, sftRecord, sftID, sftTimeLog, sftModTime, sftCreateTime: begin
+  sftEnumerate, sftSet, sftRecord, sftID, sftTID,
+  sftTimeLog, sftModTime, sftCreateTime: begin
     Value := GetInt64(Get(Row,Field),err);
     if err<>0 then
       // not an integer -> to be displayed as sftUTF8Text
@@ -18940,7 +18959,7 @@ IsDateTime:
       end;
       sftTimeLog, sftModTime, sftCreateTime:
         goto IsDateTime;
-{      sftID, sftSet:
+{      sftID, sftTID, sftSet:
         result := sftUTF8Text; // will display INTEGER field as number }
       sftRecord:
         if (Value<>0) and 
@@ -20142,7 +20161,7 @@ int:  SetOrdProp(Dest,GetOrdProp(Source));
           goto obj else
           // -> these are not class instances, but INTEGER reference to records
           goto int;
-      sftObject: begin
+      sftMany, sftObject: begin
         // generic case: copy also class content (create instances)
 obj:    S := pointer(GetOrdProp(Source));
         D := pointer(GetOrdProp(Dest));
@@ -20162,7 +20181,7 @@ obj:    S := pointer(GetOrdProp(Source));
       end;
     end;
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
-      // works also with TTimeLog, Double and Currency
+      // works also with TID, TTimeLog, Double and Currency
 i64:  SetInt64Prop(Dest,GetInt64Prop(Source));
     tkFloat:
     if (PropType^.FloatType in [ftDoub,ftCurr]) and
@@ -20940,16 +20959,16 @@ end;
 function TTypeInfo.SQLFieldType: TSQLFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Kind of
-    tkInteger:
+    tkInteger: begin
+      result := sftInteger;
+      exit;
+    end;
+    tkInt64:
       if (@self=TypeInfo(TRecordReference)) or
          (@self=TypeInfo(TRecordReferenceToBeDeleted)) then begin
         result := sftRecord;
         exit; // direct exit is faster in generated asm code (Delphi 7 at least)
-      end else begin
-        result := sftInteger;
-        exit;
-      end;
-    tkInt64:
+      end else
       if @self=TypeInfo(TCreateTime) then begin
         result := sftCreateTime;
         exit;
@@ -20960,6 +20979,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end else
       if @self=TypeInfo(TTimeLog) then begin
         result := sftTimeLog;
+        exit;
+      end else
+      if @self=TypeInfo(TID) then begin
+        result := sftTID;
         exit;
       end else begin
         result := sftInteger;
@@ -21550,7 +21573,7 @@ procedure TSQLRecordFill.ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
 begin
   if (self<>nil) and (fTable<>nil) and (fTableMapRecordManyInstances=nil) then
     // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
-    Bits := fTableMapFields+Props.ModTimeFieldsBits else
+    Bits := fTableMapFields+Props.FieldBits[sftModTime] else
     // update all simple/custom fields (also for FillPrepareMany)
     Bits := Props.SimpleFieldsBits[soUpdate];
 end;
@@ -21693,7 +21716,8 @@ begin // is not part of TSQLRecordProperties because has been declared as virtua
       with Fields.List[f] do
       if ((aIsUnique in Attributes) and not (itoNoIndex4UniqueField in Options)) or
          ((SQLFieldType=sftRecord) and not (itoNoIndex4RecordReference in Options)) or
-         ((SQLFieldType=sftID) and not (itoNoIndex4NestedRecord in Options)) then
+         ((SQLFieldType=sftID) and not (itoNoIndex4NestedRecord in Options)) or
+         ((SQLFieldType=sftTID) and not (itoNoIndex4TID in Options)) then
         if (FieldName='') or IdemPropNameU(FieldName,Name) then
             Server.CreateSQLIndex(self,Name,false);
   end; // failure in Server.CreateSQLIndex() above is ignored (may already exist)
@@ -23487,7 +23511,7 @@ begin
   with Props.Props.Fields do
   for f := 0 to Count-1 do begin
     case List[f].SQLFieldType of
-    sftRecord, sftID: begin
+    sftRecord, sftID: begin // sftTID are not handled yet (don't know the table)
       R := length(fRecordReferences);
       SetLength(fRecordReferences,R+1);
       with fRecordReferences[R] do begin
@@ -24233,7 +24257,7 @@ begin
   // same format as TSQLRest.Update, BUT including the ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
-    FieldBits := CustomFields+Value.RecordProps.ModTimeFieldsBits;
+    FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
   Props.SetExpandedJSONWriter(fBatch,
     fTablePreviousSendData<>PSQLRecordClass(Value)^,True,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
@@ -24413,7 +24437,7 @@ begin
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PInteger=nil): Boolean;
+  WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID=nil): Boolean;
 var Row: integer;
     aID: TID;
     T: TSQLTableJSON;
@@ -24432,7 +24456,7 @@ begin
       if (T.FieldCount=2) and (T.RowCount>0) then begin
         for Row := 1 to T.RowCount do begin // ignore Row 0 i.e. field names
           aID := GetInt64(T.Get(Row,0));
-          Strings.AddObject(UTF8ToString(T.GetU(Row,1)),pointer(aID));
+          Strings.AddObject(T.GetString(Row,1),pointer(aID));
           if (IDToIndex<>nil) and (aID=IDToIndex^) then begin
             IDToIndex^ := Row-1;
             IDToIndex := nil; // set once
@@ -24951,11 +24975,11 @@ begin
     if (Value.fFill<>nil) and (Value.fFill.Table<>nil) and
        (Value.fFill.fTableMapRecordManyInstances=nil) then
       // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
-      FieldBits := Value.fFill.fTableMapFields+Value.RecordProps.ModTimeFieldsBits else
+      FieldBits := Value.fFill.fTableMapFields+Value.RecordProps.FieldBits[sftModTime] else
       // update all simple/custom fields (also for FillPrepareMany)
       FieldBits := Value.RecordProps.SimpleFieldsBits[soUpdate] else
     // CustomFields<>[] -> update specified and TModTime fields
-    FieldBits := CustomFields+Value.RecordProps.ModTimeFieldsBits;
+    FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
   if IsZero(FieldBits) then begin
     result := true; // a TSQLRecord with NO simple fields (e.g. ID/blob pair)
     exit;
@@ -27475,7 +27499,7 @@ begin
       if FieldType.ObjectClass=Table then
         Where := aID else
         continue;
-    else continue;
+    else continue; // sftTID not handled yet (don't know for which table)
     end;
     // set Field=0 where Field references aID
     Int64ToUTF8(Where,W);
@@ -31131,6 +31155,7 @@ var i, ndx: integer;
     aValue: PtrInt;
     err, currentRow: integer;
     P: TSQLPropInfo;
+    nfo: PPropInfo;
     Hash: TListFieldHash;
     Offs: PtrInt;
 begin
@@ -31179,12 +31204,12 @@ begin
       aValue := GetInteger(pointer(WhereValue),err);
       if err<>0 then
         exit;
-      with TSQLPropInfoRTTI(P).PropInfo^ do
-      if (PropType^.Kind=tkClass) or
-         ((PropType^.Kind=tkInteger)and(PropType^.OrdType=otSLong)) then
-        if GetterIsField then begin
+      nfo := TSQLPropInfoRTTI(P).PropInfo;
+      if {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
+         ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then
+        if nfo^.GetterIsField then begin
           // optimized version for fast retrieval of signed Int32 field value
-          Offs := GetProc{$ifndef FPC} and $00FFFFFF{$endif}; // no getter -> use PPtrInt()
+          Offs := nfo^.GetProc{$ifndef FPC} and $00FFFFFF{$endif}; // see TPropInfo.GetterAddr
           for i := 0 to fValue.Count-1 do
             if PInteger(PtrInt(fValue.List[i])+Offs)^=aValue then begin
               if FoundOffset>0 then begin // omit first FoundOffset rows
@@ -31202,7 +31227,7 @@ begin
         end;
       // not an Int32, or there is a getter procedure -> use GetOrdProp()
       for i := 0 to fValue.Count-1 do begin
-        if TSQLPropInfoRTTI(P).PropInfo^.GetOrdProp(TObject(fValue.List[i]))=aValue then begin
+        if nfo^.GetOrdProp(TObject(fValue.List[i]))=aValue then begin
           if FoundOffset>0 then begin
             inc(currentRow);
             if currentRow>=FoundOffset then
@@ -31834,7 +31859,7 @@ begin
         BlobFields[f].CopyValue(Value,fValue.List[i]);
       if Owner<>nil then
         Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,Value.fID,'',
-          @fStoredClassRecordProps.BlobFieldsBits);
+          @fStoredClassRecordProps.FieldBits[sftBlob]);
       result := true;
     finally
       StorageUnLock;
@@ -34859,6 +34884,7 @@ begin
     end;
     // get corresponding properties content
     include(HasTypeFields,F.SQLFieldType);
+    include(FieldBits[F.SQLFieldType],i);
     case F.SQLFieldType of
       sftUnknown: ;
       sftUTF8Text: begin
@@ -34872,7 +34898,6 @@ begin
       sftBlob: begin
         BlobFields[nBlob] := F as TSQLPropInfoRTTI;
         inc(nBlob);
-        include(BlobFieldsBits,i);
         SQLTableUpdateBlobFields := SQLTableUpdateBlobFields+F.Name+'=?,';
         SQLTableRetrieveBlobFields := SQLTableRetrieveBlobFields+F.Name+',';
         SQLTableRetrieveAllFields := SQLTableRetrieveAllFields+','+F.Name;
@@ -34907,12 +34932,7 @@ begin
         inc(nBlobCustom);
         goto Simple;
       end;
-      sftCreateTime: begin
-        include(ModCreateTimeFieldsBits,i);
-        goto Simple;
-      end;
-      sftModTime: begin
-        include(ModTimeFieldsBits,i);
+      sftCreateTime, sftModTime: begin
         include(ModCreateTimeFieldsBits,i);
         goto Simple;
       end;
@@ -35012,16 +35032,17 @@ const
     ' INTEGER, ',                    // sftTimeLog
     ' FLOAT, ',                      // sftCurrency
     ' TEXT COLLATE NOCASE, ',        // sftObject
-{$ifndef NOVARIANTS}
+    {$ifndef NOVARIANTS}
     ' TEXT COLLATE NOCASE, ',        // sftVariant
-{$endif}
+    {$endif}
     ' BLOB, ',                       // sftBlob
     ' BLOB, ',                       // sftBlobDynArray
     ' BLOB, ',                       // sftBlobCustom
     ' TEXT COLLATE NOCASE, ',        // sftUTF8Custom
     '',                              // sftMany
     ' INTEGER, ',                    // sftModTime
-    ' INTEGER, ');                   // sftCreateTime
+    ' INTEGER, ',                    // sftCreateTime
+    ' INTEGER, ');                   // sftTID
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then
     result := '' else
@@ -40709,4 +40730,4 @@ initialization
 end.
 
 
-
+

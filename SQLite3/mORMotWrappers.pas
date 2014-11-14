@@ -123,14 +123,14 @@ const
     'sftCreateTime', 'sftRecord', 'sftVariant');
 
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
- // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDefault,
- // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
+ // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,    sftInteger,
+    cpkDefault, cpkDefault,  cpkDefault,  cpkDefault,   cpkDefault,cpkDefault,
+ // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,sftTimeLog,sftCurrency,
     cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkTimeLog,cpkDefault,
- // sftObject, {$ifndef NOVARIANTS} sftVariant, {$endif} sftBlob, sftBlobDynArray,
-    cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif}cpkBlob,cpkDefault,
- // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime
-    cpkDefault,  cpkRecord,   cpkDefault,  cpkModTime, cpkCreateTime);
+ // sftObject,                     sftVariant,         sftBlob, sftBlobDynArray,
+    cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif} cpkBlob, cpkDefault,
+ // sftBlobCustom,sftUTF8Custom,sftMany, sftModTime,sftCreateTime, sftTID
+    cpkDefault,   cpkRecord,  cpkDefault,cpkModTime,cpkCreateTime, cpkDefault);
   CONST_SIZETODELPHI: array[0..4] of string[7] = (
     'integer','byte','word','integer','integer');
 
@@ -149,9 +149,9 @@ const
      ptRawUTF8,  // sftUTF8Text
      ptCustom,   // sftEnumerate
      ptCustom,   // sftSet
-     ptInteger,  // sftInteger
-     ptPtrUInt,  // sftID
-     ptPtrUInt,  // sftRecord
+     ptInt64,    // sftInteger
+     ptInt64,    // sftID
+     ptInt64,    // sftRecord
      ptBoolean,  // sftBoolean
      ptDouble,   // sftFloat
      ptDateTime, // sftDateTime
@@ -167,7 +167,8 @@ const
      ptRecord,   // sftUTF8Custom
      ptCustom,   // sftMany
      ptTimeLog,  // sftModTime
-     ptTimeLog); // sftCreateTime
+     ptTimeLog,  // sftCreateTime
+     ptInt64);   // sftID
 var orm,fields,records,enumerates,sets: TDocVariantData;
     rec,field: variant;
     nfoList: TSQLPropInfoList;

@@ -1319,7 +1319,7 @@ begin
       finally
         DB.UnLock;
       end;
-      InternalUpdateEvent(seUpdateBlob,TableModelIndex,Value.ID,'',@BlobFieldsBits);
+      InternalUpdateEvent(seUpdateBlob,TableModelIndex,Value.ID,'',@FieldBits[sftBlob]);
     end else
       result := true; // as TSQLRest.UpdateblobFields()
 end;

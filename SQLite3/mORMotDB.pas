@@ -599,16 +599,17 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftInt64,     // sftTimeLog
        ftCurrency,  // sftCurrency
        ftUTF8,      // sftObject
-  {$ifndef NOVARIANTS}
+       {$ifndef NOVARIANTS}
        ftUTF8,      // sftVariant
-  {$endif}
+       {$endif}
        ftBlob,      // sftBlob
        ftBlob,      // sftBlobDynArray
        ftBlob,      // sftBlobCustom
        ftUTF8,      // sftUTF8Comp
        ftInt64,     // sftMany
        ftInt64,     // sftModTime
-       ftInt64);    // sftCreateTime
+       ftInt64,     // sftCreateTime
+       ftInt64);    // sftTID
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
@@ -1459,7 +1460,7 @@ begin
        Params,aID,false);
     if result and (Owner<>nil) then begin
       Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
-          @fStoredClassRecordProps.BlobFieldsBits);
+          @fStoredClassRecordProps.FieldBits[sftBlob]);
       Owner.FlushInternalDBCache;
     end;
   end else

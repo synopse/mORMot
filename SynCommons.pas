@@ -20273,7 +20273,7 @@ end;
 
 {$ifdef CPU64}
 procedure SetInt64(P: PUTF8Char; var result: Int64);
-begin // PtrInt is already int64 -> call previous version
+begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 end;
 {$else}
@@ -35612,7 +35612,7 @@ slash:inc(i);
         'f': P[j] := #$0c;
         'r': P[j] := #$0d;
         'u':
-        if HexToBin(pointer(P+i+1),@w,2) then begin // '\u0123'
+        if HexToBin(pointer(P+i+1),@w,2) and (w<>0) then begin // '\u0123'
           w := swap(w);  // reverse byte order
           if w<=$7f then // speed up UTF-8 encoding for most used chars
             P[j] := ansichar(w) else

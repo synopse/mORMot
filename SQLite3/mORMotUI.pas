@@ -1142,7 +1142,8 @@ begin
       sftEnumerate, sftTimeLog, sftRecord, sftDateTime:
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
           length(StringValue), nil); // translated text
-      //sftID: { TODO : display ID as TSQLRecord content? better calculate it in SELECT }
+      //sftID,sftTID:
+      // proposal: display ID as TSQLRecord content? better compute it in SELECT 
       else begin
         // normal field value: unicode text (even with Delphi 2-2007 VCL), left aligned
         L := Table.GetWP(ARow,ACol,tmp,high(tmp));
