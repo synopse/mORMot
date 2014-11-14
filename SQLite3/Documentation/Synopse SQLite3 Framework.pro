@@ -2272,7 +2272,7 @@ Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor t
 The ORM will automatically perform the following optimizations for {\f1\fs20 TSQLRecord} published fields:
 - An {\i index} will be created on the database, for the corresponding column;
 - When a referenced record is deleted, the ORM will detect it and automatically set all published properties pointing to this record to 0.
-In fact, the ORM will not define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. If you also use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
+In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. If you also use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
 :  TID fields
 {\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
@@ -2280,6 +2280,18 @@ You can define a published property as {\f1\fs20 TID} to store any value of our 
 As a consequence, the ORM will perform the following optimizations for {\f1\fs20 TID} fields:
 - An {\i index} will be created on the database, for the corresponding column;
 - When a referenced record is deleted, the ORM {\i won't do anything}, since it has no information about the table to track - this is the main difference with {\f1\fs20 TSQLRecord} published property.
+You can optionally specify the associated table, using a custom {\f1\fs20 TID} type for the published property definition. In this case, you would sub-class {\f1\fs20 TID}, using {\f1\fs20 {\i tableName}ID} as naming convention.\line For instance, if you define:
+! type
+!   TSQLRecordClientID = type TID;
+!
+!   TSQLOrder = class(TSQLRecord)
+!   ...
+!   published Client: TID read fClient write fClient;
+!   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
+!   ...
+Those two published fields would be able to store a {\f1\fs20 Int64} foreign key, and will both have one {\i index} created on the database. But their type ({\f1\fs20 TID} or {\f1\fs20 TSQLRecordClientID}) will make a difference about the deletion process.
+By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so an index will be created for this column, but no deletion tracking would take place.
+On the other hand, {\i following the type naming convention}, the other {\f1\fs20 OrderedBy} property will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model. In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} type name, and search for a {\f1\fs20 TSQLRecord} class name matching {\f1\fs20 {\i TSQLRecordClassName}ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will create an index for the column, {\i and} track any {\f1\fs20 TSQLRecordClient} deletion: it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0 for any row pointing to the deleted record. As with {\f1\fs20 TSQLRecord} or {\f1\fs20 TRecordReference} properties, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL, but implement it {\i at ORM level}.
 :  TRecordReference and TRecordReferenceToBeDeleted
 {\f1\fs20 TSQLRecord} or {\f1\fs20 TID} published properties are associated with a single {\f1\fs20 TSQLRecord} joined table. You could use {\f1\fs20 @**TRecordReference@} or {\f1\fs20 @**TRecordReferenceToBeDeleted@} published properties to store a reference to any record on any table of the data model.
 In fact, such properties will store in a {\f1\fs20 Int64} value a reference to both a {\f1\fs20 TSQLRecord} class (therefore defining a table), and one {\f1\fs20 ID} (to define the row).
@@ -7171,7 +7183,7 @@ You can find in the {\f1\fs20 mORMotUILogin} unit two methods matching this call
 !    class procedure OnIdleProcess(Sender: TSynBackgroundThreadAbstract; ElapsedMS: Integer);
 !    class procedure OnIdleProcessForm(Sender: TSynBackgroundThreadAbstract; ElapsedMS: Integer);
 !  end;
-The first {\f1\fs20 OnIdleProcess()} callback will change the mouse cursor shape to {\f1\fs20 crHourClass} after a defined period of time. The {\f1\fs20 OnIdleProcessForm()} callback will not only change the mouse cursor, but also display a pop-up window with a {\i 'Please wait...'} message, if the request takes even more time. Both will call {\f1\fs20 Application.ProcessMessages} to ensure the application User Interface is still responsive.
+The first {\f1\fs20 OnIdleProcess()} callback will change the mouse cursor shape to {\f1\fs20 crHourClass} after a defined period of time. The {\f1\fs20 OnIdleProcessForm()} callback won't only change the mouse cursor, but also display a pop-up window with a {\i 'Please wait...'} message, if the request takes even more time. Both will call {\f1\fs20 Application.ProcessMessages} to ensure the application User Interface is still responsive.
 Some global variable were also defined to tune the behavior of those two callbacks:
 !var
 !  /// define when TLoginForm.OnIdleProcess() has to display the crHourGlass cursor
@@ -8125,7 +8137,7 @@ By default in {\i Delphi}, all references are defined:
 - with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, @*currency@, @*double@} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
 - via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, @*widestring@, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
 - as {\i strong reference} with {\i reference counting} for {\f1\fs20 interface} instances.
-The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and will not be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
+The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and won't be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
 See the following {\f1\fs20 interface} definition for instance:
 !  IParent = interface
 !    procedure SetChild(const Value: IChild);
@@ -12754,7 +12766,7 @@ struct1 [label="ID : TID|AssociatedRecord : TRecordReference|Status : TFileEvent
 \
 The {\f1\fs20 AssociatedRecord} property was defined as {\f1\fs20 @*TRecordReference@}. This special type (mapped as an INTEGER field in the database) is able to define a "one to many" relationship with ANY other record of the database model.
 - If you want to create a "one to many" relationship with a particular table, you should define a property with the corresponding {\f1\fs20 @*TSQLRecord@} sub-type (for instance, if you want to link to a particular {\i SafeData} row, define the property as {\f1\fs20 AssociatedData: TSQLSafeData;}) - in this case, this will create an INTEGER field in the database, holding the {\i RowID} value of the associated record (and this field content will be filled with {\f1\fs20 pointer(RowID)} and not with a real {\f1\fs20 TSQLSafeData} instance).
-- Using a {\f1\fs20 TRecordReference} type will not link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 @*RecordRef@} wrapper structure to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
+- Using a {\f1\fs20 TRecordReference} type won't link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 @*RecordRef@} wrapper structure to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
 According to the @*MVC@ model - see @10@ - the framework expect a common database model to be shared between client and server. A common function has been defined in the @!CreateFileModel!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit, as such:
 !function CreateFileModel(Owner: TSQLRest): TSQLModel;
 We'll see later its implementation. Just note for the moment that it will register the {\f1\fs20 TSQLAuditTrail, TSQLMemo, TSQLData, TSQLSafeMemo}, and {\f1\fs20 TSQLSafeData} classes as part of the database model. The order of the registration of those classes will be used for the {\f1\fs20 AssociatedRecord: TRecordReference} field of {\f1\fs20 TSQLAuditTrail} - e.g. a {\f1\fs20 TSQLMemo} record will be identified with a table index of 1 in the {\f1\fs20 RecordReference} encoded value. So it's mandatory to NOT change this order in any future modification of the database schema, without providing any explicit database content conversion mechanism.

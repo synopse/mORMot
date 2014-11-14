@@ -7971,9 +7971,13 @@ type
   TSQLDBConnectionPropertiesHook = class(TSQLDBConnectionProperties);
   TSQLRestStorageExternalHook = class(TSQLRestStorageExternal);
 
+  TSQLRecordPeopleID = type TID;
+
   TSQLRecordCustomProps = class(TSQLRecordPeople)
   protected
     fGUID: TGUID;
+    fPeopleID: TID;
+    fPeople: TSQLRecordPeopleID;
     {$ifdef PUBLISHRECORD}
     fGUIDXE6: TGUID;
     {$endif}
@@ -7981,6 +7985,8 @@ type
   public
     property GUID: TGUID read fGUID write fGUID;
   published
+    property PeopleID: TID read fPeopleID write fPeopleID;
+    property People: TSQLRecordPeopleID read fPeople write fPeople;
     {$ifdef PUBLISHRECORD}
     property GUIDXE6: TGUID read fGUIDXE6 write fGUIDXE6;
     {$endif}
@@ -9544,6 +9550,7 @@ begin
                   inc(n);
                 end;
               for i := 0 to n-1 do
+                // note that here a warning does make sense, since Server.DB=nil
                 Check(ClientDist.BatchDelete(IntArray[i])=i);
               nupd := 0;
               for i := 0 to aStatic.Count-1 do

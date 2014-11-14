@@ -2082,8 +2082,8 @@ type
     function FloatType: TFloatType;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the SQL type of this Delphi type, as managed with the database driver
-    function SQLFieldType: TSQLFieldType;
-     /// fast and easy find if a class type inherits from a specific class type
+    function GetSQLFieldType: TSQLFieldType;
+    /// fast and easy find if a class type inherits from a specific class type
     function InheritsFrom(AClass: TClass): boolean;
     /// get the enumeration type information
     function EnumBaseType: PEnumType;
@@ -3489,8 +3489,9 @@ type
   TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32){$endif}
   protected
     fObjectClass: TClass;
+    fIsTRecordReferenceToBeDeleted: boolean;
   public
-    /// will setup the corresponding RecordClass property
+    /// will setup the corresponding ObjectClass property
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
@@ -3499,11 +3500,34 @@ type
     /// direct access to the property class
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
+    /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
+    property IsTRecordReferenceToBeDeleted: boolean read fIsTRecordReferenceToBeDeleted;
   end;
 
   /// information about a TID published property
-  // - identified as a sftTID kind of property
+  // - identified as a sftTID kind of property, optionally tied to a TSQLRecord
+  // class, via its custom type name, e.g.
+  // ! TSQLRecordClientID = type TID;  ->  TSQLRecordClient class
   TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIInt64)
+  protected
+    fRecordClass: TSQLRecordClass;
+  public
+    /// will setup the corresponding RecordClass property from the TID type name
+    // - the TSQLRecord type should have previously been registered to the
+    // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
+    // that e.g. 'TSQLRecordClientID' type name would match TSQLRecordClient
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    /// the TSQLRecord class associated to this TID
+    // - is computed from its type name - for instance, if you define:
+    // ! type
+    // !   TSQLRecordClientID = type TID;
+    // !   TSQLOrder = class(TSQLRecord)
+    // !   ...
+    // !   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
+    // !   ...
+    // then this OrderedBy property would be tied to the TSQLRecordClient class
+    // of the corresponding model
+    property RecordClass: TSQLRecordClass read fRecordClass;
   end;
 
   /// information about a TSQLRecord class TSQLRecord property
@@ -6760,7 +6784,7 @@ type
     // reset to 0 by TSQLRestServer.AfterDeleteForceCoherency
     fRecordReferences: array of record
       TableIndex: integer;
-      FieldType: TSQLPropInfoRTTIInstance;
+      FieldType: TSQLPropInfo;
     end;
     procedure SetTableProps(aIndex: integer);
     function GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
@@ -14304,6 +14328,28 @@ begin
 end;
 
 
+type // those classes will be used to register globally some classes for JSON
+  TJSONSerializerRegisteredClassAbstract = class(TList)
+  protected
+    LastClass: TClass;
+    Lock: TRTLCriticalSection;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  TJSONSerializerRegisteredClass = class(TJSONSerializerRegisteredClassAbstract)
+  protected
+  public
+    procedure AddOnce(aItemClass: TClass);
+    function Find(JSON: PUTF8Char; AndRegisterClass: boolean): TClass; overload;
+    function Find(aClassName: PUTF8Char; aClassNameLen: integer): TClass; overload;
+  end;
+
+var
+  JSONSerializerRegisteredClass: TJSONSerializerRegisteredClass=nil;
+
+
 { TSQLPropInfo }
 
 const
@@ -14590,7 +14636,7 @@ begin
   if aPropInfo=nil then
     raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call',[self]);
   aType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
-  aSQLFieldType := aType^.SQLFieldType;
+  aSQLFieldType := aType^.GetSQLFieldType;
   C := nil;
   case aSQLFieldType of
     sftUnknown, sftBlobCustom:
@@ -15239,6 +15285,9 @@ constructor TSQLPropInfoRTTIInstance.Create(aPropInfo: PPropInfo; aPropIndex: in
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjectClass := aPropInfo^.PropType^.ClassType^.ClassType;
+  if aSQLFieldType=sftRecord then
+    fIsTRecordReferenceToBeDeleted :=
+      IdemPropName(aPropInfo^.PropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
 function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
@@ -15255,6 +15304,26 @@ begin
     PPointer(fPropInfo.GetterAddr(Instance))^ := Value else
   {$endif}
     fPropInfo.SetOrdProp(Instance,PtrInt(Value));
+end;
+
+
+{ TSQLPropInfoRTTITID }
+
+constructor TSQLPropInfoRTTITID.Create(aPropInfo: PPropInfo; aPropIndex: integer;
+  aSQLFieldType: TSQLFieldType);
+var TypeName: PShortString;
+    ItemClass: TClass;
+begin
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  TypeName := @aPropInfo^.PropType^.Name;
+  if IdemPropName(TypeName^,'TID') or
+     (ord(TypeName^[1]) and $df<>ord('T')) or // expect T...ID pattern
+     (PWord(@TypeName^[ord(TypeName^[0])-1])^ and $dfdf<>ord('I')+ord('D') shl 8) or
+     (JSONSerializerRegisteredClass=nil) then
+    exit;
+  ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-2);
+  if (ItemClass<>nil) and ItemClass.InheritsFrom(TSQLRecord) then
+    fRecordClass := pointer(ItemClass); // 'TSQLRecordClientID' -> TSQLRecordClient
 end;
 
 
@@ -20918,7 +20987,7 @@ begin
     else begin
       result := sftObject; // published properties, TStrings TRawUTF8List TCollection
       exit;
-    end else begin
+    end else begin 
       result := sftID; // TSQLRecord field value is pointer(RecordID), not any Instance
       exit;
     end else begin
@@ -20980,7 +21049,7 @@ asm // eax=PClassType edx=AClass
 end;
 {$endif}
 
-function TTypeInfo.SQLFieldType: TSQLFieldType;
+function TTypeInfo.GetSQLFieldType: TSQLFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Kind of
     tkInteger: begin
@@ -21006,6 +21075,11 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end else
       if @self=TypeInfo(TID) then begin
+        result := sftTID;
+        exit;
+      end else
+      if (ord(Name[1]) and $df=ord('T')) and // T...ID pattern in type name -> TID
+         (PWord(@Name[ord(Name[0])-1])^ and $dfdf=ord('I')+ord('D') shl 8) then begin
         result := sftTID;
         exit;
       end else begin
@@ -23503,13 +23577,23 @@ end;
 { TSQLModel }
 
 procedure TSQLModel.SetTableProps(aIndex: integer);
-var i, j, f, R: integer;
+var i,j,f: integer;
     Kind: TSQLRecordVirtualKind;
     Table: TSQLRecordClass;
     aTableName: RawUTF8;
     Props: TSQLModelRecordProperties;
     Search: TClass;
     W: TTextWriter;
+procedure RegisterTableForRecordReference(aList: TSQLPropInfo);
+var R: integer;
+begin
+  R := length(fRecordReferences);
+  SetLength(fRecordReferences,R+1);
+  with fRecordReferences[R] do begin
+    TableIndex := aIndex;
+    FieldType := aList;
+  end;
+end;
 begin
   assert((cardinal(aIndex)<=cardinal(fTablesMax)) and (fTableProps[aIndex]=nil));
   Table := fTables[aIndex];
@@ -23535,14 +23619,12 @@ begin
   with Props.Props.Fields do
   for f := 0 to Count-1 do begin
     case List[f].SQLFieldType of
-    sftRecord, sftID: begin // sftTID are not handled yet (don't know the table)
-      R := length(fRecordReferences);
-      SetLength(fRecordReferences,R+1);
-      with fRecordReferences[R] do begin
-        TableIndex := aIndex;
-        FieldType := List[f] as TSQLPropInfoRTTIInstance;
-      end;
-    end;
+    sftRecord, sftID:
+      RegisterTableForRecordReference(List[f]);
+    sftTID:
+      if List[f].InheritsFrom(TSQLPropInfoRTTITID) and
+         (TSQLPropInfoRTTITID(List[f]).RecordClass<>nil) then
+        RegisterTableForRecordReference(List[f]);
     sftMany: begin
       Search := (List[f] as TSQLPropInfoRTTIMany).ObjectClass;
       for i := 0 to fTablesMax do // manual search:  GetTableIndex() may fail
@@ -23589,10 +23671,14 @@ end;
 function TSQLModel.AddTable(aTable: TSQLRecordClass; aTableIndexCreated: PInteger=nil): boolean;
 var n: integer;
 begin
+  // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
+  TJSONSerializer.RegisterClassForJSON(aTable);
+  // insert only once
   if GetTableIndex(aTable)>=0 then begin
     result := false;
     exit;
   end;
+  // add to the model list
   inc(fTablesMax);
   n := fTablesMax+1;
   SetLength(fTables,n);
@@ -23663,6 +23749,9 @@ begin
   fTablesMax := N-1;
   SetLength(fTables,N);
   move(Tables[0],fTables[0],N*Sizeof(Tables[0]));
+  for i := 0 to N-1 do
+    // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
+    TJSONSerializer.RegisterClassForJSON(Tables[i]);
   SetLength(fSortedTablesName,N);
   SetLength(fSortedTablesNameIndex,N);
   SetLength(fTableProps,N);
@@ -25676,10 +25765,13 @@ begin
       with fCache[i] do
       if CacheEnable then begin
         EnterCriticalSection(Mutex);
-        for j := 0 to Count-1 do
-          if Values[j].TimeStamp64<>0 then
-            inc(result);
-        LeaveCriticalSection(Mutex);
+        try
+          for j := 0 to Count-1 do
+            if Values[j].TimeStamp64<>0 then
+              inc(result);
+        finally
+          LeaveCriticalSection(Mutex);
+        end;
       end;
 end;
 
@@ -25692,10 +25784,13 @@ begin
       with fCache[i] do
       if CacheEnable then begin
         EnterCriticalSection(Mutex);
-        for j := 0 to Count-1 do
-          if Values[j].TimeStamp64<>0 then
-            inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
-        LeaveCriticalSection(Mutex);
+        try
+          for j := 0 to Count-1 do
+            if Values[j].TimeStamp64<>0 then
+              inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
+        finally
+          LeaveCriticalSection(Mutex);
+        end;
       end;
 end;
 
@@ -25710,8 +25805,11 @@ begin
     if Cardinal(i)<Cardinal(Length(fCache)) then
       with fCache[i] do begin
         EnterCriticalSection(Mutex);
-        TimeOutMS := aTimeOutMS;
-        LeaveCriticalSection(Mutex);
+        try
+          TimeOutMS := aTimeOutMS;
+        finally
+          LeaveCriticalSection(Mutex);
+        end;
         result := true;
       end;
 end;
@@ -27501,6 +27599,7 @@ var T: integer;
     RecRef: TRecordReference;
     Rest: TSQLRest;
     ToDo: (toVoidField, toDeleteRecord);
+    cascadeOK: boolean;
     W: RawUTF8;
 begin
   result := true; // success if no property found
@@ -27514,32 +27613,39 @@ begin
     ToDo := toVoidField;
     case FieldType.SQLFieldType of
     sftRecord: begin // TRecordReference published field
-      if IdemPropName((FieldType as TSQLPropInfoRTTIInstance).PropInfo^.Name,
-          'TRecordReferenceToBeDeleted') then
+      if (FieldType as TSQLPropInfoRTTIInstance).IsTRecordReferenceToBeDeleted then
         ToDo := toDeleteRecord;
       Where := RecRef;
     end;
-    sftID:     // TSQLRecord published field
-      if FieldType.ObjectClass=Table then
+    sftID:           // TSQLRecord published field
+      if (FieldType as TSQLPropInfoRTTIInstance).ObjectClass=Table then
         Where := aID else
         continue;
-    else continue; // sftTID not handled yet (don't know for which table)
+    sftTID:          // TTableID = type TID published field
+      if (FieldType as TSQLPropInfoRTTITID).RecordClass=Table then
+        Where := aID else
+        continue;
+    else continue;
     end;
     // set Field=0 where Field references aID
     Int64ToUTF8(Where,W);
     Tab := Model.Tables[TableIndex];
+    cascadeOK := true;
     case ToDo of
     toVoidField: begin
       Rest := GetStaticDataServerOrVirtualTable(Tab);
       if Rest<>nil then // fast direct call
-        result := Rest.EngineUpdateField(TableIndex,
+        cascadeOK := Rest.EngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W) else
-        result := MainEngineUpdateField(TableIndex,
+        cascadeOK := MainEngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W);
     end;
     toDeleteRecord:
-      Delete(Tab,FieldType.Name+'=:('+W+'):');
+      cascadeOK := Delete(Tab,FieldType.Name+'=:('+W+'):');
     end;
+    if not cascadeOK then
+      InternalLog(FormatUTF8('%.AfterDeleteForceCoherency() failed to handle field %.%',
+        [Self,Model.Tables[TableIndex],FieldType.Name]),sllWarning);
   end;
 end;
 
@@ -33294,24 +33400,6 @@ begin
   end;
 end;
 
-type
-  TJSONSerializerRegisteredClassAbstract = class(TList)
-  protected
-    LastClass: TClass;
-    Lock: TRTLCriticalSection;
-  public
-    constructor Create;
-    destructor Destroy; override;
-  end;
-
-  TJSONSerializerRegisteredClass = class(TJSONSerializerRegisteredClassAbstract)
-  protected
-  public
-    procedure AddOnce(aItemClass: TClass);
-    function Find(JSON: PUTF8Char; AndRegisterClass: boolean): TClass; overload;
-    function Find(aClassName: PUTF8Char; aClassNameLen: integer): TClass; overload;
-  end;
-
 constructor TJSONSerializerRegisteredClassAbstract.Create;
 begin
   inherited Create;
@@ -33329,15 +33417,16 @@ var ClassNameValue: PUTF8Char;
     ClassNameLen: integer;
 begin // at input, JSON^='{'
   result := nil;
-  if self<>nil then
+  if self=nil then
+    exit;
+  JSON := JSONRetrieveStringField(JSON+1,ClassNameValue,ClassNameLen,true);
+  if (JSON=nil) or not IdemPropName('ClassName',ClassNameValue,ClassNameLen) then
+    exit; // we expect woStoreClassName option to have been used
+  repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  if JSONRetrieveStringField(JSON,ClassNameValue,ClassNameLen,false)=nil then
+    exit; //invalid JSON string value
+  EnterCriticalSection(Lock);
   try
-    EnterCriticalSection(Lock);
-    JSON := JSONRetrieveStringField(JSON+1,ClassNameValue,ClassNameLen,true);
-    if (JSON=nil) or not IdemPropName('ClassName',ClassNameValue,ClassNameLen) then
-      exit; // we expect woStoreClassName option to have been used
-    repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    if JSONRetrieveStringField(JSON,ClassNameValue,ClassNameLen,false)=nil then
-      exit; //invalid JSON string value
     if (LastClass<>nil) and
        IdemPropName(PShortString(PPointer(PtrInt(LastClass)+vmtClassName)^)^,
        ClassNameValue,ClassNameLen) then begin
@@ -33362,8 +33451,8 @@ end;
 procedure TJSONSerializerRegisteredClass.AddOnce(aItemClass: TClass);
 var i: integer;
 begin
+  EnterCriticalSection(Lock);
   try
-    EnterCriticalSection(Lock);
     for i := 0 to Count-1 do
       if TClass(List[i])=aItemClass then
         exit; // already registered
@@ -33377,8 +33466,8 @@ function TJSONSerializerRegisteredClass.Find(aClassName: PUTF8Char; aClassNameLe
 var i: integer;
 begin
   result := nil;
+  EnterCriticalSection(Lock);
   try
-    EnterCriticalSection(Lock);
     for i := 0 to Count-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
       // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
@@ -33407,29 +33496,31 @@ function TJSONSerializerRegisteredCollection.Find(aCollection: TCollectionClass)
 var i: integer;
 begin
   result := nil;
-  if self<>nil then
-    try
-      EnterCriticalSection(Lock);
-      for i := 0 to (Count shr 1)-1 do
-        if TClass(List[i*2])=aCollection then begin
-          result := List[i*2+1];
-          exit;
-        end;
-    finally
-      LeaveCriticalSection(Lock)
-    end;
+  if self=nil then
+    exit;
+  EnterCriticalSection(Lock);
+  try
+    for i := 0 to (Count shr 1)-1 do
+      if TClass(List[i*2])=aCollection then begin
+        result := List[i*2+1];
+        exit;
+      end;
+  finally
+    LeaveCriticalSection(Lock)
+  end;
 end;
 
 procedure TJSONSerializerRegisteredCollection.AddOnce(aCollection: TCollectionClass; aItem: TCollectionItemClass);
 begin
-  if Find(aCollection)=nil then
-    try
-      EnterCriticalSection(Lock);
-      Add(aCollection);
-      Add(aItem);
-    finally
-      LeaveCriticalSection(Lock)
-    end;
+  if (self=nil) or (Find(aCollection)<>nil) then
+    exit;
+  EnterCriticalSection(Lock);
+  try
+    Add(aCollection);
+    Add(aItem);
+  finally
+    LeaveCriticalSection(Lock)
+  end;
 end;
 
 function TJSONSerializerRegisteredCollection.Find(aCollClassName: PUTF8Char;
@@ -33437,8 +33528,8 @@ function TJSONSerializerRegisteredCollection.Find(aCollClassName: PUTF8Char;
 var i: integer;
 begin
   result := nil;
+  EnterCriticalSection(Lock);
   try
-    EnterCriticalSection(Lock);
     for i := 0 to (Count shr 1)-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
       // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
@@ -33466,9 +33557,6 @@ begin
 end;
 
 {$endif LVCL}
-
-var
-  JSONSerializerRegisteredClass: TJSONSerializerRegisteredClass=nil;
 
 class procedure TJSONSerializer.RegisterClassForJSON(aItemClass: TClass);
 begin
@@ -34848,7 +34936,8 @@ label Simple;
 begin
   InitializeCriticalSection(fLock);
   assert(aTable<>nil); // should not be called directly, but via PropsCreate()
-  // register to the JSONToObject() TObjectList "ClassName":".." feature
+  // register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
+  // (should have been done before in TSQLModel.Create/AddTable)
   TJSONSerializer.RegisterClassForJSON(aTable);
   // initialize internal structures
   fModelMax := -1;
@@ -39595,6 +39684,7 @@ end;
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
     entry: PInterfaceEntry;
+    dolock: boolean;
 begin
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
@@ -39649,9 +39739,10 @@ begin
       Ctxt.fThreadServer^.Factory := self;
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
+      dolock := optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options;
+      if dolock then
+        EnterCriticalSection(fInstanceLock);
       try
-        if optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options then
-          EnterCriticalSection(fInstanceLock);
         if not fInterface.fMethods[Ctxt.ServiceMethodIndex].InternalExecute(
             [PAnsiChar(Inst.Instance)+entry^.IOffset],Ctxt.ServiceParameters,
              WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
@@ -39662,7 +39753,7 @@ begin
           exit; // wrong request
         end;
       finally
-        if optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options then
+        if dolock then
           LeaveCriticalSection(fInstanceLock);
       end;
       if Ctxt.Call.OutHead='' then begin // <>'' for TServiceCustomAnswer
