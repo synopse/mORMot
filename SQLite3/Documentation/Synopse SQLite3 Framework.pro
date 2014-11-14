@@ -697,7 +697,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - Truly RESTful authentication with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
 - Fast a configuration-less @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
-- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
+- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB.pas} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
 - RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
 - Full @*Text Search@ engine included, with enhanced Google-like ranking algorithm;
@@ -1572,7 +1572,7 @@ With {\f1\fs20 _Obj()}, an {\i object} {\f1\fs20 variant} instance will be initi
 !  V1 := _Obj(['name','John','year',1972]);
 !  V2 := _Obj(['name','John','doc',_Obj(['one',1,'two',2.5])]); // with nested objects
 Then you can convert those objects into JSON, by two means:
-- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one UTF-8 content;
+- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one @*UTF-8@ content;
 - Or by trans-typing the {\f1\fs20 variant} instance into a string (this will be slower, but is possible).
 ! writeln(VariantSaveJson(V1)); // explicit conversion into RawUTF8
 ! writeln(V1);                  // implicit conversion from variant into string
@@ -1665,7 +1665,7 @@ With {\f1\fs20 _Arr()}, an {\i array} {\f1\fs20 variant} instance will be initia
 !  V1 := _Arr(['John','Mark','Luke']);
 !  V2 := _Obj(['name','John','array',_Arr(['one','two',2.5])]); // as nested array
 Then you can convert those objects into JSON, by two means:
-- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one UTF-8 content;
+- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one @*UTF-8@ content;
 - Or by trans-typing the {\f1\fs20 variant} instance into a string (this will be slower, but is possible).
 ! writeln(VariantSaveJson(V1));
 ! writeln(V1);  // implicit conversion from variant into string
@@ -2150,7 +2150,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |enumeration|INTEGER|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
 |set|INTEGER|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
 |{\f1\fs20 single}|FLOAT|
-|{\f1\fs20 double}|FLOAT|
+|{\f1\fs20 @*double@}|FLOAT|
 |{\f1\fs20 extended}|FLOAT|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|FLOAT|safely converted to/from {\f1\fs20 currency} type with fixed decimals, without rounding error
 |{\f1\fs20 @*RawUTF8@}|TEXT|this is the {\b preferred} field type for storing some textual content in the ORM
@@ -2181,7 +2181,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
 - If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
 - For a dynamic array field, the {\f1\fs20 index} number can be used for the {\f1\fs20 TSQLRecord. DynArray(DynArrayFieldIndex)} method to create a {\f1\fs20 TDynArray} wrapper mapping the dynamic array data;
-- For a {\f1\fs20 WinAnsiString / RawUTF8} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
+- For a {\f1\fs20 WinAnsiString / RawUTF8} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
 For instance, the following {\f1\fs20 class} definition will create an index for its {\f1\fs20 SerialNumber} property (up to 30 characters long if stored in an external database), and will expect a link to a model of diaper ({\f1\fs20 TSQLDiaperModel}) and the baby which used it ({\f1\fs20 TSQLBaby}). An {\f1\fs20 ID} / {\f1\fs20 RowID} column will be always available (from {\f1\fs20 TSQLRecord}), so in this case, you would be able to make a fast lookup for a particular diaper from either its internal {\i mORmot} ID, or its official unique serial number:
 !/// table used for the Diaper queries
 !TSQLDiaper = class(TSQLRecord)
@@ -2235,13 +2235,13 @@ In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exc
 {\i Enumerations} should be mapped as INTEGER, i.e. via {\f1\fs20 ord(aEnumValue)} or {\f1\fs20 TEnum(aIntegerValue)}.
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
 :  Floating point and Currency fields
-For standard floating-point values, the framework natively handles the {\f1\fs20 double} and {\f1\fs20 @**currency@} kind of variables.
+For standard floating-point values, the framework natively handles the {\f1\fs20 @*double@} and {\f1\fs20 @**currency@} kind of variables.
 In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
 The {\f1\fs20 currency} type is the standard {\i Delphi} type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
 As stated by the official {\i Delphi} documentation:
 {\i {\f1\fs20 Currency} is a fixed-point data type that minimizes rounding errors in monetary calculations. On the Win32 platform, it is stored as a scaled 64-bit integer with the four least significant digits implicitly representing decimal places. When mixed with other real types in assignments and expressions, {\f1\fs20 Currency} values are automatically divided or multiplied by 10000.}
 In fact, this type matches the corresponding {\f1\fs20 OLE} and {\f1\fs20 .Net} implementation of {\f1\fs20 currency}. It is still implemented the same in the {\i Win64} platform (since XE 2). The {\f1\fs20 Int64} binary representation of the {\f1\fs20 currency} type (i.e. {\f1\fs20 value*10000} as accessible via a typecast like {\f1\fs20 PInt64(@aCurrencyValue)^}) is a safe and fast implementation pattern.
-In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB} units will try to avoid any conversion to/from double for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
+In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB.pas} units will try to avoid any conversion to/from {\f1\fs20 @*double@} for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
 :  TSQLRecord fields
 It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After runing {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
 In fact, their definition is used to define a "@*one to many@" or "@*one to one@" relationship between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
@@ -2253,7 +2253,7 @@ The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized
 At loading, it will check their content:
 - If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with extended syntax, if applying);
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
-- It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 double}) if the stored text has the corresponding layout;
+- It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 @*double@}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
 Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in {\i Delphi} code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
 At JSON level, {\f1\fs20 variant} fields will be transmitted as JSON text or number, depending on the stored value.
@@ -2372,7 +2372,7 @@ You could also create a {\f1\fs20 TObjectList}, or - even better for newer versi
 Note that this method will use more memory and resources than a {\f1\fs20 *FillPrepare} call followed by a {\f1\fs20 while ...FillOne do} loop, since the later will only allocate one instance of the {\f1\fs20 TSQLRecord}, then fill the properties of this single instance directly from the returned JSON content, one at a time. For huge lists, or in multi-threaded environement, it may make a difference.\line But the generics syntax can make cleaner code, or more integrated with your business logic.
 :36  Query parameters
 For safer and faster database process, the WHERE clause of the request expects some parameters to be specified. They are bound in the {\f1\fs20 ?} appearance order in the WHERE clause of the {\f1\fs20 [CreateAnd]FillPrepare} query method.
-Standard simple kind of parameters ({\f1\fs20 RawUTF8, integer, double}..) can be bound directly - as in the sample code above for {\f1\fs20 Name} or {\f1\fs20 Sex} properties. The first parameter will be bound as {\f1\fs20 'A%' RawUTF8} TEXT, and the second as the {\f1\fs20 1} INTEGER value.
+Standard simple kind of parameters ({\f1\fs20 @*RawUTF8@, integer, @*double@, @*currency@}..) can be bound directly - as in the sample code above for {\f1\fs20 Name} or {\f1\fs20 Sex} properties. The first parameter will be bound as {\f1\fs20 'A%' RawUTF8} TEXT, and the second as the {\f1\fs20 1} INTEGER value.
 Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1\fs20 @*DateToSQL@()}, {\f1\fs20 @*DateTimeToSQL@()} or {\f1\fs20 @*TimeLogToSQL@()} functions, as such:
 ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(EncodeDate(2012,5,4))]);
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
@@ -3497,16 +3497,17 @@ As stated below, you can use any other database access layer, if you wish:
 - Direct access to a {\i @*MongoDB@} database, which implements a true @82@ design.
 \graph mORMotDBDesign mORMot Persistence Layer Architecture
 \ORM\SQLite3\direct
-\ORM\TObjectList\direct
-\ORM\External DB\direct
-\SQLite3\TObjectList\virtual
-\SQLite3\External DB
-\External DB\Oracle SQLite3 ODBC¤OleDB ZDBC\direct
-\External DB\FireDAC AnyDAC UniDAC¤BDE DBExpress NexusDB\DB.pas¤TDataSet
-\ORM\MongoDB\direct
+\ORM\TObjectList¤NoSQL\direct
+\ORM\RDBMS\direct
+\SQLite3\TObjectList¤NoSQL\virtual
+\SQLite3\RDBMS
+\RDBMS\Oracle SQLite3 ODBC¤OleDB ZDBC\direct
+\RDBMS\FireDAC AnyDAC UniDAC¤BDE DBExpress NexusDB\DB.pas¤TDataSet
+\ORM\MongoDB¤NoSQL\direct
 \ORM\TSQLRest¤redirection\direct
 =ORM=mORMot¤ORM
-\TObjectList=External DB=MongoDB=TSQLRest¤redirection
+=RDBMS=External SQL¤RDBMS
+\TObjectList¤NoSQL=RDBMS=MongoDB¤NoSQL=TSQLRest¤redirection
 \
 {\i SQlite3} will be used as the main SQL engine, able to @*JOIN@ all those tables, thanks to its {\i @*Virtual Table@} unique feature. You can in fact {\i mix} internal and external engines, in the same database model, and access all data in one unique SQL statement.
 :  SQLite3 as core
@@ -3535,11 +3536,11 @@ From the technical point of view, here are the current compilation options used 
 The overhead of including {\i SQlite3} in your server application will be worth it: just some KB to the executable, but with so many nice features, even if only external databases are used.
 :  Extended by SQLite3 virtual tables
 Since the framework is truly object oriented, another database engine could be used instead of the framework. You could easily write your own {\f1\fs20 TSQLRestServer} descendant (as an example, we included a fast in-memory database engine as {\f1\fs20 @*TSQLRestServerFullMemory@}) and link to a another engine (like {\i @*FireBird@}, or a private one). You can even use our framework without any link to the {\i @*SQLite3@} engine itself, via our provided very fast in memory dataset (which can be made persistent by writing and reading @*JSON@ files on disk). The {\i SQLite3} engine is implemented in a separate unit, named {\f1\fs20 SynSQLite3.pas}, and the main unit of the framework is {\f1\fs20 mORMot.pas}. A bridge between the two units is made with {\f1\fs20 mORMotSQLite3.pas}, which will found our ORM framework using {\i SQLite3} as its core.
-The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@}-based dedicated units, as stated @27@.
+The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@.pas}-based dedicated units, as stated @27@.
 As a result, the framework has several potential database back-ends, in addition to the default {\i SQLite3} file-based engine. Each engine may have its own purpose, according to the application expectations. Currently {\i SQLite3, Oracle, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled by our ORM.
 :59  Data access benchmark
 Purpose here is not to say that one library or database is better or faster than another, but publish a snapshot of {\i mORMot} persistence layer abilities, depending on each access library.
-In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs20 SynDB} units), but the whole @*Client-Server@ ORM of our framework.
+In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs20 SynDB.pas} units), but the whole @*Client-Server@ ORM of our framework.
 Process below includes all aspects of our ORM:
 - Access via high level @*CRUD@ methods ({\i Add/Update/Delete/Retrieve}, either per-object or in BATCH mode);
 - Read and write access of {\f1\fs20 TSQLRecord} instances, via optimized RTTI;
@@ -3747,7 +3748,7 @@ Whatever database back-end is used, don't forget that {\i mORMot} design will al
 Beginning with the revision 1.15 of the framework, the {\i @**SQLite3@} engine itself has been separated from our {\f1\fs20 mORMotSQLite3.pas} unit, and defined as a stand-alone unit named {\f1\fs20 SynSQLite3.pas}. See @SDD-DI-2.2.1@.
 It can be used therefore:
 - Either stand-alone with direct access of all its features, even using its lowest-level C API, via {\f1\fs20 SynSQLite3.pas} - but you won't be able to switch to another database engine easily;
-- Or stand-alone with high-level SQL access, using our {\f1\fs20 @*SynDB@} generic access classes, via {\f1\fs20 SynDBSQLite3.pas} - so you will be able to change to any other database engine (e.g. @*MS SQL@, @*PostgreSQL@, @*MySQL@ or @*Oracle@) when needed;
+- Or stand-alone with high-level SQL access, using our {\f1\fs20 @*SynDB@.pas} generic access classes, via {\f1\fs20 SynDBSQLite3.pas} - so you will be able to change to any other database engine (e.g. @*MS SQL@, @*PostgreSQL@, @*MySQL@ or @*Oracle@) when needed;
 - Or Client-Server based access with all our @*ORM@ features - see {\f1\fs20 mORMotSQLite3.pas}.
 We'll define here some highlights specific to our own implementation of the {\i SQLite3} engine, and let you consult the official documentation of this great Open Source project at @http://sqlite.org for general information about its common features.
 :  Statically linked or using external dll
@@ -3902,7 +3903,7 @@ It is also worth noting that external databases (see next paragraph) will also b
 Since the 2010-06-25 source code repository update, the @*RTREE@ extension is now compiled by default within all supplied {\f1\fs20 .obj} files.
 An R-Tree is a special index that is designed for doing range queries. R-Trees are most commonly used in geospatial systems where each entry is a rectangle with minimum and maximum X and Y coordinates. Given a query rectangle, an R-Tree is able to quickly find all entries that are contained within the query rectangle or which overlap the query rectangle. This idea is easily extended to three dimensions for use in CAD systems. R-Trees also find use in time-domain range look-ups. For example, suppose a database records the starting and ending times for a large number of events. A R-Tree is able to quickly find all events, for example, that were active at any time during a given time interval, or all events that started during a particular time interval, or all events that both started and ended within a given time interval. And so forth. See @http://www.sqlite.org/rtree.html
 A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS3}).
-Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 double}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
+Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 @*double@}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
 Queries against the ID or the coordinate ranges are almost immediate: so you can e.g. extract some coordinates box from the main regular {\f1\fs20 TSQLRecord} table, then use a {\f1\fs20 TSQLRecordRTree}-joined query to make the process faster; this is exactly what the {\f1\fs20 TSQLRestClient. RTreeMatch} method offers: for instance, running with {\f1\fs20 aMapData. @*Blob@Field} filled with {\f1\fs20 [-81,-79.6,35,36.2]} the following lines:
 ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
 !   aMapData.BlobField,ResultID);
@@ -4078,7 +4079,7 @@ The above code will execute the following SQL statement (with a prepared paramet
 That is, it will find all objects where {\f1\fs20 TSQLRecordPeople.FirstName} will contain the {\f1\fs20 'Finley'} word - in a regular expression, {\f1\fs20 \\b} defines a word {\f1\fs20 b}oundary search.
 In fact, the {\f1\fs20 REGEXP} operator is a special syntax for the {\f1\fs20 regexp()} user function. No {\f1\fs20 regexp()} user function is defined by default and so use of the {\f1\fs20 REGEXP} operator will normally result in an error message. Calling {\f1\fs20 CreateRegExFunction()} for a given connection will add a SQL function named "{\f1\fs20 regexp()}" at run-time, which will be called in order to implement the {\f1\fs20 REGEXP} operator.
 It will use the statically linked PCRE library as available since {\i Delphi} XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of {\i Delphi}.
-This unit will call directly the UTF-8 API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
+This unit will call directly the @*UTF-8@ API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
 :  NULL handling
 Since you access {\i Delphi} properties, NULL doesn't exist as such (it is a @*SQL@ concept). So you will have {\f1\fs20 0} for an integer field, {\f1\fs20 nil} for a field referring to another record, and {\f1\fs20 ''} for a string field. At the SQL and @*JSON@ levels, the NULL value does exist and are converted as expected. At higher level ({\i Delphi} code or {\i @*JavaScript@}/@*AJAX@ code) the NULL value is to be handled explicitly. In fact, no null-oriented ORM methods are implemented in our framework, since the object pascal language does not allow defining a nullable type (yet).
 In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).
@@ -4163,7 +4164,7 @@ For instance, here are the default Virtual Table classes deriving from those cla
 \TSQLVirtualTableCursorJSON\TSQLVirtualTableCursorIndex
 \TSQLVirtualTableCursorLog\TSQLVirtualTableCursorIndex
 \
-{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestStorageInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as UTF-8 @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
+{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestStorageInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as @*UTF-8@ @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
 Note that the virtual table module name is retrieved from the class name. For instance, the {\f1\fs20 TSQLVirtualTableJSON} class will have its module named as 'JSON' in the SQL code.
 To handle external databases, two dedicated classes, named {\f1\fs20 TSQLVirtualTableExternal} and {\f1\fs20 TSQLVirtualTableCursorExternal} will be defined in a similar manner - see @%%HierExternalTables@ @30@.
 As you probably have already stated, all those Virtual Table mechanism is implemented in {\f1\fs20 mORMot.pas}. Therefore, it is independent from the {\i @*SQLite3@} engine, even if, to my knowledge, there is no other SQL database engine around able to implement this pretty nice feature.
@@ -4281,7 +4282,7 @@ Each column value is retrieved by this method:
 !  result := true;
 !end;
 As stated by the documentation of the {\f1\fs20 TSQLVirtualTableCursor} class, {\f1\fs20 -1} is the column index for the {\f1\fs20 RowID}, and then will follow the columns as defined in the text returned by the {\f1\fs20 Structure} method (in our case, the {\f1\fs20 DateTime, Level, Content} fields of {\f1\fs20 TSQLRecordLogFile}).
-The {\f1\fs20 SetColumn} overloaded methods can be used to set the appropriate result to the {\f1\fs20 aResult} variable. For UTF-8 text, it will use a temporary in-memory space, to ensure that the text memory will be still available at least until the next {\f1\fs20 Column} method call.
+The {\f1\fs20 SetColumn} overloaded methods can be used to set the appropriate result to the {\f1\fs20 aResult} variable. For @*UTF-8@ text, it will use a temporary in-memory space, to ensure that the text memory will be still available at least until the next {\f1\fs20 Column} method call.
 :  Using a Virtual Table module
 From the low-level {\i @*SQLite3@} point of view, here is how this "{\f1\fs20 Log}" @virtual table@ module can be used, directly from the {\i SQLite3} engine.
 First we will register this module to a DB connection (this method is to be used only in case of such low-level access - in our @*ORM@ you should never call this method, but {\f1\fs20 TSQLModel. VirtualTableRegister} instead, {\i cf.} next paragraph):
@@ -4537,22 +4538,37 @@ The easiest is definitively to let your static in-memory tables inherit from {\f
 Once again, this restriction does not apply to @27@.
 :27External database access
 %cartoon05.png
-: Database agnosticism
-Since revision 1.15, our @*ORM@ @*REST@ful framework is able to access any available database engine, via a set of generic units and classes.
-The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mix those tables content with the native ORM tables of the framework. Thanks to the unique @*Virtual Table@s mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements. See @%%mORMotDesign3@.
-The current list of available external RDBMS database classes is:
-- Any {\i @*OleDB@} provider (including {\i @*MS SQL@, @*Jet/MSAccess@} or others);
-- Any {\i @*ODBC@} provider (including {\i MS SQL, @*FireBird@, @*MySQL@, @*PostgreSQL@}, @*MySQL@, IBM @*DB2@ or others);
-- Any {\i @*Zeos@Lib} provider (direct {\f1\fs20 @*ZDBC@} access without {\f1\fs20 DB.pas} overhead);
-- Any {\f1\fs20 DB.pas} / {\f1\fs20 @**TDataset@} based provider (including @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...);
-- {\i @*Oracle@} direct access (via OCI);
-- {\i SQLite3} database file.
+Our @*ORM@ @*REST@ful framework is able to access most available database engines, via a set of generic units and classes. Both @*SQL@ and @*NoSQL@ engines could be accessed - quite a unique feature in the ORM landscape (in {\i Delphi}, of course, but also in Java or C# environments).
+Remember the diagram introducing {\i mORMot}'s @42@:
+%%mORMotDBDesign
+\page
+The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mixes those tables content with the native ORM tables of the framework. Thanks to the unique @20@ mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements, even for NoSQL engines.
+|%10%90
+|\b Mode|Engines\b0
+|SQL|{\i @*SQLite3@, @*Oracle@, @*NexusDB@, @*MS SQL@, @*Jet/MSAccess@, @*FireBird@, @*MySQL@, @*PostgreSQL@, IBM @*DB2@}\line See @126@
+|NoSQL|{\i @*MongoDB@}, {\f1\fs20 TObjectList} with JSON or binary disk persistence\line See @83@ and @57@
+|%
+You can even mix databases, i.e. the same {\i mORMot} ORM could persist, at the same time, its data in several databases, some {\f1\fs20 TSQLRecord} as fast internal {\i SQLite3} tables or as {\f1\fs20 TObjectList}, others in a {\i PostgreSQL} database (tied to an external reporting/SAP engine), and e.g. flat consolidated data in a {\i MongoDB} instance.
+\page
+:126 RDBMS access via SynDB
+External {\i Relational Database Management System} (@*RDBMS@) can be accessed via our {\f1\fs20 @*SynDB@.pas} units. Then, the framework ORM is able to access them via the {\f1\fs20 mORMotDB.pas} bridge unit. But you can use the {\f1\fs20 SynDB.pas} units directly, without any link to our ORM.
+The current list of handled data access libraries is:
+|%13%25%62
+|\b Provider|{\f1\fs20 SynDB} Unit|RDBMS Engines\b0
+|{\i SQLite3}|{\f1\fs20 SynDBSQLite3.pas}|direct {\i SQLite3} access (as dll or linked to the exe)\line See @127@
+|{\i Oracle}|{\f1\fs20 SynDBOracle.pas}|direct {\i Oracle} access (via OCI)\line See @117@
+|{\i @*OleDB@}|{\f1\fs20 SynOleDB.pas}|{\i MS SQL, Jet/MSAccess} or others\line See @118@
+|{\i @*ODBC@}|{\f1\fs20 SynDBODBC.pas}|{\i MS SQL, FireBird, MySQL, PostgreSQL, IBM DB2} or others\line See @118@
+|{\i @*Zeos@Lib}|{\f1\fs20 SynDBZeos.pas}|{\i MS SQL, SQLite3, FireBird, MySQL, PostgreSQL}\line See @94@
+|{\f1\fs20 DB.pas}/\line {\f1\fs20 @**TDataset@}|{\f1\fs20 SynDBDataset.pas}|@*NexusDB@ and databases supported by @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...\line See @119@
+|%
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
+Thanks to the design of our {\f1\fs20 SynDB.pas} classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
+An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
 In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party {\i Delphi} library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
-Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
-An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
-Thanks to the design of our classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
+Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used, with fast direct access to the underlying RDBMS client library. Since the {\i ZDBC} library does not rely on {\f1\fs20 DB.pas}, and by-passes the slow {\f1\fs20 TDataSet} component, its performance is very high. The {\i ZDBC} maintainers did a lot of optimizations, especially to work with {\i mORMot}, and this library is a first-class citizen to work with our framework.
+Since the same 1.18 revision, {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB.pas} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB.pas} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
 \graph SynDBLayers SynDB Architecture
 \SynDB\Zeos
 =Zeos=ZDBC¤(Zeos)
@@ -4629,15 +4645,15 @@ Thanks to the design of our classes, it was very easy (and convenient) to implem
 \NexusDB=Oracle=Sybase=Advantage=Paradox=Informix
 \AnyDAC=UniDAC=BDE=DBExpress
 \
-This diagram is a bit difficult to follow at the latest level - but you got the general layered design, I guess. It will be split into smaller peaces later.
-:  Direct access to any Database engine
-The {\f1\fs20 @**SynDB@} units have the following features:
-- Direct fast access to {\i @*OleDB@, @*ODBC@, @*ZDBC@, @*Oracle@} (via OCI) or {\i @*SQLite3@} (statically linked or via external {\f1\fs20 dll}) databases;
+This diagram is a bit difficult to follow at the latest level - but you got the general layered design, I guess. It will be split into smaller focused diagrams later.
+:  Direct access to any RDBMS engine
+The {\f1\fs20 @**SynDB@.pas} units have the following features:
+- Direct fast access via {\i @*OleDB@, @*ODBC@, @*ZDBC@, @*Oracle@} (OCI) or {\i @*SQLite3@} (statically linked or via external {\f1\fs20 dll});
 - Thin wrapper around any {\f1\fs20 DB.pas} / {\f1\fs20 TDataset} based components (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@, @*BDE@...);
-- Generic abstract @*OOP@ layout, able to work with any SQL-based database engine;
-- Tested with {\i @*MS SQL@ Server 2008, @*Firebird@ 2.5.1, @PostgreSQL 9.2@, @*MySQL@ 5.6, IBM @*DB2@ 10.5, Oracle 11g}, and the latest {\i SQLite3} engine;
+- Generic abstract @*OOP@ layout, with a restricted set of data types, but able to work with any SQL-based database engine;
+- Tested with {\i @*MS SQL@ Server 2008/2012, @*Firebird@ 2.5.1, @PostgreSQL@ 9.2/9.3, @*MySQL@ 5.6, IBM @*DB2@ 10.5, Oracle 11g}, and the latest {\i SQLite3} engine;
 - Could access any local or remote Database, from any edition of {\i Delphi} (even {\i Delphi 7 personal}, the {\i Turbo Explorer} or {\i Starter edition}), just for free (in fact, it does not use the {\f1\fs20 DB.pas} standard unit and all its dependencies);
-- Ability to be truly Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007) - use internally UTF-8 encoding;
+- Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007), since it uses internally @*UTF-8@ encoding;
 - Handle NULL or BLOB content for parameters and results, including stored procedures;
 - Avoid most memory copy or unnecessary allocation: we tried to access the data directly from the retrieved data buffer, just as given from {\i OleDB / ODBC} or the low-level database client (e.g. OCI for Oracle, or the {\i SQLite3} engine);
 - Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
@@ -4646,19 +4662,49 @@ The {\f1\fs20 @**SynDB@} units have the following features:
 - Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
 - @*Late-binding@ column access, via a custom variant type;
-- Direct @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
+- Direct UTF-8 @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
 - High-level catalog / database layout abstract methods, able to retrieve the table and column properties (including indexes), for database reverse-engineering; provide also SQL statements to create a table or an index in a database-abstract manner; those features will be used directly by our ORM;
 - Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 TQuery}-like wrapper;
 - {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to the deprecated @*BDE@ technology;
-- Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, about all available engines; it is also a good sample program of a stand-alone usage of those libraries.
+- Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, on all supported engines; it is also a good sample program of a stand-alone usage of those libraries.
 :  Data types
 Of course, our ORM does not need a whole feature set (do not expect to use this database classes with your VCL DB RAD components), but handles directly the basic SQL column types, as needed by our ORM (derived from SQLite's internal column types): {\f1\fs20 NULL, Int64, Double, @*Currency@, DateTime, @*RawUTF8@} and {\f1\fs20 BLOB}.
-They are defined as such in {\f1\fs20 @*SynDB@}:
+They are defined as such in {\f1\fs20 @*SynDB@.pas}:
 !  TSQLDBFieldType =
 !    (ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
+|%25%65
+|\b {\f1\fs20 TSQLDBFieldType}|Content\b0
+|{\f1\fs20 ftNull}|Maps the SQL {\f1\fs20 NULL} value
+|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64 bit resolution
+|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64 bit ({\f1\fs20 @*double@}) resolution
+|{\f1\fs20 ftCurrency}|Fixed {\i financial} type, with up to 4 fixed decimal digits ({\f1\fs20 @*currency@})
+|{\f1\fs20 ftDate}|Date and time, mapping the Delphi {\f1\fs20 TDateTime} type
+|{\f1\fs20 ftUTF8}|Unicode text, encoded as @*UTF-8@, with or without size limit
+|{\f1\fs20 ftBlob}|Binary content, stored as a {\f1\fs20 RawByteString}
+|%
 Those types will map low-level database-level access types, not high-level {\i Delphi} types as {\f1\fs20 TSQLFieldType} defined in {\f1\fs20 mORMot.pas}, or the generic huge {\f1\fs20 TFieldType} as defined in the standard VCL {\f1\fs20 DB.pas} unit. In fact, it is more tied to the standard {\i @*SQLite3@} generic types, i.e. NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a {\f1\fs20 ftCurrency} and {\f1\fs20 ftDate} type, for better support of most DB engines) see @http://www.sqlite.org/datatype3.html
-You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-{\i Delphi} true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding.
+You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-{\i Delphi} true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding. Of course, if the column was not defined as Unicode text in the database, any needed conversion to/from the corresponding charset would take place at the data provider level; but in your user code, you would have always access to the Unicode content.
 BLOB columns or parameters are accessed as {\f1\fs20 @*RawByteString@} variables, which may be mapped to a standard {\f1\fs20 TStream} via our {\f1\fs20 TRawByteStringStream}.
+:  Database types
+In addition to raw data access, the {\f1\fs20 SynDB.pas} unit handles some SQL-level generation, which would be used by our @3@ kernel.
+The following RDBMS database engines are defined as such in {\f1\fs20 SynDB.pas}:
+! TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet,
+!   dMySQL, dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2);
+|%25%75
+|\b {\f1\fs20 TSQLDBDefinition}|RDBMS tested\b0
+|{\f1\fs20 dDefault}|Any database, following the SQL-92 standard
+|{\f1\fs20 dOracle}|@*Oracle@ 11g
+|{\f1\fs20 dMSSQL}|@*MS SQL@ Server 2008/2012
+|{\f1\fs20 dJet}|@*Jet/MSAccess@ (under {\i Win32} only)
+|{\f1\fs20 dMySQL}|@*MySQL@ 5.6
+|{\f1\fs20 dSQLite}|@SQLite3@ 3.7.11 and up (we supply the latest version for static linking)
+|{\f1\fs20 dFirebird}|@*Firebird@ 2.5.1
+|{\f1\fs20 dNexusDB}|@*NexusDB@ 3.11
+|{\f1\fs20 dPostgreSQL}|@PostgreSQL@ 9.2/9.3
+|{\f1\fs20 dDB2}|IBM @*DB2@ 10.5
+|%
+The above versions have been tested, but newer or older revisions may also work. Your feedback is welcome: we cannot achieve to test all possible combinations of databases and clients on our own!
+The {\f1\fs20 SynDB.pas} unit is able to generate the SQL statements of those engines, for a {\f1\fs20 CREATE TABLE} / {\f1\fs20 CREATE INDEX} command, retrieve metadata (e.g. the tables and fields information), compute the right limit/offset syntax for a {\f1\fs20 SELECT}, compute multi-{\f1\fs20 INSERT} statements - see @99@, check the SQL keywords, define specific schema/owner naming conventions, process date and time values, handle errors and exceptions, or even create a database.
 :  SynDB Units
 Here are the units implementing the external database-agnostic features:
 |%30%70
@@ -4671,7 +4717,7 @@ Here are the units implementing the external database-agnostic features:
 |{\f1\fs20 SynDBSQLite3.pas}|@*SQLite3@ direct access classes
 |{\f1\fs20 SynDBDataset.pas}\line {\f1\fs20 SynDBFireDAC.pas}\line {\f1\fs20 SynDBUniDAC.pas}\line {\f1\fs20 SynDBNexusDB.pas}\line {\f1\fs20 SynDBBDE.pas}|{\f1\fs20 @*TDataset@} ({\f1\fs20 DB.pas}) access classes
 |%
-It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB}, switching from one database engine to another is just a matter of changing a class type.
+It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB.pas}, switching from one database engine to another is just a matter of changing a class type.
 :  Classes
 The data is accessed via three families of classes:
 - {\i Connection properties}, which store the database high-level properties (like database implementation classes, server and database name, user name and password);
@@ -4702,7 +4748,7 @@ rankdir=LR;
 \TSQLDBNexusDBConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
 \TSQLDBConnectionPropertiesThreadSafe\TSQLDBConnectionProperties
 \
-Those classes are the root classes of the {\f1\fs20 SynDB} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
+Those classes are the root classes of the {\f1\fs20 SynDB.pas} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
 Then the following {\i connection} classes are defined:
 \graph HierTSQLDBSQLite3Connection TSQLDBSQLite3Connection classes hierarchy
 rankdir=LR;
@@ -4750,7 +4796,7 @@ Some dedicated {\f1\fs20 Exception} classes are also defined:
 Check the {\f1\fs20 TestOleDB.dpr} sample program, located in {\f1\fs20 SQlite3} folder, using our {\f1\fs20 SynOleDB} unit to connect to a local {\i @*MS SQL@ Server 2008 R2 Express edition}, which will write a file with the JSON representation of the {\f1\fs20 Person.Address} table of the sample database {\i AdventureWorks2008R2}.
 :  ISQLDBRows interface
 The easiest is to stay at the {\f1\fs20 TSQLDBConnectionProperties} level, using the {\f1\fs20 Execute()} methods of this instance, and access any returned data via an {\f1\fs20 @**ISQLDBRows@} interface. It will automatically use a thread-safe connection to the database, in an abstracted way.
-Typical use of {\f1\fs20 SynDB} classes could be:
+Typical use of {\f1\fs20 SynDB.pas} classes could be:
 - Initialize a shared {\f1\fs20 TSQLDBConnectionProperties} instance;
 - Execute statements directly from this instance's {\f1\fs20 Execute*()} methods.
 Defining a database connection is as easy as:
@@ -4794,7 +4840,7 @@ In practice, this code is slower than using a standard property based access, li
 But the first version, using late-binding of column name, just sounds more natural.
 Of course, since it is {\i late}-binding, we are not able to let the compiler check at compile time for the column name. If the column name in the source code is wrong, an error will be triggered at runtime only.
 First of all, let's see the fastest way of accessing the row content.
-In all cases, using the textual version of the column name ({\f1\fs20 'AccountNumber'}) is slower than using directly the column index. Even if our {\f1\fs20 @*SynDB@} library uses a fast lookup using hashing, the following code will always be faster:
+In all cases, using the textual version of the column name ({\f1\fs20 'AccountNumber'}) is slower than using directly the column index. Even if our {\f1\fs20 @*SynDB@.pas} library uses a fast lookup using hashing, the following code will always be faster:
 !var Customer: Integer;
 !begin
 !  with Props.Execute(
@@ -4809,8 +4855,8 @@ But to be honest, after profiling, most of the time is spend in the {\f1\fs20 St
 Our name lookup via a hashing function (i.e. {\f1\fs20 TDynArrayHashed}) just does its purpose very well.
 On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons.pas} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
 \page
-: Database access
-From the {\f1\fs20 SynDB} logical point of view, here is how databases can be accessed:
+: SynDB database access
+From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
 \graph SynDB1stLevel SynDB First Level Providers
 \SynDB\ZDBC
 \SynDB\ODBC
@@ -4825,7 +4871,7 @@ From the {\f1\fs20 SynDB} logical point of view, here is how databases can be ac
 \DB.pas¤TDataset\UniDAC
 \
 Of course, the physical implementation is more complicated, as was stated in @%%SynDBLayers@.
-We will now detail how these available database connections are interfaced as {\f1\fs20 SynDB} classes.
+We will now detail how these available database connections are interfaced as {\f1\fs20 SynDB.pas} classes.
 :118  OleDB or ODBC to rule them all
 {\i @**OleDB@} (Object Linking and Embedding, Database, sometimes written as OLE DB or OLE-DB) is an API designed by Microsoft for accessing data from a variety of sources in a uniform manner.
 \graph SynDBOleDB SynDB and OleDB
@@ -4874,10 +4920,10 @@ Since revision 1.18 of the framework, we included direct integration of {\i Zeos
 \ZDBC\Sybase
 \ZDBC\SQLite3
 \
-Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20 TDataSet} bottleneck, is very close to our {\f1\fs20 SynDB} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}. The {\f1\fs20 SynDBZeos} unit is intended to be a privileged access point to external SQL databases.
+Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20 TDataSet} bottleneck, is very close to our {\f1\fs20 SynDB.pas} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}. The {\f1\fs20 SynDBZeos} unit is intended to be a privileged access point to external SQL databases.
 :   Recommended version
 We recommend that you download the 7.2 branch of {\i Zeos}/ZDBC, which is the current {\i trunk}, at the time of this writing.
-A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
+A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for @*UTF-8@ content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
 When writing data (i.e. {\i Add/Update/Delete} operations), {\i @*Array bind@ing} suport has been added to the {\i Zeos}/ZDBC 7.2 branch, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true} - which will be the case for {\i @*Oracle@} and {\i @FireBird@} providers by now. Our ORM would benefit from it, when processing in BATCH mode, even letting ZDBC creates the optimized SQL - see @99@.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library, in case of single record retrieval. For instance, {\f1\fs20 TSQLDBZEOSStatement.ColumnsToJSON()} will avoid most temporary memory allocation, and is able to create the JSON directly from the low-level ZDBC binary buffers.
 If you need to stick to a version prior to 7.2, and want to work as expected with a {\i @*SQlite3@} back-end (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}?), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
 :   Connection samples
@@ -4907,7 +4953,7 @@ You may therefore use the {\f1\fs20 TSQLDBZEOSConnectionProperties.URI()} method
 See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further information about the expected syntax, and available abilities of this great open source library.
 :117  Oracle via OCI
 For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
-{\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@}.
+{\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@.pas}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
 Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection.
 You can use the latest version of the {\i Oracle Instant Client} (OIC) provided by Oracle - see @http://www.oracle.com/technetwork/database/features/instant-client - which allows to run client applications without installing the standard (huge) Oracle client or having an {\f1\fs20 ORACLE_HOME}. Just deliver the few {\f1\fs20 dll} files in the same directory than the application (probably a {\i mORMot} server), and it will work at amazing speed, with all features of Oracle (other stand-alone direct Oracle access library rely on deprecated Oracle 8 protocol).
@@ -4925,7 +4971,7 @@ Here are the main features of this unit:
 - Dedicated to work with {\i any version} of the Oracle OCI interface, starting from revision 8;
 - {\i Optimized for the latest features} of Oracle 11g (e.g. using native {\f1\fs20 Int64} for retrieving NUMBER fields with no decimal);
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
-- {\i Natively Unicode} (uses internal UTF-8 encoding), for all version of {\i Delphi}, with special handling of each database char-set;
+- {\i Natively Unicode} (uses internal @*UTF-8@ encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
 - Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32 bit for this current version);
 - {\i @*Late-binding@} access to column names, using a new dedicated {\f1\fs20 Variant} type (similar to Ole Automation runtime properties);
@@ -4937,9 +4983,9 @@ Here are the main features of this unit:
 - Implements binding of a {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} as parameter, e.g. within a {\f1\fs20 SELECT .. IN} where clause;
 - Native {\i export to @*JSON@} methods, which will be the main entry point for our @*ORM@ framework;
 - {\i Cursor support}, which is pretty common when working with stored procedures and legacy code.
-:  SQLite3
+:127  SQLite3
 For our ORM framework, we implemented an efficient {\i @*SQLite3@} wrapper, joining the {\i SQLite3} engine either statically (i.e. within the main {\f1\fs20 exe}) or from external {\f1\fs20 sqlite3.dll}.
-It was an easy task to let the {\f1\fs20 SynSQLite3.pas} unit be called from our {\f1\fs20 @*SynDB@} database abstract classes. Adding such another Database is just a very thin layer, implemented in the {\f1\fs20 SynDBSQLite3.pas} unit.
+It was an easy task to let the {\f1\fs20 SynSQLite3.pas} unit be called from our {\f1\fs20 @*SynDB@.pas} database abstract classes. Adding such another Database is just a very thin layer, implemented in the {\f1\fs20 SynDBSQLite3.pas} unit.
 If you want to link the {\i SQLite3} engine to your project executable, ensure you defined the {\f1\fs20 SynSQLite3Static.pas} unit in your {\f1\fs20 uses} clause. Otherwise, define a {\f1\fs20 TSQLite3LibraryDynamic} instance to load an external {\f1\fs20 sqlite3.dll} library:
 ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
 ! sqlite3 := TSQLite3LibraryDynamic.Create;
@@ -4955,7 +5001,7 @@ When used within the {\i mORMot} ORM, you have therefore two ways of accessing t
 \
 If your {\i mORMot}-based application purpose is to only use one centralized {\i SQLite3} database, it does not make sense to use {\f1\fs20 SynDBSQLite3} external tables. But if you want, in the future, to be able to connect to any external database, or to split your data in several database files, using those external {\i SQLite3} tables do make sense. Of course, the {\i SQlite3} engine library itself will be shared with both internal and external process.
 :119  DB.pas libraries
-Since revision 1.18 of the framework, a new {\f1\fs20 SynDBDataset.pas} unit has been introduced, able to interface any {\f1\fs20 DB.pas} based library to our {\f1\fs20 SynDB} classes, using {\f1\fs20 TDataset} to retrieve the results. Due to the {\f1\fs20 TDataset} design, performance is somewhat degraded in respect to direct {\f1\fs20 SynDB} connection (e.g. results for {\i SQLite3} or {\i @*Oracle@}), but it also opens the potential database access.
+Since revision 1.18 of the framework, a new {\f1\fs20 SynDBDataset.pas} unit has been introduced, able to interface any {\f1\fs20 DB.pas} based library to our {\f1\fs20 SynDB.pas} classes, using {\f1\fs20 TDataset} to retrieve the results. Due to the {\f1\fs20 TDataset} design, performance is somewhat degraded in respect to direct {\f1\fs20 SynDB.pas} connection (e.g. results for {\i SQLite3} or {\i @*Oracle@}), but it also opens the potential database access.
 Some dedicated providers have been published in the {\f1\fs20 SynDBDataset} sub-folder of the {\i mORMot} source code repository. Up to now, {\i @*FireDAC@} (formerly {\i @*AnyDAC@}), {\i @*UniDAC@} and {\i @*BDE@} libraries are interfaced, and a direct connection to the {\i @*NexusDB@} engine is available.
 Since there are a lot of potential combinations here - see @%%SynDBLayers@ - feedback is welcome. Due to our Agile process, we will first stick to the providers we need and use. It is up to {\i mORMot} users to ask for additional features, and provide wrappers, if possible, or at least testing abilities. Of course, {\i DBExpress} would benefit to be integrated, even if {\i Embarcadero} just acquired {\i AnyDAC} and revamped/renamed it as {\i FireDAC} - to make it the new official platform.
 :   NexusDB access
@@ -5030,7 +5076,7 @@ For instance, to access to a @*MySQL@ remote database, you should be able to con
 !  'world', 'root', 'dev');
 This library gives pretty stable results, but lack of the array binding feature, in comparison to {\i FireDAC}.
 :   BDE engine
-{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of {\i Delphi}. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB} provider.
+{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of {\i Delphi}. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB.pas} provider.
 \graph SynDBBDE SynDB and BDE
 \SynDB\DB
 =DB=DB.pas¤TDataset
@@ -5241,7 +5287,7 @@ It is a good idea to call the {\f1\fs20 @**MapAutoKeywordFields@} method after a
 If any field name is likely to conflict with a SQL keyword, it will be mapped with a trailing '_'. For instance, a {\f1\fs20 'Select'} published property would be mapped into a {\f1\fs20 _SELECT} column in the table.
 Even if this option is disabled by default, a warning message will appear in the log proposing to use this {\f1\fs20 MapAutoKeywordFields} method, and would help you to identify such issues.
 :30  External database ORM internals
-The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@}-based external database for the framework.
+The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@.pas}-based external database for the framework.
 In fact, this feature will use {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes, defined as such:
 \graph HierExternalTables External Databases classes hierarchy
 \TSQLRecordVirtual\TSQLRecord
@@ -5421,7 +5467,7 @@ $Inserted with _id=8
 $Inserted with _id=9
 $Inserted with _id=10
 Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
-The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
+The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB.pas} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
 For instance, you may write:
 !var docs: TVariantDynArray;
 !...
@@ -5625,11 +5671,11 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 boolean}|boolean|{\i MongoDB} has a {\f1\fs20 boolean} type
 |enumeration|int32|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
 |set|int64|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
-|{\f1\fs20 single}|double|
+|{\f1\fs20 single}|{\f1\fs20 @*double@}|
 |{\f1\fs20 double}|double|
 |{\f1\fs20 extended}|double|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|double|stored as {\f1\fs20 double} ({\i MongoDB} does not have a BSD type)
-|{\f1\fs20 @*RawUTF8@}|UTF-8|this is the {\b preferred} field type for storing some textual content in the ORM
+|{\f1\fs20 @*RawUTF8@}|@*UTF-8@|this is the {\b preferred} field type for storing some textual content in the ORM
 |{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in {\i Delphi}
 |{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in {\i Delphi}, as {\f1\fs20 AnsiString}
 |{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
@@ -5806,7 +5852,7 @@ As we just stated, the @**JSON@ format is used internally in this framework. By 
 JSON's basic types are - as retrieved from @http://en.wikipedia.org/wiki/JSON
 |%15%85
 |\b Type|Description\b0
-|Number|{\f1\fs20 Double} precision floating-point format in {\i JavaScript}, generally depends on implementation. There is no specific {\f1\fs20 integer} type
+|Number|{\f1\fs20 @*Double@} precision floating-point format in {\i JavaScript}, generally depends on implementation. There is no specific {\f1\fs20 integer} type
 |String|Double-quoted Unicode, with backslash escaping
 |Boolean|{\f1\fs20 true} or {\f1\fs20 false}
 |Array|An ordered sequence of values, comma-separated and enclosed in square brackets; the values do not need to be of the same type
@@ -5849,7 +5895,7 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 JSON @**serialization@  will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
-Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 double} values are stored as their corresponding floating-point representation.
+Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 @*double@} values are stored as their corresponding floating-point representation.
 All {\f1\fs20 string} content is serialized as standard JSON text field, i.e. nested with double quotes ({\f1\fs20 "}). Since JSON uses @*UTF-8@ encoding, it is one of the reasons why we introduced the {\f1\fs20 @*RawUTF8@} type, and use it everywhere in our framework.
 :51  Record serialization
 In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
@@ -5872,7 +5918,7 @@ You have several paths available:
 Note that any custom serialization (either via callbacks, or via text definition), will override any previous registered method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
 :    Default Binary/Base64 serialization
 On any version of the compiler prior to {\i Delphi} 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
-A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
+A special @*UTF-8@ prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
 $ { "MyRecord": "ï¿°w6nDoMOnYQ==" }
 You will find in {\f1\fs20 SynCommons.pas} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
 When working with most part of the framework, you do not have anything to do: any record will by default follow this {\i Base64} serialization, so you will be able e.g. to publish or consume interface-based services with records.
@@ -6047,7 +6093,7 @@ The following types are handled by this feature:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Serialized as JSON boolean
-|{\f1\fs20 byte word integer cardinal Int64 single double}|Serialized as JSON number
+|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@}|Serialized as JSON number
 |{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
 |{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
@@ -6535,7 +6581,7 @@ In fact, two steps are performed by the {\f1\fs20 TSQLHttpServer} constructor:
 As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sys} is not available, or if it was not possible to register the URLs), the {\f1\fs20 TSQLHttpServer} class will fall back into using the other {\f1\fs20 THttpServer} class, which is a plain {\i Delphi} multi-threaded server. It won't be said that we will let you down!
 Inside {\f1\fs20 http.sys} all the magic is made... it will listen to any incoming connection request, then handle the headers, then check against any matching URL.
 {\f1\fs20 http.sys} will handle all the communication by itself, leaving the server threads free to process the next request.
-You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
+You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the @*UTF-8@ file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
 :109   URI authorization as Administrator
 This works fine under XP. Performances are very good, and stability is there. But... here comes the UAC nightmare again.
 Security settings have changed since XP. Now only applications running with Administrator rights can register URLs to {\f1\fs20 http.sys}. That is, no real application. So the URI registration step will always fail with the default settings, under Vista and Seven.
@@ -7229,7 +7275,7 @@ Those features are enabled by default, and the fastest method will always be sel
 :78   Array binding
 :    For faster BATCH mode
 When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature. By now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
-Our {\f1\fs20 SynDB} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
+Our {\f1\fs20 SynDB.pas} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
 The great maintainers of the {\i ZEOS Open Source} library did especially tune its internals to support {\i mORMot} at its full speed, directly accessing the {\i ZDBC} layer - see @94@. The {\i ZEOS 7.2} branch did benefit of a huge code refactoring, and also introduced {\i array binding} abilities. This feature will be recognized and handled by our ORM, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature. But the list is growing.
 The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
@@ -7261,10 +7307,10 @@ From tests on production, this implementation is 2-100 times faster (depending o
 Sadly, array binding is not available for all databases or libraries.\line In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once. It induces a noticeable speed increase when saving several objects into an external database.
 Automatic multi-INSERT statement generation is available for:
 - Our internal {\i SQLite3} engine (in the {\f1\fs20 mORMotSQLite3.pas} unit);
-- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*MySQL@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
+- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
 - And, in the {\i @*NoSQL@} form of "documents array" insertion, for the {\i @*MongoDB@} database (in the {\f1\fs20 mORMotMongoDB.pas} unit).
 It means that even providers not implementing array binding (like {\i OleDB}, {\i ODBC} or {\i UniDAC}) are able to have a huge boost at data insertion.
-{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2, MySQL} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
+{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
 $INSERT INTO TABLE (column-a, [column-b, ...])
 $VALUES ('value-1a', ['value-1b', ...]),
 $       ('value-2a', ['value-2b', ...]),
@@ -7602,7 +7648,7 @@ Then we implement this method:
 !  with Ctxt do
 !    Results([Input['a']+Input['b']]);
 !end;
-The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 double}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
+The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
 Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
 Those methods would raise an {\f1\fs20 EParsingException} exception if the parameter is not available at the URI. So you may want to use {\f1\fs20 InputExists[]} or even {\f1\fs20 InputIntOrVoid[] InputDoubleOrVoid[] InputUTF8OrVoid[] InputOrVoid[]} methods, which won't raise any exception but return a void value (i.e. either {\f1\fs20 0}, {\f1\fs20 ""} or {\f1\fs20 Unassigned}).
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
@@ -7970,7 +8016,7 @@ Our @*Client-Server@ architecture facilitated this decoupling pattern, and allow
 The memory allocation model of the {\i Delphi} {\f1\fs20 interface} type uses some kind of {\i Automatic Reference Counting} (@*ARC@). In order to avoid memory and resource leaks and potential random errors in the applications (aka the terrible {\f1\fs20 EAccessViolation} exception on customer side) when using @46@, a @*SOA@ framework like {\i mORMot} has to offer so-called {\i @**Weak pointers@} and {\i @**Zeroing Weak pointers@} features.
 By default in {\i Delphi}, all references are defined:
 - as {\i weak references} for pointer and class instances;
-- with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, currency, double} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
+- with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, @*currency@, @*double@} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
 - via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, @*widestring@, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
 - as {\i strong reference} with {\i reference counting} for {\f1\fs20 interface} instances.
 The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and will not be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
@@ -8458,7 +8504,7 @@ Handled types of parameters are:
 |{\f1\fs20 integer cardinal Int64 double currency TDateTime}|Transmitted as JSON numbers
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
-|{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (UTF-8 encoded)
+|{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
 |{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
 |{\f1\fs20 @*TPersistent@}|Published properties will be transmitted as JSON object
@@ -8929,7 +8975,7 @@ The client code is initialized as such:
 Once the client is up and ready, the local {\f1\fs20 I: ICalculator} variable instance is retrieved, and the remote service is called directly via a simple {\f1\fs20 I.Add(a,b)} statement.
 You can imagine how easy and safe it will be to implement a @17@ for your future applications, using {\i mORMot}.
 :74  Enhanced sample: remote SQL access
-You will find in the {\f1\fs20 SQLite3\\Samples\\16 - Execute SQL via services} folder of {\i mORMot} source code a @*Client-Server@ sample able to access any external database via @*JSON@ and HTTP. It is a good demonstration of how to use a non-trivial @*interface@-based service between a client and a server. It will also show how our {\f1\fs20 SynDB} classes have a quite abstract design, and are easy to work with, whatever database provider you need to use.
+You will find in the {\f1\fs20 SQLite3\\Samples\\16 - Execute SQL via services} folder of {\i mORMot} source code a @*Client-Server@ sample able to access any external database via @*JSON@ and HTTP. It is a good demonstration of how to use a non-trivial @*interface@-based service between a client and a server. It will also show how our {\f1\fs20 SynDB.pas} classes have a quite abstract design, and are easy to work with, whatever database provider you need to use.
 The corresponding service contract has been defined:
 !  TRemoteSQLEngine = (rseOleDB, rseODBC, rseOracle, rseSQlite3, rseJet, rseMSSQL);
 !
@@ -8947,7 +8993,7 @@ Purpose of this service is:
 Of course, this service will be defined in {\f1\fs20 sicClientDriven} mode. That is, the framework will be able to manage a client-driven {\f1\fs20 TSQLDBProperties} instance life time.
 Benefit of this service is that no database connection is required on the client side: a regular HTTP connection is enough. No need to neither install nor configure any database provider.
 Due to {\i mORMot} optimized JSON serialization, it will probably be faster to work with such plain HTTP / JSON services, instead of a database connection through a VPN. In fact, database connections are made to work on a local network, and do not like high-latency connections, which are typical on the Internet. On the contrary, the {\i mORMot} Client-Server process is optimized for such kind of connection.
-Note that the {\f1\fs20 Execute()} method returns a {\f1\fs20 RawJSON} kind of variable, which is in fact a sub-type of {\f1\fs20 RawUTF8}. Its purpose is to transmit the UTF-8 encoded content directly, with no translation to a JSON string, as would be the case with a {\f1\fs20 RawUTF8} variable. In fact, escaping some JSON array within a JSON string is quite verbose. Using {\f1\fs20 RawJSON} in this case ensure the best client-side and server-side speed, and also reduce the transmission bandwidth.
+Note that the {\f1\fs20 Execute()} method returns a {\f1\fs20 RawJSON} kind of variable, which is in fact a sub-type of {\f1\fs20 RawUTF8}. Its purpose is to transmit the @*UTF-8@ encoded content directly, with no translation to a JSON string, as would be the case with a {\f1\fs20 RawUTF8} variable. In fact, escaping some JSON array within a JSON string is quite verbose. Using {\f1\fs20 RawJSON} in this case ensure the best client-side and server-side speed, and also reduce the transmission bandwidth.
 The server part is quite easy to follow:
 !type
 !  TServiceRemoteSQL = class(TInterfacedObject, IRemoteSQL)
@@ -9000,7 +9046,7 @@ The server part is quite easy to follow:
 !  FreeAndNil(fProps);
 !  inherited;
 !end;
-Any exception during {\f1\fs20 SynDB} process, or raised manually in case of wrong use case will be transmitted to the client, just as expected. The {\f1\fs20 fProps} instance life-time is handled by the client, so all we need is to release its pointer in the service implementation {\f1\fs20 destructor}.
+Any exception during {\f1\fs20 SynDB.pas} process, or raised manually in case of wrong use case will be transmitted to the client, just as expected. The {\f1\fs20 fProps} instance life-time is handled by the client, so all we need is to release its pointer in the service implementation {\f1\fs20 destructor}.
 The services are initialized on the server side with the following code:
 !var
 !  aModel: TSQLModel;
@@ -9043,7 +9089,7 @@ The services are initialized on the server side with the following code:
 !  end;
 !end.
 This is a typical {\i mORMot} server initialization, published over the HTTP communication protocol (with auto-registration feature, if possible, as stated by the {\f1\fs20 useHttpApiRegisteringURI} flag). Since we won't use ORM for any purpose but authentication, a fast {\f1\fs20 TObjectList}-based engine (i.e. {\f1\fs20 TSQLRestServerFullMemory}) is enough for this sample purpose.
-In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshaling and communication will be multi-threaded in the framework units).
+In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB.pas} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshaling and communication will be multi-threaded in the framework units).
 From the client point of view, it will be consumed as such:
 !procedure TMainForm.FormShow(Sender: TObject);
 !  (...)
@@ -9174,7 +9220,7 @@ The following execution options are available:
 Of course, {\f1\fs20 SetOption()} accepts an optional list of method names, if you want to tune the execution at the method level.
 Setting {\f1\fs20 optExecLockedPerInterface} option will {\i lock} the specified method(s) execution at the interface level. That is, it won't be possible to have two methods of the same interface be executed concurrently. This option uses a {\f1\fs20 TRTLCriticalSection} mutex, so is at the same time safe and using very little resources. But it won't guaranty that the method execution will always take place in the same thread: so if you need some per-thread initialization/finalization (e.g. for COM objects), you should better use the other options.
 Setting {\f1\fs20 optExecInMainThread} option will force the specified method(s) to be called within a {\f1\fs20 RunningThread.Synchronize()} call - it can be used e.g. if your implementation rely heavily on COM objects, or if you want to ensure that your code will work correctly, without the need to worry about thread safety, which can be quite difficult to deal with. The {\f1\fs20 optFreeInMainThread} option will also ensure that the service class instance will be released in the main thread (i.e. its {\f1\fs20 Free} method called via {\f1\fs20 Synchronize}). Since the main thread will be used by all interfaces, it could result into an execution bottleneck.
-Setting {\f1\fs20 optExecInPerInterfaceThread} option will force the specified method(s) to be called within a thread (to be more precise, a {\f1\fs20 TSynBackgroundThreadSQLRestServerProcedure} class, which will notify the {\f1\fs20 TSQLSQLRestServer} for the thread context) dedicated to the interface. An associated {\f1\fs20 optFreeInPerInterfaceThread} option will also ensure that the service class instance will be released in the same thread: it is pretty convenient to use this threading model, for instance if you want to maintain a dedicated {\f1\fs20 SynDB}-based database connection, or initialize some COM objects.
+Setting {\f1\fs20 optExecInPerInterfaceThread} option will force the specified method(s) to be called within a thread (to be more precise, a {\f1\fs20 TSynBackgroundThreadSQLRestServerProcedure} class, which will notify the {\f1\fs20 TSQLSQLRestServer} for the thread context) dedicated to the interface. An associated {\f1\fs20 optFreeInPerInterfaceThread} option will also ensure that the service class instance will be released in the same thread: it is pretty convenient to use this threading model, for instance if you want to maintain a dedicated {\f1\fs20 SynDB.pas}-based database connection, or initialize some COM objects.
 For instance, if you want all the methods of your {\f1\fs20 TServiceCalculator} class to be executed in the main thread, you can define:
 ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
 !  SetOptions([],[optExecInMainThread]);
@@ -9387,7 +9433,7 @@ For instance, if you define such a method:
 !!    result := res.FetchAllAsJSON(aExpanded);
 !end;
 The {\f1\fs20 FetchAllAsJSON()} method will return a JSON array content, but will be escaped as a JSON string when transmitted via a {\f1\fs20 RawUTF8} variable.
-A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the UTF-8 text is a valid JSON content, and should not be escaped.
+A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the @*UTF-8@ text is a valid JSON content, and should not be escaped.
 That is, defining the method as followed will increase process speed and reduce used bandwidth:
 !function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawJSON;
 See sample "{\i 16 - Execute SQL via services}" for some working code using this feature.
@@ -9528,7 +9574,7 @@ Regression tests will make the following process:
 !    Check(Content=FormatUTF8('%,%',[C3.Real,C3.Imaginary]));
 !  end;
 Note that since there is only one BLOB content returned, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed to be defined for this method. If this is the case, an exception will be raised during the {\f1\fs20 interface} registration step. But you can define any {\f1\fs20 const} parameter needed, to specify your request.
-You may also be able to use this feature to implement custom UTF-8 HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
+You may also be able to use this feature to implement custom @*UTF-8@ HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
 \page
 :65 Comparison with WCF
 Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications.\line See @http://msdn.microsoft.com/en-us/library/dd456779
@@ -9586,11 +9632,11 @@ At this time, the only missing feature of {\i mORMot}'s SOA is transactional pro
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon06.png
-Current version of the main framework units target only {\i Win32} and {\i Win64} systems.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the {\i Windows} world, especially mobile devices.
+Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i Linux} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
-- {\i @*FreePascal@} Compiler 2.7.1;
-- {\i @*Smart Mobile Studio@} 2.1, to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
+- {\i @*FreePascal@} Compiler (in 2.6.4 or 2.7.1 branches);
+- {\i @*Smart Mobile Studio@} (2.1 and up), to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
 The units are the following:
 |%37%63
 |\b Unit Name|Description\b0
@@ -9635,7 +9681,7 @@ $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- Super object properties: 41,136 assertions passed  2.20s  3,739/s  6.3 MB
 $- dwsJSON: 41,136 assertions passed  32.05ms  256,628/s  4.7 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
-The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized UTF-8 functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory. Some tricks used by {\f1\fs20 Synopse ORM} rely on pointers and are not compatible with the {\i NextGen} compiler or the official {\i Delphi} road-map, so the {\f1\fs20 Synopse crossplatform} uses diverse algorithm, but offers still pretty good performance.
+The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized @*UTF-8@ functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type as implemented in {\f1\fs20 SynCommons.pas}, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory. Some tricks used by {\f1\fs20 Synopse ORM} rely on pointers and are not compatible with the {\i NextGen} compiler or the official {\i Delphi} road-map, so the {\f1\fs20 Synopse crossplatform} uses diverse algorithm, but offers still pretty good performance.
 This unit features a {\f1\fs20 TJSONVariantData} custom variant type, similar to @80@, available in the main {\i mORMot} framework.\line It allows writing such nice and readable code, with late-binding:
 !var doc: variant;
 !    json,json2: string;
@@ -9710,7 +9756,7 @@ Under {\i FreePascal}, you have to write:
 In fact, the way late-binding properties are implemented in the {\i FreePascal} RTL forbid to modify the content of the associated {\f1\fs20 variant}. A private copy of the {\f1\fs20 variant} is made, which is not only slower, but disallows modification of its stored value.\line Any feedback and help from the {\i FreePascal} maintainers may be welcome!
 As a result, direct access to {\f1\fs20 TJSONVariantData} instances, and not a {\f1\fs20 variant} variable, would be faster and less error-prone when using this compiler, until the issue is fixed.
 In the Lazarus IDE, we also observed that the debugger is not able to handle our custom {\f1\fs20 variant} type. If you look at any {\f1\fs20 TJSONVariantData} instance with the debugger, an error message "{\i unsupported variant type}" would appear. As far as we found out, this is a Lazarus bug. Delphi, on its side, is able to display any custom {\f1\fs20 variant} type in its debugger, after conversion to {\f1\fs20 string}, i.e. its JSON representation.
-Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an UTF-8 encoded text, then the following line would reset the result code page to the system code page:
+Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an @*UTF-8@ encoded text, then the following line would reset the result code page to the system code page:
 !function StringToJSON(const Text: string): string;
 !  ...
 !  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
@@ -10037,7 +10083,7 @@ Here is an extract of the {\f1\fs20 mORMotClient.pas} unit as generated for the 
 !    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
 !    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
 !  end;
-As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as UTF-8 for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
+As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as @*UTF-8@ for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
 The supplied regression tests show how to use remotely those services:
 !!var calc: ICalculator;
 !    i,j: integer;
@@ -10500,7 +10546,7 @@ Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} tem
 - Internal partials can be defined via {\f1\fs20 \{\{<partial\}\}} - also a nice addition to the standard {\i Mustache} syntax;
 - It allows the data context to be supplied as JSON or our @80@;
 - Almost no memory allocation is performed during the rendering;
-- It is natively UTF-8, from the ground up, with optimized conversion of any string data;
+- It is natively @*UTF-8@, from the ground up, with optimized conversion of any string data;
 - Performance has been tuned and grounded in {\f1\fs20 SynCommons.pas}'s optimized code;
 - Each parsed template is thread-safe and re-entrant;
 - It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
@@ -10529,7 +10575,7 @@ If you want to supply the context data as JSON, then render it, you may write:
 !  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
 !  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
 Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
-As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into UTF-8):
+As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into @*UTF-8@):
 !  mustache := TSynMustache.Parse(
 !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
 !  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
@@ -12390,7 +12436,7 @@ In the same {\i Root folder}, the external database-agnostic units are located:
 |{\f1\fs20 SynDBOracle.pas}|{\i @*Oracle@} DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|{\i @*SQLite3@} direct access classes
 |{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 TQuery}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
-|{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB} data access
+|{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB.pas} data access
 |{\f1\fs20 SynDBZEOS.pas}|{\i @*Zeos@Lib} / ZDBC direct access classes
 |%
 :   SynDBDataset folder
@@ -12409,7 +12455,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 Documentation/}|Sub folder containing the source of the framework documentation
 |{\f1\fs20 Samples/}|Sub folders containing some sample code
 |{\f1\fs20 mORMot.pas}|Main @*ORM@ / @*SOA@ unit of the framework
-|{\f1\fs20 mORMotDB.pas}|Virtual Tables for ORM external {\f1\fs20 SynDB} access
+|{\f1\fs20 mORMotDB.pas}|Virtual Tables for ORM external {\f1\fs20 SynDB.pas} access
 |{\f1\fs20 mORMotFastCgiServer.pas}|FastCGI server - not fully tested
 |{\f1\fs20 mORMotHttpClient.pas}|HTTP/1.1 Client
 |{\f1\fs20 mORMotHttpServer.pas}|HTTP/1.1 Server
@@ -13456,7 +13502,7 @@ The JSON encoding and decoding is handled at diverse levels:
 The main class for producing JSON content is {\f1\fs20 TJSONWriter}. This class is a simple writer to a Stream, specialized for the JSON format. Since it makes
 use of an internal buffer, and avoid most temporary {\f1\fs20 string} allocation ({\i e.g.} using the stack instead of a temporary {\f1\fs20 string} via {\f1\fs20 IntToStr()} when converting a numerical value to text), it is much faster than a string append (standard {\i Delphi} {\f1\fs20 string := string+string} clauses) to produce its content. In particular, its {\f1\fs20 AddJSONEscape} method will handle JSON content escape, according to the official JSON RFC - see @http://www.ietf.org/rfc/rfc4627.txt paragraph 2.5, directly into the destination buffer. It was also designed to scales well on multi-core sytems.
 Some JSON-dedicated function are also available:
-- {\f1\fs20 GetJSONObjectAsSQL} decodes a JSON fields object into an UTF-8 encoded SQL-ready statement;
+- {\f1\fs20 GetJSONObjectAsSQL} decodes a JSON fields object into an @*UTF-8@ encoded SQL-ready statement;
 - {\f1\fs20 IsJSONString} returns TRUE if the supplied content must be encoded as a JSON string according to the JSON encoding schema, i.e. if it's some null/false/true content or any pure numerical data (integer or floating point);
 - {\f1\fs20 UnJSONFirstField} can be used to retrieve the FIRST field value of the FIRST row, from a JSON content: it may be useful to get an ID without converting the whole JSON content into a {\f1\fs20 TSQLTableJSON};
 - {\f1\fs20 JSONEncode} and {\f1\fs20 JSONDecode} functions are available to directly encode or decode some UTF-8 JSON content (used in the remote @*Service@ implementation, for instance).
@@ -13493,7 +13539,7 @@ Here is an extract of the main loop of this method:
 !  (...)
 : Database request table level
 Most high-level Client-sided list request methods returns a {\f1\fs20 TSQLTableJSON} instance as a result. This {\f1\fs20 TSQLTableJSON} class has been created from a pure JSON content, retrieved from the Server using on of the protocols defined in @SRS-DI-2.1.1.2@.
-Its {\f1\fs20 Create} constructor method call its internal {\f1\fs20 protected} method named {\f1\fs20 FillFrom()}, which make the JSON conversion into pure UTF-8 text fields, as expected by the {\f1\fs20 TSQLTable} class and its various {\f1\fs20 Get*()} methods. The {\f1\fs20 FillFrom()} method implements a very fast parsing of the supplied JSON content, then un-escape its content according to the JSON RFC quoted above.
+Its {\f1\fs20 Create} constructor method call its internal {\f1\fs20 protected} method named {\f1\fs20 FillFrom()}, which make the JSON conversion into pure @*UTF-8@ text fields, as expected by the {\f1\fs20 TSQLTable} class and its various {\f1\fs20 Get*()} methods. The {\f1\fs20 FillFrom()} method implements a very fast parsing of the supplied JSON content, then un-escape its content according to the JSON RFC quoted above.
 : Fast JSON parsing
 When it deals with parsing some (textual) content, two directions are usually envisaged. In the XML world, you have usually to make a choice between:
 - A DOM parser, which creates an in-memory tree structure of objects mapping the XML nodes;
@@ -13506,7 +13552,7 @@ In order to achieve best speed, we try to use a mixed approach:
 - The parser returns {\i pointers} to the converted elements (just like the {\i vtd-xml} library).
 In practice, here is how it is implemented:
 - A private copy of the source JSON data is made internally (so that the Client-Side method used to retrieve this data can safely free all allocated memory);
-- The source JSON data is parsed, and replaced by the UTF-8 text un-escaped content, in the same internal buffer (for example, strings are un-escaped and #0 are added at the end of any field value; and numerical values remains text-encoded in place, and will be extracted into {\f1\fs20 Int64} or {\f1\fs20 double} only if needed);
+- The source JSON data is parsed, and replaced by the UTF-8 text un-escaped content, in the same internal buffer (for example, strings are un-escaped and #0 are added at the end of any field value; and numerical values remains text-encoded in place, and will be extracted into {\f1\fs20 Int64} or {\f1\fs20 @*double@} only if needed);
 - Since data is replaced in-memory (JSON data is a bit more verbose than pure UTF-8 text so we have enough space), no memory allocation is performed during the parsing: the whole process is very fast, not noticeably slower than a SAX approach;
 - This very profiled code (using pointers and tuned code) results in a very fast parsing and conversion.
 This parsing "magic" is done in the {\f1\fs20 GetJSONField} function, as defined in the @!GetJSONField!Lib\SynCommons.pas@ unit:
@@ -13679,7 +13725,7 @@ The {\f1\fs20 TSQLRecordProperties} instance is therefore created within this fu
 !end;
 The {\f1\fs20 GarbageCollector} is a global {\f1\fs20 TObjectList}, which is used to store some global instances, living the whole process time, just like our {\f1\fs20 TSQLRecordProperties} values.
 A per-class {\f1\fs20 TSQLRecordProperties} was made therefore available for each kind of {\f1\fs20 TSQLRecord} class.
-Even most sophisticated methods of the @*ORM@ (like {\f1\fs20 TSQLRecord. GetJSONValues}) make use of these low-level {\f1\fs20 object} types. In most cases, the {\f1\fs20 GetValue} and {\f1\fs20 SetValue} methods of the {\f1\fs20 TPropInfo object} are used to convert any field value stored inside the current {\f1\fs20 TSQLRecord} instance in or from UTF-8 encoded text.
+Even most sophisticated methods of the @*ORM@ (like {\f1\fs20 TSQLRecord. GetJSONValues}) make use of these low-level {\f1\fs20 object} types. In most cases, the {\f1\fs20 GetValue} and {\f1\fs20 SetValue} methods of the {\f1\fs20 TPropInfo object} are used to convert any field value stored inside the current {\f1\fs20 TSQLRecord} instance in or from @*UTF-8@ encoded text.
 
 [SDD-DI-2.1.4]
 ; SRS-DI-2.1.4 - The framework shall provide some Cross-Cutting components
@@ -13829,7 +13875,7 @@ The {\i SQLite3} engine is accessed at two levels:
 - A low-level statically linked library @!TSQLite3LibraryStatic!Lib\SynSQLite3Static.pas@, embedding the engine within the project executable;
 - A possible use of external {\f1\fs20 sqlite3.dll} library, via the {\f1\fs20 TSQLite3LibraryDynamic} class;
 - A high-level access, implementing a Client-Side or Server-Side native {\f1\fs20 TSQLRest} descendant using the {\i SQLite3} library for ORM data persistence, in @!TSQLRestServerDB,TSQLRestClientDB!Lib\SQLite3\mORMotSQLite3.pas@.
-In addition to those two units, the @!TSQLDBSQLite3Connection,TSQLDBSQLite3Statement,TSQLDBSQLite3ConnectionProperties!Lib\SynDBSQLite3.pas@ unit publishes all features of the {\i SQlite3} database engine to its internal {\f1\fs20 SynDB} fast database access classes, which can be used uncoupled from the rest of the framework (i.e. without ORM).
+In addition to those two units, the @!TSQLDBSQLite3Connection,TSQLDBSQLite3Statement,TSQLDBSQLite3ConnectionProperties!Lib\SynDBSQLite3.pas@ unit publishes all features of the {\i SQlite3} database engine to its internal {\f1\fs20 SynDB.pas} fast database access classes, which can be used uncoupled from the rest of the framework (i.e. without ORM).
 : Low-Level access to the library
 :  Compilation of the SQLite3 engine
 First of all, the original source code of the library, which is retrieved from the official {\i SQLite3} web site in the form of the optimized Amalgamation file - see @http://www.sqlite.org/amalgamation.html - is compiled using the free Borland C++ command-line compiler.
@@ -13912,7 +13958,7 @@ The @!TSQLTableDB,TSQLRequest,TSQLDataBase,TSQLBlobStream,ESQLException!Lib\SynS
 Those database access types are then used by the following Client-Server @*REST@ful classes, to implement {\i SQLite3} storage for persistence of our @*ORM@ (the so called objects hibernation) in @!TSQLRestClientDB,TSQLRestServerDB!Lib\SQLite3\mORMotSQLite3.pas@:
 - {\f1\fs20 TSQLRestClientDB} implements a REST client with direct access to a {\i SQLite3} database, that is without the Client-Server aspect of the framework;
 - {\f1\fs20 TSQLRestServerDB} can be used to implement a REST server using {\i SQLite3} as its storage engine.
-In most projects, you should not have to use those {\f1\fs20 TSQLDatabase / TSQLRequest} objects, but rather rely either on ORM classes (from {\f1\fs20 mORMot.pas}) or the more generic {\f1\fs20 SynDB} classes (from {\f1\fs20 SynDBSQlite3.pas}).
+In most projects, you should not have to use those {\f1\fs20 TSQLDatabase / TSQLRequest} objects, but rather rely either on ORM classes (from {\f1\fs20 mORMot.pas}) or the more generic {\f1\fs20 SynDB.pas} classes (from {\f1\fs20 SynDBSQlite3.pas}).
 
 [SDD-DI-2.2.2]
 ; SRS-DI-2.2.2 - The framework libraries, including all its {\i SQLite3} related features, must be tested using Unitary testing
