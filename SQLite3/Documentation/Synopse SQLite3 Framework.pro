@@ -635,7 +635,7 @@ The {\i mORMot} framework provides an Open Source {\i self-sufficient set of uni
 - {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
-With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
+With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line {\i mORMot} is not another ORM on which a transmission layer has been added, like almost everything existing in Delphi, C# or Java: this is a full Client-Server ORM/SOA from the ground up. This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in {\i Delphi} or any other mean, including AJAX).
 The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
 No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich {\i Delphi} clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Client authentication is performed via several secure methods, and communication can be encrypted via HTTS or with proprietary SHA/AES-256 algorithm. SOA endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.
@@ -2103,20 +2103,27 @@ As was stated above, @104@ can use our {\i Log View} tool as server and real-tim
 Using a remote logging is specially useful from mobile applications (written with {\i Delphi} / @*FireMonkey@ or with @*Smart Mobile Studio@ / @*AJAX@). Our viewer tool allows efficient live debugging of such platforms.
 :3Object-Relational Mapping
 %cartoon02.png
-The @**ORM@ part of the framework - see @13@ - is implemented in @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
+The @**ORM@ part of the framework - see @13@ - is mainly implemented in the @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
 Generic access to the data is implemented by defining high-level objects as {\i Delphi} classes, descendant from a main {\f1\fs20 @**TSQLRecord@} class.
 In our @*Client-Server@ ORM, those {\f1\fs20 TSQLRecord} classes can be used for at least three main purposes:
-- Map the Database tables;
-- Define business logic in {\i Delphi} code;
-- Auto-generate the User Interface (grids, edition screens and menus).
-This allows to truly implement a Multi-tier architecture - see @7@.
-All @*published properties@ of the {\f1\fs20 TSQLRecord} descendant classes are then accessed via @*RTTI@ in a Client-Server @*REST@ful architecture.
-Following the three previous purposes, these properties will be used:
-- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way;
-- To have business logic objects accessible for both the Client and Server side, in a RESTful approach;
-- To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
+- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - see @27@ - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way - see @84@;
+- To have business logic objects accessible for both the Client and Server side, in a @*REST@ful approach - see @114@;
+- To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way - see @31@.
 Our ORM engine has genuine advanced features like {\i @*convention over configuration@}, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
+\page
 :26 TSQLRecord fields definition
+All the framework @*ORM@ process relies on the {\f1\fs20 TSQLRecord} class. This abstract {\f1\fs20 TSQLRecord} class features a lot of built-in methods, convenient to do most of the ORM process in a generic way, at record level.
+It first defines a {\i @**primary key@} field, defined as {\f1\fs20 ID: @**TID@}, i.e. as {\f1\fs20 Int64} in {\f1\fs20 mORMot.pas}:
+!type
+!  TID = type Int64;
+!  ...
+!  TSQLRecord = class(TObject)
+!  ...
+!    property ID: TID read GetID write fID;
+!  ...
+In fact, our ORM relies on a {\f1\fs20 Int64} primary key, matching the {\i SQLite3} {\f1\fs20 ID}/{\f1\fs20 RowID} primary key.
+You may be disappointed by this limitation, which is needed by the {\i SQLite3}'s implementation of @*Virtual Table@s - see @20@. We won't debate about a composite primary key (i.e. several fields), which is not a good idea for an ORM. In your previous RDBMS data modeling, you may be used to define a TEXT primary key, or even a GUID primary key: those kinds of keys are somewhat less efficient than an INTEGER, especially for ORM internals, since they are not monotonic. You can always define a secondary key, as {\f1\fs20 string} or {\f1\fs20 TGUID} field, if needed - using {\f1\fs20 stored @*AS_UNIQUE@} attribute as explained below.
+All @*published properties@ of the {\f1\fs20 TSQLRecord} descendant classes are then accessed via @*RTTI@ in a Client-Server @*REST@ful architecture.
 For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !/// some enumeration
 !// - will be written as 'Female' or 'Male' in our UI Grid
@@ -2138,6 +2145,7 @@ For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !    property Sex: TSex read fSex write fSex;
 !end;
 By adding this {\f1\fs20 TSQLBaby} class to a {\f1\fs20 @*TSQLModel@} instance, common for both Client and Server, the corresponding {\i Baby} table is created by the Framework in the database engine ({\i @*SQLite3@} natively or any external database). All @*SQL@ work ('{\f1\fs20 CREATE TABLE ...}') is done by the framework. Just code in Pascal, and all is done for you. Even the needed indexes will be created by the ORM. And you won't miss any ' or ; in your SQL query any more.
+\page
 The following {\f1\fs20 @**published properties@} types are handled by the @*ORM@, and will be converted as specified to database content (in {\i SQLite3}, an INTEGER is an {\f1\fs20 Int64}, FLOAT is a double, TEXT is an @*UTF-8@ encoded text):
 |%24%14%64
 |\b Delphi|SQLite3|Remarks\b0
@@ -2163,10 +2171,10 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 TTimeLog}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|INTEGER|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
+|{\f1\fs20 @*TSQLRecord@}|INTEGER|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64 bit under {\i Win64}
+|{\f1\fs20 @*TID@}|INTEGER|64 bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
-|{\f1\fs20 TRecordReference}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically reset all occurences of this field to 0
-|{\f1\fs20 TRecordReferenceToBeDeleted}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically delete all {\f1\fs20 TSQLRecord} containing a reference to it
+|{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|INTEGER|able to join any row on any table of the model, by storing both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} class type in a {\f1\fs20 @*RecordRef@}-like {\f1\fs20 Int64} value, with automatic reset to 0 (for {\f1\fs20 TRecordReference}) or row deletion (for {\f1\fs20 TRecordReferenceToBeDeleted}) when the pointed record is deleted
 |{\f1\fs20 @*TPersistent@}|TEXT|@*JSON@ object ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -2176,12 +2184,13 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TSQLRawBlob@}|@*BLOB@|This type is an alias to {\f1\fs20 @*RawByteString@}
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
-|{\f1\fs20 record}|TEXT|JSON string or object\line directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} for prior versions
+|{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
 |%
+\page
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
 - If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
 - For a dynamic array field, the {\f1\fs20 index} number can be used for the {\f1\fs20 TSQLRecord. DynArray(DynArrayFieldIndex)} method to create a {\f1\fs20 TDynArray} wrapper mapping the dynamic array data;
-- For a {\f1\fs20 WinAnsiString / RawUTF8} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
+- For a {\f1\fs20 RawUTF8 / string / WideString / WinAnsiString} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
 For instance, the following {\f1\fs20 class} definition will create an index for its {\f1\fs20 SerialNumber} property (up to 30 characters long if stored in an external database), and will expect a link to a model of diaper ({\f1\fs20 TSQLDiaperModel}) and the baby which used it ({\f1\fs20 TSQLBaby}). An {\f1\fs20 ID} / {\f1\fs20 RowID} column will be always available (from {\f1\fs20 TSQLRecord}), so in this case, you would be able to make a fast lookup for a particular diaper from either its internal {\i mORmot} ID, or its official unique serial number:
 !/// table used for the Diaper queries
 !TSQLDiaper = class(TSQLRecord)
@@ -2199,8 +2208,21 @@ For instance, the following {\f1\fs20 class} definition will create an index for
 !end;
 :  Text fields
 In practice, the generic {\f1\fs20 string} type is handled (as {\f1\fs20 UnicodeString} under {\i Delphi} 2009 and later), but you may loose some content if you're working with pre-Unicode version of {\i Delphi} (in which {\f1\fs20 string = AnsiString} with the current system code page). So we won't recommend its usage.
-The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @**RawUTF8@}. All business process should be made using {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters.
+The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @*RawUTF8@} as introduced for @32@. All business process should better use {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slightly slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters, so an explicit call to {\f1\fs20 StringToUTF8 / UTF8ToString} functions is required.
 You will find in {\f1\fs20 SynCommons.pas} unit all low-level {\f1\fs20 RawUTF8} processing functions and classes, to be used instead of any {\f1\fs20 SysUtils.pas} functions. The {\f1\fs20 mORMot} core implementation about {\f1\fs20 RawUTF8} is very optimized for speed and multi-threading, so it is recommended not to use {\f1\fs20 string} in your code, unless you access to the VCL / User Interface layer.
+Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are not leaking your domain from its business layer to the presentation layer, as defined with @7@:
+\graph ArchiStringTier Strings in Domain Driven Design n-Tier Architecture
+\Presentation Tier\Application Tier
+\Application Tier\Business Logic Tier
+\Business Logic Tier\Data Tier
+\string\RawUTF8
+\RawUTF8\ RawUTF8
+\ RawUTF8\  RawUTF8
+\Presentation Tier=string
+\Application Tier=RawUTF8
+\Business Logic Tier= RawUTF8
+\Data Tier=  RawUTF8
+\
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :  Date and time fields
 {\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database.
@@ -2243,11 +2265,33 @@ As stated by the official {\i Delphi} documentation:
 In fact, this type matches the corresponding {\f1\fs20 OLE} and {\f1\fs20 .Net} implementation of {\f1\fs20 currency}. It is still implemented the same in the {\i Win64} platform (since XE 2). The {\f1\fs20 Int64} binary representation of the {\f1\fs20 currency} type (i.e. {\f1\fs20 value*10000} as accessible via a typecast like {\f1\fs20 PInt64(@aCurrencyValue)^}) is a safe and fast implementation pattern.
 In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB.pas} units will try to avoid any conversion to/from {\f1\fs20 @*double@} for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
 :  TSQLRecord fields
-It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After runing {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
-In fact, their definition is used to define a "@*one to many@" or "@*one to one@" relationship between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
-Only exception to this rule is {\f1\fs20 TSQLRecordMany} kind of published properties, which, by design, are true instances, needed to access the pivot table data of "@*many to many@" relationship. {\i auto-instantiate} all {\f1\fs20 TSQLRecordMany} published properties (then release them at {\f1\fs20 Destroy}).
-Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor to {\i auto-instantiate} and load all {\f1\fs20 TSQLRecord} published properties at once.
+It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After running {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
+In fact, {\f1\fs20 TSQLRecord} published properties definition is used to define "@*one to many@" or "@*one to one@" relationships between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
+Only exception to this rule is {\f1\fs20 TSQLRecordMany} kind of published properties, which, by design, are true instances, needed to access the pivot table data of "@*many to many@" relationship. The ORM will {\i auto-instantiate} all {\f1\fs20 TSQLRecordMany} published properties, then release them at {\f1\fs20 Destroy} - so you do not need to maintain their life time.
+Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor to {\i auto-instantiate} and load all {\f1\fs20 TSQLRecord} published properties at once, then release them at {\f1\fs20 Destroy}. - see @129@.
+The ORM will automatically perform the following optimizations for {\f1\fs20 TSQLRecord} published fields:
+- An {\i index} will be created on the database, for the corresponding column;
+- When a referenced record is deleted, the ORM will detect it and automatically set all published properties pointing to this record to 0.
+In fact, the ORM will not define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. If you also use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
+:  TID fields
+{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
+You can define a published property as {\f1\fs20 TID} to store any value of our @*primary key@, i.e. up to 9,223,372,036,854,775,808. Note that in this case, there is no information about the joined table.
+As a consequence, the ORM will perform the following optimizations for {\f1\fs20 TID} fields:
+- An {\i index} will be created on the database, for the corresponding column;
+- When a referenced record is deleted, the ORM {\i won't do anything}, since it has no information about the table to track - this is the main difference with {\f1\fs20 TSQLRecord} published property.
+:  TRecordReference and TRecordReferenceToBeDeleted
+{\f1\fs20 TSQLRecord} or {\f1\fs20 TID} published properties are associated with a single {\f1\fs20 TSQLRecord} joined table. You could use {\f1\fs20 @**TRecordReference@} or {\f1\fs20 @**TRecordReferenceToBeDeleted@} published properties to store a reference to any record on any table of the data model.
+In fact, such properties will store in a {\f1\fs20 Int64} value a reference to both a {\f1\fs20 TSQLRecord} class (therefore defining a table), and one {\f1\fs20 ID} (to define the row).
+You could later on use e.g. {\f1\fs20 @*TSQLRest@.Retrieve(Reference)} to get a record content in one step.
+One {\b important note} is to remember that the table reference is stored as an index to the {\f1\fs20 TSQLRecord} class in the associated {\f1\fs20 TSQLModel}.\line As a consequence, for such {\f1\fs20 TRecordReference*} properties to work as expected, you should ensure:
+- That the order of {\f1\fs20 TSQLRecord} classes in the {\f1\fs20 TSQLModel} {\b do not change} after any model modification: otherwise, all previously stored {\f1\fs20 TRecordReference*} values would point to a wrong record;
+- That both Client and Server side {\b share the same model} - at least for the {\f1\fs20 TSQLRecord} classes which are used with {\f1\fs20 TRecordReference*}.
+Depending on the type, the ORM will track the deletion of the pointed record:
+- {\f1\fs20 TRecordReference} fields will be reset to 0 - similar to {\f1\fs20 ON DELETE SET DEFAULT} foreign key SQL declaration;
+- {\f1\fs20 TRecordReferenceToBeDeleted} will delete the whole record - similar to {\f1\fs20 ON DELETE CASCADE} foreign key SQL declaration.
+Just like with {\f1\fs20 TSQLRecord} fields, this deletion tracking is not defined at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected. If you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
+In order to work easily with {\f1\fs20 TRecordReference} values (which are in fact plain {\f1\fs20 Int64} values), you could transtype them into the {\f1\fs20 @**RecordRef@()} record, and access the stored information via a set of helper methods. See @128@ for an example of use of such {\f1\fs20 TRecordReference} in a data model, e.g. the {\f1\fs20 AssociatedRecord} property of {\f1\fs20 TSQLAuditTrail}.
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
@@ -2257,6 +2301,7 @@ At loading, it will check their content:
 - Otherwise, it will create a {\f1\fs20 string} value.
 Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in {\i Delphi} code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
 At JSON level, {\f1\fs20 variant} fields will be transmitted as JSON text or number, depending on the stored value.
+If you use a {\i MongoDB} external @*NoSQL@ database - see @84@, such {\f1\fs20 variant} field will not be stored as JSON text, but as true BSON documents. So you would be able to apply all the advanced search and indexing abilities of this database engine, if needed.
 :  Record fields
 Since {\i Delphi} XE5, you can define and work directly with published record properties of {\f1\fs20 @*TSQLRecord@}:
 !  TSQLMyRecord = class(TSQLRecordPeople)
@@ -2302,23 +2347,24 @@ You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
 : Working with Objects
-To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@:
-!var Baby: TSQLBaby;
-!  ID: integer;
+To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@, and using the {\f1\fs20 ID} @*primary key@ as resource identifier:
+!!procedure Test(Client: TSQLRest);  // we will use CRUD operations on a REST instance
+!var Baby: TSQLBaby;   // store a record
+!    ID: TID;          // store a reference to a record
 !begin
-!  // create a new record, since Smith, Jr was just born
+!  // create and save a new record, since Smith, Jr was just born
 !  Baby := TSQLBaby.Create;
 !  try
 !    Baby.Name := 'Smith';
 !    Baby.Address := 'New York City';
-!    Baby.BirthDate := Now;
+!    Baby.BirthDate := Date;
 !    Baby.Sex := sMale;
 !!    ID := Client.Add(Baby);
 !  finally
-!    Baby.Free;
+!    Baby.Free; // manage memory as usual
 !  end;
 !  // update record data
-!  Baby := TSQLBaby.Create(Client,ID);
+!!  Baby := TSQLBaby.Create(Client,ID); // retrieve from ID
 !  try
 !    assert(Baby.Name='Smith');
 !    Baby.Name := 'Smeeth';
@@ -2485,6 +2531,55 @@ or
 In both cases, the parameters will be inlined, in order to prepare the statements, and improve execution speed.
 We used the {\f1\fs20 QuotedStr} standard function to embrace the {\f1\fs20 Letters} parameter with quotes, as expected per the @*SQL@ syntax.
 Of course, using '?' and bounds parameters is much easier than '%' and manual {\f1\fs20 :(%):} in-lining with a {\f1\fs20 QuotedStr()} function call. In your client code, you should better use '?' - but if you find some {\f1\fs20 ':(%):'} in the framework source code and when a WHERE clause is expected within the transmitted JSON content, you won't be surprised.
+:130 Automatic TSQLRecord memory handling
+Working with objects is pretty powerful, but requires to handle manually the created instances life time, via {\f1\fs20 try} .. {\f1\fs20 finally} blocks. Most of the time, the {\f1\fs20 TSQLRecord} life time would be very short: we allocate one instance on a local variable, then release it when it goes out of scope.
+If we take again the {\f1\fs20 TSQLBaby} sample, we may write:
+!!function NewMaleBaby(Client: TSQLRest; const Name,Address: RawUTF8): TID;
+!var Baby: TSQLBaby;   // store a record
+!begin
+!  Baby := TSQLBaby.Create;
+!  try
+!    Baby.Name := Name;
+!    Baby.Address := Address;
+!    Baby.BirthDate := Date;
+!    Baby.Sex := sMale;
+!!    result := Client.Add(Baby);
+!  finally
+!    Baby.Free;
+!  end;
+!end;
+To ease this pretty usual pattern, the framework offers some kind of automatic memory management at {\f1\fs20 TSQLRecord} level:
+!!function NewMaleBaby(Client: TSQLRest; const Name,Address: RawUTF8): TID;
+!var Baby: TSQLBaby;   // store a record
+!begin
+!!  TSQLBaby.AutoFree(Baby);  // no try..finally needed!
+!  Baby.Name := Name;
+!  Baby.Address := Address;
+!  Baby.BirthDate := Date;
+!  Baby.Sex := sMale;
+!!  result := Client.Add(Baby);
+!end; // local Baby instance will be released here
+It may also be useful for queries.\line Instead of writing:
+!var aMale: TSQLBaby;
+!...
+!  aMale := TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
+!  try
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
+!  finally
+!    aMale.Free;
+!  end;
+We may write:
+!var aMale: TSQLBaby;
+!...
+!  TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  while aMale.FillOne do
+!    DoSomethingWith(aMale);
+Without the need to write the {\f1\fs20 try ... finally} block.
+See the {\f1\fs20 TSQLRecord.AutoFree()} overloaded methods in {\f1\fs20 mORMot.pas} for the several use cases, and the associated {\f1\fs20 TAutoFree} / {\f1\fs20 IAutoFree} types as defined in {\f1\fs20 SynCommons.pas}. Note that you can handle several local variables in a single {\f1\fs20 TSQLRecord.AutoFree()} or {\f1\fs20 TAutoFree.Create()} initialization.
+Be aware that it does not introduce some kind of magic @*garbage collector@, as available in C# or Java. It is not even similar to the {\f1\fs20 ARC} memory model used by {\i Apple} and the {\i Delphi} {\i NextGen} compiler. It is just some syntaxic sugar creating a local hidden {\f1\fs20 IAutoFree} interface, which would be released at the end of the local method by the compiler, and also release all associated class instances. So the local class instances should stay in the local scope, and should not be sent and stored in another process: in such cases, you may encounter access violation issues.
 : Objects relationship: cardinality
 All previous code is fine if your application requires "flat" data. But most of the time, you'll need to define master/child relationship, perhaps over several levels. In data modeling, the {\i @**cardinality@} of one data table with respect to another data table is a critical aspect of database design. Relationships between data tables define {\i cardinality} when explaining how each table links to another.
 In the relational model, tables can have the following {\i cardinality}, i.e. can be related as any of:
@@ -2583,10 +2678,10 @@ Or with a {\f1\fs20 with} statement:
 !  end;
 !end;
 Mapping a {\f1\fs20 TSQLRecord} field into an {\f1\fs20 integer} ID is a bit difficult to learn at first. It was the only way we found out in order to define a "one to one" or "one to many" relationship within the class definition, without any property attribute features of the {\i Delphi} compiler (only introduced in newer versions). The main drawback is that the compiler won't be able to identify at compile time some potential GPF issues at run time. This is up to the developer to write correct code, when dealing with {\f1\fs20 TSQLRecord} properties. Using {\f1\fs20 AsTSQLRecord} property and overloaded {\f1\fs20 TSQLRecord. Create(aPublishedRecord)} constructor will help a lot.
-:   Automatic instantiation and JOINed query
+:129   Automatic instantiation and JOINed query
 Having to manage at hand all nested {\f1\fs20 TSQLRecord} instances can be annoying, and error-prone.
 As an alternative, if you want to retrieve a whole {\f1\fs20 TSQLRecord} instance including its nested {\f1\fs20 TSQLRecord} published properties, you can use either of those two constructors:
-- {\f1\fs20 TSQLRecord.@*CreateJoined@(aClient,aID)};
+- {\f1\fs20 TSQLRecord.@**CreateJoined@(aClient,aID)};
 - {\f1\fs20 TSQLRecord.CreateAndFillPrepareJoined()}, followed by a {\f1\fs20 while FillOne do ....} loop.
 Both constructors:
 - Will {\i auto-instantiate} all {\f1\fs20 TSQLRecord} published properties;
@@ -2607,7 +2702,7 @@ So you can safely write:
 Note that this will work as expected when retrieving some data from the database, but, in the current implementation of the ORM, any {\f1\fs20 Update()} call will manage only the main {\f1\fs20 TSQLRecord} properties, and the nested {\f1\fs20 TSQLRecord} properties {\f1\fs20 ID}, not the nested properties values. For instance, in code above, {\f1\fs20 aClient.Update(MyFile)} will update the {\f1\fs20 TSQLMyFile} table, but won't reflect any modification to {\f1\fs20 MyFile.FirstOne} or {\f1\fs20 MyFile.SecondOne} properties. This limitation may be removed in the future - you may ask explicitly for this feature request.
 :  "Has many" and "has many through"
 As @http://en.wikipedia.org/wiki/Many-to-many_(data_model) wrote:
-{\i In systems analysis, a many-to-many relationship is a type of cardinality that refers to the relationship between two entities (see also Entity-Relationship Model) A and B in which A may contain a parent row for which there are many children in B and vice versa. For instance, think of A as Authors, and B as Books. An Author can write several Books, and a Book can be written by several Authors. Because most database management systems only support one-to-many relationships, it is necessary to implement such relationships physically via a third and fourth junction table, say, AB with two one-to-many relationships A -> AB and B -> AB. In this case the logical primary key for AB is formed from the two foreign keys (i.e. copies of the primary keys of A and B).}
+{\i In systems analysis, a many-to-many relationship is a type of cardinality that refers to the relationship between two entities (see also Entity-Relationship Model) A and B in which A may contain a parent row for which there are many children in B and vice versa. For instance, think of A as Authors, and B as Books. An Author can write several Books, and a Book can be written by several Authors. Because most database management systems only support one-to-many relationships, it is necessary to implement such relationships physically via a third and fourth junction table, say, AB with two one-to-many relationships A -> AB and B -> AB. In this case the logical @*primary key@ for AB is formed from the two foreign keys (i.e. copies of the primary keys of A and B).}
 From the record point of view, and to follow the @*ORM@ vocabulary (in Ruby on Rails, Python, or other {\i ActiveRecord} clones), we could speak of "@**has many@" relationship. In the classic RDBMS implementation, a pivot table is created, containing two references to both related records. Additional information can be stored within this pivot table. It could be used, for instance, to store association time or corresponding permissions of the relationship. This is called a "@**has many through@" relationship.
 In fact, there are several families of ORM design, when implementing the "many to many" @*cardinality@:
 - Map collections into {\f1\fs20 @*JOIN@}ed query from the ORM (i.e. pivot tables are abstracted from object lists or collections by the framework, to implement "has many" relationship, but you will have to define @*lazy loading@ and won't have "has many through" relationship at hand);
@@ -2652,7 +2747,7 @@ You may define:
 !!   property Data: variant read fData write fData;
 ! end;
 Here, we defined two indexed keys, ready to access any data record:
-- Via the {\f1\fs20 ID: integer} property defined at {\f1\fs20 TSQLRecord} level, which will map the {\i SQLite3} {\f1\fs20 RowID} primary key;
+- Via the {\f1\fs20 ID: @*TID@} property defined at {\f1\fs20 TSQLRecord} level, which will map the {\i SQLite3} {\f1\fs20 RowID} @*primary key@;
 - Via the {\f1\fs20 Name: RawUTF8} property, which will was marked to be indexed by setting the "{\f1\fs20 stored @*AS_UNIQUE@}" attribute.
 Then, any kind of data may be stored in the {\f1\fs20 Data: variant} published property. In the database, it will be stored as @*JSON@ @*UTF-8@ text, ready to be retrieved from any client, including AJAX / HTML5 applications. {\i Delphi} clients or servers will access those data via {\i @*late-binding@}, from its {\f1\fs20 TDocVariant} instance.
 You just reproduced the {\i @**schema-less@} approach of the @*NoSQL@ database engines, in a few lines of code! Thanks to the {\i mORMot}'s @6@ design, your applications are able to store any kind of document, and easily access to them via HTTP.
@@ -2665,7 +2760,7 @@ Of course, when using the database for real problems, the data does have a fairl
 ! { name : "Kate", age : 25 }
 Generally, there is a direct analogy between this {\i schema-less} style and dynamically typed languages. Constructs such as those above are easy to represent in {\i PHP}, {\i Python} and {\i Ruby}. And, thanks to our {\f1\fs20 TDocVariant} {\i late-binding} magic, even our good {\i Delphi} is able to handle those structures in our code. What we are trying to do here is make this mapping to the database natural, like:
 !var aRec: TSQLRecordData;
-!    aID: integer;
+!    aID: TID;
 !begin
 !  // initialization of one record
 !  aRec := TSQLRecordData.Create;
@@ -3196,7 +3291,7 @@ Thanks to those specific caching abilities, our framework is able to minimize th
 : Calculated fields
 It is often useful to handle some calculated fields. That is, having some field values computed when you set another field value. For instance, if you set an error code from an enumeration (stored in an INTEGER field), you may want the corresponding text (to be stored on a TEXT field). Or you may want a total amount to be computed automatically from some detailed records.
 This should not be done on the Server side. In fact, the framework expects the transmitted JSON transmitted from client to be set directly to the database layer, as stated by this code from the {\f1\fs20 mORMotSQLite3} unit:
-!function TSQLRestServerDB.EngineUpdate(Table: TSQLRecordClass; ID: integer;
+!function TSQLRestServerDB.EngineUpdate(Table: TSQLRecordClass; ID: TID;
 !  const SentData: RawUTF8): boolean;
 !begin
 !  if (self=nil) or (Table=nil) or (ID<=0) then
@@ -3312,7 +3407,7 @@ This {\f1\fs20 TSQLRecordHistory} class will in fact create a {\f1\fs20 History}
 \graph DBHistory History Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime|ID : integer"];
+struct1 [label="ID : TID|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime"];
 \
 In short, any modification via the ORM will be stored in the {\f1\fs20 TSQLRecordHistory} table, as a JSON object of the changed fields, in {\f1\fs20 TSQLRecordHistory.SentDataJSON}.
 By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB trigger to track low-level changes: it would slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
@@ -3340,7 +3435,7 @@ The database is just one way of your objects persistence:
 - Don't think "@*SQL@", think about classes;
 - Don't wonder "How will I store it?", but "Which data do I need?".
 For instance, don't be tempted to always create a pivot table (via a {\f1\fs20 @*TSQLRecordMany@} property), but consider using a {\i @*dynamic array@}, {\f1\fs20 @*TPersistent@, @*TStrings@} or {\f1\fs20 @*TCollection@} @*published properties@ instead.
-Or consider that you can use a {\f1\fs20 TRecordReference} property pointing to any registered class of the {\f1\fs20 @*TSQLModel@}, instead of creating one {\f1\fs20 @*TSQLRecord@} property per potential table.
+Or consider that you can use a {\f1\fs20 @*TRecordReference@} property pointing to any registered class of the {\f1\fs20 @*TSQLModel@}, instead of creating one {\f1\fs20 @*TSQLRecord@} property per potential table.
 The {\i mORMot} framework is even able to persist the object without any SQL database, e.g. via {\f1\fs20 TSQLRestStorageInMemory}. In fact, its ORM core is optimized but not tied to SQL.
 :  Objects, not tables
 With an @*ORM@, you should usually define fewer tables than in a "regular" relational database, because you can use the high-level type of the {\f1\fs20 @*TSQLRecord@} properties to handle some per-row data.
@@ -3878,7 +3973,7 @@ Example of possible inlined values are (note double " @*quotes@ are allowed for 
 $:(1234): :(12.34): :(12E-34): :("text"): :('It''s great'):
 All internal SQL statement generated by the @*ORM@ are now using this new parameter syntax.
 For instance, here is how an object deletion is implemented for the {\i SQlite3} engine:
-!function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: integer): boolean;
+!function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: TID): boolean;
 !begin
 !  if Assigned(OnUpdateEvent) then
 !    OnUpdateEvent(self,seDelete,Table,ID); // notify BEFORE deletion
@@ -3903,7 +3998,7 @@ It is also worth noting that external databases (see next paragraph) will also b
 Since the 2010-06-25 source code repository update, the @*RTREE@ extension is now compiled by default within all supplied {\f1\fs20 .obj} files.
 An R-Tree is a special index that is designed for doing range queries. R-Trees are most commonly used in geospatial systems where each entry is a rectangle with minimum and maximum X and Y coordinates. Given a query rectangle, an R-Tree is able to quickly find all entries that are contained within the query rectangle or which overlap the query rectangle. This idea is easily extended to three dimensions for use in CAD systems. R-Trees also find use in time-domain range look-ups. For example, suppose a database records the starting and ending times for a large number of events. A R-Tree is able to quickly find all events, for example, that were active at any time during a given time interval, or all events that started during a particular time interval, or all events that both started and ended within a given time interval. And so forth. See @http://www.sqlite.org/rtree.html
 A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS3}).
-Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 @*double@}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
+Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 @*double@}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: @*TID@} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
 Queries against the ID or the coordinate ranges are almost immediate: so you can e.g. extract some coordinates box from the main regular {\f1\fs20 TSQLRecord} table, then use a {\f1\fs20 TSQLRecordRTree}-joined query to make the process faster; this is exactly what the {\f1\fs20 TSQLRestClient. RTreeMatch} method offers: for instance, running with {\f1\fs20 aMapData. @*Blob@Field} filled with {\f1\fs20 [-81,-79.6,35,36.2]} the following lines:
 ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
 !   aMapData.BlobField,ResultID);
@@ -4029,7 +4124,7 @@ In the {\i mORMot} ORM, we defined some additional kind of collations, via some 
 |\b TSQLFieldType|Default collation\b0
 |{\f1\fs20 sftAnsiText}|NOCASE
 |{\f1\fs20 sftUTF8Text}|SYSTEMNOCASE, i.e. using {\f1\fs20 UTF8ILComp()}, which will ignore {\i Win-1252} Latin accents
-|{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
+|{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftTID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
 |{\f1\fs20 {\f1\fs20 sftDateTime}}|ISO8601, i.e. decoding the text into a date/time value before comparison
 |{\f1\fs20 sftObject\line sftVariant}|NOCASE, since it is stored as plain JSON content
 |{\f1\fs20 sftBlob\line sftBlobDynArray\line sftBlobCustom}|BINARY
@@ -4427,7 +4522,7 @@ It will create two {\f1\fs20 SQLite3} databases, one main "{\f1\fs20 testExterna
 In the "{\f1\fs20 history.db3}" file, there will be the {\f1\fs20 MyHistory} table, whereas in {\f1\fs20 testExternal.db3}", there won't be any {\f1\fs20 MyHistory} table. All {\f1\fs20 TSQLRecordMyHistory} CRUD process will be transparently redirected to {\f1\fs20 historyDB}.
 Then any ORM access from the main {\f1\fs20 aExternalClient} to the {\f1\fs20 TSQLRecordMyHistory} table via will be redirected, via an hidden {\f1\fs20 TSQLRestStorageRemote} instance, to {\f1\fs20 historyDB}. There won't be any noticeable performance penalty - on the contrary a separated database would be much better.
 An alternative would have been to use the {\f1\fs20 ATTACH TABLE} statement at {\i SQLite3} level, but it would have been only locally, and you would not be able to switch to another database engine. Whereas the {\f1\fs20 RemoteDataCreate()} method is generic, and will work with external databases - see @27@, even {\i @*NoSQL@} databases - see @84@, or remote {\i mORMot} servers, accessible via a {\f1\fs20 TSQLRestClientHTTP} instance. The only prerequirement is that all {\f1\fs20 TSQLRecord} classes in the main model do exist in the redirected database model.
-Note that the redirected {\f1\fs20 TSQLRest} instance can have its own model, its own authentication and authorization scheme, its own caching policy. It would be of great interrest when tuning your application.\line Be aware that if you use {\f1\fs20 TRecordReference} published fields, the model should better be shared among the local and redirected {\f1\fs20 TSQLRest} instances, or at least the {\f1\fs20 TSQLRecord} classes should have the same order - otherwise the {\f1\fs20 TRecordReference} values would point to the wrong table, depending on the side the query is run.
+Note that the redirected {\f1\fs20 TSQLRest} instance can have its own model, its own authentication and authorization scheme, its own caching policy. It would be of great interrest when tuning your application.\line Be aware that if you use {\f1\fs20 @*TRecordReference@} published fields, the model should better be shared among the local and redirected {\f1\fs20 TSQLRest} instances, or at least the {\f1\fs20 TSQLRecord} classes should have the same order - otherwise the {\f1\fs20 TRecordReference} values would point to the wrong table, depending on the side the query is run.
 See @%%mORMotDesign3@ and  @%%ArchServerFull@ for some explanation about how this redirection feature would interact with other abilities of the framework.
 One practical application of this redirection pattern may be with a typical corporate business.\line There may be a main {\i mORMot} server, at corporation headquarters, then local {\i mORMot} servers at each branch office, hosting applications for end users on the local network:
 \graph HostingRedirection Corporate Servers Redirection
@@ -5206,7 +5301,7 @@ The resulting table layout on the external database will be the following:
 \graph TSQLRecordPeopleExtDefaultMapping TSQLRecordPeopleExt Code-First Field/Column Mapping
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="<id>ID : integer|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
+struct1 [label="<id>ID : TID|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
 struct2 [label="<id>ID : INTEGER|<data>Data : BLOB|<fn>FirstName : NVARCHAR(40)|<ln>LastName : NVARCHAR(40)|<yob>YearOfBirth : INTEGER|<yod>YearOfDeath : INTEGER"];
 struct1:id -> struct2:id;
 struct1:data -> struct2:data;
@@ -5223,7 +5318,7 @@ A similar feature is tested for the {\f1\fs20 CreatedAt} published field, which 
 As we have just seen, the following line initializes the ORM to let {\f1\fs20 TSQLRecordPeopleExt} data be accessed via SQL, over an external database connection {\f1\fs20 fProperties}:
 !VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal');
 We also customized the name of the external table, from its default {\f1\fs20 'PeopleExt'} (computed by timing {\f1\fs20 TSQLRecord} prefix from {\f1\fs20 TSQLRecordPeopleExt}) into {\f1\fs20 'PeopleExternal'}.
-In addition to table name @**mapping@, the ORM is also able to map the {\f1\fs20 TSQLRecord} published properties names to any custom database column name. It is in fact very common that most tables on existing databases to not have very explicit column naming, which may sounds pretty weird when mapped directly as {\f1\fs20 TSQLRecord} property names. Even the primary keys of your existing database won't match the ORM's requirement of naming it as {\f1\fs20 ID}. All this should be setup as expected.
+In addition to table name @**mapping@, the ORM is also able to map the {\f1\fs20 TSQLRecord} published properties names to any custom database column name. It is in fact very common that most tables on existing databases to not have very explicit column naming, which may sounds pretty weird when mapped directly as {\f1\fs20 TSQLRecord} property names. Even the @*primary key@s of your existing database won't match the ORM's requirement of naming it as {\f1\fs20 ID}. All this should be setup as expected.
 By default, for a {\i code-driven} approach, internal property names will match the external table column names - see @%%TSQLRecordPeopleExtDefaultMapping@
 You can customize this default mapping, writing e.g.
 !fProperties := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
@@ -5247,7 +5342,7 @@ The resulting mapping will therefore be the following:
 \graph TSQLRecordPeopleExtCustomMapping TSQLRecordPeopleExt Database-First Field/Column Mapping
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="<id>ID : integer|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
+struct1 [label="<id>ID : TID|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
 struct2 [label="<id>Key : INTEGER|<data>Data : BLOB|<fn>FirstName : NVARCHAR(40)|<ln>LastName : NVARCHAR(40)|<yob>YearOfBirth : INTEGER|<yod>YOD : INTEGER"];
 struct1:id -> struct2:id;
 struct1:data -> struct2:data;
@@ -5257,7 +5352,7 @@ struct1:yob -> struct2:yob;
 struct1:yod -> struct2:yod;
 \
 Note that only the {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} column names were customized.
-Due to the design of {\i SQLite3} virtual tables, and {\i mORMot} internals in its current state, the database primary key must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM. But you can specify any secondary key, e.g. a {\f1\fs20 TEXT} field, via {\f1\fs20 stored @*AS_UNIQUE@} definition in code.
+Due to the design of {\i SQLite3} virtual tables, and {\i mORMot} internals in its current state, the database @*primary key@ must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM. But you can specify any secondary key, e.g. a {\f1\fs20 TEXT} field, via {\f1\fs20 stored @*AS_UNIQUE@} definition in code.
 :106  Sharing the database with legacy code
 It is pretty much possible that you would have to maintain and evolve a legacy project, based on an existing database, with a lot of already written SQL statements - see @66@. For instance, you would like to use {\i mORMot} for new features, and/or add mobile or HTML clients - see @86@.\line In this case, the @*ORM@ advanced features - like @38@ or BATCH process, see @28@ - may conflict with the legacy code, for the tables which may have to be shared. Here are some guidelines when working on such a project.
 To be exhaustive about this question, we need to consider each ORM @*CRUD@ operation. We may have to divide them in three kinds: read queries, insertions, and modifications of existing data.
@@ -5466,7 +5561,7 @@ $Inserted with _id=7
 $Inserted with _id=8
 $Inserted with _id=9
 $Inserted with _id=10
-Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
+Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} @*primary key@ property.
 The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB.pas} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
 For instance, you may write:
 !var docs: TVariantDynArray;
@@ -5685,9 +5780,10 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 TTimeLog}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|int32|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
+|{\f1\fs20 @*TSQLRecord@}|int32|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64 bit on {\i Win64}
+|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64 bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
-|{\f1\fs20 TRecordReference}\line {\f1\fs20 TRecordReferenceToBeDeleted}|int32|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content) - with proper synchronization when the record is deleted
+|{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|int32/int64|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 @*RecordRef@}-like value - with proper synchronization when the record is deleted
 |{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -5701,6 +5797,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} to produce true JSON
 |%
 You can share the same {\f1\fs20 TSQLRecord} definition with {\i MongoDB} and other storage means, like external SQL databases. Unused information (like the {\f1\fs20 index} attribute) will just be ignored.
+Note that {\f1\fs20 TSQLRecord}, {\f1\fs20 TID} and {\f1\fs20 TRecordReference*} published properties will automatically create an index on the corresponding field, and that a kind of {\f1\fs20 ON DELETE SET DEFAULT} tracking will take place for {\f1\fs20 TSQLRecord} and {\f1\fs20 TRecordReference} properties, and {\f1\fs20 ON DELETE CASCADE} for {\f1\fs20 TRecordReferenceToBeDeleted} - but not for {\f1\fs20 TID}, since we do not know which table to track.
 :   Register the TSQLRecord class
 On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
@@ -5934,7 +6031,7 @@ Then the {\f1\fs20 Reader} and {\f1\fs20 Writer} callbacks can be defined by two
 :    Defining callbacks
 For instance, if you want to serialize the following {\f1\fs20 record}:
 !  TSQLRestCacheEntryValue = record
-!    ID: integer;
+!    ID: TID;
 !    TimeStamp: cardinal;
 !    JSON: RawUTF8;
 !  end;
@@ -5961,7 +6058,7 @@ On the other side, the corresponding reader callback would be like:
 !  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
 !  if result=nil then
 !    aValid := false else begin
-!    V.ID := GetInteger(Values[0]);
+!    V.ID := GetInt64(Values[0]);
 !    V.TimeStamp := GetCardinal(Values[1]);
 !    V.JSON := Values[2];
 !    aValid := true;
@@ -5972,10 +6069,10 @@ Writing those callbacks by hand could be error-prone, especially for the {\f1\fs
 You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format.
 The very same {\f1\fs20 TSQLRestCacheEntryValue} can be defined as with a typical {\i pascal} {\f1\fs20 record}:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID: integer; TimeStamp: cardinal; JSON: RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp: cardinal; JSON: RawUTF8';
 Or with a shorter syntax:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID integer TimeStamp cardinal JSON RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID Int64 TimeStamp cardinal JSON RawUTF8';
 Both declarations will do the same definition. Note that the supplied text should match {\i exactly} the original {\f1\fs20 record} type definition: do not swap or forget any property!
 By convention, we use two underscore characters ({\f1\fs20 __}) before the {\f1\fs20 record} type name, to easily identify the layout definition. It may indeed be convenient to write it as a constant, close to the {\f1\fs20 record} type definition itself, and not in-lined at {\f1\fs20 RegisterCustomJSONSerializerFromText()} call level.
 Then you register your type as such:
@@ -7018,7 +7115,7 @@ On the server side, you can use this method prototype:
 !  // - see TSQLRestServer.OnUpdateEvent property
 !  // - returns true on success, false if an error occured (but action must continue)
 !  TNotifySQLEvent = function(Sender: TSQLRestServer; Event: TSQLEvent;
-!    aTable: TSQLRecordClass; aID: integer): boolean of object;
+!    aTable: TSQLRecordClass; aID: TID): boolean of object;
 !
 !  TSQLRestServer = class(TSQLRest)
 ! (...)
@@ -7250,7 +7347,7 @@ In the above code, you can identify:
 - A local {\f1\fs20 TSQLRestBatch} is prepared, and will store locally - via {\f1\fs20 batch.Update()} - any modification; as we already stated, only the retrieved field (i.e. {\f1\fs20 'Occurence'}) will be marked as to be updated;
 - {\f1\fs20 aRest.BatchSend(batch)} will send all new values (if any) to the server, in a single network round trip, and a single transaction;
 - This method is made thread safe by using {\f1\fs20 Lock.ProtectMethod} ({\f1\fs20 Lock} is a mutex private to the {\f1\fs20 TSQLTags} instance);
-- Local variables are allocated and automatically relased when the method exits, using {\f1\fs20 TAutoFree.Several()} - which avoid to write two nested {\f1\fs20 try .. finally Free end} loops.
+- Local variables are allocated and automatically relased when the method exits, using {\f1\fs20 TAutoFree.Several()} - see @130@ - which avoid to write two nested {\f1\fs20 try .. finally Free end} loops.
 Such a pattern is very common in {\i mORMot}, and illustrate how high-level ORM methods can be used instead of manual SQL. With the potential benefit of a much better performance, and cleaner code.
 :  Local network as bottleneck
 When using a remote database on a physical network, a {\i round-trip} delay occurs for each request, this time between the ORM server side and the external Database engine.
@@ -7392,7 +7489,7 @@ But most of the time, an human guess at the business logic level is enough to se
 :  How to cache
 A tuned caching mechanism can be defined, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes, at ID level.
 By default, REST level cache is disabled, until you call {\f1\fs20 TSQLRest.Cache}'s {\f1\fs20 SetCache()} and {\f1\fs20 SetTimeOut()} methods. Those methods will define the caching policy, able to specify which table(s) or record(s) are to be cached, either at the client or the server level.
-Once enabled for a table and a set of IDs on a given table, any further call to {\f1\fs20 TSQLRest.Retrieve(aClass,aID)} or {\f1\fs20 TSQLRecord.Create(aRest,aID)} will first attempt to retrieve the {\f1\fs20 TSQLRecord} of the given {\f1\fs20 aID} from the internal {\f1\fs20 TSQLRestCache} instance's in-memory cache, if available.\line Note that more complex requests, like queries on other fields than the ID primary key, or JOINed queries, won't be cached at REST level. But such requests may benefit of the @37@, at {\i SQLite3} level, on the server side.
+Once enabled for a table and a set of IDs on a given table, any further call to {\f1\fs20 TSQLRest.Retrieve(aClass,aID)} or {\f1\fs20 TSQLRecord.Create(aRest,aID)} will first attempt to retrieve the {\f1\fs20 TSQLRecord} of the given {\f1\fs20 aID} from the internal {\f1\fs20 TSQLRestCache} instance's in-memory cache, if available.\line Note that more complex requests, like queries on other fields than the ID @*primary key@, or JOINed queries, won't be cached at REST level. But such requests may benefit of the @37@, at {\i SQLite3} level, on the server side.
 For instance, here is how the Client-side caching is tested about one individual record:
 !    (...)
 !!    Client.Cache.SetCache(TSQLRecordPeople); // cache whole table
@@ -8045,7 +8142,7 @@ The following implementation will definitively leak memory:
 !end;
 In {\i Delphi}, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not value objects, but reference objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
 One common solution is to use {\i Weak pointers}, by which the {\f1\fs20 interface} is assigned to a property without incrementing the reference count.
-Note that garbage collector based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
+Note that @*garbage collector@ based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
 :  Handling weak pointers
 In order to easily create a weak pointer, the following function was added to {\f1\fs20 mORMot.pas}:
 !procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);
@@ -8156,7 +8253,7 @@ Note also that all those code will use a plain {\f1\fs20 record} as {\i @**Data 
 !    Name: RawUTF8;
 !    Password: RawUTF8;
 !    MobilePhoneNumber: RawUTF8;
-!    ID: Integer;
+!    ID: TID;
 !  end;
 Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistency layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in {\i Delphi} ensure it won't be part of a complex business logic, but will remain used as value objects.
 Now, let's come back to our {\f1\fs20 TLoginController} class.\line Here is the method we want to test:
@@ -8762,7 +8859,7 @@ This interface is implemented on the server side by the following class:
 !end;
 This interface is registered on the server side as such:
 ! Server.ServiceRegister(TServiceComplexNumber,[TypeInfo(IComplexNumber)],sicClientDriven);
-Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven garbage collector will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
+Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven @*garbage collector@ will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
 :107  Accessing low-level execution context
 When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
 You will have access to the following information, which could be useful for {\f1\fs20 sicPerSession, sicPerUser} and {\f1\fs20 sicPerGroup} instance life time modes:
@@ -9632,7 +9729,7 @@ At this time, the only missing feature of {\i mORMot}'s SOA is transactional pro
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon06.png
-Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i Linux} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
+Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
 - {\i @*FreePascal@} Compiler (in 2.6.4 or 2.7.1 branches);
@@ -10720,7 +10817,7 @@ The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f
 !    class function CurrentPublishedMonth: Integer;
 !    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
 !      Options: TSQLInitializeTableOptions); override;
-!    procedure TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
+!    procedure TagsAddOrdered(aTagID: integer; var aTags: TSQLTags);
 !  published
 !    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
 !    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
@@ -10754,7 +10851,7 @@ As you can discover:
 - The whole application would run without writing any SQL, but just high-level ORM methods;
 - Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG).
 Foreign keys and indexes are managed as such:
-- The {\f1\fs20 TSQLRecord.ID} primary key of any ORM class will be indexed;
+- The {\f1\fs20 TSQLRecord.ID} @*primary key@ of any ORM class will be indexed;
 - For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
 - An index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a list of publication months in the main BLOG page, and link to the corresponding articles.\line The following code will take care of it:
 !class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
@@ -10886,7 +10983,7 @@ Let's take a look at a bit more complex method, which we talked about in @%%mORM
 !procedure TBlogApplication.ArticleView(
 !  ID: integer; var WithComments: boolean; Direction: integer;
 !  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
-!var newID: integer;
+!var newID: TID;
 !const WHERE: array[1..2] of PUTF8Char = (
 !  'ID<? order by id desc','ID>? order by id');
 !begin
@@ -11409,14 +11506,14 @@ Here is the layout of the default {\f1\fs20 AuthGroup} table, as defined by the 
 \graph DBAuthGroup AuthGroup Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|AccessRights : RawUTF8|Ident : RawUTF8|SessionTimeout : integer"];
+struct1 [label="ID : TID|AccessRights : RawUTF8|Ident : RawUTF8|SessionTimeout : integer"];
 \
 The {\f1\fs20 AccessRights} column is a textual CSV serialization of the {\f1\fs20 TSQLAccessRights} record content, as expected by the {\f1\fs20 TSQLRestServer.URI} method. Using a CSV serialization, instead of a binary serialization, will allow the change of the {\f1\fs20 MAX_SQLTABLES} constant value.
 The {\f1\fs20 AuthUser} table, as defined by the {\f1\fs20 TSQLAuthUser} class type, is defined as such:
 \graph DBAuthUser AuthUser Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRights : TSQLAuthGroup|LogonName : RawUTF8|PasswordHashHexa : RawUTF8"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRights : TSQLAuthGroup|LogonName : RawUTF8|PasswordHashHexa : RawUTF8"];
 struct2 [label="AuthGroup"];
 struct1:f0 -> struct2;
 \
@@ -11781,7 +11878,7 @@ Then each time you want to access the {\i JavaScript} engine, you will write for
 !   engine := fSMManager.ThreadSafeEngine;
 !...  // now you can use engine, e.g. engine.Global.someMethod()
 Each thread of the HTTP server thread-pool will be initialized on the fly if needed, or the previously initialized instance will be quickly returned otherwise.
-Once you have the {\f1\fs20 TSMEngine} instance corresponding to the current thread, you can launch actions on its global object, or tune its execution.\line For instance, it could be a good idea to check for the {\i JavaScript} VM's garbage collection:
+Once you have the {\f1\fs20 TSMEngine} instance corresponding to the current thread, you can launch actions on its global object, or tune its execution.\line For instance, it could be a good idea to check for the {\i JavaScript} VM's @*garbage collector@:
 !function TTestServer.Process(Ctxt: THttpServerRequest): cardinal;
 !...
 !   engine := fSMManager.ThreadSafeEngine;
@@ -12506,8 +12603,7 @@ Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
 \page
-:125 FreePascal / Lazarus use
-
+;:125 FreePascal / Lazarus use
 : Upgrading from a 1.17 revision
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
@@ -12518,13 +12614,15 @@ To properly upgrade to the latest revision:
 - Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot.pas};
 - Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3.pas};
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
-- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static.pas} unit (for {\i Win32}).
+- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static.pas} unit (for {\i Win32} or {\i Linux}).
 4. Consult the units' headers about 1.18 for breaking changes, mainly:
-- Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 TTimeLogBits};
+- Introducing {\f1\fs20 @*TID@ = type Int64} as {\f1\fs20 TSQLRecord.ID} @*primary key@, {\f1\fs20 TIDDynArray} as an array, and @*TRecordReference@ now declared as {\f1\fs20 Int64} instead of plain {\f1\fs20 PtrInt} / {\f1\fs20 integer};
+- Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 @*TTimeLogBits@};
 - {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
-- {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 TSQLRestServerURIContext} class;
+- {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 @*TSQLRestServerURIContext@} class;
 - {\f1\fs20 rmJSON*} enumerates replaced by {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes;
 - Changed '{\f1\fs20 ¤}' into '{\f1\fs20 ~}' character for {\f1\fs20 mORMoti18n.pas} (formerly {\f1\fs20 SQlite3i18n.pas}) language files.
+Most of those changes would be easily identified at compile time. But a quick code review, and proper regression tests at application level is worth considering.
 Feel free to get support from our forum, if needed.
 
 [SAD-SynFile]
@@ -12562,7 +12660,7 @@ The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the
 You'll discover how the @*ORM@ plays its role here: you change the data, just like changing any class instance properties.
 It also uses our @!SaveAsRawByteString!Lib\SynGdiPlus.pas@ unit to create thumbnails of any picture ({\f1\fs20 emf+jpg+tif+gif+bmp}) of data inserted in the database, and add a @*BLOB@ data field containing these thumbnails.
 \page
-: Database design
+:128 Database design
 The @!TSQLFile,TSQLMemo,TSQLData,TSQLSafeMemo,TSQLSafeData,TSQLAuditTrail!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit is implementing all {\f1\fs20 @*TSQLRecord@} child classes, able to create the database tables, using the @*ORM@ aspect of the framework - see @13@. The following class hierarchy was designed:
 \graph HierSynFileRecord SynFile TSQLRecord classes hierarchy
 \TSQLAuditTrail\TSQLRecord
@@ -12601,7 +12699,7 @@ Here follows the {\i Delphi} code written, and each corresponding database field
 \graph DBMemo Memo Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Content : RawUTF8|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Content : RawUTF8|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLData = class(TSQLFile)
 !  public
@@ -12612,19 +12710,19 @@ struct1 [label="ID : integer|Content : RawUTF8|Created : TTimeLog|KeyWords : Raw
 \graph DBData Data Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLSafeMemo = class(TSQLData);
 \graph DBSafeMemo SafeMemo Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLSafeData = class(TSQLData);
 \graph DBSafeData SafeData Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 You can see that {\f1\fs20 TSQLSafeMemo} and {\f1\fs20 TSQLSafeData} are just a direct sub-class of {\f1\fs20 TSQLData} to create "{\i SafeMemo}" and "{\i SafeData}" tables with the exact same fields as the "{\i Data}" table. Since they were declared as {\f1\fs20 class(TSQLData)}, they are some new class type,
 Then the latest class is not inheriting from {\f1\fs20 TSQLFile}, because it does not contain any user data, and is used only as a log of all actions performed using {\i SynFile}:
@@ -12643,11 +12741,11 @@ Then the latest class is not inheriting from {\f1\fs20 TSQLFile}, because it doe
 \graph DBAuditTrail AuditTrail Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|AssociatedRecord : TRecordReference|Status : TFileEvent|StatusMessage : RawUTF8|Time : TTimeLog"];
+struct1 [label="ID : TID|AssociatedRecord : TRecordReference|Status : TFileEvent|StatusMessage : RawUTF8|Time : TTimeLog"];
 \
-The {\f1\fs20 AssociatedRecord} property was defined as {\f1\fs20 TRecordReference}. This special type (mapped as an INTEGER field in the database) is able to define a "one to many" relationship with ANY other record of the database model.
+The {\f1\fs20 AssociatedRecord} property was defined as {\f1\fs20 @*TRecordReference@}. This special type (mapped as an INTEGER field in the database) is able to define a "one to many" relationship with ANY other record of the database model.
 - If you want to create a "one to many" relationship with a particular table, you should define a property with the corresponding {\f1\fs20 @*TSQLRecord@} sub-type (for instance, if you want to link to a particular {\i SafeData} row, define the property as {\f1\fs20 AssociatedData: TSQLSafeData;}) - in this case, this will create an INTEGER field in the database, holding the {\i RowID} value of the associated record (and this field content will be filled with {\f1\fs20 pointer(RowID)} and not with a real {\f1\fs20 TSQLSafeData} instance).
-- Using a {\f1\fs20 TRecordReference} type will not link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 RecordRef(AssociatedRecord)} to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
+- Using a {\f1\fs20 TRecordReference} type will not link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 @*RecordRef@} wrapper structure to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
 According to the @*MVC@ model - see @10@ - the framework expect a common database model to be shared between client and server. A common function has been defined in the @!CreateFileModel!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit, as such:
 !function CreateFileModel(Owner: TSQLRest): TSQLModel;
 We'll see later its implementation. Just note for the moment that it will register the {\f1\fs20 TSQLAuditTrail, TSQLMemo, TSQLData, TSQLSafeMemo}, and {\f1\fs20 TSQLSafeData} classes as part of the database model. The order of the registration of those classes will be used for the {\f1\fs20 AssociatedRecord: TRecordReference} field of {\f1\fs20 TSQLAuditTrail} - e.g. a {\f1\fs20 TSQLMemo} record will be identified with a table index of 1 in the {\f1\fs20 RecordReference} encoded value. So it's mandatory to NOT change this order in any future modification of the database schema, without providing any explicit database content conversion mechanism.
@@ -12661,7 +12759,7 @@ Note that all above graphs were created directly from our {\i @*SynProject@} too
 !    procedure AddAuditTrail(aEvent: TFileEvent; const aMessage: RawUTF8='';
 !      aAssociatedRecord: TRecordReference=0);
 !    function OnDatabaseUpdateEvent(Sender: TSQLRestServer;
-!      Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer): boolean;
+!      Event: TSQLEvent; aTable: TSQLRecordClass; aID: TID): boolean;
 !  published
 !    procedure Event(Ctxt: TSQLRestServerURIContext);
 !  end;
@@ -12833,16 +12931,18 @@ Even if a real application may be truly Client-Server, we define a stand-alone m
 All the ORM and actions defined in the {\f1\fs20 FileTables} unit are used to initialize the {\f1\fs20 TFileRibbon} content in the {\f1\fs20 Ribbon} field which will be the main entry point of all User Interface process.
 The {\f1\fs20 ActionClick()} method is the main entry point of the application, and is called when the User clicks on any ribbon button. It is just a {\f1\fs20 case Action of ...} switch instruction, handling each {\f1\fs20 TFileAction} event as expected.
 The {\f1\fs20 Edit()} method will allow edition of a given record fields, via the separated {\f1\fs20 TEditForm} window, as defined in {\f1\fs20 FileEdit} unit. We won't use the auto-generated window from RTTI in this case, since we expect a dedicated process to attach a picture to the corresponding {\f1\fs20 TSQLFile} item.
-The {\f1\fs20 ListDblClick()} method will process any double click on the list to edit the corresponding item ({\f1\fs20 faEdit} action), or go to the record an audit trail row refers to:
+The {\f1\fs20 ListDblClick()} method will process any double click on the list to edit the corresponding item ({\f1\fs20 faEdit} action), or go to the record an audit trail row refers to, using a convenient local {\f1\fs20 @*RecordRef@} wrapper variable:
 !procedure TMainForm.ListDblClick(Sender: TObject);
 !var P: TSQLRibbonTab;
+!    ref: RecordRef;
 !begin
 !  P := Ribbon.GetActivePage;
 !  if P<>nil then
 !    if P.Table=TSQLAuditTrail then begin
-!      if P.Retrieve(Client,P.List.Row) then
-!        with RecordRef(TSQLAuditTrail(P.CurrentRecord).AssociatedRecord) do
-!          Ribbon.GotoRecord(Table(Client.Model),ID);
+!      if P.Retrieve(Client,P.List.Row) then begin
+!        ref.Value := TSQLAuditTrail(P.CurrentRecord).AssociatedRecord;
+!        Ribbon.GotoRecord(ref.Table(Client.Model),ref.ID);
+!      end;
 !    end else
 !    ActionClick(Sender,P.Table,ord(faEdit));
 !end;
@@ -12859,7 +12959,7 @@ The following {\f1\fs20 CreateReport} method is overridden in @!TFileRibbon.Crea
 !  TFileRibbon = class(TSQLRibbon)
 !  public
 !    /// overridden method used customize the report content
-!    procedure CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+!    procedure CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
 !      AlreadyBegan: boolean=false); override;
 !  end;
 The reporting engine in the framework is implemented via the {\f1\fs20 TGDIPages} class, defined in the @!TGDIPages!Lib\SQLite3\mORMotReport.pas@:
@@ -12870,7 +12970,7 @@ The reporting engine in the framework is implemented via the {\f1\fs20 TGDIPages
 - Handle bookmark, outlines and links inside the document.
 By default, the {\f1\fs20 CreateReport} method of {\f1\fs20 TSQLRibbon} will write all editable fields value to the content.
 The method is overridden by the following code:
-!procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+!procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
 !  AlreadyBegan: boolean=false);
 !var Rec: TSQLFile;
 !    Pic: TBitmap;

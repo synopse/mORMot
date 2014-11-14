@@ -9,13 +9,19 @@ An Open Source Client-Server ORM/SOA framework
 [See below if you upgrade from 1.17 revision]
 
   
-Synopse mORMot is a Client-Server ORM and Service Oriented Architecture framework
-for Delphi 6 up to XE7, targeting Win32 and Win64 platforms.
+Synopse mORMot is an Open Source Client-Server ORM SOA MVC framework
+for Delphi 6 up to XE7 and FPC, targeting Win/Linux for the server,
+and any platform for clients (including mobile or AJAX).
 
-The main two features of mORMot are therefore:
- - Client-Server ORM/ODM: objects persistence and remote access;
- - Client-Server Services: remote call of high-level data process.
- 
+The main features of mORMot are therefore:
+
+ - ORM/ODM: objects persistence on almost any database (SQL or NoSQL);
+ - SOA: organize your business logic into REST services;
+ - Clients: consume your data or services from any platform, via ORM/SOA APIs;
+ - Web MVC: publish your ORM/SOA process as responsive Web Applications.
+
+With local or remote access, via an auto-configuring Client-Server REST design.
+
 Due to its modular design, switch from a Client-Server architecture over
 HTTP, named pipes or GDI messages into a stand-alone application is just
 a matter of mORMot classes initialization.
@@ -62,7 +68,10 @@ up to the most complex Domain-Driven Design (DDD):
 
 With mORMot, ORM/ODM is not used only for data persistence of objects (like
 in other implementations), but as part of a global n-Tier, Service Oriented
-Architecture (SOA), ready to implement Domain-Driven solutions.
+Architecture (SOA), ready to implement Domain-Driven solutions. This
+framework is not an ORM on which a transmission layer has been added, like
+almost everything existing in Delphi, C# or Java: this is a full Client-Server 
+ORM/SOA from the ground up.
 This really makes the difference.
 
 The business logic of your applications will be easily exposed as Services,
@@ -108,11 +117,17 @@ as possible, while still maintaining copy-left on code we wrote.
 Main project page:
 http://mORMot.net
 
+Documentation:
+http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
+
+Installation:
+http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
+
+FAQ:
+http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
+
 How to get the source:
 http://synopse.info/fossil/wiki?name=Get+the+source
-
-Download links and documentation:
-http://synopse.info/fossil/wiki?name=Downloads
 
 A forum is dedicated to support:
 http://synopse.info
@@ -127,79 +142,30 @@ http://synopse.info/fossil/reportlist
 You can also monitor/fork our projects on GitHub:
 https://github.com/synopse/mORMot
 
-
-Don't forget to download the documentation (available in pdf files, created
-by our SynProject tool).
+Don't forget to download the documentation (available online or as pdf files,
+created by our SynProject tool).
 In particular, you should take a look at all general introduction chapters
-of the supplied SAD document. It will cover all key-concepts and code modelling
+of the SAD document. It will cover all key-concepts and code modelling
 used by the framework.
 A developer guide is included in this SAD document, in its 2nd part. You'll
 get good practice guidance, presentation of the ORM/SOA approach and other
 underlying concepts.
 
+Feel free to contribute by posting enhancements and patches to this
+quickly evolving project.
+  
 Enjoy!
 
 
-Quick steps to install mORMot:
-
-0) Read the licenses at http://synopse.info/forum/viewtopic.php?id=27
-   Using any part of this project implies that you accept
-  the terms of one of those licenses.
-
-1) See http://synopse.info/fossil/wiki?name=Get+the+source 
-   Old 1.17 version (less features and bug fixes) is deprecated today!
-   So we recommend to always use latest trunk revision.
- 
-2) There is no install program, so download and uncompress the files:
-
- Snapshot of the latest source code repository:
-  http://synopse.info/files/mORMotNightlyBuild.zip into D:\Dev\Synopse\
- Static 32 bit SQLite3 .obj files:
-  http://synopse.info/files/sqlite3obj.7z into D:\Dev\Synopse\SQLite3\
- 64 bit SQlite3 library:
-  http://synopse.info/files/SQLite3-64.7z into your Win64 .exe folders
- 32 bit SpiderMonkey library:
-  http://synopse.info/files/synsm.7z into your .exe folders needing JavaScript
-
-3) Modify the Delphi IDE library path to include:
-   D:\Dev\Synopse;D:\Dev\Synopse\SQLite3;D:\Dev\Synopse\SynDBDataset
-
-4) If you use an IDE before Delphi 2006, you should better use FastMM4 memory
-  manager to run the tests: let your Delphi IDE library path include
-  D:\Dev\Synopse\RTL7
-  If you do not want to use it, just comment SynDprUses.inc content.
-
-5) Compile the project in D:\Dev\Synopse\Sqlite3\TestSQL3.dpr and run it
-  to make sure it passes all tests.
-   On some computers, named pipes communication tests may fail - 
-  see http://synopse.info/forum/viewtopic.php?id=678
-   If you want to run the tests with the fast http.sys kernel-based 
-  HTTP server, you'll need to compile and run (as administrator)
-  TestSQL3Register.dpr once before launching TestSQL3.dpr.
-
-6) Sample programs are found in: D:\Dev\Synopse\Sqlite3\Samples
-
-7) Download the mORMot documentation from http://synopse.info/fossil/wiki?name=Downloads
-   In particular, the SAD document is worth reading - consult the keyword index 
-  at the beginning if you are somewhat lost about terminology.
-  See http://synopse.info/files/pdf/Synopse%20mORMot%20Framework%20SAD%201.18.pdf
-
-8) After having consulted both the documentation and the existing posts in the forum,
-  feel free to ask your questions in the forum at http://synopse.info
-
-9) Feel free to contribute by posting enhancements and patches to this
-  quickly evolving project.
-  
-
-
-Some units (e.g. SynPdf, SynGdiPlus, SynBigTable, SynCommons, SynDB*,
-SynSQLite3, SynMongoDB, SynMustache, mORMotReport) are used by mORMot,
-but do not require the whole framework to be linked.
+Some units (e.g. SynPdf, SynGdiPlus, SynBigTable, SynCommons, SynCrypto, 
+SynDB*, SynSQLite3, SynMongoDB, SynMustache, SynSM, mORMotReport) are used 
+by mORMot, but do not require the whole framework to be linked.
 That is, you can use e.g. only  PDF generation, SynDB fast database
 access, a static-linked SQLite3 engine, direct MongoDB access, Mustache
-templates, code-generated reports, or the TDocVariant, TDynArray,
-TSynLog classes of SynCommons, without using the main mORMot units and
-features (ORM, Client-Server, services, UI, reporting).
+templates, SpiderMonkey JavaSCript engine, code-generated reports, or 
+the TDocVariant, TDynArray, TSynLog classes of SynCommons, without using
+the main mORMot units and features (ORM, Client-Server, services, UI).
+
 Some of those units can even be compiled with Delphi 5 (e.g. SynPdf, SynDB).
 
 
@@ -219,6 +185,7 @@ Quick Steps when upgrading from a previous 1.17 revision:
  - Add in one uses clause a link to SynSQLite3Static (for Win32).
  
 5) Consult the units headers about 1.18 for breaking changes, mainly:
+ - TSQLRecord.ID: TID primary key, TIDDynArray, and TRecordReference are now Int64;
  - Renamed Iso8601 low-level structure as TTimeLogBits;
  - TJSONSerializerCustomReader/Writer callbacks changed;
  - TSQLRestServerCallBackParams replaced by TSQLRestServerURIContext class;
