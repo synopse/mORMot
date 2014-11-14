@@ -2580,6 +2580,15 @@ We may write:
 Without the need to write the {\f1\fs20 try ... finally} block.
 See the {\f1\fs20 TSQLRecord.AutoFree()} overloaded methods in {\f1\fs20 mORMot.pas} for the several use cases, and the associated {\f1\fs20 TAutoFree} / {\f1\fs20 IAutoFree} types as defined in {\f1\fs20 SynCommons.pas}. Note that you can handle several local variables in a single {\f1\fs20 TSQLRecord.AutoFree()} or {\f1\fs20 TAutoFree.Create()} initialization.
 Be aware that it does not introduce some kind of magic @*garbage collector@, as available in C# or Java. It is not even similar to the {\f1\fs20 ARC} memory model used by {\i Apple} and the {\i Delphi} {\i NextGen} compiler. It is just some syntaxic sugar creating a local hidden {\f1\fs20 IAutoFree} interface, which would be released at the end of the local method by the compiler, and also release all associated class instances. So the local class instances should stay in the local scope, and should not be sent and stored in another process: in such cases, you may encounter access violation issues.
+Due to an issue in the @*FPC@ implementation of interfaces - see issue @http://bugs.freepascal.org/view.php?id=26602 - the above code would not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
+!var aMale: TSQLBaby;
+!!    auto: IAutoFree;
+!...
+!  auto := TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  while aMale.FillOne do
+!    DoSomethingWith(aMale);
+If you want your code to cross-compile with both Delphi and FPC, consider this expectation of the FPC compiler.
 : Objects relationship: cardinality
 All previous code is fine if your application requires "flat" data. But most of the time, you'll need to define master/child relationship, perhaps over several levels. In data modeling, the {\i @**cardinality@} of one data table with respect to another data table is a critical aspect of database design. Relationships between data tables define {\i cardinality} when explaining how each table links to another.
 In the relational model, tables can have the following {\i cardinality}, i.e. can be related as any of:

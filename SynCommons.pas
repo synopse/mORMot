@@ -10513,6 +10513,8 @@ type
     // !  TAutoFree.One(myVar,TMyClass.Create);
     // !  ... use myVar
     // !end; // here myVar will be released
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     class function One(var localVariable; obj: TObject): IAutoFree;
     /// protect several local TObject variable instances life time
     // - specified as localVariable/objectInstance pairs
@@ -10524,11 +10526,13 @@ type
     // !    @var2,TMyClass.Create]);
     // !  ... use var1 and var2
     // !end; // here var1 and var2 will be released
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
      class function Several(const varObjPairs: array of pointer): IAutoFree;
     /// protect another TObject variable to an existing IAutoFree instance life time
     // - you may write:
     // !var var1,var2: TMyClass;
-    // !    auto: TAutoFree;
+    // !    auto: IAutoFree;
     // !begin
     // !  auto := TAutoFree.One(var1,TMyClass.Create);,
     // !  .... do something

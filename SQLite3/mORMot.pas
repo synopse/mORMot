@@ -4807,6 +4807,8 @@ type
     // !     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment]);
     // !   .... now you can use info, article or comment
     // ! end; // will call info.Free article.Free and comment.Free
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(varClassPairs: array of pointer): IAutoFree; overload;
     /// protect one TSQLRecord local variable instance
     // - be aware that it won't implement a full ARC memory model, but may be
@@ -4818,11 +4820,15 @@ type
     // !   TSQLBlogInfo.AutoFree(info);
     // !   .... now you can use info
     // ! end; // will call info.Free
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable): IAutoFree; overload;
     /// read and protect one TSQLRecord local variable instance
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree; overload;
 
     {/ get the captions to be used for this class
