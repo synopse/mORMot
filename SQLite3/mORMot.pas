@@ -6108,6 +6108,14 @@ type
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
     function FieldBuffer(const FieldName: RawUTF8): PUTF8Char; overload;
+    /// read-only access to a particular field value, as Integer
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetInteger() method, but for the current Step
+    function FieldAsInteger(FieldIndex: Integer): Int64; overload;
+    /// read-only access to a particular field value, as Integer
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to Get() method, but for the current Step
+    function FieldAsInteger(const FieldName: RawUTF8): Int64; overload;
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
     // - raise an ESQLTableException if called outside valid Step() sequence
@@ -18494,6 +18502,16 @@ begin
     raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): no previous Step',
       [self,FieldName]);
   result := fResults[fStepRow*FieldCount+i];
+end;
+
+function TSQLTable.FieldAsInteger(FieldIndex: Integer): Int64;
+begin
+  SetInt64(FieldBuffer(FieldIndex),result);
+end;
+
+function TSQLTable.FieldAsInteger(const FieldName: RawUTF8): Int64;
+begin
+  SetInt64(FieldBuffer(FieldName),result);
 end;
 
 {$ifndef NOVARIANTS}

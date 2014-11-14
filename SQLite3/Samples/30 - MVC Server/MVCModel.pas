@@ -448,7 +448,7 @@ var T,tagTable,postTable: TDotClearTable;
     tagsCount: integer;
     batch: TSQLRestBatch;
     PublicFolder: TFileName;
-    r,post_url,meta_id,meta_type,tag_post_id,postID,post_id: integer;
+    r,ndx,post_url,meta_id,meta_type,tag_post_id,postID,post_id: integer;
 function FixLinks(P: PUTF8Char): RawUTF8;
 var B,H: PUTF8Char;
     url: RawUTF8;
@@ -572,16 +572,18 @@ begin
     article.Tags := nil;
     if tagTable.Step(true) then
       repeat
-        if GetInteger(tagTable.FieldBuffer(tag_post_id))=postID then
-          article.TagsAddOrdered(tagID[FastFindPUTF8CharSorted(pointer(tags),high(tags),
-            tagTable.FieldBuffer(meta_id),@StrIComp)],aTagsLookup);
+        if tagTable.FieldAsInteger(tag_post_id)=postID then begin
+          ndx := FastFindPUTF8CharSorted(
+            pointer(tags),high(tags),tagTable.FieldBuffer(meta_id),@StrIComp);
+          if ndx>=0 then
+            article.TagsAddOrdered(tagID[ndx],aTagsLookup);
+        end;
       until not tagTable.Step;
     batch.Add(article,true,false,[],true);
   end;
   Rest.BatchSend(batch);
   aTagsLookup.SaveOccurence(Rest);
 end;
-
 
 
 end.

@@ -342,7 +342,7 @@ type
     fBatchMethod: TSQLURIMethod;
     fBatchOptions: TSQLRestBatchOptions;
     fBatchTableIndex: integer;
-    fBatchFirstID: integer;
+    fBatchFirstID: TID;
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
     /// retrieve a TSQLRequest instance, corresponding to any previous
@@ -697,7 +697,8 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID;
+function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer;
+  const SentData: RawUTF8): TID;
 var SQL: RawUTF8;
     LastID: Int64;
 begin
@@ -1412,7 +1413,8 @@ begin
 end;
 {$endif}
 
-function TSQLRestServerDB.BackupGZ(const DestFileName: TFileName; CompressionLevel: integer): boolean;
+function TSQLRestServerDB.BackupGZ(const DestFileName: TFileName;
+  CompressionLevel: integer): boolean;
 {$ifndef WITHUNSAFEBACKUP} // deprecated - use DB.BackupBackground() instead
 begin
   result := false;
