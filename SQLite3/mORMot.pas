@@ -1741,9 +1741,14 @@ type
   // also define j2oHandleCustomVariantsWithinString, it will also try to
   // un-escape a JSON string first, i.e. handle "[array]" or "{object}" content
   // (may be used e.g. when JSON has been retrieved from a database TEXT column)
+  // - by default, a temporary instance would be created if a published field
+  // has a setter, and the instance is expected to be released later by the
+  // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
+  // (and TPropInfo.ClassFromJSON) release it when the setter returns
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty,
-    j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString);
+    j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
+    j2oSetterExpectsToFreeTempInstance);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -2323,6 +2328,10 @@ type
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
     // - unserialize the JSON input buffer via a call to JSONToObject()
+    // - by default, a temporary instance would be created if a published field
+    // has a setter, and the instance is expected to be released later by the
+    // owner class: you can set the j2oSetterExpectsToFreeTempInstance option
+    // to let this method release it when the setter returns
     function ClassFromJSON(Instance: TObject; From: PUTF8Char; var Valid: boolean;
       Options: TJSONToObjectOptions=[]): PUTF8Char;
   end;
@@ -15347,7 +15356,7 @@ begin
     ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-13);
   end else
     // 'TSQLRecordClientID' -> TSQLRecordClient
-  ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-2);
+    ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-2);
   if (ItemClass<>nil) and ItemClass.InheritsFrom(TSQLRecord) then
     fRecordClass := pointer(ItemClass);
 end;
@@ -20082,8 +20091,11 @@ begin
     try
       result := JSONToObject(tmp,From,Valid,nil,Options);
       if not Valid then
-        tmp.Free else
+        FreeAndNil(tmp) else begin
         SetOrdProp(Instance,PtrInt(tmp)); // PtrInt(tmp) is OK for CPU64
+        if j2oSetterExpectsToFreeTempInstance in Options then
+          FreeAndNil(tmp);
+      end;
     except
       on Exception do
         tmp.Free;
