@@ -555,7 +555,7 @@ var meta: IZDatabaseMetadata;
     FA: TDynArray;
 begin
   if GetDatabaseMetadata(meta) then begin
-    SQLSplitTableName(aTablename, Schema,TableName);
+    SQLSplitTableName(UpperCase(aTablename),Schema,TableName);
     sSchema := UTF8ToString(Schema);
     sTableName := meta.GetIdentifierConvertor.Quote(UTF8ToString(TableName));
     res := meta.GetColumns('',sSchema,sTableName,'');
