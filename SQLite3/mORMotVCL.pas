@@ -260,7 +260,7 @@ begin
     exit;
   SQLType := fTable.FieldType(F,@EnumType);
   case SQLType of
-  sftBoolean, sftInteger, sftID:
+  sftBoolean, sftInteger, sftID, sftTID:
     fTemp64 := GetInt64(P);
   sftFloat, sftCurrency:
     PDouble(@fTemp64)^ := GetExtended(P);
@@ -297,12 +297,10 @@ begin
     case SQLType of
     sftBoolean:
       DBType := ftBoolean;
-    sftInteger:
+    sftInteger, sftID, sftTID:
       DBType := ftLargeint; // LargeInt=Int64
     sftFloat, sftCurrency:
       DBType := ftFloat;
-    sftID:
-      DBType := ftInteger;
     sftEnumerate, sftSet:
       if EnumType=nil then
         DBType := ftInteger else begin

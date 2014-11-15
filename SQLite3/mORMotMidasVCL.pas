@@ -251,12 +251,10 @@ begin
       case SQLType of
       sftBoolean:
         DBType := ftBoolean;
-      sftInteger:
+      sftInteger, sftID, sftTID:
         DBType := ftLargeint; // LargeInt=Int64
       sftFloat, sftCurrency:
         DBType := ftFloat;
-      sftID:
-        DBType := ftInteger;
       sftEnumerate, sftSet:
         if EnumType=nil then
           DBType := ftInteger else
@@ -312,14 +310,12 @@ begin
       case Columns[F].SQLType of
       sftBoolean:
         Field.AsBoolean := aTable.GetAsInteger(i,F)<>0;
-      sftInteger:
+      sftInteger, sftID, sftTID:
         if Field.DataType=ftLargeInt then // handle Int64 values directly
           TLargeintField(Field).Value := aTable.GetAsInt64(i,F) else
           Field.AsInteger := aTable.GetAsInteger(i,F);
       sftFloat, sftCurrency:
         Field.AsFloat := GetExtended(aTable.Get(i,F));
-      sftID:
-        Field.AsInteger := aTable.GetAsInteger(i,F);
       sftEnumerate, sftSet:
         if EnumType=nil then
           Field.AsInteger := aTable.GetAsInteger(i,F) else

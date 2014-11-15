@@ -70,50 +70,65 @@ uses
   SynVirtualDataSet;
 
 type
-  /// read-only virtual TDataSet able to access a TSQLStatement result set
-  TSynSQLStatementDataSet = class(TSynVirtualDataSet)
+  /// read-only virtual TDataSet able to access a binary buffer as returned
+  // by TSQLStatement.FetchAllToBinary method
+  TSynBinaryDataSet = class(TSynVirtualDataSet)
   protected
-    fData: TRawByteStringStream;
+    fData: RawByteString;
     fDataAccess: TSQLDBProxyStatementRandomAccess;
     fTemp64: Int64;
-    fDefaultStringType: TFieldType;
     procedure InternalInitFieldDefs; override;
     function GetRecordCount: Integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
   public
-    /// initialize the virtual TDataSet
-    // - the supplied ISQLDBRows instance can safely be freed by caller
-    constructor Create(Owner: TComponent; Statement: TSQLDBStatement;
-      MaxRowCount: cardinal=0); reintroduce;
+    /// initialize the virtual TDataSet from a FetchAllToBinary() buffer
+    constructor Create(Owner: TComponent; const BinaryData: RawByteString;
+      DataRowPosition: PCardinalDynArray=nil); reintroduce;
     /// finalize the class instance
     destructor Destroy; override;
+    /// read-only access to the internal binary buffer
+    property Data: RawByteString read fData;
     /// read-only access to the internal SynDB data
     property DataAccess: TSQLDBProxyStatementRandomAccess read fDataAccess;
   end;
 
+  /// read-only virtual TDataSet able to access a TSQLStatement result set
+  TSynSQLStatementDataSet = class(TSynBinaryDataSet)
+  protected
+  public
+    /// initialize the virtual TDataSet from a SynDB TSQLDBStatement
+    // - the supplied ISQLDBRows instance can safely be freed by caller
+    constructor Create(Owner: TComponent; Statement: TSQLDBStatement;
+      MaxRowCount: cardinal=0); reintroduce;
+  end;
 
-/// fetch a SynDB TQuery result into a VCL DataSet
+
+/// fetch a SynDB's TQuery result into a VCL DataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
-// - current implementation will return a TClientDataSet instance, created from
-// the supplied TSQLTable content (a more optimized version may appear later)
-// - for better speed with Delphi older than Delphi 2009 Update 3, it is
-// recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
+// - current implementation will return a TSynSQLStatementDataSet instance,
+// using an optimized internal binary buffer: the supplied TQuery can be released
 // - if you need a writable TDataSet, you can use the slower QueryToClientDataSet()
 // function as defined in SynDBMidasVCL.pas
 function QueryToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
   aMaxRowCount: integer=0): TSynSQLStatementDataSet;
 
-/// fetch a SynDB TSQLDBStatement result into a VCL DataSet
+/// fetch a SynDB's TSQLDBStatement result into a VCL DataSet
+// - just a wrapper around TSynSQLStatementDataSet.Create + Open
 // - if aMaxRowCount>0, will return up to the specified number of rows
-// - current implementation will return a TClientDataSet instance, created from
-// the supplied TSQLTable content (a more optimized version may appear later)
-// - for better speed with Delphi older than Delphi 2009 Update 3, it is
-// recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-// - if you need a writable TDataSet, you can use the slower 
+// - current implementation will return a TSynSQLStatementDataSet instance, using
+// an optimized internal binary buffer: the supplied statement can be released
+// - if you need a writable TDataSet, you can use the slower
 // StatementToClientDataSet() function as defined in SynDBMidasVCL.pas
 function StatementToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
   aMaxRowCount: integer=0): TSynSQLStatementDataSet;
+
+/// fetch a SynDB's TSQLDBStatement.FetchAllToBinary buffer into a VCL DataSet
+// - just a wrapper around TSynBinaryDataSet.Create + Open
+// - if you need a writable TDataSet, you can use the slower
+// StatementToClientDataSet() function as defined in SynDBMidasVCL.pas
+function BinaryToDataSet(aOwner: TComponent;
+  const aBinaryData: RawByteString): TSynBinaryDataSet;
 
 
 implementation
@@ -135,38 +150,36 @@ begin
   result.Open;
 end;
 
-
-{ TSynSQLStatementDataSet }
-
-constructor TSynSQLStatementDataSet.Create(Owner: TComponent;
-  Statement: TSQLDBStatement; MaxRowCount: cardinal=0);
-var DataRowPosition: TCardinalDynArray;
+function BinaryToDataSet(aOwner: TComponent; const aBinaryData: RawByteString): TSynBinaryDataSet;
 begin
-  inherited Create(Owner);
-  fData := TRawByteStringStream.Create;
-  Statement.FetchAllToBinary(fData,MaxRowCount,@DataRowPosition);
-  fDataAccess := TSQLDBProxyStatementRandomAccess.Create(
-    pointer(fData.DataString),length(fData.DataString),@DataRowPosition);
-  {$ifndef UNICODE}
-  if not Statement.Connection.Properties.VariantStringAsWideString then
-    fDefaultStringType := ftString else
-  {$endif}
-    fDefaultStringType := ftWideString; // means UnicodeString for Delphi 2009+
+  result := TSynBinaryDataSet.Create(aOwner,aBinaryData);
+  result.Open;
 end;
 
-destructor TSynSQLStatementDataSet.Destroy;
+
+{ TSynBinaryDataSet }
+
+constructor TSynBinaryDataSet.Create(Owner: TComponent; const BinaryData: RawByteString;
+  DataRowPosition: PCardinalDynArray);
+begin
+  inherited Create(Owner);
+  fData := BinaryData;
+  fDataAccess := TSQLDBProxyStatementRandomAccess.Create(
+    pointer(fData),length(fData),DataRowPosition);
+end;
+
+destructor TSynBinaryDataSet.Destroy;
 begin
   fDataAccess.Free;
-  fData.Free;
   inherited;
 end;
 
-function TSynSQLStatementDataSet.GetRecordCount: Integer;
+function TSynBinaryDataSet.GetRecordCount: Integer;
 begin
   result := fDataAccess.DataRowCount;
 end;
 
-procedure TSynSQLStatementDataSet.InternalInitFieldDefs;
+procedure TSynBinaryDataSet.InternalInitFieldDefs;
 var F: integer;
     DBType: TFieldType;
 begin
@@ -178,7 +191,7 @@ begin
     case ColumnType of
     SynCommons.ftInt64: DBType := ftLargeint;
     SynCommons.ftDate:  DBType := ftDateTime;
-    SynCommons.ftUTF8:  DBType := fDefaultStringType;
+    SynCommons.ftUTF8:  DBType := ftWideString; // means UnicodeString for Delphi 2009+
     SynCommons.ftBlob:  DBType := ftBlob;
     SynCommons.ftDouble, SynCommons.ftCurrency: DBType := ftFloat;
     else raise EDatabaseError.CreateFmt('GetFieldData ColumnType=%d',[ord(ColumnType)]);
@@ -187,7 +200,7 @@ begin
   end;
 end;
 
-function TSynSQLStatementDataSet.GetRowFieldData(Field: TField;
+function TSynBinaryDataSet.GetRowFieldData(Field: TField;
   RowIndex: integer; out ResultLen: Integer; OnlyCheckNull: boolean): Pointer;
 var F: integer;
 begin
@@ -208,7 +221,25 @@ begin
     end;
     SynCommons.ftUTF8, SynCommons.ftBlob:
       resultLen := FromVarUInt32(PByte(result));
-    end; // other ColumnTypes are already in the expected format 
+    end; // other ColumnTypes are already in the expected format
 end;
+
+
+{ TSynSQLStatementDataSet }
+
+constructor TSynSQLStatementDataSet.Create(Owner: TComponent;
+  Statement: TSQLDBStatement; MaxRowCount: cardinal=0);
+var DataStream: TRawByteStringStream;
+    DataRowPosition: TCardinalDynArray;
+begin
+  DataStream := TRawByteStringStream.Create;
+  try
+    Statement.FetchAllToBinary(DataStream,MaxRowCount,@DataRowPosition);
+    inherited Create(Owner,DataStream.DataString,@DataRowPosition);
+  finally
+    DataStream.Free;
+  end;
+end;
+
 
 end.

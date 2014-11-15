@@ -483,10 +483,14 @@ begin
         if IsNull then
           W.AddShort('null') else
         case DataType of
-        ftBoolean: W.AddString(JSON_BOOLEAN[AsBoolean]);
-        ftSmallint, ftInteger, ftWord, ftAutoInc: W.Add(AsInteger);
-        ftLargeint: W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
-        ftFloat, ftCurrency, ftBCD: W.Add(AsFloat);
+        ftBoolean:
+          W.AddString(JSON_BOOLEAN[AsBoolean]);
+        ftSmallint, ftInteger, ftWord, ftAutoInc:
+          W.Add(AsInteger);
+        ftLargeint:
+          W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
+        ftFloat, ftCurrency, ftBCD:
+          W.Add(AsFloat);
         ftTimeStamp, ftDate, ftTime, ftDateTime: begin
           W.Add('"');
           W.AddDateTime(AsDateTime);
@@ -503,7 +507,8 @@ begin
           W.AddJSONEscapeW(pointer(TWideStringField(Data.Fields[f]).Value));
           W.Add('"');
         end;
-        ftVariant: W.AddVariantJSON(AsVariant);
+        ftVariant:
+          W.AddVariantJSON(AsVariant);
         ftBytes, ftVarBytes, ftBlob, ftGraphic, ftOraBlob, ftOraClob: begin
           blob := TRawByteStringStream.Create;
           try
@@ -521,9 +526,12 @@ begin
         end;
         {$endif}
         {$ifdef UNICODE}
-        ftShortint, ftByte: W.Add(AsInteger);
-        ftLongWord: W.AddU(TLongWordField(Data.Fields[f]).Value);
-        ftExtended, ftSingle: W.Add(AsFloat);
+        ftShortint, ftByte:
+          W.Add(AsInteger);
+        ftLongWord:
+          W.AddU(TLongWordField(Data.Fields[f]).Value);
+        ftExtended, ftSingle:
+          W.Add(AsFloat);
         {$endif}
         else W.AddShort('null'); // unhandled field type
         end;
