@@ -7972,12 +7972,14 @@ type
   TSQLRestStorageExternalHook = class(TSQLRestStorageExternal);
 
   TSQLRecordPeopleID = type TID;
+  TSQLRecordPeopleToBeDeletedID = type TID;
 
   TSQLRecordCustomProps = class(TSQLRecordPeople)
   protected
     fGUID: TGUID;
     fPeopleID: TID;
     fPeople: TSQLRecordPeopleID;
+    fPeopleCascade: TSQLRecordPeopleToBeDeletedID;
     {$ifdef PUBLISHRECORD}
     fGUIDXE6: TGUID;
     {$endif}
@@ -7987,6 +7989,7 @@ type
   published
     property PeopleID: TID read fPeopleID write fPeopleID;
     property People: TSQLRecordPeopleID read fPeople write fPeople;
+    property PeopleCascade: TSQLRecordPeopleToBeDeletedID read fPeopleCascade write fPeopleCascade;
     {$ifdef PUBLISHRECORD}
     property GUIDXE6: TGUID read fGUIDXE6 write fGUIDXE6;
     {$endif}
@@ -9476,8 +9479,9 @@ begin
       Check(Client.DB.BackupBackground('backupbackground.db3',1024,0,OnBackupProgress));
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
-        Server := TSQLRestServerTest.Create(ModelC,false);
+        Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
         try
+          Server.Model.Owner := Server; // we just use TSQLRecordPeople here
           Server.NoAJAXJSON := true;
           DeleteFile('People.json');
           DeleteFile('People.data');

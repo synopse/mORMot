@@ -2272,7 +2272,7 @@ Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor t
 The ORM will automatically perform the following optimizations for {\f1\fs20 TSQLRecord} published fields:
 - An {\i index} will be created on the database, for the corresponding column;
 - When a referenced record is deleted, the ORM will detect it and automatically set all published properties pointing to this record to 0.
-In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. If you also use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
+In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but emulated {\i at ORM level}.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
 :  TID fields
 {\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
@@ -2283,15 +2283,20 @@ As a consequence, the ORM will perform the following optimizations for {\f1\fs20
 You can optionally specify the associated table, using a custom {\f1\fs20 TID} type for the published property definition. In this case, you would sub-class {\f1\fs20 TID}, using {\f1\fs20 {\i tableName}ID} as naming convention.\line For instance, if you define:
 ! type
 !   TSQLRecordClientID = type TID;
+!   TSQLRecordClientToBeDeletedID = type TID;
 !
 !   TSQLOrder = class(TSQLRecord)
 !   ...
-!   published Client: TID read fClient write fClient;
-!   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
+!   published Client: TID
+!     read fClient write fClient;
+!   published OrderedBy: TSQLRecordClientID
+!     read fOrderedBy write fOrderedBy;
+!   published OrderedByCascade: TSQLRecordClientToBeDeletedID
+!     read fOrderedByCascade write fOrderedByCascade;
 !   ...
-Those two published fields would be able to store a {\f1\fs20 Int64} foreign key, and will both have one {\i index} created on the database. But their type ({\f1\fs20 TID} or {\f1\fs20 TSQLRecordClientID}) will make a difference about the deletion process.
-By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so an index will be created for this column, but no deletion tracking would take place.
-On the other hand, {\i following the type naming convention}, the other {\f1\fs20 OrderedBy} property will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model. In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} type name, and search for a {\f1\fs20 TSQLRecord} class name matching {\f1\fs20 {\i TSQLRecordClassName}ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will create an index for the column, {\i and} track any {\f1\fs20 TSQLRecordClient} deletion: it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0 for any row pointing to the deleted record. As with {\f1\fs20 TSQLRecord} or {\f1\fs20 TRecordReference} properties, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL, but implement it {\i at ORM level}.
+Those three published fields would be able to store a {\f1\fs20 Int64} foreign key, and will botall have one {\i index} created on the database.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or TSQLRecordClientToBeDeletedID - will define how the deletion process will be processed.
+By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so no deletion tracking would take place.
+On the other hand, {\i following the type naming convention}, the others {\f1\fs20 OrderedBy} and {\f1\fs20 OrderedByCascade} properties will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model.\line In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} or {\f1\fs20 'TSQLRecordClientToBeDeletedID'}  type names, and search for a {\f1\fs20 TSQLRecord} associated by trimming {\f1\fs20 *[ToBeDeleted]ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will be able to track any {\f1\fs20 TSQLRecordClient} deletion: for any row pointing to the deleted record, it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0, or that the row containing the {\f1\fs20 OrderedByCascade} property will be deleted. Note that the framework won't define a {\f1\fs20 ON DELETE SET DEFAULT} or {\f1\fs20 ON DELETE CASCADE} foreign key via SQL, but emulate them {\i at ORM level}.
 :  TRecordReference and TRecordReferenceToBeDeleted
 {\f1\fs20 TSQLRecord} or {\f1\fs20 TID} published properties are associated with a single {\f1\fs20 TSQLRecord} joined table. You could use {\f1\fs20 @**TRecordReference@} or {\f1\fs20 @**TRecordReferenceToBeDeleted@} published properties to store a reference to any record on any table of the data model.
 In fact, such properties will store in a {\f1\fs20 Int64} value a reference to both a {\f1\fs20 TSQLRecord} class (therefore defining a table), and one {\f1\fs20 ID} (to define the row).
@@ -2300,10 +2305,22 @@ One {\b important note} is to remember that the table reference is stored as an 
 - That the order of {\f1\fs20 TSQLRecord} classes in the {\f1\fs20 TSQLModel} {\b do not change} after any model modification: otherwise, all previously stored {\f1\fs20 TRecordReference*} values would point to a wrong record;
 - That both Client and Server side {\b share the same model} - at least for the {\f1\fs20 TSQLRecord} classes which are used with {\f1\fs20 TRecordReference*}.
 Depending on the type, the ORM will track the deletion of the pointed record:
-- {\f1\fs20 TRecordReference} fields will be reset to 0 - similar to {\f1\fs20 ON DELETE SET DEFAULT} foreign key SQL declaration;
-- {\f1\fs20 TRecordReferenceToBeDeleted} will delete the whole record - similar to {\f1\fs20 ON DELETE CASCADE} foreign key SQL declaration.
-Just like with {\f1\fs20 TSQLRecord} fields, this deletion tracking is not defined at RDBMS level, but {\i at ORM level}, so it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected. If you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
+- {\f1\fs20 TRecordReference} fields will be reset to 0 - emulating {\f1\fs20 ON DELETE SET DEFAULT} foreign key SQL declaration;
+- {\f1\fs20 TRecordReferenceToBeDeleted} will delete the whole record - emulating {\f1\fs20 ON DELETE CASCADE} foreign key SQL declaration.
+Just like with {\f1\fs20 TSQLRecord} or {\f1\fs20 {\i TSQLRecordClassName}[ToBeDeleted]ID} fields, this deletion tracking is not defined at RDBMS level, but emulated {\i at ORM level}.
 In order to work easily with {\f1\fs20 TRecordReference} values (which are in fact plain {\f1\fs20 Int64} values), you could transtype them into the {\f1\fs20 @**RecordRef@()} record, and access the stored information via a set of helper methods. See @128@ for an example of use of such {\f1\fs20 TRecordReference} in a data model, e.g. the {\f1\fs20 AssociatedRecord} property of {\f1\fs20 TSQLAuditTrail}.
+:  TSQLRecord, TID, TRecordReference deletion tracking
+To sum up all possible foreign key reference available by the framework, check out this table:
+|%35%8%9%20%28
+|\b Type Definition|Index|Tables|Deletion Tracking|Emulated SQL\b0
+|{\f1\fs20 TSQLRecord}|Yes|One|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 TID}|Yes|No|None|None
+|{\f1\fs20 T{\i ClassName}ID}|Yes|One|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 T{\i ClassName}ToBeDeletedID}|Yes|One|Row deleted|ON DELETE CASCADE
+|{\f1\fs20 TRecordReference}|Yes|All|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 TRecordReferenceToBeDeleted}|Yes|All|Row deleted|ON DELETE CASCADE
+|%
+It is worth saying that this deletion tracking is not defined at RDBMS level, but {\i at ORM level}.\line As a consequence, it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected for TRecordReference.\line Since this is not a database level tracking, but only from a {\i mORMot} server, if you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:

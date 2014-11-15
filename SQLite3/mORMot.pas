@@ -3489,7 +3489,7 @@ type
   TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32){$endif}
   protected
     fObjectClass: TClass;
-    fIsTRecordReferenceToBeDeleted: boolean;
+    fCascadeDelete: boolean;
   public
     /// will setup the corresponding ObjectClass property
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
@@ -3501,7 +3501,7 @@ type
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
     /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
-    property IsTRecordReferenceToBeDeleted: boolean read fIsTRecordReferenceToBeDeleted;
+    property CascadeDelete: boolean read fCascadeDelete;
   end;
 
   /// information about a TID published property
@@ -3511,11 +3511,13 @@ type
   TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIInt64)
   protected
     fRecordClass: TSQLRecordClass;
+    fCascadeDelete: boolean;
   public
     /// will setup the corresponding RecordClass property from the TID type name
     // - the TSQLRecord type should have previously been registered to the
     // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
     // that e.g. 'TSQLRecordClientID' type name would match TSQLRecordClient
+    // - in addition, the '...ToBeDeletedID' name pattern should set CascadeDelete
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// the TSQLRecord class associated to this TID
     // - is computed from its type name - for instance, if you define:
@@ -3526,8 +3528,23 @@ type
     // !   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
     // !   ...
     // then this OrderedBy property would be tied to the TSQLRecordClient class
-    // of the corresponding model
+    // of the corresponding model, and the field value will be reset to 0 when
+    // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
     property RecordClass: TSQLRecordClass read fRecordClass;
+    /// TRUE if this sftTID type name follows the '...ToBeDeletedID' pattern
+    // - e.g. 'TSQLRecordClientToBeDeletedID' type name would match
+    // TSQLRecordClient and set CascadeDelete
+    // - is computed from its type name - for instance, if you define:
+    // ! type
+    // !   TSQLRecordClientToBeDeletedID = type TID;
+    // !   TSQLOrder = class(TSQLRecord)
+    // !   ...
+    // !   published OrderedBy: TSQLRecordClienToBeDeletedtID read fOrderedBy write fOrderedBy;
+    // !   ...
+    // then this OrderedBy property would be tied to the TSQLRecordClient class
+    // of the corresponding model, and the whole record will be deleted when
+    // the targetting record is deleted (emulating a ON DELETE CASCADE)
+    property CascadeDelete: boolean read fCascadeDelete;
   end;
 
   /// information about a TSQLRecord class TSQLRecord property
@@ -6781,10 +6798,13 @@ type
     // existing in the database model
     // - used in TSQLRestServer.Delete() to enforce relational database coherency
     // after deletion of a record: all other records pointing to it will be
-    // reset to 0 by TSQLRestServer.AfterDeleteForceCoherency
+    // reset to 0 or deleted (if CascadeDelete is true) by
+    // TSQLRestServer.AfterDeleteForceCoherency
     fRecordReferences: array of record
       TableIndex: integer;
       FieldType: TSQLPropInfo;
+      FieldTable: TSQLRecordClass;
+      CascadeDelete: boolean;
     end;
     procedure SetTableProps(aIndex: integer);
     function GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
@@ -15286,8 +15306,7 @@ begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjectClass := aPropInfo^.PropType^.ClassType^.ClassType;
   if aSQLFieldType=sftRecord then
-    fIsTRecordReferenceToBeDeleted :=
-      IdemPropName(aPropInfo^.PropType^.Name,'TRecordReferenceToBeDeleted')
+    fCascadeDelete:= IdemPropName(aPropInfo^.PropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
 function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
@@ -15321,9 +15340,16 @@ begin
      (PWord(@TypeName^[ord(TypeName^[0])-1])^ and $dfdf<>ord('I')+ord('D') shl 8) or
      (JSONSerializerRegisteredClass=nil) then
     exit;
+  if (ord(TypeName^[0])>13) and
+     IdemPropName('ToBeDeletedID',@TypeName^[ord(TypeName^[0])-12],13) then begin
+    // 'TSQLRecordClientToBeDeletedID' -> TSQLRecordClient + CascadeDelete=true
+    fCascadeDelete := true;
+    ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-13);
+  end else
+    // 'TSQLRecordClientID' -> TSQLRecordClient
   ItemClass := JSONSerializerRegisteredClass.Find(@TypeName^[1],ord(TypeName^[0])-2);
   if (ItemClass<>nil) and ItemClass.InheritsFrom(TSQLRecord) then
-    fRecordClass := pointer(ItemClass); // 'TSQLRecordClientID' -> TSQLRecordClient
+    fRecordClass := pointer(ItemClass);
 end;
 
 
@@ -23584,14 +23610,22 @@ var i,j,f: integer;
     Props: TSQLModelRecordProperties;
     Search: TClass;
     W: TTextWriter;
-procedure RegisterTableForRecordReference(aList: TSQLPropInfo);
+procedure RegisterTableForRecordReference(aFieldType: TSQLPropInfo;
+  aFieldTable: TClass);
 var R: integer;
 begin
+  if (aFieldTable=nil) or not aFieldTable.InheritsFrom(TSQLRecord) then
+    exit; // no associated table to track deletion
   R := length(fRecordReferences);
   SetLength(fRecordReferences,R+1);
   with fRecordReferences[R] do begin
     TableIndex := aIndex;
-    FieldType := aList;
+    FieldType := aFieldType;
+    FieldTable := pointer(aFieldTable);
+    if aFieldType.InheritsFrom(TSQLPropInfoRTTIInstance) then
+      CascadeDelete := TSQLPropInfoRTTIInstance(aFieldType).CascadeDelete else
+    if aFieldType.InheritsFrom(TSQLPropInfoRTTITID) then 
+      CascadeDelete := TSQLPropInfoRTTITID(aFieldType).CascadeDelete;
   end;
 end;
 begin
@@ -23619,12 +23653,14 @@ begin
   with Props.Props.Fields do
   for f := 0 to Count-1 do begin
     case List[f].SQLFieldType of
-    sftRecord, sftID:
-      RegisterTableForRecordReference(List[f]);
+    sftRecord:
+      RegisterTableForRecordReference(List[f],Table); // Table not used
+    sftID:
+      RegisterTableForRecordReference(
+        List[f],(List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
     sftTID:
-      if List[f].InheritsFrom(TSQLPropInfoRTTITID) and
-         (TSQLPropInfoRTTITID(List[f]).RecordClass<>nil) then
-        RegisterTableForRecordReference(List[f]);
+      RegisterTableForRecordReference(
+        List[f],(List[f] as TSQLPropInfoRTTITID).RecordClass);
     sftMany: begin
       Search := (List[f] as TSQLPropInfoRTTIMany).ObjectClass;
       for i := 0 to fTablesMax do // manual search:  GetTableIndex() may fail
@@ -27607,23 +27643,27 @@ begin
   Where := 0; // make compiler happy
   {$endif}
   RecRef := RecordReference(Model,Table,aID);
-  if RecRef<>0 then
+  if RecRef=0 then
+    exit; // nothing to synchronize
   for T := 0 to high(Model.fRecordReferences) do
   with Model.fRecordReferences[T] do begin
     ToDo := toVoidField;
     case FieldType.SQLFieldType of
     sftRecord: begin // TRecordReference published field
-      if (FieldType as TSQLPropInfoRTTIInstance).IsTRecordReferenceToBeDeleted then
+      if CascadeDelete then
         ToDo := toDeleteRecord;
       Where := RecRef;
     end;
     sftID:           // TSQLRecord published field
-      if (FieldType as TSQLPropInfoRTTIInstance).ObjectClass=Table then
+      if FieldTable=Table then
         Where := aID else
         continue;
     sftTID:          // TTableID = type TID published field
-      if (FieldType as TSQLPropInfoRTTITID).RecordClass=Table then
-        Where := aID else
+      if FieldTable=Table then begin
+        if CascadeDelete then
+          ToDo := toDeleteRecord;
+        Where := aID;
+      end else
         continue;
     else continue;
     end;
