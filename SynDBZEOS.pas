@@ -108,7 +108,7 @@ end;
 
  ... but you should better upgrade to the latest Zeos 7.2 revision! :)
     See http://synopse.info/forum/viewtopic.php?pid=9146#p9146
- 
+
 *)
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -222,7 +222,7 @@ type
     /// access to the database metadata, as retrieved by ZEOS
     // - returns TRUE if metadata interface has been retrieved
     function GetDatabaseMetadata(out meta: IZDatabaseMetadata): boolean;
-    /// compute the ZEOS URI from a given database engine
+    /// compute the ZEOS URI for a given database engine
     // - the optional server name can contain a port number, specified after ':'
     // - you can set an optional full path to the client library name,
     // to be completed on the left side with the executable path
@@ -239,7 +239,16 @@ type
     // !  '3camadas', 'sysdba', 'masterkey');
     class function URI(aServer: TSQLDBDefinition;
       const aServerName: RawUTF8; const aLibraryLocation: TFileName='';
-      aLibraryLocationAppendExePath: boolean=true): RawUTF8;
+      aLibraryLocationAppendExePath: boolean=true): RawUTF8; overload;
+    /// compute the ZEOS URI for a given protocol
+    // - if a TSQSLDBDefinition may have several protocols (e.g. MSSQL), you
+    // can use this overloaded method to select the exact protocol to use if the
+    // default one fixed by TSQLDBDefinition does not match your needs
+    // - the protocol name should contain the trailing : character, e.g.
+    // 'firebird-2.0:' if the default 'firebird-2.5:' is not correct
+    class function URI(const aProtocol, aServerName: RawUTF8;
+      const aLibraryLocation: TFileName='';
+      aLibraryLocationAppendExePath: boolean=true): RawUTF8; overload;
   published
     /// the remote DBMS name, as retrieved from ServerName, i.e. ZEOS URL
     property DBMSName: RawUTF8 read fDBMSName;
@@ -546,7 +555,7 @@ var meta: IZDatabaseMetadata;
     FA: TDynArray;
 begin
   if GetDatabaseMetadata(meta) then begin
-    SQLSplitTableName(UpperCase(aTablename), Schema,TableName);
+    SQLSplitTableName(aTablename, Schema,TableName);
     sSchema := UTF8ToString(Schema);
     sTableName := meta.GetIdentifierConvertor.Quote(UTF8ToString(TableName));
     res := meta.GetColumns('',sSchema,sTableName,'');
@@ -597,15 +606,22 @@ begin
 end;
 
 class function TSQLDBZEOSConnectionProperties.URI(aServer: TSQLDBDefinition;
-  const aServerName: RawUTF8;
-  const aLibraryLocation: TFileName; aLibraryLocationAppendExePath: boolean): RawUTF8;
+  const aServerName: RawUTF8; const aLibraryLocation: TFileName;
+  aLibraryLocationAppendExePath: boolean): RawUTF8;
 const
   /// ZDBC provider names corresponding to SynDB recognized SQL engines
   ZEOS_PROVIDER: array[TSQLDBDefinition] of RawUTF8 = (
     '','','oracle:','mssql:','','mysql:','sqlite:',
     'firebird-2.5:','','postgresql-9:','');
+begin
+  result := URI(ZEOS_PROVIDER[aServer],aServerName,
+    aLibraryLocation,aLibraryLocationAppendExePath);
+end;
+
+class function TSQLDBZEOSConnectionProperties.URI(const aProtocol,aServerName: RawUTF8;
+  const aLibraryLocation: TFileName; aLibraryLocationAppendExePath: boolean): RawUTF8;
 begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
-  result := ZEOS_PROVIDER[aServer];
+  result := trim(aProtocol);
   if result='' then
     exit;
   if aServerName<>'' then
