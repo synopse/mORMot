@@ -11980,10 +11980,16 @@ function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZCompress(const Data: RawByteString): RawByteString;
+function SynLZCompress(const Data: RawByteString): RawByteString; overload;
+
+/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+procedure SynLZCompress(P: PAnsiChar; PLen: integer;out Result: RawByteString); overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZDecompress(const Data: RawByteString): RawByteString;
+function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
+
+/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer;out Result: RawByteString); overload;
 
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
@@ -42301,47 +42307,73 @@ begin
 end;
 
 function SynLZCompress(const Data: RawByteString): RawByteString;
-var DataLen, len: integer;
-    P: PAnsiChar;
 begin
-  DataLen := length(Data);
-  if DataLen=0 then
-    result := '' else begin
-    len := SynLZcompressdestlen(DataLen)+8;
-    SetString(result,nil,len);
-    P := pointer(result);
-    PCardinal(P)^ := crc32c(0,pointer(Data),DataLen);
-{$ifdef PUREPASCAL}
-    len := SynLZcompress1pas(pointer(Data),DataLen,P+8); {$else}
-    len := SynLZcompress1asm(pointer(Data),DataLen,P+8);
-{$endif}
-    PCardinal(P+4)^ := crc32c(0,pointer(P+8),len);
-    SetLength(result,len+8);
+  SynLZCompress(pointer(Data),length(Data),result);
+end;
+
+const
+  SYNLZCOMPRESS_SYNLZ_SIZETRIGGER = 100;
+  SYNLZCOMPRESS_STORED = #0;
+  SYNLZCOMPRESS_SYNLZ = #1;
+
+procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
+var len: integer;
+    R: PAnsiChar;
+    crc: cardinal;
+begin
+  if PLen=0 then
+    exit;
+  crc := crc32c(0,P,PLen);
+  if PLen<SYNLZCOMPRESS_SYNLZ_SIZETRIGGER then begin
+    SetString(result,nil,PLen+9);
+    R := pointer(result);
+    PCardinal(R)^ := crc;
+    R[4] := SYNLZCOMPRESS_STORED;
+    PCardinal(R+5)^ := crc;
+    move(P^,R[9],PLen);
+  end else begin
+    SetString(result,nil,SynLZcompressdestlen(PLen)+9);
+    R := pointer(result);
+    PCardinal(R)^ := crc;
+    R[4] := SYNLZCOMPRESS_SYNLZ;
+    {$ifdef PUREPASCAL}
+    len := SynLZcompress1pas(P,PLen,R+9);
+    {$else}
+    len := SynLZcompress1asm(P,PLen,R+9);
+    {$endif}
+    PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    SetLength(result,len+9);
   end;
 end;
 
 function SynLZDecompress(const Data: RawByteString): RawByteString;
-var DataLen, len: integer;
-    P: PAnsiChar;
 begin
-  DataLen := length(Data);
-  result := '';
-  if DataLen=0 then
-    exit;
-  P := pointer(Data);
-  if (DataLen<=8) or (crc32c(0,pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
-    exit;
-  len := SynLZdecompressdestlen(P+8);
-  SetLength(result,len);
-  if (len<>0) and
-{$ifdef PUREPASCAL}
-        ((SynLZdecompress1pas(P+8,DataLen-8,pointer(result))<>len) or
-{$else} ((SynLZdecompress1asm(P+8,DataLen-8,pointer(result))<>len) or
-{$endif}(crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
-    result := '' else
-    SetLength(result,len);
+  SynLZDecompress(pointer(Data),Length(Data),result);
 end;
 
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
+var len: integer;
+begin
+  if (PLen<=9) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
+    exit;
+  case P[4] of
+  SYNLZCOMPRESS_STORED:
+    if PCardinal(P)^=PCardinal(P+5)^ then
+      SetString(result,P+9,PLen-9);
+  SYNLZCOMPRESS_SYNLZ: begin
+    len := SynLZdecompressdestlen(P+9);
+    SetLength(result,len);
+    if (len<>0) and
+       {$ifdef PUREPASCAL}
+       ((SynLZdecompress1pas(P+9,PLen-9,pointer(result))<>len) or
+       {$else}
+       ((SynLZdecompress1asm(P+9,PLen-9,pointer(result))<>len) or
+       {$endif}
+       (crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
+      result := '';
+  end;
+  end;
+end;
 
 function MatchPattern(P,PEnd,Up: PUTF8Char; var Dest: PUTF8Char): boolean;
 begin
