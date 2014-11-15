@@ -475,10 +475,14 @@ function VirtualTableExternalMap(aModel: TSQLModel;
 // and released globaly when the ORM is no longer needed
 // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
 // external DB, but you can avoid it for speed when handling session and security
+// by setting DoNotRegisterUserGroupTables
+// - you can set MapAutoKeywordFields to ensure that the mapped field names 
+// won't conflict with a SQL reserved keyword on the external database
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotCacheUserGroupTables: boolean=false): boolean;
+  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean=false;
+  MapAutoKeywordFields: boolean=false): boolean;
 
 
 implementation
@@ -514,7 +518,8 @@ begin
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotCacheUserGroupTables: boolean=false): boolean;
+  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables,
+  MapAutoKeywordFields: boolean): boolean;
 var i: integer;
 begin
   if (aModel=nil) or (aExternalDB=nil) then begin
@@ -523,11 +528,13 @@ begin
   end;
   result := true;
   for i := 0 to high(aModel.Tables) do
-    if DoNotCacheUserGroupTables and ((aModel.Tables[i]=TSQLAuthGroup)
+    if DoNotRegisterUserGroupTables and ((aModel.Tables[i]=TSQLAuthGroup)
        or (aModel.Tables[i]=TSQLAuthUser)) then
       continue else
     if not VirtualTableExternalRegister(aModel,aModel.Tables[i],aExternalDB,'') then
-      result := false;
+      result := false else
+      if MapAutoKeywordFields then
+        aModel.TableProps[i].ExternalDB.MapAutoKeywordFields;
 end;
 
 function VirtualTableExternalMap(aModel: TSQLModel;
