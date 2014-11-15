@@ -32,6 +32,7 @@ unit mORMotReport;
 
   Contributor(s):
   - Celery
+  - Leo
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -197,6 +198,7 @@ unit mORMotReport;
   - added setter method for ZoomStatus property (during preview) - [dd656b470b]
   - added TGDIPages.ExportPDFStream() method - to be used e.g. on servers
   - fixed [cfdc644038] about truncated parenthesis in pdf export for caCurrency
+  - fixed [e7ffb69131] about TGDIPages.DrawGraphic() when the TGraphic is Empty
   - allow preview as a blank colored component at design time (thanks to Celery)
 
 
@@ -3438,7 +3440,8 @@ procedure TGDIPages.DrawGraphic(graph: TGraphic; bLeft, bWidth: integer;
 var R: TRect;
     H: Integer;
 begin
-  if (Self=nil) or (graph=nil) then exit; // avoid GPF
+  if (self=nil) or (graph=nil) or graph.Empty then
+    exit; // avoid GPF
   // compute position and draw bitmap
   if bLeft=maxInt then // do center
     bLeft := PrinterPxToMmX(fPageMarginsPx.Left+
