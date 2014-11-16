@@ -233,6 +233,7 @@ unit SynDB;
   - TSQLDBStatement.Bind(const Params: array of const) will accept variant
     values for BLOB, as requested by [64f7d840e1bf]
   - added missing ColumnToSQLVar() method to ISQLDBRows interface
+  - exposed FetchAllToJSON method for ISQLDBRows interface
   - added TSQLDBStatement.ColumnsToBinary() method
   - method TSQLDBStatement.ColumnTypeNativeToDB() is now public, and will
     recognize "uniqueidentifier" data type as ftUTF8
@@ -678,6 +679,22 @@ type
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
       DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): RawUTF8;
+    // append all rows content as a JSON stream
+    // - JSON data is added to the supplied TStream, with UTF-8 encoding
+    // - if Expanded is true, JSON data is an array of objects, for direct use
+    // with any Ajax or .NET client:
+    // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
+    // - if Expanded is false, JSON data is serialized (used in TSQLTableJSON)
+    // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
+    // format and contains true BLOB data
+    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - you can ignore all BLOB fields, if DoNotFetchBlobs is set to TRUE
+    // - you can go back to the first row of data before creating the JSON, if
+    // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
+    // - returns the number of row data returned (excluding field names)
+    function FetchAllToJSON(JSON: TStream; Expanded: boolean;
+      DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -1327,8 +1344,9 @@ type
     /// the associated User Password, as specified at creation
     property PassWord: RawUTF8 read fPassWord;
     /// can be used to store the fForeignKeys[] data in an external BLOB
-    // - since GetForeignKeys is somewhat slow, could save a lot of time
-    property ForeignKeysData: RawByteString read GetForeignKeysData write SetForeignKeysData;
+    // - since GetForeignKeys can be (somewhat) slow, could save a lot of time
+    property ForeignKeysData: RawByteString
+      read GetForeignKeysData write SetForeignKeysData;
     /// an optional Schema name to be used for SQLGetField() instead of UserID
     // - by default, UserID will be used as schema name, if none is specified
     // (i.e. if table name is not set as SCHEMA.TABLE)
@@ -4058,11 +4076,11 @@ var
 class function TSQLDBConnectionProperties.IsSQLKeyword(
   aDB: TSQLDBDefinition; aWord: RawUTF8): boolean;
 const
-  /// the known reserved keywords per database engine, in alphabetic order
+  /// CSV of the known reserved keywords per database engine, in alphabetic order
   DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char = (
   // dUnknown
   '',
-  // dDefault = ODBC / SQL-92 keywords
+  // dDefault = ODBC / SQL-92 keywords (always checked first)
   'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,'+
   'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,'+
   'char_length,character,character_length,check,close,coalesce,collate,collation,'+
@@ -4084,11 +4102,11 @@ const
   'timestamp,timezone_hour,timezone_minute,to,trailing,transaction,translate,'+
   'translation,trim,true,union,unique,unknown,update,upper,usage,user,using,value,values,'+
   'varchar,varying,view,when,whenever,where,with,work,write,year,zone',
-  // dOracle
+  // dOracle specific keywords (in addition to dDefault)
   'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,'+
   'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,'+
   'pctfree',
-  // dMSSQL
+  // dMSSQL specific keywords (in addition to dDefault)
   'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,'+
   'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,'+
   'clustered,collect,completion,compute,condition,constructor,contains,containstable,'+
@@ -4118,11 +4136,11 @@ const
   'xmlattributes,xmlbinary,xmlcast,xmlcomment,xmlconcat,xmldocument,xmlelement,'+
   'xmlexists,xmlforest,xmliterate,xmlnamespaces,xmlparse,xmlpi,xmlquery,xmlserialize,'+
   'xmltable,xmltext,xmlvalidate',
-  // dJet
+  // dJet specific keywords (in addition to dDefault)
   'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,'+
   'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,'+
   'varbinary,varp,yesno',
-  // dMySQL
+  // dMySQL specific keywords (in addition to dDefault)
   'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,'+
   'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,'+
   'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,'+
@@ -4139,11 +4157,11 @@ const
   'sql_small_result,sqlexception,ssl,starting,straight_join,terminated,text,tinyblob,'+
   'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,'+
   'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
-  // dSQLite
+  // dSQLite keywords (dDefault is not added to this list)
   'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,'+
   'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,'+
   'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
-  // dFirebird
+  // dFirebird specific keywords (in addition to dDefault)
   'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,'+
   'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,'+
   'entry_point,exit,file,filter,function,gdscode,gen_id,generator,'+
@@ -4153,12 +4171,12 @@ const
   'raw_partitions,rdb$db_key,record_version,reserv,reserving,retain,return,'+
   'returning_values,returns,segment,shadow,shared,singular,snapshot,sort,stability,'+
   'start,starting,starts,statistics,sub_type,suspend,trigger,type,variable,wait,while',
-  // dNexusDB
+  // dNexusDB specific keywords (in addition to dDefault)
   'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,'+
   'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,'+
   'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,'+
   'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
-  // dPostgreSQL
+  // dPostgreSQL specific keywords (in addition to dDefault)
   'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,'+
   'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,'+
   'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,'+
@@ -4179,7 +4197,7 @@ const
   'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,'+
   'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,'+
   'xmlroot,xmlserialize,yes',
-  // dDB2
+  // dDB2 specific keywords (in addition to dDefault)
   'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,'+
   'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,'+
   'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,'+
@@ -4214,12 +4232,13 @@ const
   'volatiledefaults,volumesdefinition,whendelete,wheneverdense_rank,wheredenserank,'+
   'whiledescribe,withdescriptor,withoutdeter');
 var db: TSQLDBDefinition;
-begin
+begin // search using fast binary lookup in the alphabetic ordered arrays
   if DB_KEYWORDS[dDefault]=nil then
     for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db],DB_KEYWORDS[db]);
   aWord := Trim(LowerCase(aWord));
-  if (aDB=dSQLite) or (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+  if (aDB=dSQLite) or
+     (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
       high(DB_KEYWORDS[dDefault]),pointer(aWord))<0) then
     if aDB<=dDefault then
       result := false else
