@@ -2421,7 +2421,7 @@ type
   // - can cache last results for SELECT statements, if property UseCache is true:
   //  this can speed up most read queries, for web server or client UI e.g.
   TSQLDataBase = class
-  private
+  protected
     fDB: TSQLite3DB;
     fFileName: TFileName;
     fIsMemory: boolean;
@@ -2947,10 +2947,10 @@ begin
     result := nil;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  if RowID=0 then
-    RowID := LastInsertRowID; // warning: won't work on multi-thread process
   Lock;
   try
+    if RowID=0 then
+      RowID := LastInsertRowID; // warning: won't work on multi-thread process
     result := TSQLBlobStream.Create(DB,DBName,TableName,ColumnName,RowID,ReadWrite);
   finally
     UnLock;

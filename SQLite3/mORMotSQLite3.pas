@@ -1329,7 +1329,7 @@ procedure TSQLRestServerDB.Commit(SessionID: cardinal=1);
 begin
   inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
   try
-    DB.Commit;
+    DB.Commit; // will call DB.Lock
   except
     on ESQLite3Exception do
       ; // just catch exception
@@ -1340,7 +1340,7 @@ procedure TSQLRestServerDB.RollBack(SessionID: cardinal=1);
 begin
   inherited; // reset TSQLRestServerDB.fTransactionActive flag
   try
-    DB.RollBack; // reset TSQLDataBase.RollBack
+    DB.RollBack; // will call DB.Lock
   except
     on ESQLite3Exception do
       ; // just catch exception
@@ -1350,14 +1350,14 @@ end;
 function TSQLRestServerDB.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean;
 begin
   result := inherited TransactionBegin(aTable,SessionID);
-  if result then
-    // fTransactionActive flag was not already set
-    try
-      DB.TransactionBegin;
-    except
-      on ESQLite3Exception do
-        result := false;
-    end;
+  if not result then
+    exit; // fTransactionActive flag was already set
+  try
+    DB.TransactionBegin; // will call DB.Lock
+  except
+    on ESQLite3Exception do
+      result := false;
+  end;
 end;
 
 function TSQLRestServerDB.Backup(Dest: TStream): boolean;
@@ -1526,8 +1526,14 @@ end;
 procedure TSQLRestServerDB.FlushInternalDBCache;
 begin
   inherited;
-  if DB<>nil then
+  if DB=nil then
+    exit;
+  DB.Lock;
+  try
     DB.CacheFlush;
+  finally
+    DB.UnLock;
+  end;
 end;
 
 function TSQLRestServerDB.InternalBatchStart(

@@ -71,6 +71,8 @@ unit SynDBSQLite3;
   - statement cache refactoring: cache logic is now at SynDB unit level
   - fixed ticket [4c68975022] about broken SQL statement when logging active
   - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
+  - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
+    constructor, to be used e.g. with a TSQLRestServerDB.DB existing database
   - overloaded function RowsToSQLite3() is now moved as generic
     TSQLDBConnection.NewTableFromRows() method
   - TSQLDBSQLite3Statement.BindTextP('') will bind '' text instead of null value
@@ -110,17 +112,18 @@ uses
 { -------------- SQlite3 database engine native connection  }
 
 type
-  /// will implement properties shared by the static SQLite3 engine
+  /// will implement properties shared by the SQLite3 engine
   TSQLDBSQLite3ConnectionProperties = class(TSQLDBConnectionProperties)
   private
     fUseMormotCollations: boolean;
+    fExistingDB: TSQLDatabase;
     procedure SetUseMormotCollations(const Value: boolean);
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
   public
-    /// initialize the properties
+    /// initialize access to a SQLite3 engine with some properties 
     // - only used parameter is aServerName, which should point to the SQLite3
     // database file to be opened (one will be created if none exists)
     // - you can specify an optional password, which will be used to access
@@ -130,7 +133,11 @@ type
     // be used on production - in which the default encryption level is
     // very low)
     // - other parameters (DataBaseName, UserID) are ignored
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); overload; override;
+    /// initialize access to an existing SQLite3 engine
+    // - this overloaded constructor allows to access via SynDB methods to an
+    // existing SQLite3 database, e.g. TSQLRestServerDB.DB (from mORMotSQLite3.pas)
+    constructor Create(aDB: TSQLDatabase); reintroduce; overload; 
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
@@ -372,6 +379,17 @@ begin
   UseMormotCollations := true;
 end;
 
+type
+  TSQLDatabaseHook = class(TSQLDatabase); // to access fPassword
+
+constructor TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase);
+begin
+  if aDB=nil then
+    raise ESQLDBException.CreateUTF8('%.Create(DB=nil)',[self]);
+  fExistingDB := aDB;
+  Create('',StringToUTF8(aDB.FileName),'',TSQLDatabaseHook(aDB).fPassword);
+end;
+
 procedure TSQLDBSQLite3ConnectionProperties.GetForeignKeys;
 begin
   // do nothing (yet)
@@ -396,7 +414,9 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter;
   Disconnect; // force fTrans=fError=fServer=fContext=nil
-  fDB := TSQLDatabase.Create(UTF8ToString(Properties.ServerName),Properties.PassWord);
+  fDB := (Properties as TSQLDBSQLite3ConnectionProperties).fExistingDB;
+  if fDB=nil then
+    fDB := TSQLDatabase.Create(UTF8ToString(Properties.ServerName),Properties.PassWord);
   //fDB.SetWalMode(true); // slower INSERT in WAL mode for huge number of rows
   inherited Connect; // notify any re-connection
 end;
@@ -404,7 +424,9 @@ end;
 procedure TSQLDBSQLite3Connection.Disconnect;
 begin
   inherited Disconnect; // flush any cached statement
-  FreeAndNil(fDB);
+  if (Properties as TSQLDBSQLite3ConnectionProperties).fExistingDB=fDB then
+    fDB := nil else
+    FreeAndNil(fDB);
 end;
 
 function TSQLDBSQLite3Connection.GetLockingMode: TSQLLockingMode;
