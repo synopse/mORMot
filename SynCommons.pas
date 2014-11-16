@@ -403,6 +403,7 @@ unit SynCommons;
   - new StrUInt64(), UniqueRawUTF8(), FastNewRawUTF8() and SetRawUTF8() functions
   - recognize 8.1 and upcoming "Threshold" 9 in TWindowsVersion
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
+  - added DynArrayLoad() and DynArraySave() helper functions
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - added TDynArrayHashed.HashElement property
   - new TDynArrayHashed.AddUniqueName() method
@@ -4350,20 +4351,32 @@ procedure RecordClear(var Dest; TypeInfo: pointer);
 procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
   TypeInfo: pointer);
 
+/// fill a dynamic array content from a binary serialization as saved by
+// DynArraySave() / TDynArray.Save()
+// - Value shall be set to the target dynamic array field
+// - just a function helper around TDynArray.Load()
+function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+
+/// serialize a dynamic array content as binary, ready to be loaded by
+// DynArrayLoad() / TDynArray.Load()
+// - Value shall be set to the source dynamic array field
+// - just a function helper around TDynArray.Load()
+function DynArraySave(var Value; TypeInfo: pointer): RawByteString; 
+
 /// fill a dynamic array content from a JSON serialization as saved by
 // TTextWriter.AddDynArrayJSON
-// - Value shall be set to the target dynamic array field 
+// - Value shall be set to the target dynamic array field
 // - is just a wrapper around TDynArray.LoadFromJSON(), creating a temporary
 // TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJSONCustomReader callback
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later 
+// a temporary copy if you need to access it later
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 
-/// serialize a dynamic array content as JSON 
-// - Value shall be set to the source dynamic array field 
+/// serialize a dynamic array content as JSON
+// - Value shall be set to the source dynamic array field
 // - is just a wrapper around TTextWriter.AddDynArrayJSON(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
@@ -30743,6 +30756,20 @@ begin
   DestDynArray.CopyFrom(Source,SourceMaxElem);
 end;
 
+function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+var DynArray: TDynArray;
+begin
+  DynArray.Init(TypeInfo,Value);
+  result := DynArray.LoadFrom(Source);
+end;
+
+function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
+var DynArray: TDynArray;
+begin
+  DynArray.Init(TypeInfo,Value);
+  result := DynArray.SaveTo;
+end;
+
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 var DynArray: TDynArray;
@@ -41738,6 +41765,10 @@ end;
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
   GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
   FieldProp: TSynTableFieldProperties=nil);
+// TODO: should share code with TSQLRestStorageExternal.AdaptSQLForEngineList,
+// handle multiple AND/OR/NOT Field2=... clauses, and keep the fields order
+// in the result (i.e. define Fields: IntegerDynArray instead of TSQLFieldBits)
+// - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
     err: integer;
@@ -41925,7 +41956,7 @@ limit:
         WhereValue := 'COUNT'; // not void
       end else
         // invalid "SELECT count(*) FROM table TOTO"
-       WhereValue := '' else begin
+        WhereValue := '' else begin
     WhereField := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
     WhereValue := '*'; // not void
   end;

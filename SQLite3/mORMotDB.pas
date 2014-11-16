@@ -763,6 +763,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
+// TODO: should share code with TSynTableStatement.Create() - see [94ff704bb]
 var Prop: ShortString; // to avoid any temporary memory allocation
     P: PUTF8Char;
     W: TTextWriter;
