@@ -53,7 +53,7 @@ begin
       'postgres','postgres','postgresPassword');
     try
       aExternalDB.ThreadingMode := tmMainConnection; // force SINGLE connection
-      VirtualTableExternalRegisterAll(aModel,aExternalDB);
+      VirtualTableExternalRegisterAll(aModel,aExternalDB,[regMapAutoKeywordFields]);
       aServer := TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME);
       try // PostgreSQL uses one fork per connection -> better only two threads
         aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;

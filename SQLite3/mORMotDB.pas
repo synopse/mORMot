@@ -476,13 +476,29 @@ function VirtualTableExternalMap(aModel: TSQLModel;
 // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
 // external DB, but you can avoid it for speed when handling session and security
 // by setting DoNotRegisterUserGroupTables
-// - you can set MapAutoKeywordFields to ensure that the mapped field names 
-// won't conflict with a SQL reserved keyword on the external database
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean=false;
-  MapAutoKeywordFields: boolean=false): boolean;
+  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean=false): boolean; overload;
+
+type
+  /// all possible options for the overloaded VirtualTableExternalRegisterAll()
+  // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
+  // external DB, but you can avoid it for speed when handling session and security
+  // by setting regDoNotRegisterUserGroupTables
+  // - you can set regMapAutoKeywordFields to ensure that the mapped field names
+  // won't conflict with a SQL reserved keyword on the external database
+  TVirtualTableExternalRegisterOption = (
+    regDoNotRegisterUserGroupTables,
+    regMapAutoKeywordFields
+    );
+  /// set of options for VirtualTableExternalRegisterAll()
+  TVirtualTableExternalRegisterOptions = set of TVirtualTableExternalRegisterOption;
+
+/// register all tables of the model to be external, with some options
+function VirtualTableExternalRegisterAll(aModel: TSQLModel;
+  aExternalDB: TSQLDBConnectionProperties;
+  aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
 
 
 implementation
@@ -518,8 +534,17 @@ begin
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TSQLModel;
-  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables,
-  MapAutoKeywordFields: boolean): boolean;
+  aExternalDB: TSQLDBConnectionProperties; DoNotRegisterUserGroupTables: boolean): boolean;
+const OPT: array[boolean] of TVirtualTableExternalRegisterOptions =
+  ([],[regDoNotRegisterUserGroupTables]);
+begin
+  result := VirtualTableExternalRegisterAll(
+    aModel,aExternalDB,OPT[DoNotRegisterUserGroupTables]);
+end;
+
+function VirtualTableExternalRegisterAll(aModel: TSQLModel;
+  aExternalDB: TSQLDBConnectionProperties;
+  aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
 var i: integer;
 begin
   if (aModel=nil) or (aExternalDB=nil) then begin
@@ -528,12 +553,12 @@ begin
   end;
   result := true;
   for i := 0 to high(aModel.Tables) do
-    if DoNotRegisterUserGroupTables and ((aModel.Tables[i]=TSQLAuthGroup)
-       or (aModel.Tables[i]=TSQLAuthUser)) then
+    if (regDoNotRegisterUserGroupTables in aOptions) and
+       ((aModel.Tables[i]=TSQLAuthGroup) or (aModel.Tables[i]=TSQLAuthUser)) then
       continue else
     if not VirtualTableExternalRegister(aModel,aModel.Tables[i],aExternalDB,'') then
       result := false else
-      if MapAutoKeywordFields then
+      if regMapAutoKeywordFields in aOptions then
         aModel.TableProps[i].ExternalDB.MapAutoKeywordFields;
 end;
 

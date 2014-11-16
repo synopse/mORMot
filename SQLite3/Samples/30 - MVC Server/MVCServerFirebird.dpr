@@ -61,7 +61,7 @@ begin
       aURI,'MVCServerFirebird.fdb','sysdba','masterkey');
     {$endif}
     try
-      VirtualTableExternalRegisterAll(aModel,aExternalDB);
+      VirtualTableExternalRegisterAll(aModel,aExternalDB,[regMapAutoKeywordFields]);
       aServer := TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME);
       try
         aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
