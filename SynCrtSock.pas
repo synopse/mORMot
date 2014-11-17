@@ -1328,6 +1328,24 @@ function SendEmail(const Server, From, CSVDest, Subject, Text: RawByteString;
 // encoded - since Delphi 2010, it will be converted from UnicodeString
 function SendEmailSubject(const Text: string): RawByteString;
 
+const
+  /// HTML Status Code for "Success"
+  STATUS_SUCCESS = 200;
+  /// HTML Status Code for "Created"
+  STATUS_CREATED = 201;
+  /// HTML Status Code for "No Content"
+  STATUS_NOCONTENT = 204;
+  /// HTML Status Code for "Bad Request"
+  STATUS_BADREQUEST = 400;
+  /// HTML Status Code for "Unauthorized"
+  STATUS_UNAUTHORIZED = 401;
+  /// HTML Status Code for "Forbidden"
+  STATUS_FORBIDDEN = 403;
+  /// HTML Status Code for "Not Found"
+  STATUS_NOTFOUND = 404;
+  /// HTML Status Code for "Internal Server Error"
+  STATUS_SERVERERROR = 500;
+
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
 function StatusCodeToReason(Code: integer): RawByteString;
@@ -2017,7 +2035,8 @@ begin
   fCallingThread := aCallingThread;
 end;
 
-procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders, aInContent, aInContentType: RawByteString);
+procedure THttpServerRequest.Prepare(
+  const aURL, aMethod, aInHeaders, aInContent, aInContentType: RawByteString);
 begin
   fURL := aURL;
   fMethod := aMethod;
@@ -2043,7 +2062,7 @@ begin
   NotifyThreadStart(Ctxt.CallingThread);
   if Assigned(OnRequest) then
     result := OnRequest(Ctxt) else
-    result := 404; // 404 NOT FOUND
+    result := STATUS_NOTFOUND; 
 end;
 
 procedure THttpServerGeneric.NotifyThreadStart(Sender: TNotifiedThread);
@@ -2696,7 +2715,7 @@ begin
   {$ifdef DEBUG2}system.write(#13#10,method,' ',url);
   if Retry then system.Write(' RETRY');{$endif}
   if Sock<0 then
-    DoRetry(404) else // socket closed (e.g. KeepAlive=0) -> reconnect
+    DoRetry(STATUS_NOTFOUND) else // socket closed (e.g. KeepAlive=0) -> reconnect
   try
   try
 {$ifdef DEBUG23}system.write(' Send');{$endif}
@@ -2766,10 +2785,10 @@ begin
     if not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
 {$ifdef DEBUGAPI}writeln('? ',Command,' ContentLength=',length(Content));
-    if result<>200 then writeln('? ',Content,#13#10,HeaderGetText); {$endif}
+    if result<>STATUS_SUCCESS then writeln('? ',Content,#13#10,HeaderGetText); {$endif}
   except
     on Exception do
-      DoRetry(404);
+      DoRetry(STATUS_NOTFOUND);
   end;
   finally
     if KeepAlive=0 then
@@ -2804,7 +2823,7 @@ begin
   Http := OpenHttp(server,port);
   if Http<>nil then
   try
-    if Http.Get(url)=200 then
+    if Http.Get(url)=STATUS_SUCCESS then
       result := Http.Content;
   finally
     Http.Free;
@@ -2818,7 +2837,8 @@ begin
   Http := OpenHttp(server,port);
   if Http<>nil then
   try
-    result := Http.Post(url,Data,DataType) in [200,201,204];
+    result := Http.Post(url,Data,DataType) in
+      [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
   finally
     Http.Free;
   end;
@@ -3026,6 +3046,7 @@ var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
     s: RawByteString;
+    ErrorMsg: string;
     FileToSend: TFileStream;
 begin
   if (ClientSock=nil) or (ClientSock.Headers=nil) then
@@ -3036,9 +3057,16 @@ begin
   Context := THttpServerRequest.Create(self,aCallingThread);
   try
     // calc answer
-    with ClientSock do begin
+    with ClientSock do
       Context.Prepare(URL,Method,HeaderGetText,Content,ContentType);
+    try
       Code := Request(Context);
+    except
+      on E: Exception do begin
+        ErrorMsg := E.ClassName+': '+E.Message;
+        Code := STATUS_BADREQUEST;
+        Context.OutContent := '';
+      end;
     end;
     if Terminated then
       exit;
@@ -3056,19 +3084,21 @@ begin
           FileToSend.Free;
         end;
       except
-        on Exception do begin
-         Code := 404;
+        on E: Exception do begin // error reading or sending file
+         ErrorMsg := E.ClassName+': '+E.Message;
+         Code := STATUS_NOTFOUND;
          Context.OutContent := '';
         end;
       end;
     // send response (multi-thread OK) at once
-    if (Code<200) or (ClientSock.Headers=nil) then
-      Code := 404;
-    if not(Code in [200,201]) and (Context.OutContent='') then begin
+    if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
+      Code := STATUS_NOTFOUND;
+    if not(Code in [STATUS_SUCCESS,STATUS_CREATED]) and (Context.OutContent='') then begin
       Context.OutCustomHeaders := '';
       Context.OutContentType := 'text/html'; // create message to display
-      ContexT.OutContent := RawByteString(format('<body>%s Server Error %d<hr>%s<br>',
-        [ClassName,Code,StatusCodeToReason(Code)]));
+      Context.OutContent := RawByteString(format(
+        '<body style="font-family:verdana"><h1>%s Server Error %d</h1><hr><p>%s<p>%s',
+        [ClassName,Code,StatusCodeToReason(Code),ErrorMsg]));
     end;
     // 1. send HTTP status command
     if ClientSock.TCPPrefix<>'' then
@@ -5177,7 +5207,7 @@ begin
               {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
               fmOpenRead or fmShareDenyNone);
             if PtrInt(FileHandle)<0 then begin
-              SendError(404,SysErrorMessage(GetLastError));
+              SendError(STATUS_NOTFOUND,SysErrorMessage(GetLastError));
               continue;
             end;
             try // http.sys will serve then close the file from kernel
@@ -5230,7 +5260,7 @@ begin
             // handle any exception raised during process: show must go on!
             if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                (EHttpApiServer(E).LastError<>HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
-              SendError(500,E.Message,E);
+              SendError(STATUS_SERVERERROR,E.Message,E);
         end;
       finally    
         ReqId := 0; // reset Request ID to handle the next pending request
