@@ -10569,12 +10569,17 @@ type
     destructor Destroy; override;
   end;
 
+  {$ifdef DELPHI5OROLDER} // IAutoLocker -> internal error C3517 under Delphi 5 :(
+  TAutoLocker = class
+  {$else}
   /// an interface used by TAutoLocker to protect multi-thread execution
   IAutoLocker = interface
     /// will enter the mutex until the IUnknown reference is released
     // - i.e. until you left the method block
     // - using an IUnknown interface to let the compiler auto-generate a
     // try..finally block statement to release the lock
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     function ProtectMethod: IUnknown;
     /// enter the mutex
     // - any call to Enter should be ended with a call to Leave
@@ -10589,6 +10594,7 @@ type
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
   TAutoLocker = class(TInterfacedObject,IAutoLocker)
+  {$endif}
   protected
     fLock: TRTLCriticalSection;
     fLocked: boolean;
