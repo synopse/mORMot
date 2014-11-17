@@ -531,6 +531,7 @@ unit SynCommons;
   - added RecordSaveJSON() function which follows TTextWriter.AddRecordJSON() format
   - added TSynNameValue.InitFromIniSection() method and optional default value
     parameter to TSynNameValue.Value()
+  - added TSynNameValue.Delete() and SetBlobDataPtr() methods
   - added TSynNameValue.OnAfterAdd callback event
   - added TObjectListLocked class
   - TSynTests will now write the tests summary with colored console output
@@ -1301,6 +1302,11 @@ const
   /// HTTP header for MIME content type used for UTF-8 encoded XML
   XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+XML_CONTENT_TYPE;
 
+  /// MIME content type used for raw binary data
+  BINARY_CONTENT_TYPE = 'application/octet-stream';
+
+  /// HTTP header for MIME content type used for raw binary data
+  BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+BINARY_CONTENT_TYPE;
 
 
 /// faster equivalence to SetString() function for a RawUTF8
@@ -3094,8 +3100,8 @@ function CodePageToCharSet(CodePage: Cardinal): Integer;
 
 /// retrieve the MIME content type from a supplied binary buffer
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
-// - default is 'application/octet-stream' or 'application/extension' if
-// FileName was specified
+// - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
+// 'application/extension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 // - can be used as such:
 // !  Call.OutHead := HEADER_CONTENT_TYPE+
@@ -3261,7 +3267,7 @@ function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): P
 
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
-// - returns -1 if the specified Value was alredy present in Values[]
+// - returns -1 if the specified Value was already present in Values[]
 //  (we must avoid any duplicate for binary search)
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position
@@ -4204,10 +4210,14 @@ type
       OnAdd: TSynNameValueNotify=nil);
     /// search for a Name, return the index in List
     function Find(const aName: RawUTF8): integer;
+    /// search for a Name, and delete it in the List if it exists
+    function Delete(const aName: RawUTF8): boolean;
     /// search for a Name, return the associated Value
     function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
     /// returns true if the Init() method has been called
     function Initialized: boolean;
+    /// can be used to set all data from one BLOB memory buffer
+    procedure SetBlobDataPtr(aValue: pointer);
     /// can be used to set or retrieve all stored data as one BLOB content
     property BlobData: RawByteString read GetBlobData write SetBlobData;
     /// event triggerred after an item has just been added to the list
@@ -6205,10 +6215,9 @@ type
   // not compatible with previous versions, and it does make sense to
   // work with RawByteString in our UTF-8 oriented framework
   TRawByteStringStream = class(TStream)
-  private
+  protected
     fDataString: RawByteString;
     fPosition: Integer;
-  protected
     procedure SetSize(NewSize: Longint); override;
   public
     constructor Create(const aString: RawByteString=''); overload;
@@ -24377,7 +24386,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     end;
   end;
   if Result='' then
-    Result := 'application/octet-stream';
+    Result := BINARY_CONTENT_TYPE;
 end;
 
 function IsContentCompressed(Content: Pointer; Len: integer): boolean;
@@ -45552,8 +45561,10 @@ end;
 
 constructor TRawByteStringStream.Create(const aString: RawByteString);
 begin
-  if aString<>'' then
+  if aString='' then
+    exit;
     fDataString := aString;
+  fPosition := length(fDataString);
 end;
 
 function TRawByteStringStream.Read(var Buffer; Count: Integer): Longint;
@@ -45665,6 +45676,18 @@ begin
   result := fDynArray.FindHashed(aName);
 end;
 
+function TSynNameValue.Delete(const aName: RawUTF8): boolean;
+var ndx: integer;
+begin
+  ndx := fDynArray.FindHashed(aName);
+  if ndx>=0 then begin
+    fDynArray.Delete(ndx);
+    fDynArray.ReHash;
+    result := true;
+  end else
+    result := false;
+end;
+
 function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
 var i: integer;
 begin
@@ -45684,10 +45707,15 @@ begin
   result := fDynArray.SaveTo;
 end;
 
+procedure TSynNameValue.SetBlobDataPtr(aValue: pointer);
+begin
+  fDynArray.LoadFrom(aValue);
+  fDynArray.ReHash;
+end;
+
 procedure TSynNameValue.SetBlobData(const aValue: RawByteString);
 begin
-  fDynArray.LoadFrom(pointer(aValue));
-  fDynArray.ReHash;
+  SetBlobDataPtr(pointer(aValue));
 end;
 
 
