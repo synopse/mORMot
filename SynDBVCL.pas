@@ -49,6 +49,8 @@ unit SynDBVCL;
   - first public release, corresponding to Synopse mORMot Framework 1.17
 
   Version 1.18
+  - BREAKING CHANGE: QueryToDataSet() and StatementToDataSet() renamed
+    as overloaded functions ToDataSet()
   - now uses read/only TSynVirtualDataSet class for much faster process
     and lower resource use - see SynDBMidasVCL.pas unit if you need
   	a TClientDataset writable (but slower) instance
@@ -108,25 +110,25 @@ type
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will return a TSynSQLStatementDataSet instance,
 // using an optimized internal binary buffer: the supplied TQuery can be released
-// - if you need a writable TDataSet, you can use the slower QueryToClientDataSet()
+// - if you need a writable TDataSet, you can use the slower ToClientDataSet()
 // function as defined in SynDBMidasVCL.pas
-function QueryToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
-  aMaxRowCount: integer=0): TSynSQLStatementDataSet;
+function ToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
+  aMaxRowCount: integer=0): TSynSQLStatementDataSet; overload;
 
 /// fetch a SynDB's TSQLDBStatement result into a VCL DataSet
 // - just a wrapper around TSynSQLStatementDataSet.Create + Open
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will return a TSynSQLStatementDataSet instance, using
 // an optimized internal binary buffer: the supplied statement can be released
-// - if you need a writable TDataSet, you can use the slower
-// StatementToClientDataSet() function as defined in SynDBMidasVCL.pas
-function StatementToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
-  aMaxRowCount: integer=0): TSynSQLStatementDataSet;
+// - if you need a writable TDataSet, you can use the slower ToClientDataSet()
+// function as defined in SynDBMidasVCL.pas
+function ToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
+  aMaxRowCount: integer=0): TSynSQLStatementDataSet; overload;
 
 /// fetch a SynDB's TSQLDBStatement.FetchAllToBinary buffer into a VCL DataSet
 // - just a wrapper around TSynBinaryDataSet.Create + Open
-// - if you need a writable TDataSet, you can use the slower
-// StatementToClientDataSet() function as defined in SynDBMidasVCL.pas
+// - if you need a writable TDataSet, you can use the slower ToClientDataSet()
+// function as defined in SynDBMidasVCL.pas
 function BinaryToDataSet(aOwner: TComponent;
   const aBinaryData: RawByteString): TSynBinaryDataSet;
 
@@ -134,16 +136,16 @@ function BinaryToDataSet(aOwner: TComponent;
 implementation
 
 
-function QueryToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
+function ToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
   aMaxRowCount: integer): TSynSQLStatementDataSet;
 begin
   if aStatement=nil then
     result := nil else
-    result := StatementToDataSet(aOwner,
+    result := ToDataSet(aOwner,
       aStatement.PreparedSQLDBStatement.Instance,aMaxRowCount);
 end;
 
-function StatementToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
+function ToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
   aMaxRowCount: integer): TSynSQLStatementDataSet;
 begin
   result := TSynSQLStatementDataSet.Create(aOwner,aStatement,aMaxRowCount);

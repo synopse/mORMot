@@ -90,8 +90,8 @@ type
 // force the use of WideString fields instead of AnsiString, if needed
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function TSQLTableToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest=nil
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
+function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest=nil
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload; 
 
 /// convert a JSON result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from
@@ -107,7 +107,7 @@ function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8; aClient: 
 
 
 type
-  /// how TSQLTableToClientDataSet/JSONToClientDataSet functions will fill
+  /// how ToClientDataSet/JSONToClientDataSet functions will fill
   // the TClientDataSet instance
   TClientDataSetMode = (cdsNew, cdsAppend, cdsReplace);
 
@@ -118,7 +118,7 @@ type
 // force the use of WideString fields instead of AnsiString, if needed
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function TSQLTableToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
+function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
   aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 
@@ -144,8 +144,7 @@ var T: TSQLTableJSON;
 begin
   T := TSQLTableJSON.Create('',aJSON);
   try
-    result := TSQLTableToClientDataSet(aDataSet,T,aClient,aMode,aLogChange
-      {$ifndef UNICODE},aForceWideString{$endif});
+    result := ToClientDataSet(aDataSet,T,aClient,aMode,aLogChange{$ifndef UNICODE},aForceWideString{$endif});
   finally
     T.Free;
   end;
@@ -157,8 +156,7 @@ var T: TSQLTableJSON;
 begin
   T := TSQLTableJSON.Create('',aJSON);
   try
-    result := TSQLTableToClientDataSet(aOwner,T,aClient
-      {$ifndef UNICODE},aForceWideString{$endif});
+    result := ToClientDataSet(aOwner,T,aClient{$ifndef UNICODE},aForceWideString{$endif});
   finally
     T.Free;
   end;
@@ -167,7 +165,7 @@ end;
 var
   GlobalDataSetCount: integer;
 
-function TSQLTableToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest
+function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest
   {$ifndef UNICODE}; aForceWideString: boolean{$endif}): TClientDataSet;
 begin
   result := TClientDataSet.Create(aOwner);
@@ -176,7 +174,7 @@ begin
     inc(GlobalDataSetCount);
     if aTable=nil then
       exit;
-    if not TSQLTableToClientDataSet(result,aTable,aClient,cdsNew,false
+    if not ToClientDataSet(result,aTable,aClient,cdsNew,false
       {$ifndef UNICODE}, aForceWideString{$endif}) then
       FreeAndNil(result);
   except
@@ -185,7 +183,7 @@ begin
   end;
 end;
 
-function TSQLTableToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
+function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
   aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 var F,i: integer;

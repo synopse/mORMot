@@ -487,7 +487,7 @@ type
   THttpSocketCompressSet = set of 0..31;
 
   /// parent of THttpClientSocket and THttpServerSocket classes
-  // - contain properties for implementing the HTTP/1.1 protocol using WinSock
+  // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
   // - can optionaly compress and uncompress on the fly the data, with
   // standard gzip/deflate or custom (synlzo/synlz) protocols
@@ -562,7 +562,7 @@ type
 
   THttpServer = class;
 
-  /// WinSock-based HTTP/1.1 server class used by THttpServer Threads
+  /// Socket API based HTTP/1.1 server class used by THttpServer Threads
   THttpServerSocket = class(THttpSocket)
   private
   public
@@ -595,7 +595,7 @@ type
     function HeaderGetText: RawByteString; override;
   end;
 
-  /// WinSock-based REST and HTTP/1.1 compatible client class
+  /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document
   // - the REST commands (GET/POST/PUT/DELETE) are directly available
   // - open connection with the server with inherited Open(server,port) function
@@ -660,7 +660,7 @@ type
   TSynThreadPoolTHttpServer = class;
 {$endif}
 
-  /// HTTP response Thread as used by THttpServer WinSock-based class
+  /// HTTP response Thread as used by THttpServer Socket API based class
   // - Execute procedure get the request and calculate the answer
   // - you don't have to overload the protected THttpServerResp Execute method:
   // override THttpServer.Request() function or, if you need a lower-level access
@@ -1007,7 +1007,7 @@ type
   {$endif MSWINDOWS}
 
 
-  /// main HTTP server Thread using the standard Sockets library (e.g. WinSock)
+  /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads
   // - it implements a HTTP/1.1 compatible server, according to RFC 2068 specifications
@@ -1101,6 +1101,8 @@ type
     Address: RawByteString;
     /// fill the members from a supplied URI
     function From(aURI: RawByteString): boolean;
+    /// compute the whole normalized URI 
+    function URI: RawByteString;
   end;
 
 {$ifdef USEWININET}
@@ -2109,6 +2111,12 @@ begin
     result := true;
 end;
 
+function TURI.URI: RawByteString;
+const Prefix: array[boolean] of RawByteString = ('http://','https://');
+begin
+  result := Prefix[Https]+Server+':'+Port+'/'+Address;
+end;
+
 
 { ************ Socket API access - TCrtSocket and THttp*Socket }
 
@@ -2694,7 +2702,7 @@ function THttpClientSocket.Request(const url, method: RawByteString;
   KeepAlive: cardinal; const Header, Data, DataType: RawByteString; retry: boolean): integer;
 procedure DoRetry(Error: integer);
 begin
-  if retry then // retry once -> return error if already retried
+  if retry then // retry once -> return error only if failed after retrial 
     result := Error else begin
     Close; // close this connection
     try

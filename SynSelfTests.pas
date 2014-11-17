@@ -147,6 +147,7 @@ uses
   SynSQLite3,
   SynSQLite3Static,
   SynDBSQLite3,
+  SynDBRemote,
 {$ifndef DELPHI5OROLDER}
   mORMot,
   mORMotDB,
@@ -655,6 +656,8 @@ type
     /// test TQuery emulation class
     procedure _TQuery;
     {$endif}
+    /// test SynDB connection remote access via HTTP
+    procedure _SynDBRemote;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -6599,6 +6602,11 @@ var s,t: RawByteString;
     complen1: integer;
     {$endif}
 begin
+  for i := 1 to 200 do begin
+    t := StringOfChar(AnsiChar(i),i);
+    s := StringOfChar(AnsiChar(i),i);
+    Check(SynLZDecompress(SynLZCompress(s))=t);
+  end;
   for i := 0 to 1000 do begin
     t := RandomString(i*8);
     SetString(s,PAnsiChar(pointer(t)),length(t)); // =UniqueString
@@ -7536,7 +7544,8 @@ begin
     DataBase := TSQLRestServerDB.Create(Model,'test.db3');
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
-    Server := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[DataBase],'+',HTTP_DEFAULT_MODE,16,secSynShaAes);
+    Server := TSQLHttpServer.Create(
+      HTTP_DEFAULTPORT,[DataBase],'+',HTTP_DEFAULT_MODE,16,secSynShaAes);
     fRunConsole := fRunConsole+'using '+Server.HttpServer.APIVersion;
     Database.NoAJAXJSON := true; // expect not expanded JSON from now on
   except
@@ -8373,6 +8382,72 @@ begin
 end;
 {$endif}
 
+
+procedure TTestExternalDatabase._SynDBRemote;
+var Props: TSQLDBConnectionProperties;
+procedure DoTest(proxy: TSQLDBConnectionProperties);
+var Stmt: ISQLDBRows;
+    id,lastid,n,n1: integer;
+    {$ifndef LVCL}
+    Row: variant;
+    {$endif}
+begin
+  try
+    Check(Proxy.UserID='user');
+    Stmt := proxy.Execute('select * from People where YearOfDeath=?',[1519]);
+    Check(Stmt<>nil);
+    n := 0;
+    lastid := 0;
+    while Stmt.Step do begin
+      id := Stmt.ColumnInt('ID');
+      Check(id<>lastid);
+      Check(id>0);
+      lastid := id;
+      Check(Stmt.ColumnInt('YearOfDeath')=1519);
+      inc(n);
+    end;
+    Check(n>500);
+    n1 := n;
+    n := 0;
+    {$ifndef LVCL}
+    Row := Stmt.RowData;
+    {$endif}
+    if Stmt.Step(true) then
+    repeat
+      {$ifdef LVCL}
+      Check(Stmt.ColumnInt('ID')>0);
+      Check(Stmt.ColumnInt('YearOfDeath')=1519);
+      {$else}
+      Check(Row.ID>0);
+      Check(Row.YearOfDeath=1519);
+      {$endif}
+      inc(n);
+    until not Stmt.Step;
+    Check(n=n1);
+  finally
+    Stmt := nil;
+    proxy.Free;
+  end;
+end;
+var Server: TSQLDBServerAbstract;
+const ADDR='localhost:'+HTTP_DEFAULTPORT;
+begin
+  Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
+  try
+    DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(Props,'user','pass'));
+    Server := {$ifdef MSWINDOWS}TSQLDBServerHttpApi{$else}TSQLDBServerSockets{$endif}.
+      Create(Props,'root',HTTP_DEFAULTPORT,'user','pass');
+    try
+      DoTest(TSQLDBSocketConnectionProperties.Create(ADDR,'root','user','pass'));
+      DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'));
+      DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'));
+    finally
+      Server.Free;
+    end;
+  finally
+    Props.Free;
+  end;
+end;
 
 procedure TTestExternalDatabase.CryptedDatabase;
 var R,R2: TSQLRecordPeople;

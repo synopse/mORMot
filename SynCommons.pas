@@ -1,7 +1,7 @@
 /// common functions used by most Synopse projects
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit SynCommons;
+unit SynCommons; 
 
 (*
     This file is part of Synopse framework.
@@ -10668,8 +10668,11 @@ type
   /// used to refer to a simple authentication class
   TSynAuthenticationClass = class of TSynAuthentication;
   
-  /// simple authentication class
+  /// simple authentication class, implementing safe token/challenge security
   // - maintain a list of user / name credential pairs, and a list of sessions
+  // - is not meant to handle authorization, just plain user access validation
+  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
+  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
   TSynAuthentication = class
   protected
     fLock: TAutoLocker;
@@ -10698,8 +10701,12 @@ type
     /// delete a session
     procedure RemoveSession(aID: integer);
     /// returns the current identification token
+    // - to be sent to the client for its authentication challenge
     function CurrentToken: Int64;
-    /// to be used to compute a Hash on the client, for a given Token 
+    /// to be used to compute a Hash on the client, for a given Token
+    // - the token should have been retrieved from the server, and the client
+    // should compute and return this hash value, to perform the authentication
+    // challenge and create the session
     class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal;
   end;
 
@@ -45784,7 +45791,7 @@ end;
 
 class function TSynAuthentication.ComputeHash(Token: Int64;
   const UserName,PassWord: RawUTF8): cardinal;
-begin
+begin // rough authentication - better than nothing
   result := length(UserName);
   result := crc32c(crc32c(crc32c(result,@Token,sizeof(Token)),
     pointer(UserName),result),pointer(Password),length(PassWord));
@@ -45793,7 +45800,7 @@ end;
 function TSynAuthentication.ComputeCredential(previous: boolean;
   const UserName,PassWord: RawUTF8): cardinal;
 var tok: Int64;
-begin // rough authentication - better than nothing
+begin
   tok := GetTickCount64 div 10000;
   if previous then
     dec(tok);

@@ -50,6 +50,8 @@ unit SynDBMidasVCL;
   - first public release, corresponding to Synopse mORMot Framework 1.18,
     which is an extraction from former SynDBVCL.pas unit (which is faster
     but read/only)
+  - BREAKING CHANGE: QueryToClientDataSet() and StatementToClientDataSet()
+    renamed as overloaded functions ToClientDataSet()
 
 
 }
@@ -85,33 +87,39 @@ type
   TClientDataSet = TBufDataset;
 {$endif}
 
-/// fetch a SynDB TQuery result into a new VCL TClientDataSet
+/// fetch a SynDB TQuery result set into a new VCL TClientDataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will return a TClientDataSet instance, created from
 // the supplied TQuery content
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 // - if you need a read/only TDataSet, you should better not use this function
-// but QueryToDataSet() as defined in SynDBVCL which is much faster and uses
+// but ToDataSet() as defined in SynDBVCL which is much faster and uses
 // much less resources
-function QueryToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
+function ToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
   aMaxRowCount: integer=0): TClientDataSet; overload;
 
-/// fetch a SynDB TSQLDBStatement result into a new VCL TClientDataSet
+/// fetch a SynDB TSQLDBStatement result set into a new VCL TClientDataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will return a TClientDataSet instance, created from
 // the supplied TSQLDBStatement content
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 // - if you need a read/only TDataSet, you should better not use this function
-// but StatementToDataSet() as defined in SynDBVCL which is much faster and uses
+// but ToDataSet() function as defined in SynDBVCL which is much faster and uses
 // much less resources
-function StatementToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
+function ToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
+  aMaxRowCount: integer=0): TClientDataSet; overload;
+
+/// fetch a SynDB ISQLDBRows result set into a new VCL TClientDataSet
+// - this overloade function can use directly a result of the
+// TSQLDBConnectionProperties.Execute() method
+function ToClientDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
   aMaxRowCount: integer=0): TClientDataSet; overload;
 
 
 type
-  /// how QueryToClientDataSet/StatementToClientDataSet functions will
+  /// how ToClientDataSet functions will
   // fill the TClientDataSet instance
   TClientDataSetMode = (cdsNew, cdsAppend, cdsReplace);
 
@@ -122,7 +130,7 @@ type
 // the supplied TQuery content 
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function QueryToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery;
+function ToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery;
   aMaxRowCount: integer=0; aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false): boolean; overload;
 
 /// fetch a SynDB TSQLDBStatement result into an existing VCL TClientDataSet
@@ -131,7 +139,7 @@ function QueryToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery
 // the supplied TSQLDBStatement content
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function StatementToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
+function ToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
   aMaxRowCount: integer=0; aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false): boolean; overload;
 
 
@@ -140,25 +148,23 @@ implementation
 var
   GlobalDataSetCount: integer;
 
-function QueryToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery;
+function ToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery;
   aMaxRowCount: integer; aMode: TClientDataSetMode; aLogChange: boolean): boolean;
 begin
   if aStatement=nil then
     result := false else
-    result := StatementToClientDataSet(aDataSet,
-      aStatement.PreparedSQLDBStatement.Instance,aMaxRowCount);
+    result := ToClientDataSet(aDataSet,aStatement.PreparedSQLDBStatement.Instance,aMaxRowCount);
 end;
 
-function QueryToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
+function ToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
   aMaxRowCount: integer): TClientDataSet;
 begin
   if aStatement=nil then
     result := nil else
-    result := StatementToClientDataSet(aOwner,
-      aStatement.PreparedSQLDBStatement.Instance,aMaxRowCount);
+    result := ToClientDataSet(aOwner,aStatement.PreparedSQLDBStatement.Instance,aMaxRowCount);
 end;
 
-function StatementToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
+function ToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
   aMaxRowCount: integer): TClientDataSet;
 begin
   result := TClientDataSet.Create(aOwner);
@@ -167,7 +173,7 @@ begin
     inc(GlobalDataSetCount);
     if aStatement=nil then
       exit;
-    if not StatementToClientDataSet(result,aStatement,aMaxRowCount,cdsNew) then
+    if not ToClientDataSet(result,aStatement,aMaxRowCount,cdsNew) then
       FreeAndNil(result);
   except
     on Exception do
@@ -175,7 +181,15 @@ begin
   end;
 end;
 
-function StatementToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
+function ToClientDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
+  aMaxRowCount: integer=0): TClientDataSet; overload;
+begin
+  if aStatement=nil then
+    result := nil else
+    result := ToClientDataSet(aOwner,aStatement.Instance,aMaxRowCount);
+end;
+
+function ToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
   aMaxRowCount: integer; aMode: TClientDataSetMode; aLogChange: boolean): boolean; overload;
 var Source: TSynSQLStatementDataSet;
     Columns: array of record

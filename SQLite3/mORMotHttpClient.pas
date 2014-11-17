@@ -98,8 +98,9 @@ unit mORMotHttpClient;
         TSQLite3HttpClientWinHTTP constructors
 		
     Version 1.18
-	   - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
-	   - classes TSQLite3HttpClient* renamed as TSQLHttpClient*
+     - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
+       (see mORMotHTTPServer.pas for the server side)
+     - TSQLite3HttpClient* classes renamed as TSQLHttpClient*
      - all TSQLHttpClient* classes are now thread-safe (i.e. protected by
        a global mutex, as other TSQLRestClientURI implementations already did)
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit

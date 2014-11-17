@@ -122,6 +122,7 @@ uses
   {$endif LVCL}
   {$ifdef MSWINDOWS}
   SynBigTable in '..\SynBigTable.pas',
+  SynZipFiles in '..\SynZipFiles.pas',
   {$endif}
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
@@ -146,9 +147,9 @@ uses
   SynDBOracle in '..\SynDBOracle.pas',
   SynOleDB in '..\SynOleDB.pas',
   SynDBODBC in '..\SynDBODBC.pas',
-  SynZipFiles in '..\SynZipFiles.pas',
   {$endif}
-{$ifndef DELPHI5OROLDER}
+{$ifndef DELPHI5OROLDER}      
+  SynDBRemote in '..\SynDBRemote.pas',
   mORMotDB in 'mORMotDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
 {$endif DELPHI5OROLDER}

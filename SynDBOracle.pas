@@ -2084,7 +2084,7 @@ begin
   V := GetCol(Col,C);
   if V=nil then // column is NULL
     result := 0 else
-    case C^.ColumnType of // optimized for StatementToDataSet() in SynDBVCL.pas
+    case C^.ColumnType of // optimized for ToDataSet() in SynDBVCL.pas
     ftDouble:   result := PDouble(V)^;
     ftInt64:    result := PInt64(V)^;
     ftCurrency: begin

@@ -11,6 +11,7 @@ object Form1: TForm1
   Font.Name = 'Tahoma'
   Font.Style = []
   OldCreateOrder = False
+  OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = chkFromSQLClick
   PixelsPerInch = 96
@@ -38,29 +39,53 @@ object Form1: TForm1
     TabOrder = 1
     object lblTiming: TLabel
       Left = 456
-      Top = 16
+      Top = 13
       Width = 241
       Height = 13
       AutoSize = False
     end
-    object chkFromSQL: TCheckBox
-      Left = 32
-      Top = 16
-      Width = 137
-      Height = 17
-      Caption = 'From SQL'
-      Checked = True
-      State = cbChecked
-      TabOrder = 0
-      OnClick = chkFromSQLClick
+    object lblFrom: TLabel
+      Left = 40
+      Top = 12
+      Width = 28
+      Height = 13
+      Caption = 'From:'
     end
     object chkViaTClientDataSet: TCheckBox
       Left = 216
-      Top = 16
-      Width = 193
+      Top = 12
+      Width = 137
       Height = 17
       Caption = 'Via TClientDataSet'
+      TabOrder = 0
+      OnClick = chkFromSQLClick
+    end
+    object cbbDataSource: TComboBox
+      Left = 72
+      Top = 10
+      Width = 129
+      Height = 21
+      Style = csDropDownList
+      ItemHeight = 13
+      ItemIndex = 0
       TabOrder = 1
+      Text = 'JSON file'
+      OnChange = chkFromSQLClick
+      Items.Strings = (
+        'JSON file'
+        'SQLite3 direct'
+        'SQLite3 proxy'
+        'SQLite3 HTTP WinHTTP'
+        'SQLite3 HTTP WinINet'
+        'SQLite3 HTTP Sockets')
+    end
+    object btnRefresh: TButton
+      Left = 360
+      Top = 8
+      Width = 75
+      Height = 25
+      Caption = 'Refresh'
+      TabOrder = 2
       OnClick = chkFromSQLClick
     end
   end

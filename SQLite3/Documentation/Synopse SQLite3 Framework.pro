@@ -727,7 +727,7 @@ Even if {\i mORMot} will be more easily used in a project designed from scratch,
 Due to its modular design, you can integrate some framework bricks to your existing application:
 - You may add logging to your code - see @16@, to track unresolved issues, and add customer-side performance profiling;
 - Use low-level classes like {\f1\fs20 record} or {\i dynamic array} wrappers - see @48@, or our dynamic document storage via {\f1\fs20 variant} - see @80@, including @*JSON@ or binary persistence;
-- You can use the direct DB layers, including the {\f1\fs20 TQuery} emulation class, to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@, or switch to a @*NoSQL@ database - see @83@;
+- You can use the direct DB layers, including the {\f1\fs20 @*TQuery@} emulation class - see @133@ - to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@, or switch to a @*NoSQL@ database - see @83@;
 - Reports could benefit of the {\f1\fs20 mORMotReport.pas} code-based system, which is very easy to use even on the server side (serving @*PDF@ files), when your business logic heavily relies on objects, not direct DB - see @67@;
 - HTTP requests may be made available using Client-Server services via methods - see @49@, e.g. for rendering HTML pages generated on the fly with {\i @*Mustache@} templates- see @81@, pictures or @*PDF@ reports;
 - You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migration to @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
@@ -4694,6 +4694,7 @@ The current list of handled data access libraries is:
 |{\i @*ODBC@}|{\f1\fs20 SynDBODBC.pas}|{\i MS SQL, FireBird, MySQL, PostgreSQL, IBM DB2} or others\line See @118@
 |{\i @*Zeos@Lib}|{\f1\fs20 SynDBZeos.pas}|{\i MS SQL, SQLite3, FireBird, MySQL, PostgreSQL}\line See @94@
 |{\f1\fs20 DB.pas}/\line {\f1\fs20 @**TDataset@}|{\f1\fs20 SynDBDataset.pas}|@*NexusDB@ and databases supported by @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...\line See @119@
+|HTTP|{\f1\fs20 SynDBRemote.pas}|remote access to any {\f1\fs20 SynDB} database, over HTTP
 |%
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
 Thanks to the design of our {\f1\fs20 SynDB.pas} classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
@@ -4702,6 +4703,8 @@ In fact, {\i OleDB} is a good candidate for database access with good performanc
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
 Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used, with fast direct access to the underlying RDBMS client library. Since the {\i ZDBC} library does not rely on {\f1\fs20 DB.pas}, and by-passes the slow {\f1\fs20 TDataSet} component, its performance is very high. The {\i ZDBC} maintainers did a lot of optimizations, especially to work with {\i mORMot}, and this library is a first-class citizen to work with our framework.
 Since the same 1.18 revision, {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB.pas} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB.pas} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
+Last but not least, the {\f1\fs20 SynDBRemote.pas} unit allows you to  create database applications that perform SQL operations on a remote {\f1\fs20 SynDB} HTTP server, instead of a database server. You can create connections just like any other {\f1\fs20 SynDB} database, but the transmission would take place over HTTP, with no need to install a database client with your application - see @131@.
+The following connections are therefore possible:
 \graph SynDBLayers SynDB Architecture
 \SynDB\Zeos
 =Zeos=ZDBC¤(Zeos)
@@ -4710,6 +4713,8 @@ Since the same 1.18 revision, {\f1\fs20 DB.pas} can be used with our {\f1\fs20 S
 \SynDB\Oracle
 \SynDB\SQLite3
 \SynDB\DB
+\SynDB\SynDB¤Remote
+\SynDB¤Remote\any RDBMS
 =DB=DB.pas¤TDataset
 \Zeos\Oracle
 \Zeos\MS SQL
@@ -4794,11 +4799,13 @@ The {\f1\fs20 @**SynDB@.pas} units have the following features:
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
 - Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
-- @*Late-binding@ column access, via a custom variant type;
+- @*Late-binding@ column access, via a custom variant type when accessing the result sets;
+- two kind of optimized {\f1\fs20 @*TDataSet@} result sets: one based on {\f1\fs20 @*TClientDataSet@}, and a much faster read-only {\f1\fs20 @*TSynSQLStatementDataSet@}
 - Direct UTF-8 @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
 - High-level catalog / database layout abstract methods, able to retrieve the table and column properties (including indexes), for database reverse-engineering; provide also SQL statements to create a table or an index in a database-abstract manner; those features will be used directly by our ORM;
-- Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 TQuery}-like wrapper;
-- {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to the deprecated @*BDE@ technology;
+- Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 @*TQuery@}-like wrapper;
+- {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to {\f1\fs20 DB.pas} based code (including the deprecated @*BDE@ technology), with huge speed improvement for result sets (since we bypass the slow {\f1\fs20 TDataSet} component);
+- Fast and safe remote access over HTTP to any {\f1\fs20 SynDB} engine, without the need to deploy the RDBMS client library with the application;
 - Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, on all supported engines; it is also a good sample program of a stand-alone usage of those libraries.
 :  Data types
 Of course, our ORM does not need a whole feature set (do not expect to use this database classes with your VCL DB RAD components), but handles directly the basic SQL column types, as needed by our ORM (derived from SQLite's internal column types): {\f1\fs20 NULL, Int64, Double, @*Currency@, DateTime, @*RawUTF8@} and {\f1\fs20 BLOB}.
@@ -4849,8 +4856,11 @@ Here are the units implementing the external database-agnostic features:
 |{\f1\fs20 SynDBOracle.pas}|@*Oracle@ DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|@*SQLite3@ direct access classes
 |{\f1\fs20 SynDBDataset.pas}\line {\f1\fs20 SynDBFireDAC.pas}\line {\f1\fs20 SynDBUniDAC.pas}\line {\f1\fs20 SynDBNexusDB.pas}\line {\f1\fs20 SynDBBDE.pas}|{\f1\fs20 @*TDataset@} ({\f1\fs20 DB.pas}) access classes
+|{\f1\fs20 SynDBRemote.pas}|remote access over HTTP
+|{\f1\fs20 SynDBVCL}|read/only {\f1\fs20 @*TSynSQLStatementDataSet@} result sets
+|{\f1\fs20 SynDBMidasVCL}|read/write {\f1\fs20 @*TClientDataSet@} result sets
 |%
-It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB.pas}, switching from one database engine to another is just a matter of changing a class type.
+It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework (even the remote access). They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB.pas}, switching from one database engine to another (even a remote HTTP access) is just a matter of changing one class type.
 :  Classes
 The data is accessed via three families of classes:
 - {\i Connection properties}, which store the database high-level properties (like database implementation classes, server and database name, user name and password);
@@ -4880,6 +4890,10 @@ rankdir=LR;
 \TODBCConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
 \TSQLDBNexusDBConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
 \TSQLDBConnectionPropertiesThreadSafe\TSQLDBConnectionProperties
+\TSQLDBHTTPConnectionPropertiesAbstract\TSQLDBConnectionProperties
+\TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinINetConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
 \
 Those classes are the root classes of the {\f1\fs20 SynDB.pas} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
 Then the following {\i connection} classes are defined:
@@ -4895,6 +4909,7 @@ rankdir=LR;
 \TSQLDBZEOSConnection\TSQLDBConnectionThreadSafe
 \TSQLDBNexusDBConnection\TSQLDBConnectionThreadSafe
 \TSQLDBSQLite3Connection\TSQLDBConnection
+\TSQLDBProxyConnection\TSQLDBConnection
 \
 Each connection may create a corresponding {\i statement} instance:
 \graph HierTOleDBStatement TOleDBStatement classes hierarchy
@@ -4911,6 +4926,7 @@ Each connection may create a corresponding {\i statement} instance:
 \TSQLDBStatementWithParams\TSQLDBStatement
 \TSQLDBSQLite3Statement\TSQLDBStatement
 \TOleDBStatement\TSQLDBStatement
+\TSQLDBProxyStatement\TSQLDBStatement
 \
 In the above hierarchy, {\f1\fs20 TSQLDBDatasetStatementAbstract} is used to allow the use of custom classes for parameter process, e.g. {\f1\fs20 TADParams} for @*FireDAC@ (which features {\i Array DML}).
 Some dedicated {\f1\fs20 Exception} classes are also defined:
@@ -4923,6 +4939,7 @@ Some dedicated {\f1\fs20 Exception} classes are also defined:
 \EODBCException\ESQLDBException
 \EOleDBException\ESQLDBException
 \ESQLDBZEOS\ESQLDBException
+\ESQLDBRemote\ESQLDBException
 \ESQLDBOracle\Exception
 \ESQLQueryException\Exception
 \
@@ -4987,6 +5004,47 @@ In all cases, using the textual version of the column name ({\f1\fs20 'AccountNu
 But to be honest, after profiling, most of the time is spend in the {\f1\fs20 Step} method, especially in {\f1\fs20 fRowSet.GetData}. In practice, I was not able to notice any speed increase worth mentioning, with the code above.
 Our name lookup via a hashing function (i.e. {\f1\fs20 TDynArrayHashed}) just does its purpose very well.
 On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons.pas} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
+:134  TDataset and SynDB
+Since our {\f1\fs20 SynDB.pas} unit does not rely on the Delphi's {\f1\fs20 DB.pas} unit, its result sets do not inherit from the {\f1\fs20 @**TDataset@}.
+As a benefit, those result sets would be much faster, when accessed from your object code.\line But as a drawback, you won't be able to use them in your regular VCL applications.
+In order to easily use the {\f1\fs20 SynDB.pas} unit with VCL components, you can create {\f1\fs20 TDataSet} results sets from any {\f1\fs20 SynDB} query.\line You have access to two kind of optimized {\f1\fs20 @*TDataSet@} result sets:
+|%30%15%25%30
+|\b TDataSet class|Operation|Unit|Remark\b0
+|{\f1\fs20 @*TClientDataSet@}|read/write|{\f1\fs20 SynDBMidasVCL.pas}|Slow due to memory copy
+|{\f1\fs20 @*TSynSQLStatementDataSet@}|read only|{\f1\fs20 SynDBVCL.pas}|Fast due to direct mapping
+|%
+You can therefore assign the result of a {\f1\fs20 SynDB} request to any {\f1\fs20 TDataSource}, as such for our fast {\f1\fs20 TSynSQLStatementDataSet} read/only storage:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToDataSet(ds1,aProps.Execute('select * from people',[]));
+or for a {\f1\fs20 TClientDataSet} kind of in-memory storage:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToClientDataSet(ds1,aProps.Execute('select * from people',[]));
+See sample "{\f1\fs20 17 - TClientDataset use}" to find out more about using such {\f1\fs20 TDataSet}, including some speed information. You need to have run the {\f1\fs20 TestSQL3.dpr} set of regression tests before, to have the expected {\i SQlite3} data file.
+:133  TQuery emulation class
+The {\f1\fs20 SynDB.pas} unit offers a {\f1\fs20 @**TQuery@}-like class. This class emulates regular {\f1\fs20 TQuery} classes, without inheriting from {\f1\fs20 DB.pas} nor its slow {\f1\fs20 TDataSet}.
+It mimic basic {\f1\fs20 TQuery} VCL methods, with the following benefits:
+- Does not inherit from {\f1\fs20 TDataset}, but has its own light implementation over {\f1\fs20 SynDB.pas} {\f1\fs20 ISQLDBStatement} result sets, so is usually much faster;
+- Will be also faster for field and parameters access by name - or even index;
+- Is Unicode-ready, even with older pre-Unicode version of Delphi, able to return the data as {\f1\fs20 WideString}, independently from the current system charset;
+- You can still create a {\f1\fs20 TDataSet} from {\f1\fs20 SynDB}'s {\f1\fs20 TQuery}, via the {\f1\fs20 ToDataSet()} function defined in {\f1\fs20 SynDBVCL.pas}.
+Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it directly as a regular replacement for your RAD code.\line But if your application is data-centric and tried to encapsulate its business logic with object, you can still replace directly your existing code with the following:
+!  Q := TQuery.Create(aSQLDBConnection);
+!  try
+!    Q.SQL.Clear; // optional
+!    Q.SQL.Add('select * from DOMAIN.TABLE');
+!    Q.SQL.Add('  WHERE ID_DETAIL=:detail;');
+!    Q.ParamByName('DETAIL').AsString := '123420020100000430015';
+!    Q.Open;
+!    Q.First;    // optional
+!    while not Q.Eof do begin
+!      assert(Q.FieldByName('id_detail').AsString='123420020100000430015');
+!      Q.Next;
+!    end;
+!    Q.Close;    // optional
+!  finally
+!    Q.Free;
+!  end;
+You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application... See @66@.
 \page
 : SynDB database access
 From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
@@ -5233,6 +5291,83 @@ This library gives pretty stable results, but lack of the array binding feature,
 \Oracle=Paradox=Informix
 \
 Please do not use the BDE on any new project!\line You should better switch to another access layer.
+:131  Remote access via HTTP
+The {\f1\fs20 SynDBRemote.pas} unit allows you to create database applications that perform SQL operations on a remote HTTP server, instead of a database server. You can create connections just like any other {\f1\fs20 SynDB.pas} database, but the transmission would take place over HTTP. As a result, no database client is to be deployed on the end user application: it will just use HTTP requests, even over Internet. You can use all the features of {\f1\fs20 SynDB.pas} classes, with the ease of one optimized HTTP connection.
+\graph SynDBRemoteOverview SynDB Remote access Overview
+node [shape=box];
+subgraph cluster_0 {
+"Client 1";
+label="Office 1";
+}
+subgraph cluster_1 {
+"Client 2";
+label="Remote A";
+}
+subgraph cluster_3 {
+"Client 3";
+label="Office 2";
+}
+subgraph cluster_4 {
+"Client 4";
+label="Remote B";
+}
+subgraph cluster_2 {
+\Client 1\DB\direct
+\Client 3\DB
+\SynDBRemote¤Server\DB\local¤network
+\Client 2\SynDBRemote¤Server\HTTP¤HTTPS¤Internet
+\Client 4\SynDBRemote¤Server
+label="Server";
+}
+\
+This feature is {\i not} part of our @*REST@ful @*ORM@, so does not use the {\f1\fs20 mORMot.pas} unit, but its own optimized protocol, using enhanced security (user authentication and optional HTTPS) and automatic data compression. Only the HTTP client and server classes, from the {\f1\fs20 SynCrtSock.pas} unit, are used.
+Since your application can use both {\f1\fs20 @*TDataSet@} - see @134@ - and emulated {\f1\fs20 @*TQuery@} - see @133@, this new mean of transmission may make it easy to convert existing Delphi client-server applications into @7@ with minimal changes in source code. Then, for your new code, you may switch to a @*SOA@ / @*ORM@ design, using {\i mORMot}'s @*REST@ful abilities - see @6@.
+To publish your {\f1\fs20 SynDB.pas} connection, you just need to initialize one of the {\f1\fs20 TSQLDBServer*} classes defined in {\f1\fs20 SynDBRemote.pas}:
+\graph HierTSQLDBServerSockets SynDB Remote access Server classes hierarchy
+\TSQLDBServerHttpApi\TSQLDBServerAbstract
+\TSQLDBServerSockets\TSQLDBServerAbstract
+\
+You can define either a HTTP server based on the socket API - {\f1\fs20 TSQLDBServerSockets} - or the more stable and fast {\f1\fs20 TSQLDBServerHttpApi} class (under {\i Windows} only), which uses the {\f1\fs20 http.sys} kernel mode HTTP server available since Windows XP - see @88@.
+For the client side, you could use the following classes also defined in {\f1\fs20 SynDBRemote.pas}:
+\graph HierTSQLDBWinINetConnectionProperties SynDB Remote access Client classes hierarchy
+\TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinINetConnectionProperties\TSQLDBWinHTTPConnectionProperties
+\
+As you can see, you may choose between a pure socket API client, one using {\f1\fs20 WinINet}, or another using {\f1\fs20 WinHTTP}. The latest is the more stable under {\i Windows} - see @135@ for a comparison of the diverse APIs.
+To define a HTTP server, you may write:
+!uses SynDB, // RDBMS core
+!     SynDBSQLite3, SynSQLite3Static, // static SQLite3 engine
+!     SynDBRemote; // for HTTP server
+! ...
+!var Props: TSQLDBConnectionProperties;
+!    HttpServer: TSQLDBServerAbstract;
+! ...
+!  Props := TSQLDBSQLite3ConnectionProperties.Create('data.db3','','','');
+!!  HttpServer := TSQLDBServerHttpApi.Create(Props,'remote','8092','user','pass');
+The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/remote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
+On the client side, you can then write:
+!uses SynDB, // RDBMS core
+!     SynDBRemote; // for HTTP server
+! ...
+!var Props: TSQLDBConnectionProperties;
+! ...
+!!  Props := TSQLDBWinHTTPConnectionProperties.Create('1.2.3.4:8092','root','user','pass');
+As you can see, there is no link to {\f1\fs20 SynDBSQLite3.pas} nor {\f1\fs20 SynSQLite3Static.pas} on the client side. Just the HTTP link is needed. No need to deploy the RDBMS client libraries with your application, nor setup the local network firewall.
+We defined here a single user, with 'user' / 'pass' credentials, but you may manage more users on the server side, using the {\f1\fs20 Authenticate} property of {\f1\fs20 TSQLDBServerAbstract}. Note that in our remote access, user management does not match the RDBMS user rights: you should better have your own set of users at application level, for higher security, and a better integration with your business logic. If creating a new user on a RDBMS could be painful, it is pretty easy on our {\f1\fs20 SynDBRemote.pas} side.
+Then, you execute your favorite SQL using the connection just as usual:
+!procedure Test(Props: TSQLDBConnectionProperties);
+!var Stmt: ISQLDBRows;
+!begin
+!  Stmt := Props.Execute('select * from People where YearOfDeath=?',[1519]);
+!  while Stmt.Step do begin
+!    assert(Stmt.ColumnInt('ID')>0);
+!    assert(Stmt.ColumnInt('YearOfDeath')=1519);
+!   end;
+!end;
+You may even use this remote connection e.g. using a stand-alone shared {\i SQLite3} database as high performance but low maintenance client-server database engine.
+The transmission protocol use an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You could even publish your server over HTTPS, if needed.
+Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design. But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 \page
 : ORM Integration
 :  Code-first or database-first
@@ -6747,7 +6882,7 @@ The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKi
 All {\i mORMot} samples are compiled with this flag, as such:
 ! aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
 Note this does not follow default security policy of Windows. But it will make your application development easier.
-:  HTTP client(s)
+:135  HTTP client(s)
 In fact, there are several implementation of a @**HTTP@/1.1 clients, according to this class hierarchy:
 \graph ClientRESTHttpClasses HTTP/1.1 Client RESTful classes
 \TSQLHttpClientWinINet\TSQLHttpClientWinGeneric
@@ -12570,7 +12705,7 @@ In the same {\i Root folder}, the external database-agnostic units are located:
 |{\f1\fs20 SynDBODBC.pas}|fast @*ODBC@ direct access classes
 |{\f1\fs20 SynDBOracle.pas}|{\i @*Oracle@} DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|{\i @*SQLite3@} direct access classes
-|{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 TQuery}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
+|{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 @*TQuery@}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
 |{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB.pas} data access
 |{\f1\fs20 SynDBZEOS.pas}|{\i @*Zeos@Lib} / ZDBC direct access classes
 |%
