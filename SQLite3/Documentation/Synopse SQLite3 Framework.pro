@@ -3696,6 +3696,7 @@ In these tables:
 - 'SQLite3 (mem)' stands for the internal {\i SQLite3} engine running in memory;
 - 'SQLite3 (ext ...)' is about access to a {\i SQLite3} engine as external database - see @27@, either as file or memory;
 - '{\f1\fs20 TObjectList}' indicates a {\f1\fs20 TSQLRestStorageInMemory} instance - see @57@ - either static (with no SQL support) or virtual (i.e. SQL featured via {\i SQLite3} virtual table mechanism) which may persist the data on disk as JSON or compressed binary;
+- 'HTTP SQLite3' stands for a {\i SQLite3} engine published over HTTP using our {\f1\fs20 SynDBRemote.pas} unit - see @131@, then accessed as an external database by our ORM;
 - '@*NexusDB@' is the free embedded edition, available from official site;
 - 'Jet' stands for a {\i @*Jet/MSAccess@} database engine, accessed via OleDB.
 - 'Oracle' shows the results of our direct OCI access layer ({\f1\fs20 SynDBOracle.pas});
@@ -3739,6 +3740,7 @@ Here are some insertion speed values, in objects/second:
 |{\b SQLite3 (ext off)}|2245|47961|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
 |{\b SQLite3 (ext mem)}|101440|211389|113530|209713
+|{\b HTTP SQLite3}|2165|36464|2079|38478
 |{\b MongoDB (ack)}|10081|84585|9800|85232
 |{\b MongoDB (no ack)}|33223|273672|34665|274393
 |{\b ODBC SQLite3}|492|11746|35367|82425
@@ -3798,6 +3800,7 @@ Here are some reading speed values, in objects/second:
 |{\b SQLite3 (ext off)}|133696|262977|543065
 |{\b SQLite3 (ext off exc)}|134698|264186|558596
 |{\b SQLite3 (ext mem)}|137487|259713|557475
+|{\b HTTP SQLite3}|2198|209231|340460
 |{\b MongoDB (ack)}|8002|262353|271268
 |{\b MongoDB (no ack)}|8234|272079|274582
 |{\b ODBC SQLite3}|19461|136600|201280
@@ -5367,21 +5370,25 @@ Then, you execute your favorite SQL using the connection just as usual:
 !    assert(Stmt.ColumnInt('YearOfDeath')=1519);
 !   end;
 !end;
-You may even use this remote connection e.g. using a stand-alone shared {\i SQLite3} database as high performance but low maintenance client-server database engine. You may create it as such on the server side:
+Or you may use it with VCL components, using the {\f1\fs20 SynDBVCL.pas} unit:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToDataSet(ds1,Props.Execute('select * from people',[]));
+The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshaling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
+You may use this remote connection feature e.g. to mutate a stand-alone shared {\i SQLite3} database into a high performance but low maintenance client-server database engine. You may create it as such on the server side:
 !var props: TSQLDBSQLite3ConnectionProperties;
 !    server: TSQLDBServerHttpApi;
 !...
 !  props := TSQLDBSQLite3ConnectionProperties.Create('database.db3','','','');
 !  props.MainSQLite3DB.Synchronous := smOff;
-!  props.MainSQLite3DB.LockingMode := lmExclusive;
+!  props.MainSQLite3DB.LockingMode := lmExclusive; // tune the performance
 !  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
 !...
 You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*TSQLRestServerDB@} used for our @*REST@ful ORM - see @42@) by creating the properties as such:
 !  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
 !  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
-Our {\f1\fs20 @*SynDBExplorer@} tool is able to server any remote {\f1\fs20 SynDB} connection, or connect to it via HTTP. It could be very handy, even for debugging purposes.
+Last but not least, our {\f1\fs20 @*SynDBExplorer@} tool is able to server any remote {\f1\fs20 SynDB} connection, or connect to it via HTTP. It could be very handy, even for debugging purposes.
 To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the start button.
-To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values set on the server side, e.g. with the default values "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password. You would be able to access the main server instance remotely, just as if the database was accessed via a regular client. If the server side database is {\i SQLite3}, you just change this local engine into a true client-server database - you may be amazed by the resulting performance.
+To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values set on the server side, e.g. with the default values "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password. You would be able to access the main server instance remotely, just as if the database was accessed via a regular client. If the server side database is {\i SQLite3}, you just mutated this local engine into a true client-server database - you may be amazed by the resulting performance.
 The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
 Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design. But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 \page
