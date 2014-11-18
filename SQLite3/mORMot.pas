@@ -1508,13 +1508,13 @@ type
     // - FieldValues[] strings will be quoted and/or inlined depending on Params
     // - if RowID is set, a RowID column will be added within the returned content
     procedure Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-      Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
+      Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - overloaded method expecting a RawUTF8 buffer, making a private copy
     // of the JSON content to avoid unexpected in-place modification, then
     // calling Decode(P: PUTF8Char) to perform the process
     procedure Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
-      Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
+      Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// encode as a SQL-ready INSERT or UPDATE statement
     // - after a successfull call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
@@ -19213,7 +19213,7 @@ begin
 end;
 
 procedure TJSONObjectDecoder.Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Params: TJSONObjectDecoderParams; RowID: TID; ReplaceRowIDWithID: boolean);
+  Params: TJSONObjectDecoderParams; const RowID: TID; ReplaceRowIDWithID: boolean);
 var EndOfObject: AnsiChar;
 
   procedure GetSQLValue(ndx: integer);
@@ -19328,7 +19328,7 @@ begin
       if ReplaceRowIDWithID then
         FieldNames[0] := 'ID' else
         FieldNames[0] := 'RowID';
-      Int64ToUtf8(RowID,FieldValues[0]);
+      FieldValues[0] := Int64ToUtf8(RowID); // Int64ToUtf8(RowID,FieldValues[0]) fails on D2007
       FieldCount := 1;
       FieldNameLen := Length(FieldNames[0]);
       FieldValueLen := Length(FieldValues[0]);
@@ -19376,7 +19376,7 @@ begin
 end;
 
 procedure TJSONObjectDecoder.Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
-  Params: TJSONObjectDecoderParams; RowID: TID=0; ReplaceRowIDWithID: Boolean=false);
+  Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false);
 var P: PUTF8Char;
 begin
   if JSON='' then

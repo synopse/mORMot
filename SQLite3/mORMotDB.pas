@@ -1102,7 +1102,7 @@ begin
           for j := 0 to high(Fields) do
             Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
           if Occasion=soUpdate then // ?=ID parameter
-            Int64ToUtf8(fBatchIDs[i],Values[length(Fields),n]);
+            Values[length(Fields),n] := Int64ToUtf8(fBatchIDs[i]); // D2007 fails with var
           BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
           if n+1>=max then
             break; // do not send too much items at once, for better speed
@@ -1119,7 +1119,7 @@ begin
         SetLength(Values,1);
         SetLength(Values[0],n);
         for i := 0 to n-1 do
-          Int64ToUTF8(fBatchIDs[BatchBegin+i],Values[0,i]);
+          Values[0,i] := Int64ToUTF8(fBatchIDs[BatchBegin+i]); // var fails on D2007
       end;
       end;
       n := BatchEnd-BatchBegin+1;
@@ -1778,8 +1778,8 @@ begin
     end;
     // compute SQL statement and associated bound parameters
     SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
-    if Occasion=soUpdate then
-      Int64ToUTF8(UpdatedID,Decoder.FieldValues[Decoder.FieldCount-1]);
+    if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007
+      Decoder.FieldValues[Decoder.FieldCount-1] := Int64ToUTF8(UpdatedID);
     // execute statement
     Query := fProperties.NewThreadSafeStatementPrepared(SQL,false);
     if Query=nil then

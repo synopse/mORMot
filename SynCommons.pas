@@ -1889,7 +1889,7 @@ procedure Int32ToUTF8(Value : integer; var result: RawUTF8); overload;
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - result as var parameter saves a local assignment and a try..finally
-procedure Int64ToUtf8(const Value: Int64; var result: RawUTF8); overload;
+procedure Int64ToUtf8(Value: Int64; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
@@ -13808,7 +13808,7 @@ begin
   SetRawUTF8(result,P,@tmp[15]-P);
 end;
 
-procedure Int64ToUtf8(const Value: Int64; var result: RawUTF8);
+procedure Int64ToUtf8(Value: Int64; var result: RawUTF8);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -31663,7 +31663,8 @@ begin
   if (Value=nil) or
      //((ElemSize<>sizeof(pointer)) and (StoredElemSize<>ElemSize)) or
      ((ElemType=nil) and (Source^<>#0) or
-     ((ElemType<>nil) and (Source^<>PAnsiChar(ElemType)^))) then begin
+     ((ElemType<>nil) and (Source^=#0{<>PAnsiChar(ElemType)^}))) then begin
+     // ignore ElemType^ to be cross-FPC/Delphi compatible
     result := nil; // invalid Source content
     exit;
   end;
