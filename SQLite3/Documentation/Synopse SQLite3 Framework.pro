@@ -3696,7 +3696,7 @@ In these tables:
 - 'SQLite3 (mem)' stands for the internal {\i SQLite3} engine running in memory;
 - 'SQLite3 (ext ...)' is about access to a {\i SQLite3} engine as external database - see @27@, either as file or memory;
 - '{\f1\fs20 TObjectList}' indicates a {\f1\fs20 TSQLRestStorageInMemory} instance - see @57@ - either static (with no SQL support) or virtual (i.e. SQL featured via {\i SQLite3} virtual table mechanism) which may persist the data on disk as JSON or compressed binary;
-- 'HTTP SQLite3' stands for a {\i SQLite3} engine published over HTTP using our {\f1\fs20 SynDBRemote.pas} unit - see @131@, then accessed as an external database by our ORM;
+- 'WinHTTP SQLite3' and 'Sockets SQLite3' stands for a {\i SQLite3} engine published over HTTP using our {\f1\fs20 SynDBRemote.pas} unit using the {\f1\fs20 WinHTTP} API or plain sockets on the client side - see @131@, then accessed as an external database by our ORM;
 - '@*NexusDB@' is the free embedded edition, available from official site;
 - 'Jet' stands for a {\i @*Jet/MSAccess@} database engine, accessed via OleDB.
 - 'Oracle' shows the results of our direct OCI access layer ({\f1\fs20 SynDBOracle.pas});
@@ -3740,7 +3740,8 @@ Here are some insertion speed values, in objects/second:
 |{\b SQLite3 (ext off)}|2245|47961|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
 |{\b SQLite3 (ext mem)}|101440|211389|113530|209713
-|{\b HTTP SQLite3}|2165|36464|2079|38478
+|{\b WinHTTP SQLite3}|2165|36464|2079|38478
+|{\b Sockets SQLite3}|8118|75251|8553|80550
 |{\b MongoDB (ack)}|10081|84585|9800|85232
 |{\b MongoDB (no ack)}|33223|273672|34665|274393
 |{\b ODBC SQLite3}|492|11746|35367|82425
@@ -3800,7 +3801,8 @@ Here are some reading speed values, in objects/second:
 |{\b SQLite3 (ext off)}|133696|262977|543065
 |{\b SQLite3 (ext off exc)}|134698|264186|558596
 |{\b SQLite3 (ext mem)}|137487|259713|557475
-|{\b HTTP SQLite3}|2198|209231|340460
+|{\b WinHTTP SQLite3}|2198|209231|340460
+|{\b Sockets SQLite3}|8524|210260|387687
 |{\b MongoDB (ack)}|8002|262353|271268
 |{\b MongoDB (no ack)}|8234|272079|274582
 |{\b ODBC SQLite3}|19461|136600|201280
@@ -3851,6 +3853,7 @@ During the tests, internal caching - see @37@ and @38@ - was disabled, so you ma
 When declared as virtual table (via a {\f1\fs20 VirtualTableRegister} call), you have the full power of SQL (including @*JOIN@s) at hand, with incredibly fast @*CRUD@ operations: 100,000 requests per second for objects read and write, including serialization and Client-Server communication!
 Some providers are first-class citizens to {\i mORMot}, like {\i @*SQLite3@}, {\i @*Oracle@}, {\i @*MS SQL@}, @*PostgreSQL@, @*MySQL@ or IBM @*DB2@. You can connect to them without the bottleneck of the {\f1\fs20 DB.pas} unit, nor any restriction of your {\i Delphi} license (a {\i Starter edition} is enough).
 First of all, {\i SQLite3} is still to be considered, even for a production server. Thanks to {\i mORMot}'s architecture and design, this "embedded" database could be used as main database engine for a client-server application with heavy concurrent access - if you have doubts about its scaling abilities, see @25@. Here, "embedded" is not restricted to "mobile", but sounds like a self-contained, zero-configuration proven engine.
+The remote access via HTTP gives pretty good results, and in this local benchmark, plain socket client (i.e. {\f1\fs20 TSQLDBSocketConnectionProperties} class) gives better results that the {\f1\fs20 WinHTTP} API (using {\f1\fs20 TSQLDBWinHTTPConnectionProperties} on the client side). But in real use, e.g. over the Internet, the {\f1\fs20 WinHTTP} API has been reported as more stable, so may be preferred on production. With a {\i SQlite3} backend, this offers pretty good performance, and the benefit of using standard HTTP for its transport.
 Most recognized {\i closed source} databases are available:
 - Direct access to {\i Oracle} gives impressive results in BATCH mode (aka @*array bind@ing). It may be an obligation if your end-customer stores already its data in such a server, for instance, and want to leverage the licensing cost of its own IT solution. {\i Oracle Express} edition is free, but somewhat heavy and limited in terms of data/hardware size (see its licensing terms);
 - {\i MS SQL Server}, directly accessed via {\i OleDB} (or {\i ODBC}) gives pretty good timing. A {\i MS SQL Server 2008 R2 Express} instance is pretty well integrated with the {\i Windows} environment, for a very affordable price (i.e. for free) - the {\i LocalDB} (MSI installer) edition is enough to start with, but also with data/hardware size limitation, just like {\i Oracle Express};
@@ -4809,7 +4812,7 @@ The {\f1\fs20 @**SynDB@.pas} units have the following features:
 - Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 @*TQuery@}-like wrapper;
 - {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to {\f1\fs20 DB.pas} based code (including the deprecated @*BDE@ technology), with huge speed improvement for result sets (since we bypass the slow {\f1\fs20 TDataSet} component);
 - Fast and safe remote access over HTTP to any {\f1\fs20 SynDB} engine, without the need to deploy the RDBMS client library with the application;
-- Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, on all supported engines; it is also a good sample program of a stand-alone usage of those libraries.
+- Free {\f1\fs20 @**SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, on all supported engines, and publish as server or consume as client {\f1\fs20 SynDB} remote access over HTTP - see @131@; it is also a good sample program of a stand-alone usage of those libraries.
 :  Data types
 Of course, our ORM does not need a whole feature set (do not expect to use this database classes with your VCL DB RAD components), but handles directly the basic SQL column types, as needed by our ORM (derived from SQLite's internal column types): {\f1\fs20 NULL, Int64, Double, @*Currency@, DateTime, @*RawUTF8@} and {\f1\fs20 BLOB}.
 They are defined as such in {\f1\fs20 @*SynDB@.pas}:
@@ -5294,6 +5297,7 @@ This library gives pretty stable results, but lack of the array binding feature,
 \Oracle=Paradox=Informix
 \
 Please do not use the BDE on any new project!\line You should better switch to another access layer.
+\page
 :131  Remote access via HTTP
 The {\f1\fs20 SynDBRemote.pas} unit allows you to create database applications that perform SQL operations on a remote HTTP server, instead of a database server. You can create connections just like any other {\f1\fs20 SynDB.pas} database, but the transmission would take place over HTTP. As a result, no database client is to be deployed on the end user application: it will just use HTTP requests, even over Internet. You can use all the features of {\f1\fs20 SynDB.pas} classes, with the ease of one optimized HTTP connection.
 \graph SynDBRemoteOverview SynDB Remote access Overview
@@ -5325,6 +5329,8 @@ label="Server";
 \
 This feature is {\i not} part of our @*REST@ful @*ORM@, so does not use the {\f1\fs20 mORMot.pas} unit, but its own optimized protocol, using enhanced security (user authentication and optional HTTPS) and automatic data compression. Only the HTTP client and server classes, from the {\f1\fs20 SynCrtSock.pas} unit, are used.
 Since your application can use both {\f1\fs20 @*TDataSet@} - see @134@ - and emulated {\f1\fs20 @*TQuery@} - see @133@, this new mean of transmission may make it easy to convert existing Delphi client-server applications into @7@ with minimal changes in source code. Then, for your new code, you may switch to a @*SOA@ / @*ORM@ design, using {\i mORMot}'s @*REST@ful abilities - see @6@.
+The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
+:   Server and Client classes
 To publish your {\f1\fs20 SynDB.pas} connection, you just need to initialize one of the {\f1\fs20 TSQLDBServer*} classes defined in {\f1\fs20 SynDBRemote.pas}:
 \graph HierTSQLDBServerSockets SynDB Remote access Server classes hierarchy
 \TSQLDBServerHttpApi\TSQLDBServerAbstract
@@ -5337,7 +5343,8 @@ For the client side, you could use the following classes also defined in {\f1\fs
 \TSQLDBWinHTTPConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
 \TSQLDBWinINetConnectionProperties\TSQLDBWinHTTPConnectionProperties
 \
-As you can see, you may choose between a pure socket API client, one using {\f1\fs20 WinINet}, or another using {\f1\fs20 WinHTTP}. The latest is the more stable under {\i Windows} - see @135@ for a comparison of the diverse APIs.
+As you can see, you may choose between a pure socket API client, one using {\f1\fs20 WinINet}, or another using {\f1\fs20 WinHTTP}. The latest is the more stable over the {\i Internet}, even if plain sockets tend to give better numbers on {\f1\fs20 localhost} as stated by our @59@. Please read @135@ for a comparison of the diverse APIs.
+:   Publish a SynDB connection over HTTP
 To define a HTTP server, you may write:
 !uses SynDB, // RDBMS core
 !     SynDBSQLite3, SynSQLite3Static, // static SQLite3 engine
@@ -5351,9 +5358,10 @@ To define a HTTP server, you may write:
 The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/syndbremote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
 Note that the URI should be registered to work as expected, just as needed by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
 !THttpApiServer.AddUrlAuthorize('syndbremote','8092',false,'+');
+:   SynDB client access via HTTP
 On the client side, you can then write:
 !uses SynDB, // RDBMS core
-!     SynDBRemote; // for HTTP server
+!     SynDBRemote; // for HTTP client
 ! ...
 !var Props: TSQLDBConnectionProperties;
 ! ...
@@ -5374,6 +5382,7 @@ Or you may use it with VCL components, using the {\f1\fs20 SynDBVCL.pas} unit:
 !  ds1.DataSet.Free; // release previous TDataSet
 !  ds1.DataSet := ToDataSet(ds1,Props.Execute('select * from people',[]));
 The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshaling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
+:   Advanced use cases
 You may use this remote connection feature e.g. to mutate a stand-alone shared {\i SQLite3} database into a high performance but low maintenance client-server database engine. You may create it as such on the server side:
 !var props: TSQLDBSQLite3ConnectionProperties;
 !    server: TSQLDBServerHttpApi;
@@ -5384,13 +5393,19 @@ You may use this remote connection feature e.g. to mutate a stand-alone shared {
 !  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
 !...
 You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*TSQLRestServerDB@} used for our @*REST@ful ORM - see @42@) by creating the properties as such:
-!  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
+!!  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
 !  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
-Last but not least, our {\f1\fs20 @*SynDBExplorer@} tool is able to server any remote {\f1\fs20 SynDB} connection, or connect to it via HTTP. It could be very handy, even for debugging purposes.
-To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the start button.
-To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values set on the server side, e.g. with the default values "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password. You would be able to access the main server instance remotely, just as if the database was accessed via a regular client. If the server side database is {\i SQLite3}, you just mutated this local engine into a true client-server database - you may be amazed by the resulting performance.
-The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
-Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design. But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
+If you use the {\f1\fs20 http.sys} kernel-mode server, you could share the same IP port between regular ORM/SOA operations (which may be 80 for a "pure" HTTP server), and remote {\f1\fs20 SynDB} access, if the database name (i.e. here '{\f1\fs20 syndbremote}') does not conflict with a ORM table nor a method service.
+:   Integration with SynDBExplorer
+Our {\f1\fs20 @*SynDBExplorer@} tool is able to publish in one clieck any {\f1\fs20 SynDB} connection as a HTTP server, or connect to it via HTTP. It could be very handy, even for debugging purposes.
+To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the "{\f1\fs20 Start}" button.
+To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values matching the server side, e.g. with the default "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password.
+You would be able to access the main server instance remotely, just as if the database was accessed via a regular client.
+If the server side database is {\i SQLite3}, you just mutated this local engine into a true client-server database - you may be amazed by the resulting performance.
+:   Do not forget the mORMot!
+Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design.
+But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
+Note that for cross-platform clients, {\i mORMot}'s ORM/SOA patterns are a much better approach: do not put SQL in your mobile application, but use services, so that you would not need to re-validate and re-publish the app to the store after any small fix of your business logic!
 \page
 : ORM Integration
 :  Code-first or database-first

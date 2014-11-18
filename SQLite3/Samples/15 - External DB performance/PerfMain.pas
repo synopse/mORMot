@@ -165,7 +165,7 @@ const
 procedure TMainForm.BtnRunTestsClick(Sender: TObject);
 var T,U,P: RawUTF8;
     props: TSQLDBSQLite3ConnectionProperties;
-    server: TSQLDBServerHttpApi;
+    server: TSQLDBServerAbstract;
 begin
   ExeVersionRetrieve;
   //SynDBLog.Family.Level := LOG_VERBOSE;  // for debugging
@@ -195,11 +195,13 @@ begin
     Test(TSQLDBSQLite3ConnectionProperties,SQLITE_MEMORY_DATABASE_NAME,'','','',' (ext mem)',true);
     DeleteFile('SQLite3 (http).db3');
     props := TSQLDBSQLite3ConnectionProperties.Create('sqlite3 (http).db3','','','');
-    server := TSQLDBServerHttpApi.Create(props,'root','888','user','password');
+    server := {TSQLDBServerSockets}TSQLDBServerHttpApi.Create(props,'root','888','user','password');
     try
       props.MainSQLite3DB.Synchronous := smOff;
       props.MainSQLite3DB.LockingMode := lmExclusive;
       Test(TSQLDBWinHTTPConnectionProperties,
+        'localhost:888','root','user','password',' SQLite3 (off exc)',false);
+      Test(TSQLDBSocketConnectionProperties,
         'localhost:888','root','user','password',' SQLite3 (off exc)',false);
     finally
       server.Free;
