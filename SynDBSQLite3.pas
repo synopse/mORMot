@@ -73,6 +73,7 @@ unit SynDBSQLite3;
   - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
   - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
     constructor, to be used e.g. with a TSQLRestServerDB.DB existing database
+  - added TSQLDBSQLite3ConnectionProperties.MainDB property
   - overloaded function RowsToSQLite3() is now moved as generic
     TSQLDBConnection.NewTableFromRows() method
   - TSQLDBSQLite3Statement.BindTextP('') will bind '' text instead of null value
@@ -118,6 +119,7 @@ type
     fUseMormotCollations: boolean;
     fExistingDB: TSQLDatabase;
     procedure SetUseMormotCollations(const Value: boolean);
+    function GetMainDB: TSQLDataBase;
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
@@ -143,6 +145,10 @@ type
     // multi-thread access)
     // - the caller is responsible of freeing this instance
     function NewConnection: TSQLDBConnection; override;
+    /// direct access to the main SQlite3 DB instance
+    // - can be used to tune directly the database properties
+    property MainSQLite3DB: TSQLDataBase read GetMainDB;
+  published
     /// TRUE if you want the SQL creation fields to use mORMot collation
     // - default value is TRUE for use within the mORMot framework, to use
     // dedicated UTF-8 collation and full Unicode support, and Iso8601 handling
@@ -369,6 +375,19 @@ const SQLITE3_FIELDS: array[boolean] of TSQLDBFieldTypeDefinition = (
 begin
   fUseMormotCollations := Value;
   fSQLCreateField := SQLITE3_FIELDS[Value];
+end;
+
+function TSQLDBSQLite3ConnectionProperties.GetMainDB: TSQLDataBase;
+begin
+  if self=nil then
+    result := nil else
+    if fExistingDB<>nil then
+      result := fExistingDB else
+      with MainConnection as TSQLDBSQLite3Connection do begin
+        if not IsConnected then
+          Connect; // we expect the SQLite3 instance to be created if needed
+        result := DB;
+      end;
 end;
 
 constructor TSQLDBSQLite3ConnectionProperties.Create(const aServerName,
