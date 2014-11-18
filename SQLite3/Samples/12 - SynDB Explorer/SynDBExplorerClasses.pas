@@ -12,7 +12,7 @@ type
     ctOracleOLEDB, ctOracleMSOLEDB, ctMSSQL, ctGenericOLEDB,
     ctSqlite3,
     ctJet_mdbOLEDB,
-    ctODBC);
+    ctODBC,cRemoteHTTP);
 
   TSQLConnection = class(TSQLRecord)
   private

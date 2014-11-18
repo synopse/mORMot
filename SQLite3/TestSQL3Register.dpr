@@ -35,6 +35,7 @@ begin
   // for LogView tool in Remote Logging server mode:
   Call('LogService','888');
   Call('LogService','8091');
+  Call('syndbremote','8092');
   // we're done
   WriteLn('Done - Press ENTER to Exit');
   ReadLn;

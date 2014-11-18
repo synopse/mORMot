@@ -13,7 +13,8 @@ uses
 {$endif}
   SynCommons, SynZip, mORMot, SynSQLite3, SynSQLite3Static,
   mORMoti18n, mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
-  SynTaskDialog,  SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC,
+  SynTaskDialog,
+  SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC, SynDBRemote,
   SynDBExplorerClasses, SynDBExplorerFrame, ComCtrls;
 
 type
@@ -58,6 +59,8 @@ resourcestring
 
 implementation
 
+uses SynDBExplorerServer;
+
 {$ifndef HASINLINE}
   {$R Vista.res}
 {$endif}
@@ -95,7 +98,8 @@ const CONN_CLASSES: array[TExpConnectionType] of TSQLDBConnectionPropertiesClass
    {$else}
    TOleDBJetConnectionProperties,
    {$endif}
-   TODBCConnectionProperties);
+   TODBCConnectionProperties,
+   TSQLDBWinHTTPConnectionProperties);
 var i: integer;
     Pass: RawUTF8;
 begin

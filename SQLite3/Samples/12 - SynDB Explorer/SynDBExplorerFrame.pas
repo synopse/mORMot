@@ -35,6 +35,7 @@ type
     BtnTablesExport: TButton;
     BtnExecLog: TButton;
     BtnExecToTab: TButton;
+    btnRunServer: TButton;
     procedure EditTableChange(Sender: TObject);
     procedure ListTableDblClick(Sender: TObject);
     procedure BtnExecClick(Sender: TObject);
@@ -51,6 +52,7 @@ type
       Shift: TShiftState);
     procedure ListTableKeyUp(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure btnRunServerClick(Sender: TObject);
   private
     fHint: THintWindowDelayed;
     fGrid: TSQLTableToGrid;
@@ -96,7 +98,7 @@ implementation
 uses
   SynDBOracle,
   SynDBExplorerMain, SynDBExplorerQueryBuilder, SynDBExplorerExportTables,
-  SynTaskDialog, SynBigTable, SynDBSQLite3;
+  SynTaskDialog, SynBigTable, SynDBSQLite3, SynDBExplorerServer;
 
 {$R *.dfm}
 
@@ -769,6 +771,13 @@ begin
   end;
   List.ItemIndex := 0;
   LogClick(List);
+end;
+
+procedure TDBExplorerFrame.btnRunServerClick(Sender: TObject);
+begin
+  if (HTTPServerForm.Props=nil) or (HTTPServerForm.Server=nil) then
+    HTTPServerForm.Props := Props;
+  HTTPServerForm.Show;
 end;
 
 end.

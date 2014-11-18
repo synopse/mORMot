@@ -5344,15 +5344,17 @@ To define a HTTP server, you may write:
 !    HttpServer: TSQLDBServerAbstract;
 ! ...
 !  Props := TSQLDBSQLite3ConnectionProperties.Create('data.db3','','','');
-!!  HttpServer := TSQLDBServerHttpApi.Create(Props,'remote','8092','user','pass');
-The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/remote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
+!!  HttpServer := TSQLDBServerHttpApi.Create(Props,'syndbremote','8092','user','pass');
+The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/syndbremote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
+Note that the URI should be registered to work as expected, just as needed by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
+!THttpApiServer.AddUrlAuthorize('syndbremote','8092',false,'+');
 On the client side, you can then write:
 !uses SynDB, // RDBMS core
 !     SynDBRemote; // for HTTP server
 ! ...
 !var Props: TSQLDBConnectionProperties;
 ! ...
-!!  Props := TSQLDBWinHTTPConnectionProperties.Create('1.2.3.4:8092','root','user','pass');
+!!  Props := TSQLDBWinHTTPConnectionProperties.Create('1.2.3.4:8092','syndbremote','user','pass');
 As you can see, there is no link to {\f1\fs20 SynDBSQLite3.pas} nor {\f1\fs20 SynSQLite3Static.pas} on the client side. Just the HTTP link is needed. No need to deploy the RDBMS client libraries with your application, nor setup the local network firewall.
 We defined here a single user, with 'user' / 'pass' credentials, but you may manage more users on the server side, using the {\f1\fs20 Authenticate} property of {\f1\fs20 TSQLDBServerAbstract}. Note that in our remote access, user management does not match the RDBMS user rights: you should better have your own set of users at application level, for higher security, and a better integration with your business logic. If creating a new user on a RDBMS could be painful, it is pretty easy on our {\f1\fs20 SynDBRemote.pas} side.
 Then, you execute your favorite SQL using the connection just as usual:
@@ -5372,17 +5374,20 @@ You may even use this remote connection e.g. using a stand-alone shared {\i SQLi
 !  props := TSQLDBSQLite3ConnectionProperties.Create('database.db3','','','');
 !  props.MainSQLite3DB.Synchronous := smOff;
 !  props.MainSQLite3DB.LockingMode := lmExclusive;
-!  server := TSQLDBServerHttpApi.Create(props,'remote','8092','user','password');
+!  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
 !...
 You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*TSQLRestServerDB@} used for our @*REST@ful ORM - see @42@) by creating the properties as such:
 !  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
-!  server := TSQLDBServerHttpApi.Create(props,'remote','8092','user','password');
+!  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
+Our {\f1\fs20 @*SynDBExplorer@} tool is able to server any remote {\f1\fs20 SynDB} connection, or connect to it via HTTP. It could be very handy, even for debugging purposes.
+To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the start button.
+To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values set on the server side, e.g. with the default values "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password. You would be able to access the main server instance remotely, just as if the database was accessed via a regular client. If the server side database is {\i SQLite3}, you just change this local engine into a true client-server database - you may be amazed by the resulting performance.
 The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
 Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design. But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 \page
 : ORM Integration
 :  Code-first or database-first
-When working with any @13@, you have mainly two possibilites:
+When working with any @13@, you have mainly two possibilities:
 - Start from scratch, i.e. write your classes and let the ORM create all the database structure, which will reflect directly the object properties - it is also named "@*code-first@";
 - Use an existing database, and then define in your model how your classes map the existing database structure - this is the "@*database-first@" option.
 Our {\i mORMot} framework implements both paths, even if, like for other ORMs, code-first sounds like a more straight option.
