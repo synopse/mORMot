@@ -405,8 +405,8 @@ constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   aHttps: boolean; aThreadPoolCount: integer);
 begin
   inherited;
-  fServer := THttpServer.Create(aPort,fThreadPoolCount);
+  fServer := THttpServer.Create(aPort{$ifdef MSWINDOWS},fThreadPoolCount{$endif});
   fServer.OnRequest := Process;
 end;
 
-end.
+end.

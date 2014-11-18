@@ -8439,8 +8439,10 @@ begin
       Create(Props,'root',HTTP_DEFAULTPORT,'user','pass');
     try
       DoTest(TSQLDBSocketConnectionProperties.Create(ADDR,'root','user','pass'));
+      {$ifdef MSWINDOWS}
       DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'));
       DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'));
+      {$endif}
     finally
       Server.Free;
     end;
