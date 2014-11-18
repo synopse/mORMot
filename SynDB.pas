@@ -2362,7 +2362,7 @@ type
   // - will generate TSQLDBProxyConnection kind of connection
   TSQLDBProxyConnectionPropertiesAbstract = class(TSQLDBConnectionProperties)
   protected
-    fDoNotSendDisconnect: boolean;
+    fHandleConnection: boolean;
     fAuthenticationClass: TSynAuthenticationClass;
     fCurrentSession: integer;
     /// abstract process of internal commands
@@ -2396,10 +2396,12 @@ type
     // - always returns false, to force a new fake statement to be created
     function IsCachable(P: PUTF8Char): boolean; override;
   published
-    /// by default, Disconnect will really disconnect the remote connection
+    /// Connect and Disconnect won't really connect nor disconnect the
+    // remote connection
     // - you can set this property to TRUE if you expect the remote connection
-    // to stay alive, even if the remote proxy connection finished its work 
-    property DoNotSendDisconnect: boolean read fDoNotSendDisconnect write fDoNotSendDisconnect;
+    // by in synch with the remote proxy connection (should not be used in
+    // most cases, unless you are sure you have only one single client at a time 
+    property HandleConnection: boolean read fHandleConnection write fHandleConnection;
   end;
 
   /// implements an abstract proxy-like virtual connection to a DB engine
@@ -3970,17 +3972,17 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       AppendOutput(ServerTimeStamp);
     cGetFields: begin
       Properties.GetFields(O,OutputSQLDBColumnDefineDynArray);
-      msgOutput := msgOutput+RecordSave(
+      msgOutput := msgOutput+DynArraySave(
         OutputSQLDBColumnDefineDynArray,TypeInfo(TSQLDBColumnDefineDynArray));
     end;
     cGetIndexes:  begin
       Properties.GetIndexes(O,OutputSQLDBIndexDefineDynArray);
-      msgOutput := msgOutput+RecordSave(
+      msgOutput := msgOutput+DynArraySave(
         OutputSQLDBIndexDefineDynArray,TypeInfo(TSQLDBIndexDefineDynArray));
     end;
     cGetTableNames: begin
       Properties.GetTableNames(OutputRawUTF8DynArray);
-      msgOutput := msgOutput+RecordSave(OutputRawUTF8DynArray,TypeInfo(TRawUTF8DynArray));
+      msgOutput := msgOutput+DynArraySave(OutputRawUTF8DynArray,TypeInfo(TRawUTF8DynArray));
     end;
     cGetForeignKeys: begin
       Properties.GetForeignKey('',''); // ensure Dest.fForeignKeys exists
@@ -7106,7 +7108,6 @@ constructor TSQLDBRemoteConnectionPropertiesTest.Create(
   aProps: TSQLDBConnectionProperties; const aUserID,aPassword: RawUTF8);
 begin
   fProps := aProps;
-  fDoNotSendDisconnect := true; // as expected below
   fAuthenticate := TSynAuthentication.Create(aUserID,aPassword);
   inherited Create('','',aUserID,aPassword);
 end;
@@ -7141,14 +7142,15 @@ end;
 procedure TSQLDBProxyConnection.Connect;
 begin
   inherited Connect;
-  fProxy.Process(cConnect,self,self);
+  if fProxy.HandleConnection then
+    fProxy.Process(cConnect,self,self);
   fConnected := true;
 end;
 
 procedure TSQLDBProxyConnection.Disconnect;
 begin
   inherited Disconnect;
-  if not fProxy.DoNotSendDisconnect then
+  if fProxy.HandleConnection then
     fProxy.Process(cDisconnect,self,self);
   fConnected := false;
 end;
@@ -7454,7 +7456,8 @@ begin
   TSQLDBProxyConnectionPropertiesAbstract(fConnection.fProperties).Process(
     CMD[fExpectResults],Input,fDataInternalCopy);
   // retrieve columns information from TSQLDBStatement.FetchAllToBinary() format
-  IntHeaderProcess(pointer(fDataInternalCopy),Length(fDataInternalCopy));
+  if fExpectResults then
+    IntHeaderProcess(pointer(fDataInternalCopy),Length(fDataInternalCopy));
 end;
 
 procedure TSQLDBProxyStatement.ExecutePreparedAndFetchAllAsJSON(Expanded: boolean;
