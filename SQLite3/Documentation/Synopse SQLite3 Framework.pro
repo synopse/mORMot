@@ -1491,7 +1491,7 @@ The {\f1\fs20 TDynArrayHashed} wrapper allow implementation of a dictionary usin
 !    procedure ReleaseAllDBStatements;
 !  end;
 Those definitions will prepare a {\i dynamic array} storing a {\f1\fs20 TSQLRequest} and {\i SQL statement} association, with an external {\f1\fs20 Count} variable, for better speed.
-It will be used as such in {\f1\fs20 TSQLRestServerDB}:
+It will be used as such in {\f1\fs20 @*TSQLRestServerDB@}:
 !constructor TSQLRestServerDB.Create(aModel: TSQLModel; aDB: TSQLDataBase);
 !begin
 !  fStatementCache.Init(aDB);
@@ -3663,7 +3663,7 @@ From the technical point of view, here are the current compilation options used 
 - Automatic SQL statement parameter preparation, for execution speed up;
 - {\f1\fs20 TSQLDatabase} can cache the last results for SELECT statements, or use a tuned client-side or server-side per-record caching, in order to speed up most read queries, for lighter web server or client User Interface e.g.;
 - User @*authentication@ handling ({\i SQLite3} is user-free designed);
-- {\i SQLite3} source code was compiled without thread mutex: the caller has to be @*thread-safe@ aware; this is faster on most configurations, since mutex has to be acquired once): low level {\f1\fs20 sqlite3_*()} functions are not thread-safe, as {\f1\fs20 TSQLRequest} and {\f1\fs20 TSQLBlobStream} which just wrap them; but {\f1\fs20 TSQLDataBase} is thread-safe, as {\f1\fs20 TSQLTableDB}/{\f1\fs20 TSQLRestServerDB}/{\f1\fs20 TSQLRestClientDB} which call {\f1\fs20 TSQLDataBase};
+- {\i SQLite3} source code was compiled without thread mutex: the caller has to be @*thread-safe@ aware; this is faster on most configurations, since mutex has to be acquired once): low level {\f1\fs20 sqlite3_*()} functions are not thread-safe, as {\f1\fs20 TSQLRequest} and {\f1\fs20 TSQLBlobStream} which just wrap them; but {\f1\fs20 TSQLDataBase} is thread-safe, as {\f1\fs20 TSQLTableDB}/{\f1\fs20 @*TSQLRestServerDB@}/{\f1\fs20 TSQLRestClientDB} which call {\f1\fs20 TSQLDataBase};
 - Compiled with {\f1\fs20 SQLITE_OMIT_SHARED_CACHE} define, since with the new @*Client-Server@ approach of this framework, no concurrent access could happen, and an internal efficient caching algorithm is added, avoiding most call of the {\i SQLite3} engine in multi-user environment (any @*AJAX@ usage should benefit of it);
 - The embedded {\i SQLite3} database engine can be easily updated from the official {\i SQLite3} source code available at @http://sqlite.org - use the amalgamation C file with a few minor changes (documented in the {\f1\fs20 SynSQLite3Static.pas} unit) - the resulting C source code delivered as {\f1\fs20 .obj} is also available in the official {\i Synopse} source code repository.
 The overhead of including {\i SQlite3} in your server application will be worth it: just some KB to the executable, but with so many nice features, even if only external databases are used.
@@ -3682,7 +3682,7 @@ Process below includes all aspects of our ORM:
 - Virtual cross-database layer using its {\i SQLite3} kernel;
 - SQL on-the-fly generation and translation (in {\i virtual} mode);
 - Access to the database engines via several libraries or providers.
-In those tests, we just bypassed the communication layer, since {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} are run in-process, in the same thread - as a {\f1\fs20 TSQLRestServerDB} instance. So you have here some raw performance testimony of our framework's ORM and RESTful core, and may expect good scaling abilities when running on high-end hardware, over a network.
+In those tests, we just bypassed the communication layer, since {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} are run in-process, in the same thread - as a {\f1\fs20 @*TSQLRestServerDB@} instance. So you have here some raw performance testimony of our framework's ORM and RESTful core, and may expect good scaling abilities when running on high-end hardware, over a network.
 On a recent notebook computer ({\i Core i7} and SSD drive), depending on the back-end database interfaced, {\i mORMot} excels in speed, as will show the following @**benchmark@:
 - You can persist up to 570,000 objects per second, or retrieve 870,000 objects per second (for our pure {\i Delphi} in-memory engine);
 - When data is retrieved from server or client @38@, you can read more than 900,000 objects per second, whatever the database back-end is;
@@ -4233,7 +4233,7 @@ So depending on your application requirements, you may switch Synchronous settin
 To change the main {\i SQLite3} engine synchronous parameter, you may code for instance:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!Client.Server.DB.Synchronous := smOff;
-Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 TSQLRestServerDB} instance.
+Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 @*TSQLRestServerDB@} instance.
 But if you defined some {\i SQLite3} external tables - see @27@, you can define the setting for a particular external connection, for instance:
 !Props := TSQLDBSQLite3ConnectionProperties.Create(DBFileName,'''','');
 !VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
@@ -4245,7 +4245,7 @@ You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLD
 To change the main {\i SQLite3} engine locking mode parameter, you may code for instance:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!Client.Server.DB.LockingMode := lmExclusive;
-Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 TSQLRestServerDB} instance.
+Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 @*TSQLRestServerDB@} instance.
 But if you defined some {\i SQLite3} external tables - see @27@, you can define the setting for a particular external connection, for instance:
 !Props := TSQLDBSQLite3ConnectionProperties.Create(DBFileName,'''','');
 !VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
@@ -4269,7 +4269,7 @@ If you can afford loosing some data in very rare border case, or if you are sure
 In all cases, do not forget to perform @*backup@s of your {\i SQlite3} database as often as possible (at least several times a day). Adding a backup feature on the server side is as simple as running:
 ! Server.DB.BackupBackground('backup.db3',1024,10,nil);
 The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 pages (i.e. it would process 1 MB per step, since default page size is 1024 bytes), performing a little sleep of 10 milliseconds between each 1 MB copy step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specify an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
-Note that {\f1\fs20 TSQLRestServerDB.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
+Note that {\f1\fs20 @*TSQLRestServerDB@.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
 The same backup process can be used e.g. to save an in-memory {\i SQLite3} database into a {\i SQLite3} file, as such:
 ! if aInMemoryDB.BackupBackground('backup.db3',-1,0,nil) then
 !   aInMemoryDB.BackupBackgroundWaitUntilFinished;
@@ -4944,7 +4944,7 @@ Some dedicated {\f1\fs20 Exception} classes are also defined:
 \ESQLQueryException\Exception
 \
 Check the {\f1\fs20 TestOleDB.dpr} sample program, located in {\f1\fs20 SQlite3} folder, using our {\f1\fs20 SynOleDB} unit to connect to a local {\i @*MS SQL@ Server 2008 R2 Express edition}, which will write a file with the JSON representation of the {\f1\fs20 Person.Address} table of the sample database {\i AdventureWorks2008R2}.
-:  ISQLDBRows interface
+:137  ISQLDBRows interface
 The easiest is to stay at the {\f1\fs20 TSQLDBConnectionProperties} level, using the {\f1\fs20 Execute()} methods of this instance, and access any returned data via an {\f1\fs20 @**ISQLDBRows@} interface. It will automatically use a thread-safe connection to the database, in an abstracted way.
 Typical use of {\f1\fs20 SynDB.pas} classes could be:
 - Initialize a shared {\f1\fs20 TSQLDBConnectionProperties} instance;
@@ -4970,7 +4970,7 @@ Then any sub-code is able to execute any SQL request, with optional bound parame
 In this procedure, no {\f1\fs20 TSQLDBStatement} is defined, and there is no need to add a {\f1\fs20 try ... finally Query.Free; end;} block.
 In fact, the {\f1\fs20 MyConnProps.Execute} method returns a {\f1\fs20 TSQLDBStatement} instance as a {\f1\fs20 ISQLDBRows}, which methods can be used to loop for each result row, and retrieve individual column values. In the code above, {\f1\fs20 I['FirstName']} will in fact call the {\f1\fs20 I.Column[]} default property, which will return the column value as a {\f1\fs20 variant}. You have other dedicated methods, like {\f1\fs20 ColumnUTF8} or {\f1\fs20 ColumnInt}, able to retrieve directly the expected data.
 Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @16@.
-:  Late-binding
+:136  Late-binding
 We implemented @*late-binding@ access of column values, via a custom variant time. It uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties.
 The resulting {\i Delphi} code to write is just clear and obvious:
 !procedure UseProps(Props: TSQLDBConnectionProperties);
@@ -5022,12 +5022,12 @@ or for a {\f1\fs20 TClientDataSet} kind of in-memory storage:
 See sample "{\f1\fs20 17 - TClientDataset use}" to find out more about using such {\f1\fs20 TDataSet}, including some speed information. You need to have run the {\f1\fs20 TestSQL3.dpr} set of regression tests before, to have the expected {\i SQlite3} data file.
 :133  TQuery emulation class
 The {\f1\fs20 SynDB.pas} unit offers a {\f1\fs20 @**TQuery@}-like class. This class emulates regular {\f1\fs20 TQuery} classes, without inheriting from {\f1\fs20 DB.pas} nor its slow {\f1\fs20 TDataSet}.
-It mimic basic {\f1\fs20 TQuery} VCL methods, with the following benefits:
+It mimics basic {\f1\fs20 TQuery} VCL methods, with the following benefits:
 - Does not inherit from {\f1\fs20 TDataset}, but has its own light implementation over {\f1\fs20 SynDB.pas} {\f1\fs20 ISQLDBStatement} result sets, so is usually much faster;
 - Will be also faster for field and parameters access by name - or even index;
 - Is Unicode-ready, even with older pre-Unicode version of Delphi, able to return the data as {\f1\fs20 WideString}, independently from the current system charset;
 - You can still create a {\f1\fs20 TDataSet} from {\f1\fs20 SynDB}'s {\f1\fs20 TQuery}, via the {\f1\fs20 ToDataSet()} function defined in {\f1\fs20 SynDBVCL.pas}.
-Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it directly as a regular replacement for your RAD code.\line But if your application is data-centric and tried to encapsulate its business logic with object, you can still replace directly your existing code with the following:
+Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it directly as a regular replacement for your RAD code.\line But if your application is data-centric and tried to encapsulate its business logic with some classes - i.e. if it tried to properly implement @*OOP@, not RAD - you can still replace directly your existing code with the {\f1\fs20 TQuery} emulator:
 !  Q := TQuery.Create(aSQLDBConnection);
 !  try
 !    Q.SQL.Clear; // optional
@@ -5044,7 +5044,7 @@ Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it d
 !  finally
 !    Q.Free;
 !  end;
-You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application... See @66@.
+You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade, especially for @66@.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application, or let your old application communicate with the database over plain HTTP, without the need to install any RDBMS client - see @131@.
 \page
 : SynDB database access
 From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
@@ -5092,7 +5092,7 @@ Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS
 \ODBC\Jet/Access
 \ODBC\Advantage
 \
-By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/AnyDAC component sets.
+By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/FireDAC/AnyDAC component sets.
 Most {\i OleDB / ODBC} providers are free (even maintained by the database owner), others would need a paid license.
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i OleDB} or {\i ODBC} remote access expects only the database instance to be reachable on the Server side. Clients could communicate via standard HTTP, so won't need any specific port forwarding or other IT configuration to work as expected.
 :94  ZEOS via direct ZDBC
@@ -5365,8 +5365,19 @@ Then, you execute your favorite SQL using the connection just as usual:
 !    assert(Stmt.ColumnInt('YearOfDeath')=1519);
 !   end;
 !end;
-You may even use this remote connection e.g. using a stand-alone shared {\i SQLite3} database as high performance but low maintenance client-server database engine.
-The transmission protocol use an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You could even publish your server over HTTPS, if needed.
+You may even use this remote connection e.g. using a stand-alone shared {\i SQLite3} database as high performance but low maintenance client-server database engine. You may create it as such on the server side:
+!var props: TSQLDBSQLite3ConnectionProperties;
+!    server: TSQLDBServerHttpApi;
+!...
+!  props := TSQLDBSQLite3ConnectionProperties.Create('database.db3','','','');
+!  props.MainSQLite3DB.Synchronous := smOff;
+!  props.MainSQLite3DB.LockingMode := lmExclusive;
+!  server := TSQLDBServerHttpApi.Create(props,'remote','8092','user','password');
+!...
+You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*TSQLRestServerDB@} used for our @*REST@ful ORM - see @42@) by creating the properties as such:
+!  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
+!  server := TSQLDBServerHttpApi.Create(props,'remote','8092','user','password');
+The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
 Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design. But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 \page
 : ORM Integration
@@ -6759,7 +6770,7 @@ This architecture is implemented by a hierarchy of classes, implementing the @*R
 \
 All ORM operations (aka @*CRUD@ process) are available from the abstract {\f1\fs20 TSQLRest} class definition, which is overridden to implement either a Server (via {\f1\fs20 TSQLRestServer} classes), or a Client (via {\f1\fs20 TSQLRestClientURI} classes) access to the data.
 You should instantiate the classes corresponding to the needed transmission protocol, but should better rely on abstraction, i.e. implement your whole code logic relying on abstract {\f1\fs20 TSQLRestClient / TSQLRestServer} classes. It will then help changing from one protocol or configuration at runtime, depending on your customer's expectations.
-:  Server classes
+:138  Server classes
 The following classes are available to implement a {\i Server} instance:
 \graph ServerRESTClasses RESTful Server classes
 \TSQLRestServerDB\TSQLRestServer
@@ -6768,7 +6779,7 @@ The following classes are available to implement a {\i Server} instance:
 \TSQLRestServer\TSQLRest
 \
 In practice, in order to implement the business logic, you should better create a new {\f1\fs20 class}, inheriting from one of the above {\f1\fs20 TSQLRestServer} classes. Having your own inherited class does make sense, especially for implementing your own method-based services - see @49@, or {\f1\fs20 override} internal methods.
-The {\f1\fs20 TSQLRestServerDB} class is the main kingn of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
+The {\f1\fs20 @**TSQLRestServerDB@} class is the main kind of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
 If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
 If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
 :  Storage classes
@@ -12765,6 +12776,7 @@ Download and uncompress the framework archives, including all sub-folders, into 
 |{\b Static 32 bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
 |{\b 64 bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
 |{\b 32 bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
+|{\b for FPC only: static SQLite3 .o files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
 In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} menu):

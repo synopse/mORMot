@@ -59,7 +59,8 @@ uses
   {$ifdef USEMONGODB}
     SynMongoDB, mORMotMongoDB,
   {$endif}
-  SynSQLite3, SynSQLite3Static;
+  SynSQLite3, SynSQLite3Static,
+  SynDBRemote;
 
 type
   TMainForm = class(TForm)
@@ -163,6 +164,8 @@ const
 
 procedure TMainForm.BtnRunTestsClick(Sender: TObject);
 var T,U,P: RawUTF8;
+    props: TSQLDBSQLite3ConnectionProperties;
+    server: TSQLDBServerHttpApi;
 begin
   ExeVersionRetrieve;
   //SynDBLog.Family.Level := LOG_VERBOSE;  // for debugging
@@ -177,6 +180,7 @@ begin
 {  FreeAndNil(sqlite3); sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll'); }
   // if false then
   try
+  try
     // -------- SQlite3
     //(*
     Test(nil,'','','','','SQLite3 (file full)',true,smFull);
@@ -189,6 +193,18 @@ begin
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off)',true,smOff);
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off exc)',true,smOff,lmExclusive);
     Test(TSQLDBSQLite3ConnectionProperties,SQLITE_MEMORY_DATABASE_NAME,'','','',' (ext mem)',true);
+    DeleteFile('SQLite3 (http).db3');
+    props := TSQLDBSQLite3ConnectionProperties.Create('sqlite3 (http).db3','','','');
+    server := TSQLDBServerHttpApi.Create(props,'root','888','user','password');
+    try
+      props.MainSQLite3DB.Synchronous := smOff;
+      props.MainSQLite3DB.LockingMode := lmExclusive;
+      Test(TSQLDBWinHTTPConnectionProperties,
+        'localhost:888','root','user','password',' SQLite3 (off exc)',false);
+    finally
+      server.Free;
+      props.Free;
+    end;
     //*)
     {$ifdef USEMONGODB}
     Test(nil,'MongoDB','','','','MongoDB (ack)',false);
@@ -388,11 +404,13 @@ begin
     on E: Exception do
       LogMemo.Lines.Add(E.Message);
   end;
-  Label3.Caption := '';
-  T := ObjectToJSON(Stats,[woHumanReadable]);
-  FileFromString(T,ChangeFileExt(paramstr(0),'.stats'));
-  FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
-  SaveStats;
+  finally
+    Label3.Caption := '';
+    T := ObjectToJSON(Stats,[woHumanReadable]);
+    FileFromString(T,ChangeFileExt(paramstr(0),'.stats'));
+    FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
+    SaveStats;
+  end;
 end;
 
 type
