@@ -209,7 +209,7 @@ begin
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
   Coll.FindDocs('{Number:{$gt:?}}',[COLL_COUNT shr 1],docs,null);
   Check(length(docs)=COLL_COUNT-(COLL_COUNT shr 1)-1);
-  for i := 1 to high(docs) do
+  for i := 0 to high(docs) do
     Check(docs[i].number>COLL_COUNT shr 1);
 end;
 
@@ -250,13 +250,11 @@ begin
   for i := 0 to COLL_COUNT-1 do begin
     jsonOne := VariantSaveMongoJSON(fValues[i],modMongoStrict);
     jsonArray := '['+jsonOne+']';
-    //if i mod 100=0 then begin // search by name is SLOW, even with the index!
-      Check(Coll.FindJSON('{Name:?}',[fValues[i].Name])=jsonArray);
-      Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null)=jsonarray);
-      Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null,1)=jsonone);
-      docs := Coll.FindDoc('{Name:?}',[fValues[i].Name]);
-      Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
-    //end;
+    Check(Coll.FindJSON('{Name:?}',[fValues[i].Name])=jsonArray);
+    Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null)=jsonarray);
+    Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null,1)=jsonone);
+    docs := Coll.FindDoc('{Name:?}',[fValues[i].Name]);
+    Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id]);
     Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id],1);
