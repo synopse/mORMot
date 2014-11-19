@@ -136,9 +136,10 @@ begin
     try
       MainCaption := format('%s %s (compiled with %s) - %s',
         [MainCaption,SYNOPSE_FRAMEWORK_VERSION,GetDelphiCompilerVersion,ConnectionName]);
-      if LoadTableNames then begin // retrieve all needed info from DB
-        Props.GetTableNames(C.fTableNames);     // retrieve and set table names        
-        C.ForeignKeys := CompressString(Props.ForeignKeysData); // set foreign keys
+      if LoadTableNames or                      // retrieve all needed info from DB
+         (C.Connection=ctRemoteHTTP) then begin
+        Props.GetTableNames(C.fTableNames);     // retrieve and set table names
+        C.ForeignKeys := CompressString(Props.ForeignKeysData); // foreign keys
         if Conns<>nil then
           Conns.Modified := true;
       end else begin
