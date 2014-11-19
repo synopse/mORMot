@@ -6,6 +6,39 @@ An Open Source Client-Server ORM/SOA framework
   http://synopse.info
   http://mormot.net
 
+Contributors
+  Alexander (sha)
+  Alfred Glaenzer (alf)
+  Arnaud Bouchez
+  Aweste
+  Cheemeng
+  CoMPi
+  Damien (ddemars)
+  David Mead (MDW)
+  Delphinium
+  DigDiver
+  DigDiver
+  EMartin
+  Eric Grange
+  Esmond
+  Joe (jokusoft)
+  Jordi Tudela
+  Mario Moretti
+  Martin Suer
+  MChaos
+  Ondrej (reddwarf)
+  Pavel (mpv)
+  Pierre le Riche
+  RalfS
+  Sabbiolina
+  Sabbiolina
+  Sanyin
+  Sinisa (sinisav)
+  Sllimr7139
+  Vadim Orel
+  Win2014
+  Wolfgang Ehrhardt
+
 [See below if you upgrade from 1.17 revision]
 
   
