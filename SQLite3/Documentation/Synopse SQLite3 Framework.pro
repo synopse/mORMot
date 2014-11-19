@@ -10627,6 +10627,7 @@ If you update your data model on the server, just re-generate your {\f1\fs20 mOR
 Thanks to the {\i SmartPascal} strong typing, any breaking change of the server expectations would immediately be reported at compilation, and not at runtime, as it would with regular {\i JavaScript} clients.
 :MVC pattern
 %cartoon07.png
+The {\i mORMot} framwork allows writing rich and/or web MVC applications, relying on regular ORM and SOA methods to implement its business model and its application layer, with an optional dedicated MVC model for the HTML rendering.
 : Model
 According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
 The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
@@ -10635,6 +10636,33 @@ See @110@ for how to define the model of your application.
 The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
 - For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
 - For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
+\graph MVCWebClients MVC Web and Rich Clients
+subgraph cluster_0 {
+label="Web client 1";
+"HTML Browser";
+}
+subgraph cluster_3 {
+label="Web client 2";
+"HTML Browser ";
+}
+subgraph cluster_4 {
+label="Rich Client 3";
+"FMX\nPresentation Tier";
+}
+subgraph cluster_1 {
+label=" Server";
+\HTML Browser \Web¤Presentation Tier
+\HTML Browser\Web¤Presentation Tier
+\Web¤Presentation Tier\Application Tier
+\Application Tier\Business Logic Tier
+}
+\FMX¤Presentation Tier\Application Tier
+subgraph cluster_2 {
+label="  DB     Server";
+\Business Logic Tier\Data Tier
+}
+\
+The {\i Web Presentation Tier} will be detailed @108@, but we will now present the project-wide implementation proposal.
 :  Desktop clients
 :5   RTTI
 The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
