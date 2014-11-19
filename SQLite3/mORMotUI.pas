@@ -1746,6 +1746,10 @@ end;
 function TSQLTableToGrid.GetFieldIndexTimeLogForMark: integer;
 var F: integer;
 begin
+  if Self=nil then begin
+    result := -1;
+    exit;
+  end;
   if fFieldIndexTimeLogForMark=-2 then begin
     fFieldIndexTimeLogForMark := -1;
     for F := 0 to Table.FieldCount-1 do

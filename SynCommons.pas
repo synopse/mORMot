@@ -45613,10 +45613,7 @@ end;
 
 constructor TRawByteStringStream.Create(const aString: RawByteString);
 begin
-  if aString='' then
-    exit;
   fDataString := aString;
-  fPosition := length(fDataString);
 end;
 
 function TRawByteStringStream.Read(var Buffer; Count: Integer): Longint;

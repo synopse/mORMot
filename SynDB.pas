@@ -4010,8 +4010,9 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         Stmt.BindArray(i,VType,VArray,InputExecute.ArrayCount);
       Stmt.ExecutePrepared;
       if ExecuteWithResults then begin
-        Data := TRawByteStringStream.Create(msgOutput); // include header
+        Data := TRawByteStringStream.Create(msgOutput);
         try
+          Data.Seek(0,soFromEnd); // include header
           case header.Command of
           cExecuteToBinary:
             Stmt.FetchAllToBinary(Data);
