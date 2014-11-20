@@ -487,7 +487,8 @@ type
   // external DB, but you can avoid it for speed when handling session and security
   // by setting regDoNotRegisterUserGroupTables
   // - you can set regMapAutoKeywordFields to ensure that the mapped field names
-  // won't conflict with a SQL reserved keyword on the external database
+  // won't conflict with a SQL reserved keyword on the external database by
+  // mapping a name with a trailing '_' character for the external column
   TVirtualTableExternalRegisterOption = (
     regDoNotRegisterUserGroupTables,
     regMapAutoKeywordFields
@@ -687,11 +688,11 @@ begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName]);
         if fStoredClassProps.ExternalDB.AutoMapKeywordFields then begin
-          log.Log(sllWarning,'-> %.% mapped to "_%"',
+          log.Log(sllWarning,'-> %.% mapped to "%_"',
             [fStoredClass,nfo.Name,SQL]);
-          fStoredClassProps.ExternalDB.MapField(nfo.Name,'_'+SQL);
+          fStoredClassProps.ExternalDB.MapField(nfo.Name,SQL+'_');
         end else
-          log.Log(sllWarning,'-> you should better call MapAutoKeywordFields');
+          log.Log(sllWarning,'-> you should better use MapAutoKeywordFields');
       end;
     end;
   end;

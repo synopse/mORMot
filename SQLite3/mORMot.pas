@@ -6608,7 +6608,7 @@ type
     // keyword for the given database
     // - by default, no check is performed: you can use this method to ensure
     // that all field names won't conflict with a SQL reserved keyword: such
-    // fields will be identified and automatically mapped as _fieldname 
+    // fields will be identified and automatically mapped as fieldname_
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
     // !   MapField('IntField','ExtField').
