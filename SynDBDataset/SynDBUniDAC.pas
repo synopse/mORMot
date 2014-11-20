@@ -235,7 +235,6 @@ begin
   dPostgreSQL: begin  // thanks delphinium for the trick!
     fSpecificOptions.Values['CharSet'] := 'UTF8';
     fSpecificOptions.Values['UseUnicode'] := 'true';
-    fSpecificOptions.Values['CharLength'] := '2';
   end;
   end;
 end;
