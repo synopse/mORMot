@@ -14898,7 +14898,7 @@ begin
   {$ifdef HASVARUSTRING}
   if VType=varByRef or varUString then begin
     wasString := true;
-    RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),result);
+    RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),length(UnicodeString(VAny)),result);
   end else
   {$endif}
     VariantSaveJSON(V,twJSONEscape,result); // will handle also custom types
@@ -29642,8 +29642,8 @@ begin // this code should copy parameters without any reference count handling
   {$ifdef HASVARUSTRARG}
   varUStrArg: begin
     if ByRef then
-      Value.VType := varUString or varByRef else
-      Value.VType := varUString;
+      P := pointer(P^);
+    Value.VType := varUString;
     Value.VUString := PPointer(P)^;
   end;
   {$endif}

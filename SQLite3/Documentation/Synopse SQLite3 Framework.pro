@@ -3417,20 +3417,21 @@ Since all content changes will be stored in this single table by default (note t
 Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
 :  A true Time Machine for your objects
 Once the object changes are tracked, you can later on browse the history of the object, by using the {\f1\fs20 TSQLRecordHistory.CreateHistory()}, then {\f1\fs20 HistoryGetLast}, {\f1\fs20 HistoryCount}, and {\f1\fs20 HistoryGet()} methods:
-!var aHist: TSQLRecordSecondaryHistory;
+!var aHist: TSQLRecordHistory;
 !    aInvoice: TSQLInvoice;
 !    aEvent: TSQLHistoryEvent; // would be either heAdd, heUpdate or heDelete
 !    aTimeStamp: TModTime;
 !(...)
 !aInvoice := TSQLInvoice.Create;
-!aHist := TSQLRecordSecondaryHistory.CreateHistory(aClient,TSQLRecordPeopleExt,400);
+!aHist := TSQLRecordHistory.CreateHistory(aClient,TSQLInvoice,400);
 !try
 !  writeln('Number of items in the record history: ',aHist.HistoryCount);
 !  for i := 0 to aHist.HistoryCount-1 do begin
 !    aHist.HistoryGet(i,aEvent,aTimeStamp,aInvoice);
 !    writeln;
 !    writeln('Event: ',GetEnumName(TypeInfo(TSQLHistoryEvent),ord(aEvent))^);
-!    writeln('TimeStamp: ',TTimeLogBits(TimeStamp).ToText);
+!    writeln('TimeStamp: ',TTimeLogBits(aTimeStamp).ToText);
+!    writeln('Identifier: ',aInvoice.Number);
 !    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect));
 !  end;
 !finally
@@ -5590,7 +5591,7 @@ or, if you want to full fluent interface definition:
 !    MapField('YearOfDeath','YOD').
 !!    MapAutoKeywordFields
 It is a good idea to call the {\f1\fs20 @**MapAutoKeywordFields@} method after any manual field mapping for a database-first database, since even your custom field names may conflict with a SQL keyword.
-If any field name is likely to conflict with a SQL keyword, it will be mapped with a trailing '_'. For instance, a {\f1\fs20 'Select'} published property would be mapped into a {\f1\fs20 _SELECT} column in the table.
+If any field name is likely to conflict with a SQL keyword, it will be mapped with a trailing '_'. For instance, a {\f1\fs20 'Select'} published property would be mapped into a {\f1\fs20 SELECT_} column in the table.
 Even if this option is disabled by default, a warning message will appear in the log proposing to use this {\f1\fs20 MapAutoKeywordFields} method, and would help you to identify such issues.
 :30  External database ORM internals
 The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@.pas}-based external database for the framework.
