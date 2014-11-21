@@ -2449,12 +2449,14 @@ type
     fDataRowCount: integer;
     fDataRowReaderOrigin, fDataRowReader: PByte;
     fDataRowNullSize: cardinal;
-    fDataCurrentRowIndex: integer;
-    fDataCurrentRowNull: TSQLDBProxyStatementColumns;
     fDataCurrentRowNullLen: cardinal;
+    fDataCurrentRowNull: TSQLDBProxyStatementColumns;
+    fDataCurrentRowIndex: integer;
     fDataCurrentRowValues: array of pointer;
     fDataCurrentRowValuesStart: pointer;
     fDataCurrentRowValuesSize: Cardinal;
+    // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..
+    fDataCurrentRowColTypes: array of TSQLDBFieldType;
     function IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IntHeaderProcess(Data: PByte; DataLen: integer);
@@ -6138,31 +6140,38 @@ var F: integer;
     VDouble: double;
     VCurrency: currency absolute VDouble;
     VDateTime: TDateTime absolute VDouble;
+    colType: TSQLDBFieldType;
 begin
   for F := 0 to length(ColTypes)-1 do
-    if not (F in Null) then
-    case ColTypes[F] of
-    ftInt64:
-      W.WriteVarInt64(ColumnInt(F));
-    ftDouble: begin
-      VDouble := ColumnDouble(F);
-      W.Write(@VDouble,sizeof(VDouble));
+    if not (F in Null) then begin
+      colType := ColTypes[F];
+      if colType<ftInt64 then begin
+        colType := ColumnType(F); // per-row column type (SQLite3 only)
+        W.Write1(ord(colType));
+      end;
+      case colType of
+      ftInt64:
+        W.WriteVarInt64(ColumnInt(F));
+      ftDouble: begin
+        VDouble := ColumnDouble(F);
+        W.Write(@VDouble,sizeof(VDouble));
+      end;
+      ftCurrency: begin
+        VCurrency := ColumnCurrency(F);
+        W.Write(@VCurrency,sizeof(VCurrency));
+      end;
+      ftDate: begin
+        VDateTime := ColumnDateTime(F);
+        W.Write(@VDateTime,sizeof(VDateTime));
+      end;
+      ftUTF8:
+        W.Write(ColumnUTF8(F));
+      ftBlob:
+        W.Write(ColumnBlob(F));
+      else raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
+        [self,ColumnName(F),ord(colType)]);
     end;
-    ftCurrency: begin
-      VCurrency := ColumnCurrency(F);
-      W.Write(@VCurrency,sizeof(VCurrency));
-    end;
-    ftDate: begin
-      VDateTime := ColumnDateTime(F);
-      W.Write(@VDateTime,sizeof(VDateTime));
-    end;
-    ftUTF8:
-      W.Write(ColumnUTF8(F));
-    ftBlob:
-      W.Write(ColumnBlob(F));
-    else raise ESQLDBException.CreateUTF8(
-      '%.ColumnsToBinary: invalid ColTypes[%]=%',[self,F,ord(ColTypes[F])]);
-    end;
+  end;
 end;
 
 const
@@ -6176,20 +6185,21 @@ var F, FMax, FieldSize, NullRowSize: integer;
     W: TFileBufferWriter;
     ColTypes: TSQLDBFieldTypeDynArray;
 begin
+  FillChar(Null,sizeof(Null),0);
   result := 0;
   W := TFileBufferWriter.Create(Dest);
   try
+    W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
     FMax := ColumnCount;
-    if FMax>0 then
+    W.WriteVarUInt32(FMax);
+    if FMax>0 then begin
       // write column description
-      W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
-      W.WriteVarUInt32(FMax);
       SetLength(ColTypes,FMax);
       dec(FMax);
       for F := 0 to FMax do begin
         W.Write(ColumnName(F));
         ColTypes[F] := ColumnType(F,@FieldSize);
-        W.Write(@ColTypes[F],sizeof(ColTypes[0]));
+        W.Write1(ord(ColTypes[F]));
         W.WriteVarUInt32(FieldSize);
       end;
       // initialize null handling
@@ -6225,6 +6235,7 @@ begin
         if (MaxRowCount>0) and (result>=MaxRowCount) then
           break;
       until not Step;
+    end;
     W.Write(@result,SizeOf(result)); // fixed size at the end for row count
     W.Flush;
   finally
@@ -7216,7 +7227,7 @@ end;
 { TSQLDBProxyStatementAbstract }
 
 procedure TSQLDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: integer);
-var Magic,F: integer;
+var Magic,F,colCount: integer;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
@@ -7228,9 +7239,13 @@ begin
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
       break;
-    for F := 1 to FromVarUInt32(Data) do
+    colCount := FromVarUInt32(Data);
+    SetLength(fDataCurrentRowColTypes,colCount);
+    SetLength(fDataCurrentRowValues,colCount);
+    for F := 0 to colCount-1 do
     with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(FromVarString(Data)))^ do begin
       ColumnType := TSQLDBFieldType(Data^);
+      fDataCurrentRowColTypes[F] := ColumnType; 
       inc(Data);
       ColumnValueDBSize := FromVarUInt32(Data);
     end;
@@ -7242,7 +7257,6 @@ begin
     fDataRowReaderOrigin := Data;
     fDataRowReader := Data;
     fDataRowNullSize := ((fColumnCount-1) shr 3)+1;
-    SetLength(fDataCurrentRowValues,fColumnCount);
     exit;
   until false;
   fDataRowCount := 0;
@@ -7251,8 +7265,8 @@ begin
 end;
 
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte);
-var F, Len: Integer;
-begin
+var F,Len: Integer;
+begin // format match TSQLDBStatement.FetchAllToBinary()
   if fDataCurrentRowNullLen>0 then
     FillChar(fDataCurrentRowNull,fDataCurrentRowNullLen,0);
   fDataCurrentRowNullLen := FromVarUInt32(Reader);
@@ -7266,21 +7280,25 @@ begin
   for F := 0 to fColumnCount-1 do
     if F in fDataCurrentRowNull then
       fDataCurrentRowValues[F] := nil else begin
+      fDataCurrentRowColTypes[F] := fColumns[F].ColumnType;
+      if fDataCurrentRowColTypes[F]<ftInt64 then begin
+        fDataCurrentRowColTypes[F] := TSQLDBFieldType(Reader^);
+        inc(Reader);
+      end;
       fDataCurrentRowValues[F] := Reader;
-      with fColumns[F] do
-      case ColumnType of
+      case fDataCurrentRowColTypes[F] of
       ftInt64:
         Reader := GotoNextVarInt(Reader);
       ftDouble, ftCurrency, ftDate:
         inc(Reader,SizeOf(Int64));
       ftUTF8, ftBlob: begin
         Len := FromVarUInt32(Reader);
-        if Len>ColumnDataSize then
-          ColumnDataSize := Len;
+        if Len>fColumns[F].ColumnDataSize then
+          fColumns[F].ColumnDataSize := Len;
         inc(Reader,Len); // jump string/blob content
       end;
       else raise ESQLDBException.CreateUTF8('%.IntStep: Invalid ColumnType(%)=%',
-        [self,ColumnName,ord(ColumnType)]);
+        [self,fColumns[F].ColumnName,ord(fDataCurrentRowColTypes[F])]);
       end;
     end;
   fDataCurrentRowValuesSize := PtrUInt(Reader)-PtrUInt(fDataCurrentRowValuesStart);
@@ -7295,10 +7313,10 @@ begin
   for col := 0 to fColumnCount-1 do begin
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    Data := fDataCurrentRowValues[col];
+    Data := fDataCurrentRowValues[col]; 
     if Data=nil then
       WR.AddShort('null') else
-    case fColumns[col].ColumnType of
+    case fDataCurrentRowColTypes[col] of
       ftInt64:
         WR.Add(FromVarInt64Value(Data));
       ftDouble:
@@ -7317,12 +7335,12 @@ begin
         WR.Add('"');
       end;
       ftBlob:
-        if fForceBlobAsNull then
-          WR.AddShort('null') else begin
-          // WrBase64(..,withMagic=true)
-          DataLen := FromVarUInt32(Data);
-          WR.WrBase64(PAnsiChar(Data),DataLen,true);
-        end;
+      if fForceBlobAsNull then
+        WR.AddShort('null') else begin
+        // WrBase64(..,withMagic=true)
+        DataLen := FromVarUInt32(Data);
+        WR.WrBase64(PAnsiChar(Data),DataLen,true);
+      end;
     end;
     WR.Add(',');
   end;
@@ -7352,7 +7370,7 @@ begin
       with fColumns[Col] do begin
         if FieldSize<>nil then
           FieldSize^ := ColumnDataSize; // true max size as computed at loading 
-        result := ColumnType;
+        result := fDataCurrentRowColTypes[Col]; // per-row column type (SQLite3)
       end else
     raise ESQLDBException.CreateUTF8('Invalid %.ColumnType()',[self]);
 end;
@@ -7364,7 +7382,7 @@ begin
     Data := fDataCurrentRowValues[Col];
     if Data=nil then
       result := ftNull else
-      result := fColumns[Col].ColumnType;
+      result := fDataCurrentRowColTypes[Col]; // per-row column type (SQLite3)
   end;
 end;
 
