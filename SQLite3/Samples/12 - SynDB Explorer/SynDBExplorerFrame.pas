@@ -288,7 +288,7 @@ begin
       if SQL<>'' then
         if isSelect(Pointer(SQL)) then begin
           try
-            Rows := Props.Execute(SQL,[]);
+            Rows := Props.Execute(SQL,[],nil,(Sender<>BtnExecToFile));
           except
             on Exception do
             if Props.InheritsFrom(TSQLDBSQLite3ConnectionProperties) then
@@ -305,7 +305,7 @@ begin
               Frame.MemoSQL.Lines.Text := U2S(SQL);
             end;
             with Frame do begin
-              fJSONBuffer := Rows.FetchAllAsJSON(false,nil,true); // DoNotFetchBlobs=true
+              fJSONBuffer := Rows.FetchAllAsJSON(false); 
               Stop := Timer.Stop;
               Table := TSQLTableJSON.Create('',pointer(fJSONBuffer),length(fJSONBuffer));
               fGrid := TSQLTableToGrid.Create(DrawGrid,Table,nil);

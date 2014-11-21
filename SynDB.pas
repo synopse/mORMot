@@ -210,8 +210,7 @@ unit SynDB;
   - TSQLDBConnectionProperties.SQLSelectAll() now handles spaces in table names
   - TSQLDBStatement.GetParamValueAsText() will truncate to a given number of
     chars the returned text
-  - added DoNotFetchBlobs optional parameter to TSQLDBStatement.FetchAllAsJSON()
-    FetchAllToJSON(), and ColumnsToJSON() methods (used e.g. by SynDBExplorer)
+  - added ForceBlobAsNull property to ISQLDBStatement (used e.g. by SynDBExplorer)
   - added RewindToFirst optional parameter to TSQLDBStatement.FetchAllAsJSON()
     and FetchAllToJSON() methods (could be used e.g. for TQuery.FetchAllAsJSON)
   - added new TSQLDBStatement.ExecutePreparedAndFetchAllAsJSON() method for
@@ -579,7 +578,7 @@ type
      - the specified Temp variable will be used for temporary storage of
        svtUTF8/svtBlob values }
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
-      var Temp: RawByteString; DoNotFetchBlob: boolean=false);
+      var Temp: RawByteString);
     {$ifndef LVCL}
     {/ return a Column as a variant
      - a ftUTF8 TEXT content will be mapped into a generic WideString variant
@@ -674,14 +673,13 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - you can ignore all BLOB fields, if DoNotFetchBlobs is set to TRUE
     // - you can go back to the first row of data before creating the JSON, if
     // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): RawUTF8;
+      RewindToFirst: boolean=false): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -692,12 +690,11 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can ignore all BLOB fields, if DoNotFetchBlobs is set to TRUE
     // - you can go back to the first row of data before creating the JSON, if
     // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
     function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): PtrInt;
+      RewindToFirst: boolean=false): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -862,10 +859,10 @@ type
       CheckIsOutParameter: boolean=true): TSQLDBFieldType;
     {$endif}
 
-    {/ execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - should raise an Exception on any error
-     - after execution, you can access any returned data via ISQLDBRows methods }
+    /// execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - should raise an Exception on any error
+    // - after execution, you can access any returned data via ISQLDBRows methods
     procedure ExecutePrepared;
     // execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
@@ -877,6 +874,12 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8);
+    function GetForceBlobAsNull: boolean;
+    procedure SetForceBlobAsNull(value: boolean);
+    /// if set, any BLOB field won't be retrieved, and forced to be null
+    // - this may be used to speed up fetching the results for SQL requests
+    // with * statements
+    property ForceBlobAsNull: boolean read GetForceBlobAsNull write SetForceBlobAsNull;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: Integer;
   end;
@@ -1188,8 +1191,11 @@ type
     // !   while Step do
     // !     writeln(R.FirstName,' ',DateToStr(R.BirthDate));
     // ! end;
+    // - you can any BLOB field to be returned as null with the ForceBlobAsNull
+    // optional parameter
     function Execute(const aSQL: RawUTF8; const Params: array of const
-      {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif}): ISQLDBRows;
+      {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif};
+      ForceBlobAsNull: boolean=false): ISQLDBRows;
     /// execute a SQL query, without returning any rows
     // - can be used to launch INSERT, DELETE or UPDATE statement, e.g.
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
@@ -1570,8 +1576,11 @@ type
     fTotalRowsRetrieved: Integer;
     fCurrentRow: Integer;
     fSQLWithInlinedParams: RawUTF8;
+    fForceBlobAsNull: boolean;
     fDBMS: TSQLDBDefinition;
     function GetSQLWithInlinedParams: RawUTF8;
+    function GetForceBlobAsNull: boolean;
+    procedure SetForceBlobAsNull(value: boolean);
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
     {/ will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
@@ -1896,7 +1905,7 @@ type
      - the specified Temp variable will be used for temporary storage of
        svtUTF8/svtBlob values }
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
-      var Temp: RawByteString; DoNotFetchBlob: boolean=false); virtual;
+      var Temp: RawByteString); virtual;
     {/ return a special CURSOR Column content as a SynDB result set
      - Cursors are not handled internally by mORMot, but some databases (e.g.
        Oracle) usually use such structures to get data from strored procedures
@@ -1955,8 +1964,8 @@ type
     // - this default implementation will call Column*() methods above, but you
     // should also implement a custom version with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    // format and contains true BLOB data
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); virtual;
+    // format and contains true BLOB data (unless ForceBlobAsNull property was set)
+    procedure ColumnsToJSON(WR: TJSONWriter); virtual;
     {/ compute the SQL INSERT statement corresponding to this columns row
     - and populate the Fields[] array with columns information (type and name)
     - the SQL statement is prepared with bound parameters, e.g.
@@ -1974,14 +1983,13 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
-    // - you can ignore all BLOB fields, if DoNotFetchBlobs is set to TRUE
     // - you can go back to the first row of data before creating the JSON, if
     // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
     function FetchAllToJSON(JSON: TStream; Expanded: boolean;
-      DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): PtrInt;
+      RewindToFirst: boolean=false): PtrInt;
     // Append all rows content as a CSV stream
     // - CSV data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
@@ -2004,12 +2012,11 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - you can ignore all BLOB fields, if DoNotFetchBlobs is set to TRUE
     // - you can go back to the first row of data before creating the JSON, if
     // RewindToFirst is TRUE (could be used e.g. for TQuery.FetchAllAsJSON)
     // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt=nil;
-      DoNotFetchBlobs: boolean=false; RewindToFirst: boolean=false): RawUTF8;
+      RewindToFirst: boolean=false): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -2348,7 +2355,7 @@ type
   // - used for cExecute, cExecuteToBinary, cExecuteToJSON and cExecuteToExpandedJSON
   // commands of TSQLDBProxyConnectionProperties.Process()
   // - set by TSQLDBProxyStatement.ParamsToCommand() protected method
-  TSQLDBProxyConnectionCommandExecute = record
+  TSQLDBProxyConnectionCommandExecute = packed record
     /// the associated SQL statement
     SQL: RawUTF8;
     /// input parameters
@@ -2356,6 +2363,8 @@ type
     Params: TSQLDBParamDynArray;
     /// if input parameters expected BindArray() process
     ArrayCount: integer;
+    /// if set, any BLOB field won't be retrieved, and forced to be null
+    ForceBlobAsNull: boolean;
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -2471,7 +2480,7 @@ type
     {{ return a Column as a blob value of the current Row, first Col is 0 }
     function ColumnBlob(Col: integer): RawByteString; override;
     {{ return all columns values into JSON content }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// direct access to the data buffer of the current row
     // - points to Double/Currency value, or variable-length Int64/UTF8/Blob
     // - points to nil if the column value is NULL
@@ -3992,6 +4001,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       RecordLoad(InputExecute,O,TypeInfo(TSQLDBProxyConnectionCommandExecute));
       ExecuteWithResults := header.Command<>cExecute;
       Stmt := NewStatementPrepared(InputExecute.SQL,ExecuteWithResults,true);
+      if InputExecute.ForceBlobAsNull then
+        Stmt.ForceBlobAsNull := true;
       for i := 1 to Length(InputExecute.Params) do
       with InputExecute.Params[i-1] do
       if InputExecute.ArrayCount=0 then
@@ -4098,10 +4109,12 @@ end;
 
 function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8;
   const Params: array of const
-  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif}): ISQLDBRows;
+  {$ifndef LVCL}{$ifndef DELPHI5OROLDER}; RowsVariant: PVariant=nil{$endif}{$endif};
+  ForceBlobAsNull: boolean=false): ISQLDBRows;
 var Stmt: ISQLDBStatement;
 begin
   Stmt := NewThreadSafeStatementPrepared(aSQL,true,true);
+  Stmt.ForceBlobAsNull := ForceBlobAsNull;
   Stmt.Bind(Params);
   Stmt.ExecutePrepared;
   result := Stmt;
@@ -4168,7 +4181,8 @@ begin
   result := PrepareInlined(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
 
-function TSQLDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBRows;
+function TSQLDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8;
+  ExpectResults: Boolean): ISQLDBRows;
 var Query: ISQLDBStatement;
 begin
   result := nil; // returns nil interface on error
@@ -5773,6 +5787,16 @@ begin
     raise ESQLDBException.CreateUTF8('Invalid call to %.Column*(Col=%)',[self,Col]);
 end;
 
+function TSQLDBStatement.GetForceBlobAsNull: boolean;
+begin
+  result := fForceBlobAsNull;
+end;
+
+procedure TSQLDBStatement.SetForceBlobAsNull(value: boolean);
+begin
+  fForceBlobAsNull := value;
+end;
+
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
 begin
   // SynDBLog.Enter(self);
@@ -5863,7 +5887,7 @@ begin
   result := ColumnTimeStamp(ColumnIndex(ColName));
 end;
 
-procedure TSQLDBStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBStatement.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     blob: RawByteString;
 begin
@@ -5890,7 +5914,7 @@ begin
         WR.Add('"');
       end;
       ftBlob:
-        if DoNotFetchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
           WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
@@ -5906,7 +5930,7 @@ begin
 end;
 
 procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
-  var Temp: RawByteString; DoNotFetchBlob: boolean);
+  var Temp: RawByteString);
 begin
   if ColumnNull(Col) then // will call GetCol() to check Col
     Value.VType := ftNull else
@@ -5921,9 +5945,10 @@ begin
       Value.VText := pointer(Temp);
     end;
     ftBlob:
-    if DoNotFetchBlob then begin
+    if fForceBlobAsNull then begin
       Value.VBlob := nil;
       Value.VBlobLen := 0;
+      Value.VType := ftNull;
     end else begin
       Temp := ColumnBlob(Col);
       Value.VBlob := pointer(Temp);
@@ -5967,11 +5992,13 @@ begin
 end;
 {$endif}
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBStatement.Execute(const aSQL: RawUTF8;
+  ExpectResults: Boolean);
 begin
   Connection.InternalProcess(speActive);
   try
     Prepare(aSQL,ExpectResults);
+    SetForceBlobAsNull(true);
     ExecutePrepared;
   finally
     Connection.InternalProcess(speNonActive);
@@ -5979,7 +6006,7 @@ begin
 end;
 
 function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean;
-  DoNotFetchBlobs, RewindToFirst: boolean): PtrInt;
+  RewindToFirst: boolean): PtrInt;
 var W: TJSONWriter;
     col: integer;
 begin
@@ -5997,7 +6024,7 @@ begin
     // write rows data
     while Step(RewindToFirst) do begin
       RewindToFirst := false;
-      ColumnsToJSON(W,DoNotFetchBlobs);
+      ColumnsToJSON(W);
       W.Add(',');
       inc(result);
     end;
@@ -6028,6 +6055,7 @@ begin
   result := 0;
   if (Dest=nil) or (self=nil) or (ColumnCount=0) then
     exit;
+  fForceBlobAsNull := true;
   if Tab then
     CommaSep := #9;
   FMax := ColumnCount-1;
@@ -6049,7 +6077,7 @@ begin
     // add CSV rows
     while Step do begin
       for F := 0 to FMax do begin
-        ColumnToSQLVar(F,V,tmp,true); // DoNotFetchBlobs=true
+        ColumnToSQLVar(F,V,tmp); 
         case V.VType of
           ftNull:     W.AddShort(NULL[tab]);
           ftInt64:    W.Add(V.VInt64);
@@ -6070,7 +6098,7 @@ begin
             end else
               W.AddNoJSONEscape(V.VText);
           end;
-          ftBlob: W.AddShort(BLOB[Tab]);  // DoNotFetchBlobs=true
+          ftBlob: W.AddShort(BLOB[Tab]);  // ForceBlobAsNull should be true
           else raise ESQLDBException.CreateUTF8(
             '%.FetchAllToCSVValues: Invalid ColumnType(%) %',
             [self,F,TSQLDBFieldTypeToString(ColumnType(F))]);
@@ -6088,13 +6116,13 @@ begin
 end;
 
 function TSQLDBStatement.FetchAllAsJSON(Expanded: boolean;
-  ReturnedRowCount: PPtrInt; DoNotFetchBlobs, RewindToFirst: boolean): RawUTF8;
+  ReturnedRowCount: PPtrInt; RewindToFirst: boolean): RawUTF8;
 var Stream: TRawByteStringStream;
     RowCount: PtrInt;
 begin
   Stream := TRawByteStringStream.Create;
   try
-    RowCount := FetchAllToJSON(Stream,Expanded,DoNotFetchBlobs,RewindToFirst);
+    RowCount := FetchAllToJSON(Stream,Expanded,RewindToFirst);
     if ReturnedRowCount<>nil then
       ReturnedRowCount^ := RowCount;
     result := Stream.DataString;
@@ -7257,7 +7285,7 @@ begin
   fDataCurrentRowValuesSize := PtrUInt(Reader)-PtrUInt(fDataCurrentRowValuesStart);
 end;
 
-procedure TSQLDBProxyStatementAbstract.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBProxyStatementAbstract.ColumnsToJSON(WR: TJSONWriter);
 var col, DataLen: integer;
     Data: PByte;
 begin
@@ -7288,7 +7316,7 @@ begin
         WR.Add('"');
       end;
       ftBlob:
-        if DoNotFetchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           // WrBase64(..,withMagic=true)
           DataLen := FromVarUInt32(Data);
@@ -7445,6 +7473,7 @@ begin
     SetLength(fParams,fParamCount);
   Input.Params := fParams;
   Input.ArrayCount := fParamsArrayCount;
+  Input.ForceBlobAsNull := fForceBlobAsNull;
 end;
 
 procedure TSQLDBProxyStatement.ExecutePrepared;

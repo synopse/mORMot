@@ -255,7 +255,7 @@ type
      - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -697,7 +697,7 @@ function TSQLDBFirebirdStatement.ColumnNull(Col: integer): boolean;
 begin
 end;
 
-procedure TSQLDBFirebirdStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBFirebirdStatement.ColumnsToJSON(WR: TJSONWriter);
 var col, METHODTOBEWRITTEN: integer;
 begin
   if (CurrentRow<=0) then

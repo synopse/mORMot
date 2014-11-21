@@ -319,7 +319,7 @@ type
     // - will use WR.Expand to guess the expected output format
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     {$endif}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
@@ -1041,8 +1041,7 @@ begin
 end;
 
 {$ifdef ZEOS72UP}
-procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter;
-  DoNotFetchBlobs: boolean);
+procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     P: PAnsiChar;
     Len: NativeUInt;
@@ -1099,8 +1098,8 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         end;
         WR.Add('"');
       end;
-      ftBlob:
-        if DoNotFetchBlobs then
+      ftBlob:              
+        if fForceBlobAsNull then
           WR.AddShort('null') else
         if fDBMS in [dMySQL,dSQLite] then begin
           P := fResultSet.GetPAnsiChar(col+1,Len);

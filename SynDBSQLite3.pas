@@ -332,7 +332,7 @@ type
      - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
 /// direct export of a DB statement rows into a SQLite3 database
@@ -650,9 +650,9 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSQLDBSQLite3Statement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBSQLite3Statement.ColumnsToJSON(WR: TJSONWriter);
 begin
-  fStatement.FieldsToJSON(WR,DoNotFetchBlobs);
+  fStatement.FieldsToJSON(WR,fForceBlobAsNull);
 end;
 
 function TSQLDBSQLite3Statement.ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;

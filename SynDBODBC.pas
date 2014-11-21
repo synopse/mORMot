@@ -283,7 +283,7 @@ type
      - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -1356,7 +1356,7 @@ begin // will check for NULL but never returns colWrongType
   result := GetCol(Col,ftNull)=colNull;
 end;
 
-procedure TODBCStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TODBCStatement.ColumnsToJSON(WR: TJSONWriter);
 var res: TSQLDBStatementGetCol;
     col: integer;
     tmp: array[0..31] of AnsiChar;
@@ -1395,7 +1395,7 @@ begin
         WR.Add('"');
       end;
       ftBlob:
-        if DoNotFetchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(Col);
           WR.WrBase64(pointer(blob),length(blob),true);

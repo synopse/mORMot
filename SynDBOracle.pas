@@ -424,14 +424,14 @@ type
        possible when called from TSQLVirtualTableCursorExternal.Column method
        as defined in mORMotDB unit (i.e. mORMot external DB access) }
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
-      var Temp: RawByteString; DoNotFetchBlob: boolean=false); override;
+      var Temp: RawByteString); override;
     {{ append all columns values of the current Row to a JSON stream
      - will use WR.Expand to guess the expected output format
      - fast overridden implementation with no temporary variable (about 20%
        faster when run over high number of data rows) 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     {/ return a special CURSOR Column content as a SynDB result set
      - Cursors are not handled internally by mORMot, but Oracle usually use
        such structures to get data from strored procedures
@@ -2121,7 +2121,7 @@ begin
   result := GetCol(Col,C)=nil;
 end;
 
-procedure TSQLDBOracleStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBOracleStatement.ColumnsToJSON(WR: TJSONWriter);
 var V: pointer;
     col, indicator: integer;
     tmp: array[0..31] of AnsiChar;
@@ -2167,7 +2167,7 @@ begin // dedicated version to avoid as much memory allocation than possible
          WR.Add('"');
        end;
        ftBlob:
-         if DoNotFetchBlobs then
+         if fForceBlobAsNull then
            WR.AddShort('null') else
            if ColumnValueInlined then
              SetString(U,PAnsiChar(V),ColumnValueDBSize) else begin
@@ -2186,7 +2186,7 @@ begin // dedicated version to avoid as much memory allocation than possible
 end;
 
 procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
-  var Temp: RawByteString; DoNotFetchBlob: boolean=false);
+  var Temp: RawByteString);
 var C: PSQLDBColumnProperty;
     V: pointer;
     NoDecimal: boolean;
@@ -2221,9 +2221,10 @@ begin // dedicated version to avoid as much memory allocation than possible
       Value.VText := pointer(Temp);
     end;
     ftBlob:
-    if DoNotFetchBlob then begin
+    if fForceBlobAsNull then begin
       Value.VBlob := nil;
       Value.VBlobLen := 0;
+      Value.VType := ftNull;
     end else begin
       if C^.ColumnValueInlined then
         SetString(Temp,PAnsiChar(V),C^.ColumnValueDBSize) else
@@ -2935,7 +2936,7 @@ var aName: RawUTF8;
     ColCount, RowSize: cardinal;
     StatementType, oType, oSize: ub2;
     Prefetch: ub4;
-    ColumnLongTypes: set of (hasLOB,hasLONG);
+    ColumnLongTypes: set of (hasLOB,hasLONG,hasCURS);
     PP: PPointer;
     Indicators: PAnsiChar;
 begin
@@ -3046,7 +3047,9 @@ begin
           ColumnValueDBSize := 24; // 24 will fit 8 bytes alignment
         end;
         SQLT_BIN: begin
-          ColumnType := ftBlob;
+          if fForceBlobAsNull then
+            ColumnType := ftNull else
+            ColumnType := ftBlob;
           ColumnValueDBType := SQLT_BIN;
         end;
         SQLT_LBI, SQLT_BLOB, SQLT_LVB: begin
@@ -3054,14 +3057,16 @@ begin
           ColumnValueInlined := false;
           ColumnValueDBType := SQLT_BLOB;
           ColumnValueDBSize := sizeof(POCILobLocator);
-          include(ColumnLongTypes,hasLOB);
+          if fForceBlobAsNull then
+            ColumnType := ftNull else
+            include(ColumnLongTypes,hasLOB);
         end;
         SQLT_RSET, SQLT_CUR: begin
           ColumnType := ftNull;
           ColumnValueInlined := false;
           ColumnValueDBType := SQLT_RSET;
           ColumnValueDBSize := sizeof(POCIStmt);
-          include(ColumnLongTypes,hasLOB);
+          include(ColumnLongTypes,hasCURS);
         end;
         else raise ESQLDBOracle.CreateUTF8('% - Column "%": unknown type %',
           [self,ColumnName,oType]);
@@ -3115,7 +3120,8 @@ begin
     end;
     Setlength(fRowBuffer,fInternalBufferSize);
     assert(fRowCount>0);
-    if (hasLOB in ColumnLongTypes) and (fRowCount>100) then
+    if ((hasLOB in ColumnLongTypes) or (hasCURS in ColumnLongTypes)) and
+       (fRowCount>100) then
       fRowCount := 100; // do not create too much POCILobLocator items
     fRowBufferCount := fRowCount; // fRowCount may be set to 0: avoid leaking
     // fRowBuffer[] contains Indicators[] + Col0[] + Col1[] + Col2[]...

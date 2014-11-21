@@ -203,7 +203,7 @@ type
      - will use WR.Expand to guess the expected output format
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
   ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
@@ -577,7 +577,7 @@ begin
   result := fQuery.Fields[col];
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TSQLDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     blob: RawByteString;
 begin
@@ -623,7 +623,7 @@ begin
         WR.Add('"');
       end;
       SynCommons.ftBlob:
-        if DoNotFetchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
           WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true

@@ -31,6 +31,7 @@ type
       Shift: TShiftState);
   private
     MainCaption: string;
+    Connection: TExpConnectionType;
     Page: TSynPager;
     PageNew: TSynPage;
     procedure PageChange(Sender: TObject);
@@ -134,6 +135,7 @@ begin
     ConnectionName := U2S(C.Ident);
     with CreateTempForm(format(sPleaseWaitN,[ConnectionName]),nil,True) do
     try
+      Connection := C.Connection;
       MainCaption := format('%s %s (compiled with %s) - %s',
         [MainCaption,SYNOPSE_FRAMEWORK_VERSION,GetDelphiCompilerVersion,ConnectionName]);
       if LoadTableNames or                      // retrieve all needed info from DB

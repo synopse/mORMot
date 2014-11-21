@@ -1019,7 +1019,7 @@ type
      - fast overridden implementation with no temporary variable 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     {{ return a Column as a variant
      - this implementation will retrieve the data with no temporary variable
        (since TQuery calls this method a lot, we tried to optimize it)
@@ -1417,7 +1417,9 @@ begin // dedicated version to avoid as much memory allocation than possible
         {$endif}
           SetString(SynUnicode(VAny),PWideChar(P),V^.Length shr 1);
       end;
-      ftBlob: begin
+      ftBlob:
+      if fForceBlobAsNull then
+        VType := varNull else begin
         VAny := nil;
         if C^.ColumnValueInlined then
           P := @V^.VData else
@@ -1428,7 +1430,7 @@ begin // dedicated version to avoid as much memory allocation than possible
   end;
 end;
 
-procedure TOleDBStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
+procedure TOleDBStatement.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     V: PColumnValue;
     P: Pointer;
@@ -1463,7 +1465,7 @@ Write:case ColumnType of
           WR.Add('"');
         end;
         ftBlob:
-          if DoNotFetchBlobs then
+          if fForceBlobAsNull then
             WR.AddShort('null') else begin
             if ColumnValueInlined then
               P := @V^.VData else
