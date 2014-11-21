@@ -285,17 +285,21 @@ begin
   ftDate,ftTime,ftDateTime:
     DateTimeToNative(Field.DataType,PDateTime(Data)^,Dest^);
   ftString: begin
-    CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
-    DataLen := length(Temp);
-    MaxLen := Field.DataSize-1; // without trailing #0
-    if DataLen>MaxLen then
-      DataLen := MaxLen;
-    move(pointer(Temp)^,Dest^,DataLen);
+    if DataLen<>0 then begin
+      CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
+      DataLen := length(Temp);
+      MaxLen := Field.DataSize-1; // without trailing #0
+      if DataLen>MaxLen then
+        DataLen := MaxLen;
+      move(pointer(Temp)^,Dest^,DataLen);
+    end;
     PAnsiChar(Dest)[DataLen] := #0;
   end;
   ftWideString: begin
     {$ifdef ISDELPHI2007ANDUP} // here Dest = PWideChar[] of DataSize bytes
-    UTF8ToWideChar(Dest,Data,(Field.DataSize-2)shr 1,DataLen);
+    if DataLen=0 then
+      PWideChar(Dest)^ := #0 else
+      UTF8ToWideChar(Dest,Data,(Field.DataSize-2)shr 1,DataLen);
     {$else}          // here Dest is PWideString
     UTF8ToWideString(Data,DataLen,WideString(Dest^));
     {$endif}
@@ -372,7 +376,11 @@ end;
 procedure TSynVirtualDataSet.InternalClose;
 begin
   BindFields(false);
+  {$ifdef ISDELPHIXE7}
+  if lcPersistent in Fields.LifeCycles then
+  {$else}
   if DefaultFields then
+  {$endif}
     DestroyFields;
   fIsCursorOpen := False;
 end;
@@ -406,7 +414,11 @@ procedure TSynVirtualDataSet.InternalOpen;
 begin
   BookmarkSize := SizeOf(TRecInfo)-sizeof(TRecInfoIdentifier);
   InternalInitFieldDefs;
+  {$ifdef ISDELPHIXE7}
+  if lcPersistent in Fields.LifeCycles then
+  {$else}
   if DefaultFields then
+  {$endif}
     CreateFields;
   BindFields(true);
   fCurrentRow := -1;
