@@ -377,7 +377,7 @@ procedure TSynVirtualDataSet.InternalClose;
 begin
   BindFields(false);
   {$ifdef ISDELPHIXE7}
-  if lcPersistent in Fields.LifeCycles then
+  if not(lcPersistent in Fields.LifeCycles) then
   {$else}
   if DefaultFields then
   {$endif}
@@ -415,7 +415,7 @@ begin
   BookmarkSize := SizeOf(TRecInfo)-sizeof(TRecInfoIdentifier);
   InternalInitFieldDefs;
   {$ifdef ISDELPHIXE7}
-  if lcPersistent in Fields.LifeCycles then
+  if not(lcPersistent in Fields.LifeCycles) then
   {$else}
   if DefaultFields then
   {$endif}

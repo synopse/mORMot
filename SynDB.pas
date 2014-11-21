@@ -2451,6 +2451,7 @@ type
     fDataRowNullSize: cardinal;
     fDataCurrentRowIndex: integer;
     fDataCurrentRowNull: TSQLDBProxyStatementColumns;
+    fDataCurrentRowNullLen: cardinal;
     fDataCurrentRowValues: array of pointer;
     fDataCurrentRowValuesStart: pointer;
     fDataCurrentRowValuesSize: Cardinal;
@@ -7251,15 +7252,15 @@ end;
 
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte);
 var F, Len: Integer;
-    NullLen: cardinal;
 begin
-  FillChar(fDataCurrentRowNull,fDataRowNullSize,0);
-  NullLen := FromVarUInt32(Reader);
-  if NullLen>fDataRowNullSize then
+  if fDataCurrentRowNullLen>0 then
+    FillChar(fDataCurrentRowNull,fDataCurrentRowNullLen,0);
+  fDataCurrentRowNullLen := FromVarUInt32(Reader);
+  if fDataCurrentRowNullLen>fDataRowNullSize then
     raise ESQLDBException.CreateUTF8('Invalid %.IntFillDataCurrent',[self]);
-  if NullLen>0 then begin
-    Move(Reader^,fDataCurrentRowNull,NullLen);
-    inc(Reader,NullLen);
+  if fDataCurrentRowNullLen>0 then begin
+    Move(Reader^,fDataCurrentRowNull,fDataCurrentRowNullLen);
+    inc(Reader,fDataCurrentRowNullLen);
   end;
   fDataCurrentRowValuesStart := Reader;
   for F := 0 to fColumnCount-1 do
@@ -7528,8 +7529,10 @@ begin // retrieve one row of data from TSQLDBStatement.FetchAllToBinary() format
     result := false; // no data was retrieved
     exit;
   end;
-  if fCurrentRow=0 then // first row should rewind the TFileBufferReader
-    fDataRowReader := fDataRowReaderOrigin;
+  if fCurrentRow=0 then begin
+    fDataRowReader := fDataRowReaderOrigin;     // rewind TFileBufferReader
+    fDataCurrentRowNullLen := fDataRowNullSize; // reset null
+  end;
   IntFillDataCurrent(fDataRowReader);
   inc(fCurrentRow);
   result := true;
