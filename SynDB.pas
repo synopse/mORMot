@@ -1435,6 +1435,45 @@ type
   // of available classes (see e.g. SynDBExplorer or sample 16)
   TSQLDBConnectionPropertiesClass = class of TSQLDBConnectionProperties;
 
+  {$ifdef WITH_PROXY}
+  /// server-side implementation of a proxy connection to any SynDB engine
+  // - this default implementation will send the data without compression,
+  // digital signature, nor encryption
+  // - inherit from this class to customize the transmission layer content
+  TSQLDBProxyConnectionProtocol = class
+  protected
+    fAuthenticate: TSynAuthentication;
+    function GetAuthenticate: TSynAuthentication;
+    /// default Handle*() will just return the incoming value
+    function HandleInput(const input: RawByteString): RawByteString; virtual;
+    function HandleOutput(const output: RawByteString): RawByteString; virtual;
+  public
+    /// initialize a protocol, with a given authentication scheme
+    // - if no authentication is given, none will be processed
+    constructor Create(aAuthenticate: TSynAuthentication); reintroduce;
+    /// release associated authentication class
+    destructor Destroy; override;
+    /// the associated authentication information
+    // - you can manage users via AuthenticateUser/DisauthenticateUser methods
+    property Authenticate: TSynAuthentication read GetAuthenticate write fAuthenticate;
+  end;
+
+  /// server-side implementation of a remote connection to any SynDB engine
+  // - implements digitally signed SynLZ-compressed binary message format,
+  // with simple symmetric encryption 
+  TSQLDBRemoteConnectionProtocol = class(TSQLDBProxyConnectionProtocol)
+  protected
+    /// SynLZ decompression + digital signature + encryption
+    function HandleInput(const input: RawByteString): RawByteString; override;
+    /// SynLZ compression + digital signature + encryption
+    function HandleOutput(const output: RawByteString): RawByteString; override;
+  public
+  end;
+
+  /// specify the class of a proxy/remote connection to any SynDB engine
+  TSQLDBProxyConnectionProtocolClass = class of TSQLDBProxyConnectionProtocol;
+  {$endif WITH_PROXY}
+
   /// abstract connection created from TSQLDBConnectionProperties
   // - more than one TSQLDBConnection instance can be run for the same
   // TSQLDBConnectionProperties
@@ -1518,7 +1557,7 @@ type
     // - any transmission protocol could call this method to execute the
     // corresponding TSQLDBProxyConnectionCommand on the current connection
     procedure RemoteProcessMessage(const Input: RawByteString;
-      out Output: RawByteString; Authenticate: TSynAuthentication=nil); virtual;
+      out Output: RawByteString; Protocol: TSQLDBProxyConnectionProtocol); virtual;
     {$endif}
 
     /// number of nested StartTransaction calls
@@ -2372,7 +2411,7 @@ type
   TSQLDBProxyConnectionPropertiesAbstract = class(TSQLDBConnectionProperties)
   protected
     fHandleConnection: boolean;
-    fAuthenticationClass: TSynAuthenticationClass;
+    fProtocol: TSQLDBProxyConnectionProtocol;
     fCurrentSession: integer;
     /// abstract process of internal commands
     // - one rough unique method is used, in order to make easier several
@@ -2382,6 +2421,7 @@ type
     function Process(Command: TSQLDBProxyConnectionCommand;
       const Input; var Output): integer; virtual; abstract;
     /// calls Process(cGetToken) + Process(cGetDBMS)
+    // - override this method and set fProtocol before calling inherited
     procedure SetInternalProperties; override;
     /// calls Process(cGetForeignKeys,self,fForeignKeys)
     procedure GetForeignKeys; override;
@@ -2555,7 +2595,7 @@ type
   // - will compute binary compressed messages for the remote processing,
   // ready to be served e.g. over HTTP via our SynDBRemote.pas unit
   // - abstract class which should override its protected ProcessMessage() method
-  // e.g. by TSQLDBRemoteConnectionPropertiesTest or 
+  // e.g. by TSQLDBRemoteConnectionPropertiesTest or
   TSQLDBRemoteConnectionPropertiesAbstract = class(TSQLDBProxyConnectionPropertiesAbstract)
   protected
     /// will build and interpret binary messages to be served with ProcessMessage
@@ -2573,7 +2613,6 @@ type
   TSQLDBRemoteConnectionPropertiesTest = class(TSQLDBRemoteConnectionPropertiesAbstract)
   protected
     fProps: TSQLDBConnectionProperties;
-    fAuthenticate: TSynAuthentication;
     // this overriden method will just call fProps.RemoteProcessMessage()
     procedure ProcessMessage(const Input: RawByteString; out Output: RawByteString); override;
   public
@@ -2581,9 +2620,7 @@ type
     // - you can specify a User/Password credential pair to also test the
     // authentication via TSynAuthentication
     constructor Create(aProps: TSQLDBConnectionProperties;
-      const aUserID,aPassword: RawUTF8); reintroduce;
-    /// released used memory
-    destructor Destroy; override;
+      const aUserID,aPassword: RawUTF8; aProtocol: TSQLDBProxyConnectionProtocolClass); reintroduce;
   end;
 
 
@@ -3923,8 +3960,48 @@ type
   end;
   PRemoteMessageHeader = ^TRemoteMessageHeader;
 
+constructor TSQLDBProxyConnectionProtocol.Create(aAuthenticate: TSynAuthentication);
+begin
+  fAuthenticate := aAuthenticate;
+end;
+
+function TSQLDBProxyConnectionProtocol.GetAuthenticate: TSynAuthentication;
+begin
+  if self=nil then
+    result := nil else
+    result := fAuthenticate;
+end;
+
+function TSQLDBProxyConnectionProtocol.HandleInput(const input: RawByteString): RawByteString;
+begin
+  result := input;
+end;
+
+function TSQLDBProxyConnectionProtocol.HandleOutput(const output: RawByteString): RawByteString;
+begin
+  result := output;
+end;
+
+destructor TSQLDBProxyConnectionProtocol.Destroy;
+begin
+  fAuthenticate.Free;
+end;
+
+function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString): RawByteString;
+begin
+  result := Input;
+  SymmetricEncrypt(length(result),result);
+  result := SynLZDecompress(result);
+end;
+
+function TSQLDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString): RawByteString;
+begin
+  result := SynLZCompress(output);
+  SymmetricEncrypt(length(result),result);
+end;
+
 procedure TSQLDBConnection.RemoteProcessMessage(const Input: RawByteString;
-  out Output: RawByteString; Authenticate: TSynAuthentication);
+  out Output: RawByteString; Protocol: TSQLDBProxyConnectionProtocol);
 var Stmt: ISQLDBStatement;
     Data: TRawByteStringStream;
     msgInput,msgOutput: RawByteString;
@@ -3945,12 +4022,14 @@ begin
   msgOutput := msgOutput+temp;
 end;
 begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
-  msgInput := SynLZDecompress(Input);
+  if Protocol=nil then
+    raise ESQLDBRemote.CreateUTF8('%.RemoteProcessMessage(protocol=nil)',[self]);
+  msgInput := Protocol.HandleInput(Input);
   header := pointer(msgInput);
   if (header=nil) or (header.Magic<>REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.RemoteProcessMessage() input',[self]);
-  if (Authenticate<>nil) and not (header.Command in [cGetToken,cGetDBMS]) then
-    if not Authenticate.SessionExists(header.SessionID) then
+  if (Protocol.Authenticate<>nil) and not (header.Command in [cGetToken,cGetDBMS]) then
+    if not Protocol.Authenticate.SessionExists(header.SessionID) then
       raise ESQLDBRemote.Create('You do not have the right to be here');
   O := pointer(msgInput);
   inc(O,sizeof(header^));
@@ -3958,12 +4037,12 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
     msgOutput := copy(msgInput,1,SizeOf(header^));
     case header.Command of
     cGetToken:
-      AppendOutput(Authenticate.CurrentToken);
+      AppendOutput(Protocol.Authenticate.CurrentToken);
     cGetDBMS: begin
       session := 0;
-      if Authenticate<>nil then begin
+      if Protocol.Authenticate<>nil then begin
         user := GetNextItem(PUTF8Char(O),#1);
-        session := Authenticate.CreateSession(user,PCardinal(O)^);
+        session := Protocol.Authenticate.CreateSession(user,PCardinal(O)^);
         if session=0 then
           raise ESQLDBRemote.Create('Invalid Credentials - check User and Password');
       end;
@@ -4042,7 +4121,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       end;
     end;
     cQuit:
-      Authenticate.RemoveSession(header.SessionID);
+      Protocol.Authenticate.RemoveSession(header.SessionID);
     else raise ESQLDBException.CreateUTF8(
       'Unknown %.RemoteProcessMessage() command %',[self,ord(header.Command)]);
     end;
@@ -4052,7 +4131,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       msgOutput := msgOutput+StringToUTF8(E.ClassName+#0+E.Message);
     end;
   end;
-  Output := SynLZCompress(msgOutput);
+  Output := Protocol.HandleOutput(msgOutput);
 end;
 
 {$endif WITH_PROXY}
@@ -7025,20 +7104,24 @@ procedure TSQLDBProxyConnectionPropertiesAbstract.SetInternalProperties;
 var InputCredential: RawUTF8;
     token: Int64;
 begin
-  if fAuthenticationClass=nil then
-    // override this method and set fAuthenticationClass before calling inherited  
-    fAuthenticationClass := TSynAuthentication;
+  if fProtocol=nil then
+    // override this method and set fProtocol before calling inherited
+    fProtocol := TSQLDBProxyConnectionProtocol.Create(nil);
   Process(cGetToken,self,token);
   SetLength(InputCredential,4);
-  PCardinal(InputCredential)^ := fAuthenticationClass.ComputeHash(token,UserID,PassWord);
+  PCardinal(InputCredential)^ := fProtocol.Authenticate.ComputeHash(token,UserID,PassWord);
   InputCredential := UserID+#1+InputCredential;
   fCurrentSession := Process(cGetDBMS,InputCredential,fDBMS);
 end;
 
 destructor TSQLDBProxyConnectionPropertiesAbstract.Destroy;
 begin
-  inherited Destroy;
-  Process(cQuit,self,self);
+  try
+    inherited Destroy;
+    Process(cQuit,self,self);
+  finally
+    fProtocol.Free;
+  end;
 end;
 
 procedure TSQLDBProxyConnectionPropertiesAbstract.GetForeignKeys;
@@ -7108,8 +7191,8 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() input command %',
         [self,ord(Command)]);
   end;
-  ProcessMessage(SynLZCompress(msgInput),msgRaw);
-  msgOutput := SynLZDecompress(msgRaw);
+  ProcessMessage(fProtocol.HandleOutput(msgInput),msgRaw);
+  msgOutput := fProtocol.HandleInput(msgRaw);
   outheader := pointer(msgOutput);
   if (outheader=nil) or (outheader.Magic<>REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.Process() returned content',[self]);
@@ -7146,23 +7229,18 @@ end;
 { TSQLDBRemoteConnectionPropertiesTest }
 
 constructor TSQLDBRemoteConnectionPropertiesTest.Create(
-  aProps: TSQLDBConnectionProperties; const aUserID,aPassword: RawUTF8);
+  aProps: TSQLDBConnectionProperties; const aUserID,aPassword: RawUTF8;
+  aProtocol: TSQLDBProxyConnectionProtocolClass);
 begin
   fProps := aProps;
-  fAuthenticate := TSynAuthentication.Create(aUserID,aPassword);
+  fProtocol := aProtocol.Create(TSynAuthentication.Create(aUserID,aPassword));
   inherited Create('','',aUserID,aPassword);
-end;
-
-destructor TSQLDBRemoteConnectionPropertiesTest.Destroy;
-begin
-  inherited;
-  fAuthenticate.Free;
 end;
 
 procedure TSQLDBRemoteConnectionPropertiesTest.ProcessMessage(const Input: RawByteString;
   out Output: RawByteString);
 begin
-  fProps.ThreadSafeConnection.RemoteProcessMessage(Input,Output,fAuthenticate);
+  fProps.ThreadSafeConnection.RemoteProcessMessage(Input,Output,fProtocol);
 end;
 
 
@@ -7620,3 +7698,4 @@ initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);
   assert(SizeOf(TSQLDBParam)=sizeof(PTrUInt)*3+sizeof(Int64));
 end.
+

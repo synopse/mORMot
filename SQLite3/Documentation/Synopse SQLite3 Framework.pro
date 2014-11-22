@@ -5328,9 +5328,9 @@ subgraph cluster_2 {
 label="Server";
 }
 \
-This feature is {\i not} part of our @*REST@ful @*ORM@, so does not use the {\f1\fs20 mORMot.pas} unit, but its own optimized protocol, using enhanced security (user authentication and optional HTTPS) and automatic data compression. Only the HTTP client and server classes, from the {\f1\fs20 SynCrtSock.pas} unit, are used.
+This feature is {\i not} part of our @*REST@ful @*ORM@, so does not use the {\f1\fs20 mORMot.pas} unit, but its own optimized protocol, using enhanced security (transmission encryption with user authentication and optional HTTPS) and automatic data compression. Only the HTTP client and server classes, from the {\f1\fs20 SynCrtSock.pas} unit, are used.
 Since your application can use both {\f1\fs20 @*TDataSet@} - see @134@ - and emulated {\f1\fs20 @*TQuery@} - see @133@, this new mean of transmission may make it easy to convert existing Delphi client-server applications into @7@ with minimal changes in source code. Then, for your new code, you may switch to a @*SOA@ / @*ORM@ design, using {\i mORMot}'s @*REST@ful abilities - see @6@.
-The transmission protocol uses an optimized binary format, which is compressed and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
+The transmission protocol uses an optimized binary format, which is compressed, encrypted and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
 :   Server and Client classes
 To publish your {\f1\fs20 SynDB.pas} connection, you just need to initialize one of the {\f1\fs20 TSQLDBServer*} classes defined in {\f1\fs20 SynDBRemote.pas}:
 \graph HierTSQLDBServerSockets SynDB Remote access Server classes hierarchy

@@ -74,7 +74,8 @@ object Form1: TForm1
       Items.Strings = (
         'JSON file'
         'SQLite3 direct'
-        'SQLite3 proxy'
+        'SQLite3 proxy direct'
+        'SQLite3 proxy compressed'
         'SQLite3 HTTP WinHTTP'
         'SQLite3 HTTP WinINet'
         'SQLite3 HTTP Sockets')

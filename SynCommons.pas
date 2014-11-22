@@ -570,7 +570,8 @@ unit SynCommons;
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
     instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
   - added fnv32() function, slower than kr32, but with less collisions
-  - added SynLZCompress/SynLZDecompress functions, using crc32c() for hashing 
+  - added SynLZCompress/SynLZDecompress functions, using crc32c() for hashing
+  - added SymmetricEncrypt() function
   - added GetAllBits() function
   - changed GetBitCSV/SetBitCSV CSV format to use 'first-last,' pattern to
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
@@ -7416,6 +7417,10 @@ function SupportSSE42: boolean;
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif PUREPASCAL}
+
+/// naive symmetric encryption scheme using a 32 bit key
+// - fast, but not very secure
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 var
   /// compute CRC32C checksum on the supplied buffer
@@ -22638,6 +22643,22 @@ asm // ecx=crc, rdx=buf, r8=len
 @0: not eax
 end;
 {$endif CPU64DELPHI}
+
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
+var i,len: integer;
+    d: PCardinal;
+begin
+  UniqueString(data);
+  len := length(data);
+  d := pointer(data);
+  for i := 0 to (len shr 2)-1 do begin
+    key := key xor PCardinalArray(@crc32ctab)^[i and $ff];
+    d^ := d^ xor key;
+    inc(d);
+  end;
+  for i := 0 to (len and 3)-1 do
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor byte(key xor crc32ctab[0,i]);
+end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}

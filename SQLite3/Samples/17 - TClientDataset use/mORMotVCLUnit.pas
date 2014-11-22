@@ -56,6 +56,8 @@ begin
   fDBFileName :=  '..\..\exe\test.db3';
   if not FileExists(fDBFileName) then
     fDBFileName :=  '..\..\test.db3';
+  if not FileExists(fDBFileName) then
+    raise Exception.Create('impossible to find test.db3');
   fProps := TSQLDBSQLite3ConnectionProperties.Create(StringToUTF8(fDBFileName),'','','');
   fServer := SERVER_CLASS.Create(fProps,SERVER_NAME,SERVER_PORT,'user','pass');
 end;
@@ -79,16 +81,19 @@ begin
       ds1.DataSet := JSONToClientDataSet(self,fJSON) else
       ds1.DataSet := JSONToDataSet(self,fJSON, // demo client-side column definition
         [sftInteger,sftUTF8Text,sftUTF8Text,sftBlob,sftInteger,sftInteger]);
-  1,2,3,4,5: begin
+  1..6: begin
     // test TSynSQLStatementDataSet: reading from SynDB database
     proxy := fProps;
     try
       case cbbDataSource.ItemIndex of
       1: ; // source is directly the SQLite3 engine
-      2: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(fProps,'user','pass');
-      3: proxy := TSQLDBWinHTTPConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
-      4: proxy := TSQLDBWinINetConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
-      5: proxy := TSQLDBSocketConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
+      2: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
+          fProps,'user','pass',TSQLDBProxyConnectionProtocol);
+      3: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
+         fProps,'user','pass',TSQLDBRemoteConnectionProtocol);
+      4: proxy := TSQLDBWinHTTPConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
+      5: proxy := TSQLDBWinINetConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
+      6: proxy := TSQLDBSocketConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
       end;
       stmt := proxy.NewThreadSafeStatement;
       try
