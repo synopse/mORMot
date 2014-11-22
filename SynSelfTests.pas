@@ -8386,47 +8386,83 @@ end;
 procedure TTestExternalDatabase._SynDBRemote;
 var Props: TSQLDBConnectionProperties;
 procedure DoTest(proxy: TSQLDBConnectionProperties);
-var Stmt: ISQLDBRows;
+procedure DoTests;
+var res: ISQLDBRows;
     id,lastid,n,n1: integer;
+    IDs: TIntegerDynArray;
     {$ifndef LVCL}
     Row: variant;
     {$endif}
+procedure DoInsert;
+var i: integer;
+begin
+  for i := 0 to high(IDs) do
+    proxy.ExecuteNoResult(
+      'INSERT INTO People (ID,FirstName,LastName,YearOfBirth,YearOfDeath) '+
+      'VALUES (?,?,?,?,?)',
+      [IDs[i],'FirstName New '+Int32ToUtf8(i),'New Last',i+1400,1519]);
+end;
+function DoCount: integer;
+var res: ISQLDBRows;
+begin
+  res := proxy.Execute('select count(*) from People where YearOfDeath=?',[1519]);
+  Check(res.Step);
+  result := res.ColumnInt(0);
+end;
+begin
+  if proxy<>Props then
+    Check(proxy.UserID='user');
+  proxy.ExecuteNoResult('delete from people where ID>=?',[50000]);
+  res := proxy.Execute('select * from People where YearOfDeath=?',[1519]);
+  Check(res<>nil);
+  n := 0;
+  lastid := 0;
+  while res.Step do begin
+    id := res.ColumnInt('ID');
+    Check(id<>lastid);
+    Check(id>0);
+    lastid := id;
+    Check(res.ColumnInt('YearOfDeath')=1519);
+    inc(n);
+  end;
+  Check(n=DoCount);
+  n1 := n;
+  n := 0;
+  {$ifndef LVCL}
+  Row := res.RowData;
+  {$endif}
+  if res.Step(true) then
+  repeat
+    {$ifdef LVCL}
+    Check(res.ColumnInt('ID')>0);
+    Check(res.ColumnInt('YearOfDeath')=1519);
+    {$else}
+    Check(Row.ID>0);
+    Check(Row.YearOfDeath=1519);
+    {$endif}
+    inc(n);
+  until not res.Step;
+  Check(n=n1);
+  SetLength(IDs,50);
+  FillIncreasing(pointer(IDs),50000,length(IDs));
+  proxy.ThreadSafeConnection.StartTransaction;
+  DoInsert;
+  proxy.ThreadSafeConnection.Rollback;
+  Check(DoCount=n);
+  proxy.ThreadSafeConnection.StartTransaction;
+  DoInsert;
+  proxy.ThreadSafeConnection.Commit;
+  n1 := DoCount;
+  Check(n1=n+length(IDs));
+  proxy.ExecuteNoResult('delete from people where ID>=?',[50000]);
+  Check(DoCount=n);
+end;
 begin
   try
-    Check(Proxy.UserID='user');
-    Stmt := proxy.Execute('select * from People where YearOfDeath=?',[1519]);
-    Check(Stmt<>nil);
-    n := 0;
-    lastid := 0;
-    while Stmt.Step do begin
-      id := Stmt.ColumnInt('ID');
-      Check(id<>lastid);
-      Check(id>0);
-      lastid := id;
-      Check(Stmt.ColumnInt('YearOfDeath')=1519);
-      inc(n);
-    end;
-    Check(n>500);
-    n1 := n;
-    n := 0;
-    {$ifndef LVCL}
-    Row := Stmt.RowData;
-    {$endif}
-    if Stmt.Step(true) then
-    repeat
-      {$ifdef LVCL}
-      Check(Stmt.ColumnInt('ID')>0);
-      Check(Stmt.ColumnInt('YearOfDeath')=1519);
-      {$else}
-      Check(Row.ID>0);
-      Check(Row.YearOfDeath=1519);
-      {$endif}
-      inc(n);
-    until not Stmt.Step;
-    Check(n=n1);
+    DoTests;
   finally
-    Stmt := nil;
-    proxy.Free;
+    if proxy<>Props then
+      proxy.Free;
   end;
 end;
 var Server: TSQLDBServerAbstract;
@@ -8434,7 +8470,11 @@ const ADDR='localhost:'+HTTP_DEFAULTPORT;
 begin
   Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
   try
-    DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(Props,'user','pass'));
+    DoTest(Props);
+    DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(
+      Props,'user','pass',TSQLDBProxyConnectionProtocol));
+    DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(
+      Props,'user','pass',TSQLDBRemoteConnectionProtocol));
     Server := {$ifdef MSWINDOWS}TSQLDBServerHttpApi{$else}TSQLDBServerSockets{$endif}.
       Create(Props,'root',HTTP_DEFAULTPORT,'user','pass');
     try

@@ -10645,7 +10645,7 @@ type
   TLockedDocVariant = class(TInterfacedObject,ILockedDocVariant)
   protected
     fValue: TDocVariantData;
-    fLock: IAutoLocker;
+    fLock: TAutoLocker;
     function GetValue(const Name: RawUTF8): Variant;
     procedure SetValue(const Name: RawUTF8; const Value: Variant);
   public
@@ -10653,6 +10653,8 @@ type
     constructor Create(FastStorage: boolean=True); overload;
     /// initialize the thread-safe document storage with the corresponding options
     constructor Create(options: TDocVariantOptions); overload;
+    /// finalize the storage
+    destructor Destroy; override;
     /// check and return a given property by name
     function Exists(const Name: RawUTF8; out Value: Variant): boolean;
     /// set a value by property name, and set a local copy
@@ -22648,7 +22650,7 @@ procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
     d: PCardinal;
 begin
-  UniqueString(data);
+  UniqueString(AnsiString(data));
   len := length(data);
   d := pointer(data);
   for i := 0 to (len shr 2)-1 do begin
@@ -37132,6 +37134,12 @@ constructor TLockedDocVariant.Create(options: TDocVariantOptions);
 begin
   fLock := TAutoLocker.Create;
   fValue.Init(options);
+end;
+
+destructor TLockedDocVariant.Destroy;
+begin
+  inherited;
+  fLock.Free;
 end;
 
 function TLockedDocVariant.Exists(const Name: RawUTF8; out Value: Variant): boolean;

@@ -91,9 +91,12 @@ begin
           fProps,'user','pass',TSQLDBProxyConnectionProtocol);
       3: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
          fProps,'user','pass',TSQLDBRemoteConnectionProtocol);
-      4: proxy := TSQLDBWinHTTPConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
-      5: proxy := TSQLDBWinINetConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
-      6: proxy := TSQLDBSocketConnectionProperties.Create(SERVER_ADDR,SERVER_NAME,'user','pass');
+      4: proxy := TSQLDBWinHTTPConnectionProperties.Create(
+          SERVER_ADDR,SERVER_NAME,'user','pass');
+      5: proxy := TSQLDBWinINetConnectionProperties.Create(
+          SERVER_ADDR,SERVER_NAME,'user','pass');
+      6: proxy := TSQLDBSocketConnectionProperties.Create(
+          SERVER_ADDR,SERVER_NAME,'user','pass');
       end;
       stmt := proxy.NewThreadSafeStatement;
       try

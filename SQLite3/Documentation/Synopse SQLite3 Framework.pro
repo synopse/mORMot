@@ -5397,6 +5397,7 @@ You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*T
 !!  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
 !  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
 If you use the {\f1\fs20 http.sys} kernel-mode server, you could share the same IP port between regular ORM/SOA operations (which may be 80 for a "pure" HTTP server), and remote {\f1\fs20 SynDB} access, if the database name (i.e. here '{\f1\fs20 syndbremote}') does not conflict with a ORM table nor a method service.
+Note that you can also customize the transmission protocol by setting your own {\f1\fs20 TSQLDBProxyConnectionProtocol} class on both server and server sides.
 :   Integration with SynDBExplorer
 Our {\f1\fs20 @*SynDBExplorer@} tool is able to publish in one click any {\f1\fs20 SynDB} connection as a HTTP server, or connect to it via HTTP. It could be very handy, even for debugging purposes.
 To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the "{\f1\fs20 Start}" button.

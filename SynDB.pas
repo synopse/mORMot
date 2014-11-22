@@ -890,16 +890,16 @@ type
   /// proxy commands implemented by TSQLDBProxyConnectionProperties.Process()
   // - method signature expect "const Input" and "var Output" arguments
   // - Input is not used for cConnect, cDisconnect, cGetForeignKeys,
-  // cStartTransaction, cCommit, cRollback and cServerTimeStamp
+  // cTryStartTransaction, cCommit, cRollback and cServerTimeStamp
   // - Input is the TSQLDBProxyConnectionProperties instance for cInitialize
   // - Input is the RawUTF8 table name for most cGet* metadata commands
   // - Input is the SQL statement and associated bound parameters for cExecute,
   // cExecuteToBinary, cExecuteToJSON, and cExecuteToExpandedJSON, encoded as
   // TSQLDBProxyConnectionCommandExecute record
-  // - Output is not used for cConnect, cDisconnect, cStartTransaction,
-  // cCommit, cRollback and cExecute
+  // - Output is not used for cConnect, cDisconnect, cCommit, cRollback and cExecute
   // - Output is TSQLDBDefinition (i.e. DBMS type) for cInitialize
   // - Output is TTimeLog for cServerTimeStamp
+  // - Output is boolean for cTryStartTransaction
   // - Output is TSQLDBColumnDefineDynArray for cGetFields
   // - Output is TSQLDBIndexDefineDynArray for cGetIndexes
   // - Output is TSynNameValue (fForeignKeys) for cGetForeignKeys
@@ -911,7 +911,7 @@ type
   // ! Process(cGetDBMS,User#1Hash: RawUTF8,fDBMS: TSQLDBDefinition);
   // ! Process(cConnect,?,?);
   // ! Process(cDisconnect,?,?);
-  // ! Process(cStartTransaction,?,?);
+  // ! Process(cTryStartTransaction,?,started: boolean);
   // ! Process(cCommit,?,?);
   // ! Process(cRollback,?,?);
   // ! Process(cServerTimeStamp,?,result: TTimeLog);
@@ -927,7 +927,7 @@ type
   // to the client in case of remote connection 
   TSQLDBProxyConnectionCommand = (
     cGetToken,cGetDBMS,
-    cConnect, cDisconnect, cStartTransaction, cCommit, cRollback,
+    cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
     cServerTimeStamp,
     cGetFields, cGetIndexes, cGetTableNames, cGetForeignKeys,
     cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON,
@@ -1169,7 +1169,7 @@ type
     // - overloaded method using FormatUTF8() and inlined parameters
     function PrepareInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
-    // the result rows
+    // the result rows corresponding to the supplied SELECT statement
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
     // statement instance, then run the corresponding Execute() method
     // - raise an exception on error
@@ -1443,10 +1443,19 @@ type
   TSQLDBProxyConnectionProtocol = class
   protected
     fAuthenticate: TSynAuthentication;
+    fTransactionSessionID: integer;
+    fTransactionRetryTimeout: Int64;
+    fTransactionActiveTimeout: Int64;
+    fTransactionActiveAutoReleaseTicks: Int64;
+    fLock: TRTLCriticalSection;
     function GetAuthenticate: TSynAuthentication;
     /// default Handle*() will just return the incoming value
     function HandleInput(const input: RawByteString): RawByteString; virtual;
     function HandleOutput(const output: RawByteString): RawByteString; virtual;
+    /// default trial transaction
+    function TransactionStarted(connection: TSQLDBConnection;
+      sessionID: integer): boolean; virtual;
+    procedure TransactionEnd(sessionID: integer); virtual;
   public
     /// initialize a protocol, with a given authentication scheme
     // - if no authentication is given, none will be processed
@@ -2413,6 +2422,7 @@ type
     fHandleConnection: boolean;
     fProtocol: TSQLDBProxyConnectionProtocol;
     fCurrentSession: integer;
+    fStartTransactionTimeOut: Int64;
     /// abstract process of internal commands
     // - one rough unique method is used, in order to make easier several
     // implementation schemes and reduce data marshalling as much as possible
@@ -2449,8 +2459,14 @@ type
     // remote connection
     // - you can set this property to TRUE if you expect the remote connection
     // by in synch with the remote proxy connection (should not be used in
-    // most cases, unless you are sure you have only one single client at a time 
+    // most cases, unless you are sure you have only one single client at a time
     property HandleConnection: boolean read fHandleConnection write fHandleConnection;
+    /// milliseconds to way until StartTransaction is allowed by the server
+    // - in the current implementation, there should be a single transaction
+    // at once on the server side: this is the time to try before reporting
+    // an ESQLDBRemote exception failure
+    property StartTransactionTimeOut: Int64
+      read fStartTransactionTimeOut write fStartTransactionTimeOut;
   end;
 
   /// implements an abstract proxy-like virtual connection to a DB engine
@@ -3963,6 +3979,9 @@ type
 constructor TSQLDBProxyConnectionProtocol.Create(aAuthenticate: TSynAuthentication);
 begin
   fAuthenticate := aAuthenticate;
+  fTransactionRetryTimeout := 100;
+  fTransactionActiveTimeout := 120000; // after 2 minutes, clear any transaction 
+  InitializeCriticalSection(fLock);
 end;
 
 function TSQLDBProxyConnectionProtocol.GetAuthenticate: TSynAuthentication;
@@ -3982,9 +4001,59 @@ begin
   result := output;
 end;
 
+function TSQLDBProxyConnectionProtocol.TransactionStarted(connection: TSQLDBConnection;
+  sessionID: integer): boolean;
+var endTrial: Int64;
+begin
+  if sessionID=0 then
+    raise ESQLDBRemote.Create('Remote transaction expects authentication/session');
+  endTrial := GetTickCount64+fTransactionRetryTimeout;
+  repeat
+    EnterCriticalSection(fLock);
+    try
+      if (fTransactionActiveAutoReleaseTicks<>0) and
+         (GetTickCount64>fTransactionActiveAutoReleaseTicks) then
+        try
+          connection.Rollback;
+        finally
+          fTransactionSessionID := 0;
+          fTransactionActiveAutoReleaseTicks := 0;
+        end;
+      result := fTransactionSessionID=0;
+      if result then begin
+        fTransactionSessionID := sessionID;
+        fTransactionActiveAutoReleaseTicks := GetTickCount64+fTransactionActiveTimeout;
+        connection.StartTransaction;
+      end;
+    finally
+      LeaveCriticalSection(fLock);
+    end;
+    if result or (GetTickCount64>endTrial) then
+      break;
+    sleep(1);
+  until false;
+end;
+
+procedure TSQLDBProxyConnectionProtocol.TransactionEnd(sessionID: integer);
+begin
+  if sessionID=0 then
+    raise ESQLDBRemote.Create('Remote transaction expects authentication/session');
+  EnterCriticalSection(fLock);
+  try
+    if sessionID<>fTransactionSessionID then
+      raise ESQLDBRemote.CreateUTF8('Invalid %.TransactionEnd(%) - expected %',
+        [self,sessionID,fTransactionSessionID]);
+    fTransactionSessionID := 0;
+    fTransactionActiveAutoReleaseTicks := 0;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
 destructor TSQLDBProxyConnectionProtocol.Destroy;
 begin
   fAuthenticate.Free;
+  DeleteCriticalSection(fLock);
 end;
 
 function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString): RawByteString;
@@ -4053,12 +4122,16 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       Connect;
     cDisconnect:
       Disconnect;
-    cStartTransaction:
-      StartTransaction;
-    cCommit:
+    cTryStartTransaction:
+      msgOutput := msgOutput+AnsiChar(Protocol.TransactionStarted(self,header.SessionID));
+    cCommit: begin
+      Protocol.TransactionEnd(header.SessionID);
       Commit;
-    cRollback:
+    end;
+    cRollback: begin
+      Protocol.TransactionEnd(header.SessionID);
       Rollback;
+    end;
     cServerTimeStamp:
       AppendOutput(ServerTimeStamp);
     cGetFields: begin
@@ -4120,8 +4193,11 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         end;
       end;
     end;
-    cQuit:
+    cQuit: begin
+      if header.SessionID=Protocol.fTransactionSessionID then
+        Protocol.TransactionEnd(header.SessionID);
       Protocol.Authenticate.RemoveSession(header.SessionID);
+    end;
     else raise ESQLDBException.CreateUTF8(
       'Unknown %.RemoteProcessMessage() command %',[self,ord(header.Command)]);
     end;
@@ -7104,6 +7180,8 @@ procedure TSQLDBProxyConnectionPropertiesAbstract.SetInternalProperties;
 var InputCredential: RawUTF8;
     token: Int64;
 begin
+  if fStartTransactionTimeOut=0 then
+    fStartTransactionTimeOut := 2000;
   if fProtocol=nil then
     // override this method and set fProtocol before calling inherited
     fProtocol := TSQLDBProxyConnectionProtocol.Create(nil);
@@ -7169,6 +7247,7 @@ var msgInput,msgOutput,msgRaw: RawByteString;
     O: PAnsiChar;
     OutputSQLDBDefinition: TSQLDBDefinition absolute Output;
     OutputInt64: Int64 absolute Output;
+    OutputBoolean: boolean absolute Output;
     OutputSQLDBColumnDefineDynArray: TSQLDBColumnDefineDynArray absolute Output;
     OutputSQLDBIndexDefineDynArray: TSQLDBIndexDefineDynArray absolute Output;
     OutputRawUTF8DynArray: TRawUTF8DynArray absolute Output;
@@ -7180,7 +7259,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   header.Command := Command;
   SetString(msgInput,PAnsiChar(@header),sizeof(header));
   case Command of
-  cGetToken, cConnect, cDisconnect, cStartTransaction, cCommit, cRollback,
+  cGetToken, cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
   cServerTimeStamp, cGetTableNames, cGetForeignKeys, cQuit:
     ; // no input parameters here, just the command
   cGetDBMS, cGetFields, cGetIndexes:
@@ -7203,8 +7282,10 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
     OutputInt64 := PInt64(O)^;
   cGetDBMS:
     OutputSQLDBDefinition := TSQLDBDefinition(O^);
-  cConnect, cDisconnect, cStartTransaction, cCommit, cRollback, cExecute, cQuit:
+  cConnect, cDisconnect, cCommit, cRollback, cExecute, cQuit:
     ; // no output parameters here
+  cTryStartTransaction:
+    OutputBoolean := boolean(O^);
   cGetFields:
     DynArrayLoad(OutputSQLDBColumnDefineDynArray,O,TypeInfo(TSQLDBColumnDefineDynArray));
   cGetIndexes:
@@ -7296,9 +7377,23 @@ begin
 end;
 
 procedure TSQLDBProxyConnection.StartTransaction;
+var started: boolean;
+    endTrial: Int64;
 begin
   inherited StartTransaction;
-  fProxy.Process(cStartTransaction,self,self);
+  started := false;
+  endTrial := GetTickCount64+fProxy.StartTransactionTimeOut;
+  repeat
+    fProxy.Process(cTryStartTransaction,self,started);
+    if started or (GetTickCount64>endTrial) then
+      break;
+    sleep(10); // retry every 10 ms
+  until false;
+  if not started then begin
+    inherited Rollback; // dec(fTransactionCount)
+    raise ESQLDBRemote.CreateUTF8('Reached %("%/%").StartTransactionTimeOut=% ms',
+      [self,fProxy.ServerName,fProxy.DatabaseName,fProxy.StartTransactionTimeOut]);
+  end;
 end;
 
 
