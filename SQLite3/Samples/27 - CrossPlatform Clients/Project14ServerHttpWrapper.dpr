@@ -48,8 +48,9 @@ begin
       aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
       try
         aHTTPServer.AccessControlAllowOrigin := '*'; // for AJAX requests to work
-        writeln(#10'Background server is running.');
-        writeln('You can test http://localhost:',PORT_NAME,'/wrapper');
+        writeln(#10'Background server is running.'#10);
+        writeln('Cross-Platform wrappers are available at localhost:',
+          PORT_NAME,'/',ROOT_NAME,'/wrapper'#10);
         writeln(#10'Press [Enter] to close the server.'#10);
         readln;
       finally
