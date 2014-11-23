@@ -35557,6 +35557,9 @@ end;
 procedure TextColor(Color: TConsoleColor);
 const AnsiTbl : string[8]='04261537';
 begin
+  if ord(color)=TextAttr then
+    exit;
+  TextAttr := ord(color);
   if ord(color)>=8 then
     write(#27'[1;3') else
     write(#27'[0;3');
