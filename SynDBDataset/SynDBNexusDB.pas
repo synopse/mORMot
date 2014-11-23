@@ -68,6 +68,7 @@ uses
   Classes, Contnrs,
   {$ifdef ISDELPHIXE2}Data.DB,{$else}DB,{$endif}
   SynCommons,
+  SynLog,
   SynDB,
   SynDBDataset,
   nxDB,

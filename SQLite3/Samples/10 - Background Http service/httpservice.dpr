@@ -8,6 +8,7 @@ uses
   SysUtils,
   WinSvc,
   SynCommons,
+  SynLog,
   mORMotService,
   mORMot,
   mORMotSQLite3, SynSQLite3Static,

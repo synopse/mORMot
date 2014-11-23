@@ -146,6 +146,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   SynDB;
              

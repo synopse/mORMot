@@ -8,6 +8,7 @@ program RESTserver_wrappers;
 
 uses
   SynCommons,          // framework core
+  SynLog,              // logging features
   mORMot,              // RESTful server & ORM
   mORMotSQLite3,       // SQLite3 engine as ORM core
   SynSQLite3Static,    // staticaly linked SQLite3 engine

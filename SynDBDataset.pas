@@ -62,6 +62,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   {$ifdef ISDELPHIXE2}
   Data.DB, Data.FMTBcd;

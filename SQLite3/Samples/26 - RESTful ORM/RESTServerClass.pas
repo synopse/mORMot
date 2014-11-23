@@ -6,6 +6,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   RESTData;
 

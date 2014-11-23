@@ -68,6 +68,7 @@ uses
   {$endif}
   Variants,
   SynCommons,
+  SynLog,
   SynCrypto,
   SynMustache,
   mORMot;

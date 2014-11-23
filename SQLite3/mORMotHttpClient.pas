@@ -144,6 +144,7 @@ uses
   SynLZ,
   SynCrtSock,
   SynCommons,
+  SynLog,
   mORMot;
 
 type

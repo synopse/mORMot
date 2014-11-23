@@ -88,7 +88,8 @@ interface
 uses
   Windows, WinSVC, Messages, Classes, SysUtils,
   {$ifndef LVCL}Contnrs,{$endif}
-  SynCommons
+  SynCommons,
+  SynLog
   {$ifndef NOMORMOTKERNEL},
   mORMot
   {$endif} // translated caption needed only if with full UI

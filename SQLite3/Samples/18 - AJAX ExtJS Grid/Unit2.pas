@@ -5,7 +5,8 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
-  SynCommons, mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer; 
+  SynCommons, SynLog,
+  mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer; 
 
 type
   TSQLSampleRecord = class(TSQLRecord)

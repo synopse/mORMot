@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, ShellAPI,
-  SynCommons, SynZip, SynCrtSock,
+  SynCommons, SynLog, SynZip, SynCrtSock,
   mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer;
 
 type

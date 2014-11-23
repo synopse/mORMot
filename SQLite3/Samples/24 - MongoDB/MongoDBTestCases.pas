@@ -11,6 +11,7 @@ uses
   SysUtils,
   Variants,
   SynCommons,
+  SynTests,
   SynMongoDB,
   mORMot,
   SynSQLite3Static,

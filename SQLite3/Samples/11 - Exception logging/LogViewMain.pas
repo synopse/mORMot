@@ -10,7 +10,7 @@ uses
 {$WARN UNIT_PLATFORM OFF}
   FileCtrl,
 {$WARN UNIT_PLATFORM ON}
-  SynCommons, mORMotHttpServer;
+  SynCommons, SynLog, mORMotHttpServer;
 
 type
   TMainLogView = class(TForm)

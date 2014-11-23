@@ -106,6 +106,8 @@ uses
   SynCrypto in '..\SynCrypto.pas',
   SynCrtSock in '..\SynCrtSock.pas',
   SynCommons in '..\SynCommons.pas',
+  SynLog in '..\SynLog.pas',
+  SynTests in '..\SynTests.pas',
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',

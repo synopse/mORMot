@@ -206,6 +206,7 @@ uses
   SynCrtSock,
   SynCrypto, // for CompressShaAes()
   SynCommons,
+  SynLog,
   mORMot;
 
 type

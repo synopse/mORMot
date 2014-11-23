@@ -22,7 +22,8 @@ uses
   mORMot,
   SynSelfTests,
 {$endif}
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 type
   /// a class just to show how methods are handled

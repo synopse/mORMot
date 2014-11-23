@@ -1167,7 +1167,9 @@ uses
 {$ifdef SSPIAUTH}
   SynSSPIAuth,
 {$endif}
-  SynCommons;
+  SynCommons,
+  SynLog,
+  SynTests;
 
 
 

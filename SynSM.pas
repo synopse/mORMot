@@ -81,6 +81,8 @@ uses
   {$endif}
   Variants,
   SynCommons,
+  SynLog,
+  SynTests,
   SynSMAPI;
 
 const

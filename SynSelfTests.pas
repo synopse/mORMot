@@ -161,7 +161,9 @@ uses
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
-  SynCommons;
+  SynCommons,
+  SynLog,
+  SynTests;
 
 
 

@@ -246,7 +246,8 @@ uses
   {$ifdef FPC}
   Variants,
   {$endif}
-  SynCommons;
+  SynCommons,
+  SynTests;
 
 type
   TSynBigTable = class;

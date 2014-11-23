@@ -83,6 +83,8 @@ uses
   SynCrypto,
   SynCrtSock,
   SynCommons,
+  SynLog,
+  SynTests,
 {$ifndef DELPHI5OROLDER}
   {$ifdef MSWINDOWS}
   SynBigTable,

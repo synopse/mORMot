@@ -188,7 +188,8 @@ uses
   {$ifndef LVCL}
   Contnrs,
   {$endif}
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }

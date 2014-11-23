@@ -6,7 +6,7 @@ program Project14ServerHttp;
 uses
   SysUtils,
   Classes,
-  SynCommons,
+  SynCommons, SynLog,
   mORMot,
   mORMotHttpServer,
   Project14Interface in 'Project14Interface.pas';

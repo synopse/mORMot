@@ -18,11 +18,13 @@ const
 
 var delete: boolean;
     i: integer;
+
 procedure Call(const Root,Port: RawByteString);
 begin
   writeln(REGSTR[delete],' of /',root,':',port,'/+ for http.sys');
   writeln(THttpApiServer.AddUrlAuthorize(root,port,false,'+',delete));
 end;
+
 begin
   // perform url registration for http.sys
   // (e.g. to be run as administrator under Windows Vista/Seven)

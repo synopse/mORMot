@@ -10,6 +10,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotDB,
   mORMotHttpServer,

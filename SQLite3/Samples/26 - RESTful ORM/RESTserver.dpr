@@ -9,6 +9,7 @@ uses
   SysUtils,
   WinSvc,
   SynCommons,
+  SynLog,
   mORMot,
   SynCrtSock,
   mORMotHTTPServer,

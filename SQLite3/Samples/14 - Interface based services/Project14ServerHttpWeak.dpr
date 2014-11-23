@@ -7,6 +7,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotSQLite3,
   mORMotHttpServer,

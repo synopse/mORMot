@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, SynCommons, mORMot, mORMotHttpClient;
+  Dialogs, StdCtrls, SynCommons, SynLog, mORMot, mORMotHttpClient;
 
 type
   TMainForm = class(TForm)

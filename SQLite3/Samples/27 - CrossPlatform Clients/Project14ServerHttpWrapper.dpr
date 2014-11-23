@@ -1,4 +1,4 @@
-/// this server will demonstrate how to publish code generation wrappers 
+/// this server will demonstrate how to publish code generation wrappers
 program Project14ServerHttpWrapper;
 
 {$APPTYPE CONSOLE}
@@ -7,6 +7,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotHttpServer,
   mORMotWrappers,

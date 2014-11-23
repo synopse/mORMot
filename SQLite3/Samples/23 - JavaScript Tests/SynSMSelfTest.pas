@@ -58,7 +58,9 @@ uses
   SysUtils,
   Math,
   SynCrtSock,
-  SynCommons;
+  SynCommons,
+  SynLog,
+  SynTests;
 
 /// this is the main entry point of the tests
 // - this procedure will create a console, then run all available tests

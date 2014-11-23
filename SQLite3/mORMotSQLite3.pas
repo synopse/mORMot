@@ -263,9 +263,10 @@ uses
 {$endif}
   SynZip,
   SynCommons,
+  SynLog,
   SynSQLite3,
   mORMot;
-
+  
 {$define INCLUDE_FTS3}
 { define this if you want to include the FTS3/FTS4 feature into the library
   - FTS3 is an SQLite module implementing full-text search

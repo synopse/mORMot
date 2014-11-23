@@ -73,7 +73,8 @@ uses
   Variants, // this unit expects Variants to be available for storage
   SysUtils,
   SynCrtSock,
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 
   

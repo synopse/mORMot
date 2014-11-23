@@ -8,6 +8,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
 {$ifndef DELPHI5OROLDER}
   mORMot,
 {$endif}

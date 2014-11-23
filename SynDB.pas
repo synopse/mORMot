@@ -294,7 +294,8 @@ uses
   {$ifndef DELPHI5OROLDER}
   Variants,
   {$endif}
-  SynCommons;
+  SynCommons,
+  SynLog;
 
   
 { -------------- TSQLDB* generic classes and types }

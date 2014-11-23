@@ -66,6 +66,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   DBTables,
   SynDBDataset;

@@ -124,6 +124,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   // load physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to

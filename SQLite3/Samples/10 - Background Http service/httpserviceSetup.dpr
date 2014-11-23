@@ -8,6 +8,7 @@ uses
   SysUtils,
   WinSvc,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotService;
 

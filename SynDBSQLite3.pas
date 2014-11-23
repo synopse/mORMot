@@ -107,6 +107,7 @@ uses
   Contnrs,
   {$endif}
   SynCommons,
+  SynLog,
   SynSQLite3,
   SynDB;
 

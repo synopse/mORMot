@@ -65,6 +65,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   SynDBDataset,
   {$ifdef ISDELPHIXE5}

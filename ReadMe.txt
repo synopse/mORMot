@@ -212,6 +212,7 @@ Quick Steps when upgrading from a previous 1.17 revision:
 3) Download latest 1.18 revision files as stated just above
   
 4) Change your references to mORMot units:
+ - Add in your uses clause SynLog.pas and/or SynTests.pas if needed;
  - Rename in your uses clause any SQLite3Commons reference into mORmot;
  - Rename in your uses clause any SQLite3 reference into mORMotSQLite3;
  - Rename in your uses clause any other SQlite3* reference into mORMot*;

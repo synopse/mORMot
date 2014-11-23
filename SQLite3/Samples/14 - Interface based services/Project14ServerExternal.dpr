@@ -11,7 +11,7 @@ uses
   SysUtils,
   mORMot,
   mORMotSQLite3,
-  SynCommons,
+  SynCommons, SynLog,
   SynDB,
   SynDBSQLite3, SynSQLite3, SynSQLite3Static,
   mORMotDB,

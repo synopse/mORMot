@@ -742,13 +742,13 @@ Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit 
 :123 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
 First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries targets the main article about a given concept or technical term.
-Feel free to give your feedback in the very same forum, asking new questions or improving answers!
-{\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes!
+Feel free to give your feedback at @http://synopse.info/forum asking new questions or improving answers!
+{\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes! Consider also the  slides available at @https://drive.google.com/folderview?id=0B0r8u-FwvxWdeVJVZnBhSEpKYkE
 {\b Where should I start?}\line Take a look at the {\i Architecture principles} @40@, then download and install the sources and compile and run the {\f1\fs20 TestSQL3.dpr} program as stated @113@. Check about @*ORM@ @3@, @*SOA@ @63@ and @*MVC@ @108@, then test the various samples (from the {\f1\fs20 SQLite3\\Samples} folder), especially 01, 02, 04, 11, 12, 14, 17, 26, 28, 30 and the {\f1\fs20 MainDemo}.
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services and "manual" SQL statements - in this case, you have at hand @27@ classes in {\i mORMot}, which allow very high performance and direct export to JSON.
 {\b I am tempted by using an ORM, but {\i mORMot} forces you to inherit from a root {\f1\fs20 @*TSQLRecord@} type, whereas I'd like to use any kind of object.}\line Adding attributes to an existing class is tempting, but would pollute your code at the end, mixing persistence and business logic: see {\i @*Persistence Ignorance@} and {\i @*Aggregates@} @124@. Our ORM does not rely on {\i generics}, but on the power of the object pascal {\f1\fs20 class} used with {\i @*convention over configuration@} - so our code is faster, and works with older versions of Delphi, or FreePascal.
-{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can use standard {\i Delphi} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
+{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see @77@ or @72@. If you used {\i DataSnap} to access a remote database and linked to VCL components, see the {\f1\fs20 mORMotVCL.pas} unit which can publish a data source for your UI.
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
@@ -1258,7 +1258,7 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 SourcePath=Lib\SQLite3
 IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
-SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
+SourceFile=TestSQL3.dpr;SynLog.pas;SynTests.pas;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
 Version=1.18
 TitleOffset=0
@@ -1271,6 +1271,8 @@ The {\i Synopse mORMot} framework consists in a huge number of units, so we will
 node [shape="box"];
 rankdir=LR;
 \mORMot.pas\SynCommons.pas
+\mORMot.pas\SynTests.pas
+\mORMot.pas\SynLog.pas
 \mORMotDB.pas\mORMot.pas
 \mORMotDB.pas\SynCommons.pas
 \mORMotDB.pas\SynDB.pas
@@ -1281,10 +1283,11 @@ rankdir=LR;
 \mORMotSQlite3.pas\SynSQLite3.pas又ynSQLite3Static.pas
 \SynSQLite3.pas又ynSQLite3Static.pas\SynCommons.pas
 \SynDB.pas\SynCommons.pas
+\SynDB.pas\SynLog.pas
 \SynDBSQlite3.pas\SynDB.pas
 \SynDBSQlite3.pas\SynCommons.pas
 \SynDBSQlite3.pas\SynSQLite3.pas又ynSQLite3Static.pas
-\SynDBOracle.pas又ynDBODBC.pas又ynOleDB.pas又ynDBZEOS.pas又ynDBDataset.pas又ynDBFireDAC.pas又ynDBUniDAC.pas又ynDBNexusDB.pas又ynDBBDE.pas\SynDB.pas
+\SynDBOracle.pas又ynDBODBC.pas又ynOleDB.pas又ynDBZEOS.pas又ynDBDataset.pas又ynDBFireDAC.pas又ynDBUniDAC.pas又ynDBNexusDB.pas又ynDBBDE.pas又ynDBRemote.pas\SynDB.pas
 \mORMotDB.pas\SynSQLite3.pas又ynSQLite3Static.pas
 \mORMotReport.pas\SynCommons.pas
 \mORMotReport.pas\SynPdf.pas
@@ -1299,6 +1302,7 @@ rankdir=LR;
 \mORMotMVC.pas\SynCommons.pas
 \mORMotMVC.pas\SynMustache.pas
 \SynMongoDB.pas\SynCommons.pas
+\SynMongoDB.pas\SynLog.pas
 \SynMongoDB.pas\SynCrtSock.pas
 =UI=mORMotUI.pas孑ORMotToolBar.pas孑ORMoti18n.pas孑ORMotUILogin.pas孑ORMotUIEdit.pas孑ORMotUIQuery.pas孑ORMotUIOptions.pas
 =HTTP=mORMotHttpClient.pas孑ORMotHttpServer.pas
@@ -1310,14 +1314,14 @@ rankdir=LR;
 The main units you have to be familiar with are the following:
 |%30%70
 |\b Unit name|Description\b0
-|{\f1\fs20 SynCommons.pas}|Common types, classes and functions
+|{\f1\fs20 SynCommons.pas}\line {\f1\fs20 SynLog.pas}\line {\f1\fs20 SynTests.pas}|Common types, classes and functions
 |{\f1\fs20 mORMot.pas}|Main unit of the @*ORM@ / @*SOA@ framework
 |{\f1\fs20 SynSQLite3.pas\line SynSQLite3Static.pas}|{\i @*SQLite3@} database engine
 |{\f1\fs20 mORMotSQLite3.pas}|Bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 @*SynDB@.pas\line SynDB*.pas}|Direct RDBMS access classes
 |{\f1\fs20 mORMotDB.pas}|ORM external {\f1\fs20 SynDB.pas} access, via {\i SQlite3} virtual tables
 |{\f1\fs20 SynMongoDB.pas\line mORMotMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
-|{\f1\fs20 SynSM*.pas}|{\i SpiderMonkey} JavaScript engine
+|{\f1\fs20 SynSM.pas}\line {\f1\fs20 SynSMAPI.pas}|{\i SpiderMonkey} JavaScript engine
 |{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas\line SynCrtSock.pas}|@*REST@ful HTTP/1.1 Client and Server
 |{\f1\fs20 mORMotMVC.pas\line SynMustache.pas}|@*MVC@ classes for writing @*Web Application@s
 |{\f1\fs20 mORMotUI*.pas}|Grid and Forms User Interface generation
@@ -1344,8 +1348,8 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - Unicode and @*UTF-8@;
 - {\f1\fs20 @*Currency@} type;
 - {\i @*Dynamic array@} wrappers ({\f1\fs20 TDynArray} and {\f1\fs20 TDynArrayHashed});
-- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage;
-- @*Log@ging.
+- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage.
+Other shared features available in {\f1\fs20 SynTests.pas} and {\f1\fs20 SynLog.pas} would be detailed later, i.e. @*Test@ing and @*Log@ging - see @12@.
 :32 Unicode and UTF-8
 Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE7 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
 Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
@@ -1802,305 +1806,6 @@ In fact, whenever a dynamic {\i schema-less} storage structure is needed, you ma
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
 We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like {\i Python} or {\i JavaScript}: {\i Delphi} is perfectly able to handle dynamic coding!
 \page
-:16 Enhanced logging
-A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
-Here are some of its features:
-- Logging with a {\i set} of levels, not only a level scale;
-- Fast, low execution overhead;
-- Can load {\f1\fs20 .map} file symbols to be displayed in logging (i.e. source code file name and line numbers are logged instead of a hexadecimal value);
-- Compression of {\f1\fs20 .map} into binary {\f1\fs20 .mab} (900 KB -> 70 KB);
-- Inclusion of the {\f1\fs20 .map/.mab} into the {\f1\fs20 .exe}, with very slow size increase;
-- Exception logging ({\i Delphi} or low-level exceptions) with unit names and line numbers;
-- Optional stack trace with units and line numbers;
-- Methods or procedure recursive tracing, with {\i Enter} and {\i auto-Leave} (using a fake {\f1\fs20 interface} instance);
-- High resolution time stamps, for customer-side profiling of the application execution;
-- Set / enumerates / {\f1\fs20 TList} / {\f1\fs20 TPersistent} / {\f1\fs20 TObjectList} / dynamic array JSON serialization;
-- Per-thread or global logging;
-- Optional multiple log files on the same process;
-- Optional rotation when main log reaches a specified size, with compression of the rotated logs;
-- Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
-- Optional colored echo to a console window, for interactive debugging;
-- Fast log viewer tool available, including thread filtering and customer-side execution profiling;
-- Optional remote logging via HTTP - the log viewer can be used as server.
-:  Setup logging
-Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
-For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
-In short, you can add logging to your program, just by using the {\f1\fs20 TSynLog} class, as such:
-!  TSynLog.Add.Log(sllInfo,Stats.DebugMessage);
-This line will log the {\f1\fs20 Stats.DebugMessage} text, with a {\f1\fs20 sllInfo} notification level. See the description of all {\f1\fs20 Log()} overloaded methods of the {\f1\fs20 ISynLog} interface, to find out how your project can easily log events.
-First of all, you need to define your logging setup via code:
-!  with TSynLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    //Level := [sllException,sllExceptionOS];
-!    //HighResolutionTimeStamp := true;
-!    //AutoFlushTimeOut := 5;
-!    OnArchive := EventArchiveSynLZ;
-!    //OnArchive := EventArchiveZip;
-!    ArchiveAfterDays := 1; // archive after one day
-!  end;
-The main setting here is {\f1\fs20 TSynLog.Family.Level := ...} which defines which levels are to be logged. That is, if {\f1\fs20 sllInfo} is part of {\f1\fs20 TSynLog.Family.Level}, any {\f1\fs20 TSynLog.Add.Log(sllInfo,...)} command will log the corresponding content - otherwise, it will be a no-operation. {\f1\fs20 LOG_VERBOSE} is a constant setting all levels at once.
-You have several debugging levels available, and even 4 custom types:
-!  TSynLogInfo = (
-!    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
-!    sllEnter, sllLeave,
-!    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-!    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-!    sllServiceCall, sllServiceReturn, sllUserAuth,
-!    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
-Here are the purpose of each logging level:
-- {\f1\fs20 sllInfo} will log general information events;
-- {\f1\fs20 sllDebug} will log detailed debugging information;
-- {\f1\fs20 sllTrace} will log low-level step by step debugging information;
-- {\f1\fs20 sllWarning} will log unexpected values (not an error);
-- {\f1\fs20 sllError} will log errors;
-- {\f1\fs20 sllEnter} will log every method start;
-- {\f1\fs20 sllLeave} will log every method quit;
-- {\f1\fs20 sllLastError} will log the {\f1\fs20 GetLastError} OS message;
-- {\f1\fs20 sllException} will log all exception raised - available since Windows XP;
-- {\f1\fs20 sllExceptionOS} will log all OS low-level exceptions ({\f1\fs20 EDivByZero, ERangeError, EAccessViolation}...);
-- {\f1\fs20 sllMemory} will log memory statistics;
-- {\f1\fs20 sllStackTrace} will log caller's stack trace (it is by default part of {\f1\fs20 TSynLogFamily. LevelStackTrace} like {\f1\fs20 sllError, sllException, sllExceptionOS, sllLastError} and {\f1\fs20 sllFail});
-- {\f1\fs20 sllFail} was defined for {\f1\fs20 TSynTestsLogged. Failed} method, and can be used to log some customer-side assertions (may be notifications, not errors);
-- {\f1\fs20 sllSQL} is dedicated to trace the SQL statements;
-- {\f1\fs20 sllCache} should be used to trace any internal caching mechanism (it is used for instance by our SQL statement caching);
-- {\f1\fs20 sllResult} could trace the SQL results, JSON encoded;
-- {\f1\fs20 sllDB} is dedicated to trace low-level database engine features;
-- {\f1\fs20 sllHTTP} could be used to trace HTTP process;
-- {\f1\fs20 sllClient/sllServer} could be used to trace some Client or Server process;
-- {\f1\fs20 sllServiceCall/sllServiceReturn} to trace some remote service or library;
-- {\f1\fs20 sllUserAuth} to trace user authentication (e.g. for individual requests);
-- {\f1\fs20 sllCustom1..sllCustom4} items can be used for any purpose by your programs;
-- {\f1\fs20 sllNewRun} will be written when a process re-opens a rotated log.
-Logging is not using directly a {\f1\fs20 TSynLogInfo} level, but the following {\f1\fs20 set}:
-!  /// used to define a logging level
-!  // - i.e. a combination of none or several logging event
-!  // - e.g. use LOG_VERBOSE constant to log all events
-!  TSynLogInfos = set of TSynLogInfo;
-Most logging tools in the wild use a level scale, i.e. with a hierarchy, excluding the lower levels when one is selected.
-Our logging classes use a {\i set}, and not directly a particular level, so you are able to select which exact events are worth recording. In practice, we found this pattern to make a lot of sense and to be much more efficient for support.
-:  Call trace
-The logging mechanism can be used to trace recursive calls. It can use an interface-based mechanism to log when you enter and leave any method:
-!procedure TMyDB.SQLExecute(const SQL: RawUTF8);
-!var ILog: ISynLog;
-!begin
-!  ILog := TSynLogDB.Enter(self,'SQLExecute');
-!  // do some stuff
-!  ILog.Log(sllInfo,'SQL=%',[SQL]);
-!end; // when you leave the method, it will write the corresponding event to the log
-It will be logged as such:
-$20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
-$20110325 19325801 info   SQL=SELECT * FROM Table;
-$20110325 19325801  -
-Note that by default you have human-readable {\i time and date} written to the log, but it is also possible to replace this timing with {\i high-resolution timestamps}. With this, you'll be able to profile your application with data coming from the customer side, on its real computer. Via the {\f1\fs20 Enter} method (and its {\i auto-Leave} feature), you have all information needed for this.
-:  Including symbol definitions
-In the above logging content, the method name is set in the code (as {\f1\fs20 'SQLExecute'}). But if the logger class is able to find a {\f1\fs20 .map} file associated to the {\f1\fs20 .exe}, the logging mechanism is able to read this symbol information, and write the exact line number of the event.
-By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the {\i Delphi} IDE.
-In the following log entries, you'll see both high-resolution time stamp, and the entering and leaving of a {\f1\fs20 TTestCompression.TestLog} method traced with no additional code (with accurate line numbers, extracted from the {\f1\fs20 .map} content):
-$0000000000000B56  +    TTestCompression(00AB3570).000E6C79 SynSelfTests.TTestCompression.TestLog (376)
-$0000000000001785  -
-There is already a dedicated {\f1\fs20 TSynLogFile} class able to read the {\f1\fs20 .log} file, and recognize its content.
-The first time the {\f1\fs20 .map} file is read, a {\f1\fs20 .mab} file is created, and will contain all symbol information needed. You can send the {\f1\fs20 .mab} file with the {\f1\fs20 .exe} to your client, or even embed its content to the {\f1\fs20 .exe} (see the {\f1\fs20 Map2Mab.dpr} sample file located in the {\f1\fs20 Samples\\11 - Exception logging\\} folder).
-This {\f1\fs20 .mab} file is very optimized: for instance, a {\f1\fs20 .map} of 927,984 bytes compresses into a 71,943 {\f1\fs20 .mab} file.
-:  Exception handling
-Of course, this @*log@ging mechanism is able to intercept the raise of exceptions, including the worse (e.g. {\f1\fs20 EAccessViolation}), to be logged automatically in the log file, as such:
-$000000000000090B EXCOS EAccessViolation (C0000005) at 000E9C7A SynSelfTests.Proc1 (785)  stack trace 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9E2E SynSelfTests.TestsLog (818) 000EA0FB SynSelfTests (853) 00003BF4 System.InitUnits 00003C5B System.@StartExe 000064AB SysInit.@InitExe 000EA3EC TestSQL3 (153)
-The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level {\i Delphi} exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
-For instance, if you add to your program:
-!uses
-!  SynCommons;
-!(...)
-!  TSynLog.Family.Level := [sllExceptionOS];
-all OS exceptions (excluding pure {\i Delphi} exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
-!TSynLog.Family.Level := [sllException,sllExceptionOS];
-will trace also {\i Delphi} exceptions, for instance.
-You can specify some {\f1\fs20 Exception} class to be ignored, by adding them to {\f1\fs20 Family.ExceptionIgnore} internal list. It could make sense to add this setting, if your code often triggers some non-breaking exceptions, e.g. with {\f1\fs20 StrToInt()}:
-!  TSynLog.Family.ExceptionIgnore.Add(EConvertError);
-If your {\i Delphi} code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
-You can set the following global variable to assign a customized callback, and be able to customize the logging content associated to any exception:
-!type
-!  /// global hook callback to customize exceptions logged by TSynLog
-!  // - should return FALSE if Context.EAddr and Stack trace is to be appended
-!  TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
-!
-!var
-!  /// allow to customize the Exception logging message
-!  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
-The {\f1\fs20 Context: TSynLogExceptionContext} content is to be used to append some text to the specified {\f1\fs20 TTextWriter} instance.
-An easier possibility is to inherit your custom exception class from {\f1\fs20 ESynException}, and override its unique virtual method:
-!  /// generic parent class of all custom Exception types of this unit
-!  ESynException = class(Exception)
-!  public
-!    /// can be used to customize how the exception is logged
-!    // - this default implementation will call the DefaultSynLogExceptionToStr()
-!    // callback or TSynLogExceptionToStrCustom, if defined
-!    // - override this method to provide a custom logging content
-!    // - should return TRUE if Context.EAddr and Stack trace is not to be
-!    // written (i.e. as for any TSynLogExceptionToStr callback)
-!!    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
-!  end;
-See {\f1\fs20 TSynLogExceptionContext} to check the execution context, and the implementation of the {\f1\fs20 function DefaultSynLogExceptionToStr()} function.
-:  Serialization
-{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynCommons.pas} unit - see @48@.
-The {\f1\fs20 TSQLLog} class (using the enhanced @*RTTI@ methods defined in {\f1\fs20 mORMot.pas} unit) is even able to serialize {\f1\fs20 @*TSQLRecord@, @*TPersistent@, TList} and {\f1\fs20 @*TCollection@} instances as JSON, or any other class instance, after call to {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@}.
-For instance, the following code:
-!procedure TestPeopleProc;
-!var People: TSQLRecordPeople;
-!    Log: ISynLog;
-!begin
-!  Log := TSQLLog.Enter;
-!  People := TSQLRecordPeople.Create;
-!  try
-!    People.ID := 16;
-!    People.FirstName := 'Louis';
-!    People.LastName := 'Croiv嶵aton';
-!    People.YearOfBirth := 1754;
-!    People.YearOfDeath := 1793;
-!    Log.Log(sllInfo,People);
-!  finally
-!    People.Free;
-!  end;
-!end;
-will result in the following log content:
-$0000000000001172  +    000E9F67 SynSelfTests.TestPeopleProc (784)
-$000000000000171B info      {"TSQLRecordPeople(00AB92E0)":{"ID":16,"FirstName":"Louis","LastName":"Croiv嶵aton","Data":"","YearOfBirth":1754,"YearOfDeath":1793}}
-$0000000000001731  -
-:  Multi-threaded applications
-You can define several @*log@ files per process, and even a per-thread log file, if needed (it could be sometimes handy, for instance on a server running the same logic in parallel in several threads).
-The logging settings are made at the logging class level. Each logging class (inheriting from {\f1\fs20 TSynLog}) has its own {\f1\fs20 TSynLogFamily} instance, which is to be used to customize the logging class level. Then you can have several instances of the individual {\f1\fs20 TSynLog} classes, each class sharing the settings of the {\f1\fs20 TSynLogFamily}.
-You can therefore initialize the "family" settings before using logging, like in this code which will force to log all levels ({\f1\fs20 LOG_VERBOSE}), and create a per-thread log file, and write the {\f1\fs20 .log} content not in the {\f1\fs20 .exe} folder, but in a custom directory:
-! with TSynLogDB.Family do
-! begin
-!   Level := LOG_VERBOSE;
-!!   PerThreadLog := ptOneFilePerThread;
-!   DestinationPath := 'C:\Logs';
-! end;
-If you specifies {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} for the family, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} - the supplied {\f1\fs20 LogView} tool will handle it as expected. This can be very useful for a multi-threaded server process, e.g. as implement with {\i mORMot}'s Client-Server classes @35@.
-:  Log to the console
-For debugging purposes, it could be very handy to output the logging content to a console window. It enables interactive debugging of a Client-Server process, for instance: you can interact with the Client, then look in real time at the server console window, and inspect which requests are processed, without the need to open the log file.
-The {\f1\fs20 EchoToConsole} property enable you to select which events are to be echoed on the console (perhaps you expect only errors to appear, for instance).
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!!    EchoToConsole := LOG_VERBOSE; // log all events to the console
-!  end;
-Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
-Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and writing to the console under {\i Windows} is much slower than writing to a file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
-:104  Remote logging
-By default, {\f1\fs20 TSynLog} writes its activity to a local file, and/or to the console. The log file can be transmitted later on (once compressed) to support, for further review and debugging.\line But sometimes, it may be handy to see the logging in real-time, on a remote computer.
-You can enable such remote monitoring for a given {\f1\fs20 TSynLog} class, by adding the {\f1\fs20 mORMotHTTPClient.pas} unit in your use clause, then calling the following constructor:
-! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15',SQLite3Log,'8091','LogService');
-This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:8091/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
-A {\f1\fs20 TSQLHttpClient} instance will be created, and will be managed by the {\f1\fs20 SQLite3Log} instance. It will be released when the application will be closed, or when the {\f1\fs20 SQLite3Log.Family.EchoRemoteStop} method will be called.
-In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (8091 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
-Implementation of this remote logging has been tuned on both client and server side.\line On client side, log events are gathered and sent in a dedicated background thread: if a lot of events are generated, they will be transferred in chunks of several rows, to minimize resource and bandwidth. On server side, incoming events are stored in memory, and indexed on the fly, with a periodic refresh rate of 500 ms: even a very active client logger would just let the {\i Log View} tool be responsive and efficient.\line Thanks to the nature of the {\f1\fs20 http.sys} based server, several {\i Server Root} URI can be accessed in parallel with several {\i Log View} tool instance, on the same HTTP port: it will ease the IT policy of your network, since a single forwarded port would be able to handle several incoming connections.
-See the "{\f1\fs20 RemoteLoggingTest.dpr}" sample from "{\f1\fs20 11 - Exception logging}", in conjunction with the {\f1\fs20 LogView.dpr} tool available in the same folder, for a running example of remote logging.
-Note that our cross-platform clients - see @86@ - are able to log to a remote server, with the same exact format as used by our {\f1\fs20 TSynLog} class.
-:  Log to third-party libraries
-Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console or a remote log server (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
-It may be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs.
-You can define the {\f1\fs20 TSynLogFamily.EchoCustom} property to specify a simple event to be triggered for each log operation: the application can then decide to log to a third party logger application.
-Note that there is also the {\f1\fs20 TSynLogFamily.NoFile} property, which allows to disable completely the built-in file logging mechanism.
-For instance, you may write:
-!procedure TMyClass.Echo(Sender: TTextWriter; Level: TSynLogInfo; const Text: RawUTF8);
-!begin
-!  if Level in LOG_STACKTRACE then // filter only errors
-!    writeln(Text); // could be any third-party logger
-!end;
-!
-!...
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    // EchoToConsole := LOG_VERBOSE; // log all events to the console
-!!    EchoCustom := aMyClass.Echo; // register third-party logger
-!!    NoFile := true; // ensure TSynLog won't use the default log file
-!  end;
-A process similar to {\f1\fs20 TSynLogFile.ProcessOneLine()} could then parse the incoming {\f1\fs20 Text} value, if needed.
-:  Automated log archival
-Log archives can be created with the following settings:
-! with TSynLogDB.Family do
-! begin
-!  (...)
-!  OnArchive := EventArchiveZip;
-!  ArchivePath := '\\Remote\WKS2302\Archive\Logs'; // or any path
-! end;
-The {\f1\fs20 ArchivePath} property can be set to several functions, taking a timeout delay from the {\f1\fs20 ArchiveAfterDays} property value:
-- {\f1\fs20 nil} is the default value, and won't do anything: the {\f1\fs20 .log} will remain on disk until they will be deleted by hand;
-- {\f1\fs20 EventArchiveDelete} in order to delete deprecated {\f1\fs20 .log} files;
-- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons.pas} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
-- {\f1\fs20 SynZip.EventArchiveZip} will archive the {\f1\fs20 .log} files in {\f1\fs20 ArchivePath\\log\\YYYYMM.zip} files, grouping every .
-{\i SynLZ} files are less compressed, but created much faster than {\f1\fs20 .zip} files. However, {\f1\fs20 .zip} files are more standard, and on a regular application, compression speed won't be an issue for the application.
-:  Log files rotation
-You can set {\f1\fs20 TSynLogFamily.RotateFileCount} and {\f1\fs20 RotateFileSizeKB} properties, to enable log file rotation:
-- If both values are > 0, the log file will have a fixed name, without any time-stamp within;
-- {\f1\fs20 RotateFileSizeKB} will define the maximum size of the main uncompressed log file
-- {\f1\fs20 RotateFileCount} will define how many files are kept on disk - note that rotated files are compressed using {\i SynLZ}, so compression will be very fast.
-Log file rotation is as easy as:
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    RotateFileCount := 5;        // will maintain a set of up to 5 files
-!    RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
-!  end;
-Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
-- {\f1\fs20 TestSQL3.log} which will be the latest (current) log file, uncompressed;
-- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i Log Viewer} tool - see @103@ - is able to uncompress those {\f1\fs20 .synlz} files directly.
-Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
-As an alternative, or in addition to this {\i by-size} rotation pattern, you could specify a fixed time of the day to perform the rotation.\line For instance, the following will perform automatic rotation of the log files, whatever their size, at {\f1\fs20 23:00} each evening:
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    RotateFileCount := 5;        // will maintain a set of up to 5 files
-!    RotateFileDailyAtHour := 23; // rotate at 11:00 PM
-!  end;
-If the default behavior - which is to compress all rotated files into {\f1\fs20 .synlz} format, and delete the older files - does not fit your needs, you can set a custom event to the {\f1\fs20 TSynLogFamily.OnRotate} property, which would take care of the file rotation process.
-:  Integration within tests
-Logging is integrated within the unit @*test@ing classes, so that any failure will create an entry in the log with the source line, and stack trace:
-$C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-13)
-$Host=Laptop User=MyName CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
-$TSynLogTest 1.13 2011-04-13 05:40:25
-$
-$20110413 05402559 fail  TTestLowLevelCommon(00B31D70) Low level common: TDynArray "dynamic array failure" stack trace 0002FE0B SynCommons.TDynArray.Init (15148) 00036736 SynCommons.Test64K (18206) 0003682F SynCommons.TTestLowLevelCommon._TDynArray (18214) 000E9C94 TestSQL3 (163)
-The difference between a test suit without logging ({\f1\fs20 TSynTests}) and a test suit with logging ({\f1\fs20 TSynTestsLogged}) is only this overridden method:
-!procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
-!begin
-!  inherited;
-!  with TestCase[fCurrentMethod] do
-!    fLogFile.Log(sllFail,'%: % "%"',
-!      [Ident,TestName[fCurrentMethodIndex],msg],aTest);
-!end;
-In order to enable tests logging, you have just to enable it, e.g. with:
-! TSynLogTestLog.Family.Level := LOG_VERBOSE;
-You can optionally redirect the following global variable at program initialization, to share testing events with the main {\i mORMot} logs:
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
-!  end;
-:103  Log Viewer
-Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 17,000,000 test cases do create a huge log file of about 550 MB), a log viewer was definitively in need.
-The log-viewer application is available as source code in the "{\i Samples}" folder, in the "{\i 11 - Exception logging}" sub-folder.
-:   Open log files
-You can run it with a specified log file on the command line, or use the "{\i Browse}" button to browse for a file. That is, you can associate this tool with your {\f1\fs20 .log} files, for instance, and you'll open it just by double-clicking on such files.
-Note that if the file is not in our {\f1\fs20 TSynLog} format, it will still be opened as plain text. You'll be able to browse its content and search within, but all the nice features of our logging won't be available, of course.
-It is worth saying that the viewer was designed to be {\i fast}.\line In fact, it takes no time to open any log file. For instance, a 390 MB log file is opened in less than one second on my laptop. Under Windows Seven, it takes more time to display the "Open file" dialog window than reading and indexing the 390 MB content.\line It uses internally memory mapped files and optimized data structures to access to the data as fast as possible - see {\f1\fs20 TSynLogFile} class.
-:   Log browser
-The screen is divided into three main spaces:
-- On the left side, the panel of commands;
-- On the right side, the log events list;
-- On the middle, an optional list of method calls, and another list of threads (not shown by default).
-The command panel allows to {\i Browse} your disk for a {\f1\fs20 .log} file. This button is a toggle of an optional {\i Drive / Directory / File} panel on the leftmost side of the tool. When a {\f1\fs20 .log / .synlz / .txt} file is selected, its content is immediately displayed. You can specify a directory name as a parameter of the tool (e.g. in a {\f1\fs20 .lnk} desktop link), which will let the viewer be opened in "Browse" mode, starting with the specified folder.
-A button gives access to the global {\i Stats} about its content (customer-side hardware and software running configuration, general numbers about the log), and even ask for a source code line number and unit name from a hexadecimal address available in the log, by browsing for the corresponding {\f1\fs20 .map} file (could be handy if you did not deliver the {\f1\fs20 .map} content within your main executable - which you should have to, IMHO).
-Just below the "{\i Browse}" button, there is an edit field available, with a ? button. Enter any text within this edit field, and it will be searched within the log events list. Search is case-insensitive, and was designed to be fast. Clicking on the ? button (or pressing the {\f1\fs20 F3} key) allows to repeat the last search.
-In the very same left panel, you can see all existing events, with its own color and an associated check-box. Note that only events really encountered in the {\f1\fs20 .log} file appear in this list, so its content will change between log files. By selecting / un-selecting a check-box, the corresponding events will be instantaneously displayed / or not on the right side list of events. You can right click on the events check-box list to select a predefined set of events.
-The right colored event list follows the events appended to the log, by time order. When you click on an event, its full line content is displayed at the bottom on the screen, in a memo.
-Having all @*SQL@ / @*NoSQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
-:   Customer-side profiler
-One distinctive feature of the {\f1\fs20 TSynLog} logging class is that it is able to map methods or functions entering/leaving (using the {\f1\fs20 Enter} method), and trace this into the logs. The corresponding timing is also written within the "{\i Leave}" event, and allows application profiling from the customer side. Most of the time, profiling an application is done during the testing, with a test environment and database. But this is not, and will never reproduce the exact nature of the customer use: for instance, hardware is not the same (network, memory, CPU), nor the software (Operating System version, [anti-]virus installed)... By enabling customer-side method profiling, the log will contain all relevant information. Those events are named "{\i Enter}" / "{\i Leave}" in the command panel check-box list, and written as + and - in the right-sided event list.
-The "{\i Methods profiler}" options allow to display the middle optional method calls list. Several sort order are available: by name (alphabetical sort), by occurrence (in running order, i.e. in the same order than in the event log), by time (the full time corresponding to this method, i.e. the time written within the "{\i Leave}" event), and by proper time (i.e. excluding all time spent in the nested methods).
-The "{\i Merge method calls}" check-box allows to regroup all identical method calls, according to their name. In fact, most methods are not called once, but multiple time. And this is the accumulated time spent in the method which is the main argument for code profiling.
-I'm quite sure that the first time you'll use this profiling feature on a huge existing application, you'll find out some bottlenecks you would have never thought about before.
-:   Per-thread inspection
-If the {\f1\fs20 TSynLog} family has specified {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} property, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} of the logged action.
-The log-viewer application will identify this column, and show a "{\i Thread}" group below the left-side commands. It will allow to go to the next thread, or toggle the optional {\i Thread view} list. By checking / un-checking any thread of this list, you are able to inspect the execution log for a given process, very easily. A right-click on this thread list will display a pop-up menu, allowing to select all threads or no thread in one command.
-:   Server for remote logging
-As was stated above, @104@ can use our {\i Log View} tool as server and real-time viewer for any remote client, either using {\f1\fs20 TSynLog}, or any cross-platform client - see @86@.
-Using a remote logging is specially useful from mobile applications (written with {\i Delphi} / @*FireMonkey@ or with @*Smart Mobile Studio@ / @*AJAX@). Our viewer tool allows efficient live debugging of such platforms.
 :3Object-Relational Mapping
 %cartoon02.png
 The @**ORM@ part of the framework - see @13@ - is mainly implemented in the @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
@@ -4976,7 +4681,7 @@ Then any sub-code is able to execute any SQL request, with optional bound parame
 !end;
 In this procedure, no {\f1\fs20 TSQLDBStatement} is defined, and there is no need to add a {\f1\fs20 try ... finally Query.Free; end;} block.
 In fact, the {\f1\fs20 MyConnProps.Execute} method returns a {\f1\fs20 TSQLDBStatement} instance as a {\f1\fs20 ISQLDBRows}, which methods can be used to loop for each result row, and retrieve individual column values. In the code above, {\f1\fs20 I['FirstName']} will in fact call the {\f1\fs20 I.Column[]} default property, which will return the column value as a {\f1\fs20 variant}. You have other dedicated methods, like {\f1\fs20 ColumnUTF8} or {\f1\fs20 ColumnInt}, able to retrieve directly the expected data.
-Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @16@.
+Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @73@.
 :136  Late-binding
 We implemented @*late-binding@ access of column values, via a custom variant time. It uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties.
 The resulting {\i Delphi} code to write is just clear and obvious:
@@ -7697,7 +7402,7 @@ In practice, caching issues could be difficult to track. So in case of doubt (wh
 :  What to cache
 Typical content of these two tuned caches can be any global configuration settings, or any other kind of unchanging data which is not likely to vary often, and is accessed simultaneously by multiple clients, such as catalog information for an on-line retailer.
 Another good use of caching is to store data that changes but is accessed by only one client at a time. By setting a cache at the client level for such content, the server won't be called often to retrieve the client-specific data. In such case, the problem of handling concurrent access to the cached data doesn't arise.
-Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @16@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
+Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @73@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
 But most of the time, an human guess at the business logic level is enough to set which data is to be cached on each side, and ensure content coherency.
 :  How to cache
 A tuned caching mechanism can be defined, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes, at ID level.
@@ -7737,7 +7442,7 @@ In order to speed up our data processing, we first have to consider the classic 
 Our optimization goals would therefore be leaded into those two directions.
 :  Profiling your application
 If you worry about performance, first reflex may be to enable the framework logging, even on customer sites.
-The profiling abilities of the {\f1\fs20 TSynLog} class, used everywhere in our framework, will allow you to identify the potential bottlenecks of your client applications. See @73@ about this feature.\line From our experiment, we can assure you that the first time you may run logging on a real {\i mORMot} application, you may find issues you would never have think off by yourself.
+The profiling abilities of the {\f1\fs20 TSynLog} class, used everywhere in our framework, will allow you to identify the potential bottlenecks of your client applications. See @16@ about this feature.\line From our experiment, we can assure you that the first time you may run logging on a real {\i mORMot} application, you may find issues you would never have think off by yourself.
 Fight against any duplicated queries, unnecessary returned information (do not forget to specify the fields to be retrieved to your {\f1\fs20 CreateAndFillPrepare()} request), unattended requests triggered by the User Interface (typically a {\f1\fs20 TEdit}'s {\f1\fs20 OnChange} event may benefit of using a {\f1\fs20 TTimer} before asking for auto-completion)...
 Once you have done this cleaning, you may be proud of you, and it may be enough for your customers to enjoy your application. You deserve a coffee or a drink.
 :  Client-side caching
@@ -9967,7 +9672,7 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - @63@ with parameters marshaling and instance-life time;
 - Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
-- Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server, e.g. our @103@;
+- Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server - see @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
 In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
 In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client source file for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially for targeting Java or C# clients.
@@ -10113,7 +9818,7 @@ You can find a corresponding BATCH file in the {\f1\fs20 CrossPlatform} folder, 
 In fact, the {\f1\fs20 SynCrossPlatformJSON.pas} unit is not used under {\i Smart Mobile Studio}: we use the built-in JSON serialization features of {\i JavaScript}, using {\f1\fs20 variant} dynamic type, and the standard {\f1\fs20 JSON.Stringify()} and {\f1\fs20 JSON.Parse()} functions.
 :  Remote logging
 Since there is no true file system API available under a HTML5 sand-boxed application, logging to a local file is not an option. Even when packaged with {\i PhoneGap}, local log files are not convenient to work with.
-Generated logs will have the same methods and format as with {\i Delphi} or {\i FreePascal} - see @105@. {\f1\fs20 TSQLRest.Log(E: Exception)} method will also log the stack trace of the exception!  And our @103@ tool is able to run as efficient remote server.
+Generated logs will have the same methods and format as with {\i Delphi} or {\i FreePascal} - see @105@. {\f1\fs20 TSQLRest.Log(E: Exception)} method will also log the stack trace of the exception!  Our {\f1\fs20 LogView} tool - see @103@ - is able to run as a simple but efficient remote log server and viewer, shared with regular or cross-platform units of the framework.
 A dedicated {\i asynchronous} implementation has been refined for {\i Smart Mobile Studio} clients, so that several events would be gathered and sent at once to the remote server, to maximize bandwidth use and let the application be still responsive.\line It allows even complex mobile applications to be debugged with ease, on any device, even over WiFi or 3G/4G networks. Your support could ask your customer to enable logging for a particular case, then see in real time what is wrong with your application.
 \page
 : Generating client wrappers
@@ -12492,6 +12197,8 @@ In order to provide the better scaling of the server side, @*cache@ can be easil
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
 %cartoon05.png
+Since we covered most architectural and technical aspects of the framework, it is time to put the last missing bricks to the building, meaning testing and logging.
+\page
 : Automated testing
 You know that @**test@ing is (almost) everything if you want to avoid regression problems in your application.
 How can you be confident that any change made to your software code won't create any error in other part of the software?
@@ -12506,7 +12213,7 @@ And even better, testing-driven coding can be encouraged:
 It could sounds like a waste of time, but such coding improve your code quality a lot, and, at least, it help you write and optimize every implementation feature.
 The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), it is very much integrated with other elements of the framework (like logging), and provide a complete {\i stubbing / mocking} mechanism to cover @62@.
 :  Involved classes in Unitary testing
-The @!TSynTest,TSynTestCase,TSynTests!Lib\SynCommons.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE7, no external dependency).
+The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTest.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE7 and FPC, no external dependency).
 The following diagram defines this class hierarchy:
 \graph HierTSynTest TSynTest classes hierarchy
 \TSynTests\TSynTest
@@ -12612,20 +12319,321 @@ $! All tests passed successfully.
 You can see that all text on screen was created by "UnCamelCasing" the method names (thanks to our good old @*Camel@), and that the test suit just follows the order defined when registering the classes. Each method has its own timing, which is pretty convenient to track performance regressions.
 This test program has been uploaded in the {\f1\fs20 SQLite3\\Sample\\07 - SynTest} folder of the Source Code Repository.
 :  Implemented tests
-The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 35,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
+The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 175,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
 Before any release all unitary regression tests are performed with the following compilers:
-- {\i Delphi} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
+- {\i Delphi} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynLog.pas}, {\f1\fs20 SynTests.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
 - {\i Delphi} 6;
 - {\i Delphi} 7, with and without our Enhanced Run Time Library;
 - {\i Delphi} 2007;
 - {\i Delphi} 2010 (we assume that if it works with {\i Delphi} 2010, it will work with {\i Delphi} 2009, with the exception of {\f1\fs20 generic} compilation);
 - {\i Delphi} XE4;
-- {\i Delphi} XE6.
+- {\i Delphi} XE6;
+- {\i Delphi} XE7;
+- {\i FPC} 2.7.1 (svn revision).
 Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBExplorer@} sophisticated tools) are compiled, and user-level testing is performed against those applications.
 You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
 \page
-:73 Logging
-The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynCommons.pas} unit - see @16@.
+:16 Enhanced logging
+A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
+Here are some of its features:
+- Logging with a {\i set} of levels, not only a level scale;
+- Fast, low execution overhead;
+- Can load {\f1\fs20 .map} file symbols to be displayed in logging (i.e. source code file name and line numbers are logged instead of a hexadecimal value);
+- Compression of {\f1\fs20 .map} into binary {\f1\fs20 .mab} (900 KB -> 70 KB);
+- Inclusion of the {\f1\fs20 .map/.mab} into the {\f1\fs20 .exe}, with very slow size increase;
+- Exception logging ({\i Delphi} or low-level exceptions) with unit names and line numbers;
+- Optional stack trace with units and line numbers;
+- Methods or procedure recursive tracing, with {\i Enter} and {\i auto-Leave} (using a fake {\f1\fs20 interface} instance);
+- High resolution time stamps, for customer-side profiling of the application execution;
+- Set / enumerates / {\f1\fs20 TList} / {\f1\fs20 TPersistent} / {\f1\fs20 TObjectList} / dynamic array JSON serialization;
+- Per-thread or global logging;
+- Optional multiple log files on the same process;
+- Optional rotation when main log reaches a specified size, with compression of the rotated logs;
+- Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
+- Optional colored echo to a console window, for interactive debugging;
+- Fast log viewer tool available, including thread filtering and customer-side execution profiling;
+- Optional remote logging via HTTP - the log viewer can be used as server.
+:  Setup logging
+Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
+For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
+In short, you can add logging to your program, just by using the {\f1\fs20 TSynLog} class, as such:
+!  TSynLog.Add.Log(sllInfo,Stats.DebugMessage);
+This line will log the {\f1\fs20 Stats.DebugMessage} text, with a {\f1\fs20 sllInfo} notification level. See the description of all {\f1\fs20 Log()} overloaded methods of the {\f1\fs20 ISynLog} interface, to find out how your project can easily log events.
+First of all, you need to define your logging setup via code:
+!  with TSynLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    //Level := [sllException,sllExceptionOS];
+!    //HighResolutionTimeStamp := true;
+!    //AutoFlushTimeOut := 5;
+!    OnArchive := EventArchiveSynLZ;
+!    //OnArchive := EventArchiveZip;
+!    ArchiveAfterDays := 1; // archive after one day
+!  end;
+The main setting here is {\f1\fs20 TSynLog.Family.Level := ...} which defines which levels are to be logged. That is, if {\f1\fs20 sllInfo} is part of {\f1\fs20 TSynLog.Family.Level}, any {\f1\fs20 TSynLog.Add.Log(sllInfo,...)} command will log the corresponding content - otherwise, it will be a no-operation. {\f1\fs20 LOG_VERBOSE} is a constant setting all levels at once.
+You have several debugging levels available, and even 4 custom types:
+!  TSynLogInfo = (
+!    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+!    sllEnter, sllLeave,
+!    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+!    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+!    sllServiceCall, sllServiceReturn, sllUserAuth,
+!    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
+Here are the purpose of each logging level:
+- {\f1\fs20 sllInfo} will log general information events;
+- {\f1\fs20 sllDebug} will log detailed debugging information;
+- {\f1\fs20 sllTrace} will log low-level step by step debugging information;
+- {\f1\fs20 sllWarning} will log unexpected values (not an error);
+- {\f1\fs20 sllError} will log errors;
+- {\f1\fs20 sllEnter} will log every method start;
+- {\f1\fs20 sllLeave} will log every method quit;
+- {\f1\fs20 sllLastError} will log the {\f1\fs20 GetLastError} OS message;
+- {\f1\fs20 sllException} will log all exception raised - available since Windows XP;
+- {\f1\fs20 sllExceptionOS} will log all OS low-level exceptions ({\f1\fs20 EDivByZero, ERangeError, EAccessViolation}...);
+- {\f1\fs20 sllMemory} will log memory statistics;
+- {\f1\fs20 sllStackTrace} will log caller's stack trace (it is by default part of {\f1\fs20 TSynLogFamily. LevelStackTrace} like {\f1\fs20 sllError, sllException, sllExceptionOS, sllLastError} and {\f1\fs20 sllFail});
+- {\f1\fs20 sllFail} was defined for {\f1\fs20 TSynTestsLogged. Failed} method, and can be used to log some customer-side assertions (may be notifications, not errors);
+- {\f1\fs20 sllSQL} is dedicated to trace the SQL statements;
+- {\f1\fs20 sllCache} should be used to trace any internal caching mechanism (it is used for instance by our SQL statement caching);
+- {\f1\fs20 sllResult} could trace the SQL results, JSON encoded;
+- {\f1\fs20 sllDB} is dedicated to trace low-level database engine features;
+- {\f1\fs20 sllHTTP} could be used to trace HTTP process;
+- {\f1\fs20 sllClient/sllServer} could be used to trace some Client or Server process;
+- {\f1\fs20 sllServiceCall/sllServiceReturn} to trace some remote service or library;
+- {\f1\fs20 sllUserAuth} to trace user authentication (e.g. for individual requests);
+- {\f1\fs20 sllCustom1..sllCustom4} items can be used for any purpose by your programs;
+- {\f1\fs20 sllNewRun} will be written when a process re-opens a rotated log.
+Logging is not using directly a {\f1\fs20 TSynLogInfo} level, but the following {\f1\fs20 set}:
+!  /// used to define a logging level
+!  // - i.e. a combination of none or several logging event
+!  // - e.g. use LOG_VERBOSE constant to log all events
+!  TSynLogInfos = set of TSynLogInfo;
+Most logging tools in the wild use a level scale, i.e. with a hierarchy, excluding the lower levels when one is selected.
+Our logging classes use a {\i set}, and not directly a particular level, so you are able to select which exact events are worth recording. In practice, we found this pattern to make a lot of sense and to be much more efficient for support.
+:  Call trace
+The logging mechanism can be used to trace recursive calls. It can use an interface-based mechanism to log when you enter and leave any method:
+!procedure TMyDB.SQLExecute(const SQL: RawUTF8);
+!var ILog: ISynLog;
+!begin
+!  ILog := TSynLogDB.Enter(self,'SQLExecute');
+!  // do some stuff
+!  ILog.Log(sllInfo,'SQL=%',[SQL]);
+!end; // when you leave the method, it will write the corresponding event to the log
+It will be logged as such:
+$20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
+$20110325 19325801 info   SQL=SELECT * FROM Table;
+$20110325 19325801  -
+Note that by default you have human-readable {\i time and date} written to the log, but it is also possible to replace this timing with {\i high-resolution timestamps}. With this, you'll be able to profile your application with data coming from the customer side, on its real computer. Via the {\f1\fs20 Enter} method (and its {\i auto-Leave} feature), you have all information needed for this.
+:  Including symbol definitions
+In the above logging content, the method name is set in the code (as {\f1\fs20 'SQLExecute'}). But if the logger class is able to find a {\f1\fs20 .map} file associated to the {\f1\fs20 .exe}, the logging mechanism is able to read this symbol information, and write the exact line number of the event.
+By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the {\i Delphi} IDE.
+In the following log entries, you'll see both high-resolution time stamp, and the entering and leaving of a {\f1\fs20 TTestCompression.TestLog} method traced with no additional code (with accurate line numbers, extracted from the {\f1\fs20 .map} content):
+$0000000000000B56  +    TTestCompression(00AB3570).000E6C79 SynSelfTests.TTestCompression.TestLog (376)
+$0000000000001785  -
+There is already a dedicated {\f1\fs20 TSynLogFile} class able to read the {\f1\fs20 .log} file, and recognize its content.
+The first time the {\f1\fs20 .map} file is read, a {\f1\fs20 .mab} file is created, and will contain all symbol information needed. You can send the {\f1\fs20 .mab} file with the {\f1\fs20 .exe} to your client, or even embed its content to the {\f1\fs20 .exe} (see the {\f1\fs20 Map2Mab.dpr} sample file located in the {\f1\fs20 Samples\\11 - Exception logging\\} folder).
+This {\f1\fs20 .mab} file is very optimized: for instance, a {\f1\fs20 .map} of 927,984 bytes compresses into a 71,943 {\f1\fs20 .mab} file.
+:  Exception handling
+Of course, this @*log@ging mechanism is able to intercept the raise of exceptions, including the worse (e.g. {\f1\fs20 EAccessViolation}), to be logged automatically in the log file, as such:
+$000000000000090B EXCOS EAccessViolation (C0000005) at 000E9C7A SynSelfTests.Proc1 (785)  stack trace 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9E2E SynSelfTests.TestsLog (818) 000EA0FB SynSelfTests (853) 00003BF4 System.InitUnits 00003C5B System.@StartExe 000064AB SysInit.@InitExe 000EA3EC TestSQL3 (153)
+The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level {\i Delphi} exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
+For instance, if you add to your program:
+!uses
+!  SynLog;
+!(...)
+!  TSynLog.Family.Level := [sllExceptionOS];
+all OS exceptions (excluding pure {\i Delphi} exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
+!TSynLog.Family.Level := [sllException,sllExceptionOS];
+will trace also {\i Delphi} exceptions, for instance.
+You can specify some {\f1\fs20 Exception} class to be ignored, by adding them to {\f1\fs20 Family.ExceptionIgnore} internal list. It could make sense to add this setting, if your code often triggers some non-breaking exceptions, e.g. with {\f1\fs20 StrToInt()}:
+!  TSynLog.Family.ExceptionIgnore.Add(EConvertError);
+If your {\i Delphi} code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
+You can set the following global variable to assign a customized callback, and be able to customize the logging content associated to any exception:
+!type
+!  /// global hook callback to customize exceptions logged by TSynLog
+!  // - should return FALSE if Context.EAddr and Stack trace is to be appended
+!  TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
+!
+!var
+!  /// allow to customize the Exception logging message
+!  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
+The {\f1\fs20 Context: TSynLogExceptionContext} content is to be used to append some text to the specified {\f1\fs20 TTextWriter} instance.
+An easier possibility is to inherit your custom exception class from {\f1\fs20 ESynException}, and override its unique virtual method:
+!  /// generic parent class of all custom Exception types of this unit
+!  ESynException = class(Exception)
+!  public
+!    /// can be used to customize how the exception is logged
+!    // - this default implementation will call the DefaultSynLogExceptionToStr()
+!    // callback or TSynLogExceptionToStrCustom, if defined
+!    // - override this method to provide a custom logging content
+!    // - should return TRUE if Context.EAddr and Stack trace is not to be
+!    // written (i.e. as for any TSynLogExceptionToStr callback)
+!!    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
+!  end;
+See {\f1\fs20 TSynLogExceptionContext} to check the execution context, and the implementation of the {\f1\fs20 function DefaultSynLogExceptionToStr()} function.
+:  Serialization
+{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynLog.pas} unit - see @48@.
+The {\f1\fs20 TSQLLog} class (using the enhanced @*RTTI@ methods defined in {\f1\fs20 mORMot.pas} unit) is even able to serialize {\f1\fs20 @*TSQLRecord@, @*TPersistent@, TList} and {\f1\fs20 @*TCollection@} instances as JSON, or any other class instance, after call to {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@}.
+For instance, the following code:
+!procedure TestPeopleProc;
+!var People: TSQLRecordPeople;
+!    Log: ISynLog;
+!begin
+!  Log := TSQLLog.Enter;
+!  People := TSQLRecordPeople.Create;
+!  try
+!    People.ID := 16;
+!    People.FirstName := 'Louis';
+!    People.LastName := 'Croiv嶵aton';
+!    People.YearOfBirth := 1754;
+!    People.YearOfDeath := 1793;
+!    Log.Log(sllInfo,People);
+!  finally
+!    People.Free;
+!  end;
+!end;
+will result in the following log content:
+$0000000000001172  +    000E9F67 SynSelfTests.TestPeopleProc (784)
+$000000000000171B info      {"TSQLRecordPeople(00AB92E0)":{"ID":16,"FirstName":"Louis","LastName":"Croiv嶵aton","Data":"","YearOfBirth":1754,"YearOfDeath":1793}}
+$0000000000001731  -
+:  Multi-threaded applications
+You can define several @*log@ files per process, and even a per-thread log file, if needed (it could be sometimes handy, for instance on a server running the same logic in parallel in several threads).
+The logging settings are made at the logging class level. Each logging class (inheriting from {\f1\fs20 TSynLog}) has its own {\f1\fs20 TSynLogFamily} instance, which is to be used to customize the logging class level. Then you can have several instances of the individual {\f1\fs20 TSynLog} classes, each class sharing the settings of the {\f1\fs20 TSynLogFamily}.
+You can therefore initialize the "family" settings before using logging, like in this code which will force to log all levels ({\f1\fs20 LOG_VERBOSE}), and create a per-thread log file, and write the {\f1\fs20 .log} content not in the {\f1\fs20 .exe} folder, but in a custom directory:
+! with TSynLogDB.Family do
+! begin
+!   Level := LOG_VERBOSE;
+!!   PerThreadLog := ptOneFilePerThread;
+!   DestinationPath := 'C:\Logs';
+! end;
+If you specifies {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} for the family, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} - the supplied {\f1\fs20 LogView} tool will handle it as expected. This can be very useful for a multi-threaded server process, e.g. as implement with {\i mORMot}'s Client-Server classes @35@.
+:  Log to the console
+For debugging purposes, it could be very handy to output the logging content to a console window. It enables interactive debugging of a Client-Server process, for instance: you can interact with the Client, then look in real time at the server console window, and inspect which requests are processed, without the need to open the log file.
+The {\f1\fs20 EchoToConsole} property enable you to select which events are to be echoed on the console (perhaps you expect only errors to appear, for instance).
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!!    EchoToConsole := LOG_VERBOSE; // log all events to the console
+!  end;
+Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
+Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and writing to the console under {\i Windows} is much slower than writing to a file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
+:104  Remote logging
+By default, {\f1\fs20 TSynLog} writes its activity to a local file, and/or to the console. The log file can be transmitted later on (once compressed) to support, for further review and debugging.\line But sometimes, it may be handy to see the logging in real-time, on a remote computer.
+You can enable such remote monitoring for a given {\f1\fs20 TSynLog} class, by adding the {\f1\fs20 mORMotHTTPClient.pas} unit in your use clause, then calling the following constructor:
+! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15',SQLite3Log,'8091','LogService');
+This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:8091/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
+A {\f1\fs20 TSQLHttpClient} instance will be created, and will be managed by the {\f1\fs20 SQLite3Log} instance. It will be released when the application will be closed, or when the {\f1\fs20 SQLite3Log.Family.EchoRemoteStop} method will be called.
+In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (8091 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
+Implementation of this remote logging has been tuned on both client and server side.\line On client side, log events are gathered and sent in a dedicated background thread: if a lot of events are generated, they will be transferred in chunks of several rows, to minimize resource and bandwidth. On server side, incoming events are stored in memory, and indexed on the fly, with a periodic refresh rate of 500 ms: even a very active client logger would just let the {\i Log View} tool be responsive and efficient.\line Thanks to the nature of the {\f1\fs20 http.sys} based server, several {\i Server Root} URI can be accessed in parallel with several {\i Log View} tool instance, on the same HTTP port: it will ease the IT policy of your network, since a single forwarded port would be able to handle several incoming connections.
+See the "{\f1\fs20 RemoteLoggingTest.dpr}" sample from "{\f1\fs20 11 - Exception logging}", in conjunction with the {\f1\fs20 LogView.dpr} tool available in the same folder, for a running example of remote logging.
+Note that our cross-platform clients - see @86@ - are able to log to a remote server, with the same exact format as used by our {\f1\fs20 TSynLog} class.
+:  Log to third-party libraries
+Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console or a remote log server (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
+It may be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs.
+You can define the {\f1\fs20 TSynLogFamily.EchoCustom} property to specify a simple event to be triggered for each log operation: the application can then decide to log to a third party logger application.
+Note that there is also the {\f1\fs20 TSynLogFamily.NoFile} property, which allows to disable completely the built-in file logging mechanism.
+For instance, you may write:
+!procedure TMyClass.Echo(Sender: TTextWriter; Level: TSynLogInfo; const Text: RawUTF8);
+!begin
+!  if Level in LOG_STACKTRACE then // filter only errors
+!    writeln(Text); // could be any third-party logger
+!end;
+!
+!...
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    // EchoToConsole := LOG_VERBOSE; // log all events to the console
+!!    EchoCustom := aMyClass.Echo; // register third-party logger
+!!    NoFile := true; // ensure TSynLog won't use the default log file
+!  end;
+A process similar to {\f1\fs20 TSynLogFile.ProcessOneLine()} could then parse the incoming {\f1\fs20 Text} value, if needed.
+:  Automated log archival
+Log archives can be created with the following settings:
+! with TSynLogDB.Family do
+! begin
+!  (...)
+!  OnArchive := EventArchiveZip;
+!  ArchivePath := '\\Remote\WKS2302\Archive\Logs'; // or any path
+! end;
+The {\f1\fs20 ArchivePath} property can be set to several functions, taking a timeout delay from the {\f1\fs20 ArchiveAfterDays} property value:
+- {\f1\fs20 nil} is the default value, and won't do anything: the {\f1\fs20 .log} will remain on disk until they will be deleted by hand;
+- {\f1\fs20 EventArchiveDelete} in order to delete deprecated {\f1\fs20 .log} files;
+- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons.pas} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
+- {\f1\fs20 SynZip.EventArchiveZip} will archive the {\f1\fs20 .log} files in {\f1\fs20 ArchivePath\\log\\YYYYMM.zip} files, grouping every .
+{\i SynLZ} files are less compressed, but created much faster than {\f1\fs20 .zip} files. However, {\f1\fs20 .zip} files are more standard, and on a regular application, compression speed won't be an issue for the application.
+:  Log files rotation
+You can set {\f1\fs20 TSynLogFamily.RotateFileCount} and {\f1\fs20 RotateFileSizeKB} properties, to enable log file rotation:
+- If both values are > 0, the log file will have a fixed name, without any time-stamp within;
+- {\f1\fs20 RotateFileSizeKB} will define the maximum size of the main uncompressed log file
+- {\f1\fs20 RotateFileCount} will define how many files are kept on disk - note that rotated files are compressed using {\i SynLZ}, so compression will be very fast.
+Log file rotation is as easy as:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
+!    RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
+!  end;
+Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
+- {\f1\fs20 TestSQL3.log} which will be the latest (current) log file, uncompressed;
+- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i Log Viewer} tool - see @103@ - is able to uncompress those {\f1\fs20 .synlz} files directly.
+Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
+As an alternative, or in addition to this {\i by-size} rotation pattern, you could specify a fixed time of the day to perform the rotation.\line For instance, the following will perform automatic rotation of the log files, whatever their size, at {\f1\fs20 23:00} each evening:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
+!    RotateFileDailyAtHour := 23; // rotate at 11:00 PM
+!  end;
+If the default behavior - which is to compress all rotated files into {\f1\fs20 .synlz} format, and delete the older files - does not fit your needs, you can set a custom event to the {\f1\fs20 TSynLogFamily.OnRotate} property, which would take care of the file rotation process.
+:  Integration within tests
+Logging is integrated within the unit @*test@ing classes, so that any failure will create an entry in the log with the source line, and stack trace:
+$C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-13)
+$Host=Laptop User=MyName CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
+$TSynLogTest 1.13 2011-04-13 05:40:25
+$
+$20110413 05402559 fail  TTestLowLevelCommon(00B31D70) Low level common: TDynArray "dynamic array failure" stack trace 0002FE0B SynCommons.TDynArray.Init (15148) 00036736 SynCommons.Test64K (18206) 0003682F SynCommons.TTestLowLevelCommon._TDynArray (18214) 000E9C94 TestSQL3 (163)
+The difference between a test suit without logging ({\f1\fs20 TSynTests}) and a test suit with logging ({\f1\fs20 TSynTestsLogged}) is only this overridden method:
+!procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
+!begin
+!  inherited;
+!  with TestCase[fCurrentMethod] do
+!    fLogFile.Log(sllFail,'%: % "%"',
+!      [Ident,TestName[fCurrentMethodIndex],msg],aTest);
+!end;
+In order to enable tests logging, you have just to enable it, e.g. with:
+! TSynLogTestLog.Family.Level := LOG_VERBOSE;
+You can optionally redirect the following global variable at program initialization, to share testing events with the main {\i mORMot} logs:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
+!  end;
+:103  Log Viewer
+Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 17,000,000 test cases do create a huge log file of about 550 MB), a log viewer was definitively in need.
+The log-viewer application is available as source code in the "{\i Samples}" folder, in the "{\i 11 - Exception logging}" sub-folder.
+:   Open log files
+You can run it with a specified log file on the command line, or use the "{\i Browse}" button to browse for a file. That is, you can associate this tool with your {\f1\fs20 .log} files, for instance, and you'll open it just by double-clicking on such files.
+Note that if the file is not in our {\f1\fs20 TSynLog} format, it will still be opened as plain text. You'll be able to browse its content and search within, but all the nice features of our logging won't be available, of course.
+It is worth saying that the viewer was designed to be {\i fast}.\line In fact, it takes no time to open any log file. For instance, a 390 MB log file is opened in less than one second on my laptop. Under Windows Seven, it takes more time to display the "Open file" dialog window than reading and indexing the 390 MB content.\line It uses internally memory mapped files and optimized data structures to access to the data as fast as possible - see {\f1\fs20 TSynLogFile} class.
+:   Log browser
+The screen is divided into three main spaces:
+- On the left side, the panel of commands;
+- On the right side, the log events list;
+- On the middle, an optional list of method calls, and another list of threads (not shown by default).
+The command panel allows to {\i Browse} your disk for a {\f1\fs20 .log} file. This button is a toggle of an optional {\i Drive / Directory / File} panel on the leftmost side of the tool. When a {\f1\fs20 .log / .synlz / .txt} file is selected, its content is immediately displayed. You can specify a directory name as a parameter of the tool (e.g. in a {\f1\fs20 .lnk} desktop link), which will let the viewer be opened in "Browse" mode, starting with the specified folder.
+A button gives access to the global {\i Stats} about its content (customer-side hardware and software running configuration, general numbers about the log), and even ask for a source code line number and unit name from a hexadecimal address available in the log, by browsing for the corresponding {\f1\fs20 .map} file (could be handy if you did not deliver the {\f1\fs20 .map} content within your main executable - which you should have to, IMHO).
+Just below the "{\i Browse}" button, there is an edit field available, with a ? button. Enter any text within this edit field, and it will be searched within the log events list. Search is case-insensitive, and was designed to be fast. Clicking on the ? button (or pressing the {\f1\fs20 F3} key) allows to repeat the last search.
+In the very same left panel, you can see all existing events, with its own color and an associated check-box. Note that only events really encountered in the {\f1\fs20 .log} file appear in this list, so its content will change between log files. By selecting / un-selecting a check-box, the corresponding events will be instantaneously displayed / or not on the right side list of events. You can right click on the events check-box list to select a predefined set of events.
+The right colored event list follows the events appended to the log, by time order. When you click on an event, its full line content is displayed at the bottom on the screen, in a memo.
+Having all @*SQL@ / @*NoSQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
+:   Customer-side profiler
+One distinctive feature of the {\f1\fs20 TSynLog} logging class is that it is able to map methods or functions entering/leaving (using the {\f1\fs20 Enter} method), and trace this into the logs. The corresponding timing is also written within the "{\i Leave}" event, and allows application profiling from the customer side. Most of the time, profiling an application is done during the testing, with a test environment and database. But this is not, and will never reproduce the exact nature of the customer use: for instance, hardware is not the same (network, memory, CPU), nor the software (Operating System version, [anti-]virus installed)... By enabling customer-side method profiling, the log will contain all relevant information. Those events are named "{\i Enter}" / "{\i Leave}" in the command panel check-box list, and written as + and - in the right-sided event list.
+The "{\i Methods profiler}" options allow to display the middle optional method calls list. Several sort order are available: by name (alphabetical sort), by occurrence (in running order, i.e. in the same order than in the event log), by time (the full time corresponding to this method, i.e. the time written within the "{\i Leave}" event), and by proper time (i.e. excluding all time spent in the nested methods).
+The "{\i Merge method calls}" check-box allows to regroup all identical method calls, according to their name. In fact, most methods are not called once, but multiple time. And this is the accumulated time spent in the method which is the main argument for code profiling.
+I'm quite sure that the first time you'll use this profiling feature on a huge existing application, you'll find out some bottlenecks you would have never thought about before.
+:   Per-thread inspection
+If the {\f1\fs20 TSynLog} family has specified {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} property, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} of the logged action.
+The log-viewer application will identify this column, and show a "{\i Thread}" group below the left-side commands. It will allow to go to the next thread, or toggle the optional {\i Thread view} list. By checking / un-checking any thread of this list, you are able to inspect the execution log for a given process, very easily. A right-click on this thread list will display a pop-up menu, allowing to select all threads or no thread in one command.
+:   Server for remote logging
+As was stated above, @104@ can use our {\i Log View} tool as server and real-time viewer for any remote client, either using {\f1\fs20 TSynLog}, or any cross-platform client - see @86@.
+Using a remote logging is specially useful from mobile applications (written with {\i Delphi} / @*FireMonkey@ or with @*Smart Mobile Studio@ / @*AJAX@). Our viewer tool allows efficient live debugging of such platforms.
+:73  Framework log integration
+The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynLog.pas} unit - see @16@.
 In its current implementation, the framework is able to log on request:
 - Any exceptions triggered during process, via {\f1\fs20 sllException} and {\f1\fs20 sllExceptionOS} levels;
 - Client and server @*REST@ful {\f1\fs20 URL} methods via {\f1\fs20 sllClient} and {\f1\fs20 sllServer} levels;
@@ -12690,7 +12698,7 @@ The framework source code tree will compile and is tested for the following plat
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
-Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPDF.pas} or the @27@ units) are also compatible with {\i Delphi} 5.
+Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynTest.pas}, {\f1\fs20 SynLog.pas} {\f1\fs20 SynPDF.pas} or the @27@ units) are also compatible with {\i Delphi} 5.
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
@@ -12745,6 +12753,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynCrypto.pas}|fast cryptographic routines (hashing and cypher)
 |{\f1\fs20 SynDprUses.inc}|generic header included in the beginning of the uses clause of a .dpr source code
 |{\f1\fs20 SynGdiPlus.pas}|GDI+ library API access with anti-aliasing drawing
+|{\f1\fs20 SynLog.pas}|logging functions used by most Synopse projects
 |{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
 |{\f1\fs20 SynLZO.pas}|LZO compression decompression unit
 |{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode {\i Delphi} only
@@ -12759,6 +12768,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine (for Win32)
 |{\f1\fs20 SynSSPIAuth.pas}|low level access to Windows Authentication
 |{\f1\fs20 SynTaskDialog.*}|implement TaskDialog window\line (native on Vista/Seven, emulated on XP)
+|{\f1\fs20 SynTest.pas}|cross-compiler unitary tests functions
 |{\f1\fs20 SynWinSock.pas}|low level access to network Sockets for the Windows platform
 |{\f1\fs20 SynZip.pas deflate.obj trees.obj}|low-level access to ZLib compression, 1.2.5
 |{\f1\fs20 SynZipFiles.pas}|high-level access to .zip archive file compression
@@ -12775,6 +12785,7 @@ In the same {\i Root folder}, the external database-agnostic units are located:
 |{\f1\fs20 SynDBOracle.pas}|{\i @*Oracle@} DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|{\i @*SQLite3@} direct access classes
 |{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 @*TQuery@}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
+|{\f1\fs20 SynDBRemote.pas}|remote access over HTTP
 |{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB.pas} data access
 |{\f1\fs20 SynDBZEOS.pas}|{\i @*Zeos@Lib} / ZDBC direct access classes
 |%
@@ -12854,6 +12865,8 @@ To properly upgrade to the latest revision:
 1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
 2. Download latest 1.18 revision files as stated just above.
 3. Change your references to {\i mORMot} units:
+- Add in your uses clause {\f1\fs20 SynTests.pas} if you use testing features;
+- Add in your uses clause {\f1\fs20 SynLog.pas} if you use logging features;
 - Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot.pas};
 - Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3.pas};
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};

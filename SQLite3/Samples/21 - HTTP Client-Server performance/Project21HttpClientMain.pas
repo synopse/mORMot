@@ -31,6 +31,8 @@ implementation
 
 uses
   SynCommons,
+  SynLog,
+  SynTests,
   mORMot,
   SynSelfTests;
 

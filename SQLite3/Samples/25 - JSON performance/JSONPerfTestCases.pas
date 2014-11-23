@@ -67,6 +67,7 @@ uses
   {$endif}
   mORMot,
   SynCommons,
+  SynTests,
   SynCrossPlatformJSON;
 
 

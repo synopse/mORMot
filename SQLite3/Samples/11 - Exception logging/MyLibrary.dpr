@@ -8,7 +8,8 @@ library MyLibrary;
 
 }
 uses
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 {$R *.res}
 

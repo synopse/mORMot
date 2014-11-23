@@ -8,6 +8,8 @@ uses
   Contnrs,
   Variants,
   SynCommons,
+  SynLog,
+  SynTests,
   mORMot,
   mORMotMVC,
   MVCModel;

@@ -151,6 +151,7 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynLog,
   SynDB;
 
 { -------------- Oracle Client Interface native connection  }

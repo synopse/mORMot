@@ -4,7 +4,7 @@ program Project14Server;
 
 uses
   SysUtils,
-  SynCommons, mORMot,
+  SynCommons, SynLog, mORMot,
   mORMotSQLite3, SynSQLite3Static,
   Project14Interface;
 
