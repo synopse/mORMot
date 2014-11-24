@@ -694,7 +694,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - No @*RAD@ components, but true @*ORM@ and @*SOA@ approach;
 - Multi-@*Tier@ architecture, with integrated @*Business rules@ as fast ORM-based classes and {\i @*Domain-Driven@} design;
 - {\i Service-Oriented-Architecture} model, using custom RESTful JSON services - you can send as JSON any {\f1\fs20 TStrings, TCollection, TPersistent} or {\f1\fs20 TObject} (via registration of a custom serializer) instance, or even a {\i dynamic array}, or any record content, with integrated JSON @*serialization@, via an @*interface@-based contract shared on both client and server sides;
-- Truly RESTful authentication with a dual @*security@ model (session + per-query);
+- Truly RESTful @*authentication@ with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
 - Fast a configuration-less @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
 - Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB.pas} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
@@ -1814,7 +1814,7 @@ In our @*Client-Server@ ORM, those {\f1\fs20 TSQLRecord} classes can be used for
 - To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - see @27@ - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way - see @84@;
 - To have business logic objects accessible for both the Client and Server side, in a @*REST@ful approach - see @114@;
 - To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way - see @31@.
-Our ORM engine has genuine advanced features like {\i @*convention over configuration@}, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
+Our ORM engine has genuine advanced features like {\i @*convention over configuration@}, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, @*authentication@...).
 \page
 :26 TSQLRecord fields definition
 All the framework @*ORM@ process relies on the {\f1\fs20 TSQLRecord} class. This abstract {\f1\fs20 TSQLRecord} class features a lot of built-in methods, convenient to do most of the ORM process in a generic way, at record level.
@@ -5062,7 +5062,11 @@ To define a HTTP server, you may write:
 !  Props := TSQLDBSQLite3ConnectionProperties.Create('data.db3','','','');
 !!  HttpServer := TSQLDBServerHttpApi.Create(Props,'syndbremote','8092','user','pass');
 The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/syndbremote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
-Note that the URI should be registered to work as expected, just as needed by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
+A first user is defined, with '{\f1\fs20 user}' / '{\f1\fs20 pass}' credentials. Note that in our remote access, user management {\i does not} match the RDBMS user rights: you should better have your own set of users at application level, for higher security, and a better integration with your business logic. If creating a new user on a RDBMS could be painful, managing remote user @*authentication@ is pretty easy on the {\f1\fs20 SynDBRemote.pas} side, by using the {\f1\fs20 Protocol.Authenticate} property of the server:
+!HttpServer.Protocol.Authenticate.AuthenticateUser('toto','pipo');
+!HttpServer.Protocol.Authenticate.AuthenticateUser('toto2','pipo2');
+!...
+The URI should be registered to work as expected, just as expected by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
 !THttpApiServer.AddUrlAuthorize('syndbremote','8092',false,'+');
 :   SynDB client access via HTTP
 On the client side, you can then write:
@@ -5073,7 +5077,7 @@ On the client side, you can then write:
 ! ...
 !!  Props := TSQLDBWinHTTPConnectionProperties.Create('1.2.3.4:8092','syndbremote','user','pass');
 As you can see, there is no link to {\f1\fs20 SynDBSQLite3.pas} nor {\f1\fs20 SynSQLite3Static.pas} on the client side. Just the HTTP link is needed. No need to deploy the RDBMS client libraries with your application, nor setup the local network firewall.
-We defined here a single user, with 'user' / 'pass' credentials, but you may manage more users on the server side, using the {\f1\fs20 Authenticate} property of {\f1\fs20 TSQLDBServerAbstract}. Note that in our remote access, user management does not match the RDBMS user rights: you should better have your own set of users at application level, for higher security, and a better integration with your business logic. If creating a new user on a RDBMS could be painful, it is pretty easy on our {\f1\fs20 SynDBRemote.pas} side.
+We defined here a single user, with 'user' / 'pass' credentials, but you may manage more users on the server side, using the {\f1\fs20 Protocol.Authenticate} property of {\f1\fs20 TSQLDBServerAbstract}.
 Then, you execute your favorite SQL using the connection just as usual:
 !procedure Test(Props: TSQLDBConnectionProperties);
 !var Stmt: ISQLDBRows;
@@ -5526,6 +5530,10 @@ $Name: Name 8  Number: 7
 $Name: Name 9  Number: 8
 $Name: Name 10  Number: 9
 $Name: Name 11  Number: 10
+In a GUI application, you could fill a VCL grid using a {\f1\fs20 TDocVariantArrayDataSet} as defined in {\f1\fs20 SynVirtualDataSet.pas}, for instance:
+! ds1.DataSet.Free; // release previous TDataSet
+! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt,?}}',['John',21],null));
+This overloaded {\f1\fs20 FindDocs()} method takes a query filter as JSON and parameters (following the {\f1\fs20 MongoDB} syntax), and a {\f1\fs20 Projection} mapping ({\f1\fs20 null} to retrieve all properties). Its returns a {\f1\fs20 TVariantDynArray} result, which was mapped to an optimized read/only {\f1\fs20 TDataSet} using the overloaded {\f1\fs20 ToDataSet()} function. So in our case, the DB grid has been filled with all people named '{\f1\fs20 John}', with age greater than 21.
 If you want to retrieve the documents directly as JSON, we can write:
 !var json: RawUTF8;
 !...
@@ -5543,7 +5551,7 @@ You can note that {\f1\fs20 FindJSON()} has two properties, which are the {\f1\f
 !  writeln(json);
 Which would output:
 $[{"_id":5,"Name":"Name 6","Number":5}]
-Note here than we used an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
+We used here an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
 We can specify a projection:
 !  json := Coll.FindJSON('{_id:?}',[5],'{Name:1}');
 !  writeln(json);

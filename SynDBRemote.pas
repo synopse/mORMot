@@ -245,19 +245,15 @@ implementation
 constructor TSQLDBServerAbstract.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName,aPassword: RawUTF8; aHttps: boolean;
   aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
-var auth: TSynAuthentication;
 begin
   fProperties := aProperties;
   fDatabaseName := aDatabaseName;
   fPort := aPort;
   fHttps := aHttps;
   fThreadPoolCount := aThreadPoolCount;
-  if aUserName='' then
-    auth := nil else
-    auth := TSynAuthentication.Create(aUserName,aPassword);
   if aProtocol=nil then
     aProtocol := TSQLDBRemoteConnectionProtocol;
-  fProtocol := aProtocol.Create(auth);
+  fProtocol := aProtocol.Create(TSynAuthentication.Create(aUserName,aPassword));
 end;
 
 destructor TSQLDBServerAbstract.Destroy;
