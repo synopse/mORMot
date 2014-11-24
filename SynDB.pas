@@ -4098,7 +4098,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
   header := pointer(msgInput);
   if (header=nil) or (header.Magic<>REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.RemoteProcessMessage() input',[self]);
-  if (Protocol.Authenticate<>nil) and not (header.Command in [cGetToken,cGetDBMS]) then
+  if (Protocol.Authenticate<>nil) and (Protocol.Authenticate.UsersCount>0) and
+     not (header.Command in [cGetToken,cGetDBMS]) then
     if not Protocol.Authenticate.SessionExists(header.SessionID) then
       raise ESQLDBRemote.Create('You do not have the right to be here');
   O := pointer(msgInput);
@@ -4110,7 +4111,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       AppendOutput(Protocol.Authenticate.CurrentToken);
     cGetDBMS: begin
       session := 0;
-      if Protocol.Authenticate<>nil then begin
+      if (Protocol.Authenticate<>nil) and (Protocol.Authenticate.UsersCount>0) then begin
         user := GetNextItem(PUTF8Char(O),#1);
         session := Protocol.Authenticate.CreateSession(user,PCardinal(O)^);
         if session=0 then

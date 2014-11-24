@@ -10793,6 +10793,10 @@ type
     /// returns the current identification token
     // - to be sent to the client for its authentication challenge
     function CurrentToken: Int64;
+    /// the number of current opened sessions
+    property SessionsCount: integer read fSessionsCount;
+    /// the number of registered users
+    property UsersCount: integer read fCredentials.Count;
     /// to be used to compute a Hash on the client, for a given Token
     // - the token should have been retrieved from the server, and the client
     // should compute and return this hash value, to perform the authentication
@@ -41742,4 +41746,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
