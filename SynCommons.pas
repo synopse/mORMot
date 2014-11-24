@@ -1965,13 +1965,18 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 // - to be used instead of StrLen() on a memory protected buffer
 function StrLenPas(S: pointer): PtrInt;
 
+{$ifdef FPC}
+/// FPC will use its internal optimized implementation
+function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
+{$else}
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms: please note that in this case, it may read up to 15 bytes
 // before or beyond the string; this is rarely a problem but it can in principle
 // generate a protection violation (e.g. when used over mapped files) - in this
-// case, you can use the slower StrLenPas() function instead
+// case, you can use the slightly slower StrLenPas() function instead
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
+{$endif}
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -15454,13 +15459,11 @@ begin
   result := 0;
   if S<>nil then
   while true do
-    if PAnsiChar(S)[0]<>#0 then
-    if PAnsiChar(S)[1]<>#0 then
-    if PAnsiChar(S)[2]<>#0 then
-    if PAnsiChar(S)[3]<>#0 then begin
-      inc(PtrUInt(S),4);
-      inc(result,4);
-    end else begin
+    if PAnsiChar(S)[result+0]<>#0 then
+    if PAnsiChar(S)[result+1]<>#0 then
+    if PAnsiChar(S)[result+2]<>#0 then
+    if PAnsiChar(S)[result+3]<>#0 then
+      inc(result,4) else begin
       inc(result,3);
       exit;
     end else begin
@@ -25808,7 +25811,6 @@ begin
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
-  {$ifndef USEPACKAGES}
   if DebugHook=0 then begin // patch only outside debugging
     RedirectCode(SystemFillCharAddress,FillCharAddr);
     RedirectCode(@System.Move,MoveAddr);
@@ -25821,7 +25823,6 @@ begin
     {$endif UNICODE}
     {$endif DOPATCHTRTL}
   end;
-  {$endif USEPACKAGES}
 end;
 
 {$endif CPUARM}
@@ -41576,9 +41577,11 @@ initialization
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
   {$ifndef FPC}
   {$ifndef CPUARM}
+  {$ifndef USEPACKAGES}
   InitRedirectCode;
-  {$endif}
-  {$endif}
+  {$endif USEPACKAGES}
+  {$endif CPUARM}
+  {$endif FPC}
   InitSynCommonsConversionTables;
   {$ifdef MSWINDOWS}
   RetrieveSystemInfo;
@@ -41595,4 +41598,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
