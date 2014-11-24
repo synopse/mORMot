@@ -69,10 +69,11 @@ object Form1: TForm1
       ItemHeight = 13
       ItemIndex = 0
       TabOrder = 1
-      Text = 'JSON file'
+      Text = 'JSON direct'
       OnChange = chkFromSQLClick
       Items.Strings = (
-        'JSON file'
+        'JSON direct'
+        'JSON TDocVariant'
         'SQLite3 direct'
         'SQLite3 proxy direct'
         'SQLite3 proxy compressed'

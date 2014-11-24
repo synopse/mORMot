@@ -9620,6 +9620,8 @@ function JSONToVariantDynArray(const JSON: RawUTF8): TVariantDynArray;
 // - will use a TDocVariantData temporary storage
 function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 
+/// guess the correct TSQLDBFieldType from a variant value
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
 var
   /// the internal custom variant type used to register TDocVariant
   DocVariantType: TSynInvokeableVariantType = nil;
@@ -10187,8 +10189,14 @@ function DocVariantData(const DocVariant: variant): PDocVariantData;
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
 // - will return a read-only fake TDocVariantData with Kind=dvUndefined if the
 // supplied variant is not a TDocVariant instance
-function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
+function DocVariantDataSafe(const DocVariant: variant): PDocVariantData; overload;
 
+/// direct access to a TDocVariantData from a given variant instance
+// - return a pointer to the TDocVariantData corresponding to the variant
+// instance, which may be of kind varByRef (e.g. when retrieved by late binding)
+// - will check the supplied document kind, i.e. either dvObject or dvArray and
+// raise a EDocVariant exception if it does not match 
+function DocVariantDataSafe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
 
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -13527,6 +13535,12 @@ begin
   {$endif}
   varByte:     Value := VByte;
   varInteger:  Value := VInteger;
+  varWord64:
+    if (VInt64>=0) and (VInt64<=High(integer)) then
+      Value := VInt64 else begin
+      result := False;
+      exit;
+    end;
   varInt64:
     if (VInt64>=Low(integer)) and (VInt64<=High(integer)) then
       Value := VInt64 else begin
@@ -13647,7 +13661,8 @@ begin
     UInt32ToUTF8(VByte,result);
   varInteger:
     Int32ToUTF8(VInteger,result);
-  varInt64:
+  varInt64,
+  varWord64:
     Int64ToUTF8(VInt64,result);
   varSingle:
     ExtendedToStr(VSingle,SINGLE_PRECISION,result);
@@ -27690,7 +27705,7 @@ begin
       PInteger(Dest)^ := VInteger;
       inc(Dest,sizeof(VInteger));
     end;
-    varInt64, varDouble, varDate, varCurrency:begin
+    varInt64, varWord64, varDouble, varDate, varCurrency:begin
       PInt64(Dest)^ := VInt64;
       inc(Dest,sizeof(VInt64));
     end;
@@ -27728,7 +27743,7 @@ begin
     result := sizeof(VSmallint)+sizeof(VType);
   varSingle, varLongWord, varInteger:
     result := sizeof(VInteger)+sizeof(VType);
-  varInt64, varDouble, varDate, varCurrency:
+  varInt64, varWord64, varDouble, varDate, varCurrency:
     result := sizeof(VInt64)+sizeof(VType);
   varString, varOleStr:
     if VAny=nil then
@@ -27805,7 +27820,7 @@ begin
       VInteger := PInteger(Source)^;
       inc(Source,sizeof(VInteger));
     end;
-    varInt64, varDouble, varDate, varCurrency:begin
+    varInt64, varWord64, varDouble, varDate, varCurrency:begin
       VInt64 := PInt64(Source)^;
       inc(Source,sizeof(VInt64));
     end;
@@ -28539,6 +28554,34 @@ begin
   result := tmp.VValue;
 end;
 
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+begin
+  with TVarData(V) do
+  case VType of
+  varEmpty:
+    result := ftUnknown;
+  varNull:
+    result := ftNull;
+  {$ifndef DELPHI5OROLDER}varShortInt, varWord, varLongWord,{$endif}
+  varSmallInt, varByte, varBoolean, varInteger, varInt64, varWord64:
+    result := ftInt64;
+  varSingle,varDouble:
+    result := ftDouble;
+  varDate:
+    result := ftDate;
+  varCurrency:
+    result := ftCurrency;
+  varString:
+    if (VString<>nil) and (PCardinal(VString)^ and $ffffff=JSON_BASE64_MAGIC) then
+      result := ftBlob else
+      result := ftUTF8;
+  else
+  if VType=varVariant or varByRef then
+    result := VariantTypeToSQLDBFieldType(PVariant(VPointer)^) else
+    result := ftUTF8;
+  end;
+end;
+
 
 { TDocVariantData }
 
@@ -28655,11 +28698,11 @@ begin
     if n>0 then begin
       SetLength(VValue,n);
       SetLength(VName,n);
-    repeat
-      // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
-      Name := GetJSONPropName(JSON);
-      if Name=nil then
-        exit;
+      repeat
+        // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
+        Name := GetJSONPropName(JSON);
+        if Name=nil then
+          exit;
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
         if JSON=nil then
           exit;
@@ -28667,7 +28710,7 @@ begin
         inc(VCount);
         if VCount>n then
           raise EDocVariant.Create('Unexpected object size');
-    until EndOfObject='}';
+      until EndOfObject='}';
     end else
       if JSON^='}' then // n=0
         repeat inc(JSON) until not(JSON^ in [#1..' ']) else
@@ -29426,7 +29469,7 @@ end;
 
 const // will be in code section of the exe, so will be read-only by design
   DocVariantDataFake: TDocVariantData = ();
-  
+
 function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
 begin
   with TVarData(DocVariant) do
@@ -29435,6 +29478,14 @@ begin
     if VType=varByRef or varVariant then
       result := DocVariantDataSafe(PVariant(VPointer)^) else
       result := @DocVariantDataFake;
+end;
+
+function DocVariantDataSafe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
+begin
+  result := DocVariantDataSafe(DocVariant);
+  if result^.Kind<>ExpectedKind then
+    raise EDocVariant.CreateUTF8('DocVariantSafe(%)<>%',
+      [ord(result^.Kind),ord(ExpectedKind)]);
 end;
 
 function _Obj(const NameValuePairs: array of const;

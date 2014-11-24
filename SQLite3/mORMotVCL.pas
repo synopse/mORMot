@@ -121,7 +121,6 @@ type
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
       const ColumnTypes: array of TSQLFieldType
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
-
     /// finalize the class instance
     destructor Destroy; override;
     

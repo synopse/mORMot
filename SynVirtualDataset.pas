@@ -160,6 +160,32 @@ type
     property OnPostError;
   end;
 
+  /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
+  // - could be used e.g. from the result of TMongoCollection.FindDocs() to
+  // avoid most temporary conversion into JSON or TClientDataSet buffers
+  TDocVariantArrayDataSet = class(TSynVirtualDataSet)
+  protected
+    fValues: TVariantDynArray;
+    fColumns: array of record
+      Name: RawUTF8;
+      FieldType: TSQLDBFieldType;
+    end;
+    fTemp64: Int64;
+    fTempUTF8: RawUTF8;
+    fTempBlob: RawByteString;
+    procedure InternalInitFieldDefs; override;
+    function GetRecordCount: Integer; override;
+    function GetRowFieldData(Field: TField; RowIndex: integer;
+      out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
+  public
+    /// initialize the virtual TDataSet from a dynamic array of TDocVariant
+    // - you can set the expected column names and types matching the results
+    // document layout - if no column information is specified, the first
+    // TDocVariant will be used as reference
+    constructor Create(Owner: TComponent; const Data: TVariantDynArray;
+      const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType); reintroduce;
+  end;
+
 const
   /// map the VCL string type, depending on the Delphi compiler version
   {$ifdef UNICODE}
@@ -172,6 +198,12 @@ const
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet
 function DataSetToJSON(Data: TDataSet): RawUTF8;
+
+/// convert a dynamic array of TDocVariant result into a VCL DataSet
+// - this function is just a wrapper around TDocVariantArrayDataSet.Create()
+// - the TDataSet will be opened once created
+function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
+  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
 
 
 implementation
@@ -559,6 +591,120 @@ begin
   finally
     W.Free;
   end;
+end;
+
+{ TDocVariantArrayDataSet }
+
+constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
+  const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
+  const ColumnTypes: array of TSQLDBFieldType);
+var n,i,j: integer;
+    first: PDocVariantData;
+begin
+  fValues := Data;
+  n := Length(ColumnNames);
+  if n>0 then begin
+    if n<>length(ColumnTypes) then
+      raise ESynException.CreateUTF8('%.Create(ColumnNames<>ColumnTypes)',[self]);
+    SetLength(fColumns,n);
+    for i := 0 to n-1 do begin
+      fColumns[i].Name := ColumnNames[i];
+      fColumns[i].FieldType := ColumnTypes[i];
+    end;
+  end else
+  if fValues<>nil then begin
+    first := DocVariantDataSafe(fValues[0],dvObject);
+    SetLength(fColumns,first^.Count);
+    for i := 0 to first^.Count-1 do begin
+      fColumns[i].Name := first^.Names[i];
+      fColumns[i].FieldType := VariantTypeToSQLDBFieldType(first^.Values[i]);
+      case fColumns[i].FieldType of
+      SynCommons.ftNull:
+        fColumns[i].FieldType := SynCommons.ftBlob;
+      SynCommons.ftCurrency:
+        fColumns[i].FieldType := SynCommons.ftDouble;
+      SynCommons.ftInt64:
+        for j := 1 to first^.Count-1 do // ensure type coherency of whole column
+          with DocVariantDataSafe(fValues[j],dvObject)^ do
+          if (i<Length(Names)) and IdemPropNameU(Names[i],fColumns[i].Name) then
+          if VariantTypeToSQLDBFieldType(Values[i]) in [SynCommons.ftDouble,SynCommons.ftCurrency] then begin
+            fColumns[i].FieldType := SynCommons.ftDouble;
+            break;
+          end;
+      end;
+    end;
+  end;
+  inherited Create(Owner);
+end;
+
+function TDocVariantArrayDataSet.GetRecordCount: Integer;
+begin
+  result := length(fValues);
+end;
+
+function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
+  RowIndex: integer; out ResultLen: Integer;
+  OnlyCheckNull: boolean): Pointer;
+var F,ndx: integer;
+    wasString: Boolean;
+begin
+  result := nil;
+  F := Field.Index;
+  if (cardinal(RowIndex)<cardinal(length(fValues))) and
+     (cardinal(F)<cardinal(length(fColumns))) and
+     not (fColumns[F].FieldType in [ftNull,SynCommons.ftUnknown,SynCommons.ftCurrency]) then
+    with DocVariantDataSafe(fValues[RowIndex])^ do
+    if (Kind=dvObject) and (Count>0) then begin
+      if IdemPropNameU(fColumns[F].Name,Names[F]) then
+        ndx := F else // optimistic match
+        ndx := GetValueIndex(fColumns[F].Name);
+      if ndx>=0 then
+        if VarIsNull(Values[ndx]) then
+          exit else begin
+          result := @fTemp64;
+          if not OnlyCheckNull then
+          case fColumns[F].FieldType of
+          ftInt64:
+            VariantToInt64(Values[ndx],fTemp64);
+          ftDouble,SynCommons.ftDate:
+            VariantToDouble(Values[ndx],PDouble(@fTemp64)^);
+          ftUTF8: begin
+            VariantToUTF8(Values[ndx],fTempUTF8,wasString);
+            result := pointer(fTempUTF8);
+            ResultLen := length(fTempUTF8);
+          end;
+          SynCommons.ftBlob: begin
+            VariantToUTF8(Values[ndx],fTempUTF8,wasString);
+            if Base64MagicCheckAndDecode(pointer(fTempUTF8),length(fTempUTF8),fTempBlob) then begin
+              result := pointer(fTempBlob);
+              ResultLen := length(fTempBlob);
+            end;
+          end;
+          end;
+        end;
+    end;
+end;
+
+procedure TDocVariantArrayDataSet.InternalInitFieldDefs;
+const TYPES: array[TSQLDBFieldType] of TFieldType = (
+  // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+  ftWideString,ftWideString,ftLargeint,ftFloat,ftFloat,ftDate,ftWideString,ftBlob);
+var F,siz: integer;
+begin
+  FieldDefs.Clear;
+  for F := 0 to high(fColumns) do begin
+    if fColumns[F].FieldType=ftUTF8 then
+      siz := 16 else
+      siz := 0;
+    FieldDefs.Add(UTF8ToString(fColumns[F].Name),TYPES[fColumns[F].FieldType],siz);
+  end;
+end;
+
+function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
+  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
+begin
+  result := TDocVariantArrayDataSet.Create(aOwner,Data,ColumnNames,ColumnTypes);
+  result.Open;
 end;
 
 end.

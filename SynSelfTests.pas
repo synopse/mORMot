@@ -5595,6 +5595,7 @@ begin
   Check(V.doc.name='John');
   Check(V.doc.birthYear=1972);
   if discogs<>'' then begin
+    FileFromString(JSONReformat(discogs),ChangeFileExt(discogsFileName,'2.json'));
     Disco := _JSON(discogs,aOptions);
     Check(Disco.releases._count<=Disco.pagination.items);
     for i := 0 to Disco.Releases._count-1 do begin

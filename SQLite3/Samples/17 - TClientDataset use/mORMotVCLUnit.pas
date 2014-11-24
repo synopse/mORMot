@@ -71,9 +71,11 @@ end;
 procedure TForm1.chkFromSQLClick(Sender: TObject);
 var proxy: TSQLDBConnectionProperties;
     stmt: TSQLDBStatement;
+    values: TDocVariantData;
     Timer: TPrecisionTimer;
 begin
   ds1.DataSet.Free;
+  chkViaTClientDataSet.Enabled := cbbDataSource.ItemIndex<>1;
   Timer.Start;
   case cbbDataSource.ItemIndex of
   0: // test TSynSQLTableDataSet: reading from JSON content
@@ -81,21 +83,25 @@ begin
       ds1.DataSet := JSONToClientDataSet(self,fJSON) else
       ds1.DataSet := JSONToDataSet(self,fJSON, // demo client-side column definition
         [sftInteger,sftUTF8Text,sftUTF8Text,sftBlob,sftInteger,sftInteger]);
-  1..6: begin
+  1: begin // no TClientDataSet yet for dynamic array of TDocVariant
+    values.InitJSON(fJSON,JSON_OPTIONS[true]);
+    ds1.DataSet := ToDataSet(self,values.Values,[],[]);
+  end;
+  2..7: begin
     // test TSynSQLStatementDataSet: reading from SynDB database
     proxy := fProps;
     try
       case cbbDataSource.ItemIndex of
-      1: ; // source is directly the SQLite3 engine
-      2: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
-          fProps,'user','pass',TSQLDBProxyConnectionProtocol);
+      2: ; // source is directly the SQLite3 engine
       3: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
+          fProps,'user','pass',TSQLDBProxyConnectionProtocol);
+      4: proxy := TSQLDBRemoteConnectionPropertiesTest.Create(
          fProps,'user','pass',TSQLDBRemoteConnectionProtocol);
-      4: proxy := TSQLDBWinHTTPConnectionProperties.Create(
+      5: proxy := TSQLDBWinHTTPConnectionProperties.Create(
           SERVER_ADDR,SERVER_NAME,'user','pass');
-      5: proxy := TSQLDBWinINetConnectionProperties.Create(
+      6: proxy := TSQLDBWinINetConnectionProperties.Create(
           SERVER_ADDR,SERVER_NAME,'user','pass');
-      6: proxy := TSQLDBSocketConnectionProperties.Create(
+      7: proxy := TSQLDBSocketConnectionProperties.Create(
           SERVER_ADDR,SERVER_NAME,'user','pass');
       end;
       stmt := proxy.NewThreadSafeStatement;

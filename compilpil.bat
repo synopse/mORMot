@@ -10,7 +10,7 @@ if not "%LVCL%"=="" goto AllSet
 set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 goto AllSet
 :EnhancedRTL
-set Switches=-B -Q -DENHANCEDRTL;INCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
+set Switches=-B -Q -DENHANCEDRTL;INCLUDE_FTS3;USEZEOS -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform;\dev\zeos\src\core;\dev\zeos\src\dbc;\dev\zeos\src\parsesql;\dev\zeos\src\plain -I\dev\lib;\dev\lib\crossplatform;\dev\zeos\src -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
 goto AllSet
 :AlreadySet
 set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi5\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
@@ -42,7 +42,6 @@ del tempbuild\exe\*.mdb
 del tempbuild\exe\TestSQL3.*
 mkdir tempbuild\dcu
 del tempbuild\dcu\*.dcu
-
 
 cd \dev\lib\sqlite3
 
@@ -127,6 +126,7 @@ cd "\dev\lib\sqlite3\Samples\11 - Exception logging"
 
 cd "\Dev\Lib\SQLite3\Samples\12 - SynDB Explorer"
 %DCC% SynDBExplorer.dpr %Switches%
+
 @if errorlevel 1 pause
 
 cd "\dev\lib\sqlite3\Samples\13 - StandAlone JSON SQL server"
