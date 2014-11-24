@@ -331,6 +331,7 @@ function DateTimeToIso8601(Value: TDateTime): string;
 function Iso8601ToDateTime(const Value: string): TDateTime;
 function TryStrToInt(const S: string; var Value: integer): Boolean;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean;
+function StrToInt64Def(const S: string; const def: Int64): Int64;
 function UpCase(ch: Char): Char; inline;
 function GetNextCSV(const str: string; var index: Integer; var res: string;
   Sep: char): boolean;
@@ -796,6 +797,12 @@ end;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean; inline;
 begin
   result := TryStrToInt(S,Value);
+end;
+
+function StrToInt64Def(const S: string; const def: Int64): Int64;
+begin
+  if not TryStrToInt(S,result) then
+      result := def;
 end;
 
 function NowToIso8601: string;

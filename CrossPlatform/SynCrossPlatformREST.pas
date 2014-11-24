@@ -94,7 +94,6 @@ type
   /// alias to share the same string type between client and server
   RawUTF8 = string;
 
-
   TSQLRest = class;
   TSQLRecord = class;
   TSQLModel = class;
@@ -235,6 +234,13 @@ type
   /// a set of published property Kind
   TSQLFieldKinds = set of TSQLFieldKind;
 
+  /// the TSQLRecord primary key is a 64 bit integer
+  TID = type Int64;
+
+  /// a dynamic array of TSQLRecord primary keys
+  // - used e.g. for BATCH process
+  TIDDynArray = array of TID;
+
   /// store information of one TSQLRecord published property
   TSQLModelInfoPropInfo = class
   public
@@ -373,7 +379,7 @@ type
   // (SmartMobileStudio does not allow {$M+} in the source)
   TSQLRecord = class(TPersistent)
   protected
-    fID: integer;
+    fID: TID;
     fInternalState: cardinal;
     fFill: TSQLTableJSON;
     {$ifdef ISSMS}
@@ -387,7 +393,7 @@ type
     /// this constructor initializes the record
     constructor Create; overload; virtual;
     /// this constructor loads a record from a REST instance from its ID
-    constructor Create(aClient: TSQLRest; aID: integer;
+    constructor Create(aClient: TSQLRest; aID: TID;
       ForUpdate: boolean=false); overload;
     /// this constructor loads a record from a REST instance
     // - you can bind parameters by using ? in the SQLWhere clause
@@ -439,7 +445,7 @@ type
     property InternalState: cardinal read fInternalState;
   published
     /// stores the record's primary key
-    property ID: integer read fID write fID;
+    property ID: TID read fID write fID;
   end;
 
   /// table containing the available user access rights for authentication
@@ -478,7 +484,7 @@ type
     fPasswordHashHexa: string;
     fDisplayName: string;
     fData: TSQLRawBlob;
-    fGroup: integer;
+    fGroup: TID;
     {$ifdef ISSMS}
     class function ComputeRTTI: TRTTIPropInfos; override;
     procedure SetProperty(FieldIndex: integer; const Value: variant); override;
@@ -503,7 +509,7 @@ type
     /// the associated access rights of this user in TSQLAuthGroup
     // - access rights are managed by group
     // - note that 'Group' field name is not allowed by SQLite
-    property GroupRights: integer read fGroup write fGroup;
+    property GroupRights: TID read fGroup write fGroup;
     /// some custom data, associated to the User
     // - Server application may store here custom data
     // - its content is not used by the framework but 'may' be used by your
@@ -715,10 +721,10 @@ type
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
     function InternalBatch(Table: TSQLRecordClass; const CMD: string; var Info: TSQLModelInfo): Integer;
-    function ExecuteAdd(tableIndex: integer; const json: string): integer; virtual; abstract;
-    function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; virtual; abstract;
+    function ExecuteAdd(tableIndex: integer; const json: string): TID; virtual; abstract;
+    function ExecuteUpdate(tableIndex: integer; ID: TID; const json: string): boolean; virtual; abstract;
     function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
-      var Results: TIntegerDynArray): integer; virtual; abstract;
+      var Results: TIDDynArray): integer; virtual; abstract;
   public
     /// initialize the class, and associate it to a specified database Model
     // - if aOwnModel is TRUE, this class destructor will free aModel instance
@@ -728,7 +734,7 @@ type
 
     /// get a member from its ID
     // - return true on success, and fill all simple fields
-    function Retrieve(aID: integer; Value: TSQLRecord;
+    function Retrieve(aID: TID; Value: TSQLRecord;
       ForUpdate: boolean=false): boolean; overload; virtual; abstract;
     /// get a member from a where clause
     // - you can bind parameters by using ? in the SQLWhere clause
@@ -762,9 +768,9 @@ type
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): integer; virtual;
+    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): TID; virtual;
     /// delete a member
-    function Delete(Table: TSQLRecordClass; ID: integer): boolean; virtual; abstract;
+    function Delete(Table: TSQLRecordClass; ID: TID): boolean; virtual; abstract;
     /// update a member
     // - you can let default FieldNames='' to update simple fields, '*' to
     // update all fields (including BLOBs), or specify a CSV list of updated fields
@@ -807,13 +813,13 @@ type
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     // - deleted record class is the TSQLRecordClass used at BatchStart()
     // call: it will fail if no class was specified for this BATCH sequence
-    function BatchDelete(ID: integer): integer; overload;
+    function BatchDelete(ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
     // - similar to Delete(), but in BATCH mode: nothing is sent until BatchSend()
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     // - with this overloaded method, the deleted record class is specified:
     // no class shall have been set at BatchStart() call, or should be the same
-    function BatchDelete(Table: TSQLRecordClass; ID: integer): integer; overload;
+    function BatchDelete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
     // - similar to Delete(), but in BATCH mode: nothing is sent until BatchSend()
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -824,13 +830,13 @@ type
     /// execute a BATCH sequence started by BatchStart() method
     // - send all pending BatchAdd/Update/Delete statements to the remote server
     // - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
-    // - a dynamic array of integers will be created in Results,
+    // - a dynamic array of 64 bit integers will be created in Results,
     // containing all ROWDID created for each BatchAdd call, or 200
     // (=HTML_SUCCESS) for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
     // imply that all statements in the BATCH sequence were successfull
-    function BatchSend(var Results: TIntegerDynArray): integer;
+    function BatchSend(var Results: TIDDynArray): integer;
     /// abort a BATCH sequence started by BatchStart() method
     // - in short, nothing is sent to the remote server, and sequence is voided
     procedure BatchAbort;
@@ -913,12 +919,12 @@ type
       onBeforeSuccess: TSQLRestEventProcess);
     {$endif}
     function getURI(aTable: TSQLRecordClass): string;
-    function getURIID(aTableExistingIndex: integer; aID: integer): string;
-    function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: integer): string;
-    function ExecuteAdd(tableIndex: integer; const json: string): integer; override;
-    function ExecuteUpdate(tableIndex,ID: integer; const json: string): boolean; override;
+    function getURIID(aTableExistingIndex: integer; aID: TID): string;
+    function getURICallBack(const aMethodName: string; aTable: TSQLRecordClass; aID: TID): string;
+    function ExecuteAdd(tableIndex: integer; const json: string): TID; override;
+    function ExecuteUpdate(tableIndex: integer; ID: TID; const json: string): boolean; override;
     function ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
-      var Results: TIntegerDynArray): integer; override;
+      var Results: TIDDynArray): integer; override;
     procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
     procedure InternalStateUpdate(const Call: TSQLRestURIParams);
     procedure CallRemoteServiceInternal(var Call: TSQLRestURIParams;
@@ -968,7 +974,7 @@ type
     // - this method will sign the url, if authentication is enabled
     procedure URI(var Call: TSQLRestURIParams); virtual;
     /// get a member from its ID using URI()
-    function Retrieve(aID: integer; Value: TSQLRecord;
+    function Retrieve(aID: TID; Value: TSQLRecord;
       ForUpdate: boolean=false): boolean; overload; override;
     /// execute directly a SQL statement, returning a list of rows or nil
     // - we expect reUrlEncodedSQL to be defined in AllowRemoteExecute on
@@ -976,17 +982,17 @@ type
     // HTTP client libraires will accept this layout (e.g. Indy or AJAX)
     function ExecuteList(const SQL: string): TSQLTableJSON; override;
     /// delete a member
-    function Delete(Table: TSQLRecordClass; ID: integer): boolean; override;
+    function Delete(Table: TSQLRecordClass; ID: TID): boolean; override;
 
     /// wrapper to the protected URI method to call a method on the server
     // - perform a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     procedure CallBackGet(const aMethodName: string;
       const aNameValueParameters: array of const; var Call: TSQLRestURIParams;
-      aTable: TSQLRecordClass=nil; aID: integer=0);
+      aTable: TSQLRecordClass=nil; aID: TID=0);
     /// decode "result":... content as returned by CallBackGet()
     function CallBackGetResult(const aMethodName: string;
       const aNameValueParameters: array of const;
-      aTable: TSQLRecordClass=nil; aID: integer=0): string;
+      aTable: TSQLRecordClass=nil; aID: TID=0): string;
     /// authenticate an User to the current connected Server
     // - using TSQLRestServerAuthenticationDefault or TSQLRestServerAuthenticationNone
     // - will set Authentication property on success
@@ -1552,7 +1558,7 @@ begin
   // do nothing by now: inherited classes may set some properties
 end;
 
-constructor TSQLRecord.Create(aClient: TSQLRest; aID: integer;
+constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID;
   ForUpdate: boolean=false);
 begin
   Create;
@@ -2151,7 +2157,7 @@ begin
     end;
 end;
 
-function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): integer;
+function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): TID;
 var tableIndex: Integer;
     json: string;
 begin
@@ -2231,7 +2237,7 @@ begin
   end;
 end;
 
-function TSQLRest.BatchDelete(Table: TSQLRecordClass; ID: integer): integer;
+function TSQLRest.BatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 var info: TSQLModelInfo;
 begin
   if ID<=0 then
@@ -2242,7 +2248,7 @@ begin
   end;
 end;
 
-function TSQLRest.BatchDelete(ID: integer): integer;
+function TSQLRest.BatchDelete(ID: TID): integer;
 begin
   result := BatchDelete(fBatchTable,ID);
 end;
@@ -2259,7 +2265,7 @@ begin
     result := fBatchCount;
 end;
 
-function TSQLRest.BatchSend(var Results: TIntegerDynArray): integer;
+function TSQLRest.BatchSend(var Results: TIDDynArray): integer;
 begin
   if (self=nil) or (fBatch='') then
     result := HTML_BADREQUEST else
@@ -2510,7 +2516,7 @@ begin
 end;
 
 function TSQLRestClientURI.getURICallBack(const aMethodName: string;
-  aTable: TSQLRecordClass; aID: integer): string;
+  aTable: TSQLRecordClass; aID: TID): string;
 begin
   result := getURI(aTable);
   if aID>0 then
@@ -2518,7 +2524,7 @@ begin
   result := result+'/'+aMethodName;
 end;
 
-function TSQLRestClientURI.getURIID(aTableExistingIndex: integer; aID: integer): string;
+function TSQLRestClientURI.getURIID(aTableExistingIndex: integer; aID: TID): string;
 begin
   result := Model.Root+'/'+Model.Info[aTableExistingIndex].Name;
   if aID>0 then
@@ -2545,7 +2551,7 @@ begin
     Log(sllError,'ExecuteList failed');
 end;
 
-function TSQLRestClientURI.Retrieve(aID: integer; Value: TSQLRecord;
+function TSQLRestClientURI.Retrieve(aID: TID; Value: TSQLRecord;
   ForUpdate: boolean): boolean;
 var tableIndex: Integer;
     Call: TSQLRestURIParams;
@@ -2651,7 +2657,7 @@ end;
 
 procedure TSQLRestClientURI.CallBackGet(const aMethodName: string;
   const aNameValueParameters: array of const; var Call: TSQLRestURIParams;
-  aTable: TSQLRecordClass; aID: integer);
+  aTable: TSQLRecordClass; aID: TID);
 begin
   Log(sllServiceCall,'Method-based service %s',[aMethodName]);
   Call.Url := getURICallBack(aMethodName,aTable,aID)+UrlEncode(aNameValueParameters);
@@ -2661,7 +2667,7 @@ begin
 end;
 
 function TSQLRestClientURI.ExecuteBatchSend(Table: TSQLRecordClass; const Data: string;
-  var Results: TIntegerDynArray): integer;
+  var Results: TIDDynArray): integer;
 var {$ifdef ISSMS}
     doc: variant;
     {$else}
@@ -2703,7 +2709,7 @@ begin
     doc.Init(jsonres);
     if (doc.Kind=jvArray) and (doc.Count=fBatchCount) then
       for i := 0 to fBatchCount-1 do
-        Results[i] := doc.Values[i];
+        Results[i] := Int64(doc.Values[i]);
   end;
   {$endif}
 end;
@@ -2735,7 +2741,7 @@ end;
 
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
-  aID: integer): string;
+  aID: TID): string;
 var Call: TSQLRestURIParams;
     dummyID: integer;
 begin
@@ -2932,7 +2938,7 @@ end;
 {$endif ISSMS}
 
 function TSQLRestClientURI.ExecuteAdd(tableIndex: integer;
-  const json: string): integer;
+  const json: string): TID;
 var Call: TSQLRestURIParams;
     location: string;
     i: integer;
@@ -2947,14 +2953,14 @@ begin
   location := GetOutHeader(Call,'location');
   for i := length(location) downto 1 do
     if not (ord(location[i]) in [ord('0')..ord('9')]) then begin
-      result := StrToIntDef(Copy(location,i+1,length(location)),0);
+      result := StrToInt64Def(Copy(location,i+1,length(location)),0);
       break; // 'Location: root/People/11012' e.g.
     end;
   Log(sllDB,'%s.ID=%d created from %s',[Model.Info[tableIndex].Name,result,json]);
 end;
 
 function TSQLRestClientURI.Delete(Table: TSQLRecordClass;
-  ID: integer): boolean;
+  ID: TID): boolean;
 var Call: TSQLRestURIParams;
     tableIndex: integer;
 begin
@@ -2969,7 +2975,7 @@ begin
   Log(LOGLEVELDB[result],'Delete %s.ID=%d',[Model.Info[tableIndex].Name,ID]);
 end;
 
-function TSQLRestClientURI.ExecuteUpdate(tableIndex,ID: integer;
+function TSQLRestClientURI.ExecuteUpdate(tableIndex: integer; ID: TID;
   const json: string): boolean; 
 var Call: TSQLRestURIParams;
 begin

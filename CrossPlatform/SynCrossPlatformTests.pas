@@ -641,7 +641,7 @@ end;
 procedure TSynCrossPlatformClient.ORMBatch;
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
-    res: TIntegerDynArray;
+    res: TIDDynArray;
     i,id: integer;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
