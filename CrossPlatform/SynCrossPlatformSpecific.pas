@@ -521,6 +521,7 @@ constructor TIndyHttpConnectionClass.Create(
 begin
   inherited;
   fConnection := TIdHTTP.Create(nil);
+  fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
   if fParameters.Https then
     fConnection.IOHandler:= TIdSSLIOHandlerSocketOpenSSL.Create(nil);
