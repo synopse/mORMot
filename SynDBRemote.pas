@@ -118,6 +118,8 @@ type
     /// the associated database name
     property DatabaseName: RawUTF8 read fDatabaseName;
     /// the associated communication protocol
+    // - to manage user authentication, use AuthenticateUser/DisauthenticateUser
+    // methods of Protocol.Authenticate
     property Protocol: TSQLDBProxyConnectionProtocol read fProtocol write fProtocol;
   end;
 

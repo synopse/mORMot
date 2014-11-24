@@ -2025,7 +2025,7 @@ To sum up all possible foreign key reference available by the framework, check o
 |{\f1\fs20 TRecordReference}|Yes|All|Field reset to 0|ON DELETE SET DEFAULT
 |{\f1\fs20 TRecordReferenceToBeDeleted}|Yes|All|Row deleted|ON DELETE CASCADE
 |%
-It is worth saying that this deletion tracking is not defined at RDBMS level, but {\i at ORM level}.\line As a consequence, it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected for TRecordReference.\line Since this is not a database level tracking, but only from a {\i mORMot} server, if you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
+It is worth saying that this deletion tracking is not defined at RDBMS level, but {\i at ORM level}.\line As a consequence, it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected for {\f1\fs20 TRecordReference}.\line Since this is not a database level tracking, but only from a {\i mORMot} server, if you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
@@ -7115,7 +7115,7 @@ If you are making a number of such calls (e.g. add 1000 records), you'll have 10
 \
 The BATCH sequence allows you to regroup those statements into just ONE remote call. Internally, it builds a @*JSON@ stream, then post this stream at once to the server. Then the server answers at once, after having performed all the modifications.
 Some new {\f1\fs20 TSQLRestClientURI} methods have been added to implement BATCH sequences to speed up database modifications: after a call to {\f1\fs20 BatchStart}, database modification statements are added to the sequence via {\f1\fs20 BatchAdd / BatchUpdate / BatchDelete}, then all statements are sent as one to the remote server via {\f1\fs20 BatchSend} - this is MUCH faster than individual calls to {\f1\fs20 Add / Update / Delete} in case of a slow remote connection (typically @*HTTP@ over Internet).
-Since the statements are performed at once, you can't receive the result (e.g. the ID of the added row) on the same time as you append the request to the BATCH sequence. So you'll have to wait for the {\f1\fs20 BatchSend} method to retrieve all results, {\i at once}, in a {\i dynamic} {\f1\fs20 array of integer}.
+Since the statements are performed at once, you can't receive the result (e.g. the ID of the added row) on the same time as you append the request to the BATCH sequence. So you'll have to wait for the {\f1\fs20 BatchSend} method to retrieve all results, {\i at once}, in a {\i dynamic} {\f1\fs20 array of TID}.
 As you may guess, it's also a good idea to use a @*transaction@ for the whole process. By default, the BATCH sequence is not embedded into a transaction.
 You have two possibilities to add a transaction:
 - Either let the caller use an explicit {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block;
@@ -12708,10 +12708,9 @@ In order to maintain the source code repository in a decent size, we excluded th
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i Win64} library yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
-For FPC under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, the following has been reported to compile our customized {\f1\fs20 sqlite3.c} file:
-$ gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
-With FPC, you can also use an external library, on the target platform.
+For native {\i Windows} @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For FPC, you can download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file.
+You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
 You can download the needed files from @http://synopse.info/files/synsm.7z
@@ -12828,7 +12827,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 c.bat sqlite3.c}|Source code of the {\i SQLite3} embedded Database engine
 |%
 :   CrossPlatform folder
-In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} client for compilers or platforms not supported by the main branch:
+In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} clients for compilers or platforms not supported by the main branch:
 |%40%60
 |\b File|Description\b0
 |{\f1\fs20 SynCrossPlatform.inc}|Includes cross-platform and cross-compiler conditionals
@@ -12837,6 +12836,7 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
+See @86@ for more information.
 \page
 :113 Installation
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
@@ -12872,7 +12872,7 @@ To properly upgrade to the latest revision:
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
 - Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static.pas} unit (for {\i Win32} or {\i Linux}).
 4. Consult the units' headers about 1.18 for breaking changes, mainly:
-- Introducing {\f1\fs20 @*TID@ = type Int64} as {\f1\fs20 TSQLRecord.ID} @*primary key@, {\f1\fs20 TIDDynArray} as an array, and @*TRecordReference@ now declared as {\f1\fs20 Int64} instead of plain {\f1\fs20 PtrInt} / {\f1\fs20 integer};
+- Introducing {\f1\fs20 @*TID@ = type Int64} as {\f1\fs20 TSQLRecord.ID} @*primary key@, {\f1\fs20 TIDDynArray} as an array, and {\f1\fs20 @*TRecordReference@} now declared as {\f1\fs20 Int64} instead of plain {\f1\fs20 PtrInt} / {\f1\fs20 integer};
 - Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 @*TTimeLogBits@};
 - {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
 - {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 @*TSQLRestServerURIContext@} class;

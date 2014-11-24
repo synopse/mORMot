@@ -15464,13 +15464,11 @@ begin
   result := 0;
   if S<>nil then
   while true do
-    if S[0]<>#0 then
-    if S[1]<>#0 then
-    if S[2]<>#0 then
-    if S[3]<>#0 then begin
-      inc(S,4);
-      inc(result,4);
-    end else begin
+    if S[result+0]<>#0 then
+    if S[result+1]<>#0 then
+    if S[result+2]<>#0 then
+    if S[result+3]<>#0 then
+      inc(result,4) else begin
       inc(result,3);
       exit;
     end else begin
@@ -41531,10 +41529,10 @@ begin
     end;
     if IsIdle then
       break;
-    case OnIdleProcessNotify of
-      0..9:    Sleep(0);
-      10..100: Sleep(5);
-      else     Sleep(10);
+    case OnIdleProcessNotify of // GetTickCount64 resolution is 10-16 ms
+    0..30:   Sleep(0);
+    31..100: Sleep(1);
+    else     Sleep(5);
     end;
   until false;
   // process execution in the background thread 
@@ -41744,4 +41742,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

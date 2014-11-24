@@ -11681,16 +11681,10 @@ begin
         end;
       {$endif}
       {$ifndef LVCL}
-      if (fDatabase<>nil) and (fDatabase.AcquireWriteMode=amMainThread) then begin
+      if (fDatabase<>nil) and (fDatabase.AcquireWriteMode=amMainThread) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
-        Sleep(0);
-      end else
       {$endif}
-      {$ifdef MSWINDOWS}
-      if fTestClass=TSQLRestClientURIMessage then
-        Sleep(0) else
-      {$endif}
-        Sleep(1);
+      Sleep(0);
       allFinished := true;
       for n := 0 to fRunningThreadCount-1 do
         if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then begin
