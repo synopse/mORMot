@@ -8285,7 +8285,7 @@ type
     wServer2008_R2, wServer2008_R2_64, wSeven, wSeven_64,
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wNine, wNine_64, wServer2014R2, wServer2014R2_64);
+    wTen, wTen_64, wServer2014R2, wServer2014R2_64);
   {$ifndef UNICODE}
   /// not defined in older Delphi versions
   TOSVersionInfoEx = record
@@ -15887,7 +15887,7 @@ begin
      1: Vers := wSeven;
      2: Vers := wEight;
      3: Vers := wEightOne;
-     4: Vers := wNine;
+     4: Vers := wTen;
     end;
     if Vers<>wUnknown then begin
       if wProductType<>VER_NT_WORKSTATION then
@@ -15896,6 +15896,7 @@ begin
         inc(Vers);   // e.g. wEight -> wEight64
     end;
     end;
+    10: Vers := wTen;
   end;
   OSVersion := Vers;
 end;
@@ -41372,7 +41373,7 @@ end;
 function TSynAuthentication.CurrentToken: Int64;
 begin
   result := (GetTickCount64 div 10000) xor fTokenSeed;
-end;
+end;                                         
 
 procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
 begin
@@ -41766,4 +41767,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
