@@ -586,7 +586,9 @@ unit SynCommons;
     when sorting UTF8 Field with tfoCaseInsensitive in Options
   - speedup of QuotedStr() function and TDynArrayHashed hashing process
   - added GotoEndOfJSONString() function
-  - added GetJSONPropName() function, able to understand MongoDB extended syntax
+  - added GetJSONPropName() and GotoNextJSONPropName() functions, able to
+    understand MongoDB extended syntax
+  - added JSONArrayCount() and JSONObjectPropCount() functions
   - several speedup in GetJSONField() and JSON parsing: it will now expect true,
     false or null to be in lowercase only (as in json.org specifications)
   - fixed function GetJSONField() to properly decode JSON number with exponent
@@ -6704,6 +6706,12 @@ function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
 function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal=1;
   EndOfObject: PAnsiChar=nil): PUTF8Char;
 
+/// read the position of the JSON value just after a property identifier
+// - this function will handle strict JSON property name (i.e. a "string"), but
+// also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
+// see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
+function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
+
 /// reach the position of the next JSON object of JSON array
 // - first char is expected to be either '[' either '{' with default EndChar=#0
 // - or you can specify ']' or '}' as the expected EndChar
@@ -6731,6 +6739,11 @@ function JSONArrayCount(P: PUTF8Char): integer; overload;
 // really HUGE arrays, it is faster to allocate the content within the loop,
 // not in-head
 function JSONArrayCount(P,PMax: PUTF8Char): integer; overload;
+
+/// compute the number of fields in a JSON object
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+function JSONObjectPropCount(P: PUTF8Char): integer;
 
 /// remove comments from a text buffer before passing it to JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -28604,7 +28617,7 @@ function TDocVariantData.InitJSONInPlace(JSON: PUTF8Char;
   aOptions: TDocVariantOptions; aEndOfObject: PUTF8Char): PUTF8Char;
 var EndOfObject: AnsiChar;
     Name: PUTF8Char;
-    n,len: integer;
+    n: integer;
 begin
   Init(aOptions);
   result := nil;
@@ -28621,15 +28634,13 @@ begin
     if n>0 then begin
       SetLength(VValue,n);
       repeat
-        if VCount>n then
-          break;
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
         if JSON=nil then
           exit;
         inc(VCount);
+        if VCount>n then
+          raise EDocVariant.Create('Unexpected array size');
       until EndOfObject=']';
-      if VCount<>n then
-        raise EDocVariant.Create('Unexpected array size');
     end else
       if JSON^=']' then // n=0
         repeat inc(JSON) until not(JSON^ in [#1..' ']) else
@@ -28637,28 +28648,30 @@ begin
   end;
   '{': begin
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
+    n := JSONObjectPropCount(JSON);
+    if n<0 then
+      exit; // invalid content
     VKind := dvObject;
-    SetLength(VValue,16);
-    SetLength(VName,16);
-    len := 16;
-    n := 0;
+    if n>0 then begin
+      SetLength(VValue,n);
+      SetLength(VName,n);
     repeat
       // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
       Name := GetJSONPropName(JSON);
       if Name=nil then
         exit;
-      if n>=len then begin
-        len := len+len shr 3+32;
-        SetLength(VValue,len);
-        SetLength(VName,len);
-      end;
-      GetJSONToAnyVariant(VValue[n],JSON,@EndOfObject,@VOptions);
-      if JSON=nil then
-        exit;
-      VName[n] := Name;
-      inc(n);
+        GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
+        if JSON=nil then
+          exit;
+        VName[VCount] := Name;
+        inc(VCount);
+        if VCount>n then
+          raise EDocVariant.Create('Unexpected object size');
     until EndOfObject='}';
-    VCount := n;
+    end else
+      if JSON^='}' then // n=0
+        repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+        exit;
   end;
   'n','N': begin
     if IdemPChar(JSON+1,'ULL') then begin
@@ -30104,6 +30117,39 @@ begin
     repeat inc(P) until not(P^ in [#1..' ']);
   end;
   if P^=']' then
+    result := n;
+end;
+
+function JSONObjectPropCount(P: PUTF8Char): integer;
+var n: integer;
+begin
+  result := -1;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>'}' then
+  repeat
+    P := GotoNextJSONPropName(P);
+    if P=nil then
+      exit;
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArray(P);
+      if P=nil then
+        exit; // invalid content
+    end;
+    end;
+    while not (P^ in [#0,',','}']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  until false;
+  if P^='}' then
     result := n;
 end;
 
@@ -34523,7 +34569,7 @@ begin  // should match GotoNextJSONObjectOrArray()
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
     if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
       exit;
-    P^ :=#0;
+    P^ := #0;
     inc(P);
   end;
   '''': begin // single quotes won't handle nested quote character
@@ -34547,6 +34593,46 @@ begin  // should match GotoNextJSONObjectOrArray()
     exit;
   end;
   result := Name;
+end;
+
+function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
+label s;
+begin  // should match GotoNextJSONObjectOrArray()
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  result := nil;
+  if P=nil then
+    exit;
+  case P^ of
+  '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
+    repeat
+      inc(P);
+    until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
+    if P^ in [#1..' '] then
+      inc(P);
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+      exit;
+  end;
+  '''': begin // single quotes won't handle nested quote character
+    inc(P);
+    while P^<>'''' do
+      if P^<' ' then
+        exit else
+        inc(P);
+    goto s;
+  end;
+  '"': begin
+    P := GotoEndOfJSONString(P);
+    if P^<>'"' then
+      exit;
+s:  repeat inc(P) until not(P^ in [#1..' ']);
+    if P^<>':' then
+      exit;
+  end else
+    exit;
+  end;
+  repeat inc(P) until not(P^ in [#1..' ']);
+  result := P;
 end;
 
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean=nil;
@@ -34761,6 +34847,14 @@ begin
       repeat inc(P); if P^<=' ' then exit; until P^='''';
       repeat inc(P) until not(P^ in [#1..' ']);
       if P^<>':' then exit;
+    end;
+    '/': begin
+      repeat // allow extended /regex/ syntax
+        inc(P);
+        if P^=#0 then
+          exit;
+      until P^='/';
+      repeat inc(P) until not(P^ in [#1..' ']);
     end;
     else begin
 Prop: if not (P^ in ['_','A'..'Z','a'..'z','0'..'9','$']) then
