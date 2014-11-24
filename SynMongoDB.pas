@@ -1923,6 +1923,7 @@ type
       Flags: TMongoQueryFlags=[]); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
+    // - you can e.g. fill a res: TVariantDynArray with the following query: 
     // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res,null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
@@ -1931,6 +1932,17 @@ type
       var result: TVariantDynArray; const Projection: variant;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]); overload;
+    /// select documents in a collection and returns a dynamic array of
+    // TDocVariant instance containing the selected documents
+    // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
+    // as defined in SynVirtualDataSet.pas: 
+    // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt,?}}',['John',21],null));
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // field names to retrieve, or a TDocVariant or TBSONVariant with
+    // projection operators
+    function FindDocs(Criteria: PUTF8Char; const Params: array of const;
+      const Projection: variant; NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      Flags: TMongoQueryFlags=[]): TVariantDynArray; overload;
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
@@ -2311,20 +2323,35 @@ procedure BSONItemsToDocVariant(Kind: TBSONElementType; BSON: PByte;
 const OPTIONS: array[TBSONDocArrayConversion] of TDocVariantOptions =
     ([],[dvoReturnNullForUnknownProperty],
         [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]);
-var item: TBSONElement;
-    value: Variant;
-begin
+var k: TDocVariantKind;
+    i,n: integer;
+    items: array[0..63] of TBSONElement;
+begin // very fast optimized code
   if not (Kind in [betDoc,betArray]) then
     VarCastError;
   if (BSON=nil) or (TBSONElementType(BSON^)=betEof) then
     TVarData(Doc).VType := varNull else begin
-    Doc.Init(OPTIONS[Option]);
-    while item.FromNext(BSON) do begin
-      item.ToVariant(value,Option);
-      if Kind=betDoc then
-        Doc.AddValue(item.Name,value) else
-        Doc.AddItem(value);
-    end;
+    if Kind=betDoc then
+      k := dvObject else
+      k := dvArray;
+    Doc.Init(OPTIONS[Option],k);
+    repeat
+      n := 0;
+      while items[n].FromNext(BSON) do begin
+        inc(n);
+        if n=length(items) then
+          break;
+      end;
+      if n=0 then
+        break;
+      Doc.Capacity := Doc.Capacity+n;
+      for i := 0 to n-1 do begin
+        if Kind=betDoc then
+          SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
+        items[i].ToVariant(Doc.Values[i+Doc.Count],Option);
+      end;
+      Doc.SetCount(Doc.Count+n);
+    until (BSON=nil) or (BSON^=byte(betEOF));
   end;
 end;
 
@@ -2713,7 +2740,7 @@ begin
   if BSON=nil then begin
     result := false;
     exit;
-  end;
+  end;                           
   Kind := TBSONElementType(BSON^);
   case ord(Kind) of
   ord(betEOF):
@@ -5426,6 +5453,13 @@ begin
     TMongoRequestQuery.Create(fFullCollectionName,
       BSONVariant(Criteria,[],Params),Projection,
       NumberToReturn,NumberToSkip,Flags),result);
+end;
+
+function TMongoCollection.FindDocs(Criteria: PUTF8Char; const Params: array of const;
+  const Projection: variant; NumberToReturn,NumberToSkip: Integer;
+  Flags: TMongoQueryFlags): TVariantDynArray;
+begin
+  FindDocs(Criteria,Params,result,Projection,NumberToReturn,NumberToSkip,Flags);
 end;
 
 function TMongoCollection.FindOne(const _id: TBSONObjectID): variant;

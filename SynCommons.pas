@@ -9857,6 +9857,7 @@ type
     procedure InternalAddValue(const aName: RawUTF8; const aValue: variant);
     procedure SetCapacity(aValue: integer);
     function GetCapacity: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that VKind=dvObject
@@ -9872,7 +9873,7 @@ type
     // !  assert(variant(Doc).name='John');
     // !end;
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure Init(aOptions: TDocVariantOptions=[]);
+    procedure Init(aOptions: TDocVariantOptions=[]; aKind: TDocVariantKind=dvUndefined);
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
@@ -9968,6 +9969,11 @@ type
     /// delete all internal stored values
     // - like Clear + Init() with the same options
     procedure Reset;
+    /// force a number of items
+    // - could be used to fast add items to the internal Values[]/Names[] arrays
+    // - just set VCount, do not resize the arrays: caller should ensure that
+    // Capacity is big enough
+    procedure SetCount(aCount: integer);
 
     /// save a document as UTF-8 encoded JSON
     // - will write either a JSON object or array, depending of the internal
@@ -10064,7 +10070,10 @@ type
     // ! TDocVariantData(aVariant).AddValue('name','John');
     // ! Assert(TDocVariantData(aVariant).Kind=dvObject);
     // - returns the index of the corresponding newly added value
-    function AddValue(const aName: RawUTF8; const aValue: variant): integer;
+    function AddValue(const aName: RawUTF8; const aValue: variant): integer; overload;
+    /// add a value in this document
+    // - overloaded function accepting a UTF-8 encoded buffer for the name
+    function AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer; overload;
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -28587,20 +28596,20 @@ end;
 
 { TDocVariantData }
 
-procedure TDocVariantData.Init(aOptions: TDocVariantOptions=[]);
+procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   ZeroFill(TVarData(self));
   VType := DocVariantType.VarType;
   VOptions := aOptions;
+  VKind := aKind;
 end;
 
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
   aOptions: TDocVariantOptions=[]);
 begin
-  Init(aOptions);
-  VKind := dvObject;
+  Init(aOptions,dvObject);
   AddNameValuesToObject(NameValuePairs);
 end;
 
@@ -28623,8 +28632,7 @@ procedure TDocVariantData.InitArray(const Items: array of const;
   aOptions: TDocVariantOptions=[]);
 var A: integer;
 begin
-  Init(aOptions);
-  VKind := dvArray;
+  Init(aOptions,dvArray);
   if high(Items)>=0 then begin
     VCount := length(Items);
     SetLength(VValue,VCount);
@@ -28638,9 +28646,8 @@ procedure TDocVariantData.InitArrayFromVariants(const Items: TVariantDynArray;
 begin
   if Items=nil then
     VType := varNull else begin
-    Init(aOptions);
+    Init(aOptions,dvArray);
     VCount := length(Items);
-    VKind := dvArray;
     VValue := Items; // direct by-reference copy
   end;
 end;
@@ -28650,9 +28657,8 @@ procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUTF8DynArray;
 begin
   if (aNames=nil) or (aValues=nil) or (length(aNames)<>length(aValues)) then
     VType := varNull else begin
-    Init(aOptions);
+    Init(aOptions,dvObject);
     VCount := length(aNames);
-    VKind := dvObject;
     VName := aNames; // direct by-reference copy
     VValue := aValues;
   end;
@@ -28805,6 +28811,11 @@ begin
   VOptions := opt;
 end;
 
+procedure TDocVariantData.SetCount(aCount: integer);
+begin
+  VCount := aCount;
+end;
+
 procedure TDocVariantData.InternalAddValue(const aName: RawUTF8; const aValue: variant);
 var len: integer;
 begin
@@ -28839,6 +28850,8 @@ end;
 
 procedure TDocVariantData.SetCapacity(aValue: integer);
 begin
+  if VKind=dvObject then
+    SetLength(VName,aValue);
   SetLength(VValue,aValue);
 end;
 
@@ -28857,6 +28870,13 @@ begin
   end;
   InternalAddValue(aName,aValue);
   result := VCount-1;
+end;
+
+function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer;
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(aName),aNameLen);
+  result := AddValue(tmp,aValue);
 end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
