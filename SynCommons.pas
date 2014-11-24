@@ -6788,7 +6788,8 @@ const
   /// map a PtrUInt type to the TJSONCustomParserRTTIType set
   ptPtrUInt = {$ifdef CPU64}ptInt64{$else}ptCardinal{$endif};
   /// which TJSONCustomParserRTTIType types are not simple types
-  PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom];
+  // - ptTimeLog is complex, since could be also TCreateTime or TModTime
+  PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
 
 
 { ************ filtering and validation classes and functions }
