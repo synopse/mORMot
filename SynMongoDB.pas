@@ -2324,7 +2324,7 @@ const OPTIONS: array[TBSONDocArrayConversion] of TDocVariantOptions =
     ([],[dvoReturnNullForUnknownProperty],
         [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]);
 var k: TDocVariantKind;
-    i,n: integer;
+    i,n,cap: integer;
     items: array[0..63] of TBSONElement;
 begin // very fast optimized code
   if not (Kind in [betDoc,betArray]) then
@@ -2335,6 +2335,7 @@ begin // very fast optimized code
       k := dvObject else
       k := dvArray;
     Doc.Init(OPTIONS[Option],k);
+    cap := 0;
     repeat
       n := 0;
       while items[n].FromNext(BSON) do begin
@@ -2344,7 +2345,11 @@ begin // very fast optimized code
       end;
       if n=0 then
         break;
-      Doc.Capacity := Doc.Capacity+n;
+      inc(cap,n);
+      if cap<512 then
+        Doc.Capacity := cap else
+        if Doc.Capacity<cap then
+          Doc.Capacity := cap+cap shr 3; // faster for huge arrays
       for i := 0 to n-1 do begin
         if Kind=betDoc then
           SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
