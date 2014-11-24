@@ -88,6 +88,9 @@ uses
   w3c.date;
 {$else}
 uses
+  {$ifndef USETMONITOR}
+  Windows,
+  {$endif}
   SysUtils,
   Classes;
 {$endif}
@@ -95,7 +98,7 @@ uses
 type
   {$ifdef ISDWS}
 
-  // HTTP body may not match the string type, and could be binary 
+  // HTTP body may not match the string type, and could be binary
   THttpBody = string;
 
   // define some Delphi types not supported natively by DWS/SMS
@@ -119,10 +122,25 @@ type
                             rrsDone            = 4);
   {$else}
 
-  /// will store input and output HTTP body content 
-  // - HTTP body may not match the string type, and could be binary 
+  /// will store input and output HTTP body content
+  // - HTTP body may not match the string type, and could be binary
   // - this kind of variable is compatible with NextGen version of the compiler
   THttpBody = array of byte;
+
+  /// cross-platform thread safe locking
+  // - will use TMonitor on the newest Delphi platforms
+  TMutex = class
+  {$ifndef USETMONITOR}
+  protected
+    fLock: TRTLCriticalSection;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  {$endif}
+  public
+    procedure Enter;
+    procedure Leave;
+  end;
 
   {$ifdef NEXTGEN}
   /// see TUTF8Buffer = TBytes in SynCrossPlatformJSON
@@ -132,10 +150,14 @@ type
   {$endif ISDWS}
 
   /// used to store the request of a REST call
+  {$ifdef FPC}
+  TSQLRestURIParams = object
+  {$else}
   {$ifdef USESYNCRT}
   TSQLRestURIParams = object
   {$else}
   TSQLRestURIParams = record
+  {$endif}
   {$endif}
     /// input parameter containing the caller URI
     Url: string;
@@ -180,7 +202,7 @@ type
     ProxyName: string;
     /// the optional proxy password to be used
     ProxyByPass: string;
-    /// the connection timeout, in ms 
+    /// the connection timeout, in ms
     ConnectionTimeOut: integer;
     /// the timeout when sending data, in ms
     SendTimeout: cardinal;
@@ -365,7 +387,6 @@ uses
 
 {$ifdef USESYNCRT}
 uses
-  Windows,
   SynCrtSock;
 {$endif}
 
@@ -950,5 +971,48 @@ begin
   HttpBodyToText(OutBody,result);
   {$endif}
 end;
+
+
+{$ifndef ISDWS}
+
+{ TMutex }
+
+{$ifdef USETMONITOR}
+
+procedure TMutex.Enter;
+begin
+  TMonitor.Enter(self);
+end;
+
+procedure TMutex.Leave;
+begin
+  TMonitor.Exit(self);
+end;
+
+{$else}
+
+constructor TMutex.Create;
+begin
+  InitializeCriticalSection(fLock);
+end;
+
+destructor TMutex.Destroy;
+begin
+  DeleteCriticalSection(fLock);
+end;
+
+procedure TMutex.Enter;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TMutex.Leave;
+begin
+  LeaveCriticalSection(fLock);
+end;
+
+{$endif}
+
+{$endif ISDWS}
 
 end.

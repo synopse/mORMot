@@ -49,8 +49,8 @@ unit SynCrossPlatformJSON;
   - first public release, corresponding to mORMot Framework 1.18
   - would compile with Delphi for any platform (including NextGen for mobiles),
     with FPC 2.7 or Kylix, and with SmartMobileStudio 2+
-  - FPC has some issues with working with variants: UTF-8 encoding is sometimes
-    lost, and TInvokeableVariantType.SetProperty() is just broken
+  - FPC prior to 2.7.1 has some issues with working with variants: UTF-8
+    encoding is sometimes lost, and TInvokeableVariantType.SetProperty is broken
 
 }
 
@@ -79,8 +79,13 @@ type
   PByteDynArray = ^TByteDynArray;
 
   {$ifndef UNICODE}
+  {$ifdef FPC}
+  NativeInt = PtrInt;
+  NativeUInt = PtrUInt;
+  {$else}
   NativeInt = integer;
   NativeUInt = cardinal;
+  {$endif}
   RawByteString = AnsiString;
   {$endif}
 
@@ -211,8 +216,13 @@ type
     procedure Clear(var V: TVarData); override;
     function GetProperty(var Dest: TVarData; const V: TVarData;
       const Name: string): Boolean; override;
+    {$ifdef FPC_VARIANTSETVAR} // see http://mantis.freepascal.org/view.php?id=26773
+    function SetProperty(var V: TVarData; const Name: string;
+      const Value: TVarData): Boolean; override;
+    {$else}
     function SetProperty(const V: TVarData; const Name: string;
       const Value: TVarData): Boolean; override;
+    {$endif}
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
@@ -506,7 +516,7 @@ begin
 end;
 {$else}
 begin
-  SetString(result,PAnsiChar(@Buffer[1]),Buffer^[0]);
+  SetString(result,PAnsiChar(@Buffer^[1]),Buffer^[0]);
 end;
 {$endif}
 
@@ -1271,8 +1281,8 @@ begin
   SetLength(PropNames,n);
   SetLength(PropRTTI,n);
   for i := 0 to n-1 do begin
-    PropNames[i] := ShortStringToString(@List[i].Name);
-    PropRTTI[i] := List[i];
+    PropRTTI[i] := List^[i];
+    PropNames[i] := ShortStringToString(@PropRTTI[i]^.Name);
   end;
   freemem(List);
 end;
@@ -1341,7 +1351,7 @@ begin
   tkVariant:
     result := GetVariantProp(Instance,PropInfo);
   tkClass: begin
-    obj := pointer(GetOrdProp(Instance,PropInfo));
+    obj := TObject(NativeInt(GetOrdProp(Instance,PropInfo)));
     if obj=nil then
       result := null else
       TJSONVariantData(result).Init(ObjectToJSON(obj));
@@ -1400,14 +1410,14 @@ begin
         Finalize(blob^);
     end;
   tkClass: begin
-    obj := pointer(GetOrdProp(Instance,PropInfo));
+    obj := TObject(NativeInt(GetOrdProp(Instance,PropInfo)));
     if TVarData(Value).VType>varNull then
       if obj=nil then begin
-        obj := JSONVariantData(Value).ToNewObject;
+        obj := JSONVariantData(Value)^.ToNewObject;
         if obj<>nil then
           SetOrdProp(Instance,PropInfo,NativeInt(obj));
       end else
-        JSONVariantData(Value).ToObject(obj);
+        JSONVariantData(Value)^.ToObject(obj);
   end;
   end;
 end;
@@ -1423,7 +1433,7 @@ begin
     result := TObjectList.Create;
     for i := 0 to doc.Count-1 do begin
       item := ItemClass.Create;
-      if not JSONVariantData(doc.Values[i]).ToObject(item) then begin
+      if not JSONVariantData(doc.Values[i])^.ToObject(item) then begin
         FreeAndNil(result);
         exit;
       end;
@@ -1492,6 +1502,7 @@ function ObjectToJSON(Instance: TObject; StoreClassName: boolean): string;
 var TypeInfo: PTypeInfo;
     PropCount, i: integer;
     PropList: PPropList;
+    PropInfo: PPropInfo;
 begin
   if Instance=nil then begin
     result := 'null';
@@ -1503,7 +1514,8 @@ begin
       result := '[]' else begin
       result := '[';
       for i := 0 to TList(Instance).Count-1 do
-        result := result+ObjectToJSON(TList(Instance).List[i],StoreClassName)+',';
+        result := result+ObjectToJSON(TObject(
+          TList(Instance).List{$ifdef FPC}^{$endif}[i]),StoreClassName)+',';
       result[length(result)] := ']';
     end;
     exit;
@@ -1540,9 +1552,11 @@ begin
       if StoreClassName then
         result := '{"ClassName":"'+string(Instance.ClassName)+'",' else
         result := '{';
-      for i := 0 to PropCount-1 do
-        result := result+StringToJSON(ShortStringToString(@PropList[i]^.Name))+':'+
-          ValueToJSON(GetInstanceProp(Instance,PropList[i]))+',';
+      for i := 0 to PropCount-1 do begin
+        PropInfo := PropList^[i];
+        result := result+StringToJSON(ShortStringToString(@PropInfo^.Name))+':'+
+          ValueToJSON(GetInstanceProp(Instance,PropInfo))+',';
+      end;
       result[length(result)] := '}';
     finally
       FreeMem(PropList);
@@ -1854,7 +1868,7 @@ begin
       TCollection(Instance).Clear;
       for i := 0 to Count-1 do begin
         aItem := TCollection(Instance).Add;
-        if not JSONVariantData(Values[i]).ToObject(aItem) then
+        if not JSONVariantData(Values[i])^.ToObject(aItem) then
           exit;
       end;
     end else
@@ -1925,16 +1939,23 @@ begin
   result := true;
 end;
 
+{$ifdef FPC_VARIANTSETVAR}
+function TJSONVariant.SetProperty(var V: TVarData; const Name: string;
+  const Value: TVarData): Boolean;
+{$else}
 function TJSONVariant.SetProperty(const V: TVarData; const Name: string;
   const Value: TVarData): Boolean;
+{$endif}
 begin
   {$ifdef FPC}
+  {$ifndef FPC_VARIANTSETVAR} 
   raise EJSONException.Create('Setting TJSONVariant via late-binding does not'+
-    ' work with FPC: use TJSONVariantData(jsonvar)[''prop''] := ... instead');
-  {$else}
+    ' work with FPC - see http://mantis.freepascal.org/view.php?id=26773 -'+
+    ' use latest SVN or JSONVariantDataSafe(jsonvar)^[''prop''] := ... instead');
+  {$endif}
+  {$endif}
   TJSONVariantData(V).SetValue(Name,variant(Value));
   result := true;
-  {$endif}
 end;
 
 

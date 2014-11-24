@@ -132,7 +132,7 @@ end;
 
 { Some helpers for record types }
 
-function Variant2TTestCustomJSONArraySimpleArray(const _variant: variant): TTestCustomJSONArraySimpleArray;
+function Variant2TTestCustomJSONArraySimpleArray(_variant: variant): TTestCustomJSONArraySimpleArray;
 var _a: integer;
     _arr: PJSONVariantData;
 begin

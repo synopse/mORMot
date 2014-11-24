@@ -176,7 +176,7 @@ end;
 { Some helpers for record types }
 {{#records}}
 
-function Variant2{{name}}(const _variant: variant): {{name}};
+function Variant2{{name}}(_variant: variant): {{name}};
 var _a: integer;
     _arr: PJSONVariantData;
 begin

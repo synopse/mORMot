@@ -59,6 +59,14 @@
   {$Q-} // disable overflow checking
   {$R-} // disable range checking
 
+  {$ifdef VER2_7_1}
+    {$define ISFPC271}
+    // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
+    // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
+    // => this will change the TInvokeableVariantType.SetProperty() signature
+    {$define FPC_VARIANTSETVAR}
+  {$endif}
+
 {$else}
 
 {$ifdef DWSSCRIPT} // always defined since SMS 1.1.2
@@ -93,7 +101,10 @@
       {$define ISDELPHIXE}
     {$ifend}
     {$if CompilerVersion >= 23.0}
-      {$define ISDELPHIXE2} // e.g. for Vcl.Graphics 
+      {$define ISDELPHIXE2} // e.g. for Vcl.Graphics
+      {$ifndef MSWINDOWS}
+      {$define USETMONITOR}
+      {$endif} 
     {$ifend}
     {$if CompilerVersion >= 25.0}
       {$define ISDELPHIXE4}

@@ -165,7 +165,7 @@ type
   public
     /// to be called in a loop to iterate through all data rows
     // - if returned true, Object published properties will contain this row
-    function FillOne(Value: TSQLRecord; SeekFirst: boolean=false): boolean;
+    function FillOne(aValue: TSQLRecord; aSeekFirst: boolean=false): boolean;
   end;
 
   {$endif ISDWS}
@@ -683,7 +683,11 @@ type
 
   /// callback which should return TRUE on process success, or FALSE on error
   TSQLRestEventProcess = function: boolean;
+
+  {$else}
+  TSQLRestLogClientThread = class;
   {$endif ISSMS}
+
 
   /// abstract REST access class
   TSQLRest = class
@@ -698,14 +702,15 @@ type
     fOwnModel: boolean;
     fLogLevel: TSynLogInfos;
     fOnLog: TOnSQLRestLog;
+    {$ifdef ISSMS}
     fLogClient: TSQLRestClientURI;
-    fLogClientModel: TSQLModel;
-    {$ifndef ISSMS}
+    procedure LogToRemoteServerText(const Text: string);
+    {$else}
+    fLogClient: TSQLRestLogClientThread; 
     fLogFileBuffer: array of byte;
     fLogFile: system.text;
     procedure LogToFileText(const Text: string);
     {$endif}
-    procedure LogToRemoteServerText(const Text: string);
     procedure LogClose;
     function GetServerTimeStamp: TTimeLog;
     function SetServerTimeStamp(const ServerResponse: string): boolean;
@@ -1026,6 +1031,29 @@ type
     property Authentication: TSQLRestServerAuthentication read fAuthentication;
   end;
 
+  {$ifndef ISSMS}
+  TSQLRestClientHTTP = class;
+  
+  /// thread used to asynchronously log to a remote client
+  TSQLRestLogClientThread = class(TThread)
+  protected
+    fOwner: TSQLRest;
+    fOnLog: TOnSQLRestLog;
+    fClient: TSQLRestClientHTTP;
+    fLock: TMutex;
+    fPending: string;
+    procedure Execute; override;
+  public
+    /// initialize the thread
+    constructor Create(Owner: TSQLRest;
+      const aServer: string; aPort: integer; const aRoot: string);
+    /// log one line of text
+    procedure LogToRemoteServerText(const Text: string);
+    /// finalize the thread
+    destructor Destroy; override;
+  end;
+  {$endif ISSMS}
+
   /// abstract class used for client authentication
   TSQLRestServerAuthentication = class
   protected
@@ -1076,6 +1104,7 @@ type
     fParameters: TSQLRestConnectionParams;
     fKeepAlive: Integer;
     fCustomHttpHeader: RawUTF8; // e.g. for SetHttpBasicAuthHeaders()
+    fForceTerminate: Boolean;
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// access to a mORMot server via HTTP
@@ -1697,12 +1726,11 @@ end;
 
 {$else}
 
-function TSQLTableJSON.FillOne(Value: TSQLRecord;
-  SeekFirst: boolean): boolean;
+function TSQLTableJSON.FillOne(aValue: TSQLRecord; aSeekFirst: boolean): boolean;
 begin
-  result := StepObject(Value,SeekFirst);
+  result := StepObject(aValue,aSeekFirst);
   if result then
-    Value.fInternalState := fInternalState;
+    aValue.fInternalState := fInternalState;
 end;
 
 function TSQLTableJSON.GetPropInfo(aTypeInfo: TRTTITypeInfo;
@@ -1947,18 +1975,18 @@ end;
 
 procedure TSQLModel.Add(Table: TSQLRecordClass);
 var n,i: integer;
-    info: TSQLModelInfo;
+    nfo: TSQLModelInfo;
 begin
   n := length(fInfo);
   for i := 0 to n-1 do
     if fInfo[i].Table=Table then
       raise ERESTException.CreateFmt('%s registered twice',[Table.ClassName]);
-  info := TSQLModelInfo.CreateFromRTTI(Table);
+  nfo := TSQLModelInfo.CreateFromRTTI(Table);
   {$ifdef ISSMS}
-  fInfo.Add(info);
+  fInfo.Add(nfo);
   {$else}
   SetLength(fInfo,n+1);
-  fInfo[n] := info;
+  fInfo[n] := nfo;
   {$endif}
 end;
 
@@ -2258,39 +2286,42 @@ begin
 end;
 
 procedure TSQLRest.Log(Level: TSynLogInfo; const Text: string; Instance: TObject);
+procedure DoLog;
 var line: string;
     {$ifndef ISSMS}
     i: integer;
     {$endif}
 begin
-  if Assigned(self) and Assigned(fOnLog) and (Level in fLogLevel) then begin
-    // compute the line as expected by TSynLog / LogView
-    line := copy(FormatDateTime(
-      {$ifdef ISSMS}'yyyymmdd hhnnsszzz'{$else}'yyyymmdd" "hhnnsszzz'{$endif},
-      Now),1,17)+LOG_LEVEL_TEXT[Level];
-    if Assigned(Instance) then
-      line := line+Instance.ClassName+
-      {$ifdef ISSMS}' ';{$else}'('+IntToHex(
-      {$ifdef CPU64}Int64(Instance),16{$else}cardinal(Instance),8{$endif})+') ';
-      {$endif}
-    line := line+Text;
-    // ensure no CR/LF in the output row
-    {$ifdef ISSMS}
-    line := line.Replace(#10,' ').Replace(#13,' ');
-    {$else}
-    for i := 1 to length(line) do
-      if ord(line[i])<32 then
-        line[i] := ' ';
+  // compute the line as expected by TSynLog / LogView
+  line := copy(FormatDateTime(
+    {$ifdef ISSMS}'yyyymmdd hhnnsszzz'{$else}'yyyymmdd" "hhnnsszzz'{$endif},
+    Now),1,17)+LOG_LEVEL_TEXT[Level];
+  if Assigned(Instance) then
+    line := line+Instance.ClassName+
+    {$ifdef ISSMS}' ';{$else}'('+IntToHex(
+    {$ifdef CPU64}Int64(Instance),16{$else}cardinal(Instance),8{$endif})+') ';
     {$endif}
-    // line output
-    fOnLog(line);
-  end;
+  line := line+Text;
+  // ensure no CR/LF in the output row
+  {$ifdef ISSMS}
+  line := line.Replace(#10,' ').Replace(#13,' ');
+  {$else}
+  for i := 1 to length(line) do
+    if ord(line[i])<32 then
+      line[i] := ' ';
+  {$endif}
+  // line output
+  fOnLog(line);
+end;
+begin
+  if Assigned(self) and Assigned(fOnLog) and (Level in fLogLevel) then
+    DoLog;
 end;
 
 procedure TSQLRest.Log(Level: TSynLogInfo; const Fmt: string; const Args: array of const;
   Instance: TObject);
 begin
-  if Assigned(fOnLog) and (Level in fLogLevel) then
+  if Assigned(self) and Assigned(fOnLog) and (Level in fLogLevel) then
     Log(Level,Format(Fmt,Args),Instance);
 end;
 
@@ -2321,8 +2352,7 @@ var Call: TSQLRestURIParams;
     userAgent: string;
 begin
   LogClose;
-  fLogClientModel := TSQLModel.Create([],aRoot);
-  fLogClient := TSQLRestClientHTTP.Create(aServer,aPort,fLogClientModel);
+  fLogClient := TSQLRestClientHTTP.Create(aServer,aPort,TSQLModel.Create([],aRoot),true);
   fLogClient.CallBackGet('TimeStamp',[],Call); // synchronous connection
   if Call.OutStatus=HTML_SUCCESS then begin
     fLogLevel := LogLevel;
@@ -2341,38 +2371,73 @@ end;
 
 {$else}
 
-procedure TSQLRest.LogToRemoteServer(LogLevel: TSynLogInfos;
+constructor TSQLRestLogClientThread.Create(Owner: TSQLRest; 
   const aServer: string; aPort: integer; const aRoot: string);
-var exeName: string;
 begin
-  LogClose;
-  fLogClientModel := TSQLModel.Create([],aRoot);
-  try
-    fLogClient := TSQLRestClientHTTP.Create(aServer,aPort,fLogClientModel);
-    if fLogClient.Connect then begin
-      fLogLevel := LogLevel;
-      OnLog := LogToRemoteServerText;
-      exeName := paramstr(0);
-      if exeName='' then
-        exeName := 'non Windows platform';
-      Log(sllClient,'Remote Cross-Platform Client %s Connected from %s',[ClassName,exeName]);
-    end else
-      LogClose;
-  except
-    on E: Exception do begin
-      LogClose;
-      raise;
-    end;
+  fLock := TMutex.Create;
+  fOwner := Owner;
+  fClient := TSQLRestClientHTTP.Create(aServer,aPort,
+    TSQLModel.Create([],aRoot),true,false,'','',10000,10000,500);
+  fOwner.OnLog := {$ifdef FPC}@{$endif}LogToRemoteServerText;
+  inherited Create(false);
+end;
+
+destructor TSQLRestLogClientThread.Destroy;
+begin
+  if fOwner.fLogClient=Self then begin
+    fOwner.fLogClient := nil;
+    fOwner.fOnlog := nil;
+  end;
+  fClient.fForceTerminate := true;
+  inherited Destroy;
+  fClient.Free;
+  fLock.Free;
+end;
+
+procedure TSQLRestLogClientThread.LogToRemoteServerText(const Text: string);
+begin
+  if self=nil then
+    exit; // avoid GPF
+  fLock.Enter;
+  if fPending='' then
+    fPending := Text else
+    fPending := fPending+#13#10+Text;
+  fLock.Leave;
+end;
+
+procedure TSQLRestLogClientThread.Execute;
+var exeName, data: string;
+    Call: TSQLRestURIParams;
+begin
+  if not fClient.Connect then
+    exit;
+  fOwner.OnLog := {$ifdef FPC}@{$endif}LogToRemoteServerText;
+  exeName := paramstr(0);
+  if exeName='' then
+    exeName := 'non Windows platform';
+  fOwner.Log(sllClient,'Remote Cross-Platform Client %s Connected from %s',
+    [ClassName,exeName]);
+  while not Terminated do begin
+    sleep(10);
+    if Terminated then
+      break;
+    fLock.Enter;
+    data := fPending;
+    fPending := '';
+    fLock.Leave;
+    if data='' then
+      continue;
+    Call.Init(fClient.getURICallBack('RemoteLog',nil,0),'PUT',data);
+    fClient.URI(Call);
   end;
 end;
 
-procedure TSQLRest.LogToRemoteServerText(const Text: string);
-var Call: TSQLRestURIParams;
+procedure TSQLRest.LogToRemoteServer(LogLevel: TSynLogInfos;
+  const aServer: string; aPort: integer; const aRoot: string);
 begin
-  if fLogClient=nil then
-    exit;
-  Call.Init(fLogClient.getURICallBack('RemoteLog',nil,0),'PUT',Text);
-  fLogClient.URI(Call);
+  LogClose;
+  fLogLevel := LogLevel;
+  fLogClient := TSQLRestLogClientThread.Create(self,aServer,aPort,aRoot);
 end;
 
 procedure TSQLRest.LogToFile(LogLevel: TSynLogInfos; const aFolderName,aFileName: TFileName);
@@ -2395,7 +2460,7 @@ begin
     Writeln(fLogFile,'Host=Unknown User=Unknown CPU=Unknown OS=0.0=0.0.0 Wow64=0 Freq=1');
     Writeln(fLogFile,'TSQLRest 1.18 CrossPlatform ',NowToIso8601,#13#10);
     fLogLevel := LogLevel;
-    OnLog := LogToFileText;
+    OnLog := {$ifdef FPC}@{$endif}LogToFileText;
   except
     on E: Exception do
       Finalize(fLogFileBuffer);
@@ -2414,22 +2479,21 @@ procedure TSQLRest.LogClose;
 begin
   fLogLevel := [];
   fOnLog := nil;
-  {$ifndef ISSMS}
+  {$ifdef ISSMS}
+  if fLogClient<>nil then begin
+    fLogClient.CallAsynchText; // send NOW any pending log
+    fLogClient.Free;
+    fLogClient := nil;
+  end;
+  {$else}
   if fLogFileBuffer<>nil then
     try
       system.Close(fLogFile);
     finally
       Finalize(fLogFileBuffer);
     end;
+  FreeAndNil(fLogClient);
   {$endif}
-  if fLogClient<>nil then begin
-    {$ifdef ISSMS}
-    fLogClient.CallAsynchText; // send NOW any pending log
-    {$endif}
-    fLogClient.Free;
-    fLogClient := nil;
-    fLogClientModel.Free;
-  end;
 end;
 
 
@@ -2681,17 +2745,17 @@ end;
 
 procedure TSQLRestClientURI.CallRemoteServiceInternal(var Call: TSQLRestURIParams;
   aCaller: TServiceClientAbstract; const aMethod, aParams: string);
-var url, clientDrivenID, sent, methodName: string;
+var url, clientDrivenID, sent, methName: string;
 begin
-  methodName:= aCaller.fServiceURI+'.'+aMethod;
-  Log(sllServiceCall,'Interface-based service '+methodName);
+  methName:= aCaller.fServiceURI+'.'+aMethod;
+  Log(sllServiceCall,'Interface-based service '+methName);
   url := Model.Root+'/'+aCaller.fServiceURI;
   if aCaller.fInstanceImplementation=sicClientDriven then
     clientDrivenID := (aCaller as TServiceClientAbstractClientDriven).ClientID;
   ServicesRouting.ClientSideInvoke(url,aMethod,aParams,clientDrivenID,sent);
   Call.Init(url,'POST',sent);
   URI(Call); // asynchronous or synchronous call
-  InternalServiceCheck(methodName,Call); // will log only for synchronous call
+  InternalServiceCheck(methName,Call); // will log only for synchronous call
 end;
 
 { Some definitions copied from mORMot.pas unit }
@@ -3043,6 +3107,8 @@ begin
         fConnection.Free;
         fConnection := nil;
         Call.OutStatus := HTML_NOTIMPLEMENTED;
+        if fForceTerminate then
+          break;
       end; // will retry once (e.g. if connection broken)
     end;
   end;
