@@ -10765,32 +10765,34 @@ type
 {$endif}
 
   /// used to refer to a simple authentication class
-  TSynAuthenticationClass = class of TSynAuthentication;
-  
-  /// simple authentication class, implementing safe token/challenge security
-  // - maintain a list of user / name credential pairs, and a list of sessions
-  // - is not meant to handle authorization, just plain user access validation
-  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
-  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
-  TSynAuthentication = class
+  TSynAuthenticationClass = class of TSynAuthenticationAbstract;
+
+  /// abstract authentication class, implementing safe token/challenge security
+  // and a list of active sessions
+  // - do not use this class, but plain TSynAuthentication
+  TSynAuthenticationAbstract = class
   protected
     fLock: TAutoLocker;
     fSessions: TIntegerDynArray;
     fSessionsCount: Integer;
     fSessionGenerator: integer;
     fTokenSeed: Int64;
-    fCredentials: TSynNameValue;
-    function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal;
+    function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal; virtual;
+    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; virtual; abstract;
+    function GetUsersCount: integer; virtual; abstract;
   public
     /// initialize the authentication scheme
-    // - you can optionally register one user credential
-    constructor Create(const aUserName: RawUTF8=''; const aPassword: RawUTF8='');
+    constructor Create;
     /// finalize the authentation
     destructor Destroy; override;
     /// register one credential for a given user
-    procedure AuthenticateUser(const aName, aPassword: RawUTF8);
+    // - this abstract method would raise an exception: inherited classes should
+    // implement them as expected
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
     /// unregister one credential for a given user
-    procedure DisauthenticateUser(const aName: RawUTF8);
+    // - this abstract method would raise an exception: inherited classes should
+    // implement them as expected
+    procedure DisauthenticateUser(const aName: RawUTF8); virtual;
     /// create a new session
     // - should return 0 on authentication error, or an integer session ID
     // - this method will check the User name and password, and create a new session
@@ -10805,12 +10807,32 @@ type
     /// the number of current opened sessions
     property SessionsCount: integer read fSessionsCount;
     /// the number of registered users
-    property UsersCount: integer read fCredentials.Count;
+    property UsersCount: integer read GetUsersCount;
     /// to be used to compute a Hash on the client, for a given Token
     // - the token should have been retrieved from the server, and the client
     // should compute and return this hash value, to perform the authentication
     // challenge and create the session
-    class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal;
+    class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; virtual;
+  end;
+
+  /// simple authentication class, implementing safe token/challenge security
+  // - maintain a list of user / name credential pairs, and a list of sessions
+  // - is not meant to handle authorization, just plain user access validation
+  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
+  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
+  TSynAuthentication = class(TSynAuthenticationAbstract)
+  protected
+    fCredentials: TSynNameValue;
+    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; override;
+    function GetUsersCount: integer; override;
+  public
+    /// initialize the authentication scheme
+    // - you can optionally register one user credential
+    constructor Create(const aUserName: RawUTF8=''; const aPassword: RawUTF8=''); reintroduce;
+    /// register one credential for a given user
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); override;
+    /// unregister one credential for a given user
+    procedure DisauthenticateUser(const aName: RawUTF8); override;
   end;
 
 
@@ -41333,26 +41355,23 @@ begin
 end;
 
 
-{ TSynAuthentication }
+{ TSynAuthenticationAbstract }
 
-constructor TSynAuthentication.Create(const aUserName,aPassword: RawUTF8);
+constructor TSynAuthenticationAbstract.Create;
 begin
   fLock := TAutoLocker.Create;
-  fCredentials.Init(true);
   fTokenSeed := GetTickCount64*PtrUInt(self);
   fSessionGenerator := PtrUInt(ClassType)*Int64Rec(fTokenSeed).Hi;
   fSessionGenerator := abs(fSessionGenerator);
-  if aUserName<>'' then
-    AuthenticateUser(aUserName,aPassword);
 end;
 
-destructor TSynAuthentication.Destroy;
+destructor TSynAuthenticationAbstract.Destroy;
 begin
   fLock.Free;
   inherited;
 end;
 
-class function TSynAuthentication.ComputeHash(Token: Int64;
+class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
   const UserName,PassWord: RawUTF8): cardinal;
 begin // rough authentication - better than nothing
   result := length(UserName);
@@ -41360,7 +41379,7 @@ begin // rough authentication - better than nothing
     pointer(UserName),result),pointer(Password),length(PassWord));
 end;
 
-function TSynAuthentication.ComputeCredential(previous: boolean;
+function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
   const UserName,PassWord: RawUTF8): cardinal;
 var tok: Int64;
 begin
@@ -41370,37 +41389,30 @@ begin
   result := ComputeHash(tok xor fTokenSeed,UserName,PassWord);
 end;
 
-function TSynAuthentication.CurrentToken: Int64;
+function TSynAuthenticationAbstract.CurrentToken: Int64;
 begin
   result := (GetTickCount64 div 10000) xor fTokenSeed;
-end;                                         
-
-procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
-begin
-  fLock.Enter;
-  fCredentials.Add(aName,aPassword);
-  fLock.Leave;
 end;
 
-procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
+procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
 begin
-  fLock.Enter;
-  fCredentials.Delete(aName);
-  fLock.Leave;
+  raise ESynException.CreateFmt('%.AuthenticateUser() is not implemented',[self]);
 end;
 
-function TSynAuthentication.CreateSession(const User: RawUTF8; Hash: cardinal): integer;
-var i: integer;
-    password: RawUTF8;
+procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
+begin
+  raise ESynException.CreateFmt('%.DisauthenticateUser() is not implemented',[self]);
+end;
+
+function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8; Hash: cardinal): integer;
+var password: RawUTF8;
 begin
   result := 0;
   fLock.Enter;
   try
     // check the credentials
-    i := fCredentials.Find(User);
-    if i<0 then
+    if not GetPassword(User,password) then
       exit;
-    password := fCredentials.List[i].Value;
     if (ComputeCredential(false,User,password)<>Hash) and
        (ComputeCredential(true,User,password)<>Hash) then
       exit;
@@ -41415,20 +41427,63 @@ begin
   end;
 end;
 
-function TSynAuthentication.SessionExists(aID: integer): boolean;
+function TSynAuthenticationAbstract.SessionExists(aID: integer): boolean;
 begin
   fLock.Enter;
   result := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID)>=0;
   fLock.Leave;
 end;
 
-procedure TSynAuthentication.RemoveSession(aID: integer);
+procedure TSynAuthenticationAbstract.RemoveSession(aID: integer);
 var i: integer;
 begin
   fLock.Enter;
   i := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID);
   if i>=0 then
     DeleteInteger(fSessions,fSessionsCount,i);
+  fLock.Leave;
+end;
+
+
+{ TSynAuthentication }
+
+constructor TSynAuthentication.Create(const aUserName,aPassword: RawUTF8);
+begin
+  inherited Create;
+  fCredentials.Init(true);
+  if aUserName<>'' then
+    AuthenticateUser(aUserName,aPassword);
+end;
+
+function TSynAuthentication.GetPassword(const UserName: RawUTF8;
+  out Password: RawUTF8): boolean;
+var i: integer;
+begin
+  i := fCredentials.Find(UserName);
+  if i<0 then begin
+    result := false;
+    exit;
+  end;
+  password := fCredentials.List[i].Value;
+  result := true;
+end;
+
+function TSynAuthentication.GetUsersCount: integer;
+begin
+  result := fCredentials.Count;
+end;
+
+procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
+begin
+  fLock.Enter;
+  fCredentials.Add(aName,aPassword);
+  fLock.Leave;
+end;
+
+procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
+begin
+  fLock.Enter;
+  fCredentials.Delete(aName);
   fLock.Leave;
 end;
 

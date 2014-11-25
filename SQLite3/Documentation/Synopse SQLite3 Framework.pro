@@ -5066,6 +5066,7 @@ A first user is defined, with '{\f1\fs20 user}' / '{\f1\fs20 pass}' credentials.
 !HttpServer.Protocol.Authenticate.AuthenticateUser('toto','pipo');
 !HttpServer.Protocol.Authenticate.AuthenticateUser('toto2','pipo2');
 !...
+You could also share {\i mORMot}'s REST authentication users @139@, by replacing the default {\f1\fs20 TSynAuthentication} class instance with {\f1\fs20 TSynAuthenticationRest}, as defined in {\f1\fs20 mORMot.pas}. Note using at the same time {\f1\fs20 SynDBRemote} and {\i mORMot}'s ORM/SOA sounds like a weak design, but may have its benefits when dealing with legacy code, and a lot of existing SQL statements.
 The URI should be registered to work as expected, just as expected by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
 !THttpApiServer.AddUrlAuthorize('syndbremote','8092',false,'+');
 :   SynDB client access via HTTP
@@ -5092,6 +5093,15 @@ Or you may use it with VCL components, using the {\f1\fs20 SynDBVCL.pas} unit:
 !  ds1.DataSet.Free; // release previous TDataSet
 !  ds1.DataSet := ToDataSet(ds1,Props.Execute('select * from people',[]));
 The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshaling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
+If you defined you own {\f1\fs20 TSynAuthentication} class on the server class (e.g. to use REST users and groups via {\f1\fs20 TSynAuthenticationRest}), you should create you own class, and override the following method:
+!procedure TSQLDBWinHTTPConnectionPropertiesRest.SetInternalProperties;
+!begin
+!  if fProtocol=nil then
+!    fProtocol := TSQLDBRemoteConnectionProtocol.Create(
+!!      TSynAuthenticationRest.Create(nil,[]));
+!  inherited;
+!end;
+This overriden method would inherit from {\f1\fs20 TSQLDBWinHTTPConnectionProperties} all its behavior, but use the ORM/SOA authentication scheme for validating its users on the server side.
 :   Advanced use cases
 You may use this remote connection feature e.g. to mutate a stand-alone shared {\i SQLite3} database into a high performance but low maintenance client-server database engine. You may create it as such on the server side:
 !var props: TSQLDBSQLite3ConnectionProperties;
@@ -7201,7 +7211,7 @@ All the JSON generation (client-side) and parsing (server-side) has been optimiz
 Thanks to this BATCH process, most time is now spent into the database engine itself, and not in the communication layer.
 :100  Unit Of Work pattern
 :   Several Batches
-On the {\f1\fs20 TSQLRestClientURI} side, all {\i BatchStart/BatchAdd/BatchUpdate/BatchDelete} methods are using a single temporary storage furing the BATCH preparation. This may be safe only if one single thread is accessing the methods - which is usually the case for a @*REST@ Client application.
+On the {\f1\fs20 TSQLRestClientURI} side, all {\i BatchStart/BatchAdd/BatchUpdate/BatchDelete} methods are using a single temporary storage during the BATCH preparation. This may be safe only if one single thread is accessing the methods - which is usually the case for a @*REST@ Client application.
 In fact, all BATCH process is using a {\f1\fs20 @*TSQLRestBatch@} class, which can be created on the fly, and safely coexist as multiple instances for the same {\f1\fs20 TSQLRest}. As a result, you can create your own local {\f1\fs20 TSQLRestBatch} instances, for safe batch process. This is in fact mandatory on the {\f1\fs20 TSQLRestServer} side, which do not have the {\f1\fs20 Batch*()} methods, since they would not be thread safe.
 On the server side, you may write for instance:
 !var Batch: TSQLRestBatch;
@@ -11453,7 +11463,7 @@ If authentication is enabled for the Client-Server process (i.e. if the {\f1\fs2
 - Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing a {\f1\fs20 reSQL} flag in its {\f1\fs20 AllowRemoteExecute};
 - Each REST request will expect an additional parameter, named {\f1\fs20 session_signature}, to every URL. Using the URI instead of {\i cookies} allows the signature process to work with all communication protocols, not only @*HTTP@;
 - Of course, you have the opportunity to tune or even by-pass the security for a given service (method-based or interface-based), on need: e.g. to allow some methods only to your system administrators, or to serve public HTML content.
-:   Per-User authentication
+:139   Per-User authentication
 On the Server side, two tables, defined by the {\f1\fs20 @**TSQLAuthGroup@} and {\f1\fs20 @**TSQLAuthUser@} classes, will handle respectively per-group access rights (authorization), and user validation (authentication). In the database, they will be persisted as {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables.
 The Server will search for any class inheriting from {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} in its @*Model@. By default, you can use plain {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} classes - and if none is defined in the model, and authentication is enabled, those mandatory classes will be added. But you can inherit from {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser}, and define e.g. your own fields, for any custom purpose at {\i Group} or {\i User} level. The exact class types are available from {\f1\fs20 SQLAuthUserClass} and {\f1\fs20 SQLAuthGroupClass} properties of {\f1\fs20 TSQLRestServer}.
 Since the whole records will be loaded and persisted in memory at every authentication, do not store too much data in those tables: for instance, do not put historical data (like previous client activity), or huge BLOBs (like detailed pictures) - a dedicated table or set of tables would be a better idea.

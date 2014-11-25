@@ -2329,7 +2329,7 @@ var k: TDocVariantKind;
 begin // very fast optimized code
   if not (Kind in [betDoc,betArray]) then
     VarCastError;
-  if (BSON=nil) or (TBSONElementType(BSON^)=betEof) then
+  if (BSON=nil) or (BSON^=byte(betEOF)) then
     TVarData(Doc).VType := varNull else begin
     if Kind=betDoc then
       k := dvObject else

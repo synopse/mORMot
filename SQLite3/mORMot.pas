@@ -833,6 +833,7 @@ unit mORMot;
       TSQLRestServer.SQLAuthUserClass/SQLAuthGroupClass new properties
     - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
       as requested by feature request [842906425928]
+    - added TSynAuthenticationRest e.g. for SynDBRemote to check REST users
     - added TSQLRestServer.OnSessionCreate / OnSessionClosed methods
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
@@ -11166,6 +11167,26 @@ type
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
   end;
   {$endif}
+
+  /// TSynAuthentication* class using TSQLAuthUser/TSQLAuthGroup for credentials
+  // - could be used e.g. for SynDBRemote access in conjunction with mORMot
+  TSynAuthenticationRest = class(TSynAuthenticationAbstract)
+  protected
+    fServer: TSQLRestServer;
+    fAllowedGroups: TIntegerDynArray;
+    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; override;
+    function GetUsersCount: integer; override;
+  public
+    /// initialize the authentication scheme
+    // - you can optionally set the groups allowing to use SynDBRemote - if none
+    // is specify, username/password is enough
+    constructor Create(aServer: TSQLRestServer; const aAllowedGroups: array of integer); reintroduce;
+    /// add some new groups to validate an user authentication
+    procedure RegisterAllowedGroups(const aAllowedGroups: array of integer);
+    /// to be used to compute a Hash on the client, for a given Token
+    // - the password will be hashed as expected by the GetPassword() method
+    class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; override;
+  end;
 
   /// common ancestor for tracking changes on TSQLRecord tables
   // - used by TSQLRestServer.TrackChanges() method for simple fields history
@@ -36613,10 +36634,13 @@ end;
 
 { TSQLAuthUser }
 
+const
+  TSQLAUTHUSER_SALT = 'salt';
+
 procedure TSQLAuthUser.SetPasswordPlain(const Value: RawUTF8);
 begin
   if self<>nil then
-    PasswordHashHexa := SHA256('salt'+Value);
+    PasswordHashHexa := SHA256(TSQLAUTHUSER_SALT+Value);
 end;
 
 function TSQLAuthUser.CanUserLog(Ctxt: TSQLRestServerURIContext): boolean;
@@ -37198,6 +37222,54 @@ begin
 end;
 
 {$endif SSPIAUTH}
+
+{ TSynAuthenticationRest }
+
+constructor TSynAuthenticationRest.Create(aServer: TSQLRestServer;
+  const aAllowedGroups: array of integer);
+begin
+  inherited Create;
+  fServer := aServer;
+  RegisterAllowedGroups(aAllowedGroups);
+end;
+
+procedure TSynAuthenticationRest.RegisterAllowedGroups(
+  const aAllowedGroups: array of integer);
+var i: integer;
+begin
+  for i := 0 to high(aAllowedGroups) do
+    AddSortedInteger(fAllowedGroups,aAllowedGroups[i]);
+end;
+
+function TSynAuthenticationRest.GetPassword(const UserName: RawUTF8;
+  out Password: RawUTF8): boolean;
+var U: TSQLAuthUser;
+begin
+  if fServer=nil then begin
+    result := false;
+    exit;
+  end;
+  U := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[UserName]);
+  try
+    result := (U.fID>0) and
+      (FastFindIntegerSorted(fAllowedGroups,PtrInt(U.fGroup))>=0);
+    if result then
+      Password := U.PasswordHashHexa; // same as ComputeHash() below
+  finally
+    U.Free;
+  end;
+end;
+
+function TSynAuthenticationRest.GetUsersCount: integer;
+begin
+  result := 1; // fake answer indicating that authentication is enabled
+end;
+
+class function TSynAuthenticationRest.ComputeHash(Token: Int64;
+  const UserName,PassWord: RawUTF8): cardinal;
+begin // same as GetPassword() above
+  result := inherited ComputeHash(Token,UserName,SHA256(TSQLAUTHUSER_SALT+Password));
+end;
 
 
 { TServiceContainer }
