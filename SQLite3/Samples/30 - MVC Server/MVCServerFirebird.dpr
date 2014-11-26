@@ -37,7 +37,7 @@ var aModel: TSQLModel;
     aURI: RawUTF8;
     aDriver: TADPhysIBDriverLink;
     {$endif}
-    aExternalDB: TSQLDBConnectionProperties;
+    aExternalDB: TSQLDBConnectionPropertiesThreadSafe;
     aServer: TSQLRestServerDB;
     aApplication: TBlogApplication;
     aHTTPServer: TSQLHttpServer;
@@ -51,6 +51,7 @@ begin
       TSQLDBZEOSConnectionProperties.URI(dFIREBIRD,'',
       '..\15 - External DB performance\Firebird\fbembed.dll'),
       'MVCServerFirebird.fdb','sysdba','masterkey');
+    aExternalDB.ThreadingMode := tmMainConnection; // as expected for FB embedded
     {$endif}
     {$ifdef USEFIREDACFIREBIRD}
     aDriver := TADPhysIBDriverLink.Create(nil);
@@ -65,8 +66,8 @@ begin
       VirtualTableExternalRegisterAll(aModel,aExternalDB,[regMapAutoKeywordFields]);
       aServer := TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME);
       try
-    {    aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
-        aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread; }
+        aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
+        aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread; 
         aServer.CreateMissingTables;
         aApplication := TBlogApplication.Create(aServer);
         try
