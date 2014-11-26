@@ -104,6 +104,9 @@ type
     // ! Create(aProps,'remotedb');
     // - you can optionally register one user credential, or change the
     // transmission Protocol which is TSQLDBRemoteConnectionProtocol by default
+    // - aProperties.ThreadingMode will be set to tmMainConnection - in fact,
+    // you should better use a single thread for the process, but you may
+    // define a small thread pool for the process IF the provider supports it
     constructor Create(aProperties: TSQLDBConnectionProperties;
       const aDatabaseName: RawUTF8; const aPort: RawUTF8=SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
@@ -247,6 +250,8 @@ constructor TSQLDBServerAbstract.Create(aProperties: TSQLDBConnectionProperties;
   aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
 begin
   fProperties := aProperties;
+  if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then
+    TSQLDBConnectionPropertiesThreadSafe(fProperties).ThreadingMode := tmMainConnection;
   fDatabaseName := aDatabaseName;
   fPort := aPort;
   fHttps := aHttps;

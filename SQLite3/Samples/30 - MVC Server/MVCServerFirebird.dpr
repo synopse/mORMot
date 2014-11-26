@@ -12,6 +12,7 @@ uses
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   SynCrtSock,
   SynCommons,
+  SynLog,
   mORMot,
   SynSQLite3,
   SynSQLite3Static,
@@ -64,8 +65,8 @@ begin
       VirtualTableExternalRegisterAll(aModel,aExternalDB,[regMapAutoKeywordFields]);
       aServer := TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME);
       try
-        aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
-        aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread;
+    {    aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
+        aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread; }
         aServer.CreateMissingTables;
         aApplication := TBlogApplication.Create(aServer);
         try

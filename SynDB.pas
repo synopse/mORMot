@@ -986,6 +986,8 @@ type
   // UserID and password)
   // - should also provide some Database-specific generic SQL statement creation
   // (e.g. how to create a Table), to be used e.g. by the mORMot layer
+  // - this class level will handle a single "main connection" - you may inherit
+  // from TSQLDBConnectionThreadSafe to maintain one connection per thread
   TSQLDBConnectionProperties = class
   protected
     fServerName: RawUTF8;
@@ -1010,7 +1012,6 @@ type
     fEngineName: RawUTF8;
     fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
-    fLastConnectionAccessTicks: Int64;
     fConnectionTimeOutTicks: Int64;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
@@ -1022,7 +1023,6 @@ type
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
     function GetMainConnection: TSQLDBConnection; virtual;
-    procedure CheckConnectionTimeout; virtual;
     /// will be called at the end of constructor
     // - this default implementation will do nothing
     procedure SetInternalProperties; virtual;
@@ -1499,6 +1499,8 @@ type
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
     fRollbackOnDisconnect: Boolean;
+    fLastAccessTicks: Int64;
+    function IsOutdated: boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
     function GetServerTimeStamp: TTimeLog; virtual;
     function GetLastErrorWasAboutConnection: boolean; 
@@ -2106,11 +2108,11 @@ type
     fThreadID: DWORD;
   end;
 
-  /// diverse threading modes used by TSQLDBConnectionPropertiesThreadSafe
+  /// threading modes set to TSQLDBConnectionPropertiesThreadSafe.ThreadingMode
   // - default mode is to use a Thread Pool, i.e. one connection per thread
   // - or you can force to use the main connection
-  // - or you can use a shared background thread process
-  // - last two modes could be used in database embedded mode (SQLite3/FireBird),
+  // - or you can use a shared background thread process (not implemented yet)
+  // - last two modes could be used for embedded databases (SQLite3/FireBird),
   // when multiple connections may break stability, consume too much resources
   // and/or decrease performance
   TSQLDBConnectionPropertiesThreadSafeThreadingMode = (
@@ -2124,8 +2126,6 @@ type
     fLatestConnectionRetrievedInPool: integer;
     fConnectionCS: TRTLCriticalSection;
     fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
-    /// returns nil if none was defined yet
-    function CurrentThreadConnection: TSQLDBConnection;
     /// returns -1 if none was defined yet
     function CurrentThreadConnectionIndex: Integer;
     /// overridden method to properly handle multi-thread
@@ -3793,6 +3793,23 @@ begin
   inherited;
 end;
 
+function TSQLDBConnection.IsOutdated: boolean;
+var Ticks: Int64;
+begin
+  result := false;
+  if (self=nil) or (fProperties.fConnectionTimeOutTicks=0) then
+    exit;
+  if fLastAccessTicks<0 then begin // was forced by ClearConnectionPool
+    result := true;
+    exit;
+  end;
+  Ticks := GetTickCount64;
+  if (fLastAccessTicks<>0) and
+     (Ticks-fLastAccessTicks>fProperties.fConnectionTimeOutTicks) then
+    result := true else
+    fLastAccessTicks := Ticks;
+end;
+
 function TSQLDBConnection.GetInTransaction: boolean;
 begin
   result := TransactionCount>0;
@@ -4008,6 +4025,10 @@ var endTrial: Int64;
 begin
   if sessionID=0 then
     raise ESQLDBRemote.Create('Remote transaction expects authentication/session');
+  if connection.Properties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) and
+     (TSQLDBConnectionPropertiesThreadSafe(connection.Properties).ThreadingMode=tmThreadPool) then
+    raise ESQLDBRemote.CreateUTF8('Remote transaction expects %.ThreadingMode<>tmThreadPool: '+
+      'commit/execute/rollback should be in the same thread/connection',[connection.Properties]);
   endTrial := GetTickCount64+fTransactionRetryTimeout;
   repeat
     EnterCriticalSection(fLock);
@@ -4360,7 +4381,7 @@ end;
 
 procedure TSQLDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
 begin
-  fConnectionTimeOutTicks := minutes*60000; // minutes to ms conversion 
+  fConnectionTimeOutTicks := minutes*60000; // minutes to ms conversion
 end;
 
 function TSQLDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
@@ -4368,19 +4389,10 @@ begin
   result := fConnectionTimeOutTicks div 60000;
 end;
 
-procedure TSQLDBConnectionProperties.CheckConnectionTimeout;
-var Ticks: Int64;
-begin
-  Ticks := GetTickCount64;
-  if (fConnectionTimeOutTicks<>0) and (fLastConnectionAccessTicks<>0) and
-     (Ticks-fLastConnectionAccessTicks>fConnectionTimeOutTicks) then
-    ClearConnectionPool; 
-  fLastConnectionAccessTicks := Ticks;
-end;
-
 function TSQLDBConnectionProperties.GetMainConnection: TSQLDBConnection;
 begin
-  CheckConnectionTimeout;
+  if fMainConnection.IsOutdated then
+    FreeAndNil(fMainConnection);
   if fMainConnection=nil then
     fMainConnection := NewConnection;
   result := fMainConnection;
@@ -5612,11 +5624,14 @@ end;
 { TSQLDBConnectionPropertiesThreadSafe }
 
 procedure TSQLDBConnectionPropertiesThreadSafe.ClearConnectionPool;
+var i: integer;
 begin
   EnterCriticalSection(fConnectionCS);
   try
-    inherited; // clear fMainConnection
-    fConnectionPool.Clear;
+    if fMainConnection<>nil then
+      fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
+    for i := 0 to fConnectionPool.Count-1 do 
+      TSQLDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
     LeaveCriticalSection(fConnectionCS);
@@ -5630,20 +5645,6 @@ begin
   fLatestConnectionRetrievedInPool := -1;
   InitializeCriticalSection(fConnectionCS);
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
-end;
-
-function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnection: TSQLDBConnection;
-var i: integer;
-begin
-  EnterCriticalSection(fConnectionCS);
-  try
-    i := CurrentThreadConnectionIndex;
-    if i<0 then
-      result := nil else
-      result := fConnectionPool.List[i];
-  finally
-    LeaveCriticalSection(fConnectionCS);
-   end;
 end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
@@ -5695,7 +5696,6 @@ end;
 function TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSQLDBConnection;
 var i: integer;
 begin
-  CheckConnectionTimeout;
   case fThreadingMode of
   tmThreadPool: begin
     EnterCriticalSection(fConnectionCS);
@@ -5703,7 +5703,9 @@ begin
       i := CurrentThreadConnectionIndex;
       if i>=0 then begin
         result := fConnectionPool.List[i];
-        exit;
+        if result.IsOutdated then
+          fConnectionPool.Delete(i) else // release outdated connection
+          exit;
       end;
       result := NewConnection;
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
