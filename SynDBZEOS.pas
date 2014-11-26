@@ -644,7 +644,7 @@ begin
   fDatabase := DriverManager.GetConnectionWithParams(
     (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
   fDatabase.SetAutoCommit(true);
-  fDatabase.SetTransactionIsolation(tiNone);
+  fDatabase.SetTransactionIsolation(tiReadCommitted);
 end;
 
 procedure TSQLDBZEOSConnection.Connect;
