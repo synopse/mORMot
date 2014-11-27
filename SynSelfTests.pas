@@ -8740,7 +8740,7 @@ begin
           RExt.CreatedAt := 0;
           if RInt.fID>100 then begin
             if aExternalClient.BatchCount=0 then
-              aExternalClient.BatchStart(TSQLRecordPeopleExt);
+              aExternalClient.BatchStart(TSQLRecordPeopleExt,5000);
             aExternalClient.BatchAdd(RExt,true);
           end else begin
             aID := aExternalClient.Add(RExt,true);
@@ -8807,7 +8807,7 @@ begin
             RExt.YearOfBirth := RExt.YearOfDeath; // YOB=YOD for 1/100 rows
             if i>4000 then begin
               if aExternalClient.BatchCount=0 then
-                aExternalClient.BatchStart(TSQLRecordPeopleExt);
+                aExternalClient.BatchStart(TSQLRecordPeopleExt,10000);
               Check(aExternalClient.BatchUpdate(RExt)>=0,'BatchUpdate 1/100 rows');
             end else begin
               Check(aExternalClient.Update(RExt),'Update 1/100 rows');
@@ -8893,7 +8893,7 @@ begin
       end;
       RJoin := TSQLRecordTestJoin.Create;
       try
-        aExternalClient.BatchStart(TSQLRecordTestJoin);
+        aExternalClient.BatchStart(TSQLRecordTestJoin,1000);
         for i := 1 to BLOB_MAX do
         if i and 127<>0 then begin
           RJoin.Name := Int32ToUTF8(i);
@@ -9666,7 +9666,7 @@ begin
             // test BATCH sequence usage
             if ClientDist.TransactionBegin(TSQLRecordPeople) then
             try
-              Check(ClientDist.BatchStart(TSQLRecordPeople));
+              Check(ClientDist.BatchStart(TSQLRecordPeople,5000));
               n := 0;
               for i := 0 to aStatic.Count-1 do
                 if i and 7=0 then begin
