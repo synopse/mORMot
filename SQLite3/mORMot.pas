@@ -30257,6 +30257,7 @@ begin
     end;
   end else
     AutomaticTransactionPerRow := 0;
+  SetLength(RunTableTransactions,Model.TablesMax+1);
   if IdemPChar(Sent,'"OPTIONS",') then begin
     inc(Sent,10);
     byte(batchOptions) := GetNextItemCardinal(Sent,',');
@@ -30307,7 +30308,7 @@ begin
         inc(RowCountForCurrentTransaction);
         if RunTableTransactions[RunTableIndex]=nil then
           if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then 
-            RunTableTransactions[RunTableIndex] := RunningRest else 
+            RunTableTransactions[RunTableIndex] := RunningRest else
             InternalLog('%.TransactionBegin failed -> no transaction',[RunningRest],sllWarning);
       end;
       // handle batch pending request sending (if table or method changed)
