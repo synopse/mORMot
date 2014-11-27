@@ -259,6 +259,8 @@ unit SynDB;
     (e.g. :AS :OF :BY), to be compliant with Oracle OCI expectations
   - added property RollbackOnDisconnect, set to TRUE by default, to ensure
     any pending uncommitted transaction is roll-backed - see [dc64fe169b]
+  - added TSQLDBConnectionProperties.SharedTransaction() method to implement
+    nested transactions, as long as the same connection is re-used
   - added TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed()
     internal method, used by some overridden GetFields() implementations
 
@@ -958,6 +960,9 @@ type
   // TSQLDBConnection.OnProperties properties
   TOnSQLDBProcess = procedure(Sender: TSQLDBConnection; Event: TOnSQLDBProcessEvent) of object;
 
+  /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
+  TSQLDBSharedTransactionAction = (transBegin, transCommit, transRollback);
+
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
   // implementing INSERT with multiple VALUES (like MySQL, PostgreSQL, NexusDB,
@@ -1013,6 +1018,11 @@ type
     fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
     fConnectionTimeOutTicks: Int64;
+    fSharedTransactions: array of record
+      SessionID: cardinal;
+      RefCount: integer;
+      Connection: TSQLDBConnection;
+    end;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDBMS value or dDefault
@@ -1212,6 +1222,16 @@ type
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
     function ExecuteInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBRows; overload;
+    /// handle a transaction process common to all associated connections
+    // - could be used to share a single transaction among several connections,
+    // or to run nested transactions even on DB engines which do not allow them
+    // - will use a simple reference counting mechanism to allow nested
+    // transactions, identified by a session identifier
+    // - will fail if the same connection is not used for the whole process,
+    // which would induce a potentially incorrect behavior  
+    // - returns the connection corresponding to the session, nil on error
+    function SharedTransaction(SessionID: cardinal;
+      action: TSQLDBSharedTransactionAction): TSQLDBConnection; virtual;
 
     /// convert a textual column data type, as retrieved e.g. from SQLGetField,
     // into our internal primitive types
@@ -4424,6 +4444,63 @@ function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(
 begin
   result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
+
+function TSQLDBConnectionProperties.SharedTransaction(SessionID: cardinal;
+  action: TSQLDBSharedTransactionAction): TSQLDBConnection;
+procedure SetResultToSameConnection(index: integer);
+begin
+  result := ThreadSafeConnection;
+  if result<>fSharedTransactions[index].Connection then
+    raise ESQLDBException.CreateUTF8(
+      '%.SharedTransaction(sessionID=%) with mixed connections',[self,SessionID]);
+end;
+var i,n: integer;
+begin
+  n := Length(fSharedTransactions);
+  try
+    for i := 0 to n-1 do
+    if fSharedTransactions[i].SessionID=SessionID then begin
+      SetResultToSameConnection(i);
+      case action of
+      transBegin: // nested StartTransaction
+        InterlockedIncrement(fSharedTransactions[i].RefCount);
+      else begin  // (nested) commit/rollback
+        if InterlockedDecrement(fSharedTransactions[i].RefCount)=0 then begin
+          dec(n);
+          move(fSharedTransactions[i+1],fSharedTransactions[i],(n-i)*sizeof(fSharedTransactions[0]));
+          SetLength(fSharedTransactions,n);
+          case action of
+          transCommit:   result.Commit;
+          transRollback: result.Rollback;
+          end;
+        end;
+      end;
+      end;
+      exit;
+    end;
+    case action of
+    transBegin: begin
+      result := ThreadSafeConnection;
+      for i := 0 to n-1 do
+        if fSharedTransactions[i].Connection=result then
+        raise ESQLDBException.CreateUTF8(
+          '%.SharedTransaction(sessionID=%) already started for sessionID=%',
+          [self,SessionID,fSharedTransactions[i].SessionID]);
+      result.StartTransaction;
+      SetLength(fSharedTransactions,n+1);
+      fSharedTransactions[n].SessionID := SessionID;
+      fSharedTransactions[n].RefCount := 1;
+      fSharedTransactions[n].Connection := result;
+    end else
+      raise ESQLDBException.CreateUTF8(
+        'Unexpected %.SharedTransaction(%)',[self,SessionID]);
+    end;
+  except
+    on Exception do
+      result := nil; // result.StartTransaction/Commit/Rollback failed
+  end;
+end;
+
 
 procedure TSQLDBConnectionProperties.SetInternalProperties;
 begin

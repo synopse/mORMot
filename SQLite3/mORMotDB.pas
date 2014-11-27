@@ -575,17 +575,6 @@ end;
 
 { TSQLRestStorageExternal }
 
-procedure TSQLRestStorageExternal.Commit(SessionID: cardinal);
-begin
-  inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
-  try
-    fProperties.ThreadSafeConnection.Commit;
-  except
-    on Exception do
-      ; // just catch exception
-  end;
-end;
-
 constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer);
 
@@ -1609,17 +1598,6 @@ begin
   end;
 end;
 
-procedure TSQLRestStorageExternal.RollBack(SessionID: cardinal);
-begin
-  inherited RollBack(SessionID); // reset fTransactionActive
-  try
-    fProperties.ThreadSafeConnection.Rollback;
-  except
-    on Exception do
-      ; // just catch exception
-  end;
-end;
-
 function TSQLRestStorageExternal.EngineSearchField(
   const FieldName: ShortString; const FieldValue: array of const;
   var ResultID: TIDDynArray): boolean;
@@ -1651,15 +1629,21 @@ end;
 function TSQLRestStorageExternal.TransactionBegin(
   aTable: TSQLRecordClass; SessionID: cardinal): boolean;
 begin
-  result := false;
   if (aTable=fStoredClass) and inherited TransactionBegin(aTable,SessionID) then
-  try
-    fProperties.ThreadSafeConnection.StartTransaction;
-    result := true; // success
-  except
-    on Exception do
-      result := false;
-  end;
+    result := fProperties.SharedTransaction(SessionID,transBegin)<>nil else
+    result := false;
+end;
+
+procedure TSQLRestStorageExternal.Commit(SessionID: cardinal);
+begin
+  inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
+  fProperties.SharedTransaction(SessionID,transCommit);
+end;
+
+procedure TSQLRestStorageExternal.RollBack(SessionID: cardinal);
+begin
+  inherited RollBack(SessionID); // reset fTransactionActive
+  fProperties.SharedTransaction(SessionID,transRollback);
 end;
 
 function TSQLRestStorageExternal.CreateSQLMultiIndex(
