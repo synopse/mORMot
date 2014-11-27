@@ -9409,7 +9409,10 @@ type
     function GetLogClass: TSynLogClass;
     {$endif}
     /// log the corresponding text (if logging is enabled)
-    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); 
+    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalLog(Format: PWinAnsiChar; const Args: array of const;
+      Level: TSynLogInfo); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// internal method used by Delete(Table,SQLWhere) method
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
@@ -12691,7 +12694,7 @@ type
     // same time, you should better use BATCH process, specifying a positive
     // AutomaticTransactionPerRow parameter to BatchStart() 
     function TransactionBegin(aTable: TSQLRecordClass; 
-	  SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override; 
+  	  SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override; 
     /// end a transaction (calls REST END Member)
     // - by default, Client transaction will use here a pseudo session
     procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
@@ -24522,6 +24525,15 @@ begin
   {$endif}
 end;
 
+procedure TSQLRest.InternalLog(Format: PWinAnsiChar;
+  const Args: array of const; Level: TSynLogInfo);
+begin
+  {$ifdef WITHLOG}
+  if Level in fLogFamily.Level then
+    fLogFamily.SynLog.Log(Level,Format,Args,self);
+  {$endif}
+end;
+
 {$ifdef WITHLOG}
 procedure TSQLRest.SetLogClass(aClass: TSynLogClass);
 begin
@@ -26264,8 +26276,8 @@ begin
       except
         on E: Exception do
           if (fClient<>nil) and not Terminated then
-            fClient.InternalLog('TRemoteLogThread fatal error: '+
-              'some events were not transmitted',sllWarning);
+            fClient.InternalLog('%.Execute fatal error: %'+
+              'some events were not transmitted',[self,E],sllWarning);
       end;
     end;
 end;
@@ -27734,8 +27746,8 @@ begin
       cascadeOK := Delete(Tab,FieldType.Name+'=:('+W+'):');
     end;
     if not cascadeOK then
-      InternalLog(FormatUTF8('%.AfterDeleteForceCoherency() failed to handle field %.%',
-        [Self,Model.Tables[TableIndex],FieldType.Name]),sllWarning);
+      InternalLog('%.AfterDeleteForceCoherency() failed to handle field %.%',
+        [Self,Model.Tables[TableIndex],FieldType.Name],sllWarning);
   end;
 end;
 
@@ -29958,9 +29970,9 @@ begin
             HistBlob.fModifiedRecord := HistJson.ModifiedRecord else
             RetrieveBlobFields(HistBlob);
           if not HistBlob.HistoryOpen(Model) then begin
-            InternalLog(FormatUTF8('Invalid %.History BLOB content for ID=%: % '+
+            InternalLog('Invalid %.History BLOB content for ID=%: % '+
               'layout may have changed -> flush any previous content',
-              [HistBlob.RecordClass,HistBlob.fID,HistJson.ModifiedTable(Model)]),sllError);
+              [HistBlob.RecordClass,HistBlob.fID,HistJson.ModifiedTable(Model)],sllError);
             HistBlob.fID := 0;
           end;
           if HistBlob.fID<>0 then // allow changes appending to HistBlob
@@ -30192,23 +30204,29 @@ var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
     URIMethod, RunningBatchURIMethod: TSQLURIMethod;
-    RunningBatchRest: TSQLRest; 
+    RunningBatchRest, RunningRest: TSQLRest;
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
+    RunTableTransactions: array of TSQLRest;
     ID, Count: integer;
     batchOptions: TSQLRestBatchOptions;
-    RunTable, PrevRunTable, RunningBatchTable: TSQLRecordClass;
-    RunTableIndex: integer;
+    RunTable, RunningBatchTable: TSQLRecordClass;
+    RunTableIndex,i: integer;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
   procedure PerformAutomaticCommit;
+  var i: integer;
   begin
     if RunningBatchRest<>nil then begin
       RunningBatchRest.InternalBatchStop; // send pending rows before commit
       RunningBatchRest := nil;
       RunningBatchTable := nil;
     end;
-    Commit(CONST_AUTHENTICATION_NOT_USED);
+    for i := 0 to high(RunTableTransactions) do
+      if RunTableTransactions[i]<>nil then begin
+        RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED);
+        RunTableTransactions[i] := nil;
+      end;
     RowCountForCurrentTransaction := 0;
   end;
 begin
@@ -30245,7 +30263,6 @@ begin
   end else
     byte(batchOptions) := 0;
   RowCountForCurrentTransaction := 0;
-  PrevRunTable := nil;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
@@ -30269,6 +30286,9 @@ begin
         RunTable := Model.Tables[RunTableIndex];
       end;
       RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
+      if RunStatic=nil then
+        RunningRest := self else
+        RunningRest := RunStatic;
       if Count>=length(Results) then
         SetLength(Results,Count+256+Count shr 3);
       Results[Count] := HTML_NOTMODIFIED;
@@ -30282,21 +30302,13 @@ begin
         URIMethod := mNone;
       // handle auto-committed transaction process
       if AutomaticTransactionPerRow>0 then begin
-        if PrevRunTable<>RunTable then begin // allow method change for same table
-          if RowCountForCurrentTransaction>0 then
-            // table changed -> commit previous trans
-            PerformAutomaticCommit;
-          PrevRunTable := RunTable;
-        end;
         if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
           PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
-        if RowCountForCurrentTransaction>0 then
-          inc(RowCountForCurrentTransaction) else
-          if TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
-            inc(RowCountForCurrentTransaction) else begin
-            InternalLog('TransactionBegin error -> AutomaticTransactionPerRow ignored',sllWarning);
-            AutomaticTransactionPerRow := 0;
-          end;
+        inc(RowCountForCurrentTransaction);
+        if RunTableTransactions[RunTableIndex]=nil then
+          if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then 
+            RunTableTransactions[RunTableIndex] := RunningRest else 
+            InternalLog('%.TransactionBegin failed -> no transaction',[RunningRest],sllWarning);
       end;
       // handle batch pending request sending (if table or method changed)
       if (RunningBatchRest<>nil) and
@@ -30372,7 +30384,9 @@ begin
   except
     on Exception do begin
       if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
-        RollBack(CONST_AUTHENTICATION_NOT_USED);
+        for i := 0 to high(RunTableTransactions) do
+          if RunTableTransactions[i]<>nil then
+            RunTableTransactions[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
         InternalLog('PARTIAL rollback of latest auto-committed transaction',sllWarning);
       end;
       raise;
