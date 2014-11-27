@@ -12988,13 +12988,22 @@ type
     // - restore the previous state of the database, before the call to TransactionBegin }
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
 
-    /// begin a BATCH sequence to speed up huge database change
+    /// begin a BATCH sequence to speed up huge database change for a given table
     // - is a wrapper around TSQLRestBatch.Create() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread-safe
     // - if you need a thread-safe "Unit Of Work" process, please use a private
     // TSQLRestBatch instance and the overloaded TSQLRest.BatchSend() method
+    // - call BatchStartAny() or set the aTable parameter to nil if you want to
+    // use any kind of TSQLRecord objects within the process, not a single one
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]): boolean; virtual;
+    /// begin a BATCH sequence to speed up huge database change for any table
+    // - will call the BatchStart() method with aTable = nil so that you may be
+    // able to use any kind of TSQLRecord class within the process
+    // - is a wrapper around TSQLRestBatch.Create() which will be stored in this
+    // TSQLRestClientURI instance - be aware that this won't be thread-safe
+    function BatchStartAny(AutomaticTransactionPerRow: cardinal;
+      Options: TSQLRestBatchOptions=[]): boolean; 
     /// create a new member in current BATCH sequence
     // - is a wrapper around TSQLRestBatch.Add() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread safe
@@ -26982,6 +26991,12 @@ begin
     fBatchCurrent.fCalledWithinRest := true;
     result := true;
   end;
+end;
+
+function TSQLRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
+  Options: TSQLRestBatchOptions): boolean;
+begin
+  result := BatchStart(nil,AutomaticTransactionPerRow,Options);
 end;
 
 function TSQLRestClientURI.BatchUpdate(Value: TSQLRecord;

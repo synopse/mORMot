@@ -7189,6 +7189,13 @@ Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelf
 !  for i := 0 to n-1 do
 !    Check(not ClientDist.Retrieve(IntArray[i],V),'BatchDelete');
 In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 BatchAdd BatchDelete BatchUpdate} methods instead of plain {\f1\fs20 Add Delete Update} methods. The ORM will take care of all the low-level data process, including JSON serialization, automatic per-chunk transactions creation, and SQL statements generation, with several optimizations - see @78@ and @99@.
+In the above example, we started the batch process involving only {\f1\fs20 TSQLRecordPeople} kind of objects:
+!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));
+But you could mix any kind of {\f1\fs20 TSQLRecord} content, if you set the class to {\f1\fs20 nil}, as such:
+!  Check(ClientDist.BatchStart(nil,1000));
+or use the {\f1\fs20 BatchStartAny()} method:
+!  Check(ClientDist.BatchStartAny(1000));
+In practice, you should better create and maintain your own instance of {\f1\fs20 TSQLRestBatch}, so that you would be able to implement any number of simultaneous batch process - see @100@.
 :  Transmitted JSON
 As described above, all {\f1\fs20 Batch*()} methods do serialize the objects values as JSON on the client side, then send this JSON at once to the server, where it will be processed without any client-server {\i round-trip} and slow latency.
 Here is some extract of typical JSON stream as sent to the server:
