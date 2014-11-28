@@ -759,11 +759,11 @@ begin
           [self,StoredClass,ord(row.Item.Kind)]);
       col := 0;
       while (row.Item.Data.DocList^<>byte(betEof)) and (col<colCount) and
-            item[col].FromNext(row.Item.Data.DocList) do 
+            item[col].FromNext(row.Item.Data.DocList) do
         inc(col);
       if col<>colCount then
         raise EORMMongoDBException.CreateUTF8(
-          '%.GetJSONValues(%): column count concern in row %<>%',
+          '%.GetJSONValues(%): missing column - count=% expected:%',
           [self,StoredClass,col,colCount]);
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
@@ -863,7 +863,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if IsZero(Stmt.Fields) and not Stmt.WithID then begin
+        if (Stmt.Fields=nil) and not Stmt.WithID then begin
           if Stmt.IsSelectCountWhere then
             // was "SELECT Count(*) FROM TableName WHERE ..."
             if Stmt.WhereField<0 then
@@ -875,7 +875,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         end;
         // save rows as JSON, with appropriate search according to Where* arguments
         ComputeQuery;
-        BSONProjectionSet(Projection,Stmt.WithID,Stmt.Fields,@extFieldNames);
+        BSONProjectionSet(Projection,Stmt.WithID,Stmt.FieldBits,@extFieldNames);
         if Stmt.FoundLimit=0 then
           Stmt.FoundLimit := maxInt;
         Res := fCollection.FindBSON(Query,Projection,Stmt.FoundLimit,Stmt.FoundOffset);

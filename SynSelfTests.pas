@@ -5944,7 +5944,7 @@ begin
             Check(Client.Add(R,true)=i);
           end;
           Client.Commit;
-          Check(Client.BatchStart(TSQLRecordTest,100));
+          Check(Client.BatchStart(TSQLRecordTest,1000));
           for i := 100 to 9999 do begin
             FillRWith(i);
             Check(Client.BatchAdd(R,true,false,ALL_FIELDS)=i-100);

@@ -790,6 +790,8 @@ unit mORMot;
     - new function CurrentServiceContext, to be used from packages instead of
       direct ServiceContext threadvar access - circumvent Delphi RTL/compiler
       restriction (bug?) as reported by [155b09dc1b]
+    - let the ORM reading methods follow the SELECT column order using
+      TSQLFieldIndexDynArray instead of TSQLFieldBits as expected by [94ff704bb1] 
     - let TSQLRest.OneFieldValues() handle directly naive expressions like
       'SELECT ID from Table where ID=10' or 'where ID in (10,20,30)'
     - new TSQLRestClientURI.ForceBlobTransfertTable[] property which enable to
@@ -3782,6 +3784,24 @@ type
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldIndexsFromBlobField(aBlobField: PPropInfo;
       var Bits: TSQLFieldBits): boolean;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
+      var Indexes: TSQLFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied field names
+    // - returns the matching fields set
+    function FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldIndexDynArray; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns TRUE on success, FALSE if any field name is not existing
+    function FieldIndexDynArrayFromCSV(const aFieldsCSV: RawUTF8;
+      var Indexes: TSQLFieldIndexDynArray): boolean; overload;
+    /// set all field indexes corresponding to the supplied CSV field names
+    // - returns the matching fields set
+    function FieldIndexDynArrayFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldIndexDynArray; overload;
+    /// set all field indexes corresponding to the supplied BLOB field type information
+    // - returns TRUE on success, FALSE if blob field is not recognized
+    function FieldIndexDynArrayFromBlobField(aBlobField: PPropInfo;
+      var Indexes: TSQLFieldIndexDynArray): boolean;
     {/ retrieve a Field property RTTI information from a Property Name
       - this version returns nil if the property is not a BLOB field }
     function BlobFieldPropFromRawUTF8(const PropName: RawUTF8): PPropInfo;
@@ -3831,18 +3851,12 @@ type
     // - you can use TSQLRecordProperties.FieldIndexsFromCSV() or
     // TSQLRecordProperties.FieldIndexsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
-      const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer;
-    /// initialize the JSON writer parameters with corresponding fields
-    // - WrittenFields could be e.g. SimpleFieldsBits[TSQLOccasion]
-    // or be computed by TSQLRecordProperties.FieldIndexsFromCSV() or
-    // TSQLRecordProperties.FieldIndexsFromRawUTF8()
-    // - recreate especially the ColNames[] and other necessary properties
-    // - if ForceResetFields is TRUE, all parameters will be recreated
-    // - if ForceResetFields is FALSE, WrittenFields will be checked against W.Fields
-    // and will recreate all parameters only if needed
-    // - is used e.g. in TSQLRestClientURI.BatchUpdate and BatchAdd methods
-    procedure SetExpandedJSONWriter(W: TJSONWriter; ForceResetFields: boolean;
-      withID: boolean; const WrittenFields: TSQLFieldBits);
+      const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer; overload;
+    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
+    // - you can use TSQLRecordProperties.FieldIndexsFromCSV() or
+    // TSQLRecordProperties.FieldIndexsFromRawUTF8() to compute aFields
+    function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
+      const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
     /// save the TSQLRecord RTTI into a binary header
@@ -4678,12 +4692,15 @@ type
     fRest: TSQLRest;
     fCalledWithinRest: boolean;
     fBatch: TJSONSerializer;
+    fBatchFields: TSQLFieldBits;
     fTable: TSQLRecordClass;
     fTablePreviousSendData: TSQLRecordClass;
     fTableIndex: integer;
     fBatchCount: integer;
     fDeletedRecordRef: TIDDynArray;
     fDeletedCount: integer;
+    procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
+      ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
     /// close a BATCH sequence started by Start method
     // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
     // - will also notify the TSQLRest.Cache for all deleted IDs
@@ -9413,7 +9430,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalLog(Format: PWinAnsiChar; const Args: array of const;
       Level: TSynLogInfo); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// internal method used by Delete(Table,SQLWhere) method
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
       var IDs: TIDDynArray): boolean; 
@@ -22207,6 +22223,7 @@ end;
 
 procedure TSQLRecord.GetJSONValues(W: TJSONSerializer);
 var i,n: integer;
+    Props: TSQLPropInfoList;
 label txt,txt1;
 begin
   if self=nil then
@@ -22223,21 +22240,22 @@ begin
     n := 1;
   end else
     n := 0;
-  with RecordProps do
-  for i := 0 to Fields.Count-1 do
-    if i in W.Fields then begin
+  if W.Fields<>nil then begin
+    Props := RecordProps.Fields;
+    for i := 0 to length(W.Fields)-1 do begin
       if W.Expand then begin
         W.AddString(W.ColNames[n]); // '"'+ColNames[]+'":'
         inc(n);
       end;
-      Fields.List[i].GetJSONValues(Self,W);
+      Props.List[W.Fields[i]].GetJSONValues(Self,W);
       W.Add(',');
     end;
+  end;
   W.CancelLastComma; // cancel last ','
   if W.Expand then
     W.Add('}');
 end;
-
+                           
 procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
 begin
   if JSON<>nil then
@@ -24300,6 +24318,7 @@ begin
   fBatchCount := 0;
   fDeletedCount := 0;
   fBatch := TJSONSerializer.CreateOwnedStream;
+  fBatch.Expand := true;
   if aTable<>nil then begin
     fTableIndex := fRest.Model.GetTableIndexExisting(aTable);
     fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
@@ -24333,6 +24352,20 @@ begin
     result := fBatchCount;
 end;
 
+procedure TSQLRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
+  ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
+begin
+  if (self=nil) or (fBatch=nil) then
+    exit;
+  if not ForceResetFields then
+    if fBatch.Expand and (fBatch.WithID=withID) and
+       IsEqual(fBatchFields,WrittenFields) then
+      exit; // already set -> do not compute it again
+  fBatchFields := WrittenFields;
+  fBatch.ChangeExpandedFields(withID,FieldBitsToIndex(WrittenFields,Props.Fields.Count));
+  Props.SetJSONWriterColumnNames(fBatch,0);
+end;
+
 function TSQLRestBatch.Add(Value: TSQLRecord; SendData,ForceID: boolean;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var Props: TSQLRecordProperties;
@@ -24356,8 +24389,7 @@ begin
     if IsZero(CustomFields) then
       FieldBits := Props.SimpleFieldsBits[soInsert] else
       FieldBits := CustomFields+Props.ModCreateTimeFieldsBits;
-    Props.SetExpandedJSONWriter(fBatch,
-      fTablePreviousSendData<>PSQLRecordClass(Value)^,
+    SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
       (Value.ID<>0) and ForceID,FieldBits);
     fTablePreviousSendData := PSQLRecordClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
@@ -24454,8 +24486,8 @@ begin
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
     FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
-  Props.SetExpandedJSONWriter(fBatch,
-    fTablePreviousSendData<>PSQLRecordClass(Value)^,True,FieldBits);
+  SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
+    true,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
   Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
   Value.GetJSONValues(fBatch);
@@ -30258,12 +30290,12 @@ begin
   end else
     AutomaticTransactionPerRow := 0;
   SetLength(RunTableTransactions,Model.TablesMax+1);
+  RowCountForCurrentTransaction := 0;
   if IdemPChar(Sent,'"OPTIONS",') then begin
     inc(Sent,10);
     byte(batchOptions) := GetNextItemCardinal(Sent,',');
   end else
     byte(batchOptions) := 0;
-  RowCountForCurrentTransaction := 0;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
@@ -31661,7 +31693,7 @@ begin
         if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if IsZero(Stmt.Fields) and not Stmt.WithID then
+        if (Stmt.Fields=nil) and not Stmt.WithID then
           if Stmt.IsSelectCountWhere and (Stmt.FoundLimit=0) and (Stmt.FoundOffset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
             SetCount(FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,DoNothingEvent,nil,0,0)) else
@@ -35309,63 +35341,40 @@ end;
 
 procedure TSQLRecordProperties.SetJSONWriterColumnNames(W: TJSONSerializer;
   KnownRowsCount: integer);
-var i,n: integer;
+var i,n,nf: integer;
 begin
   // get col count overhead
   if W.withID then
     n := 1 else
     n := 0;
   // set col names
-  SetLength(W.ColNames,Fields.Count+n);
+  nf := Length(W.Fields);
+  SetLength(W.ColNames,nf+n);
   if W.withID then
     W.ColNames[0] := 'RowID'; // works for both normal and FTS3 records
-  for i := 0 to Fields.Count-1 do
-    if i in W.Fields then begin
-      W.ColNames[n] := Fields.List[i].Name;
-      inc(n);
-    end;
-  // adjust col count
-  if n<>length(W.ColNames) then
-    SetLength(W.ColNames,n);
-  W.AddColumns(KnownRowsCount); // write or init field names for appropriate JSON Expand
+  for i := 0 to nf-1 do begin
+    W.ColNames[n] := Fields.List[W.Fields[i]].Name;
+    inc(n);
+  end;
+  // write or init field names for appropriate JSON Expand
+  W.AddColumns(KnownRowsCount);
 end;
 
 function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand,
   withID: boolean; const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer;
 begin
-  if (self=nil) or ((Int64(Fields)=0) and not withID) then  // no data
+  result := CreateJSONWriter(JSON,Expand,withID,
+    FieldBitsToIndex(aFields,Fields.Count),KnownRowsCount);
+end;
+
+function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand,
+  withID: boolean; const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer;
+begin
+  if (self=nil) or ((Fields=nil) and not withID) then  // no data
     result := nil else begin
     result := TJSONSerializer.Create(JSON,Expand,withID,aFields);
     SetJSONWriterColumnNames(result,KnownRowsCount);
   end;
-end;
-
-procedure TSQLRecordProperties.SetExpandedJSONWriter(W: TJSONWriter;
-  ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
-var i, id, nFieldBits: integer;
-begin
-  if (self=nil) or (W=nil) then
-    exit;
-  if not ForceResetFields then
-    if W.Expand and (W.WithID=withID) and IsEqual(W.Fields,WrittenFields) then
-      exit; // already set -> do not compute it again
-  if withID then
-    id := 1 else
-    id := 0;
-  nFieldBits := id+GetBitsCount(WrittenFields,Fields.Count);
-  SetLength(W.ColNames,nFieldBits);
-  if withID then
-    W.ColNames[0] := '"RowID":'; // works for both normal and FTS3 records
-  W.Expand := true;
-  W.WithID := withID;
-  W.Fields := WrittenFields;
-  for i := 0 to Fields.Count-1 do
-    if i in W.Fields then begin
-      W.ColNames[id] := '"'+Fields.List[i].Name+'":'; // as in TJSONWriter.AddColumns
-      W.FieldMax := i;
-      inc(id);
-    end;
-  assert(id=nFieldBits);
 end;
 
 procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);
@@ -35476,7 +35485,8 @@ end;
 
 function TSQLRecordProperties.FieldIndexsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits;
 begin
-  FieldIndexsFromCSV(aFieldsCSV,Result);
+  if not FieldIndexsFromCSV(aFieldsCSV,Result) then
+    fillchar(result,sizeof(result),0);
 end;
 
 function TSQLRecordProperties.FieldIndexsFromRawUTF8(const aFields: array of RawUTF8;
@@ -35498,7 +35508,71 @@ end;
 
 function TSQLRecordProperties.FieldIndexsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits;
 begin
-  FieldIndexsFromRawUTF8(aFields,Result);
+  if not FieldIndexsFromRawUTF8(aFields,Result) then
+    fillchar(result,sizeof(result),0);
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
+  var Indexes: TSQLFieldIndexDynArray): boolean;
+var f,ndx: integer;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  for f := 0 to high(aFields) do begin
+    ndx := Fields.IndexByName(aFields[f]);
+    if ndx<0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes,ndx);
+  end;
+  result := true;
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldIndexDynArray;
+begin
+  if not FieldIndexDynArrayFromRawUTF8(aFields,result) then
+    result := nil;
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromCSV(const aFieldsCSV: RawUTF8;
+  var Indexes: TSQLFieldIndexDynArray): boolean;
+var ndx: integer;
+    P: PUTF8Char;
+    FieldName: ShortString;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  P := pointer(aFieldsCSV);
+  while P<>nil do begin
+    GetNextItemShortString(P,FieldName);
+    FieldName[ord(FieldName[0])+1] := #0; // make PUTF8Char
+    ndx := Fields.IndexByName(@FieldName[1]);
+    if ndx<0 then
+      exit; // invalid field name
+    AddFieldIndex(Indexes,ndx);
+  end;
+  result := true;
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldIndexDynArray;
+begin
+  if not FieldIndexDynArrayFromCSV(aFieldsCSV,result) then
+    result := nil;
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromBlobField(aBlobField: PPropInfo;
+  var Indexes: TSQLFieldIndexDynArray): boolean;
+var f: integer;
+begin
+  if self<>nil then
+  for f := 0 to high(BlobFields) do
+    if BlobFields[f].fPropInfo=aBlobField then begin
+      AddFieldIndex(Indexes,BlobFields[f].PropertyIndex);
+      result := true;
+      exit;
+    end;
+  result := false;
 end;
 
 function TSQLRecordProperties.AppendFieldName(FieldIndex: Integer;
