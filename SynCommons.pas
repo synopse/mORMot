@@ -7585,7 +7585,8 @@ function IsEqual(const A,B: TSQLFieldBits): boolean;
 
 /// convert a TSQLFieldBits set of bits into an array of integers
 procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
-  var Index: TSQLFieldIndexDynArray; MaxLength: integer=MAX_SQLFIELDS); overload;
+  var Index: TSQLFieldIndexDynArray; MaxLength: integer=MAX_SQLFIELDS;
+  IndexStart: integer=0); overload;
 
 /// convert a TSQLFieldBits set of bits into an array of integers
 function FieldBitsToIndex(const Fields: TSQLFieldBits;
@@ -8591,12 +8592,9 @@ type
   TSynTableStatement = class
     /// the SELECT SQL statement parsed
     SQLStatement: RawUTF8;
-    /// the fields selected for the SQL statement, in the expected order
-    // - contains the list of the RTTI field indexes
-    // - if ID/RowID is selected, then WithID is true
-    Fields: TSQLFieldIndexDynArray;
-    /// is TRUE if ID/RowID was set in the WHERE clause
-    WithID: boolean;
+    /// the column SELECTed for the SQL statement, in the expected order
+    // - contains 0 for ID/RowID, or the RTTI field index + 1
+    SelectFields: TSQLFieldIndexDynArray;
     /// the retrieved table name
     TableName: RawUTF8;
     /// the index of the field used for the WHERE clause
@@ -8648,9 +8646,8 @@ type
     constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
       SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       FieldProp: TSynTableFieldProperties=nil);
-    /// compute the SELECT column bits from the Fields array
-    function FieldBits: TSQLFieldBits;
-      {$ifdef HASINLINE}inline;{$endif}
+    /// compute the SELECT column bits from the SelectFields array
+    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
   end;
 
   /// function prototype used to retrieve the RECORD data of a specified Index
@@ -21204,7 +21201,7 @@ end;
 {$WARNINGS ON}
 
 procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
-  MaxLength: integer);
+  MaxLength,IndexStart: integer);
 var i,n: integer;
     sets: array[0..MAX_SQLFIELDS-1] of TSQLFieldIndex; // to avoid memory reallocation
 begin
@@ -21214,9 +21211,9 @@ begin
       sets[n] := i;
       inc(n);
     end;
-  SetLength(Index,n);
+  SetLength(Index,IndexStart+n);
   for i := 0 to n-1 do
-    Index[i] := sets[i];
+    Index[IndexStart+i] := sets[i];
 end;
 
 function FieldBitsToIndex(const Fields: TSQLFieldBits;
@@ -38975,7 +38972,7 @@ var Statement: TSynTableStatement absolute Opaque;
     FIndex: cardinal;
 begin  // note: we should have handled -2 (=COUNT) case already
   if (self=nil) or (Statement=nil) or (Data=nil) or
-     (Statement.WhereValueSBF='') or (Statement.Fields=nil) then begin
+     (Statement.WhereValueSBF='') or (Statement.SelectFields=nil) then begin
     result := false;
     exit;
   end;
@@ -40452,9 +40449,7 @@ begin
   i := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
   if i<0 then
     result := false else begin // Field not found -> incorrect SQL statement
-    if i=0 then
-      withID := true else
-      AddFieldIndex(Fields,i-1);
+    AddFieldIndex(SelectFields,i);
     result := true;
   end;
 end;
@@ -40472,8 +40467,10 @@ begin
   P := GotoNextNotSpace(P); // trim left
   if P^=#0 then exit else // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
-    withID := true;
-    FieldBitsToIndex(SimpleFieldsBits,Fields);
+    SetLength(SelectFields,1);
+    FieldBitsToIndex(SimpleFieldsBits,SelectFields,MAX_SQLFIELDS,1);
+    for ndx := 1 to high(SelectFields) do
+      inc(SelectFields[ndx]);
     inc(P);
     GetNextFieldProp(P,Prop);
   end else
@@ -40647,9 +40644,14 @@ lim2: if IdemPropName(Prop,'LIMIT') then
   SQLStatement := SQL;
 end;
 
-function TSynTableStatement.FieldBits: TSQLFieldBits;
+procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+var i: integer;
 begin
-  FieldIndexToBits(Fields,result);
+  fillchar(Fields,sizeof(Fields),0);
+  for i := 0 to Length(SelectFields)-1 do
+    if SelectFields[i]=0 then
+      withID := true else
+      include(Fields,SelectFields[i]-1);
 end;
 
 

@@ -803,6 +803,8 @@ var W: TJSONSerializer;
     ResCount: PtrInt;
     extFieldNames: TRawUTF8DynArray;
     Stmt: TSynTableStatement;
+    bits: TSQLFieldBits;
+    withID: boolean;
 procedure ComputeQuery;
 const // see http://docs.mongodb.org/manual/reference/operator/query
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
@@ -863,7 +865,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if (Stmt.Fields=nil) and not Stmt.WithID then begin
+        if Stmt.SelectFields=nil then begin
           if Stmt.IsSelectCountWhere then
             // was "SELECT Count(*) FROM TableName WHERE ..."
             if Stmt.WhereField<0 then
@@ -875,14 +877,15 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         end;
         // save rows as JSON, with appropriate search according to Where* arguments
         ComputeQuery;
-        BSONProjectionSet(Projection,Stmt.WithID,Stmt.FieldBits,@extFieldNames);
+        Stmt.SelectFieldBits(bits,withID);
+        BSONProjectionSet(Projection,withID,bits,@extFieldNames);
         if Stmt.Limit=0 then
           Stmt.Limit := maxInt;
         Res := fCollection.FindBSON(Query,Projection,Stmt.Limit,Stmt.Offset);
         MS := TRawByteStringStream.Create;
         try
           W := fStoredClassRecordProps.CreateJSONWriter(
-            MS,ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,Stmt.withID,Stmt.Fields,0);
+            MS,ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,withID,bits,0);
           try
             ResCount := GetJSONValues(Res,extFieldNames,W);
             result := MS.DataString;

@@ -31537,6 +31537,8 @@ var i,KnownRowsCount: integer;
     W: TJSONSerializer;
     IsNull: boolean;
     Prop: TSQLPropInfo;
+    bits: TSQLFieldBits;
+    withID: boolean;
 label err;
 begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
@@ -31546,8 +31548,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
       KnownRowsCount := Stmt.Limit else
       KnownRowsCount := fValue.Count else
     KnownRowsCount := 0;
-  W := fStoredClassRecordProps.CreateJSONWriter(
-    Stream,Expand,Stmt.withID,Stmt.Fields,KnownRowsCount);
+  Stmt.SelectFieldBits(bits,withID);
+  W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,bits,KnownRowsCount);
   if W<>nil then
   try
     if Expand then
@@ -31693,7 +31695,7 @@ begin
         if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
-        if (Stmt.Fields=nil) and not Stmt.WithID then
+        if Stmt.SelectFields=nil then
           if Stmt.IsSelectCountWhere and (Stmt.Limit=0) and (Stmt.Offset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
             SetCount(FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,DoNothingEvent,nil,0,0)) else

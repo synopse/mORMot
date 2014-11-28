@@ -5839,6 +5839,8 @@ end;
 procedure TTestLowLevelTypes._TSynTableStatement;
 var Stmt: TSynTableStatement;
     Props: TSQLRecordProperties;
+    bits: TSQLFieldBits;
+    withID: boolean;
 procedure New(const SQL: RawUTF8);
 begin
   Stmt.Free;
@@ -5849,8 +5851,9 @@ procedure CheckIdData(limit,offset: integer);
 begin
   Check(Stmt.TableName='tab');
   Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
-  Check(Stmt.WithID);
-  Check((length(Stmt.Fields)=1)and(Props.Fields.List[Stmt.Fields[0]].Name='Data'));
+  Check((length(Stmt.SelectFields)=2)and
+    (Stmt.SelectFields[0]=0) and
+    (Props.Fields.List[Stmt.SelectFields[1]-1].Name='Data'));
   Check(Stmt.Limit=limit);
   Check(Stmt.Offset=offset);
 end;
@@ -5860,8 +5863,9 @@ begin
   New('select * from atable');
   Check(Stmt.TableName='atable');
   Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
-  Check(Stmt.WithID);
-  Check(IsEqual(Stmt.FieldBits,Props.SimpleFieldsBits[soSelect]));
+  Stmt.SelectFieldBits(bits,withID);
+  Check(withID);
+  Check(IsEqual(bits,Props.SimpleFieldsBits[soSelect]));
   Check(Stmt.OrderByField=nil);
   New('select iD,Data from tab');
   CheckIdData(0,0);
@@ -5895,8 +5899,7 @@ begin
   Check(Stmt.WhereValueInteger=10);
   Check(Stmt.Limit=10);
   Check(Stmt.Offset=20);
-  Check(Stmt.WithID);
-  Check(Stmt.Fields=nil);
+  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
   Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
   Check(Stmt.OrderByDesc);
   Stmt.Free;
