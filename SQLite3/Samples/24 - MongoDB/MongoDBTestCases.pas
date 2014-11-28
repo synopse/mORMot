@@ -467,7 +467,7 @@ end;
 procedure TTestORM.RetrieveOneWithWhereClause;
 var R: TSQLORM;
     i,n: integer;
-    bytes: Int64;
+    bytes,i64: Int64;
 begin
   bytes := fMongoClient.BytesTransmitted;
   for i := 1 to COLL_COUNT do begin
@@ -506,6 +506,85 @@ begin
   finally
     R.Free;
   end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      case n of
+      1: i := 1;
+      2: i := 10;
+      3: i := 20;
+      else i := 0;
+      end;
+      TestOne(R,i);
+    end;
+    Check(n=3);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and ID=?',[10]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,10);
+    end;
+    Check(n=1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=?',[30]);
+  try  
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n*10);
+    end;
+    Check(n=3,'{$or:[{Age:{$in:[10,20]}},{_id:30}]}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1%']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.Age);
+    end;
+    Check(n>10,'{Name:/^name 1/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.Age);
+    end;
+    Check(n=1,'{Name:/^name 1$/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['%ame 1%']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.Age);
+    end;
+    Check(n>10,'{Name:/ame 1/i}');
+  finally
+    R.Free;
+  end;
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is null',[],[],i64));
+  check(i64=COLL_COUNT,'{Data:null}');
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
+  check(i64=0,'{Data:{$ne:null}}');
 end;
 
 procedure TTestORM.Update;
@@ -546,7 +625,7 @@ procedure TTestORM.Blobs;
 var R: TSQLORM;
     i, n: integer;
     blob,blobRead: TSQLRawBlob;
-    bytes: Int64;
+    bytes,i64: Int64;
 begin
   SetLength(blob,8);
   bytes := fMongoClient.BytesTransmitted;
@@ -608,6 +687,10 @@ begin
   finally
     R.Free;
   end;
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is null',[],[],i64));
+  check(i64=0,'{Data:null}');
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
+  check(i64=COLL_COUNT,'{Data:{$ne:null}}');
 end;
 
 procedure TTestORM.Delete;

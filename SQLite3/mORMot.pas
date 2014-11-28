@@ -24856,13 +24856,16 @@ begin
   result := false;
   if (self<>nil) and (Table<>nil) and (length(FieldName)=length(FieldValue)) then
   with Table.RecordProps do begin
-    for i := 0 to high(FieldName) do
-      if not IsFieldName(FieldName[i]) then
-        exit else // prevent SQL error
-        if SQL='' then
-          SQL := 'SELECT '+FieldName[i] else
-          SQL := SQL+','+FieldName[i];
-    SQL := SQL+' FROM '+SQLTableName+' WHERE '+WhereClause+' LIMIT 1;';
+    if (length(FieldName)=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then
+      SQL := 'SELECT COUNT(*) FROM '+SQLTableName+' WHERE '+WhereClause else begin
+      for i := 0 to high(FieldName) do
+        if not IsFieldName(FieldName[i]) then
+          exit else // prevent SQL error
+          if SQL='' then
+            SQL := 'SELECT '+FieldName[i] else
+            SQL := SQL+','+FieldName[i];
+      SQL := SQL+' FROM '+SQLTableName+' WHERE '+WhereClause+' LIMIT 1;';
+    end;
     T := ExecuteList([Table],SQL);
     if T<>nil then
     try
@@ -31588,11 +31591,11 @@ begin // exact same format as TSQLTable.GetJSONValues()
             end else
               goto err;
     {$endif}
-    opIs: // handle IS NULL and IS NOT NULL operators
+    opIsNull, opIsNotNull:
       if Stmt.Where[0].Field>0 then begin
         Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field-1];
         if Prop.InheritsFrom(TSQLPropInfoRTTIRawBlob) then begin
-          IsNull := IdemPropName(Stmt.Where[0].Value,'NULL');
+          IsNull := Stmt.Where[0].Operator=opIsNull;
           for i := 0 to fValue.Count-1 do
           if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[i])=IsNull then begin
             TSQLRecord(fValue.List[i]).GetJSONValues(W);

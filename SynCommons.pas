@@ -8580,7 +8580,8 @@ type
      opGreaterThan,
      opGreaterThanOrEqualTo,
      opIn,
-     opIs,
+     opIsNull,
+     opIsNotNull,
      opLike);
 
   TSynTableFieldProperties = class;
@@ -40502,20 +40503,23 @@ begin
     case P[1] of
     's','S': begin
       P := GotoNextNotSpace(P+2);
-      {$ifndef NOVARIANTS}
-      SetVariantNull(Where.ValueVariant);
-      {$endif}
       if IdemPChar(P,'NULL') then begin
         Where.Value := 'null';
-        Where.Operator := opIs;
+        Where.Operator := opIsNull;
+        Where.ValueSQL := P;
+        Where.ValueSQLLen := 4;
+        TVarData(Where.ValueVariant).VType := varNull;
         inc(P,4);
         result := true;
       end else
       if IdemPChar(P,'NOT NULL') then begin
         Where.Value := 'not null';
-        Where.Operator := opIs;
+        Where.Operator := opIsNotNull;
+        Where.ValueSQL := P;
+        Where.ValueSQLLen := 8;
+        TVarData(Where.ValueVariant).VType := varNull;
         inc(P,8);
-        result := true;
+        result := true; // leave ValueVariant=unassigned
       end;
       exit;
     end;
@@ -40533,6 +40537,8 @@ begin
            inc(P);
        inc(P);
        SetString(Where.Value,PAnsiChar(B),P-B);
+       Where.ValueSQL := B;
+       Where.ValueSQLLen := P-B;
        Where.Value[1] := '[';
        Where.Value[P-B] := ']';
        TDocVariantData(Where.ValueVariant).InitJSONInPlace(

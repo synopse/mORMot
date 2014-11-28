@@ -117,7 +117,7 @@ type
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: Integer;const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
-    // BLOBs should be access directly, not through slower JSON Base64 encoding
+    // BLOBs should be accessed directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
@@ -805,34 +805,70 @@ var W: TJSONSerializer;
     Stmt: TSynTableStatement;
     bits: TSQLFieldBits;
     withID: boolean;
-procedure ComputeQuery;
-const // see http://docs.mongodb.org/manual/reference/operator/query
-  QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
-    '$ne','$lt','$lte','$gt','$gte','$in');
-var QueryFieldName: RawUTF8;
+
+function ComputeQuery: boolean;
+var FieldName: RawUTF8;
+    B: TBSONWriter;
+    start,startOR,startORItem: cardinal;
+    n,w: integer;
 begin
-  if (Length(Stmt.Where)<>1) or (Stmt.Where[0].Field<0) then begin
-    SetVariantNull(Query); // only a SINGLE expression is allowed yet
+  result := false;
+  if Stmt.SQLStatement='' then begin
+    InternalLog('%.EngineList: Invalid SQL statement "%"',[self,SQL],sllError);
     exit;
   end;
-  QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.Where[0].Field-1);
-  case Stmt.Where[0].Operator of
-  opEqualTo:
-    Query := BSONVariant([QueryFieldName,Stmt.Where[0].ValueVariant]);
-  opIs: // http://docs.mongodb.org/manual/faq/developers/#faq-developers-query-for-nulls
-    if IdemPropName(Stmt.Where[0].Value,'null') then
-      Query := BSONVariant('{%:{$type:10}}',[QueryFieldName],[]) else
-      Query := BSONVariant('{%:{$not:{type:10}}}',[QueryFieldName],[])
-  else
-    Query := BSONVariant([QueryFieldName,
-      '{',QUERY_OPS[Stmt.Where[0].Operator],Stmt.Where[0].ValueVariant,'}']);
+  n := Length(Stmt.Where);
+  if (n<1) or (Stmt.Where[0].Field<0) then begin // no WHERE clause or COUNT(*)
+    result := true;
+    SetVariantNull(Query); // void query -> returns all rows
+    exit;
   end;
+  B := TBSONWriter.Create(TRawByteStringStream);
+  try
+    startORItem := 0; // makes compiler happy
+    start := B.BSONDocumentBegin;
+    if (n>1) and Stmt.Where[1].JoinedOR then begin
+      for w := 2 to n-1 do
+      if not Stmt.Where[w].JoinedOR then begin
+        InternalLog('%.EngineList: Unhandled mixed AND/OR for "%"',[self,SQL],sllError);
+        exit;
+      end;
+      B.BSONWrite('$or',betArray); // e.g. {$or:[{quantity:{$lt:20}},{price:10}]}
+      startOR := B.BSONDocumentBegin;
+    end else
+      startOR := cardinal(-1);
+    for w := 0 to n-1 do begin
+      if Integer(startOR)>=0 then begin
+        B.BSONWrite(UInt32ToUtf8(w),betDoc);
+        startORItem := B.BSONDocumentBegin;
+      end;
+      with Stmt.Where[w] do begin
+        FieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Field-1);
+        if not B.BSONWriteQueryOperator(FieldName,Operator,ValueVariant) then begin
+          InternalLog('%.EngineList: Unhandled operator % for field "%" in "%"',[
+            self,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
+            FieldName,SQL],sllError);
+          exit;
+        end;
+      end;
+      if Integer(startOR)>=0 then
+        B.BSONDocumentEnd(startORItem);
+    end;
+    if Integer(startOR)>=0 then
+      B.BSONDocumentEnd(startOR);
+    B.BSONDocumentEnd(start);
+    B.ToBSONVariant(Query);
+  finally
+    B.Free;
+  end;
+  result := true; // indicates success
 end;
 procedure SetCount(aCount: integer);
 begin
   result := FormatUTF8('[{"Count(*)":%}]'#$A,[aCount]);
   ResCount := 1;
 end;
+
 begin // same logic as in TSQLRestStorageInMemory.EngineList()
   ResCount := 0;
   if self=nil then begin
@@ -856,9 +892,8 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (Stmt.SQLStatement='') or  // parsing failed
-           (length(Stmt.Where)<>1) or // only a SINGLE expression is allowed yet
-           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
+        if (Stmt.SQLStatement='') or (length(Stmt.Where)=0) or  // parsing failed
+          not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
           // invalid request -> return '' to mark error
           result := '';
           exit;
@@ -871,13 +906,19 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             // was "SELECT Count(*) FROM TableName WHERE ..."
             if Stmt.Where[0].Field<0 then
               SetCount(TableRowCount(fStoredClass)) else begin
-              ComputeQuery;
+              if not ComputeQuery then begin
+                result := ''; // indicates error
+                exit;
+              end;
               SetCount(fCollection.FindCount(Query));
             end;
           exit; // also invalid "SELECT FROM Table"
         end;
         // save rows as JSON, with appropriate search according to Where* arguments
-        ComputeQuery;
+        if not ComputeQuery then begin
+          result := ''; // indicates error
+          exit;
+        end;
         Stmt.SelectFieldBits(bits,withID);
         BSONProjectionSet(Projection,withID,bits,@extFieldNames);
         if Stmt.Limit=0 then

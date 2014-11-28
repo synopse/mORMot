@@ -5934,8 +5934,7 @@ begin
   Check(Stmt.Where[0].ValueInteger=100);
   Check(Stmt.Where[1].JoinedOR);
   Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='Data');
-  Check(Stmt.Where[1].Operator=opIs);
-  Check(Stmt.Where[1].Value='not null');
+  Check(Stmt.Where[1].Operator=opIsNotNull);
   Check(Stmt.Limit=20);
   Check(Stmt.Offset=10);
   Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
@@ -5949,8 +5948,7 @@ begin
   Check(Stmt.Where[0].Value='monet');
   Check(Stmt.Where[1].JoinedOR);
   Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='Data');
-  Check(Stmt.Where[1].Operator=opIs);
-  Check(Stmt.Where[1].Value='null');
+  Check(Stmt.Where[1].Operator=opIsNull);
   Check(Stmt.Limit=20);
   Check(Stmt.Offset=10);
   Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and

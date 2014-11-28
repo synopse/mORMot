@@ -520,7 +520,7 @@ type
     /// write an ObjectID value
     procedure BSONWrite(const name: RawUTF8; const value: TBSONObjectID); overload;
     /// write a RegEx value
-    procedure BSONWriteRegEx(const name: RawUTF8; const RegEx: RawByteString);
+    procedure BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
     /// write a data/time value
     procedure BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
     /// write an element with no value
@@ -562,6 +562,12 @@ type
     procedure BSONWriteObject(const NameValuePairs: array of const);
     /// write a projection specified as fieldname:1 pairs as a BSON document
     procedure BSONWriteProjection(const FieldNamesCSV: RawUTF8);
+    /// write an object as query parameter
+    // - will handle all SQL operators, including IN (), IS NULL or LIKE 
+    // - see @http://docs.mongodb.org/manual/reference/operator/query
+    // - returns TRUE on success, FALSE if the operator is not implemented yet
+    function BSONWriteQueryOperator(const name: RawUTF8; operator: TSynTableStatementOperator;
+      const Value: variant): boolean;
     /// write an array specified as a list of items as a BSON document
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
@@ -2985,10 +2991,13 @@ begin
   Write(@value,sizeof(value));
 end;
 
-procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx: RawByteString);
+procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
 begin
-  BSONWrite(name,betRegEx);
+  BSONWrite(name,betRegEx); // cstring cstring
   Write(pointer(RegEx),length(RegEx));
+  Write1(0);
+  Write(pointer(Options),length(Options));
+  Write1(0);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: RawUTF8;
@@ -3213,6 +3222,59 @@ begin
   for i := 0 to high(FieldNames) do
     BSONWrite(FieldNames[i],1);
   BSONDocumentEnd(Start);
+end;
+
+function TBSONWriter.BSONWriteQueryOperator(const name: RawUTF8;
+  operator: TSynTableStatementOperator; const Value: variant): boolean;
+const
+  QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
+    '$ne','$lt','$lte','$gt','$gte','$in');
+var start: cardinal;
+    wasString: boolean;
+    like: RawUTF8;
+    len: integer;
+begin
+  result := false; // error on premature exit
+  case Operator of
+  // http://docs.mongodb.org/manual/faq/developers/#faq-developers-query-for-nulls
+  // {$type:10} would return only existing fields, but our ODM do not insert
+  // blobs by default -> do not use {$type:10} trick but plain {field:null}
+  opIsNull:
+    operator := opEqualTo;     // here Value=null
+  opIsNotNull:
+    operator := opNotEqualTo;  // here Value=null
+  end;
+  case Operator of
+  opEqualTo:
+    BSONWriteVariant(name,Value);
+  opNotEqualTo..opIn: begin
+    BSONWrite(name,betDoc);
+    start := BSONDocumentBegin;
+    BSONWriteVariant(QUERY_OPS[operator],Value);
+    BSONDocumentEnd(start);
+  end;
+  opLike: begin
+    VariantToUTF8(Value,like,wasString);
+    len := length(like);
+    if (len=0) or not wasString then
+      exit;
+    if like[1]='%' then
+      if len=1 then // LIKE '%' is invalid 
+        exit else
+        if like[len]='%' then
+          if len=2 then
+            exit else // LIKE '%%' is invalid
+            like := copy(like,2,len-2) else    // LIKE '%a%' -> /a/
+          like := copy(like,2,len-1)+'$' else  // LIKE '%a'  -> /a$/
+      if like[len]='%' then
+        like := '^'+copy(like,1,len-1) else    // LIKE 'a%'  -> /^a/
+        like := '^'+like+'$';                  // LIKE 'a'   -> /^a$/
+    BSONWriteRegEx(name,like,'i'); // /like/i for case-insensitivity
+  end;
+  else
+    exit; // unhandled operator
+  end;
+  result := true;
 end;
 
 procedure TBSONWriter.BSONWriteObject(const NameValuePairs: array of const);
