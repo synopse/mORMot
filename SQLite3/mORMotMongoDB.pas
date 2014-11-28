@@ -876,9 +876,9 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         // save rows as JSON, with appropriate search according to Where* arguments
         ComputeQuery;
         BSONProjectionSet(Projection,Stmt.WithID,Stmt.FieldBits,@extFieldNames);
-        if Stmt.FoundLimit=0 then
-          Stmt.FoundLimit := maxInt;
-        Res := fCollection.FindBSON(Query,Projection,Stmt.FoundLimit,Stmt.FoundOffset);
+        if Stmt.Limit=0 then
+          Stmt.Limit := maxInt;
+        Res := fCollection.FindBSON(Query,Projection,Stmt.Limit,Stmt.Offset);
         MS := TRawByteStringStream.Create;
         try
           W := fStoredClassRecordProps.CreateJSONWriter(

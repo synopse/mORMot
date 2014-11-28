@@ -333,6 +333,8 @@ type
 {$endif}
 {$endif}
 {$endif}
+    /// test SELECT statement parsing
+    procedure _TSynTableStatement;
   end;
 
 {$ifndef DELPHI5OROLDER}
@@ -5832,8 +5834,74 @@ begin
   end;
 end;
 
-
 {$ifndef DELPHI5OROLDER}
+
+procedure TTestLowLevelTypes._TSynTableStatement;
+var Stmt: TSynTableStatement;
+    Props: TSQLRecordProperties;
+procedure New(const SQL: RawUTF8);
+begin
+  Stmt.Free;
+  Stmt := TSynTableStatement.Create(SQL,Props.Fields.IndexByName,
+    Props.SimpleFieldsBits[soSelect]);
+end;
+procedure CheckIdData(limit,offset: integer);
+begin
+  Check(Stmt.TableName='tab');
+  Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
+  Check(Stmt.WithID);
+  Check((length(Stmt.Fields)=1)and(Props.Fields.List[Stmt.Fields[0]].Name='Data'));
+  Check(Stmt.Limit=limit);
+  Check(Stmt.Offset=offset);
+end;
+begin
+  Stmt := nil;
+  Props := TSQLRecordPeople.RecordProps;
+  New('select * from atable');
+  Check(Stmt.TableName='atable');
+  Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
+  Check(Stmt.WithID);
+  Check(IsEqual(Stmt.FieldBits,Props.SimpleFieldsBits[soSelect]));
+  Check(Stmt.OrderByField=nil);
+  New('select iD,Data from tab');
+  CheckIdData(0,0);
+  Check(Stmt.OrderByField=nil);
+  New('select iD,Data from tab order by firstname');
+  CheckIdData(0,0);
+  Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
+  Check(not Stmt.OrderByDesc);
+  New('select iD,Data from tab order by firstname desc');
+  CheckIdData(0,0);
+  Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
+  Check(Stmt.OrderByDesc);
+  New('select rowid , Data from tab order by firstname , lastname desc');
+  CheckIdData(0,0);
+  Check((length(Stmt.OrderByField)=2) and
+    (Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName') and
+    (Props.Fields.List[Stmt.OrderByField[1]-1].Name='LastName'));
+  Check(Stmt.OrderByDesc);
+  New('select iD,Data from tab limit   20');
+  CheckIdData(20,0);
+  Check(Stmt.OrderByField=nil);
+  Check(not Stmt.OrderByDesc);
+  New('select iD,Data from tab  offset   20');
+  CheckIdData(0,20);
+  Check(Stmt.OrderByField=nil);
+  Check(not Stmt.OrderByDesc);
+  New('select iD from tab where id >= 10 limit 10 offset 20 order by firstname desc');
+  Check(Stmt.TableName='tab');
+  Check(Stmt.WhereField=0);
+  Check(Stmt.WhereOperator=opGreaterThanOrEqualTo);
+  Check(Stmt.WhereValueInteger=10);
+  Check(Stmt.Limit=10);
+  Check(Stmt.Offset=20);
+  Check(Stmt.WithID);
+  Check(Stmt.Fields=nil);
+  Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
+  Check(Stmt.OrderByDesc);
+  Stmt.Free;
+end;
+
 
 { TTestBasicClasses }
 

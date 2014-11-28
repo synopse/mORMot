@@ -31542,8 +31542,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
   if Stmt.WhereField=SYNTABLESTATEMENTWHEREALL then
     // no WHERE statement -> get all rows -> set rows count
-    if (Stmt.FoundLimit>0) and (fValue.Count>Stmt.FoundLimit) then
-      KnownRowsCount := Stmt.FoundLimit else
+    if (Stmt.Limit>0) and (fValue.Count>Stmt.Limit) then
+      KnownRowsCount := Stmt.Limit else
       KnownRowsCount := fValue.Count else
     KnownRowsCount := 0;
   W := fStoredClassRecordProps.CreateJSONWriter(
@@ -31565,11 +31565,11 @@ begin // exact same format as TSQLTable.GetJSONValues()
     case Stmt.WhereOperator of
     opEqualTo:
       result := FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,
-        GetJSONValuesEvent,W,Stmt.FoundLimit,Stmt.FoundOffset);
+        GetJSONValuesEvent,W,Stmt.Limit,Stmt.Offset);
     {$ifndef NOVARIANTS}
     opIn:
       if (Stmt.WhereField<>0) or // only handle ID IN (..) by now
-         (Stmt.FoundOffset>0) then
+         (Stmt.Offset>0) then
         goto err else
         with TDocVariantData(Stmt.WhereValueVariant) do
           for i := 0 to Count-1 do
@@ -31579,7 +31579,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
                 TSQLRecord(fValue.List[j]).GetJSONValues(W);
                 W.Add(',');
                 inc(result);
-                if (Stmt.FoundLimit>0) and (result>=Stmt.FoundLimit) then
+                if (Stmt.Limit>0) and (result>=Stmt.Limit) then
                   break;
               end;
             end else
@@ -31595,7 +31595,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
             TSQLRecord(fValue.List[i]).GetJSONValues(W);
             W.Add(',');
             inc(result);
-            if (Stmt.FoundLimit>0) and (result>=Stmt.FoundLimit) then
+            if (Stmt.Limit>0) and (result>=Stmt.Limit) then
               break;
           end;
         end else
@@ -31694,7 +31694,7 @@ begin
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
         if (Stmt.Fields=nil) and not Stmt.WithID then
-          if Stmt.IsSelectCountWhere and (Stmt.FoundLimit=0) and (Stmt.FoundOffset=0) then
+          if Stmt.IsSelectCountWhere and (Stmt.Limit=0) and (Stmt.Offset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
             SetCount(FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,DoNothingEvent,nil,0,0)) else
             // invalid "SELECT FROM Table" ?

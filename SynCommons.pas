@@ -538,8 +538,9 @@ unit SynCommons;
     regroup set bits (reduce storage size e.g. for TSQLAccessRights) - format
     is still compatible with old layout, but will more optimized and readable
   - TSynTableStatement.Create() SQL statement parser will handle optional
-    LIMIT [OFFSET] clause (in new FoundLimit/FoundOffset integer properties),
-    "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
+    LIMIT [OFFSET] clause (in new Limit/Offset integer properties),
+    ORDER BY ... [DESC/ASC] clause (in new OrderByField/OrderByDesc properties),
+    and "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
   - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
     functions so that TSynTableStatement would store the SELECT column order
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
@@ -8591,13 +8592,15 @@ type
     /// the SELECT SQL statement parsed
     SQLStatement: RawUTF8;
     /// the fields selected for the SQL statement, in the expected order
+    // - contains the list of the RTTI field indexes
+    // - if ID/RowID is selected, then WithID is true
     Fields: TSQLFieldIndexDynArray;
     /// is TRUE if ID/RowID was set in the WHERE clause
     WithID: boolean;
     /// the retrieved table name
     TableName: RawUTF8;
     /// the index of the field used for the WHERE clause
-    // - SYNTABLESTATEMENTWHEREID=0 is ID, 1 for field # 0, 2 for field #1,
+    // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
     // - equal SYNTABLESTATEMENTWHEREALL=-1, means all rows must be fetched
     // (no WHERE clause: "SELECT * FROM TableName")
@@ -8616,12 +8619,17 @@ type
     /// the value used for the WHERE clause
     WhereValueVariant: variant;
     {$endif}
+    /// recognize an ORDER BY clause with one or several fields
+    // - here 0 = ID, otherwise RTTI field index +1
+    OrderByField: TSQLFieldIndexDynArray;
+    /// false for default ASC order, true for DESC attribute
+    OrderByDesc: boolean;
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
-    FoundLimit: integer;
+    Limit: integer;
     /// the number specified by the optional OFFSET ... clause
     // - set to 0 by default (meaning no OFFSET clause)
-    FoundOffset: integer;
+    Offset: integer;
     /// TRUE if is "SELECT Count(*) FROM TableName WHERE ..." clause
     IsSelectCountWhere: boolean;
     /// optional associated writer
@@ -13433,7 +13441,7 @@ const
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef FPC}inline;
 begin
-  if text<>pointer(Dest) then
+  if (len>128) or (len=0) or (text<>pointer(Dest)) then
     SetString(Dest,PAnsiChar(text),len) else
     SetLength(Dest,len);
 end;
@@ -13441,7 +13449,7 @@ end;
 {$ifdef PUREPASCAL}
 var P: PStrRec;
 begin
-  if (len>128) or (PtrInt(Dest)=0) or     // Dest=''
+  if (len>128) or (len=0) or (PtrInt(Dest)=0) or     // Dest=''
     (PStrRec(PtrInt(Dest)-STRRECSIZE)^.refCnt<>1) then 
     SetString(Dest,PAnsiChar(text),len) else begin
     if PStrRec(Pointer(PtrInt(Dest)-STRRECSIZE))^.length<>len then begin
@@ -13461,6 +13469,12 @@ asm // eax=@Dest text=edx len=ecx
     ja @3
 {$else}
     ja System.@LStrFromPCharLen
+{$endif}
+    or ecx,ecx // len=0
+{$ifdef UNICODE}
+    jz @3
+{$else}
+    jz System.@LStrFromPCharLen
 {$endif}
     push ebx
     mov ebx,[eax]
@@ -40420,7 +40434,7 @@ constructor TSynTableStatement.Create(const SQL: RawUTF8;
 // - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
-    err: integer;
+    ndx,err: integer;
 function GetPropIndex: integer;
 begin
   if not GetNextFieldProp(P,Prop) then
@@ -40444,7 +40458,7 @@ begin
     result := true;
   end;
 end;
-label limit;
+label lim,lim2;
 begin
   // if fValue.Count=0 then exit; allow no row
   P := pointer(SQL);
@@ -40509,13 +40523,13 @@ begin
           WhereValue := 'null';
           WhereOperator := opIs;
           inc(P,4);
-          goto Limit;
+          goto lim;
         end else
         if IdemPChar(P,'NOT NULL') then begin
           WhereValue := 'not null';
           WhereOperator := opIs;
           inc(P,8);
-          goto Limit;
+          goto lim;
         end;
         exit;
       end;
@@ -40537,7 +40551,7 @@ begin
          WhereValue[P-B] := ']';
          TDocVariantData(WhereValueVariant).InitJSONInPlace(
            pointer(WhereValue),JSON_OPTIONS[true]);
-         goto Limit;
+         goto lim;
       end;
       {$endif}
       end;
@@ -40587,16 +40601,35 @@ begin
     if PWord(P)^=ord(')')+ord(':')shl 8 then
       inc(P,2); // ignore :(...): parameter
     // 4. get optional LIMIT clause
-limit:
-    P := GotoNextNotSpace(P);
+lim:P := GotoNextNotSpace(P);
     while (P<>nil) and not(P^ in [#0,';']) do begin
       GetNextFieldProp(P,Prop);
-      if IdemPropName(Prop,'LIMIT') then
-        FoundLimit := GetNextItemCardinal(P,' ') else
+lim2: if IdemPropName(Prop,'LIMIT') then
+        Limit := GetNextItemCardinal(P,' ') else
       if IdemPropName(Prop,'OFFSET') then
-        FoundOffset := GetNextItemCardinal(P,' ') else
-        // any other clause (e.g. "ORDER BY") is ignored
-        break;
+        Offset := GetNextItemCardinal(P,' ') else
+      if IdemPropName(Prop,'ORDER') then begin
+        GetNextFieldProp(P,Prop);
+        if IdemPropName(Prop,'BY') then begin
+          repeat
+            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+            if ndx<0 then
+              exit; // incorrect SQL statement
+            AddFieldIndex(OrderByField,ndx);
+            if P^<>',' then begin // check ORDER BY ... ASC/DESC
+              if GetNextFieldProp(P,Prop) then
+                if IdemPropName(Prop,'DESC') then
+                  OrderByDesc := true else
+                if not IdemPropName(Prop,'ASC') then
+                  exit; // incorrect SQL statement
+              break;
+            end;
+            repeat inc(P) until not (P^ in [',',#1..' ']);
+          until P^ in [#0,';'];
+        end else
+         exit; // incorrect SQL statement
+      end else
+        break; // reached the end of the statement
     end;
   end else
     if IsSelectCountWhere then
@@ -40606,9 +40639,11 @@ limit:
       end else
         // invalid "SELECT count(*) FROM table TOTO"
         WhereValue := '' else begin
-    WhereField := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
-    WhereValue := '*'; // not void
-  end;
+        WhereField := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
+        WhereValue := '*'; // not void
+        if Prop<>'' then
+          goto lim2;
+      end;
   SQLStatement := SQL;
 end;
 
