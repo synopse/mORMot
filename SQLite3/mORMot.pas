@@ -31542,7 +31542,8 @@ var i,KnownRowsCount: integer;
 label err;
 begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
-  if Stmt.WhereField=SYNTABLESTATEMENTWHEREALL then
+  assert(length(Stmt.Where)=1);
+  if Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL then
     // no WHERE statement -> get all rows -> set rows count
     if (Stmt.Limit>0) and (fValue.Count>Stmt.Limit) then
       KnownRowsCount := Stmt.Limit else
@@ -31554,7 +31555,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
   try
     if Expand then
       W.Add('[');
-    if Stmt.WhereField=SYNTABLESTATEMENTWHEREALL then begin
+    if Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL then begin
       // no WHERE statement -> all rows
       for i := 0 to KnownRowsCount-1 do begin
         if Expand then
@@ -31564,16 +31565,16 @@ begin // exact same format as TSQLTable.GetJSONValues()
       end;
       result := KnownRowsCount;
     end else
-    case Stmt.WhereOperator of
+    case Stmt.Where[0].Operator of
     opEqualTo:
-      result := FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,
+      result := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
         GetJSONValuesEvent,W,Stmt.Limit,Stmt.Offset);
     {$ifndef NOVARIANTS}
     opIn:
-      if (Stmt.WhereField<>0) or // only handle ID IN (..) by now
+      if (Stmt.Where[0].Field<>0) or // only handle ID IN (..) by now
          (Stmt.Offset>0) then
         goto err else
-        with TDocVariantData(Stmt.WhereValueVariant) do
+        with TDocVariantData(Stmt.Where[0].ValueVariant) do
           for i := 0 to Count-1 do
             if VariantToInt64(Values[i],id) then begin
               j := IDToIndex(id);
@@ -31588,10 +31589,10 @@ begin // exact same format as TSQLTable.GetJSONValues()
               goto err;
     {$endif}
     opIs: // handle IS NULL and IS NOT NULL operators
-      if Stmt.WhereField>0 then begin
-        Prop := fStoredClassRecordProps.Fields.List[Stmt.WhereField-1];
+      if Stmt.Where[0].Field>0 then begin
+        Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field-1];
         if Prop.InheritsFrom(TSQLPropInfoRTTIRawBlob) then begin
-          IsNull := IdemPropName(Stmt.WhereValue,'NULL');
+          IsNull := IdemPropName(Stmt.Where[0].Value,'NULL');
           for i := 0 to fValue.Count-1 do
           if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[i])=IsNull then begin
             TSQLRecord(fValue.List[i]).GetJSONValues(W);
@@ -31688,20 +31689,21 @@ begin
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (Stmt.WhereValue='') or 
+        if (Stmt.SQLStatement='') or  // parsing failed
+           (length(Stmt.Where)<>1) or // only a SINGLE expression is allowed yet
            not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return ''
           result := '' else
-        if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
+        if Stmt.Where[0].Field=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
         if Stmt.SelectFields=nil then
           if Stmt.IsSelectCountWhere and (Stmt.Limit=0) and (Stmt.Offset=0) then
             // was "SELECT Count(*) FROM TableName WHERE ..."
-            SetCount(FindWhereEqual(Stmt.WhereField,Stmt.WhereValue,DoNothingEvent,nil,0,0)) else
+            SetCount(FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,DoNothingEvent,nil,0,0)) else
             // invalid "SELECT FROM Table" ?
             exit else begin
-          // save rows as JSON, with appropriate search according to Where* arguments
+          // save rows as JSON, with appropriate search according to Where.* arguments
           MS := TRawByteStringStream.Create;
           try
             ForceAJAX := ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON;

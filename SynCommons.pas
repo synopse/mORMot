@@ -541,6 +541,7 @@ unit SynCommons;
     LIMIT [OFFSET] clause (in new Limit/Offset integer properties),
     ORDER BY ... [DESC/ASC] clause (in new OrderByField/OrderByDesc properties),
     and "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
+  - TSynTableStatement.Where[] is now an array to allow complex WHERE clause
   - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
     functions so that TSynTableStatement would store the SELECT column order
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
@@ -8579,9 +8580,44 @@ type
      opGreaterThan,
      opGreaterThanOrEqualTo,
      opIn,
-     opIs);
+     opIs,
+     opLike);
 
   TSynTableFieldProperties = class;
+
+  /// one recognized WHERE expression for TSynTableStatement
+  TSynTableStatementWhere = record
+    /// expressions are evaluated as AND unless this field is set to TRUE
+    JoinedOR: boolean;
+    /// the index of the field used for the WHERE expression
+    // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
+    // and so on... (i.e. WhereField = RTTI field index +1)
+    // - equal SYNTABLESTATEMENTWHEREALL=-1, means all rows must be fetched
+    // (no WHERE clause: "SELECT * FROM TableName")
+    // - if SYNTABLESTATEMENTWHERECOUNT=-2, means SQL statement was
+    // "SELECT Count(*) FROM TableName"
+    Field: integer;
+    /// the operator of the WHERE expression
+    Operator: TSynTableStatementOperator;
+    /// the value used for the WHERE expression
+    Value: RawUTF8;
+    /// the raw value SQL buffer used for the WHERE expression
+    ValueSQL: PUTF8Char;
+    /// the raw value SQL buffer length used for the WHERE expression
+    ValueSQLLen: integer;
+    /// an integer representation of WhereValue (used for ID check e.g.)
+    ValueInteger: integer;
+    /// used to fast compare with SBF binary compact formatted data
+    ValueSBF: TSBFString;
+    {$ifndef NOVARIANTS}
+    /// the value used for the WHERE expression, encoded as Variant
+    // - may be a TDocVariant for the IN operator
+    ValueVariant: variant;
+    {$endif}
+  end;
+
+  /// the recognized WHERE expressions for TSynTableStatement
+  TSynTableStatementWhereDynArray = array of TSynTableStatementWhere;
 
   /// used to parse a SELECT SQL statement
   // - handle basic REST commands, no complete SQL interpreter is implemented: only
@@ -8591,32 +8627,15 @@ type
   // - will parse the "LIMIT number OFFSET number" end statement clause
   TSynTableStatement = class
     /// the SELECT SQL statement parsed
+    // - equals '' if the parsing failed
     SQLStatement: RawUTF8;
     /// the column SELECTed for the SQL statement, in the expected order
     // - contains 0 for ID/RowID, or the RTTI field index + 1
     SelectFields: TSQLFieldIndexDynArray;
     /// the retrieved table name
     TableName: RawUTF8;
-    /// the index of the field used for the WHERE clause
-    // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
-    // and so on... (i.e. WhereField = RTTI field index +1)
-    // - equal SYNTABLESTATEMENTWHEREALL=-1, means all rows must be fetched
-    // (no WHERE clause: "SELECT * FROM TableName")
-    // - if SYNTABLESTATEMENTWHERECOUNT=-2, means SQL statement was
-    // "SELECT Count(*) FROM TableName"
-    WhereField: integer;
-    /// the operator of the WHERE clause
-    WhereOperator: TSynTableStatementOperator;
-    /// the value used for the WHERE clause
-    WhereValue: RawUTF8;
-    /// an integer representation of WhereValue (used for ID check e.g.)
-    WhereValueInteger: integer;
-    /// used to fast compare with SBF binary compact formatted data
-    WhereValueSBF: TSBFString;
-    {$ifndef NOVARIANTS}
-    /// the value used for the WHERE clause
-    WhereValueVariant: variant;
-    {$endif}
+    /// the WHERE clause of this SQL statement
+    Where: TSynTableStatementWhereDynArray;
     /// recognize an ORDER BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
     OrderByField: TSQLFieldIndexDynArray;
@@ -38971,21 +38990,21 @@ var Statement: TSynTableStatement absolute Opaque;
     F: TSynTableFieldProperties;
     FIndex: cardinal;
 begin  // note: we should have handled -2 (=COUNT) case already
-  if (self=nil) or (Statement=nil) or (Data=nil) or
-     (Statement.WhereValueSBF='') or (Statement.SelectFields=nil) then begin
+  if (self=nil) or (Statement=nil) or (Data=nil) or (Statement.SelectFields=nil) or
+     (length(Statement.Where)<>1) or (Statement.Where[0].ValueSBF='') then begin
     result := false;
     exit;
   end;
   result := true;
-  FIndex := Statement.WhereField;
+  FIndex := Statement.Where[0].Field;
   if FIndex=SYNTABLESTATEMENTWHEREID then begin
-    if ID<>Statement.WhereValueInteger then
+    if ID<>Statement.Where[0].ValueInteger then
       exit;
   end else begin
     dec(FIndex); // 0 is ID, 1 for field # 0, 2 for field #1, and so on...
     if FIndex<cardinal(fField.Count) then begin
       F := TSynTableFieldProperties(fField.List[FIndex]);
-      if F.SortCompare(GetData(Data,F),pointer(Statement.WhereValueSBF))<>0 then
+      if F.SortCompare(GetData(Data,F),pointer(Statement.Where[0].ValueSBF))<>0 then
         exit;
     end; // WhereField=-1 -> all rows (ignore -2 -> COUNT)
   end;
@@ -40422,6 +40441,7 @@ begin
   result := Prop<>'';
 end;
 
+
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
   GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
   FieldProp: TSynTableFieldProperties=nil);
@@ -40431,7 +40451,9 @@ constructor TSynTableStatement.Create(const SQL: RawUTF8;
 // - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
-    ndx,err: integer;
+    ndx,err,whereCount: integer;
+    whereWithOR: boolean;
+
 function GetPropIndex: integer;
 begin
   if not GetNextFieldProp(P,Prop) then
@@ -40453,9 +40475,131 @@ begin
     result := true;
   end;
 end;
+function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
+begin
+  result := false;
+  Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
+  case P^ of
+  '=': Where.Operator := opEqualTo;
+  '>': if P[1]='=' then begin
+         inc(P);
+         Where.Operator := opGreaterThanOrEqualTo;
+       end else
+         Where.Operator := opGreaterThan;
+  '<': case P[1] of
+       '=': begin
+         inc(P);
+         Where.Operator := opLessThanOrEqualTo;
+       end;
+       '>': begin
+         inc(P);
+         Where.Operator := opNotEqualTo;
+       end;
+       else
+         Where.Operator := opLessThan;
+       end;
+  'i','I':
+    case P[1] of
+    's','S': begin
+      P := GotoNextNotSpace(P+2);
+      {$ifndef NOVARIANTS}
+      SetVariantNull(Where.ValueVariant);
+      {$endif}
+      if IdemPChar(P,'NULL') then begin
+        Where.Value := 'null';
+        Where.Operator := opIs;
+        inc(P,4);
+        result := true;
+      end else
+      if IdemPChar(P,'NOT NULL') then begin
+        Where.Value := 'not null';
+        Where.Operator := opIs;
+        inc(P,8);
+        result := true;
+      end;
+      exit;
+    end;
+    {$ifndef NOVARIANTS}
+    'n','N': begin
+       Where.Operator := opIn;
+       P := GotoNextNotSpace(P+2);
+       if P^<>'(' then
+         exit; // incorrect SQL statement
+       B := P; // get the IN() clause as JSON - without :(...): by now
+       inc(P);
+       while P^<>')' do
+         if P^=#0 then
+           exit else
+           inc(P);
+       inc(P);
+       SetString(Where.Value,PAnsiChar(B),P-B);
+       Where.Value[1] := '[';
+       Where.Value[P-B] := ']';
+       TDocVariantData(Where.ValueVariant).InitJSONInPlace(
+         pointer(Where.Value),JSON_OPTIONS[true]);
+       result := true;
+       exit;
+    end;
+    {$endif}
+    end; // 'i','I':
+  'l','L':
+    if IdemPChar(P+1,'IKE') then begin
+      inc(P,3);
+      Where.Operator := opLike;
+    end else
+    exit;
+  else exit; // unknown operator
+  end;
+  inc(P); // we got 'WHERE FieldName operator ' -> handle value
+  P := GotoNextNotSpace(P);
+  Where.ValueSQL := P;
+  if PWord(P)^=ord(':')+ord('(') shl 8 then
+    inc(P,2); // ignore :(...): parameter (no prepared statements here)
+  if P^ in ['''','"'] then begin
+    // SQL String statement
+    P := UnQuoteSQLStringVar(P,Where.Value);
+    if P=nil then
+      exit; // end of string before end quote -> incorrect
+    {$ifndef NOVARIANTS}
+    RawUTF8ToVariant(Where.Value,Where.ValueVariant);
+    {$endif}
+    if FieldProp<>nil then
+      // create a SBF formatted version of the WHERE value
+      Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
+  end else
+  if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
+    // NULL statement
+    Where.Value := 'null'; // not void
+    {$ifndef NOVARIANTS}
+    SetVariantNull(Where.ValueVariant);
+    {$endif}
+  end else begin
+    // numeric statement or 'true' or 'false' (OK for NormalizeValue)
+    B := P;
+    repeat
+      inc(P);
+    until P^ in [#0..' ',';',')'];
+    SetString(Where.Value,B,P-B);
+    {$ifndef NOVARIANTS}
+    Where.ValueVariant := VariantLoadJSON(Where.Value);
+    {$endif}
+    Where.ValueInteger := GetInteger(pointer(Where.Value),err);
+    if FieldProp<>nil then
+      if Where.Value<>'?' then
+        if (FieldProp.FieldType in FIELD_INTEGER) and (err<>0) then
+          // we expect a true INTEGER value here
+          Where.Value := '' else
+          // create a SBF formatted version of the WHERE value
+          Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
+  end;
+  if PWord(P)^=ord(')')+ord(':')shl 8 then
+    inc(P,2); // ignore :(...): parameter
+  Where.ValueSQLLen := P-Where.ValueSQL;
+  result := true;
+end;
+
 label lim,lim2;
 begin
-  // if fValue.Count=0 then exit; allow no row
   P := pointer(SQL);
   if (P=nil) or (self=nil) then
     exit; // avoid GPF
@@ -40492,112 +40636,32 @@ begin
   GetNextFieldProp(P,Prop);
   TableName := Prop;
   // 3. get WHERE clause
+  whereCount := 0;
+  whereWithOR := false;
   GetNextFieldProp(P,Prop);
   if IdemPropName(Prop,'WHERE') then begin
-    WhereField := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-    if WhereField<0 then
-      exit; // incorrect SQL statement
-    case P^ of
-    '=': WhereOperator := opEqualTo;
-    '>': if P[1]='=' then begin
-           inc(P);
-           WhereOperator := opGreaterThanOrEqualTo;
-         end else
-           WhereOperator := opGreaterThan;
-    '<': if P[1]='=' then begin
-           inc(P);
-           WhereOperator := opLessThanOrEqualTo;
-         end else
-           WhereOperator := opLessThan;
-    'i','I':
-      case P[1] of
-      's','S': begin
-        P := GotoNextNotSpace(P+2);
-        {$ifndef NOVARIANTS}
-        SetVariantNull(WhereValueVariant);
-        {$endif}
-        if IdemPChar(P,'NULL') then begin
-          WhereValue := 'null';
-          WhereOperator := opIs;
-          inc(P,4);
-          goto lim;
-        end else
-        if IdemPChar(P,'NOT NULL') then begin
-          WhereValue := 'not null';
-          WhereOperator := opIs;
-          inc(P,8);
-          goto lim;
-        end;
-        exit;
-      end;
-      {$ifndef NOVARIANTS}
-      'n','N': begin
-         WhereOperator := opIn;
-         P := GotoNextNotSpace(P+2);
-         if P^<>'(' then
-           exit; // incorrect SQL statement
-         B := P; // get the IN() clause - without :(...): by now
-         inc(P);
-         while P^<>')' do
-           if P^=#0 then
-             exit else
-             inc(P);
-         inc(P);
-         SetString(WhereValue,PAnsiChar(B),P-B);
-         WhereValue[1] := '[';
-         WhereValue[P-B] := ']';
-         TDocVariantData(WhereValueVariant).InitJSONInPlace(
-           pointer(WhereValue),JSON_OPTIONS[true]);
-         goto lim;
-      end;
-      {$endif}
-      end;
-    else exit; // unknown operator
-    end;
-    inc(P); // we had 'WHERE FieldName = '
-    P := GotoNextNotSpace(P);
-    if PWord(P)^=ord(':')+ord('(') shl 8 then
-      inc(P,2); // ignore :(...): parameter (no prepared statements here)
-    if P^ in ['''','"'] then begin
-      // SQL String statement
-      P := UnQuoteSQLStringVar(P,WhereValue);
-      if P=nil then
-        exit; // end of string before end quote -> incorrect
-      {$ifndef NOVARIANTS}
-      RawUTF8ToVariant(WhereValue,WhereValueVariant);
-      {$endif}
-      if FieldProp<>nil then
-        // create a SBF formatted version of the WHERE value
-        WhereValueSBF := FieldProp.SBFFromRawUTF8(WhereValue);
-    end else
-    if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
-      // NULL statement
-      WhereValue := 'null'; // not void
-      {$ifndef NOVARIANTS}
-      SetVariantNull(WhereValueVariant);
-      {$endif}
-    end else begin
-      // numeric statement or 'true' or 'false' (OK for NormalizeValue)
+    repeat
       B := P;
-      repeat
-        inc(P);
-      until P^ in [#0..' ',';',')'];
-      SetString(WhereValue,B,P-B);
-      {$ifndef NOVARIANTS}
-      WhereValueVariant := VariantLoadJSON(WhereValue);
-      {$endif}
-      WhereValueInteger := GetInteger(pointer(WhereValue),err);
-      if FieldProp<>nil then
-        if WhereValue<>'?' then
-          if (FieldProp.FieldType in FIELD_INTEGER) and (err<>0) then
-            // we expect a true INTEGER value here
-            WhereValue := '' else
-            // create a SBF formatted version of the WHERE value
-            WhereValueSBF := FieldProp.SBFFromRawUTF8(WhereValue);
-    end;
-    if PWord(P)^=ord(')')+ord(':')shl 8 then
-      inc(P,2); // ignore :(...): parameter
-    // 4. get optional LIMIT clause
+      ndx := GetPropIndex;
+      if ndx<0 then
+        if whereCount=0 then // invalid WHERE clause
+          exit else begin
+          P := B;
+          break;
+        end;
+      SetLength(Where,whereCount+1);
+      if not GetWhereExpression(ndx,Where[whereCount]) then
+        exit; // invalid SQL statement
+      Where[whereCount].JoinedOR := whereWithOR;
+      inc(whereCount);
+      GetNextFieldProp(P,Prop);
+      if IdemPropName(Prop,'OR') then
+        whereWithOR := true else
+      if IdemPropName(Prop,'AND') then
+        whereWithOR := false else
+        goto lim2;
+    until false;
+    // 4. get optional LIMIT/OFFSET/ORDER clause
 lim:P := GotoNextNotSpace(P);
     while (P<>nil) and not(P^ in [#0,';']) do begin
       GetNextFieldProp(P,Prop);
@@ -40629,19 +40693,21 @@ lim2: if IdemPropName(Prop,'LIMIT') then
         break; // reached the end of the statement
     end;
   end else
-    if IsSelectCountWhere then
+    if IsSelectCountWhere then 
       if (P=nil) or (GotoNextNotSpace(P)^ in [#0,';'])  then begin
-        WhereField := SYNTABLESTATEMENTWHERECOUNT;
-        WhereValue := 'COUNT'; // not void
+        SetLength(Where,1);
+        Where[0].Field := SYNTABLESTATEMENTWHERECOUNT;
+        Where[0].Value := 'COUNT'; // not void
       end else
         // invalid "SELECT count(*) FROM table TOTO"
-        WhereValue := '' else begin
-        WhereField := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
-        WhereValue := '*'; // not void
+        exit else begin
+        SetLength(Where,1);
+        Where[0].Field := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
+        Where[0].Value := '*'; // not void
         if Prop<>'' then
           goto lim2;
       end;
-  SQLStatement := SQL;
+  SQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
 procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);

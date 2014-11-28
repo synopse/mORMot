@@ -811,21 +811,21 @@ const // see http://docs.mongodb.org/manual/reference/operator/query
     '$ne','$lt','$lte','$gt','$gte','$in');
 var QueryFieldName: RawUTF8;
 begin
-  if Stmt.WhereField<0 then begin
-    SetVariantNull(Query);
+  if (Length(Stmt.Where)<>1) or (Stmt.Where[0].Field<0) then begin
+    SetVariantNull(Query); // only a SINGLE expression is allowed yet
     exit;
   end;
-  QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.WhereField-1);
-  case Stmt.WhereOperator of
+  QueryFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.Where[0].Field-1);
+  case Stmt.Where[0].Operator of
   opEqualTo:
-    Query := BSONVariant([QueryFieldName,Stmt.WhereValueVariant]);
+    Query := BSONVariant([QueryFieldName,Stmt.Where[0].ValueVariant]);
   opIs: // http://docs.mongodb.org/manual/faq/developers/#faq-developers-query-for-nulls
-    if IdemPropName(Stmt.WhereValue,'null') then
+    if IdemPropName(Stmt.Where[0].Value,'null') then
       Query := BSONVariant('{%:{$type:10}}',[QueryFieldName],[]) else
       Query := BSONVariant('{%:{$not:{type:10}}}',[QueryFieldName],[])
   else
     Query := BSONVariant([QueryFieldName,
-      '{',QUERY_OPS[Stmt.WhereOperator],Stmt.WhereValueVariant,'}']);
+      '{',QUERY_OPS[Stmt.Where[0].Operator],Stmt.Where[0].ValueVariant,'}']);
   end;
 end;
 procedure SetCount(aCount: integer);
@@ -856,19 +856,20 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (Stmt.WhereValue='') or
+        if (Stmt.SQLStatement='') or  // parsing failed
+           (length(Stmt.Where)<>1) or // only a SINGLE expression is allowed yet
            not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
           // invalid request -> return '' to mark error
           result := '';
           exit;
         end;
-        if Stmt.WhereField=SYNTABLESTATEMENTWHERECOUNT then
+        if Stmt.Where[0].Field=SYNTABLESTATEMENTWHERECOUNT then
           // was "SELECT Count(*) FROM TableName;"
           SetCount(TableRowCount(fStoredClass)) else
         if Stmt.SelectFields=nil then begin
           if Stmt.IsSelectCountWhere then
             // was "SELECT Count(*) FROM TableName WHERE ..."
-            if Stmt.WhereField<0 then
+            if Stmt.Where[0].Field<0 then
               SetCount(TableRowCount(fStoredClass)) else begin
               ComputeQuery;
               SetCount(fCollection.FindCount(Query));

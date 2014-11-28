@@ -5850,19 +5850,37 @@ end;
 procedure CheckIdData(limit,offset: integer);
 begin
   Check(Stmt.TableName='tab');
-  Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
+  if not CheckFailed(length(Stmt.Where)=1) then
+    Check(Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL);
   Check((length(Stmt.SelectFields)=2)and
     (Stmt.SelectFields[0]=0) and
     (Props.Fields.List[Stmt.SelectFields[1]-1].Name='Data'));
   Check(Stmt.Limit=limit);
   Check(Stmt.Offset=offset);
 end;
+procedure CheckWhere(isOR: Boolean);
+begin
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=2);
+  Check(Stmt.Where[0].Field=0);
+  Check(Stmt.Where[0].Operator=opGreaterThanOrEqualTo);
+  Check(Stmt.Where[0].ValueInteger=10);
+  Check(Stmt.Where[1].JoinedOR=isOR);
+  Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[1].Operator=opGreaterThan);
+  Check(Stmt.Where[1].ValueInteger=1600);
+  Check(Stmt.Limit=10);
+  Check(Stmt.Offset=20);
+  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
+    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check(Stmt.OrderByField=nil);
+end;
 begin
   Stmt := nil;
   Props := TSQLRecordPeople.RecordProps;
   New('select * from atable');
   Check(Stmt.TableName='atable');
-  Check(Stmt.WhereField=SYNTABLESTATEMENTWHEREALL);
+  Check(Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL);
   Stmt.SelectFieldBits(bits,withID);
   Check(withID);
   Check(IsEqual(bits,Props.SimpleFieldsBits[soSelect]));
@@ -5892,16 +5910,52 @@ begin
   CheckIdData(0,20);
   Check(Stmt.OrderByField=nil);
   Check(not Stmt.OrderByDesc);
-  New('select iD from tab where id >= 10 limit 10 offset 20 order by firstname desc');
+  New('select data,iD from tab where id >= 10 limit 10 offset 20 order by firstname desc');
   Check(Stmt.TableName='tab');
-  Check(Stmt.WhereField=0);
-  Check(Stmt.WhereOperator=opGreaterThanOrEqualTo);
-  Check(Stmt.WhereValueInteger=10);
+  Check(length(Stmt.Where)=1);
+  Check(Stmt.Where[0].Field=0);
+  Check(Stmt.Where[0].Operator=opGreaterThanOrEqualTo);
+  Check(Stmt.Where[0].ValueInteger=10);
   Check(Stmt.Limit=10);
   Check(Stmt.Offset=20);
-  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
+  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
+    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
   Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
   Check(Stmt.OrderByDesc);
+  New('select data,iD from tab where id >= 10 and YearOfBirth > 1600 limit 10 offset 20');
+  CheckWhere(false);
+  New('select data,iD from tab where rowid>=10 or YearOfBirth>1600 offset 20 limit 10');
+  CheckWhere(true);
+  New('select data,iD from tab where id <> 100 or data is not null limit 20 offset 10');
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=2);
+  Check(Stmt.Where[0].Field=0);
+  Check(Stmt.Where[0].Operator=opNotEqualTo);
+  Check(Stmt.Where[0].ValueInteger=100);
+  Check(Stmt.Where[1].JoinedOR);
+  Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='Data');
+  Check(Stmt.Where[1].Operator=opIs);
+  Check(Stmt.Where[1].Value='not null');
+  Check(Stmt.Limit=20);
+  Check(Stmt.Offset=10);
+  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
+    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check(Stmt.OrderByField=nil);
+  New('select data,iD from tab where firstname like "monet" or data is null limit 20 offset 10');
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=2);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='FirstName');
+  Check(Stmt.Where[0].Operator=opLike);
+  Check(Stmt.Where[0].Value='monet');
+  Check(Stmt.Where[1].JoinedOR);
+  Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='Data');
+  Check(Stmt.Where[1].Operator=opIs);
+  Check(Stmt.Where[1].Value='null');
+  Check(Stmt.Limit=20);
+  Check(Stmt.Offset=10);
+  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
+    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check(Stmt.OrderByField=nil);
   Stmt.Free;
 end;
 
