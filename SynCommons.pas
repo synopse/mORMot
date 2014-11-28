@@ -540,6 +540,8 @@ unit SynCommons;
   - TSynTableStatement.Create() SQL statement parser will handle optional
     LIMIT [OFFSET] clause (in new FoundLimit/FoundOffset integer properties),
     "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
+  - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
+    functions so that TSynTableStatement would store the SELECT column order
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
     (now properly handles SQL null and more than MAX_SQLFIELDS parameters)
   - introducing TSQLParamType / TSQLParamTypeDynArray generic parameters
@@ -4686,6 +4688,19 @@ type
   // - you can also use ALL_FIELDS as defined in mORMot.pas
   TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
 
+  /// used to store a field index in a Table
+  // - note that -1 is commonly used for the ID/RowID field so the values should
+  // be signed
+  {$if MAX_SQLFIELDS=64}
+  TSQLFieldIndex = ShortInt; // -128..127
+  {$else}
+  TSQLFieldIndex = SmallInt; // -32768..32767
+  {$ifend}
+
+  /// used to store field indexes in a Table
+  // - same as TSQLFieldBits, but allowing to store the proper order
+  TSQLFieldIndexDynArray = array of TSQLFieldIndex;
+
   /// points to a bit set used for all available fields in a Table
   PSQLFieldBits = ^TSQLFieldBits;
 
@@ -5684,8 +5699,7 @@ type
     /// used to store output format for TSQLRecord.GetJSONValues()
     fWithID: boolean;
     /// used to store field for TSQLRecord.GetJSONValues()
-    fFields: TSQLFieldBits;
-    fFieldMax: integer;
+    fFields: TSQLFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
@@ -5697,7 +5711,12 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits=[]); overload;
+      const Fields: TSQLFieldBits); overload;
+    /// the data will be written to the specified Stream
+    // - if no Stream is supplied, a temporary memory stream will be created
+    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
+    constructor Create(aStream: TStream; Expand, withID: boolean;
+      const Fields: TSQLFieldIndexDynArray=nil); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
     /// write or init field names for appropriate JSON Expand later use
@@ -5705,6 +5724,10 @@ type
     // - if aKnownRowsCount is not null, a "rowCount":... item will be added
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer=0);
+    /// allow to change on the fly an expanded format column layout
+    // - by definition, a non expanded format would raise a ESynException
+    // - caller should then set ColNames[] and run AddColumns()
+    procedure ChangeExpandedFields(aWithID: boolean; const aFields: TSQLFieldIndexDynArray); overload;
     /// end the serialized JSON object
     // - cancel last ','
     // - close the JSON object ']' or ']}'
@@ -5719,12 +5742,9 @@ type
     /// is set to TRUE in case of Expanded format
     property Expand: boolean read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
-    property WithID: boolean read fWithID write fWithID;
+    property WithID: boolean read fWithID;
     /// Read-Only access to the field bits set for each column to be stored
-    property Fields: TSQLFieldBits read fFields write fFields;
-    /// Read-Only access to the higher field index to be stored
-    // - i.e. the highest bit set in Fields
-    property FieldMax: integer read fFieldMax write fFieldMax;
+    property Fields: TSQLFieldIndexDynArray read fFields;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
@@ -7554,13 +7574,33 @@ function IsZero(P: pointer; Length: integer): boolean; overload;
 
 /// returns TRUE if no bit inside this TSQLFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
-// - will work also with any other value 
+// - will work also with any other value
 function IsZero(const Fields: TSQLFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast comparison of two TSQLFieldBits values
 function IsEqual(const A,B: TSQLFieldBits): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a TSQLFieldBits set of bits into an array of integers
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
+  var Index: TSQLFieldIndexDynArray; MaxLength: integer=MAX_SQLFIELDS); overload;
+
+/// convert a TSQLFieldBits set of bits into an array of integers
+function FieldBitsToIndex(const Fields: TSQLFieldBits;
+  MaxLength: integer=MAX_SQLFIELDS): TSQLFieldIndexDynArray; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// add a field index to an array of field indexes
+// - returns the index in Indexes[] of the newly appended Field value
+function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+
+/// convert an arra of field indexes into a TSQLFieldBits set of bits
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
+
+/// convert an arra of field indexes into a TSQLFieldBits set of bits
+function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 type
   TSynBackgroundThreadAbstract = class;
@@ -8550,8 +8590,8 @@ type
   TSynTableStatement = class
     /// the SELECT SQL statement parsed
     SQLStatement: RawUTF8;
-    /// the fields selected for the SQL statement
-    Fields: TSQLFieldBits;
+    /// the fields selected for the SQL statement, in the expected order
+    Fields: TSQLFieldIndexDynArray;
     /// is TRUE if ID/RowID was set in the WHERE clause
     WithID: boolean;
     /// the retrieved table name
@@ -8600,6 +8640,9 @@ type
     constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
       SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       FieldProp: TSynTableFieldProperties=nil);
+    /// compute the SELECT column bits from the Fields array
+    function FieldBits: TSQLFieldBits;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// function prototype used to retrieve the RECORD data of a specified Index
@@ -9102,9 +9145,14 @@ type
     {$ifndef DELPHI5OROLDER}
     /// create a TJSONWriter, ready to be filled with GetJSONValues(W) below
     // - will initialize all TJSONWriter.ColNames[] values according to the
+    // specified Fields index list, and initialize the JSON content
+    function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
+      const Fields: TSQLFieldIndexDynArray): TJSONWriter; overload;
+    /// create a TJSONWriter, ready to be filled with GetJSONValues(W) below
+    // - will initialize all TJSONWriter.ColNames[] values according to the
     // specified Fields bit set, and initialize the JSON content
     function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits): TJSONWriter;
+      const Fields: TSQLFieldBits): TJSONWriter; overload;
     (** return the UTF-8 encoded JSON objects for the values contained
       in the specified RecordBuffer encoded in our SBF compact binary format,
       according to the Expand/WithID/Fields parameters of W
@@ -21140,6 +21188,50 @@ begin
     result := CompareMem(@A,@B,sizeof(TSQLFieldBits))
 end;
 {$WARNINGS ON}
+
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
+  MaxLength: integer);
+var i,n: integer;
+    sets: array[0..MAX_SQLFIELDS-1] of TSQLFieldIndex; // to avoid memory reallocation
+begin
+  n := 0;
+  for i := 0 to MaxLength-1 do
+    if i in Fields then begin
+      sets[n] := i;
+      inc(n);
+    end;
+  SetLength(Index,n);
+  for i := 0 to n-1 do
+    Index[i] := sets[i];
+end;
+
+function FieldBitsToIndex(const Fields: TSQLFieldBits;
+  MaxLength: integer): TSQLFieldIndexDynArray;
+begin
+  FieldBitsToIndex(Fields,result,MaxLength);
+end;
+
+function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+begin
+  result := length(Indexes);
+  SetLength(Indexes,result+1);
+  Indexes[result] := Field;
+end;
+
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
+var i: integer;
+begin
+  fillchar(Fields,sizeof(Fields),0);
+  for i := 0 to Length(Index)-1 do
+    if Index[i]>=0 then
+      include(Fields,Index[i]);
+end;
+
+function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits;
+begin
+  FieldIndexToBits(Index,result);
+end;
+
 
 function Hash32(const Text: RawByteString): cardinal;
 begin
@@ -34184,13 +34276,18 @@ end;
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
   const Fields: TSQLFieldBits);
 begin
+  Create(aStream,Expand,withID,FieldBitsToIndex(Fields));
+end;
+
+constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
+  const Fields: TSQLFieldIndexDynArray);
+begin
   if aStream=nil then
     CreateOwnedStream else
     inherited Create(aStream);
   fExpand := Expand;
   fWithID := withID;
   fFields := Fields;
-  fFieldMax := MAX_SQLFIELDS-1;
 end;
 
 procedure TJSONWriter.AddColumns(aKnownRowsCount: integer);
@@ -34217,6 +34314,16 @@ begin
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
   end;
+end;
+
+procedure TJSONWriter.ChangeExpandedFields(aWithID: boolean;
+  const aFields: TSQLFieldIndexDynArray);
+begin
+  if not Expand then
+    raise ESynException.CreateUTF8(
+      '%.ChangeExpandedFields() called with Expanded=false',[self]);
+  fWithID := aWithID;
+  fFields := aFields;
 end;
 
 procedure TJSONWriter.EndJSONObject(aKnownRowsCount,aRowsCount: integer);
@@ -38783,40 +38890,39 @@ begin
 end;
 
 {$ifndef DELPHI5OROLDER}
+
 function TSynTable.CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
   const Fields: TSQLFieldBits): TJSONWriter;
-var i, n: integer;
 begin
-  if (self=nil) or (IsZero(Fields) and not withID) then begin
+  result := CreateJSONWriter(JSON,Expand,withID,FieldBitsToIndex(Fields,fField.Count));
+end;
+
+function TSynTable.CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
+  const Fields: TSQLFieldIndexDynArray): TJSONWriter;
+var i,nf,n: integer;
+begin
+  if (self=nil) or ((Fields=nil) and not withID) then begin
     result := nil; // no data to retrieve
     exit;
   end;
-  // get col max count
+  result := TJSONWriter.Create(JSON,Expand,withID,Fields);
+  // set col names
   if withID then
     n := 1 else
     n := 0;
-  result := TJSONWriter.Create(JSON,Expand,withID,Fields);
-  // set col names
-  SetLength(result.ColNames,fField.Count+n);
+  nf := length(Fields);
+  SetLength(result.ColNames,nf+n);
   if withID then
     result.ColNames[0] := 'ID';
-  with result do
-    for i := 0 to fField.Count-1 do
-      if i in Fields then begin
-        ColNames[n] := TSynTableFieldProperties(fField.List[i]).Name;
-        inc(n);
-        fFieldMax := i;
-      end;
-  // adjust col count
-  if n<>length(result.ColNames) then
-    SetLength(result.ColNames,n);
+  for i := 0 to nf-1 do
+    result.ColNames[i+n] := TSynTableFieldProperties(fField.List[Fields[i]]).Name;
   result.AddColumns; // write or init field names for appropriate JSON Expand
 end;
 
 procedure TSynTable.GetJSONValues(aID: integer; RecordBuffer: PUTF8Char;
   W: TJSONWriter);
-var i, n: integer;
-    F: TSynTableFieldProperties;
+var i,n: integer;
+    buf: array[0..MAX_SQLFIELDS-1] of PUTF8Char;
 begin
   if (self=nil) or (RecordBuffer=nil) or (W=nil) then
     exit; // avoid GPF
@@ -38831,17 +38937,17 @@ begin
     n := 1;
   end else
     n := 0;
-  for i := 0 to W.FieldMax do begin
-    F := TSynTableFieldProperties(fField.List[i]);
-    if i in W.Fields then begin
-      if W.Expand then begin
-        W.AddString(W.ColNames[n]); // '"'+ColNames[]+'":'
-        inc(n);
-      end;
-      RecordBuffer := F.GetJSON(RecordBuffer,W);
-      W.Add(',');
-    end else
-      inc(RecordBuffer,F.GetLength(RecordBuffer));
+  for i := 0 to fField.Count-1 do begin
+    buf[i] := RecordBuffer;
+    inc(RecordBuffer,TSynTableFieldProperties(fField.List[i]).GetLength(RecordBuffer));
+  end;
+  for i := 0 to length(W.Fields)-1 do begin
+    if W.Expand then begin
+      W.AddString(W.ColNames[n]); // '"'+ColNames[]+'":'
+      inc(n);
+    end;
+    TSynTableFieldProperties(fField.List[W.Fields[i]]).GetJSON(buf[i],W);
+    W.Add(',');
   end;
   W.CancelLastComma; // cancel last ','
   if W.Expand then
@@ -38855,7 +38961,7 @@ var Statement: TSynTableStatement absolute Opaque;
     FIndex: cardinal;
 begin  // note: we should have handled -2 (=COUNT) case already
   if (self=nil) or (Statement=nil) or (Data=nil) or
-     (Statement.WhereValueSBF='') or IsZero(Statement.Fields) then begin
+     (Statement.WhereValueSBF='') or (Statement.Fields=nil) then begin
     result := false;
     exit;
   end;
@@ -38874,6 +38980,7 @@ begin  // note: we should have handled -2 (=COUNT) case already
   end;
   GetJSONValues(ID,Data,Statement.Writer);
 end;
+
 {$endif DELPHI5OROLDER}
 
 function TSynTable.GetData(RecordBuffer: PUTF8Char; Field: TSynTableFieldProperties): pointer;
@@ -40333,7 +40440,7 @@ begin
     result := false else begin // Field not found -> incorrect SQL statement
     if i=0 then
       withID := true else
-      include(Fields,i-1);
+      AddFieldIndex(Fields,i-1);
     result := true;
   end;
 end;
@@ -40352,7 +40459,7 @@ begin
   if P^=#0 then exit else // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
     withID := true;
-    Fields := SimpleFieldsBits;
+    FieldBitsToIndex(SimpleFieldsBits,Fields);
     inc(P);
     GetNextFieldProp(P,Prop);
   end else
@@ -40503,6 +40610,11 @@ limit:
     WhereValue := '*'; // not void
   end;
   SQLStatement := SQL;
+end;
+
+function TSynTableStatement.FieldBits: TSQLFieldBits;
+begin
+  FieldIndexToBits(Fields,result);
 end;
 
 
