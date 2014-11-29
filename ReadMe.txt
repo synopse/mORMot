@@ -8,15 +8,17 @@ An Open Source Client-Server ORM/SOA framework
 
 Contributors
   Alexander (sha)
+  AlexPirate
   Alfred Glaenzer (alf)
   Arnaud Bouchez
   Aweste
+  Bas Schouten
   Cheemeng
   CoMPi
   Damien (ddemars)
+  Daniel Kuettner
   David Mead (MDW)
-  Delphinium
-  DigDiver
+  Delphinium (louisyeow)
   DigDiver
   EMartin
   Eric Grange
@@ -26,15 +28,19 @@ Contributors
   Mario Moretti
   Martin Suer
   MChaos
+  Miab3
+  Michael (EgonHugeist)
+  Mingda
   Ondrej (reddwarf)
   Pavel (mpv)
   Pierre le Riche
   RalfS
-  Sabbiolina
+  Richard6688
   Sabbiolina
   Sanyin
   Sinisa (sinisav)
   Sllimr7139
+  Stefan (itSDS)
   Vadim Orel
   Win2014
   Wolfgang Ehrhardt

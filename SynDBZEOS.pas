@@ -30,7 +30,7 @@ unit SynDBZEOS;
 
   Contributor(s):
   - delphinium
-  - EgonHugeist
+  - Michael Hiergeist (EgonHugeist)
   - alexpirate
   - Joe (jokussoftware)
 

@@ -8621,53 +8621,65 @@ type
   TSynTableStatementWhereDynArray = array of TSynTableStatementWhere;
 
   /// used to parse a SELECT SQL statement
-  // - handle basic REST commands, no complete SQL interpreter is implemented: only
-  // valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;", i.e
-  // a one Table SELECT with one optional "WHERE fieldname = value" statement
-  // - handle also basic "SELECT Count(*) FROM TableName;" SQL statement
-  // - will parse the "LIMIT number OFFSET number" end statement clause
+  // - handle basic REST commands, only a sub-set of SQL is implemented: i.e.
+  // a SELECT over a single table (no JOIN) with one optional WHERE clause
+  // - handle also basic "SELECT Count(*) FROM TableName;" functions
+  // - will parse any LIMIT OFFSET ORDER BY end statement clause
   TSynTableStatement = class
-    /// the SELECT SQL statement parsed
-    // - equals '' if the parsing failed
-    SQLStatement: RawUTF8;
-    /// the column SELECTed for the SQL statement, in the expected order
-    // - contains 0 for ID/RowID, or the RTTI field index + 1
-    SelectFields: TSQLFieldIndexDynArray;
-    /// the retrieved table name
-    TableName: RawUTF8;
-    /// the WHERE clause of this SQL statement
-    Where: TSynTableStatementWhereDynArray;
-    /// recognize an ORDER BY clause with one or several fields
-    // - here 0 = ID, otherwise RTTI field index +1
-    OrderByField: TSQLFieldIndexDynArray;
-    /// false for default ASC order, true for DESC attribute
-    OrderByDesc: boolean;
-    /// the number specified by the optional LIMIT ... clause
-    // - set to 0 by default (meaning no LIMIT clause)
-    Limit: integer;
-    /// the number specified by the optional OFFSET ... clause
-    // - set to 0 by default (meaning no OFFSET clause)
-    Offset: integer;
-    /// TRUE if is "SELECT Count(*) FROM TableName WHERE ..." clause
-    IsSelectCountWhere: boolean;
-    /// optional associated writer
-    Writer: TJSONWriter;
-
+  protected
+    fSQLStatement: RawUTF8;
+    fSelectFields: TSQLFieldIndexDynArray;
+    fSelectFunctions: TRawUTF8DynArray;
+    fTableName: RawUTF8;
+    fWhere: TSynTableStatementWhereDynArray;
+    fOrderByField: TSQLFieldIndexDynArray;
+    fOrderByDesc: boolean;
+    fLimit: integer;
+    fOffset: integer;
+    fWriter: TJSONWriter;
+  public
     /// parse the given SELECT SQL statement and retrieve the corresponding
-    // parameters into Fields,TableName,WhereField,WhereValue
-    // - the supplied GetFieldIndex() method is used to populate the Fields and
-    // WhereField parameters
+    // parameters into this class read-only properties
+    // - the supplied GetFieldIndex() method is used to populate the
+    // SelectedFields and Where[].Field properties
     // - SimpleFieldsBits is used for '*' field names
-    // - WhereValue is left '' if the SQL statement is not correct
-    // - if WhereValue is set, the caller must check for TableName to match the
-    // expected value, then use the WhereField value to retrieve the content
-    // - if FieldProp is set, then the WhereValueSBF property is initialized
-    // with the SBF equivalence of the WhereValue
+    // - SQLStatement is left '' if the SQL statement is not correct
+    // - if SQLStatement is set, the caller must check for TableName to match
+    // the expected value, then use the Where[] to retrieve the content
+    // - if FieldProp is set, then the Where[].ValueSBF property is initialized
+    // with the SBF equivalence of the Where[].Value
     constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
       SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       FieldProp: TSynTableFieldProperties=nil);
     /// compute the SELECT column bits from the SelectFields array
     procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+
+    /// the SELECT SQL statement parsed
+    // - equals '' if the parsing failed
+    property SQLStatement: RawUTF8 read fSQLStatement;
+    /// the column SELECTed for the SQL statement, in the expected order
+    // - contains 0 for ID/RowID, or the RTTI field index + 1
+    property SelectFields: TSQLFieldIndexDynArray read fSelectFields;
+    /// the optional function applied to the SELECTed column
+    // - e.g. Count(*) would store 'Count' and SelectField[0]=0
+    property SelectFunctions: TRawUTF8DynArray read fSelectFunctions;
+    /// the retrieved table name
+    property TableName: RawUTF8 read fTableName;
+    /// the WHERE clause of this SQL statement
+    property Where: TSynTableStatementWhereDynArray read fWhere;
+    /// recognize an ORDER BY clause with one or several fields
+    // - here 0 = ID, otherwise RTTI field index +1
+    property OrderByField: TSQLFieldIndexDynArray read fOrderByField;
+    /// false for default ASC order, true for DESC attribute
+    property OrderByDesc: boolean read fOrderByDesc;
+    /// the number specified by the optional LIMIT ... clause
+    // - set to 0 by default (meaning no LIMIT clause)
+    property Limit: integer read fLimit;
+    /// the number specified by the optional OFFSET ... clause
+    // - set to 0 by default (meaning no OFFSET clause)
+    property Offset: integer read fOffset;
+    /// optional associated writer
+    property Writer: TJSONWriter read fWriter write fWriter;
   end;
 
   /// function prototype used to retrieve the RECORD data of a specified Index
@@ -9295,10 +9307,6 @@ const
 
   /// used by TSynTableStatement.WhereField for "SELECT .. FROM TableName WHERE ID=?"
   SYNTABLESTATEMENTWHEREID = 0;
-  /// used by TSynTableStatement.WhereField for "SELECT * FROM TableName"
-  SYNTABLESTATEMENTWHEREALL = -1;
-  /// used by TSynTableStatement.WhereField for "SELECT Count(*) FROM TableName"
-  SYNTABLESTATEMENTWHERECOUNT = -2;
 
 /// convert any AnsiString content into our SBF compact binary format storage
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
@@ -38989,25 +38997,29 @@ function TSynTable.IterateJSONValues(Sender: TObject; Opaque: pointer;
   ID: integer; Data: pointer; DataLen: integer): boolean;
 var Statement: TSynTableStatement absolute Opaque;
     F: TSynTableFieldProperties;
-    FIndex: cardinal;
+    nWhere,fIndex: cardinal;
 begin  // note: we should have handled -2 (=COUNT) case already
-  if (self=nil) or (Statement=nil) or (Data=nil) or (Statement.SelectFields=nil) or
-     (length(Statement.Where)<>1) or (Statement.Where[0].ValueSBF='') then begin
+  nWhere := length(Statement.Where);
+  if (self=nil) or (Statement=nil) or (Data=nil) or
+     (Statement.SelectFields=nil) or (nWhere>1) or 
+     ((nWhere=1)and(Statement.Where[0].ValueSBF='')) then begin
     result := false;
     exit;
   end;
   result := true;
-  FIndex := Statement.Where[0].Field;
-  if FIndex=SYNTABLESTATEMENTWHEREID then begin
-    if ID<>Statement.Where[0].ValueInteger then
-      exit;
-  end else begin
-    dec(FIndex); // 0 is ID, 1 for field # 0, 2 for field #1, and so on...
-    if FIndex<cardinal(fField.Count) then begin
-      F := TSynTableFieldProperties(fField.List[FIndex]);
-      if F.SortCompare(GetData(Data,F),pointer(Statement.Where[0].ValueSBF))<>0 then
+  if nWhere=1 then begin // Where=nil -> all rows
+    fIndex := Statement.Where[0].Field;
+    if fIndex=SYNTABLESTATEMENTWHEREID then begin
+      if ID<>Statement.Where[0].ValueInteger then
         exit;
-    end; // WhereField=-1 -> all rows (ignore -2 -> COUNT)
+    end else begin
+      dec(fIndex); // 0 is ID, 1 for field # 0, 2 for field #1, and so on...
+      if fIndex<cardinal(fField.Count) then begin
+        F := TSynTableFieldProperties(fField.List[fIndex]);
+        if F.SortCompare(GetData(Data,F),pointer(Statement.Where[0].ValueSBF))<>0 then
+          exit;
+      end;
+    end;
   end;
   GetJSONValues(ID,Data,Statement.Writer);
 end;
@@ -40470,9 +40482,25 @@ function SetFields: boolean;
 var i: integer;
 begin
   i := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-  if i<0 then
-    result := false else begin // Field not found -> incorrect SQL statement
-    AddFieldIndex(SelectFields,i);
+  if i<0 then begin
+    if P^='(' then begin
+      P := GotoNextNotSpace(P+1);
+      AddRawUTF8(fSelectFunctions,UpperCase(Prop));
+      if IdemPropNameU(Prop,'COUNT') and (P^='*') then begin
+        P := GotoNextNotSpace(P+1);
+        result := P^=')';
+        if result then begin
+          AddFieldIndex(fSelectFields,0); // '*' -> ID
+          P := GotoNextNotSpace(P+1);
+        end;
+      end else
+        result := SetFields;
+    end else
+      result := false;
+  end else begin // Field not found -> incorrect SQL statement
+    AddFieldIndex(fSelectFields,i);
+    if P^=')' then
+      P := GotoNextNotSpace(P+1);
     result := true;
   end;
 end;
@@ -40617,35 +40645,29 @@ begin
   P := GotoNextNotSpace(P); // trim left
   if P^=#0 then exit else // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
-    SetLength(SelectFields,1);
-    FieldBitsToIndex(SimpleFieldsBits,SelectFields,MAX_SQLFIELDS,1);
-    for ndx := 1 to high(SelectFields) do
-      inc(SelectFields[ndx]);
+    SetLength(fSelectFields,1); // SelectFields[0] := 0
+    FieldBitsToIndex(SimpleFieldsBits,fSelectFields,MAX_SQLFIELDS,1);
+    for ndx := 1 to high(fSelectFields) do
+      inc(fSelectFields[ndx]);
     inc(P);
     GetNextFieldProp(P,Prop);
   end else
-  if IdemPChar(P,'COUNT(*) ') then begin
-    inc(P,8);
-    GetNextFieldProp(P,Prop);
-    IsSelectCountWhere := true; // get WHERE clause below
-  end else begin
-    if not SetFields then
-      exit else // we need at least one field name
-      if P^<>',' then
-        GetNextFieldProp(P,Prop) else
-        repeat
-          while P^ in [',',#1..' '] do inc(P); // trim left
-        until not SetFields; // add other CSV field names
-  end;
+  if not SetFields then
+    exit else // we need at least one field name
+    if P^<>',' then
+      GetNextFieldProp(P,Prop) else
+      repeat
+        while P^ in [',',#1..' '] do inc(P); // trim left
+      until not SetFields; // add other CSV field names
   // 2. get FROM clause
-  if not IdemPropName(Prop,'FROM') then exit; // incorrect SQL statement
+  if not IdemPropNameU(Prop,'FROM') then exit; // incorrect SQL statement
   GetNextFieldProp(P,Prop);
-  TableName := Prop;
+  fTableName := Prop;
   // 3. get WHERE clause
   whereCount := 0;
   whereWithOR := false;
   GetNextFieldProp(P,Prop);
-  if IdemPropName(Prop,'WHERE') then begin
+  if IdemPropNameU(Prop,'WHERE') then begin
     repeat
       B := P;
       ndx := GetPropIndex;
@@ -40655,15 +40677,15 @@ begin
           P := B;
           break;
         end;
-      SetLength(Where,whereCount+1);
-      if not GetWhereExpression(ndx,Where[whereCount]) then
+      SetLength(fWhere,whereCount+1);
+      if not GetWhereExpression(ndx,fWhere[whereCount]) then
         exit; // invalid SQL statement
-      Where[whereCount].JoinedOR := whereWithOR;
+      fWhere[whereCount].JoinedOR := whereWithOR;
       inc(whereCount);
       GetNextFieldProp(P,Prop);
-      if IdemPropName(Prop,'OR') then
+      if IdemPropNameU(Prop,'OR') then
         whereWithOR := true else
-      if IdemPropName(Prop,'AND') then
+      if IdemPropNameU(Prop,'AND') then
         whereWithOR := false else
         goto lim2;
     until false;
@@ -40671,23 +40693,23 @@ begin
 lim:P := GotoNextNotSpace(P);
     while (P<>nil) and not(P^ in [#0,';']) do begin
       GetNextFieldProp(P,Prop);
-lim2: if IdemPropName(Prop,'LIMIT') then
-        Limit := GetNextItemCardinal(P,' ') else
-      if IdemPropName(Prop,'OFFSET') then
-        Offset := GetNextItemCardinal(P,' ') else
-      if IdemPropName(Prop,'ORDER') then begin
+lim2: if IdemPropNameU(Prop,'LIMIT') then
+        fLimit := GetNextItemCardinal(P,' ') else
+      if IdemPropNameU(Prop,'OFFSET') then
+        fOffset := GetNextItemCardinal(P,' ') else
+      if IdemPropNameU(Prop,'ORDER') then begin
         GetNextFieldProp(P,Prop);
-        if IdemPropName(Prop,'BY') then begin
+        if IdemPropNameU(Prop,'BY') then begin
           repeat
             ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
             if ndx<0 then
               exit; // incorrect SQL statement
-            AddFieldIndex(OrderByField,ndx);
+            AddFieldIndex(fOrderByField,ndx);
             if P^<>',' then begin // check ORDER BY ... ASC/DESC
               if GetNextFieldProp(P,Prop) then
-                if IdemPropName(Prop,'DESC') then
-                  OrderByDesc := true else
-                if not IdemPropName(Prop,'ASC') then
+                if IdemPropNameU(Prop,'DESC') then
+                  fOrderByDesc := true else
+                if not IdemPropNameU(Prop,'ASC') then
                   exit; // incorrect SQL statement
               break;
             end;
@@ -40699,21 +40721,9 @@ lim2: if IdemPropName(Prop,'LIMIT') then
         break; // reached the end of the statement
     end;
   end else
-    if IsSelectCountWhere then 
-      if (P=nil) or (GotoNextNotSpace(P)^ in [#0,';'])  then begin
-        SetLength(Where,1);
-        Where[0].Field := SYNTABLESTATEMENTWHERECOUNT;
-        Where[0].Value := 'COUNT'; // not void
-      end else
-        // invalid "SELECT count(*) FROM table TOTO"
-        exit else begin
-        SetLength(Where,1);
-        Where[0].Field := SYNTABLESTATEMENTWHEREALL; // no WHERE clause -> all rows
-        Where[0].Value := '*'; // not void
-        if Prop<>'' then
-          goto lim2;
-      end;
-  SQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
+  if Prop<>'' then
+    goto lim2; // handle LIMIT OFFSET ORDER
+  fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
 procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);

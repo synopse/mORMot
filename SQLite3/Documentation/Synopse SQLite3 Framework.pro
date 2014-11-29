@@ -5817,8 +5817,8 @@ Here are some typical WHERE clauses, and the corresponding {\i MongoDB} query do
 |{\f1\fs20 'Data is null'}|{\f1\fs20 \{Data:null\}}
 |{\f1\fs20 'Data is not null'}|{\f1\fs20 \{Data:\{$ne:null\}\}}
 |%
-Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex query (e.g. aggregations or {\i Map/Reduce}) by using directly the {\f1\fs20 TMongoCollection} methods.
-But for most cases, {\i mORMot} allows to share the same exact code between your regular SQL databases or NoSQL engines. You do not need to learn the {\i MongoDB} query syntax: the ODM would compute the right expression for you, depending on the database engine it runs on.
+Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex {\i NoSQL} query (e.g. using aggregation functions or the {\i Map/Reduce} pattern) by using directly the {\f1\fs20 TMongoCollection} methods.
+But for most business code, {\i mORMot} allows to share the same exact code between your regular SQL databases or NoSQL engines. You do not need to learn the {\i MongoDB} query syntax: the ODM would compute the right expression for you, depending on the database engine it runs on.
 :   BATCH mode
 In addition to individual @*CRUD@ operations, our {\i MongoDB} is able to use BATCH mode for adding or deleting documents.
 You can write the exact same code as with any SQL back-end:

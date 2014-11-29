@@ -5850,8 +5850,7 @@ end;
 procedure CheckIdData(limit,offset: integer);
 begin
   Check(Stmt.TableName='tab');
-  if not CheckFailed(length(Stmt.Where)=1) then
-    Check(Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL);
+  Check(Stmt.Where=nil,'no WHERE clause');
   Check((length(Stmt.SelectFields)=2)and
     (Stmt.SelectFields[0]=0) and
     (Props.Fields.List[Stmt.SelectFields[1]-1].Name='Data'));
@@ -5880,7 +5879,7 @@ begin
   Props := TSQLRecordPeople.RecordProps;
   New('select * from atable');
   Check(Stmt.TableName='atable');
-  Check(Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL);
+  Check(Stmt.Where=nil);
   Stmt.SelectFieldBits(bits,withID);
   Check(withID);
   Check(IsEqual(bits,Props.SimpleFieldsBits[soSelect]));
@@ -5954,6 +5953,38 @@ begin
   Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
     (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
   Check(Stmt.OrderByField=nil);
+  New('select count(*) from tab');
+  Check(Stmt.TableName='tab');
+  Check(Stmt.Where=nil);
+  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
+  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check(Stmt.Limit=0);
+  New('select count(*) from tab limit 10');
+  Check(Stmt.TableName='tab');
+  Check(Stmt.Where=nil);
+  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
+  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check(Stmt.Limit=10);
+  New('select count(*) from tab where yearofbirth>1000 limit 10');
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=1);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[0].Operator=opGreaterThan);
+  Check(Stmt.Where[0].ValueInteger=1000);
+  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
+  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check(Stmt.Limit=10);
+  New('select distinct ( yearofdeath )  from  tab where yearofbirth > :(1000): limit 20');
+  Check(Stmt.TableName='tab');
+  Check(length(Stmt.Where)=1);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[0].Operator=opGreaterThan);
+  Check(Stmt.Where[0].ValueInteger=1000);
+  Check((length(Stmt.SelectFields)=1) and
+    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='YearOfDeath'));
+  Check((length(Stmt.SelectFunctions)=1) and
+    (Stmt.SelectFunctions[0]='DISTINCT'));
+  Check(Stmt.Limit=20);
   Stmt.Free;
 end;
 

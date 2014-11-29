@@ -31545,9 +31545,8 @@ var i,KnownRowsCount: integer;
 label err;
 begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
-  assert(length(Stmt.Where)=1);
-  if Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL then
-    // no WHERE statement -> get all rows -> set rows count
+  assert(length(Stmt.Where)<=1);
+  if Stmt.Where=nil then // no WHERE statement -> get all rows -> set rows count
     if (Stmt.Limit>0) and (fValue.Count>Stmt.Limit) then
       KnownRowsCount := Stmt.Limit else
       KnownRowsCount := fValue.Count else
@@ -31558,8 +31557,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
   try
     if Expand then
       W.Add('[');
-    if Stmt.Where[0].Field=SYNTABLESTATEMENTWHEREALL then begin
-      // no WHERE statement -> all rows
+    if Stmt.Where=nil then begin // no WHERE statement -> all rows
       for i := 0 to KnownRowsCount-1 do begin
         if Expand then
           W.AddCR; // for better readability
@@ -31670,11 +31668,10 @@ begin
   ResCount := 1;
 end;
 begin
+  result := '';
   ResCount := 0;
-  if self=nil then begin
-    result := '';
+  if self=nil then
     exit;
-  end;
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
@@ -31693,19 +31690,11 @@ begin
         fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
         if (Stmt.SQLStatement='') or  // parsing failed
-           (length(Stmt.Where)<>1) or // only a SINGLE expression is allowed yet
+           (length(Stmt.Where)>1) or // only a SINGLE expression is allowed yet
            not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return ''
-          result := '' else
-        if Stmt.Where[0].Field=SYNTABLESTATEMENTWHERECOUNT then
-          // was "SELECT Count(*) FROM TableName;"
-          SetCount(TableRowCount(fStoredClass)) else
-        if Stmt.SelectFields=nil then
-          if Stmt.IsSelectCountWhere and (Stmt.Limit=0) and (Stmt.Offset=0) then
-            // was "SELECT Count(*) FROM TableName WHERE ..."
-            SetCount(FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,DoNothingEvent,nil,0,0)) else
-            // invalid "SELECT FROM Table" ?
-            exit else begin
+          exit;
+        if Stmt.SelectFunctions=nil then begin
           // save rows as JSON, with appropriate search according to Where.* arguments
           MS := TRawByteStringStream.Create;
           try
@@ -31714,6 +31703,22 @@ begin
             result := MS.DataString;
           finally
             MS.Free;
+          end;
+        end else
+        if (length(Stmt.SelectFunctions)<>1) or (Stmt.SelectFunctions[0]<>'COUNT') then
+          exit else // only handle count(*) function here
+        if ((Stmt.Limit<>0) or (Stmt.Offset<>0)) then
+          // unhandled "SELECT Count(*) [...] LIMIT ..."
+          exit else
+        if Stmt.Where=nil then
+          // was "SELECT Count(*) FROM TableName;"
+          SetCount(TableRowCount(fStoredClass)) else begin
+          // was "SELECT Count(*) FROM TableName WHERE ..."
+          ResCount := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
+            DoNothingEvent,nil,0,0);
+          case Stmt.Where[0].Operator of
+          opEqualTo: SetCount(ResCount);
+          opNotEqualTo: SetCount(TableRowCount(fStoredClass)-ResCount);
           end;
         end;
       finally

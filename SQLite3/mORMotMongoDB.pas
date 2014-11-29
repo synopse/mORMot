@@ -800,7 +800,7 @@ var W: TJSONSerializer;
     MS: TRawByteStringStream;
     Query,Projection: variant;
     Res: TBSONDocument;
-    ResCount: PtrInt;
+    ResCount,limit: PtrInt;
     extFieldNames: TRawUTF8DynArray;
     Stmt: TSynTableStatement;
     bits: TSQLFieldBits;
@@ -870,11 +870,10 @@ begin
 end;
 
 begin // same logic as in TSQLRestStorageInMemory.EngineList()
+  result := ''; // indicates error occurred
   ResCount := 0;
-  if self=nil then begin
-    result := '';
+  if self=nil then
     exit;
-  end;
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
@@ -892,50 +891,41 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
       try
-        if (Stmt.SQLStatement='') or (length(Stmt.Where)=0) or  // parsing failed
-          not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
+        if (Stmt.SQLStatement='') or // parsing failed
+          not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return '' to mark error
-          result := '';
           exit;
-        end;
-        if Stmt.Where[0].Field=SYNTABLESTATEMENTWHERECOUNT then
-          // was "SELECT Count(*) FROM TableName;"
-          SetCount(TableRowCount(fStoredClass)) else
-        if Stmt.SelectFields=nil then begin
-          if Stmt.IsSelectCountWhere then
+        if Stmt.SelectFunctions<>nil then
+          if (length(Stmt.SelectFunctions)<>1) or (Stmt.SelectFunctions[0]<>'COUNT') then
+            exit else // only handle count(*) function yet
+          if Stmt.Where=nil then
+            // was "SELECT Count(*) FROM TableName;"
+            SetCount(TableRowCount(fStoredClass)) else
             // was "SELECT Count(*) FROM TableName WHERE ..."
-            if Stmt.Where[0].Field<0 then
-              SetCount(TableRowCount(fStoredClass)) else begin
-              if not ComputeQuery then begin
-                result := ''; // indicates error
-                exit;
-              end;
-              SetCount(fCollection.FindCount(Query));
-            end;
-          exit; // also invalid "SELECT FROM Table"
-        end;
-        // save rows as JSON, with appropriate search according to Where* arguments
-        if not ComputeQuery then begin
-          result := ''; // indicates error
-          exit;
-        end;
-        Stmt.SelectFieldBits(bits,withID);
-        BSONProjectionSet(Projection,withID,bits,@extFieldNames);
-        if Stmt.Limit=0 then
-          Stmt.Limit := maxInt;
-        Res := fCollection.FindBSON(Query,Projection,Stmt.Limit,Stmt.Offset);
-        MS := TRawByteStringStream.Create;
-        try
-          W := fStoredClassRecordProps.CreateJSONWriter(
-            MS,ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,withID,bits,0);
+            if ComputeQuery then
+              SetCount(fCollection.FindCount(Query)) else
+              exit else
+        // save rows as JSON from returned BSON
+        if ComputeQuery then begin
+          Stmt.SelectFieldBits(bits,withID);
+          BSONProjectionSet(Projection,withID,bits,@extFieldNames);
+          if Stmt.Limit=0 then
+            limit := maxInt else
+            limit := Stmt.Limit;
+          Res := fCollection.FindBSON(Query,Projection,limit,Stmt.Offset);
+          MS := TRawByteStringStream.Create;
           try
-            ResCount := GetJSONValues(Res,extFieldNames,W);
-            result := MS.DataString;
+            W := fStoredClassRecordProps.CreateJSONWriter(
+              MS,ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,withID,bits,0);
+            try
+              ResCount := GetJSONValues(Res,extFieldNames,W);
+              result := MS.DataString;
+            finally
+              W.Free;
+            end;
           finally
-            W.Free;
+            MS.Free;
           end;
-        finally
-          MS.Free;
         end;
       finally
         Stmt.Free;
