@@ -540,7 +540,8 @@ unit SynCommons;
   - TSynTableStatement.Create() SQL statement parser will handle optional
     LIMIT [OFFSET] clause (in new Limit/Offset integer properties),
     ORDER BY ... [DESC/ASC] clause (in new OrderByField/OrderByDesc properties),
-    and "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL"
+    "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL",
+    and custom functions in the WHERE clause
   - TSynTableStatement.Where[] is now an array to allow complex WHERE clause
   - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
     functions so that TSynTableStatement would store the SELECT column order
@@ -8582,7 +8583,9 @@ type
      opIn,
      opIsNull,
      opIsNotNull,
-     opLike);
+     opLike,
+     opContains,
+     opFunction);
 
   TSynTableFieldProperties = class;
 
@@ -8593,13 +8596,14 @@ type
     /// the index of the field used for the WHERE expression
     // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
-    // - equal SYNTABLESTATEMENTWHEREALL=-1, means all rows must be fetched
-    // (no WHERE clause: "SELECT * FROM TableName")
-    // - if SYNTABLESTATEMENTWHERECOUNT=-2, means SQL statement was
-    // "SELECT Count(*) FROM TableName"
     Field: integer;
     /// the operator of the WHERE expression
     Operator: TSynTableStatementOperator;
+    /// the SQL function name associated to a Field and Value
+    // - e.g. 'INTEGERDYNARRAYCONTAINS' and Field=0 for
+    // IntegerDynArrayContains(RowID,10) and ValueInteger=10 
+    // - Value does not contain anything
+    FunctionName: RawUTF8;
     /// the value used for the WHERE expression
     Value: RawUTF8;
     /// the raw value SQL buffer used for the WHERE expression
@@ -40464,7 +40468,7 @@ constructor TSynTableStatement.Create(const SQL: RawUTF8;
 // - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
-    ndx,err,whereCount: integer;
+    ndx,err,len,whereCount: integer;
     whereWithOR: boolean;
 
 function GetPropIndex: integer;
@@ -40504,9 +40508,60 @@ begin
     result := true;
   end;
 end;
+function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
+begin
+  result := false;
+  P := GotoNextNotSpace(P);
+  Where.ValueSQL := P;
+  if PWord(P)^=ord(':')+ord('(') shl 8 then
+    inc(P,2); // ignore :(...): parameter (no prepared statements here)
+  if P^ in ['''','"'] then begin
+    // SQL String statement
+    P := UnQuoteSQLStringVar(P,Where.Value);
+    if P=nil then
+      exit; // end of string before end quote -> incorrect
+    {$ifndef NOVARIANTS}
+    RawUTF8ToVariant(Where.Value,Where.ValueVariant);
+    {$endif}
+    if FieldProp<>nil then
+      // create a SBF formatted version of the WHERE value
+      Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
+  end else
+  if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
+    // NULL statement
+    Where.Value := 'null'; // not void
+    {$ifndef NOVARIANTS}
+    SetVariantNull(Where.ValueVariant);
+    {$endif}
+  end else begin
+    // numeric statement or 'true' or 'false' (OK for NormalizeValue)
+    B := P;
+    repeat
+      inc(P);
+    until P^ in [#0..' ',';',')'];
+    SetString(Where.Value,B,P-B);
+    {$ifndef NOVARIANTS}
+    Where.ValueVariant := VariantLoadJSON(Where.Value);
+    {$endif}
+    Where.ValueInteger := GetInteger(pointer(Where.Value),err);
+    if FieldProp<>nil then
+      if Where.Value<>'?' then
+        if (FieldProp.FieldType in FIELD_INTEGER) and (err<>0) then
+          // we expect a true INTEGER value here
+          Where.Value := '' else
+          // create a SBF formatted version of the WHERE value
+          Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
+  end;
+  if PWord(P)^=ord(')')+ord(':')shl 8 then
+    inc(P,2); // ignore :(...): parameter
+  Where.ValueSQLLen := P-Where.ValueSQL;
+  P := GotoNextNotSpace(P);
+  result := true;
+end;
 function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
 begin
   result := false;
+  Where.JoinedOR := whereWithOR;
   Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
   case P^ of
   '=': Where.Operator := opEqualTo;
@@ -40584,52 +40639,9 @@ begin
     exit;
   else exit; // unknown operator
   end;
-  inc(P); // we got 'WHERE FieldName operator ' -> handle value
-  P := GotoNextNotSpace(P);
-  Where.ValueSQL := P;
-  if PWord(P)^=ord(':')+ord('(') shl 8 then
-    inc(P,2); // ignore :(...): parameter (no prepared statements here)
-  if P^ in ['''','"'] then begin
-    // SQL String statement
-    P := UnQuoteSQLStringVar(P,Where.Value);
-    if P=nil then
-      exit; // end of string before end quote -> incorrect
-    {$ifndef NOVARIANTS}
-    RawUTF8ToVariant(Where.Value,Where.ValueVariant);
-    {$endif}
-    if FieldProp<>nil then
-      // create a SBF formatted version of the WHERE value
-      Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
-  end else
-  if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
-    // NULL statement
-    Where.Value := 'null'; // not void
-    {$ifndef NOVARIANTS}
-    SetVariantNull(Where.ValueVariant);
-    {$endif}
-  end else begin
-    // numeric statement or 'true' or 'false' (OK for NormalizeValue)
-    B := P;
-    repeat
-      inc(P);
-    until P^ in [#0..' ',';',')'];
-    SetString(Where.Value,B,P-B);
-    {$ifndef NOVARIANTS}
-    Where.ValueVariant := VariantLoadJSON(Where.Value);
-    {$endif}
-    Where.ValueInteger := GetInteger(pointer(Where.Value),err);
-    if FieldProp<>nil then
-      if Where.Value<>'?' then
-        if (FieldProp.FieldType in FIELD_INTEGER) and (err<>0) then
-          // we expect a true INTEGER value here
-          Where.Value := '' else
-          // create a SBF formatted version of the WHERE value
-          Where.ValueSBF := FieldProp.SBFFromRawUTF8(Where.Value);
-  end;
-  if PWord(P)^=ord(')')+ord(':')shl 8 then
-    inc(P,2); // ignore :(...): parameter
-  Where.ValueSQLLen := P-Where.ValueSQL;
-  result := true;
+  // we got 'WHERE FieldName operator ' -> handle value
+  inc(P);
+  result := GetWhereValue(Where);
 end;
 
 label lim,lim2;
@@ -40674,13 +40686,38 @@ begin
       if ndx<0 then
         if whereCount=0 then // invalid WHERE clause
           exit else begin
+          if P^='(' then begin
+            inc(P);
+            SetLength(fWhere,whereCount+1);
+            with fWhere[whereCount] do begin
+              JoinedOR := whereWithOR;
+              FunctionName := UpperCase(Prop);
+              // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
+              len := length(Prop);
+              if (len>16) and
+                 IdemPropName('DynArrayContains',PUTF8Char(@PByteArray(Prop)[len-16]),16) then
+                Operator := opContains else
+                Operator := opFunction;
+              B := P;
+              Field := GetPropIndex;
+              if Field<0 then
+                P := B else
+                if P^<>',' then
+                  break else
+                  P := GotoNextNotSpace(P+1);
+              if (P^=')') or
+                 (GetWhereValue(fWhere[whereCount]) and (P^=')')) then begin
+                inc(P);
+                break;
+              end;
+            end;
+          end;
           P := B;
           break;
         end;
       SetLength(fWhere,whereCount+1);
       if not GetWhereExpression(ndx,fWhere[whereCount]) then
         exit; // invalid SQL statement
-      fWhere[whereCount].JoinedOR := whereWithOR;
       inc(whereCount);
       GetNextFieldProp(P,Prop);
       if IdemPropNameU(Prop,'OR') then
@@ -40718,6 +40755,8 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
         end else
          exit; // incorrect SQL statement
       end else
+      if Prop<>'' then
+        exit else // incorrect SQL statement
         break; // reached the end of the statement
     end;
   end else

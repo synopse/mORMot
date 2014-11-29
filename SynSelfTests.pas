@@ -5846,6 +5846,7 @@ begin
   Stmt.Free;
   Stmt := TSynTableStatement.Create(SQL,Props.Fields.IndexByName,
     Props.SimpleFieldsBits[soSelect]);
+  Check(Stmt.SQLStatement=SQL,'Statement should be valid');
 end;
 procedure CheckIdData(limit,offset: integer);
 begin
@@ -5984,6 +5985,20 @@ begin
     (Props.Fields.List[Stmt.SelectFields[0]-1].Name='YearOfDeath'));
   Check((length(Stmt.SelectFunctions)=1) and
     (Stmt.SelectFunctions[0]='DISTINCT'));
+  Check(Stmt.Limit=20);
+  New('select id from tab where id>:(1): and integerdynarray ( yearofbirth , :(10): ) '+
+    'order by firstname desc limit 20');
+  Check(Stmt.TableName='tab');
+  Check((length(Stmt.SelectFields)=1) and (Stmt.SelectFields[0]=0));
+  Check(length(Stmt.Where)=2);
+  Check(Stmt.Where[0].Field=0);
+  Check(Stmt.Where[0].Operator=opGreaterThan);
+  Check(Stmt.Where[0].ValueInteger=1);
+  Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[1].FunctionName='INTEGERDYNARRAY');
+  Check(Stmt.Where[1].ValueInteger=10);
+  Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
+  Check(Stmt.OrderByDesc);
   Check(Stmt.Limit=20);
   Stmt.Free;
 end;
