@@ -75,6 +75,7 @@ type
     procedure Retrieve;
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
+    procedure RetrieveFromSQL;
     procedure Update;
     procedure Blobs;
     procedure Delete;
@@ -467,7 +468,7 @@ end;
 procedure TTestORM.RetrieveOneWithWhereClause;
 var R: TSQLORM;
     i,n: integer;
-    bytes,i64: Int64;
+    bytes: Int64;
 begin
   bytes := fMongoClient.BytesTransmitted;
   for i := 1 to COLL_COUNT do begin
@@ -484,6 +485,14 @@ begin
     end;
   end;
   NotifyTestSpeed('rows retrieved',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+end;
+
+procedure TTestORM.RetrieveFromSQL;
+var R: TSQLORM;
+    i,n: integer;
+    i64: Int64;
+    prev: RawUTF8;
+begin
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name=?',['Name 43']);
   try
     n := 0;
@@ -503,6 +512,28 @@ begin
       TestOne(R,n);
     end;
     Check(n=50);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+    end;
+    Check(n=10);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10 offset 10',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n+10);
+    end;
+    Check(n=10);
   finally
     R.Free;
   end;

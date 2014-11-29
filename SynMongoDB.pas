@@ -1169,7 +1169,7 @@ type
   /// a MongoDB client message to query one or more documents in a collection
   TMongoRequestQuery = class(TMongoRequest)
   protected
-    fNumberToReturn: integer;
+    fNumberToReturn,fNumberToSkip: integer;
     fQuery, fReturnFieldsSelector: TVarData;
   public
     /// initialize a MongoDB client message to query one or more documents in
@@ -1204,6 +1204,8 @@ type
     procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
     /// retrieve the NumberToReturn parameter as set to the constructor
     property NumberToReturn: integer read fNumberToReturn;
+    /// retrieve the NumberToSkip parameter as set to the constructor
+    property NumberToSkip: integer read fNumberToSkip;
   end;
 
   /// a MongoDB client message to continue the query of one or more documents
@@ -1223,6 +1225,8 @@ type
 
   /// a MongoDB client message to close one or more active cursors
   TMongoRequestKillCursor = class(TMongoRequest)
+  protected
+    fCursors: TInt64DynArray;
   public
     /// initialize a MongoDB client message to close one or more active cursors
     // in the database
@@ -1231,7 +1235,10 @@ type
     // - if a cursor is read until exhausted (read until opQuery or opGetMore
     // returns zero for the CursorId), there is no need to kill the cursor
     // - there is no response to an opKillCursor message
-    constructor Create(const CursorIDs: array of Int64); reintroduce;
+    constructor Create(const FullCollectionName: RawUTF8;
+      const CursorIDs: array of Int64); reintroduce;
+    /// write the main parameters of the request as JSON
+    procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
   end;
 
 
@@ -2858,7 +2865,7 @@ begin
   case Kind of
   betDoc:
     if BSONList^=byte(betEOF) then
-      W.AddShort('null') else begin
+      W.Add('{','}') else begin
       W.Add('{');
       while item.FromNext(BSONList) do begin
         if Mode=modMongoShell then begin
@@ -4391,6 +4398,7 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUTF8;
 begin
   inherited Create(FullCollectionName,opQuery,0,0);
   fNumberToReturn := NumberToReturn;
+  fNumberToSkip := NumberToSkip;
   fQuery := TVarData(Query);
   fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
   WriteCollectionName(byte(Flags),FullCollectionName);
@@ -4408,12 +4416,18 @@ begin
     W.CancelLastChar;
   W.AddShort(',query:');
   AddMongoJSON(variant(fQuery),W,modMongoShell);
-  W.AddShort(',projection:');
-  AddMongoJSON(variant(fReturnFieldsSelector),W,modMongoShell);
-  W.AddShort(',numberToReturn:');
-  if fNumberToReturn=maxInt then
-    W.Add('-','1') else
+  if fReturnFieldsSelector.VType<>varNull then begin
+    W.AddShort(',projection:');
+    AddMongoJSON(variant(fReturnFieldsSelector),W,modMongoShell);
+  end;
+  if fNumberToReturn<maxInt then begin
+    W.AddShort(',numberToReturn:');
     W.Add(fNumberToReturn);
+  end;
+  if fNumberToSkip>0 then begin
+    W.AddShort(',numberToSkip:');
+    W.AddU(fNumberToSkip);
+  end;
   W.Add('}');
 end;
 
@@ -4430,14 +4444,35 @@ end;
 
 { TMongoRequestKillCursor }
 
-constructor TMongoRequestKillCursor.Create(const CursorIDs: array of Int64);
+constructor TMongoRequestKillCursor.Create(const FullCollectionName: RawUTF8;
+  const CursorIDs: array of Int64);
+var n: integer;
 begin
   if high(CursorIDs)<0 then
     raise EMongoException.CreateUTF8('%.Create([]) call',[self]);
-  inherited Create(FullCollectionName,opGetMore,0,0); 
+  inherited Create(FullCollectionName,opKillCursors,0,0);
   Write4(0); // reserved for future use
-  Write4(length(CursorIDs));
-  Write(@CursorIDs[0],length(CursorIDs)*sizeof(Int64));
+  n := length(CursorIDs);
+  Write4(n);
+  SetLength(fCursors,n);
+  n := n*sizeof(Int64);
+  move(CursorIDs[0],fCursors[0],n);
+  Write(pointer(fCursors),n);
+end;
+
+procedure TMongoRequestKillCursor.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
+var i: integer;
+begin
+  inherited;
+  if W.LastChar='}' then
+    W.CancelLastChar;
+  W.AddShort(',cursorID:[');
+  for i := 0 to high(fCursors) do begin
+    W.Add(fCursors[i]);
+    W.Add(',');
+  end;
+  W.CancelLastComma;
+  W.Add(']','}');
 end;
 
 
@@ -4809,7 +4844,7 @@ begin
         end;
       until ((Query.NumberToReturn>0)and(count<=0)) or (cursorID=0);
     if cursorID<>0 then // if cursor not exhausted: need to kill it
-      SendAndFree(TMongoRequestKillCursor.Create([cursorID]));
+      SendAndFree(TMongoRequestKillCursor.Create(Query.FullCollectionName,[cursorID]),true);
   finally
     Query.Free;
   end;
@@ -4916,6 +4951,7 @@ begin
   try
     Lock;
     if Send(Request) then
+      while true do
       if fSocket.TrySockRecv(@Header,sizeof(Header)) then begin
         if (Header.MessageLength<SizeOf(Header)) or
            (Header.MessageLength>MONGODB_MAXMESSAGESIZE) then
@@ -4927,7 +4963,13 @@ begin
         if fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)],DataLen) then
           if Header.ResponseTo=Request.MongoRequestID then // success
             exit else
-            raise EMongoRequestException.CreateFmt('ResponseTo=%d Expected:%d',
+          if Header.OpCode=ord(opMsg) then begin
+            if Client.Log<>nil then
+              Client.Log.Log(sllWarning,'Msg from MongoDB: %',
+                [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)]);
+          end else
+            raise EMongoRequestException.CreateFmt(
+              'ResponseTo=%d Expected:%d in current blocking mode',
               [Header.ResponseTo,Request.MongoRequestID],self,Request);
       end else
         raise EMongoRequestException.Create('Server reset the connection: '+
