@@ -556,7 +556,8 @@ begin
   result := true;
   for i := 0 to high(aModel.Tables) do
     if (regDoNotRegisterUserGroupTables in aOptions) and
-       ((aModel.Tables[i]=TSQLAuthGroup) or (aModel.Tables[i]=TSQLAuthUser)) then
+       (aModel.Tables[i].InheritsFrom(TSQLAuthGroup) or
+        aModel.Tables[i].InheritsFrom(TSQLAuthUser)) then
       continue else
     if not VirtualTableExternalRegister(aModel,aModel.Tables[i],aExternalDB,'') then
       result := false else

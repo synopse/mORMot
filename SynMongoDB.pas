@@ -1,4 +1,4 @@
-/// MongoDB document-oriented database direct access classes
+  /// MongoDB document-oriented database direct access classes
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynMongoDB;
@@ -4851,7 +4851,8 @@ begin
   if Request=nil then
     raise EMongoRequestException.Create('LockAndSend(nil)',self);
   Request.ToBSONDocument(doc);
-  if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) then
+  if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) and
+     (Client.LogRequestEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.fLogRequestEvent,Request.ToJSON(modMongoShell));
   result := fSocket.TrySndLow(pointer(doc),length(doc));
 end;
@@ -4897,7 +4898,8 @@ var reply: TMongoReply;
 begin
   GetReply(Request,reply);
   Result.Init(reply);
-  if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) then
+  if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) and
+     (Client.LogReplyEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.LogReplyEvent,
       Result.ToJSON(modMongoShell,True,Client.LogReplyEventMaxSize));
   if mrfQueryFailure in Result.ResponseFlags then
@@ -4925,11 +4927,11 @@ begin
         if fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)],DataLen) then
           if Header.ResponseTo=Request.MongoRequestID then // success
             exit else
-            raise EMongoRequestException.CreateFmt('Unexpected ResponseTo=%d',
-              [Header.ResponseTo],self,Request);
+            raise EMongoRequestException.CreateFmt('ResponseTo=%d Expected:%d',
+              [Header.ResponseTo,Request.MongoRequestID],self,Request);
       end else
         raise EMongoRequestException.Create('Server reset the connection: '+
-          'proabably due to a bad formatted BSON request',self,Request);
+          'probably due to a bad formatted BSON request',self,Request);
     // if we reached here, this is due to a socket error
     raise EMongoRequestOSException.Create('GetReply',self,Request);
   finally

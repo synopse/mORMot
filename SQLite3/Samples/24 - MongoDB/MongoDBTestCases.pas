@@ -506,6 +506,20 @@ begin
   finally
     R.Free;
   end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'order by Name',[]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.Age);
+      if prev<>'' then
+        Check(StrIComp(pointer(prev),pointer(R.Name))<0);
+      prev := R.Name;
+    end;
+    Check(n>50);
+  finally
+    R.Free;
+  end;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[51]);
   try
     n := 0;

@@ -201,6 +201,11 @@ type
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestStorageMongoDB;
 
+/// create and register ALL classes of a given model to access a MongoDB server
+// - the collection names will follow the class names
+function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
+  aMongoDatabase: TMongoDatabase; DoNotRegisterUserGroupTables: boolean=false): boolean;
+
 
 implementation
 
@@ -226,6 +231,25 @@ begin
   Props.ExternalDB.MapField('ID','_id');
   result := TSQLRestStorageMongoDB.Create(aClass,aServer);
   aServer.StaticDataAdd(result);
+end;
+
+function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
+  aMongoDatabase: TMongoDatabase; DoNotRegisterUserGroupTables: boolean): boolean;
+var i: integer;
+begin
+  if (aServer=nil) or (aMongoDatabase=nil) then begin
+    result := false;
+    exit; // avoid GPF
+  end;
+  result := true;
+  with aServer.Model do
+  for i := 0 to high(Tables) do
+    if DoNotRegisterUserGroupTables and
+       (Tables[i].InheritsFrom(TSQLAuthGroup) or
+        Tables[i].InheritsFrom(TSQLAuthUser)) then
+      continue else
+    if StaticMongoDBRegister(Tables[i],aServer,aMongoDatabase,'')=nil then
+      result := false;
 end;
 
 
@@ -807,10 +831,11 @@ var W: TJSONSerializer;
     withID: boolean;
 
 function ComputeQuery: boolean;
+const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
 var FieldName: RawUTF8;
     B: TBSONWriter;
-    start,startOR,startORItem: cardinal;
-    n,w: integer;
+    start,startSpecial,startOR,startORItem: cardinal;
+    n,w,i: integer;
 begin
   result := false;
   if Stmt.SQLStatement='' then begin
@@ -818,13 +843,18 @@ begin
     exit;
   end;
   n := Length(Stmt.Where);
-  if (n<1) or (Stmt.Where[0].Field<0) then begin // no WHERE clause or COUNT(*)
+  if (n=0) and (Stmt.OrderByField=nil) then begin // no WHERE clause
     result := true;
     SetVariantNull(Query); // void query -> returns all rows
     exit;
   end;
   B := TBSONWriter.Create(TRawByteStringStream);
   try
+    if Stmt.OrderByField<>nil then begin
+      startSpecial := B.BSONDocumentBegin;
+      B.BSONWrite('$query',betDoc);
+    end else
+      startSpecial := cardinal(-1);
     startORItem := 0; // makes compiler happy
     start := B.BSONDocumentBegin;
     if (n>1) and Stmt.Where[1].JoinedOR then begin
@@ -857,6 +887,17 @@ begin
     if Integer(startOR)>=0 then
       B.BSONDocumentEnd(startOR);
     B.BSONDocumentEnd(start);
+    if integer(startSpecial)>=0 then begin
+      if Stmt.OrderByField<>nil then begin
+        B.BSONWrite('$orderby',betDoc);
+        Start := B.BSONDocumentBegin;
+        for i := 0 to high(Stmt.OrderByField) do
+          B.BSONWrite(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.OrderByField[i]-1),
+            ORDERBY_FIELD[Stmt.OrderByDesc]);
+        B.BSONDocumentEnd(start);
+      end;
+      B.BSONDocumentEnd(startSpecial);
+    end;
     B.ToBSONVariant(Query);
   finally
     B.Free;
