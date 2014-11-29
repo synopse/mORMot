@@ -27831,7 +27831,7 @@ begin
     if length(IndexName)+length(Props.SQLTableName)>64 then
       // avoid reaching potential identifier name size limit 
       IndexName := crc32cUTF8ToHex(Props.SQLTableName)+
-                   crc32cUTF8ToHex(IndexName)+CardinalToHex(GetTickCount64);
+                   crc32cUTF8ToHex(IndexName);
   end;
   SQL := FormatUTF8('CREATE %INDEX IF NOT EXISTS Index%% ON %(%);',
     [SQL,Props.SQLTableName,IndexName,Props.SQLTableName,RawUTF8ArrayToCSV(FieldNames,',')]);
