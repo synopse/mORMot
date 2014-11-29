@@ -824,6 +824,7 @@ var W: TJSONSerializer;
     MS: TRawByteStringStream;
     Query,Projection: variant;
     Res: TBSONDocument;
+    TextOrderByField: integer;
     ResCount,limit: PtrInt;
     extFieldNames: TRawUTF8DynArray;
     Stmt: TSynTableStatement;
@@ -888,10 +889,15 @@ begin
       B.BSONDocumentEnd(startOR);
     B.BSONDocumentEnd(start);
     if integer(startSpecial)>=0 then begin
-      if Stmt.OrderByField<>nil then begin
+      n := high(Stmt.OrderByField);
+      if (n=0) and (Stmt.OrderByField[0]>0) and (Stmt.Limit=0) and
+         (Stmt.Offset=0) and (fStoredClassRecordProps.Fields.List[
+          Stmt.OrderByField[0]-1].SQLFieldType in [sftAnsiText, sftUTF8Text]) then
+        TextOrderByField := Stmt.OrderByField[0]-1 else
+      if n>=0 then begin
         B.BSONWrite('$orderby',betDoc);
         Start := B.BSONDocumentBegin;
-        for i := 0 to high(Stmt.OrderByField) do
+        for i := 0 to n do
           B.BSONWrite(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.OrderByField[i]-1),
             ORDERBY_FIELD[Stmt.OrderByDesc]);
         B.BSONDocumentEnd(start);
@@ -915,6 +921,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
   ResCount := 0;
   if self=nil then
     exit;
+  TextOrderByField := -1;
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
@@ -966,6 +973,17 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             end;
           finally
             MS.Free;
+          end;
+          if TextOrderByField>=0 then
+          // $orderby is case sensitive with MongoDB -> manual ordering
+          with TSQLTableJSON.CreateFromTables([fStoredClass],SQL,pointer(result),length(result)) do
+          try
+            SortFields(FieldIndex(
+              fStoredClassProps.ExternalDB.FieldNameByIndex(TextOrderByField)),
+              not Stmt.OrderByDesc,nil,sftUTF8Text);
+            result := GetJSONValues(W.Expand);
+          finally
+            Free;
           end;
         end;
       finally

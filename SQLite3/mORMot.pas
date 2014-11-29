@@ -17690,6 +17690,7 @@ procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
 var W: TJSONWriter;
     F,R: integer;
     U: PPUTF8Char;
+    directWrite: Boolean;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
@@ -17702,7 +17703,7 @@ begin
       RowLast := RowCount else
     if RowLast>RowCount then
       RowLast := RowCount;
-    if RowFirst<=0 then 
+    if RowFirst<=0 then
       RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
     // get col names and types
     SetLength(W.ColNames,FieldCount);
@@ -17712,6 +17713,8 @@ begin
     if Expand then
       W.Add('[');
     // write rows data
+    if QueryTables<>nil then
+      InitFieldTypes;
     U := @fResults[FieldCount*RowFirst];
     for R := RowFirst to RowLast do begin
       if Expand then
@@ -17720,14 +17723,19 @@ begin
         if Expand then
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if U^=nil then
-          W.AddShort('null') else
-        if IsStringJSON(U^) then begin
-          // IsStringJSON() is fast and safe: no need to guess exact value type
-          W.Add('"');
-          W.AddJSONEscape(U^,0);
-          W.Add('"');
-        end else
-          W.AddNoJSONEscape(U^,0);
+          W.AddShort('null') else begin
+          if QueryTables<>nil then
+            directWrite := SQLFieldTypeToDB[fFieldType[F].ContentType] in
+              [ftInt64,ftDouble,ftCurrency] else
+            // IsStringJSON() is fast and safe: no need to guess exact value type
+            directWrite := IsStringJSON(U^);
+          if directWrite then
+            W.AddNoJSONEscape(U^,0) else begin
+            W.Add('"');
+            W.AddJSONEscape(U^,0);
+            W.Add('"');
+          end;
+        end;
         W.Add(',');
         inc(U); // points to next value
       end;
@@ -18343,7 +18351,7 @@ procedure TSQLTable.SortFields(Field: integer; Asc: boolean=true;
   CustomCompare: TUTF8Compare=nil);
 var Sort: TUTF8QuickSort; // fast static object for sorting
 begin
-  if FieldCount=0 then
+  if (FieldCount=0) or (Cardinal(Field)>=cardinal(FieldCount)) then
     exit;
   if FieldType=sftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field,nil);
