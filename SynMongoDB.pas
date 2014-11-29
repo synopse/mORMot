@@ -3278,6 +3278,13 @@ begin
         like := '^'+like+'$';                  // LIKE 'a'   -> /^a$/
     BSONWriteRegEx(name,like,'i'); // /like/i for case-insensitivity
   end;
+  opContains: begin // http://docs.mongodb.org/manual/reference/operator/query/in
+    BSONWrite(name,betDoc);
+    start := BSONDocumentBegin;
+    BSONWrite(QUERY_OPS[opIn],betArray);
+    BSONWriteArray([Value]);
+    BSONDocumentEnd(start); 
+  end;
   else
     exit; // unhandled operator
   end;

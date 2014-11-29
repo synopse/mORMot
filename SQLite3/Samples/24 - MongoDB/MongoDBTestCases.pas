@@ -547,7 +547,7 @@ begin
         Check(StrIComp(pointer(prev),pointer(R.Name))<0);
       prev := R.Name;
     end;
-    Check(n>50);
+    Check(n=COLL_COUNT,'client side sort of a text field');
   finally
     R.Free;
   end;
@@ -590,6 +590,17 @@ begin
   finally
     R.Free;
   end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=? order by ID desc',[30]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      TestOne(R,30-n*10);
+      inc(n);
+    end;
+    Check(n=3,'{$query:{$or:[{Age:{$in:[10,20]}},{_id:30}]},$orderby:{_id:-1}}');
+  finally
+    R.Free;
+  end;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1%']);
   try
     n := 0;
@@ -623,6 +634,18 @@ begin
       TestOne(R,R.Age);
     end;
     Check(n>10,'{Name:/ame 1/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and '+
+    'IntegerDynArrayContains(Ints,?)',[10]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,10);
+    end;
+    Check(n=1,'{Age:{$in:[1,10,20]},Ints:{$in:[10]}}');
   finally
     R.Free;
   end;
