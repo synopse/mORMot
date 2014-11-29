@@ -943,8 +943,8 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return '' to mark error
           exit;
-        if Stmt.SelectFunctions<>nil then
-          if (length(Stmt.SelectFunctions)<>1) or (Stmt.SelectFunctions[0]<>'COUNT') then
+        if Stmt.SelectFunctionCount<>0 then
+          if (length(Stmt.Select)<>1) or (Stmt.Select[0].FunctionName<>'COUNT') then
             exit else // only handle count(*) function yet
           if Stmt.Where=nil then
             // was "SELECT Count(*) FROM TableName;"
@@ -976,7 +976,8 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
           end;
           if TextOrderByField>=0 then
           // $orderby is case sensitive with MongoDB -> manual ordering
-          with TSQLTableJSON.CreateFromTables([fStoredClass],SQL,pointer(result),length(result)) do
+          with TSQLTableJSON.CreateFromTables(
+            [fStoredClass],SQL,pointer(result),length(result)) do
           try
             SortFields(FieldIndex(
               fStoredClassProps.ExternalDB.FieldNameByIndex(TextOrderByField)),

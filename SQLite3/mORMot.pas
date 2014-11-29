@@ -31702,7 +31702,7 @@ begin
            not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return ''
           exit;
-        if Stmt.SelectFunctions=nil then begin
+        if Stmt.SelectFunctionCount=0 then begin
           // save rows as JSON, with appropriate search according to Where.* arguments
           MS := TRawByteStringStream.Create;
           try
@@ -31713,7 +31713,8 @@ begin
             MS.Free;
           end;
         end else
-        if (length(Stmt.SelectFunctions)<>1) or (Stmt.SelectFunctions[0]<>'COUNT') then
+        if (length(Stmt.Select)<>1) or (Stmt.SelectFunctionCount<>1) or
+           (Stmt.Select[0].FunctionName<>'COUNT') then
           exit else // only handle count(*) function here
         if ((Stmt.Limit<>0) or (Stmt.Offset<>0)) then
           // unhandled "SELECT Count(*) [...] LIMIT ..."

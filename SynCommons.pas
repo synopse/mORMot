@@ -543,6 +543,8 @@ unit SynCommons;
     "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL",
     and custom functions in the WHERE clause
   - TSynTableStatement.Where[] is now an array to allow complex WHERE clause
+  - TSynTableStatement.Select[] is now an array to allow aggregate functions,
+    column aliases, or simple +/- computation
   - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
     functions so that TSynTableStatement would store the SELECT column order
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
@@ -8589,6 +8591,24 @@ type
 
   TSynTableFieldProperties = class;
 
+  /// one recognized SELECT expression for TSynTableStatement
+  TSynTableStatementSelect = record
+    /// the column SELECTed for the SQL statement, in the expected order
+    // - contains 0 for ID/RowID, or the RTTI field index + 1
+    Field: integer;
+    /// an optional integer to be added
+    // - recognized from .. +123 .. -123 patterns in the select 
+    ToBeAdded: integer;
+    /// the optional column alias, e.g. 'MaxID' for 'max(id) as MaxID'
+    Alias: RawUTF8;
+    /// the optional function applied to the SELECTed column
+    // - e.g. Count(*) would store 'Count' and SelectField[0]=0
+    FunctionName: RawUTF8;
+  end;
+
+  /// the recognized SELECT expressions for TSynTableStatement
+  TSynTableStatementSelectDynArray = array of TSynTableStatementSelect;
+  
   /// one recognized WHERE expression for TSynTableStatement
   TSynTableStatementWhere = record
     /// expressions are evaluated as AND unless this field is set to TRUE
@@ -8632,8 +8652,8 @@ type
   TSynTableStatement = class
   protected
     fSQLStatement: RawUTF8;
-    fSelectFields: TSQLFieldIndexDynArray;
-    fSelectFunctions: TRawUTF8DynArray;
+    fSelect: TSynTableStatementSelectDynArray;
+    fSelectFunctionCount: integer;
     fTableName: RawUTF8;
     fWhere: TSynTableStatementWhereDynArray;
     fOrderByField: TSQLFieldIndexDynArray;
@@ -8662,11 +8682,9 @@ type
     // - equals '' if the parsing failed
     property SQLStatement: RawUTF8 read fSQLStatement;
     /// the column SELECTed for the SQL statement, in the expected order
-    // - contains 0 for ID/RowID, or the RTTI field index + 1
-    property SelectFields: TSQLFieldIndexDynArray read fSelectFields;
-    /// the optional function applied to the SELECTed column
-    // - e.g. Count(*) would store 'Count' and SelectField[0]=0
-    property SelectFunctions: TRawUTF8DynArray read fSelectFunctions;
+    property Select: TSynTableStatementSelectDynArray read fSelect;
+    /// if the SELECTed expression of this SQL statement have any function defined
+    property SelectFunctionCount: integer read fSelectFunctionCount;
     /// the retrieved table name
     property TableName: RawUTF8 read fTableName;
     /// the WHERE clause of this SQL statement
@@ -39005,7 +39023,7 @@ var Statement: TSynTableStatement absolute Opaque;
 begin  // note: we should have handled -2 (=COUNT) case already
   nWhere := length(Statement.Where);
   if (self=nil) or (Statement=nil) or (Data=nil) or
-     (Statement.SelectFields=nil) or (nWhere>1) or 
+     (Statement.Select=nil) or (nWhere>1) or 
      ((nWhere=1)and(Statement.Where[0].ValueSBF='')) then begin
     result := false;
     exit;
@@ -40468,7 +40486,7 @@ constructor TSynTableStatement.Create(const SQL: RawUTF8;
 // - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
-    ndx,err,len,whereCount: integer;
+    ndx,err,len,selectCount,whereCount: integer;
     whereWithOR: boolean;
 
 function GetPropIndex: integer;
@@ -40483,30 +40501,44 @@ begin
   end;
 end;
 function SetFields: boolean;
-var i: integer;
+var select: TSynTableStatementSelect;
 begin
-  i := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-  if i<0 then begin
-    if P^='(' then begin
+  result := false;
+  select.Field := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+  select.ToBeAdded := 0;
+  if select.Field<0 then begin
+    if P^<>'(' then // Field not found -> try function(field)
+      exit;
+    P := GotoNextNotSpace(P+1);
+    select.FunctionName := UpperCase(Prop);
+    inc(fSelectFunctionCount);
+    if IdemPropNameU(Prop,'COUNT') and (P^='*') then begin
+      select.Field := 0; // count(*) -> count(ID)
       P := GotoNextNotSpace(P+1);
-      AddRawUTF8(fSelectFunctions,UpperCase(Prop));
-      if IdemPropNameU(Prop,'COUNT') and (P^='*') then begin
-        P := GotoNextNotSpace(P+1);
-        result := P^=')';
-        if result then begin
-          AddFieldIndex(fSelectFields,0); // '*' -> ID
-          P := GotoNextNotSpace(P+1);
-        end;
-      end else
-        result := SetFields;
-    end else
-      result := false;
-  end else begin // Field not found -> incorrect SQL statement
-    AddFieldIndex(fSelectFields,i);
-    if P^=')' then
-      P := GotoNextNotSpace(P+1);
-    result := true;
+    end else begin
+      select.Field := GetPropIndex;
+      if select.Field<0 then
+        exit;
+    end;
+    if P^<>')' then
+      exit;
+    P := GotoNextNotSpace(P+1);
   end;
+  if P^ in ['+','-'] then begin
+    select.ToBeAdded := GetNextItemInteger(P,' ');
+    if select.ToBeAdded=0 then
+      exit;
+    P := GotoNextNotSpace(P);
+  end;
+  if IdemPChar(P,'AS ') then begin
+    inc(P,3);
+    if not GetNextFieldProp(P,select.Alias) then
+      exit;
+  end;
+  SetLength(fSelect,selectCount+1);
+  fSelect[selectCount] := select;
+  inc(selectCount);
+  result := true;
 end;
 function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
 begin
@@ -40654,14 +40686,20 @@ begin
     exit else // handle only SELECT statement
     inc(P,7);
   // 1. get SELECT clause: set bits in Fields from CSV field IDs in SQL
+  selectCount := 0;
   P := GotoNextNotSpace(P); // trim left
-  if P^=#0 then exit else // no SQL statement
+  if P^=#0 then
+    exit; // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
-    SetLength(fSelectFields,1); // SelectFields[0] := 0
-    FieldBitsToIndex(SimpleFieldsBits,fSelectFields,MAX_SQLFIELDS,1);
-    for ndx := 1 to high(fSelectFields) do
-      inc(fSelectFields[ndx]);
     inc(P);
+    SetLength(fSelect,MAX_SQLFIELDS);
+    selectCount := 1; // Select[0].Field := 0 -> ID
+    for ndx := 0 to MAX_SQLFIELDS-1 do
+      if ndx in SimpleFieldsBits then begin
+        fSelect[selectCount].Field := ndx+1;
+        inc(selectCount);
+      end;
+    SetLength(fSelect,selectCount);
     GetNextFieldProp(P,Prop);
   end else
   if not SetFields then
@@ -40769,10 +40807,10 @@ procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var with
 var i: integer;
 begin
   fillchar(Fields,sizeof(Fields),0);
-  for i := 0 to Length(SelectFields)-1 do
-    if SelectFields[i]=0 then
+  for i := 0 to Length(Select)-1 do
+    if Select[i].Field=0 then
       withID := true else
-      include(Fields,SelectFields[i]-1);
+      include(Fields,Select[i].Field-1);
 end;
 
 

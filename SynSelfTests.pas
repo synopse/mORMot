@@ -5852,9 +5852,9 @@ procedure CheckIdData(limit,offset: integer);
 begin
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil,'no WHERE clause');
-  Check((length(Stmt.SelectFields)=2)and
-    (Stmt.SelectFields[0]=0) and
-    (Props.Fields.List[Stmt.SelectFields[1]-1].Name='Data'));
+  Check((length(Stmt.Select)=2)and
+    (Stmt.Select[0].Field=0) and
+    (Props.Fields.List[Stmt.Select[1].Field-1].Name='Data'));
   Check(Stmt.Limit=limit);
   Check(Stmt.Offset=offset);
 end;
@@ -5871,8 +5871,8 @@ begin
   Check(Stmt.Where[1].ValueInteger=1600);
   Check(Stmt.Limit=10);
   Check(Stmt.Offset=20);
-  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
-    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check((length(Stmt.Select)=2)and(Stmt.Select[1].Field=0)and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='Data'));
   Check(Stmt.OrderByField=nil);
 end;
 begin
@@ -5918,8 +5918,8 @@ begin
   Check(Stmt.Where[0].ValueInteger=10);
   Check(Stmt.Limit=10);
   Check(Stmt.Offset=20);
-  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
-    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check((length(Stmt.Select)=2)and(Stmt.Select[1].Field=0)and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='Data'));
   Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
   Check(Stmt.OrderByDesc);
   New('select data,iD from tab where id >= 10 and YearOfBirth > 1600 limit 10 offset 20');
@@ -5937,8 +5937,8 @@ begin
   Check(Stmt.Where[1].Operator=opIsNotNull);
   Check(Stmt.Limit=20);
   Check(Stmt.Offset=10);
-  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
-    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check((length(Stmt.Select)=2)and(Stmt.Select[1].Field=0)and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='Data'));
   Check(Stmt.OrderByField=nil);
   New('select data,iD from tab where firstname like "monet" or data is null limit 20 offset 10');
   Check(Stmt.TableName='tab');
@@ -5951,20 +5951,20 @@ begin
   Check(Stmt.Where[1].Operator=opIsNull);
   Check(Stmt.Limit=20);
   Check(Stmt.Offset=10);
-  Check((length(Stmt.SelectFields)=2)and(Stmt.SelectFields[1]=0)and
-    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='Data'));
+  Check((length(Stmt.Select)=2)and(Stmt.Select[1].Field=0)and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='Data'));
   Check(Stmt.OrderByField=nil);
   New('select count(*) from tab');
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil);
-  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
-  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
   Check(Stmt.Limit=0);
   New('select count(*) from tab limit 10');
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil);
-  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
-  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
   Check(Stmt.Limit=10);
   New('select count(*) from tab where yearofbirth>1000 limit 10');
   Check(Stmt.TableName='tab');
@@ -5972,8 +5972,8 @@ begin
   Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
   Check(Stmt.Where[0].Operator=opGreaterThan);
   Check(Stmt.Where[0].ValueInteger=1000);
-  Check((length(Stmt.SelectFields)=1)and(Stmt.SelectFields[0]=0));
-  Check((length(Stmt.SelectFunctions)=1)and(Stmt.SelectFunctions[0]='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
   Check(Stmt.Limit=10);
   New('select distinct ( yearofdeath )  from  tab where yearofbirth > :(1000): limit 20');
   Check(Stmt.TableName='tab');
@@ -5981,15 +5981,14 @@ begin
   Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
   Check(Stmt.Where[0].Operator=opGreaterThan);
   Check(Stmt.Where[0].ValueInteger=1000);
-  Check((length(Stmt.SelectFields)=1) and
-    (Props.Fields.List[Stmt.SelectFields[0]-1].Name='YearOfDeath'));
-  Check((length(Stmt.SelectFunctions)=1) and
-    (Stmt.SelectFunctions[0]='DISTINCT'));
+  Check((length(Stmt.Select)=1) and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='DISTINCT'));
   Check(Stmt.Limit=20);
   New('select id from tab where id>:(1): and integerdynarray ( yearofbirth , :(10): ) '+
     'order by firstname desc limit 20');
   Check(Stmt.TableName='tab');
-  Check((length(Stmt.SelectFields)=1) and (Stmt.SelectFields[0]=0));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].Field=0) and (Stmt.Select[0].Alias=''));
   Check(length(Stmt.Where)=2);
   Check(Stmt.Where[0].Field=0);
   Check(Stmt.Where[0].Operator=opGreaterThan);
@@ -6000,6 +5999,32 @@ begin
   Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
   Check(Stmt.OrderByDesc);
   Check(Stmt.Limit=20);
+  New('select max(yearofdeath) as maxYOD from tab where yearofbirth > :(1000):');
+  Check(Stmt.TableName='tab');
+  Check((length(Stmt.Select)=1) and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath') and
+    (Stmt.Select[0].Alias='maxYOD') and (Stmt.Select[0].ToBeAdded=0));
+  Check(length(Stmt.Where)=1);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[0].Operator=opGreaterThan);
+  Check(Stmt.Where[0].ValueInteger=1000);
+  Check((length(Stmt.Select)=1) and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='MAX'));
+  Check(Stmt.Limit=0);
+  New('select max(yearofdeath)+115 as maxYOD from tab where yearofbirth > :(1000):');
+  Check(Stmt.TableName='tab');
+  Check((length(Stmt.Select)=1) and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath') and
+    (Stmt.Select[0].Alias='maxYOD') and (Stmt.Select[0].ToBeAdded=115));
+  Check(length(Stmt.Where)=1);
+  Check(Props.Fields.List[Stmt.Where[0].Field-1].Name='YearOfBirth');
+  Check(Stmt.Where[0].Operator=opGreaterThan);
+  Check(Stmt.Where[0].ValueInteger=1000);
+  Check((length(Stmt.Select)=1) and
+    (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='MAX'));
+  Check(Stmt.Limit=0);
   Stmt.Free;
 end;
 
