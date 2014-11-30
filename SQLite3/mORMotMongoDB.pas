@@ -373,7 +373,7 @@ var res: variant;
 begin
   if not fIndexesCreated then
     CreateIndexes;
-  res := fCollection.AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]);
+  res := fCollection.AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}');
   if DocVariantType.IsOfType(res) then
     fEngineLastID := VariantToInt64Def(res.max,0);
   {$ifdef WITHLOG}
@@ -1056,4 +1056,4 @@ begin
 end;
 
 
-end.
+end.
