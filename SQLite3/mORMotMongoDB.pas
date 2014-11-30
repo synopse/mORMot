@@ -1043,6 +1043,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
   ResCount := 0;
   if self=nil then
     exit;
+  InternalLog(SQL,sllSQL);
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
