@@ -14656,7 +14656,8 @@ begin
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
   end;
   sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom: begin
-    if (fieldType=sftBlobDynArray) and (typeInfo<>nil) then begin
+    if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
+       (Value<>nil) and (Value^<>'[') then begin
       tempCopy := BlobToTSQLRawBlob(Value);
       if tempCopy<>'' then begin
         Value := pointer(DynArraySaveJSON(typeInfo,tempCopy));
@@ -31714,7 +31715,7 @@ begin
           end;
         end else
         if (length(Stmt.Select)<>1) or (Stmt.SelectFunctionCount<>1) or
-           (Stmt.Select[0].FunctionName<>'COUNT') then
+           not IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
           exit else // only handle count(*) function here
         if ((Stmt.Limit<>0) or (Stmt.Offset<>0)) then
           // unhandled "SELECT Count(*) [...] LIMIT ..."

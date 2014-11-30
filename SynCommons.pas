@@ -7601,8 +7601,12 @@ function FieldBitsToIndex(const Fields: TSQLFieldBits;
 // - returns the index in Indexes[] of the newly appended Field value
 function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
 
-/// convert an arra of field indexes into a TSQLFieldBits set of bits
+/// convert an array of field indexes into a TSQLFieldBits set of bits
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
+
+// search a field index in an array of field indexes
+// - returns the index in Indexes[] of the given Field value, -1 if not found
+function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
 
 /// convert an arra of field indexes into a TSQLFieldBits set of bits
 function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
@@ -21281,6 +21285,14 @@ begin
   result := length(Indexes);
   SetLength(Indexes,result+1);
   Indexes[result] := Field;
+end;
+
+function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+begin
+  for result := 0 to length(Indexes)-1 do
+    if Indexes[result]=Field then
+      exit;
+  result := -1;
 end;
 
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
@@ -40514,7 +40526,7 @@ begin
     if P^<>'(' then // Field not found -> try function(field)
       exit;
     P := GotoNextNotSpace(P+1);
-    select.FunctionName := UpperCase(Prop);
+    select.FunctionName := Prop;
     inc(fSelectFunctionCount);
     if IdemPropNameU(Prop,'COUNT') and (P^='*') then begin
       select.Field := 0; // count(*) -> count(ID)

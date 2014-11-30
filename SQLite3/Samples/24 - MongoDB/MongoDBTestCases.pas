@@ -370,7 +370,7 @@ begin
   try
     for i := 1 to COLL_COUNT do begin
       R.Name := 'Name '+Int32ToUTF8(i);
-      R.Age := i;
+      R.Age := i and 63;
       R.Date := 1.0*(30000+i);
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
@@ -398,7 +398,7 @@ begin
   try
     for i := 1 to COLL_COUNT do begin
       R.Name := 'Name '+Int32ToUTF8(i);
-      R.Age := i;
+      R.Age := i and 63;
       R.Date := 1.0*(30000+i);
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
@@ -418,7 +418,7 @@ procedure TTestORM.TestOne(R: TSQLORM; aID: integer);
 begin
   Check(R.ID=aID);
   Check(R.Name='Name '+Int32ToUTF8(aID));
-  Check(R.Age=aID+fUpdateOffset);
+  Check(R.Age=aID and 63+fUpdateOffset);
   CheckSame(R.Date,1.0*(30000+aID),1E-5);
   Check(R.Value.num=aID+fUpdateOffset);
   Check(Length(R.Ints)=1);
@@ -489,9 +489,12 @@ end;
 
 procedure TTestORM.RetrieveFromSQL;
 var R: TSQLORM;
-    i,n: integer;
+    n,tot: integer;
     i64: Int64;
+    ages: TIntegerDynArray;
     prev: RawUTF8;
+    doc: variant;
+    T: TSQLTable;
 begin
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name=?',['Name 43']);
   try
@@ -509,9 +512,10 @@ begin
     n := 0;
     while R.FillOne do begin
       inc(n);
-      TestOne(R,n);
+      TestOne(R,R.ID);
+      Check(R.Age<51);
     end;
-    Check(n=50);
+    Check(n>50);
   finally
     R.Free;
   end;
@@ -542,7 +546,7 @@ begin
     n := 0;
     while R.FillOne do begin
       inc(n);
-      TestOne(R,R.Age);
+      TestOne(R,R.ID);
       if prev<>'' then
         Check(StrIComp(pointer(prev),pointer(R.Name))<0);
       prev := R.Name;
@@ -551,20 +555,15 @@ begin
   finally
     R.Free;
   end;
-  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[51]);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[]);
   try
     n := 0;
     while R.FillOne do begin
       inc(n);
-      case n of
-      1: i := 1;
-      2: i := 10;
-      3: i := 20;
-      else i := 0;
-      end;
-      TestOne(R,i);
+      TestOne(R,R.ID);
+      Check(R.Age in [1,10,20]);
     end;
-    Check(n=3);
+    Check(n>=3);
   finally
     R.Free;
   end;
@@ -584,20 +583,22 @@ begin
     n := 0;
     while R.FillOne do begin
       inc(n);
-      TestOne(R,n*10);
+      TestOne(R,R.ID);
+      Check((R.Age in [10,20]) or (R.ID=30));
     end;
-    Check(n=3,'{$or:[{Age:{$in:[10,20]}},{_id:30}]}');
+    Check(n>=3,'{$or:[{Age:{$in:[10,20]}},{_id:30}]}');
   finally
     R.Free;
   end;
-  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=? order by ID desc',[30]);
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=? order by ID desc',[40]);
   try
     n := 0;
     while R.FillOne do begin
-      TestOne(R,30-n*10);
       inc(n);
+      TestOne(R,R.ID);
+      Check((R.Age in [10,20]) or (R.ID=40));
     end;
-    Check(n=3,'{$query:{$or:[{Age:{$in:[10,20]}},{_id:30}]},$orderby:{_id:-1}}');
+    Check(n>=3,'{$query:{$or:[{Age:{$in:[10,20]}},{_id:40}]},$orderby:{_id:-1}}');
   finally
     R.Free;
   end;
@@ -607,7 +608,7 @@ begin
     while R.FillOne do begin
       inc(n);
       Check(IdemPChar(pointer(R.Name),'NAME 1'));
-      TestOne(R,R.Age);
+      TestOne(R,R.ID);
     end;
     Check(n>10,'{Name:/^name 1/i}');
   finally
@@ -619,7 +620,7 @@ begin
     while R.FillOne do begin
       inc(n);
       Check(IdemPChar(pointer(R.Name),'NAME 1'));
-      TestOne(R,R.Age);
+      TestOne(R,R.ID);
     end;
     Check(n=1,'{Name:/^name 1$/i}');
   finally
@@ -631,7 +632,7 @@ begin
     while R.FillOne do begin
       inc(n);
       Check(IdemPChar(pointer(R.Name),'NAME 1'));
-      TestOne(R,R.Age);
+      TestOne(R,R.ID);
     end;
     Check(n>10,'{Name:/ame 1/i}');
   finally
@@ -653,6 +654,37 @@ begin
   check(i64=COLL_COUNT,'{Data:null}');
   check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
   check(i64=0,'{Data:{$ne:null}}');
+  Check(fClient.RetrieveListJSON(TSQLORM,'',[],'min(RowID),max(RowID),Count(RowID)')=
+    '[{"min(RowID)":1,"max(RowID)":100,"Count(RowID)":100}]');
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
+  check(doc.a=1);
+  check(doc.b=COLL_COUNT);
+  check(doc.c=COLL_COUNT);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],'min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c');
+  check(doc.a=1);
+  check(doc.b=COLL_COUNT+1);
+  check(doc.c=COLL_COUNT);
+  T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,count(Age) as count',
+    'order by age group by age');
+  if not CheckFailed(T<>nil) then
+  try
+    n := 0;
+    tot := 0;
+    Check(T.FieldIndex('Age')=0);
+    Check(T.FieldIndex('first')=1);
+    while T.Step(false,@doc) do begin
+      Check(AddInteger(ages,doc.Age,true));
+      if n>0 then
+        Check(ages[n]>ages[n-1]);
+      Check(integer(doc.first) and 63=doc.Age);
+      inc(n);
+      tot := tot+doc.Count;
+    end;
+    Check(n=64);
+    Check(tot=COLL_COUNT);
+  finally
+    T.Free;
+  end;
 end;
 
 procedure TTestORM.Update;

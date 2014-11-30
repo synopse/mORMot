@@ -381,9 +381,9 @@ begin
   {$endif}
 end;
 begin
+  EnterCriticalSection(fStorageCriticalSection);
   if fEngineLastID=0 then
     ComputeMax_ID;
-  EnterCriticalSection(fStorageCriticalSection);
   inc(fEngineLastID);
   result := fEngineLastID;
   LeaveCriticalSection(fStorageCriticalSection);
@@ -823,20 +823,20 @@ var W: TJSONSerializer;
     MS: TRawByteStringStream;
     Query,Projection: variant;
     Res: TBSONDocument;
-    TextOrderByField: integer;
+    TextOrderByField: RawUTF8;
     ResCount,limit: PtrInt;
     extFieldNames: TRawUTF8DynArray;
     Stmt: TSynTableStatement;
     bits: TSQLFieldBits;
     withID: boolean;
+const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
 
 function ComputeQuery: boolean;
-const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
 var FieldName: RawUTF8;
     B: TBSONWriter;
     n,w,i: integer;
     this: set of (special,joinedOR);
-begin
+begin // here we compute a BSON query, since it is the fastest
   result := false;
   if Stmt.SQLStatement='' then begin
     InternalLog('%.EngineList: Invalid SQL statement "%"',[self,SQL],sllError);
@@ -892,7 +892,8 @@ begin
       if (n=0) and (Stmt.OrderByField[0]>0) and (Stmt.Limit=0) and
          (Stmt.Offset=0) and (fStoredClassRecordProps.Fields.List[
           Stmt.OrderByField[0]-1].SQLFieldType in [sftAnsiText, sftUTF8Text]) then
-        TextOrderByField := Stmt.OrderByField[0]-1 else
+        TextOrderByField := fStoredClassProps.ExternalDB.
+          FieldNameByIndex(Stmt.OrderByField[0]-1) else
       if n>=0 then begin
         B.BSONWrite('$orderby',betDoc);
         B.BSONDocumentBegin;
@@ -914,13 +915,134 @@ begin
   result := FormatUTF8('[{"Count(*)":%}]'#$A,[aCount]);
   ResCount := 1;
 end;
+procedure ComputeAggregate;
+const FUNCT: array[1..4] of string[3] = ('max','min','avg','sum');
+      FUNC_COUNT = 4;
+      FUNC_DISTINCT = 0;
+var i,func: integer;
+    distinct: integer;
+    W: TTextWriter;
+    distinctName,name,query: RawUTF8;
+begin // here we compute a JSON query, since it is easier to work with
+  distinct := -1;
+  for i := 0 to high(Stmt.Select) do
+    if IdemPropNameU(Stmt.Select[i].FunctionName,'distinct') then
+      if distinct>=0 then begin
+        InternalLog('%.EngineList: distinct() only allowed once in "%"',[self,SQL],sllError);
+        exit;
+      end else begin
+      distinct := Stmt.Select[i].Field;
+      distinctName := fStoredClassProps.ExternalDB.FieldNameByIndex(distinct-1);
+    end;
+  W := TTextWriter.CreateOwnedStream(1024);
+  try
+    W.AddShort('{$group:{_id:');
+    if distinct>=0 then begin
+      for i := 0 to high(Stmt.GroupByField) do
+        if Stmt.GroupByField[i]<>distinct then begin
+          InternalLog('%.EngineList: Distinct(%) expected GROUP BY % in "%"',
+            [self,distinctName,distinctName,SQL],sllError);
+          exit;
+        end;
+      W.Add('"','$');
+      W.AddString(distinctName);
+      W.AddShort('",');
+    end else
+    if length(Stmt.GroupByField)=0 then
+      W.AddShort('null,') else begin
+      W.Add('{');
+      for i := 0 to high(Stmt.GroupByField) do begin
+        name := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.GroupByField[i]-1);
+        W.AddString(name);
+        W.AddShort(':"$"');
+        W.AddString(name);
+        W.AddShort('",');
+      end;
+      W.CancelLastComma;
+      W.Add('}',',');
+    end;
+    for i := 0 to high(Stmt.Select) do begin
+      func := FindRawUTF8(['distinct','max','min','avg','count'],Stmt.Select[i].FunctionName,false);
+      if func<0 then begin
+        InternalLog('%.EngineList: unexpected function %() in "%"',
+          [self,Stmt.Select[i].FunctionName,SQL],sllError);
+        exit;
+      end;
+      if func=FUNC_DISTINCT then
+        continue;
+      W.Add('f');
+      W.AddU(i);
+      W.AddShort(':{$');
+      W.AddShort(FUNCT[func]);
+      W.Add(':');
+      if func=FUNC_COUNT then
+        W.Add('1') else begin
+        W.Add('"','$');
+        W.AddString(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.Select[i].Field-1));
+        W.Add('"');
+      end;
+      W.Add('}',',');
+    end;
+    W.CancelLastComma;
+    W.AddShort('}},');
+    if Stmt.OrderByField<>nil then begin
+      if (length(Stmt.OrderByField)<>1) or (Stmt.OrderByField[0]<>distinct) then begin
+        InternalLog('%.EngineList: ORDER BY should match Distinct(%) in "%"',
+          [self,distinctName,SQL],sllError);
+        exit;
+      end;
+      W.AddShort('{$sort:{_id:');
+      W.Add(ORDERBY_FIELD[Stmt.OrderByDesc]);
+      W.AddShort('}},');
+    end;
+    W.AddShort('{$project:{_id:0,');
+    for i := 0 to high(Stmt.Select) do
+    with Stmt.Select[i] do begin
+      W.Add('"');
+      if Alias<>'' then
+        W.AddString(Alias) else begin
+        if Field=0 then
+          name := 'RowID' else
+          name := fStoredClassRecordProps.Fields.List[Field-1].Name;
+        if FunctionName='' then
+          W.AddString(name) else
+        if IdemPropNameU(FunctionName,'distinct') then begin
+          W.AddString(name);
+          W.AddShort('":"$_id",');
+          continue;
+        end else begin
+          W.AddString(FunctionName);
+          W.Add('(');
+          W.AddString(name);
+          W.Add(')');
+        end;
+      end;
+      if ToBeAdded<>0 then begin
+        W.AddShort('":{$add:["$f');
+        W.AddU(i);
+        W.Add('"',',');
+        W.Add(ToBeAdded);
+        W.AddShort(']},');
+      end else begin
+        W.AddShort('":"$f');
+        W.AddU(i);
+        W.Add('"',',');
+      end;
+    end;
+    W.CancelLastComma;
+    W.AddShort('}}');
+    W.SetText(query);
+  finally
+    W.Free;
+  end;
+  result := fCollection.AggregateJSON(query);
+end;
 
 begin // same logic as in TSQLRestStorageInMemory.EngineList()
   result := ''; // indicates error occurred
   ResCount := 0;
   if self=nil then
     exit;
-  TextOrderByField := -1;
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
@@ -943,8 +1065,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
           // invalid request -> return '' to mark error
           exit;
         if Stmt.SelectFunctionCount<>0 then
-          if (length(Stmt.Select)<>1) or (Stmt.Select[0].FunctionName<>'COUNT') then
-            exit else // only handle count(*) function yet
+          if (length(Stmt.Select)=1) and IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
           if Stmt.Where=nil then
             // was "SELECT Count(*) FROM TableName;"
             SetCount(TableRowCount(fStoredClass)) else
@@ -952,6 +1073,8 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             if ComputeQuery then
               SetCount(fCollection.FindCount(Query)) else
               exit else
+            // e.g. SELECT Distinct(Age),max(RowID) FROM TableName GROUP BY Age
+            ComputeAggregate else
         // save rows as JSON from returned BSON
         if ComputeQuery then begin
           Stmt.SelectFieldBits(bits,withID);
@@ -973,14 +1096,12 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
           finally
             MS.Free;
           end;
-          if TextOrderByField>=0 then
+          if TextOrderByField<>'' then
           // $orderby is case sensitive with MongoDB -> manual ordering
           with TSQLTableJSON.CreateFromTables(
             [fStoredClass],SQL,pointer(result),length(result)) do
           try
-            SortFields(FieldIndex(
-              fStoredClassProps.ExternalDB.FieldNameByIndex(TextOrderByField)),
-              not Stmt.OrderByDesc,nil,sftUTF8Text);
+            SortFields(FieldIndex(TextOrderByField),not Stmt.OrderByDesc);
             result := GetJSONValues(W.Expand);
           finally
             Free;
@@ -1056,4 +1177,4 @@ begin
 end;
 
 
-end.
+end.

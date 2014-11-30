@@ -2210,9 +2210,6 @@ type
     // this single item as a TDocVariant
     // - if the server sent back several items as {result:[{..},{..}]}, will
     // return a dvArray kind of TDocVariant
-    // - for instance, the following will return the maximum _id value of
-    // the collection:
-    // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]).max
     function AggregateDoc(Operators: PUTF8Char; const Params: array of const): variant; overload;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
@@ -2235,12 +2232,15 @@ type
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - overloaded method to specify the pipeline as a BSON or JSON document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateJSON(const pipeline: variant; 
+    function AggregateJSON(const pipeline: variant;
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - overloaded method to specify the pipeline as a JSON text object
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
+    // - for instance, the following will return the maximum _id value of
+    // the collection:
+    // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}').max
     function AggregateDoc(const PipelineJSON: RawUTF8): variant; overload;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - overloaded method to specify the pipeline as a JSON text object
@@ -3212,7 +3212,7 @@ begin
     if VType=BSONVariantType.VarType then
       BSONWrite(name,TBSONVariantData(value)) else
     if VType=DocVariantType.VarType then
-      BSONWrite(name,TDocVariantData(Value)) else begin
+      BSONWrite(name,TDocVariantData(value)) else begin
       VariantSaveJSON(value,twJSONEscape,temp);
       JSON := pointer(temp);
       BSONWriteFromJSON(name,JSON,nil);
@@ -3371,6 +3371,10 @@ begin
     BSONWriteVariant(name,tmp) else
     // try from simple types
     case JSON^ of
+    #0: begin
+      JSON := nil;
+      exit;
+    end;
     '[': begin // nested array
       BSONWrite(name,betArray);
       JSON := BSONWriteDocFromJSON(JSON,EndOfObject,Kind,DoNotTryExtendedMongoSyntax);
@@ -5009,7 +5013,7 @@ begin
   GetDocumentsAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1),
     returnedValue);
-  with TDocVariantData(returnedValue) do
+  with DocVariantDataSafe(returnedValue)^ do
     if GetValueOrDefault('ok',1)<>0 then
       result := '' else
       result := VariantToUTF8(GetValueOrDefault('errmsg','unspecified error'));
@@ -5420,7 +5424,7 @@ function TMongoCollection.AggregateCall(const pipelineJSON: RawUTF8;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$int"}}}]})
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
   Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
   // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
   res := reply.result;
@@ -5498,15 +5502,14 @@ begin
   doc := _ObjFast(['key', Keys]);
   if not useCommand then
     doc.ns := FullCollectionName;
-  if DocVariantType.IsOfType(Options) then begin
-    with DocVariantData(Options)^ do
-      for i := 0 to Count-1 do
-        if Names[i]='name' then
-          indexName := VariantToUTF8(Values[i]) else
-          TDocVariantData(doc).AddValue(Names[i],Values[i]);
-  end;
+  if DocVariantType.IsOfType(Options) then
+    with DocVariantDataSafe(Options)^ do
+    for i := 0 to Count-1 do
+      if Names[i]='name' then
+        indexName := VariantToUTF8(Values[i]) else
+        TDocVariantData(doc).AddValue(Names[i],Values[i]);
   if indexName='' then begin
-    with DocVariantData(Keys)^ do
+    with DocVariantDataSafe(Keys)^ do
     for i := 0 to Count-1 do begin
       indexName := indexName+Names[i]+'_';
       order := VariantToIntegerDef(Values[i],10);
@@ -5547,14 +5550,14 @@ function TMongoCollection.Count: integer;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name]),res);
-  result := DocVariantData(res)^.GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindCount(const Query: variant): integer;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name,'query',Query]),res);
-  result := DocVariantData(res)^.GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
@@ -5569,7 +5572,7 @@ begin
   if NumberToSkip>0 then
     cmd := FormatUTF8('%,skip:%',[cmd,NumberToSkip]);
   fDatabase.RunCommand(BSONVariant(cmd+'}'),res);
-  result := TDocVariantData(res).GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;
