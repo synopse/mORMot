@@ -285,12 +285,11 @@ end;
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
   WithID: boolean; const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
 var i,n: integer;
-    Start: cardinal;
     W: TBSONWriter;
 begin
   W := TBSONWriter.Create(TRawByteStringStream);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     if withID then
       result := 1 else
       result := 0;
@@ -300,7 +299,7 @@ begin
         W.BSONWrite(fStoredClassProps.ExternalDB.FieldNames[i],1);
         inc(result);
       end;
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONVariant(Projection);
     if ExtFieldNames<>nil then
     with fStoredClassProps.ExternalDB do begin
@@ -835,8 +834,8 @@ function ComputeQuery: boolean;
 const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
 var FieldName: RawUTF8;
     B: TBSONWriter;
-    start,startSpecial,startOR,startORItem: cardinal;
     n,w,i: integer;
+    this: set of (special,joinedOR);
 begin
   result := false;
   if Stmt.SQLStatement='' then begin
@@ -849,15 +848,15 @@ begin
     SetVariantNull(Query); // void query -> returns all rows
     exit;
   end;
+  this := [];
   B := TBSONWriter.Create(TRawByteStringStream);
   try
     if Stmt.OrderByField<>nil then begin
-      startSpecial := B.BSONDocumentBegin;
+      B.BSONDocumentBegin;
       B.BSONWrite('$query',betDoc);
-    end else
-      startSpecial := cardinal(-1);
-    startORItem := 0; // makes compiler happy
-    start := B.BSONDocumentBegin;
+      include(this,special)
+    end;
+    B.BSONDocumentBegin;
     if (n>1) and Stmt.Where[1].JoinedOR then begin
       for w := 2 to n-1 do
       if not Stmt.Where[w].JoinedOR then begin
@@ -865,13 +864,13 @@ begin
         exit;
       end;
       B.BSONWrite('$or',betArray); // e.g. {$or:[{quantity:{$lt:20}},{price:10}]}
-      startOR := B.BSONDocumentBegin;
-    end else
-      startOR := cardinal(-1);
+      B.BSONDocumentBegin;
+      include(this,joinedOR);
+    end;
     for w := 0 to n-1 do begin
-      if Integer(startOR)>=0 then begin
+      if joinedOR in this then begin
         B.BSONWrite(UInt32ToUtf8(w),betDoc);
-        startORItem := B.BSONDocumentBegin;
+        B.BSONDocumentBegin;
       end;
       with Stmt.Where[w] do begin
         FieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Field-1);
@@ -882,13 +881,13 @@ begin
           exit;
         end;
       end;
-      if Integer(startOR)>=0 then
-        B.BSONDocumentEnd(startORItem);
+      if joinedOR in this then
+        B.BSONDocumentEnd;
     end;
-    if Integer(startOR)>=0 then
-      B.BSONDocumentEnd(startOR);
-    B.BSONDocumentEnd(start);
-    if integer(startSpecial)>=0 then begin
+    if joinedOR in this then
+      B.BSONDocumentEnd;
+    B.BSONDocumentEnd;
+    if special in this then begin
       n := high(Stmt.OrderByField);
       if (n=0) and (Stmt.OrderByField[0]>0) and (Stmt.Limit=0) and
          (Stmt.Offset=0) and (fStoredClassRecordProps.Fields.List[
@@ -896,13 +895,13 @@ begin
         TextOrderByField := Stmt.OrderByField[0]-1 else
       if n>=0 then begin
         B.BSONWrite('$orderby',betDoc);
-        Start := B.BSONDocumentBegin;
+        B.BSONDocumentBegin;
         for i := 0 to n do
           B.BSONWrite(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.OrderByField[i]-1),
             ORDERBY_FIELD[Stmt.OrderByDesc]);
-        B.BSONDocumentEnd(start);
+        B.BSONDocumentEnd;
       end;
-      B.BSONDocumentEnd(startSpecial);
+      B.BSONDocumentEnd;
     end;
     B.ToBSONVariant(Query);
   finally

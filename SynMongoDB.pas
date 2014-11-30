@@ -495,6 +495,8 @@ type
       Offset: cardinal;
       Length: cardinal;
     end;
+    fDocumentStack: integer;
+    fDocumentStackOffset: TCardinalDynArray;
     procedure WriteCollectionName(Flags: integer; const CollectionName: RawUTF8);
   public
     /// rewind the Stream to the position when Create() was called
@@ -595,13 +597,12 @@ type
       out Kind: TBSONElementType; DoNotTryExtendedMongoSyntax: boolean=false): PUTF8Char;
 
     /// to be called before a BSON document will be written
-    // - returns the start offset of this document, which is to be specified
-    // to NotifyDocumentEnd() when all properties have been called
-    function BSONDocumentBegin: cardinal;
+    // - each BSONDocumentBegin should be followed by its nested BSONDocumentEnd
+    procedure BSONDocumentBegin;
     /// to be called when a BSON document has been written
     // - it will store the current stream position into an internal array,
     // which will be written when you call AdjustDocumentsSize()
-    procedure BSONDocumentEnd(Start: Cardinal; WriteEndingZero: boolean=true);
+    procedure BSONDocumentEnd(WriteEndingZero: boolean=true);
     /// after all content has been written, call this method on the resulting
     // memory buffer to store all document size as expected by the standard
     procedure BSONAdjustDocumentsSize(BSON: PByteArray); virtual;
@@ -1034,7 +1035,6 @@ type
   protected
     fRequestID: integer;
     fResponseTo: integer;
-    fRequestHeaderStart: cardinal;
     fRequestOpCode: TMongoOperation;
     fDatabaseName,
     fCollectionName,
@@ -3087,20 +3087,26 @@ begin
   BSONWriteDoc(doc);
 end;
 
-function TBSONWriter.BSONDocumentBegin: cardinal;
+procedure TBSONWriter.BSONDocumentBegin;
 begin
-  result := TotalWritten;
+  if fDocumentStack>=Length(fDocumentStackOffset) then
+    SetLength(fDocumentStackOffset,fDocumentStack+fDocumentStack shr 3+16);
+  fDocumentStackOffset[fDocumentStack] := TotalWritten;
+  inc(fDocumentStack);
   Write4(0);
 end;
 
-procedure TBSONWriter.BSONDocumentEnd(Start: Cardinal; WriteEndingZero: boolean);
+procedure TBSONWriter.BSONDocumentEnd(WriteEndingZero: boolean);
 begin
   if WriteEndingZero then
     Write1(0);
+  if fDocumentStack=0 then
+    raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
+  dec(fDocumentStack);
   if fDocumentCount>=Length(fDocument) then
     SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
   with fDocument[fDocumentCount] do begin
-    Offset := Start;
+    Offset := fDocumentStackOffset[fDocumentStack];
     Length := TotalWritten-Offset;
   end;
   inc(fDocumentCount);
@@ -3201,9 +3207,8 @@ end;
 procedure TBSONWriter.BSONWriteDoc(const doc: TDocVariantData);
 var Name: RawUTF8;
     i: integer;
-    Start: Cardinal;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   if TVarData(doc).VType>varNull then // null,empty will write {}
     if TVarData(doc).VType<>DocVariantType.VarType then
       raise EBSONException.CreateFmt('doc.VType=%d',[TVarData(doc).VType]) else
@@ -3216,19 +3221,18 @@ begin
         raise EBSONException.CreateFmt('BSON document size = %d > maximum %d',
           [TotalWritten,BSON_MAXDOCUMENTSIZE]);
     end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteProjection(const FieldNamesCSV: RawUTF8);
 var FieldNames: TRawUTF8DynArray;
     i: integer;
-    Start: cardinal;
 begin
   CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(FieldNames) do
     BSONWrite(FieldNames[i],1);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 function TBSONWriter.BSONWriteQueryOperator(const name: RawUTF8;
@@ -3236,8 +3240,7 @@ function TBSONWriter.BSONWriteQueryOperator(const name: RawUTF8;
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
     '$ne','$lt','$lte','$gt','$gte','$in');
-var start: cardinal;
-    wasString: boolean;
+var wasString: boolean;
     like: RawUTF8;
     len: integer;
 begin
@@ -3256,9 +3259,9 @@ begin
     BSONWriteVariant(name,Value);
   opNotEqualTo..opIn: begin
     BSONWrite(name,betDoc);
-    start := BSONDocumentBegin;
+    BSONDocumentBegin;
     BSONWriteVariant(QUERY_OPS[operator],Value);
-    BSONDocumentEnd(start);
+    BSONDocumentEnd;
   end;
   opLike: begin
     VariantToUTF8(Value,like,wasString);
@@ -3280,10 +3283,10 @@ begin
   end;
   opContains: begin // http://docs.mongodb.org/manual/reference/operator/query/in
     BSONWrite(name,betDoc);
-    start := BSONDocumentBegin;
+    BSONDocumentBegin;
     BSONWrite(QUERY_OPS[opIn],betArray);
     BSONWriteArray([Value]);
-    BSONDocumentEnd(start); 
+    BSONDocumentEnd;
   end;
   else
     exit; // unhandled operator
@@ -3292,46 +3295,42 @@ begin
 end;
 
 procedure TBSONWriter.BSONWriteObject(const NameValuePairs: array of const);
-var Start: cardinal;
-    Name: RawUTF8;
+var Name: RawUTF8;
     i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to (length(NameValuePairs)shr 1)-1 do begin
     VarRecToUTF8(NameValuePairs[i*2],Name);
     BSONWrite(Name,NameValuePairs[i*2+1]);
   end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteArray(const Items: array of const);
-var Start: cardinal;
-    i: integer;
+var i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(Items) do
     BSONWrite(UInt32ToUtf8(i),Items[i]);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteArrayOfInteger(const Integers: array of integer);
-var Start: cardinal;
-    i: integer;
+var i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(Integers) do
     BSONWrite(UInt32ToUtf8(i),Integers[i]);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteArrayOfInt64(const Integers: array of Int64);
-var Start: cardinal;
-    i: integer;
+var i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(Integers) do
     BSONWrite(UInt32ToUtf8(i),Integers[i]);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
@@ -3419,7 +3418,7 @@ end;
 
 function TBSONWriter.BSONWriteDocFromJSON(JSON: PUTF8Char; aEndOfObject: PUTF8Char;
   out Kind: TBSONElementType; DoNotTryExtendedMongoSyntax: boolean): PUTF8Char;
-var Start, ndx: cardinal;
+var ndx: cardinal;
     EndOfObject: AnsiChar;
     Name: RawUTF8;
 begin
@@ -3430,7 +3429,7 @@ begin
   case JSON^ of
   '[': begin
     Kind := betArray;
-    Start := BSONDocumentBegin;
+    BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
     ndx := 0;
     if JSON^=']' then
@@ -3445,7 +3444,7 @@ begin
   end;
   '{': begin
     Kind := betDoc;
-    Start := BSONDocumentBegin;
+    BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
     if JSON^='}' then
       inc(JSON) else
@@ -3460,13 +3459,13 @@ begin
   'n','N': 
     if IdemPChar(JSON+1,'ULL') then begin
       Kind := betNull;
-      Start := BSONDocumentBegin;
+      BSONDocumentBegin;
       inc(JSON,4);
     end else
       exit;
   else exit;
   end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if aEndOfObject<>nil then
     aEndOfObject^ := JSON^;
@@ -4033,14 +4032,13 @@ function BSON(const NameValuePairs: array of const): TBSONDocument;
 var W: TBSONWriter;
     name: RawUTF8;
     a: Integer;
-    Start: cardinal;
 procedure WriteValue;
-var StartNested, ndx: cardinal;
+var ndx: cardinal;
 begin
   case VarRecAsChar(NameValuePairs[a]) of
   ord('['): begin
     W.BSONWrite(name,betArray);
-    StartNested := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     ndx := 0;
     repeat
       inc(a);
@@ -4050,11 +4048,11 @@ begin
       WriteValue;
       inc(ndx);
     until a=high(NameValuePairs);
-    W.BSONDocumentEnd(StartNested);
+    W.BSONDocumentEnd;
   end;
   ord('{'): begin
     W.BSONWrite(name,betDoc);
-    StartNested := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     repeat
       inc(a);
       VarRecToUTF8(NameValuePairs[a],name);
@@ -4063,7 +4061,7 @@ begin
       inc(a);
       WriteValue;
     until a=high(NameValuePairs);
-    W.BSONDocumentEnd(StartNested);
+    W.BSONDocumentEnd;
   end else
     W.BSONWrite(name,NameValuePairs[a]);
   end;
@@ -4071,7 +4069,7 @@ end;
 begin
   W := TBSONWriter.Create(TRawByteStringStream);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     a := 0;
     while a<high(NameValuePairs) do begin
       VarRecToUTF8(NameValuePairs[a],name);
@@ -4079,7 +4077,7 @@ begin
       WriteValue;
       inc(a);
     end;
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;
@@ -4088,15 +4086,14 @@ end;
 
 function BSONFieldSelector(const FieldNames: array of RawUTF8): TBSONDocument;
 var i: integer;
-    Start: cardinal;
     W: TBSONWriter;
 begin
   W := TBSONWriter.Create(TRawByteStringStream,512);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     for i := 0 to high(FieldNames) do
       W.BSONWrite(FieldNames[i],1);
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;
@@ -4254,7 +4251,7 @@ begin
     fRequestID := InterlockedIncrement(GlobalRequestID) else
     fRequestID := requestID;
   fResponseTo := responseTo;
-  fRequestHeaderStart := BSONDocumentBegin;
+  BSONDocumentBegin;
   fRequestOpCode := opCode;
   Write4(fRequestID);
   Write4(fResponseTo);
@@ -4279,7 +4276,7 @@ begin
   if (fRequestID=0) or (fRequestOpCode=opReply) then
     raise EMongoException.CreateUTF8('No previous proper %.Create() call',[self]);
   if fBSONDocument='' then begin
-    BSONDocumentEnd(fRequestHeaderStart,false);
+    BSONDocumentEnd(false);
     inherited ToBSONDocument(fBSONDocument);
   end;
   result := fBSONDocument;
@@ -4776,13 +4773,12 @@ end;
 
 function TMongoConnection.GetBSONAndFree(Query: TMongoRequestQuery): TBSONDocument;
 var W: TBSONWriter;
-    Start: Cardinal;
 begin
   W := TBSONWriter.Create(TRawByteStringStream);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     GetRepliesAndFree(Query,ReplyBSON,W); // W.Tag = item number in array
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;

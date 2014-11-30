@@ -540,11 +540,11 @@ unit SynCommons;
   - TSynTableStatement.Create() SQL statement parser will handle optional
     LIMIT [OFFSET] clause (in new Limit/Offset integer properties),
     ORDER BY ... [DESC/ASC] clause (in new OrderByField/OrderByDesc properties),
-    "SELECT Count() FROM TableName WHERE ...", "IN(...)" and "IS [NOT] NULL",
-    and custom functions in the WHERE clause
+    GROUP BY ... clause (in GroupByField property), "LIKE", "IN(...)" and
+    "IS [NOT] NULL" operators and custom functions in the WHERE clause
   - TSynTableStatement.Where[] is now an array to allow complex WHERE clause
   - TSynTableStatement.Select[] is now an array to allow aggregate functions,
-    column aliases, or simple +/- computation
+    (e.g. Count,Max or Distinct), column aliases, or simple +/- computation
   - introducing TSQLFieldIndex and TSQLFieldIndexDynArray types and associated
     functions so that TSynTableStatement would store the SELECT column order
   - SQLParamContent() / ExtractInlineParameters() functions moved from mORMot.pas
@@ -8657,6 +8657,7 @@ type
     fTableName: RawUTF8;
     fWhere: TSynTableStatementWhereDynArray;
     fOrderByField: TSQLFieldIndexDynArray;
+    fGroupByField: TSQLFieldIndexDynArray;
     fOrderByDesc: boolean;
     fLimit: integer;
     fOffset: integer;
@@ -8689,6 +8690,9 @@ type
     property TableName: RawUTF8 read fTableName;
     /// the WHERE clause of this SQL statement
     property Where: TSynTableStatementWhereDynArray read fWhere;
+    /// recognize an GROUP BY clause with one or several fields
+    // - here 0 = ID, otherwise RTTI field index +1
+    property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
     /// recognize an ORDER BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
     property OrderByField: TSQLFieldIndexDynArray read fOrderByField;
@@ -40692,14 +40696,13 @@ begin
     exit; // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
     inc(P);
-    SetLength(fSelect,MAX_SQLFIELDS);
+    SetLength(fSelect,GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1);
     selectCount := 1; // Select[0].Field := 0 -> ID
     for ndx := 0 to MAX_SQLFIELDS-1 do
       if ndx in SimpleFieldsBits then begin
         fSelect[selectCount].Field := ndx+1;
         inc(selectCount);
       end;
-    SetLength(fSelect,selectCount);
     GetNextFieldProp(P,Prop);
   end else
   if not SetFields then
@@ -40721,38 +40724,36 @@ begin
     repeat
       B := P;
       ndx := GetPropIndex;
-      if ndx<0 then
-        if whereCount=0 then // invalid WHERE clause
-          exit else begin
-          if P^='(' then begin
-            inc(P);
-            SetLength(fWhere,whereCount+1);
-            with fWhere[whereCount] do begin
-              JoinedOR := whereWithOR;
-              FunctionName := UpperCase(Prop);
-              // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
-              len := length(Prop);
-              if (len>16) and
-                 IdemPropName('DynArrayContains',PUTF8Char(@PByteArray(Prop)[len-16]),16) then
-                Operator := opContains else
-                Operator := opFunction;
-              B := P;
-              Field := GetPropIndex;
-              if Field<0 then
-                P := B else
-                if P^<>',' then
-                  break else
-                  P := GotoNextNotSpace(P+1);
-              if (P^=')') or
-                 (GetWhereValue(fWhere[whereCount]) and (P^=')')) then begin
-                inc(P);
-                break;
-              end;
+      if ndx<0 then begin
+        if P^='(' then begin
+          inc(P);
+          SetLength(fWhere,whereCount+1);
+          with fWhere[whereCount] do begin
+            JoinedOR := whereWithOR;
+            FunctionName := UpperCase(Prop);
+            // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
+            len := length(Prop);
+            if (len>16) and
+               IdemPropName('DynArrayContains',PUTF8Char(@PByteArray(Prop)[len-16]),16) then
+              Operator := opContains else
+              Operator := opFunction;
+            B := P;
+            Field := GetPropIndex;
+            if Field<0 then
+              P := B else
+              if P^<>',' then
+                break else
+                P := GotoNextNotSpace(P+1);
+            if (P^=')') or
+               (GetWhereValue(fWhere[whereCount]) and (P^=')')) then begin
+              inc(P);
+              break;
             end;
           end;
-          P := B;
-          break;
         end;
+        P := B;
+        break;
+      end;
       SetLength(fWhere,whereCount+1);
       if not GetWhereExpression(ndx,fWhere[whereCount]) then
         exit; // invalid SQL statement
@@ -40781,17 +40782,33 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
               exit; // incorrect SQL statement
             AddFieldIndex(fOrderByField,ndx);
             if P^<>',' then begin // check ORDER BY ... ASC/DESC
+              B := P;
               if GetNextFieldProp(P,Prop) then
                 if IdemPropNameU(Prop,'DESC') then
                   fOrderByDesc := true else
                 if not IdemPropNameU(Prop,'ASC') then
-                  exit; // incorrect SQL statement
+                  P := B;
               break;
             end;
-            repeat inc(P) until not (P^ in [',',#1..' ']);
+            P := GotoNextNotSpace(P+1);
           until P^ in [#0,';'];
         end else
-         exit; // incorrect SQL statement
+        exit; // incorrect SQL statement
+      end else
+      if IdemPropNameU(Prop,'GROUP') then begin
+        GetNextFieldProp(P,Prop);
+        if IdemPropNameU(Prop,'BY') then begin
+          repeat
+            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+            if ndx<0 then
+              exit; // incorrect SQL statement
+            AddFieldIndex(fGroupByField,ndx);
+            if P^<>',' then
+              break;
+            P := GotoNextNotSpace(P+1);
+          until P^ in [#0,';'];
+        end else
+        exit; // incorrect SQL statement
       end else
       if Prop<>'' then
         exit else // incorrect SQL statement

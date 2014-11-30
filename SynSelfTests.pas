@@ -5902,6 +5902,25 @@ begin
     (Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName') and
     (Props.Fields.List[Stmt.OrderByField[1]-1].Name='LastName'));
   Check(Stmt.OrderByDesc);
+  New('select rowid,Data from tab order by firstname,lastname limit 10');
+  CheckIdData(10,0);
+  Check((length(Stmt.OrderByField)=2) and
+    (Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName') and
+    (Props.Fields.List[Stmt.OrderByField[1]-1].Name='LastName'));
+  Check(not Stmt.OrderByDesc);
+  New('select rowid,Data from tab group by firstname order by firstname,lastname');
+  CheckIdData(0,0);
+  Check((length(Stmt.GroupByField)=1) and
+    (Props.Fields.List[Stmt.GroupByField[0]-1].Name='FirstName'));
+  Check((length(Stmt.OrderByField)=2) and
+    (Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName') and
+    (Props.Fields.List[Stmt.OrderByField[1]-1].Name='LastName'));
+  New('select rowid,Data from tab group by firstname,lastname limit 10');
+  CheckIdData(10,0);
+  Check((length(Stmt.GroupByField)=2) and
+    (Props.Fields.List[Stmt.GroupByField[0]-1].Name='FirstName') and
+    (Props.Fields.List[Stmt.GroupByField[1]-1].Name='LastName'));
+  Check(not Stmt.OrderByDesc);
   New('select iD,Data from tab limit   20');
   CheckIdData(20,0);
   Check(Stmt.OrderByField=nil);
