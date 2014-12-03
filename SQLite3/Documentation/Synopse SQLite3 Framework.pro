@@ -4381,7 +4381,7 @@ Or, in case the table is defined as {\f1\fs20 TSQLValue1 = class(TSQLRecord)}, p
 !end;
 The easiest is definitively to let your static in-memory tables inherit from {\f1\fs20 TSQLRecordVirtualTableAutoID}. Just use the framework by the book - see @76@.
 Once again, this restriction does not apply to @27@.
-:27External database access
+:27External SQL database access
 %cartoon05.png
 Our @*ORM@ @*REST@ful framework is able to access most available database engines, via a set of generic units and classes. Both @*SQL@ and @*NoSQL@ engines could be accessed - quite a unique feature in the ORM landscape (in {\i Delphi}, of course, but also in Java or C# environments).
 Remember the diagram introducing {\i mORMot}'s @42@:
@@ -4395,7 +4395,7 @@ The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but
 |%
 You can even mix databases, i.e. the same {\i mORMot} ORM could persist, at the same time, its data in several databases, some {\f1\fs20 TSQLRecord} as fast internal {\i SQLite3} tables or as {\f1\fs20 TObjectList}, others in a {\i PostgreSQL} database (tied to an external reporting/SAP engine), and e.g. flat consolidated data in a {\i MongoDB} instance.
 \page
-:126 RDBMS access via SynDB
+:126 SynDB direct RDBMS access
 External {\i Relational Database Management System} (@*RDBMS@) can be accessed via our {\f1\fs20 @*SynDB@.pas} units. Then, the framework ORM is able to access them via the {\f1\fs20 mORMotDB.pas} bridge unit. But you can use the {\f1\fs20 SynDB.pas} units directly, without any link to our ORM.
 The current list of handled data access libraries is:
 |%13%25%62
@@ -4758,7 +4758,7 @@ Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it d
 !  end;
 You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade, especially for @66@.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application, or let your old application communicate with the database over plain HTTP, without the need to install any RDBMS client - see @131@.
 \page
-: SynDB database access
+: SynDB clients
 From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
 \graph SynDB1stLevel SynDB First Level Providers
 \SynDB\ZDBC
@@ -5128,7 +5128,7 @@ Even if you may be tempted to use such remote access to implement a {\i n-Tier a
 But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 Note that for cross-platform clients, {\i mORMot}'s ORM/SOA patterns are a much better approach: do not put SQL in your mobile application, but use services, so that you would not need to re-validate and re-publish the app to the store after any small fix of your business logic!
 \page
-: ORM Integration
+: SynDB ORM Integration
 :  Code-first or database-first
 When working with any @13@, you have mainly two possibilities:
 - Start from scratch, i.e. write your classes and let the ORM create all the database structure, which will reflect directly the object properties - it is also named "@*code-first@";
@@ -5382,13 +5382,25 @@ As a consequence, if you use this {\f1\fs20 ConnectionTimeOutMinutes} property, 
 ! aServer.AcquireExecutionMode[execORMWrite] := am***;
 Here above, safe blocking {\f1\fs20 am***} modes are any mode {\i but} {\f1\fs20 amUnlocked}, i.e. either {\f1\fs20 amLocked}, {\f1\fs20 amBackgroundThread}, {\f1\fs20 amBackgroundORMSharedThread} or {\f1\fs20 amMainThread}.
 \page
-:83 MongoDB database access
+:83External NoSQL database access
+%cartoon06.png
+Our @*ORM@ @*REST@ful framework is able to access not only regular @*SQL@ database engines, via @126@, but also @*NoSQL@ engines - see @82@.
+Remember the diagram introducing {\i mORMot}'s @42@:
+%%mORMotDBDesign
+\page
+The following {\i NoSQL} engines can be accessed from {\i mORMot}'s {\i Object Document Mapping} (ODM) abilities:
+|%20%80
+|\b NoSQL Engine|Description\b0
+|{\f1\fs20 TObjectList}|In memory storage, with JSON or binary disk persistence
+|{\i @*MongoDB@}|#1 NoSQL database engine
+|%
+We can in fact consider our {\f1\fs20 @**TSQLRestStorageInMemory@} instance, and its {\f1\fs20 TObjectList} storage, as a {\i NoSQL} very fast in-memory engine, written in pure Delphi. See @57@ for details about this feature.
 {\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
 - Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
-{\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which matches perfectly {\i mORMot}'s @*REST@ful approach.
-:  MongoDB client
+{\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which match perfectly {\i mORMot}'s @*REST@ful approach.
+: SynMongoDB client
 The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
 It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex or {\i Javascript}):
 - For instance, a {\f1\fs20 TBSONObjectID} can be used to create some genuine document identifiers on the client side ({\i MongoDB} does not generate the IDs for you: a common way is to generate unique IDs on the client side);
@@ -5403,7 +5415,7 @@ This unit defines some objects able to connect and manage databases and collecti
 - Access to any collection, via the {\f1\fs20 TMongoCollection} class;
 - It features some nice abilities about speed, like BULK insert or delete mode, and explicit {\i Write Concern} settings.
 At collection level, you can have direct access to the data, with high level structures like {\f1\fs20 TDocVariant}/{\f1\fs20 TBSONVariant}, with easy-to-read JSON, or low level BSON content.\line You can also tune most aspects of the client process, e.g. about error handling or {\i write concerns} (i.e. how remote data modifications are acknowledged).
-:   Connecting to a server
+:  Connecting to a server
 Here is some sample code, which is able to connect to a {\i MongoDB} server, and returns the server time:
 !var Client: TMongoClient;
 !    DB: TMongoDatabase;
@@ -5428,7 +5440,7 @@ Note that for this low-level command, we used a {\f1\fs20 TDocVariant}, and its 
 In fact, if you put your mouse over the {\f1\fs20 res} variable during debugging, you will see the following JSON content:
 µ{"system":{"currentTime":"2014-05-06T15:24:25","hostname":"Acer","cpuAddrSize":64,"memSizeMB":3934,"numCores":4,"cpuArch":"x86_64","numaEnabled":false},"os":{"type":"Windows","name":"Microsoft Windows 7","version":"6.1 SP1 (build 7601)"},"extra":{"pageSize":4096},"ok":1}
 And we simply access to the server time by writing {\f1\fs20 res.system.currentTime}.
-:   Adding some documents to the collection
+:  Adding some documents to the collection
 We will now explain how to add documents to a given collection.
 We assume that we have a {\f1\fs20 DB: TMongoDatabase} instance available. Then we will create the documents with a {\f1\fs20 TDocVariant} instance, which will be filled via late-binding, and via a {\f1\fs20 doc.Clear} pseudo-method used to flush any previous property value:
 !var Coll: TMongoCollection;
@@ -5509,7 +5521,7 @@ For instance, you may write:
 !  Coll.Insert(docs); // insert all values at once
 !...
 You will find out later for some numbers about the speed increase due to such BULK insert.
-:   Retrieving the documents
+:  Retrieving the documents
 You can retrieve the document as a {\f1\fs20 TDocVariant} instance:
 !var doc: variant;
 !...
@@ -5610,7 +5622,7 @@ $Before: {"_id":2,"Name":"Name 3","Number":2}
 $After:  {"_id":2,"Name":"NEW","Number":2}
 You can refer to the documentation of the {\f1\fs20 SynMongoDB.pas} unit, to find out all functions, classes and methods available to work with {\i MongoDB}.
 Some very powerful features are available, including @**Aggregation@ (available since {\i MongoDB} 2.2), which offers a good alternative to standard @**Map/Reduce@ pattern.\line See @http://docs.mongodb.org/manual/reference/command/aggregate for reference.
-:   Write Concern and Performance
+:  Write Concern and Performance
 You can take a look at the {\f1\fs20 MongoDBTests.dpr} sample - located in the {\f1\fs20 SQLite3\\Samples\\24 - MongoDB} sub-folder of the source code repository, and the {\f1\fs20 TTestDirect} classes, to find out some performance information.
 In fact, this {\f1\fs20 TTestDirect} is inherited twice, to run the same tests with diverse write concern:
 \graph HierTTestDirect MongoDB TTestDirect classes hierarchy
@@ -5665,12 +5677,12 @@ $  Total failed: 0 / 56,527  - Direct without acknowledge PASSED  3.77s
 As you can see, the reading speed is not affected by the {\i Write Concern} settings.\line But data writing can be multiple times faster, when each write command is not acknowledged.
 Since there is no error handling, {\f1\fs20 wcUnacknowledged} is not to be used on production. You may use it for replication, or for data consolidation, e.g. feeding a database with a lot of existing data as fast as possible.
 \page
-:84  MongoDB + ORM = ODM
+:84 MongoDB + ORM = ODM
 The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} class be persisted on a remote {\i MongoDB} server.
 As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
 This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
 From the client point of view, there is no difference between a ORM or an @*ODM@: you may use a SQL engine as a storage for ODM - via @29@ - or even a NoSQL database as a regular ORM, with @*denormalization@ (even if it may void most advantages of NoSQL).
-:   Define the TSQLRecord class
+:  Define the TSQLRecord class
 In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !  TSQLORM = class(TSQLRecord)
 !  private
@@ -5734,7 +5746,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |%
 You can share the same {\f1\fs20 TSQLRecord} definition with {\i MongoDB} and other storage means, like external SQL databases. Unused information (like the {\f1\fs20 index} attribute) will just be ignored.
 Note that {\f1\fs20 TSQLRecord}, {\f1\fs20 TID} and {\f1\fs20 TRecordReference*} published properties will automatically create an index on the corresponding field, and that a kind of {\f1\fs20 ON DELETE SET DEFAULT} tracking will take place for {\f1\fs20 TSQLRecord} and {\f1\fs20 TRecordReference} properties, and {\f1\fs20 ON DELETE CASCADE} for {\f1\fs20 TRecordReferenceToBeDeleted} - but not for {\f1\fs20 TID}, since we do not know which table to track.
-:   Register the TSQLRecord class
+:  Register the TSQLRecord class
 On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
 !  DB := MongoClient.Database['dbname'];
@@ -5743,19 +5755,19 @@ On the server side (there won't be any difference for the client), you define a 
 !!  if StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'collectionname')=nil then
 !    raise Exception.Create('Error');
 And... that's all!
-If all the tables of a {\i mORMot} server should be hosted on a {\i MongoDB} server, you could call the {\f1\fs20 @*StaticMongoDBRegister@()} function instead:
+If all the tables of a {\i mORMot} server should be hosted on a {\i MongoDB} server, you could call the {\f1\fs20 @*StaticMongoDBRegisterAll@()} function instead:
 ! StaticMongoDBRegisterAll(aServer,aMongoClient.Open(colllectionname'));
 If you want {\f1\fs20 TSQLRecord.InitializeTable} method to be called for void tables (and for instance create {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} default content), you can execute the following command:
 ! Client.Server.InitializeTables(INITIALIZETABLE_NOINDEX);
-You can then use any ORM command, as usual:
+You can then execute any ORM command, as usual:
 !  writeln(Client.TableRowCount(TSQLORM)=0);
-As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using for instance:
+As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using e.g.:
 ! aModel.Props[aClass].ExternalDB.MapField(..)
 Since the field names are stored within the document itself, it may be a good idea to use shorter naming for the {\i MongoDB} collection. It may save some storage space, when working with a huge number of documents.
-Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the {\f1\fs20 TMongoCollection} instance later on, by calling:
+Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the corresponding {\f1\fs20 TMongoCollection} instance later on, using a simple transtyping:
 ! (aServer.StaticDataServer[aClass] as TSQLRestStorageMongoDB).Collection
 This may allow any specific task, including any tuned query or process.
-:   ORM/ODM CRUD methods
+:  ORM/ODM CRUD methods
 You can add documents with the standard CRUD methods of the ORM, as usual:
 !  R := TSQLORM.Create;
 !  try
@@ -5786,7 +5798,7 @@ You can define a WHERE clause, as if the back-end where a regular SQL database:
 !    R := TSQLORM.CreateAndFillPrepare(Client,'ID=?',[i]);
 !    try
 !    ...
-:   ODM complex queries
+:  ODM complex queries
 To perform a query and retrieve the content of several documents, you can use regular {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods:
 !!  R := TSQLORM.CreateAndFillPrepare(Client,WHERE_CLAUSE,[WHERE_PARAMETERS]);
 !  try
@@ -5831,7 +5843,7 @@ Here are some typical WHERE clauses, and the corresponding {\i MongoDB} query do
 |%
 Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex {\i NoSQL} query (e.g. using aggregation functions or the {\i Map/Reduce} pattern) by using directly the {\f1\fs20 TMongoCollection} methods.
 But for most business code, {\i mORMot} allows to share the same exact code between your regular SQL databases or NoSQL engines. You do not need to learn the {\i MongoDB} query syntax: the ODM would compute the right expression for you, depending on the database engine it runs on.
-:   BATCH mode
+:  BATCH mode
 In addition to individual @*CRUD@ operations, our {\i MongoDB} is able to use BATCH mode for adding or deleting documents.
 You can write the exact same code as with any SQL back-end:
 !  Client.BatchStart(TSQLORM);
@@ -5857,7 +5869,7 @@ Or for deletion:
 !      assert(fClient.BatchDelete(i)>=0);
 !  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
 Speed benefit may be huge in regard to individual Add/Delete operations, even on a local {\i MongoDB} server. We will see some benchmark numbers now.
-:   ORM/ODM performance
+:  ORM/ODM performance
 You can take a look at @59@ to compare {\i MongoDB} as back-end for our ORM classes.
 In respect to external @*SQL@ engines, it features very high speed, low CPU use, and almost no difference in use. We interfaced the {\f1\fs20 BatchAdd()} and {\f1\fs20 BatchDelete()} methods to benefit of {\i MongoDB} BULK process, and avoided most memory allocation during the process.
 Here are some numbers, extracted from the {\f1\fs20 MongoDBTests.dpr} sample, which reflects the performance of our ORM/ODM, depending on the {\i Write Concern} mode used:
@@ -5908,7 +5920,7 @@ $!     1000 rows deleted in 364us i.e. 2747252/s, aver. 0us, 23.4 MB/s
 $  Total failed: 0 / 376,435  - ORM without acknowledge PASSED  3.44s
 As for direct {\i MongoDB} access, the {\f1\fs20 wcUnacknowledged} is not to be used on production, but may be very useful in some particular scenarios. As expected, the reading process is not impacted by the {\i Write Concern} mode set.
 :6JSON RESTful Client-Server
-%cartoon06.png
+%cartoon07.png
 Before describing the Client-Server design of this framework, we may have to detail some standards it is based on:
 - JSON as its internal data storage and transmission format;
 - REST as its Client-Server architecture.
@@ -6523,7 +6535,7 @@ A {\f1\fs20 TSynCache} instance is instantiated within the {\f1\fs20 TSQLDataBas
 This will enable a global JSON cache at the SQL level. This cache will be reset on every {\f1\fs20 INSERT, UPDATE} or {\f1\fs20 DELETE} SQL statement, whatever the corresponding table is.
 In practice, this global cache was found to be efficient, even if its implementation is some kind of "naive". It is in fact much more tuned than other HTTP-level caching mechanisms used in most client-server solutions (using e.g. a {\i Squid} proxy) - since our caching is at the SQL level, it is shared among all @*CRUD@ / @*Rest@ful queries, and is also indenpendent from the authentication scheme, which pollutes the URI. Associated with the other levels of cache - see @38@ - the framework scaling was found to be very good.
 :35Client-Server process
-%cartoon07.png
+%cartoon08.png
 The {\i mORMot} framework can be used either @*stand-alone@, or in a @**Client-Server@ model, via several communication layers:
 - Fast in-process access (an executable file using a common library, for instance);
 - Windows Messages, only locally on the same computer, which are very fast for small content;
@@ -6931,7 +6943,7 @@ During all tests, no assertion failed, meaning that no concurrency problem did o
 Average performance is pretty good, even more if we consider that we are inserting one object per request, with no transaction. In fact, it sounds like if our little {\i SQLite3} server is faster than most database servers, even when accessed in highly concurrent mode! In batch mode - see @28@ - we may achieve amazing results.
 Feel free to send your own benchmark results and feedback, e.g. with concurrent clients on several workstations, or long-running tests, on our forums.
 :114Client-Server ORM
-%cartoon08.png
+%cartoon01.png
 As stated above, all ORM features can be accessible either stand-alone, or remotely via some dedicated @35@.
 That is, CRUD operations can be executed either at the database level, or remotely, from the same methods defined in {\f1\fs20 TSQLRest} abstract class.
 This feature has several benefits, among them:
@@ -7482,7 +7494,7 @@ It's worth warning once again that it's up to the code responsibility to ensure 
 {\i On the Client side}, only local CRUD operations are tracked. According to the stateless design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
-%cartoon01.png
+%cartoon02.png
 In your developer background and history, you may have been used to write your business code as {\i @**stored procedure@s}, to be executed on the server side.\line In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the database side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature is usually much faster than a pure client-sided solution.
 Since {\i mORMot} is {\i Client/Server} from the ground up, it features some unique ways of improving data-intensive process on the client or server sides, without necessary relying on proprietary {\i stored procedures}.
 This chapter is worth reading, if you start a new {\i mORMot} project, and wonder about the architecture of your upcoming applications, or if you are integrating a {\i mORMot} server in an existing application... in which you or your predecessors may have (ab)used of stored procedures.\line It is time to sit down first, and take counsel how your project may be optimized enough to scale and profit.
@@ -7690,7 +7702,7 @@ In such situation, all RESTful Server-sided solutions could produce a lot of net
 In order to speed up the process, you may define some RDMS stored procedures in the external database syntax (P/SQL, {\i .Net}, {\i Java} or whatever), then define some @11@ to launch those functions.\line Note that in this case, you'll loose the database independence of the framework, and most of the benefits of using an ORM/ODM - later on, switching to another database engine may become impossible. Such RDBMS stored procedures may be envisaged only during the transition phase of an existing application. @28@ has almost all the speed advantages of stored procedures, with the benefit of a pure object oriented code, easy to debug and maintain.
 \page
 :11 Server side Services
-%cartoon02.png
+%cartoon03.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @35@;
 - By some RESTful @**service@s, implemented in the Server as {\i published methods}, and consumed in the Client via native {\i Delphi} methods;
@@ -7700,7 +7712,7 @@ If you paid for a {\i Delphi Architect} edition, the first two items can be comp
 The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a @*KISS@ {\i @*convention over configuration@} manner.
 So {\i mORMot} is quite unique, in the fact that it features, in one unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a {\i Domain-Driven Design}, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
-%cartoon03.png
+%cartoon04.png
 To implement a service in the {\i Synopse mORMot framework}, the first method is to define @**published method@ Server-side, then use easy functions about JSON or URL-parameters to get the request encoded and decoded as expected, on Client-side.
 We'll implement the same example as in the official Embarcadero docwiki page above. Add two numbers. Very useful service, isn't it?
 : Publishing a service on the server
@@ -7885,7 +7897,7 @@ The {\i mORMot} implementation of method-based services gives full access to the
 Note that due to this implementation pattern, the {\i mORMot} service implementation is very fast, and not sensitive to the "Hash collision attack" security issue, as reported with {\i Apache} - see @http://blog.synopse.info/post/2011/12/30/Hash-collision-attack for details.
 But with this implementation, a lot of process (e.g. parameter marshalling) is to be done by hand on both client and server side code. In addition, building and maintaining a huge SOA system with a "method by method" approach could be difficult, since it publishes one big "flat" set of services. This is were {\f1\fs20 interface}s enter the scene.
 :46Interfaces
-%cartoon04.png
+%cartoon05.png
 : Delphi and interfaces
 :  Declaring an interface
 No, interface(-book) is not another social network, sorry.
@@ -8502,7 +8514,7 @@ Note that internally, those methods will compute a {\f1\fs20 Hash32()} hash valu
 You have even a full access to the internal execution trace, via the two {\f1\fs20 TInterfaceStub.Log} and {\f1\fs20 LogCount} properties. This will allow any validation of mocked {\f1\fs20 interface} calls logic, beyond {\f1\fs20 ExpectsTrace()} possibilities.
 You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs} regression tests, for a whole coverage of all the internal features.
 :63Client-Server services via interfaces
-%cartoon05.png
+%cartoon06.png
 In real world, especially when your application relies heavily on services, the @49@ implementation pattern has some drawbacks:
 - Most content marshaling is to be done by hand, so may introduce implementation issues;
 - Client and server side code does not have the same implementation pattern, so you will have to code explicitly data marshaling twice, for both client and server ({\i DataSnap} and WCF both suffer from a similar issue, by which client classes shall be coded separately, most time generated by a Wizard);
@@ -9704,7 +9716,7 @@ Optionally, {\i mORMot}'s interface based services allow to publish their result
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
-%cartoon06.png
+%cartoon07.png
 Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
@@ -10392,7 +10404,7 @@ Here, the {\f1\fs20 client} variable is a {\f1\fs20 TSQLRestClientURI} instance,
 If you update your data model on the server, just re-generate your {\f1\fs20 mORMotClient.pas} unit from {\f1\fs20 http://localhost:888/root/wrapper}, then rebuild your {\i Smart Mobile Studio} project to reflect all changes made to your ORM data model, or your SOA available services.
 Thanks to the {\i SmartPascal} strong typing, any breaking change of the server expectations would immediately be reported at compilation, and not at runtime, as it would with regular {\i JavaScript} clients.
 :MVC pattern
-%cartoon07.png
+%cartoon08.png
 The {\i mORMot} framwork allows writing rich and/or web MVC applications, relying on regular ORM and SOA methods to implement its business model and its application layer, with an optional dedicated MVC model for the HTML rendering.
 : Model
 According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
@@ -10794,7 +10806,7 @@ The fact that the {\i ViewModel} data context is transmitted as JSON content - {
 - Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients.
 The next chapter will uncover how to build such solid MVC / MVVM @*Web Application@s using {\i mORMot}.
 :108MVC/MVVM Web applications
-%cartoon08.png
+%cartoon01.png
 We will now explain how to build a @*MVC@/@*MVVM@ @**web application@ using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample. Following explanations may be a bit unsynchronized from the current state of the sample source code in the "unstable" branch of the framework repository, but you will get here below the main intangible points.
 This little web application publishes a simple BLOG, not fully finished yet (this is a {\i Sample}, remember!). But you can still execute it in your desktop browser, or any mobile device (thanks to a simple {\i @*Bootstrap@}-based @*responsive design@), and see the articles list, view one article and its comments, view the author information, log in and out.
 This sample is implemented as such:
@@ -11251,7 +11263,7 @@ It will share the same {\f1\fs20 \{\{>partials\}\}}, for a consistent and mainta
 - {\f1\fs20 \{\{>articlerow\}\}} is a partial also shared with {\f1\fs20 ArticleView.html}, which will render a list of {\f1\fs20 TSQLArticle} encoded as {\f1\fs20 \{\{#Articles\}\}}...{\f1\fs20 \{\{/Articles\}\}} sections.
 Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every aspect of the MVC process has been divided into small classes, so that the framework is able to create web applications, but also any kind of MVC applications, including mobile or VCL/FMX apps, and/or reporting - using {\f1\fs20 mORMotReport.pas}.
 :75Hosting
-%cartoon01.png
+%cartoon02.png
 We could identify several implementation patterns of a {\i mORMot} server and its clients:
 - Stand-alone application, either in the same process or locally on the same computer;
 - Private self-hosting, e.g. in a corporate network, with a {\i mORMot} executable or service publishing some content to clients locally or over the Internet (directly from a DMZ or via a VPN);
@@ -11428,7 +11440,7 @@ Then each CDN will check if the requested URI is already in its cache, according
 Of course, you can define some URI patterns to never be cached, and point directly to the {\i mORMot} server. All authenticated services, for instance would need direct access to the {\i mORMot} server, since the @98@ will append a session-private signature to each URI. Just ensure that you disabled authentication - using {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
 If your project starts to have success, using a CDN is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
 :43Security
-%cartoon02.png
+%cartoon03.png
 The framework tries to implement @**security@ via:
 - Process safety;
 - Authentication;
@@ -11746,7 +11758,7 @@ For @49@, if authentication is enabled, any method execution will be processed o
 For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
 Do not forget to remove authentication for the services for which you want to enable @97@. In fact, such world-wide @*CDN@ caching services expect the URI to be generic, and not tied to a particular client session.
 :79Scripting Engine
-%cartoon03.png
+%cartoon04.png
 : Scripting abilities
 As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the {\i Delphi} source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a {\i Delphi} IDE installed (and paid), and know the {\i Delphi} language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
@@ -12005,7 +12017,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 !  ...
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :68Domain-Driven-Design
-%cartoon04.png
+%cartoon05.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
 This is were @54@ - abbreviated DDD - patterns are worth looking at.
 : Domain
@@ -12254,7 +12266,7 @@ label="Domain Model";
 In order to provide the better scaling of the server side, @*cache@ can be easily implemented at every level, and hosting can be tuned in order to provide the best response time possible: one central server, several dedicated servers for application, domain and persistence layers...
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
-%cartoon05.png
+%cartoon06.png
 Since we covered most architectural and technical aspects of the framework, it is time to put the last missing bricks to the building, meaning testing and logging.
 \page
 : Automated testing
@@ -12730,7 +12742,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  (...)
 Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
-%cartoon06.png
+%cartoon07.png
 =[License]
 \page
 : Availability
@@ -12948,7 +12960,7 @@ TitleOffset=0
 DisplayName=Main SynFile Demo
 
 :50SynFile application
-%cartoon07.png
+%cartoon08.png
 This sample application is a simple database tool which stores text content and files into the database, in both clear and "safe" manner. Safe records are stored using {\i AES-256/SHA-256} encryption. There is an {\i Audit Trail} table for tracking the changes made to the database.
 This document will follow the application architecture and implementation, in order to introduce the reader to some main aspects of the Framework:
 - General architecture - see @7@;
