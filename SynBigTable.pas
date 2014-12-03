@@ -3338,6 +3338,7 @@ begin
       T := TSynBigTableMetaData.Create(FN,'test');
     rec := T.RecordGet(1);
     if checkFailed(rec.ID=1) then exit;
+    fInt := T.Table['int'];
     rec.SetFieldSBFValue(fInt,fInt.SBF(0)); // fake update
     if CheckFailed(T.RecordUpdate(rec)) then exit;
     T.UpdateToFile;
