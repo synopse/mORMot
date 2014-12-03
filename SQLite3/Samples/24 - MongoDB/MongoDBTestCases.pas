@@ -489,7 +489,7 @@ end;
 
 procedure TTestORM.RetrieveFromSQL;
 var R: TSQLORM;
-    n,tot: integer;
+    n,tot,tot2,total: integer;
     i64: Int64;
     ages: TIntegerDynArray;
     prev: RawUTF8;
@@ -544,14 +544,17 @@ begin
   R := TSQLORM.CreateAndFillPrepare(fClient,'order by Name',[]);
   try
     n := 0;
+    total := 0;
     while R.FillOne do begin
       inc(n);
       TestOne(R,R.ID);
+      inc(total,R.Age);
       if prev<>'' then
         Check(StrIComp(pointer(prev),pointer(R.Name))<0);
       prev := R.Name;
     end;
     Check(n=COLL_COUNT,'client side sort of a text field');
+    Check(total>=2682);
   finally
     R.Free;
   end;
@@ -660,18 +663,23 @@ begin
   check(doc.a=1);
   check(doc.b=COLL_COUNT);
   check(doc.c=COLL_COUNT);
-  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],'min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c');
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
+    'min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c,sum(Age) as d');
   check(doc.a=1);
   check(doc.b=COLL_COUNT+1);
   check(doc.c=COLL_COUNT);
-  T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,count(Age) as count',
-    'order by age group by age');
+  check(doc.d=total);
+  T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,'+
+    'count(Age) as count,sum(Age) as total','order by age group by age');
   if not CheckFailed(T<>nil) then
   try
     n := 0;
     tot := 0;
+    tot2 := 0;
     Check(T.FieldIndex('Age')=0);
     Check(T.FieldIndex('first')=1);
+    Check(T.FieldIndex('count')=2);
+    Check(T.FieldIndex('total')=3);
     while T.Step(false,@doc) do begin
       Check(AddInteger(ages,doc.Age,true));
       if n>0 then
@@ -679,9 +687,11 @@ begin
       Check(integer(doc.first) and 63=doc.Age);
       inc(n);
       tot := tot+doc.Count;
+      tot2 := tot2+doc.total;
     end;
     Check(n=64);
     Check(tot=COLL_COUNT);
+    Check(tot2=total);
   finally
     T.Free;
   end;

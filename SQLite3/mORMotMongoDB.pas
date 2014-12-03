@@ -916,10 +916,10 @@ begin
   ResCount := 1;
 end;
 procedure ComputeAggregate;
-const FUNCT: array[1..4] of string[3] = ('max','min','avg','sum');
-      FUNC_COUNT = 4;
-      FUNC_DISTINCT = 0;
-var i,func: integer;
+type TFunc = (funcDistinct,funcMax,funcMin,funcAvg,funcSum,funcCount);
+const FUNCT: array[funcMax..funcCount] of string[3] = ('max','min','avg','sum','sum');
+var i: integer;
+    func: TFunc;
     distinct: integer;
     W: TTextWriter;
     distinctName,name,query: RawUTF8;
@@ -962,20 +962,21 @@ begin // here we compute a JSON query, since it is easier to work with
       W.Add('}',',');
     end;
     for i := 0 to high(Stmt.Select) do begin
-      func := FindRawUTF8(['distinct','max','min','avg','count'],Stmt.Select[i].FunctionName,false);
-      if func<0 then begin
+      func := TFunc(FindRawUTF8(['distinct','max','min','avg','sum','count'],
+        Stmt.Select[i].FunctionName,false));
+      if ord(func)<0 then begin
         InternalLog('%.EngineList: unexpected function %() in "%"',
           [self,Stmt.Select[i].FunctionName,SQL],sllError);
         exit;
       end;
-      if func=FUNC_DISTINCT then
+      if func=funcDistinct then
         continue;
       W.Add('f');
       W.AddU(i);
       W.AddShort(':{$');
       W.AddShort(FUNCT[func]);
       W.Add(':');
-      if func=FUNC_COUNT then
+      if func=funcCount then
         W.Add('1') else begin
         W.Add('"','$');
         W.AddString(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.Select[i].Field-1));
