@@ -23414,8 +23414,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     case PosEx(copy(Result,2,4),
         'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-        'atom,rdf,rss,webp,appc,mani,docx,xml,json') of
-      // 63   68  72  76   81   86   91   96  100
+        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff') of
+      // 63   68  72  76   81   86   91   96  100  105
       1:  Result := 'image/png';
       5:  Result := 'image/gif';
       9:  Result := 'image/tiff';
@@ -23426,7 +23426,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       40: Result := 'text/css';
       44: Result := 'application/x-javascript';
       47: Result := 'image/x-icon';
-      51: Result := 'application/font-woff';
+      51,105: Result := 'application/font-woff';
       55: Result := TEXT_CONTENT_TYPE;
       59: Result := 'image/svg+xml';
       63,68,72,96: Result := XML_CONTENT_TYPE;
