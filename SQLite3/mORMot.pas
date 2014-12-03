@@ -24826,7 +24826,7 @@ begin
   if FieldNames='*' then
     result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
   if (PosEx(RawUTF8(','),FieldNames,1)=0) and
-     not IdemPChar(pointer(FieldNames),'DISTINCT(') and
+     (PosEx(RawUTF8('('),FieldNames,1)=0) and
      not IsFieldName(FieldNames) then
     result := '' else // prevent SQL error
     result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');

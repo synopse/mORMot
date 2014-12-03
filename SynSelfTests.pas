@@ -127,6 +127,7 @@ uses
   Classes,
 {$ifndef NOVARIANTS}
   SynMongoDB,
+  mORMotMongoDB,
   SynMustache,
   Variants,
 {$endif}
@@ -5977,13 +5978,13 @@ begin
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil);
   Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
-  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='count'));
   Check(Stmt.Limit=0);
   New('select count(*) from tab limit 10');
   Check(Stmt.TableName='tab');
   Check(Stmt.Where=nil);
   Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
-  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='count'));
   Check(Stmt.Limit=10);
   New('select count(*) from tab where yearofbirth>1000 limit 10');
   Check(Stmt.TableName='tab');
@@ -5992,7 +5993,7 @@ begin
   Check(Stmt.Where[0].Operator=opGreaterThan);
   Check(Stmt.Where[0].ValueInteger=1000);
   Check((length(Stmt.Select)=1)and(Stmt.Select[0].Field=0));
-  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='COUNT'));
+  Check((length(Stmt.Select)=1)and(Stmt.Select[0].FunctionName='count'));
   Check(Stmt.Limit=10);
   New('select distinct ( yearofdeath )  from  tab where yearofbirth > :(1000): limit 20');
   Check(Stmt.TableName='tab');
@@ -6002,7 +6003,7 @@ begin
   Check(Stmt.Where[0].ValueInteger=1000);
   Check((length(Stmt.Select)=1) and
     (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
-  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='DISTINCT'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='distinct'));
   Check(Stmt.Limit=20);
   New('select id from tab where id>:(1): and integerdynarray ( yearofbirth , :(10): ) '+
     'order by firstname desc limit 20');
@@ -6029,7 +6030,7 @@ begin
   Check(Stmt.Where[0].ValueInteger=1000);
   Check((length(Stmt.Select)=1) and
     (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
-  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='MAX'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='max'));
   Check(Stmt.Limit=0);
   New('select max(yearofdeath)+115 as maxYOD from tab where yearofbirth > :(1000):');
   Check(Stmt.TableName='tab');
@@ -6042,7 +6043,7 @@ begin
   Check(Stmt.Where[0].ValueInteger=1000);
   Check((length(Stmt.Select)=1) and
     (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
-  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='MAX'));
+  Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='max'));
   Check(Stmt.Limit=0);
   Stmt.Free;
 end;
@@ -8376,15 +8377,16 @@ var Props: TSQLDBConnectionProperties;
 begin
   Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
   try
-    Check(VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,
-      Props,'SampleRecord'));
+    VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
+      MapField('LastChange','Changed');
     with TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,nil) do
     try
       SQL := SQLOrigin;
       TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
       Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
       Check(AdaptSQLForEngineList(SQL)=AdaptShouldWork);
-      Check(IdemPropNameU(SQL,SQLExpected)or not AdaptShouldWork);
+      Check(IdemPropNameU(SQL,SQLExpected)or not AdaptShouldWork,
+        SQLExpected+#13#10+SQL);
     finally
       Free;
     end;
@@ -8431,6 +8433,10 @@ begin
         'select count(*) from SampleRecord');
   Test2('select count(*) from PeopleExt where rowid=2',
         'select count(*) from SampleRecord where id=2');
+  Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
+        'select Distinct(FirstName),max(Changed)+100 as "max(LastChange)" from SampleRecord where ID>=:(2):');
+  Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
+        'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
   SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
   Test(dUnknown,false);
   Test(dDefault,false);

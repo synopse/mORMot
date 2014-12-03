@@ -941,6 +941,17 @@ type
   TSQLDBConnection = class;
   TSQLDBConnectionProperties = class;
 
+  /// where the LIMIT clause should be inserted for a given SQL syntax
+  // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
+  TSQLDBDefinitionLimitPosition = (posNone, posWhere, posSelect, posAfter);
+
+  /// defines the LIMIT clause to be inserted for a given SQL syntax
+  // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
+  TSQLDBDefinitionLimitClause = record
+    Position: TSQLDBDefinitionLimitPosition;
+    InsertFmt: PUTF8Char;
+  end;
+
   /// possible events notified to TOnSQLDBProcess callback method
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
   // TSQLDBConnection.OnProcess properties
@@ -1348,13 +1359,11 @@ type
     // - the whole foreign key list is shared by all connections
     function GetForeignKey(const aTableName, aColumnName: RawUTF8): RawUTF8; 
 
-    /// adapt the LIMIT # clause in the SQL SELECT statement to a syntax
-    // matching the underlying DBMS
+    /// returns the information to adapt the LIMIT # clause in the SQL SELECT
+    // statement to a syntax matching the underlying DBMS
     // - e.g. TSQLRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TSQLRestServer.URI by-pass virtual table mechanism
-    // - integer parameters state how the SQL statement has been analysed
-    function AdaptSQLLimitForEngineList(var SQL: RawUTF8;
-      LimitRowCount, AfterSelectPos, WhereClausePos, LimitPos: integer): boolean; virtual;
+    function SQLLimitClause: TSQLDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSQLDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUTF8Char): boolean; virtual;
@@ -3087,26 +3096,24 @@ const
     'select current timestamp from sysibm.sysdummy1'
   );
 
+const
   /// the known SQL syntax to limit the number of returned rows in a SELECT
   // - Positon indicates if should be included within the WHERE clause,
   // at the beginning of the SQL statement, or at the end of the SQL statement
   // - InsertFmt will replace '%' with the maximum number of lines to be retrieved
   // - used by TSQLDBConnectionProperties.AdaptSQLLimitForEngineList()
-  DB_SQLLIMITCLAUSE: array[TSQLDBDefinition] of record
-    Position: (posNone, posWhere, posSelect, posAfter);
-    InsertFmt: PUTF8Char;
-  end = (
-    (Position: posNone;   InsertFmt:nil),
-    (Position: posNone;   InsertFmt:nil),
-    (Position: posWhere;  InsertFmt:'rownum<=%'),
-    (Position: posSelect; InsertFmt:'top(%) '),
-    (Position: posSelect; InsertFmt:'top % '),
-    (Position: posAfter;  InsertFmt:' limit %'),
-    (Position: posAfter;  InsertFmt:' limit %'),
-    (Position: posSelect; InsertFmt:'first % '),
-    (Position: posSelect; InsertFmt:'top % '),
-    (Position: posAfter;  InsertFmt:' limit %'),
-    (Position: posAfter;  InsertFmt:' fetch first % rows only'));
+  DB_SQLLIMITCLAUSE: array[TSQLDBDefinition] of TSQLDBDefinitionLimitClause  = (
+    (Position: posNone;   InsertFmt:nil),                         // dUnknown
+    (Position: posNone;   InsertFmt:nil),                         // dDefault
+    (Position: posWhere;  InsertFmt:'rownum<=%'),                 // dOracle
+    (Position: posSelect; InsertFmt:'top(%) '),                   // dMSSQL
+    (Position: posSelect; InsertFmt:'top % '),                    // dJet
+    (Position: posAfter;  InsertFmt:' limit %'),                  // dMySQL
+    (Position: posAfter;  InsertFmt:' limit %'),                  // dSQLite
+    (Position: posSelect; InsertFmt:'first % '),                  // dFirebird
+    (Position: posSelect; InsertFmt:'top % '),                    // dNexusDB
+    (Position: posAfter;  InsertFmt:' limit %'),                  // dPostgreSQL
+    (Position: posAfter;  InsertFmt:' fetch first % rows only')); // dDB2
 
   /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
@@ -3124,7 +3131,11 @@ const
     posWithColumn, posWithColumn, posGlobalBefore, posWithColumn, posWithColumn,
     posWithColumn);
 
+  /// the SQL text corresponding to the identified WHERE operators for a SELECT
+  DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUTF8 = (
+    '=','<>','<','<=','>','>=',' in ',' is null',' is not null',' like ');
 
+  
 implementation
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
@@ -5669,32 +5680,9 @@ begin
   SetString(result,PAnsiChar(@PS^[2]),ord(PS^[0])-1);
 end;
 
-function TSQLDBConnectionProperties.AdaptSQLLimitForEngineList(
-  var SQL: RawUTF8; LimitRowCount, AfterSelectPos, WhereClausePos, LimitPos: integer): boolean;
-const EXE_FMT: PUTF8Char = 'where % ';
-var ToBeInserted: RawUTF8;
-    OrderByPosWithNoWhere: integer;
+function TSQLDBConnectionProperties.SQLLimitClause: TSQLDBDefinitionLimitClause;
 begin
-  result := false;
-  if (SQL<>'') and (SQL[length(SQL)]=';') then
-    SQL[length(SQL)] := ' ';  // avoid syntax error for posWhere + WhereClausePos=0
-  with DB_SQLLIMITCLAUSE[DBMS] do begin
-    ToBeInserted := FormatUTF8(InsertFmt,[LimitRowCount]);
-    case Position of
-    posSelect: insert(ToBeInserted,SQL,AfterSelectPos);
-    posWhere:
-      if WhereClausePos=0 then
-        SQL := SQL+' where '+ToBeInserted else
-      if WhereClausePos<0 then begin
-        OrderByPosWithNoWhere := -WhereClausePos;
-        insert(FormatUTF8(EXE_FMT,[ToBeInserted]),SQL,OrderByPosWithNoWhere);
-      end else
-        insert(ToBeInserted+' and ',SQL,WhereClausePos);
-    posAfter:  insert(ToBeInserted,SQL,LimitPos);
-    else Exit;
-    end;
-    result := true;
-  end;
+  result := DB_SQLLIMITCLAUSE[DBMS];
 end;
 
 

@@ -84,11 +84,13 @@ unit mORMotDB;
     EngineAddUseSelectMaxID to unset this optimization
   - new function VirtualTableExternalRegisterAll(), to register all tables
     of a mORMot model to be handled via a specified database
-  - TSQLRestStorageExternal.AdaptSQLForEngineList() will now accept
-    'select count(*) from TableName [where...]' statements directly (virtual
-    behavior for count(*) is to loop through all records, which may be slow),
-    and 'IN (...)' or 'IS NULL' / 'IS NOT NULL' where clauses, and several
-    fields or ASC/DESC attributes in 'ORDER BY' clause - see [e48f87b3db]
+  - TSQLRestStorageExternal.AdaptSQLForEngineList() will now use the generic
+    TSynTableStatement parser - as proposed by [94ff704bb1] - to handle
+    aggregation functions like 'select count(*),max(ID) from ...' statements
+    directly (virtual behavior for count(*) is to loop through all records,
+    which may be slow), 'GROUP BY' clause, and 'IN (...)' or 'IS NULL' / 'IS NOT NULL' where
+    clauses, several fields or ASC/DESC attributes in 'ORDER BY' clause - see
+    also [e48f87b3db]
   - now TSQLRestStorageExternal will call TSQLRestServer.OnUpdateEvent and
     OnBlobUpdateEvent callbacks, if defined (even in BATCH mode)
   - BatchDelete() will now split its batch statement executed following
@@ -755,239 +757,146 @@ begin
 end;
 
 function TSQLRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
-// TODO: should share code with TSynTableStatement.Create() - see [94ff704bb]
-var Prop: ShortString; // to avoid any temporary memory allocation
-    P: PUTF8Char;
+var Stmt: TSynTableStatement;
     W: TTextWriter;
-
-  function PropHandleField(WithAliasIfNeeded: boolean): boolean;
-  var int: integer;
-  begin
-    result := true;
-    if IsRowIDShort(Prop) then
-    with StoredClassProps.ExternalDB do begin
-      W.AddString(RowIDFieldName);
-      if WithAliasIfNeeded and not(0 in FieldNamesMatchInternal) then
-        W.AddShort(' as ID');
-      exit;
-    end;
-    Prop[ord(Prop[0])+1] := #0; // make ASCIIZ
-    int := StoredClassRecordProps.Fields.IndexByName(@Prop[1]);
-    if int<0 then
-      result := false else
-      with StoredClassProps.ExternalDB do begin
-        W.AddString(FieldNames[int]);
-        if WithAliasIfNeeded and not(int+1 in FieldNamesMatchInternal) then
-          W.AddStrings([' as ',StoredClassRecordProps.Fields.List[int].Name]);
-      end;
-  end;
-  procedure GetFieldProp;
-  var i,L: integer;
-      B: PUTF8Char;
-  begin
-    Prop[0] := #0;
-    if P^=#0 then
-      exit;
-    P := GotoNextNotSpace(P); // trim left
-    B := P;
-    while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-    L := P-B;
-    if L>250 then
-      exit; // avoid potential buffer overflow
-    Prop[0] := AnsiChar(L);
-    for i := 0 to L-1 do
-      Prop[i+1] := NormToUpperAnsi7[B[i]];
-    P := GotoNextNotSpace(P); // trim right
-  end;
-  procedure WritePropAndGetFieldProp;
-  var i: integer;
-  begin
-    if W.LastChar<>' ' then
-      W.Add(' ');
-    for i := 1 to length(Prop) do
-      Prop[i] := NormToLower[Prop[i]];
-    W.AddShort(Prop);
-    W.Add(' ');
-    GetFieldProp;
-  end;
-  function NextPropHandleField: boolean;
-  begin
-    GetFieldProp;
-    result := PropHandleField(false);
-  end;
-  function NextPropHandleInternalTable: boolean;
-  begin
-    GetFieldProp;
-    with StoredClassRecordProps do
-    if IdemPropName(Prop,pointer(SQLTableName),length(SQLTableName)) then begin
-      W.AddString(fTableName);
-      result := true;
-    end else
-      result := false;
-  end;
-
-label Order,Limit,null;
-var Pos: record AfterSelect, WhereClause, Limit, LimitRowCount: integer; end;
-    B: PUTF8Char;
-    err: integer;
-    NewSQL: RawUTF8;
+    limit: TSQLDBDefinitionLimitClause;
+    limitSQL,name: RawUTF8;
+    f,n: integer;
+    extFieldName: function(FieldIndex: Integer): RawUTF8 of object;
 begin
-  //result := inherited AdaptSQLForEngineList(SQL); broken if MapField() used
   result := false;
   if SQL='' then
     exit;
-  // e.g. 'SELECT Field1,Field2 FROM table WHERE Field1=... AND/OR/NOT Field2=..
-  fillchar(Pos,sizeof(Pos),0);
-  P := pointer(SQL);
-  GetFieldProp;
-  if Prop<>'SELECT' then
-    exit;
-  W := TTextWriter.CreateOwnedStream(length(SQL)*2);
+  Stmt := TSynTableStatement.Create(SQL,
+    fStoredClassRecordProps.Fields.IndexByName,
+    fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
   try
-    W.AddShort('select ');
-    Pos.AfterSelect := W.TextLength+1;
-    repeat
-      GetFieldProp;
-      if Prop='' then exit;
-      if (Prop='COUNT') and IdemPChar(P,'(*)') then begin
-        inc(P,3);
-        GetFieldProp;
-        if Prop<>'FROM' then
-          exit;
-        W.AddShort('count(*)');
-        if P^ in [#0,';'] then begin
-          result := NextPropHandleInternalTable;
-          exit;
+    if (Stmt.SQLStatement='') or // parsing failed
+      not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
+      // SQL statement too complex for TSynTableStatement
+      exit;
+    if Stmt.Offset<>0 then begin
+      InternalLog('%.AdaptSQLForEngineList: Unhandled OFFSET for "%"',[self,SQL],sllDebug);
+      exit;
+    end;
+    if Stmt.Limit=0 then
+      limit.Position := posNone else begin
+      limit := fProperties.SQLLimitClause;
+      if limit.Position=posNone then
+        exit; // unknown syntax (e.g. dDefault)
+      limitSQL := FormatUTF8(limit.InsertFmt,[Stmt.Limit]);
+    end;
+    extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
+    W := TTextWriter.CreateOwnedStream(1024);
+    try
+      W.AddShort('select ');
+      if limit.Position=posSelect then
+        W.AddString(limitSQL);
+      for f := 0 to high(Stmt.Select) do
+      with Stmt.Select[f] do begin
+        if FunctionName<>'' then begin
+          W.AddString(FunctionName);
+          W.Add('(');
         end;
-        break; // will process 'select count(*) from tablename where ...'
-      end else
-      if not PropHandleField(true) then
-        exit; // unknown field name
-      if P^=',' then begin
-        W.Add(',');
-        inc(P);
-      end else begin
-        GetFieldProp;
-        if Prop<>'FROM' then
-          exit else
-          break;
-      end;
-    until false;
-    W.AddShort(' from ');
-    if not NextPropHandleInternalTable then
-      exit;
-    GetFieldProp;
-    if Prop='ORDER' then begin // simple ORDER BY clause is accepted
-      Pos.WhereClause := -W.TextLength-2; // WhereClausePos<0 for ORDER BY position
-Order:GetFieldProp;
-      if Prop<>'BY' then
-        exit;
-      if W.LastChar<>' ' then
-        W.Add(' ');
-      W.AddShort('order by ');
-      repeat
-        if not NextPropHandleField then
-          exit; // unknown field name in 'ORDER BY' clause
-        if P^=',' then begin // handle several fields in 'ORDER BY' clause
-          W.Add(',');
-          inc(P);
+        if FunctionKnown=funcCountStar then
+          W.Add('*') else
+          W.AddString(extFieldName(Field-1));
+        if FunctionName<>'' then
+          W.Add(')');
+        if ToBeAdded<>0 then begin
+          if ToBeAdded>0 then
+            W.Add('+');
+          W.Add(ToBeAdded);
+        end;
+        if Alias<>'' then begin
+          W.AddShort(' as ');
+          W.AddString(Alias);
         end else
-        break;
-      until false;
-      GetFieldProp;
-      if Prop='DESC' then begin
-        W.AddShort(' desc');
-        GetFieldProp;
-      end else
-      if Prop='ASC' then // will just ignore ASC attribute (is default order)
-        GetFieldProp;
-      if Prop='LIMIT' then begin
-Limit:  Pos.Limit := W.TextLength+1;
-        GetFieldProp; // do not write LIMIT now
-        if Prop='' then
-          exit; // expect e.g. LIMIT 100
-        Prop[ord(Prop[0])+1] := #0;
-        Pos.LimitRowCount := GetInteger(@Prop[1],err);
-        if err<>0 then
-          exit; // expects a number for LIMIT
-      end else
-        if Prop<>'' then
-          exit; // unexpected clause 
-      if not (GotoNextNotSpace(P)^ in [#0,';']) then
-        exit; // allow only one column name or one LIMIT ### expression
-    end else
-    if Prop='WHERE' then
-    repeat
-      WritePropAndGetFieldProp; // write as 'where' 'and' 'or'
-      Pos.WhereClause := W.TextLength+1;
-      if Prop='NOT' then
-        WritePropAndGetFieldProp; // allow  field1=456 AND NOT field2='Toto'
-      if (Prop='') or not PropHandleField(false) then
-        exit; // unknown field name or 'LIMIT' / 'ORDER BY' clause
-      B := P;
-      if P^='=' then
-        inc(P) else
-      if P^ in ['>','<'] then
-        if P[1] in ['=','>'] then
-          inc(P,2) else
-          inc(P) else
-      if IdemPChar(P,'LIKE ') then begin
-        GetFieldProp;
-        W.AddShort(' like ');
-        B := nil;
-      end else
-      if IdemPChar(P,'IS NULL') then begin
-        inc(P,7);
-        W.Add(' ');
-        goto null;
-      end else
-      if IdemPChar(P,'IS NOT NULL') then begin
-        inc(P,11);
-        W.Add(' ');
-        goto null;
-      end else
-        exit; // only "= > >= < <= <> LIKE" or "IS [NOT] NULL"
-      if B<>nil then
-        W.AddNoJSONEscape(B,P-B);
-      P := GotoNextNotSpace(P);
-      B := P;
-      if PWord(P)^=ord(':')+ord('(') shl 8 then
-        P := GotoNextNotSpace(P+2); // +2 to ignore :(...): parameter
-      if P^ in ['''','"'] then
-        P := GotoEndOfQuotedString(P);
-      repeat inc(P) until P^ in [#0..' ',';',')']; // go to end of value
-      P := GotoNextNotSpace(P);
-      if PWord(P)^=ord(')')+ord(':')shl 8 then
-        inc(P,2); // ignore :(...): parameter
-null: P := GotoNextNotSpace(P);
-      W.AddNoJSONEscape(B,P-B);
-      if P^ in [#0,';'] then
-        break; // properly ended the WHERE clause
-      GetFieldProp;
-      if Prop='ORDER' then
-        goto Order else
-      if Prop='LIMIT' then
-        goto Limit else
-      if (Prop<>'AND') and (Prop<>'OR') then
-        exit;
-    until false else
-    if Prop='LIMIT' then
-      goto Limit else
-    if Prop<>'' then
-      exit;
-    if W.LastChar=' ' then
-      W.CancelLastChar;
-    W.SetText(NewSQL);
-    NewSQL := trim(NewSQL);
+        if not (Field in StoredClassProps.ExternalDB.FieldNamesMatchInternal) then begin
+          if Field=0 then
+            name := 'RowID' else
+            name := fStoredClassRecordProps.Fields.List[Field-1].Name;
+          W.AddShort(' as ');
+          if (FunctionName='') or (FunctionKnown=funcDistinct) then
+            W.AddString(name) else begin
+            W.Add('"');
+            W.AddString(FunctionName);
+            W.Add('(');
+            W.AddString(name);
+            W.Add(')','"');
+          end;
+        end;
+        W.Add(',');
+      end;
+      W.CancelLastComma;
+      W.AddShort(' from ');
+      W.AddString(fTableName);
+      n := length(Stmt.Where);
+      if n=0 then begin
+        if limit.Position=posWhere then begin
+          W.AddShort(' where ');
+          W.AddString(limitSQL);
+        end;
+      end else begin
+        dec(n);
+        if (n>0) and Stmt.Where[1].JoinedOR then
+          for f := 2 to n do
+          if not Stmt.Where[f].JoinedOR then begin
+            InternalLog('%.AdaptSQLForEngineList: Unhandled mixed AND/OR for "%"',
+              [self,SQL],sllDebug);
+            exit;
+          end;
+        W.AddShort(' where ');
+        if limit.Position=posWhere then begin
+          W.AddString(limitSQL);
+          W.AddShort(' and ');
+        end;
+        for f := 0 to n do
+        with Stmt.Where[f] do begin
+          if (FunctionName<>'') or (Operator>high(DB_SQLOPERATOR)) then begin
+            InternalLog('%.AdaptSQLForEngineList: Unhandled function %() for "%"',
+              [self,FunctionName,SQL],sllDebug);
+            exit;
+          end;
+          if NotClause then
+            W.AddShort('not ');
+          W.AddString(extFieldName(Field-1));
+          W.AddString(DB_SQLOPERATOR[Operator]);
+          W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
+          if f<n then
+            if JoinedOR then
+              W.AddShort(' or ') else
+              W.AddShort(' and ');
+        end;
+      end;
+      if Stmt.GroupByField<>nil then begin
+        W.AddShort(' group by ');
+        for f := 0 to high(Stmt.GroupByField) do begin
+          W.AddString(extFieldName(Stmt.GroupByField[f]-1));
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+      end;
+      if Stmt.OrderByField<>nil then begin
+        W.AddShort(' order by ');
+        for f := 0 to high(Stmt.OrderByField) do begin
+          W.AddString(extFieldName(Stmt.OrderByField[f]-1));
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+        if Stmt.OrderByDesc then
+          W.AddShort(' desc');
+      end;
+      if limit.Position=posAfter then
+        W.AddString(limitSQL);
+      W.SetText(SQL);
+      result := true;
+    finally
+      W.Free;
+    end;
   finally
-    W.Free;
+    Stmt.Free;
   end;
-  if Pos.Limit>0 then
-    if not fProperties.AdaptSQLLimitForEngineList(NewSQL,
-       Pos.LimitRowCount,Pos.AfterSelect,Pos.WhereClause,Pos.Limit) then
-      exit;
-  SQL := Trim(NewSQL);
-  result := true;
 end;
 
 function TSQLRestStorageExternal.EngineLockedNextID: Integer;
