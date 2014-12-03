@@ -8606,8 +8606,14 @@ type
     /// the optional column alias, e.g. 'MaxID' for 'max(id) as MaxID'
     Alias: RawUTF8;
     /// the optional function applied to the SELECTed column
-    // - e.g. Count(*) would store 'Count' and SelectField[0]=0
+    // - e.g. Max(RowID) would store 'Max' and SelectField[0]=0
+    // - but Count(*) would store 'Count' and SelectField[0]=0, and
+    // set FunctionIsCountStart = TRUE
     FunctionName: RawUTF8;
+    /// if the function needs a special process
+    // - e.g. funcCountStar for the special Count(*) expression or
+    // funcDistinct for distinct(...) aggregation
+    FunctionKnown: (funcNone, funcCountStar, funcDistinct);
   end;
 
   /// the recognized SELECT expressions for TSynTableStatement
@@ -8617,6 +8623,8 @@ type
   TSynTableStatementWhere = record
     /// expressions are evaluated as AND unless this field is set to TRUE
     JoinedOR: boolean;
+    /// if this expression is preceded by a NOT modifier
+    NotClause: boolean;
     /// the index of the field used for the WHERE expression
     // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
@@ -8648,11 +8656,11 @@ type
   /// the recognized WHERE expressions for TSynTableStatement
   TSynTableStatementWhereDynArray = array of TSynTableStatementWhere;
 
-  /// used to parse a SELECT SQL statement
-  // - handle basic REST commands, only a sub-set of SQL is implemented: i.e.
-  // a SELECT over a single table (no JOIN) with one optional WHERE clause
-  // - handle also basic "SELECT Count(*) FROM TableName;" functions
-  // - will parse any LIMIT OFFSET ORDER BY end statement clause
+  /// used to parse a SELECT SQL statement, following the SQlite3 syntax
+  // - handle basic REST commands, i.e. a SELECT over a single table (no JOIN)
+  // with its WHERE clause, and result column aliases 
+  // - handle also aggregate functions like "SELECT Count(*) FROM TableName"
+  // - will also parse any LIMIT, OFFSET, ORDER BY, GROUP BY statement clause
   TSynTableStatement = class
   protected
     fSQLStatement: RawUTF8;
@@ -40503,7 +40511,7 @@ constructor TSynTableStatement.Create(const SQL: RawUTF8;
 var Prop: RawUTF8;
     P, B: PUTF8Char;
     ndx,err,len,selectCount,whereCount: integer;
-    whereWithOR: boolean;
+    whereWithOR,whereNotClause: boolean;
 
 function GetPropIndex: integer;
 begin
@@ -40520,8 +40528,8 @@ function SetFields: boolean;
 var select: TSynTableStatementSelect;
 begin
   result := false;
+  fillchar(select,sizeof(select),0);
   select.Field := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
-  select.ToBeAdded := 0;
   if select.Field<0 then begin
     if P^<>'(' then // Field not found -> try function(field)
       exit;
@@ -40530,8 +40538,11 @@ begin
     inc(fSelectFunctionCount);
     if IdemPropNameU(Prop,'COUNT') and (P^='*') then begin
       select.Field := 0; // count(*) -> count(ID)
+      select.FunctionKnown := funcCountStar;
       P := GotoNextNotSpace(P+1);
     end else begin
+      if IdemPropNameU(Prop,'DISTINCT') then
+        select.FunctionKnown := funcDistinct;
       select.Field := GetPropIndex;
       if select.Field<0 then
         exit;
@@ -40610,6 +40621,7 @@ function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWh
 begin
   result := false;
   Where.JoinedOR := whereWithOR;
+  Where.NotClause := whereNotClause;
   Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
   case P^ of
   '=': Where.Operator := opEqualTo;
@@ -40731,12 +40743,17 @@ begin
   // 3. get WHERE clause
   whereCount := 0;
   whereWithOR := false;
+  whereNotClause := false;
   GetNextFieldProp(P,Prop);
   if IdemPropNameU(Prop,'WHERE') then begin
     repeat
       B := P;
       ndx := GetPropIndex;
       if ndx<0 then begin
+        if IdemPropNameU(Prop,'NOT') then begin
+          whereNotClause := true;
+          continue;
+        end;
         if P^='(' then begin
           inc(P);
           SetLength(fWhere,whereCount+1);
@@ -40776,6 +40793,7 @@ begin
       if IdemPropNameU(Prop,'AND') then
         whereWithOR := false else
         goto lim2;
+      whereNotClause := false;
     until false;
     // 4. get optional LIMIT/OFFSET/ORDER clause
 lim:P := GotoNextNotSpace(P);
