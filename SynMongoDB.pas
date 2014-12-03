@@ -497,6 +497,7 @@ type
     end;
     fDocumentStack: integer;
     fDocumentStackOffset: TCardinalDynArray;
+    fDocumentArray: integer;
     procedure WriteCollectionName(Flags: integer; const CollectionName: RawUTF8);
   public
     /// rewind the Stream to the position when Create() was called
@@ -567,14 +568,18 @@ type
     /// write an object as query parameter
     // - will handle all SQL operators, including IN (), IS NULL or LIKE 
     // - see @http://docs.mongodb.org/manual/reference/operator/query
+    // - inverted should be TRUE e.g. for a NOT ... expression 
     // - returns TRUE on success, FALSE if the operator is not implemented yet
-    function BSONWriteQueryOperator(const name: RawUTF8; operator: TSynTableStatementOperator;
-      const Value: variant): boolean;
+    function BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
+      operator: TSynTableStatementOperator; const Value: variant): boolean;
+    /// write one array item, i.e. the ASCII index name as text
+    // - only one level of array should be used per TBSONWriter class 
+    procedure BSONWriteArray(const kind: TBSONElementType); overload;
     /// write an array specified as a list of items as a BSON document
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
     // - this method wil be faster than using a BSONWriteDoc(_ArrFast(...))
-    procedure BSONWriteArray(const Items: array of const);
+    procedure BSONWriteArray(const Items: array of const); overload;
     /// write an array of integers as a BSON Document
     procedure BSONWriteArrayOfInteger(const Integers: array of integer);
     /// write an array of integers as a BSON Document
@@ -598,11 +603,21 @@ type
 
     /// to be called before a BSON document will be written
     // - each BSONDocumentBegin should be followed by its nested BSONDocumentEnd
-    procedure BSONDocumentBegin;
+    procedure BSONDocumentBegin; overload;
+    /// to be called before a BSON document will be written
+    // - each BSONDocumentBegin should be followed by its nested BSONDocumentEnd
+    // - you could create a new BSON object by specifying a name and its
+    // type, i.e. either betDoc or betArray
+    procedure BSONDocumentBegin(const name: RawUTF8; kind: TBSONElementType=betDoc); overload;
+    /// to be called before a BSON document will be written in an array
+    // - only one level of array should be used per TBSONWriter class 
+    procedure BSONDocumentBeginInArray(const name: RawUTF8; kind: TBSONElementType=betDoc);
     /// to be called when a BSON document has been written
     // - it will store the current stream position into an internal array,
     // which will be written when you call AdjustDocumentsSize()
-    procedure BSONDocumentEnd(WriteEndingZero: boolean=true);
+    // - you can optional specify how many nested documents should be closed,
+    // and/or if it should not write an ending betEof item
+    procedure BSONDocumentEnd(CloseNumber: integer=1; WriteEndingZero: boolean=true);
     /// after all content has been written, call this method on the resulting
     // memory buffer to store all document size as expected by the standard
     procedure BSONAdjustDocumentsSize(BSON: PByteArray); virtual;
@@ -615,7 +630,7 @@ type
     // - call ToBSONDocument() to adjust all internal document sizes
     // - expect the TBSONWriter instance to have been created as such:
     // ! TBSONWriter.Create(TRawByteStringStream);
-    procedure ToBSONVariant(var result: variant);
+    procedure ToBSONVariant(var result: variant; Kind: TBSONElementType=betDoc);
   end;
 
 
@@ -1875,7 +1890,8 @@ type
     fDatabase: TMongoDatabase;
     fName: RawUTF8;
     fFullCollectionName: RawUTF8;
-    function AggregateCall(const pipelineJSON: RawUTF8; var reply,res: variant): boolean;
+    function AggregateCall(const pipelineJSON: RawUTF8; var reply,res: variant): boolean; overload;
+    function AggregateCall(const pipelineArray: variant; var reply,res: variant): boolean; overload;
   public
     /// initialize a reference to a given MongoDB Collection
     // - you should not use this constructor directly, but rather use
@@ -2226,13 +2242,13 @@ type
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
-    // - overloaded method to specify the pipeline as a BSON or JSON document
+    // - overloaded method to specify the pipeline as a BSON raw document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateDoc(const pipeline: variant): variant; overload;
+    function AggregateDoc(const pipelineArray: variant): variant; overload;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
-    // - overloaded method to specify the pipeline as a BSON or JSON document
+    // - overloaded method to specify the pipeline as a BSON raw document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateJSON(const pipeline: variant;
+    function AggregateJSON(const pipelineArray: variant;
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
@@ -3106,6 +3122,14 @@ begin
   BSONWriteDoc(doc);
 end;
 
+procedure TBSONWriter.BSONWriteArray(const kind: TBSONElementType);
+begin
+  BSONWrite(UInt32ToUtf8(fDocumentArray),kind);
+  inc(fDocumentArray);
+  if kind in [betDoc,betArray] then
+    BSONDocumentBegin;
+end;
+
 procedure TBSONWriter.BSONDocumentBegin;
 begin
   if fDocumentStack>=Length(fDocumentStackOffset) then
@@ -3115,20 +3139,39 @@ begin
   Write4(0);
 end;
 
-procedure TBSONWriter.BSONDocumentEnd(WriteEndingZero: boolean);
+procedure TBSONWriter.BSONDocumentBegin(const name: RawUTF8; kind: TBSONElementType);
 begin
-  if WriteEndingZero then
-    Write1(0);
-  if fDocumentStack=0 then
-    raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
-  dec(fDocumentStack);
-  if fDocumentCount>=Length(fDocument) then
-    SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
-  with fDocument[fDocumentCount] do begin
-    Offset := fDocumentStackOffset[fDocumentStack];
-    Length := TotalWritten-Offset;
+  if not (kind in [betDoc,betArray]) then
+    raise EBSONException.Create('BSONDocumentBegin(?)');
+  BSONWrite(name,kind);
+  BSONDocumentBegin;
+end;
+
+procedure TBSONWriter.BSONDocumentBeginInArray(const name: RawUTF8; kind: TBSONElementType);
+begin
+  if fDocumentArray>0 then
+    BSONDocumentEnd;
+  BSONWriteArray(kind);
+  BSONDocumentBegin(name);
+end;
+
+procedure TBSONWriter.BSONDocumentEnd(CloseNumber: integer; WriteEndingZero: boolean);
+begin
+  while CloseNumber>0 do begin
+    if (CloseNumber>1) or WriteEndingZero then
+      Write1(0);
+    if fDocumentStack=0 then
+      raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
+    dec(fDocumentStack);
+    if fDocumentCount>=Length(fDocument) then
+      SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
+    with fDocument[fDocumentCount] do begin
+      Offset := fDocumentStackOffset[fDocumentStack];
+      Length := TotalWritten-Offset;
+    end;
+    inc(fDocumentCount);
+    dec(CloseNumber);
   end;
-  inc(fDocumentCount);
 end;
 
 procedure TBSONWriter.BSONAdjustDocumentsSize(BSON: PByteArray);
@@ -3146,11 +3189,11 @@ begin
   BSONAdjustDocumentsSize(pointer(result));
 end;
 
-procedure TBSONWriter.ToBSONVariant(var result: variant);
+procedure TBSONWriter.ToBSONVariant(var result: variant; Kind: TBSONElementType);
 var doc: TBSONDocument;
 begin
   ToBSONDocument(doc);
-  BSONVariantType.FromBSONDocument(doc,result);
+  BSONVariantType.FromBSONDocument(doc,result,Kind);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: TVarRec);
@@ -3254,14 +3297,18 @@ begin
   BSONDocumentEnd;
 end;
 
-function TBSONWriter.BSONWriteQueryOperator(const name: RawUTF8;
+function TBSONWriter.BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
   operator: TSynTableStatementOperator; const Value: variant): boolean;
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
     '$ne','$lt','$lte','$gt','$gte','$in');
+  INVERT_OPS: array[opEqualTo..opGreaterThanOrEqualTo] of TSynTableStatementOperator = (
+    opNotEqualTo,opEqualTo, opGreaterThanOrEqualTo,opGreaterThan,
+    opLessThanOrEqualTo,opLessThan);
 var wasString: boolean;
     like: RawUTF8;
     len: integer;
+    doInvert: boolean;
 begin
   result := false; // error on premature exit
   case Operator of
@@ -3273,12 +3320,19 @@ begin
   opIsNotNull:
     operator := opNotEqualTo;  // here Value=null
   end;
+  doInvert := false;
+  if inverted then
+    if operator<=high(INVERT_OPS) then
+      operator := INVERT_OPS[operator] else begin
+      doInvert := true;
+      BSONDocumentBegin(name);
+      name := '$not';
+    end;
   case Operator of
   opEqualTo:
     BSONWriteVariant(name,Value);
   opNotEqualTo..opIn: begin
-    BSONWrite(name,betDoc);
-    BSONDocumentBegin;
+    BSONDocumentBegin(name);
     BSONWriteVariant(QUERY_OPS[operator],Value);
     BSONDocumentEnd;
   end;
@@ -3288,7 +3342,7 @@ begin
     if (len=0) or not wasString then
       exit;
     if like[1]='%' then
-      if len=1 then // LIKE '%' is invalid 
+      if len=1 then // LIKE '%' is invalid
         exit else
         if like[len]='%' then
           if len=2 then
@@ -3301,8 +3355,7 @@ begin
     BSONWriteRegEx(name,like,'i'); // /like/i for case-insensitivity
   end;
   opContains: begin // http://docs.mongodb.org/manual/reference/operator/query/in
-    BSONWrite(name,betDoc);
-    BSONDocumentBegin;
+    BSONDocumentBegin(name);
     BSONWrite(QUERY_OPS[opIn],betArray);
     BSONWriteArray([Value]);
     BSONDocumentEnd;
@@ -3310,6 +3363,8 @@ begin
   else
     exit; // unhandled operator
   end;
+  if doInvert then
+    BSONDocumentEnd;
   result := true;
 end;
 
@@ -4060,8 +4115,7 @@ var ndx: cardinal;
 begin
   case VarRecAsChar(NameValuePairs[a]) of
   ord('['): begin
-    W.BSONWrite(name,betArray);
-    W.BSONDocumentBegin;
+    W.BSONDocumentBegin(name,betArray);
     ndx := 0;
     repeat
       inc(a);
@@ -4074,8 +4128,7 @@ begin
     W.BSONDocumentEnd;
   end;
   ord('{'): begin
-    W.BSONWrite(name,betDoc);
-    W.BSONDocumentBegin;
+    W.BSONDocumentBegin(name,betDoc);
     repeat
       inc(a);
       VarRecToUTF8(NameValuePairs[a],name);
@@ -4299,7 +4352,7 @@ begin
   if (fRequestID=0) or (fRequestOpCode=opReply) then
     raise EMongoException.CreateUTF8('No previous proper %.Create() call',[self]);
   if fBSONDocument='' then begin
-    BSONDocumentEnd(false);
+    BSONDocumentEnd(1,false);
     inherited ToBSONDocument(fBSONDocument);
   end;
   result := fBSONDocument;
@@ -5443,15 +5496,32 @@ begin
   result := AggregateJSON(FormatUTF8(Operators,Params),Mode);
 end;
 
-function TMongoCollection.AggregateDoc(const pipeline: variant): variant;
-begin
-  result := AggregateDoc(VariantSaveJSON(pipeline));
+function TMongoCollection.AggregateCall(const pipelineArray: variant; var reply,res: variant): boolean;
+begin // see http://docs.mongodb.org/manual/reference/command/aggregate
+  if fDatabase.Client.ServerBuildInfoNumber<2020000 then
+    raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+  Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
+  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+  res := reply.result;
+  result := not VarIsNull(res);
 end;
 
-function TMongoCollection.AggregateJSON(const pipeline: variant;
-  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+function TMongoCollection.AggregateDoc(const pipelineArray: variant): variant;
+var reply: variant;
 begin
-  result := AggregateJSON(VariantSaveJSON(pipeline),Mode);
+  if AggregateCall(pipelineArray,reply,result) then
+    TDocVariant.GetSingleOrDefault(result,result,result) else
+    SetVariantNull(result);
+end;
+
+function TMongoCollection.AggregateJSON(const pipelineArray: variant;
+  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+var reply,res: variant;
+begin
+  if AggregateCall(pipelineArray,reply,res) then
+    result := VariantSaveMongoJSON(res,Mode) else
+    result := '';
 end;
 
 function TMongoCollection.AggregateDoc(const PipelineJSON: RawUTF8): variant;
@@ -5795,5 +5865,6 @@ begin
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
 end.
+
 
 

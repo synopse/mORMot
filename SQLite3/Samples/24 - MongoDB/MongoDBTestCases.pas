@@ -519,6 +519,30 @@ begin
   finally
     R.Free;
   end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not RowID=?',[50]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check(R.ID<>50);
+    end;
+    Check(n=COLL_COUNT-1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not Age<?',[52]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check(R.Age>51);
+    end;
+    Check(n>10);
+  finally
+    R.Free;
+  end;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10',[51]);
   try
     n := 0;
@@ -582,7 +606,7 @@ begin
     R.Free;
   end;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=?',[30]);
-  try  
+  try
     n := 0;
     while R.FillOne do begin
       inc(n);
@@ -641,6 +665,18 @@ begin
   finally
     R.Free;
   end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not Name like ?',['%ame 1%']);
+  try
+    tot := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(not IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.ID);
+    end;
+    Check(n+tot=COLL_COUNT,'{Name:/ame 1/i}');
+  finally
+    R.Free;
+  end;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and '+
     'IntegerDynArrayContains(Ints,?)',[10]);
   try
@@ -658,8 +694,9 @@ begin
   check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
   check(i64=0,'{Data:{$ne:null}}');
   Check(fClient.RetrieveListJSON(TSQLORM,'',[],'min(RowID),max(RowID),Count(RowID)')=
-    '[{"min(RowID)":1,"max(RowID)":100,"Count(RowID)":100}]');
-  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
+    FormatUTF8('[{"min(RowID)":1,"max(RowID)":%,"Count(RowID)":%}]',[COLL_COUNT,COLL_COUNT]));
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
+    'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
   check(doc.a=1);
   check(doc.b=COLL_COUNT);
   check(doc.c=COLL_COUNT);
@@ -669,6 +706,14 @@ begin
   check(doc.b=COLL_COUNT+1);
   check(doc.c=COLL_COUNT);
   check(doc.d=total);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'RowID=?',[50],'max(RowID) as a');
+  Check(doc.a=50);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'RowID<?',[50],'max(RowID) as a');
+  Check(doc.a=49);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'not RowID>=?',[50],'max(RowID) as a');
+  Check(doc.a=49);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'not RowID=?',[50],'count(RowID) as a');
+  Check(doc.a=COLL_COUNT-1);
   T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,'+
     'count(Age) as count,sum(Age) as total','order by age group by age');
   if not CheckFailed(T<>nil) then

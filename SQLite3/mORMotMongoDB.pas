@@ -74,6 +74,7 @@ uses
   Classes,
   Variants,
   SynCommons,
+  SynLog,
   mORMot,
   SynMongoDB;
 
@@ -125,11 +126,8 @@ type
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
-    // - overridden method to handle most potential simple queries, e.g. like
-    // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
-    // - ORM field names into mapped MongoDB external field names
-    // - handle statements to avoid slow virtual table loop over all rows, like
-    // $ SELECT count(*) FROM table
+    // - overridden method which allows return TRUE, i.e. always by-pass
+    // virtual tables process
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     // overridden method returning TRUE for next calls to EngineAdd/Delete
     // will properly handle operations until InternalBatchStop is called
@@ -819,91 +817,81 @@ end;
 
 function TSQLRestStorageMongoDB.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
-var W: TJSONSerializer;
-    MS: TRawByteStringStream;
-    Query,Projection: variant;
-    Res: TBSONDocument;
-    TextOrderByField: RawUTF8;
-    ResCount,limit: PtrInt;
-    extFieldNames: TRawUTF8DynArray;
+var ResCount: PtrInt;
     Stmt: TSynTableStatement;
-    bits: TSQLFieldBits;
-    withID: boolean;
+    extFieldName: function(FieldIndex: Integer): RawUTF8 of object;
+    Query: variant;
+    TextOrderByField: RawUTF8;
 const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
-
+procedure AddWhereClause(B: TBSONWriter);
+var n,w: integer;
+    FieldName: RawUTF8;
+    joinedOR: boolean;
+begin
+  n := Length(Stmt.Where);
+  if (n>1) and Stmt.Where[1].JoinedOR then begin
+    for w := 2 to n-1 do
+    if not Stmt.Where[w].JoinedOR then begin
+      InternalLog('%.EngineList: Unhandled mixed AND/OR for "%"',[self,SQL],sllError);
+      exit;
+    end;
+    B.BSONDocumentBegin('$or',betArray); // e.g. {$or:[{quantity:{$lt:20}},{price:10}]}
+    joinedOR := true;
+  end else
+    joinedOR := false;
+  for w := 0 to n-1 do begin
+    if joinedOR then
+      B.BSONDocumentBegin(UInt32ToUtf8(w));
+    with Stmt.Where[w] do begin
+      FieldName := extFieldName(Field-1);
+      if not B.BSONWriteQueryOperator(FieldName,NotClause,Operator,ValueVariant) then begin
+        InternalLog('%.EngineList: Unhandled operator % for field "%" in "%"',[
+          self,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
+          FieldName,SQL],sllError);
+        exit;
+      end;
+    end;
+    if joinedOR then
+      B.BSONDocumentEnd;
+  end;
+  if joinedOR then
+    B.BSONDocumentEnd;
+  B.BSONDocumentEnd;
+end;
 function ComputeQuery: boolean;
-var FieldName: RawUTF8;
-    B: TBSONWriter;
-    n,w,i: integer;
-    this: set of (special,joinedOR);
+var B: TBSONWriter;
+    n,i: integer;
 begin // here we compute a BSON query, since it is the fastest
   result := false;
   if Stmt.SQLStatement='' then begin
     InternalLog('%.EngineList: Invalid SQL statement "%"',[self,SQL],sllError);
     exit;
   end;
-  n := Length(Stmt.Where);
-  if (n=0) and (Stmt.OrderByField=nil) then begin // no WHERE clause
+  if (Stmt.Where=nil) and (Stmt.OrderByField=nil) then begin // no WHERE clause
     result := true;
     SetVariantNull(Query); // void query -> returns all rows
     exit;
   end;
-  this := [];
   B := TBSONWriter.Create(TRawByteStringStream);
   try
-    if Stmt.OrderByField<>nil then begin
-      B.BSONDocumentBegin;
-      B.BSONWrite('$query',betDoc);
-      include(this,special)
-    end;
     B.BSONDocumentBegin;
-    if (n>1) and Stmt.Where[1].JoinedOR then begin
-      for w := 2 to n-1 do
-      if not Stmt.Where[w].JoinedOR then begin
-        InternalLog('%.EngineList: Unhandled mixed AND/OR for "%"',[self,SQL],sllError);
-        exit;
-      end;
-      B.BSONWrite('$or',betArray); // e.g. {$or:[{quantity:{$lt:20}},{price:10}]}
-      B.BSONDocumentBegin;
-      include(this,joinedOR);
-    end;
-    for w := 0 to n-1 do begin
-      if joinedOR in this then begin
-        B.BSONWrite(UInt32ToUtf8(w),betDoc);
-        B.BSONDocumentBegin;
-      end;
-      with Stmt.Where[w] do begin
-        FieldName := fStoredClassProps.ExternalDB.FieldNameByIndex(Field-1);
-        if not B.BSONWriteQueryOperator(FieldName,Operator,ValueVariant) then begin
-          InternalLog('%.EngineList: Unhandled operator % for field "%" in "%"',[
-            self,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
-            FieldName,SQL],sllError);
-          exit;
-        end;
-      end;
-      if joinedOR in this then
-        B.BSONDocumentEnd;
-    end;
-    if joinedOR in this then
-      B.BSONDocumentEnd;
-    B.BSONDocumentEnd;
-    if special in this then begin
+    if Stmt.OrderByField<>nil then begin
+      B.BSONDocumentBegin('$query');
+      AddWhereClause(B);
       n := high(Stmt.OrderByField);
       if (n=0) and (Stmt.OrderByField[0]>0) and (Stmt.Limit=0) and
          (Stmt.Offset=0) and (fStoredClassRecordProps.Fields.List[
-          Stmt.OrderByField[0]-1].SQLFieldType in [sftAnsiText, sftUTF8Text]) then
-        TextOrderByField := fStoredClassProps.ExternalDB.
-          FieldNameByIndex(Stmt.OrderByField[0]-1) else
+          Stmt.OrderByField[0]-1].SQLFieldType in [sftAnsiText,sftUTF8Text]) then
+        TextOrderByField := extFieldName(Stmt.OrderByField[0]-1) else
       if n>=0 then begin
-        B.BSONWrite('$orderby',betDoc);
-        B.BSONDocumentBegin;
+        B.BSONDocumentBegin('$orderby');
         for i := 0 to n do
-          B.BSONWrite(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.OrderByField[i]-1),
-            ORDERBY_FIELD[Stmt.OrderByDesc]);
+          B.BSONWrite(extFieldName(Stmt.OrderByField[i]-1),ORDERBY_FIELD[Stmt.OrderByDesc]);
         B.BSONDocumentEnd;
       end;
       B.BSONDocumentEnd;
-    end;
+    end else
+      AddWhereClause(B);
     B.ToBSONVariant(Query);
   finally
     B.Free;
@@ -916,14 +904,14 @@ begin
   ResCount := 1;
 end;
 procedure ComputeAggregate;
-type TFunc = (funcDistinct,funcMax,funcMin,funcAvg,funcSum,funcCount);
-const FUNCT: array[funcMax..funcCount] of string[3] = ('max','min','avg','sum','sum');
+type TFunc = (funcMax,funcMin,funcAvg,funcSum,funcCount);
+const FUNCT: array[TFunc] of string[4] = ('$max','$min','$avg','$sum','$sum');
 var i: integer;
     func: TFunc;
     distinct: integer;
-    W: TTextWriter;
-    distinctName,name,query: RawUTF8;
-begin // here we compute a JSON query, since it is easier to work with
+    B: TBSONWriter;
+    distinctName,name,value: RawUTF8;
+begin
   distinct := -1;
   for i := 0 to high(Stmt.Select) do
     if IdemPropNameU(Stmt.Select[i].FunctionName,'distinct') then
@@ -932,11 +920,16 @@ begin // here we compute a JSON query, since it is easier to work with
         exit;
       end else begin
       distinct := Stmt.Select[i].Field;
-      distinctName := fStoredClassProps.ExternalDB.FieldNameByIndex(distinct-1);
+      distinctName := extFieldName(distinct-1);
     end;
-  W := TTextWriter.CreateOwnedStream(1024);
+  B := TBSONWriter.Create(TRawByteStringStream);
   try
-    W.AddShort('{$group:{_id:');
+    B.BSONDocumentBegin;
+   if Stmt.Where<>nil then begin
+      B.BSONDocumentBeginInArray('$match');
+      AddWhereClause(B);
+    end;
+    B.BSONDocumentBeginInArray('$group');
     if distinct>=0 then begin
       for i := 0 to high(Stmt.GroupByField) do
         if Stmt.GroupByField[i]<>distinct then begin
@@ -944,101 +937,85 @@ begin // here we compute a JSON query, since it is easier to work with
             [self,distinctName,distinctName,SQL],sllError);
           exit;
         end;
-      W.Add('"','$');
-      W.AddString(distinctName);
-      W.AddShort('",');
+      B.BSONWrite('_id','$'+distinctName);
     end else
     if length(Stmt.GroupByField)=0 then
-      W.AddShort('null,') else begin
-      W.Add('{');
+      B.BSONWrite('_id',betNull) else begin
+      B.BSONDocumentBegin('_id');
       for i := 0 to high(Stmt.GroupByField) do begin
-        name := fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.GroupByField[i]-1);
-        W.AddString(name);
-        W.AddShort(':"$"');
-        W.AddString(name);
-        W.AddShort('",');
+        name := extFieldName(Stmt.GroupByField[i]-1);
+        B.BSONWrite(name,'$'+name);
       end;
-      W.CancelLastComma;
-      W.Add('}',',');
+      B.BSONDocumentEnd;
     end;
-    for i := 0 to high(Stmt.Select) do begin
-      func := TFunc(FindRawUTF8(['distinct','max','min','avg','sum','count'],
-        Stmt.Select[i].FunctionName,false));
+    for i := 0 to high(Stmt.Select) do
+    with Stmt.Select[i] do begin
+      if FunctionKnown=funcDistinct then
+        continue;
+      func := TFunc(FindRawUTF8(['max','min','avg','sum','count'],FunctionName,false));
       if ord(func)<0 then begin
         InternalLog('%.EngineList: unexpected function %() in "%"',
-          [self,Stmt.Select[i].FunctionName,SQL],sllError);
+          [self,FunctionName,SQL],sllError);
         exit;
       end;
-      if func=funcDistinct then
-        continue;
-      W.Add('f');
-      W.AddU(i);
-      W.AddShort(':{$');
-      W.AddShort(FUNCT[func]);
-      W.Add(':');
+      B.BSONDocumentBegin('f'+UInt32ToUTF8(i));
       if func=funcCount then
-        W.Add('1') else begin
-        W.Add('"','$');
-        W.AddString(fStoredClassProps.ExternalDB.FieldNameByIndex(Stmt.Select[i].Field-1));
-        W.Add('"');
-      end;
-      W.Add('}',',');
+        B.BSONWrite(FUNCT[func],1) else
+        B.BSONWrite(FUNCT[func],'$'+extFieldName(Field-1));
+      B.BSONDocumentEnd;
     end;
-    W.CancelLastComma;
-    W.AddShort('}},');
+    B.BSONDocumentEnd;
     if Stmt.OrderByField<>nil then begin
       if (length(Stmt.OrderByField)<>1) or (Stmt.OrderByField[0]<>distinct) then begin
         InternalLog('%.EngineList: ORDER BY should match Distinct(%) in "%"',
           [self,distinctName,SQL],sllError);
         exit;
       end;
-      W.AddShort('{$sort:{_id:');
-      W.Add(ORDERBY_FIELD[Stmt.OrderByDesc]);
-      W.AddShort('}},');
+      B.BSONDocumentBeginInArray('$sort');
+      B.BSONWrite('_id',ORDERBY_FIELD[Stmt.OrderByDesc]);
+      B.BSONDocumentEnd;
     end;
-    W.AddShort('{$project:{_id:0,');
+    B.BSONDocumentBeginInArray('$project');
+    B.BSONWrite('_id',0);
     for i := 0 to high(Stmt.Select) do
     with Stmt.Select[i] do begin
-      W.Add('"');
       if Alias<>'' then
-        W.AddString(Alias) else begin
+        name := Alias else begin
         if Field=0 then
           name := 'RowID' else
           name := fStoredClassRecordProps.Fields.List[Field-1].Name;
-        if FunctionName='' then
-          W.AddString(name) else
-        if IdemPropNameU(FunctionName,'distinct') then begin
-          W.AddString(name);
-          W.AddShort('":"$_id",');
+        if FunctionName<>'' then
+        if FunctionKnown=funcDistinct then begin
+          B.BSONWrite(name,'$_id');
           continue;
-        end else begin
-          W.AddString(FunctionName);
-          W.Add('(');
-          W.AddString(name);
-          W.Add(')');
-        end;
+        end else
+          name := FunctionName+'('+name+')';
       end;
+      value := '$f'+UInt32ToUTF8(i);
       if ToBeAdded<>0 then begin
-        W.AddShort('":{$add:["$f');
-        W.AddU(i);
-        W.Add('"',',');
-        W.Add(ToBeAdded);
-        W.AddShort(']},');
-      end else begin
-        W.AddShort('":"$f');
-        W.AddU(i);
-        W.Add('"',',');
-      end;
+        B.BSONDocumentBegin(name);
+        B.BSONDocumentBegin('$add',betArray);
+        B.BSONWrite('0',value);
+        B.BSONWrite('1',ToBeAdded);
+        B.BSONDocumentEnd(2);
+      end else
+        B.BSONWrite(name,value);
     end;
-    W.CancelLastComma;
-    W.AddShort('}}');
-    W.SetText(query);
+    B.BSONDocumentEnd(3);
+    B.ToBSONVariant(Query,betArray);
   finally
-    W.Free;
+    B.Free;
   end;
-  result := fCollection.AggregateJSON(query);
+  result := fCollection.AggregateJSON(Query);
 end;
-
+var W: TJSONSerializer;
+    MS: TRawByteStringStream;
+    Res: TBSONDocument;
+    limit: PtrInt;
+    extFieldNames: TRawUTF8DynArray;
+    bits: TSQLFieldBits;
+    withID: boolean;
+    Projection: variant;
 begin // same logic as in TSQLRestStorageInMemory.EngineList()
   result := ''; // indicates error occurred
   ResCount := 0;
@@ -1065,16 +1042,18 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         if (Stmt.SQLStatement='') or // parsing failed
           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return '' to mark error
-          exit;
+          exit;                                                      
+        extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
         if Stmt.SelectFunctionCount<>0 then
-          if (length(Stmt.Select)=1) and IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
+          if (length(Stmt.Select)=1) and (Stmt.Select[0].Alias='') and 
+             IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
           if Stmt.Where=nil then
             // was "SELECT Count(*) FROM TableName;"
             SetCount(TableRowCount(fStoredClass)) else
             // was "SELECT Count(*) FROM TableName WHERE ..."
             if ComputeQuery then
               SetCount(fCollection.FindCount(Query)) else
-              exit else
+              exit else 
             // e.g. SELECT Distinct(Age),max(RowID) FROM TableName GROUP BY Age
             ComputeAggregate else
         // save rows as JSON from returned BSON
@@ -1099,15 +1078,15 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             MS.Free;
           end;
           if TextOrderByField<>'' then
-          // $orderby is case sensitive with MongoDB -> manual ordering
-          with TSQLTableJSON.CreateFromTables(
-            [fStoredClass],SQL,pointer(result),length(result)) do
-          try
-            SortFields(FieldIndex(TextOrderByField),not Stmt.OrderByDesc);
-            result := GetJSONValues(W.Expand);
-          finally
-            Free;
-          end;
+            // $orderby is case sensitive with MongoDB -> manual ordering
+            with TSQLTableJSON.CreateFromTables(
+              [fStoredClass],SQL,pointer(result),length(result)) do
+            try
+              SortFields(FieldIndex(TextOrderByField),not Stmt.OrderByDesc,nil,sftUTF8Text);
+              result := GetJSONValues(W.Expand);
+            finally
+              Free;
+            end;
         end;
       finally
         Stmt.Free;
