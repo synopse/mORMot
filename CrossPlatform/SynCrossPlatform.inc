@@ -78,6 +78,7 @@
     {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$define ISDELPHI2010}
     {$define ISDELPHIXE}
+    {$define USETMONITOR}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$ifdef UNICODE}
