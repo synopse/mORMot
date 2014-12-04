@@ -70,9 +70,11 @@ unit SynCrossPlatformSpecific;
       {$define USESYNCRT}
     {$endif}
     {$endif}
+    {$define USECRITICALSECTION}
   {$else}
     {$ifdef FPC}
       {$define USEFCL}
+      {$define USECRITICALSECTION}
     {$else}
       {$define USEINDY}
     {$endif}
@@ -88,8 +90,9 @@ uses
   w3c.date;
 {$else}
 uses
-  {$ifndef USETMONITOR}
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
   {$endif}
   SysUtils,
   Classes;
@@ -130,7 +133,7 @@ type
   /// cross-platform thread safe locking
   // - will use TMonitor on the newest Delphi platforms
   TMutex = class
-  {$ifndef USETMONITOR}
+  {$ifdef USECRITICALSECTION}
   protected
     fLock: TRTLCriticalSection;
   public
@@ -1000,12 +1003,20 @@ end;
 
 constructor TMutex.Create;
 begin
+  {$ifdef FPC}
+  InitCriticalSection(fLock);
+  {$else}
   InitializeCriticalSection(fLock);
+  {$endif}
 end;
 
 destructor TMutex.Destroy;
 begin
+  {$ifdef FPC}
+  DoneCriticalSection(fLock);
+  {$else}
   DeleteCriticalSection(fLock);
+  {$endif}
 end;
 
 procedure TMutex.Enter;
@@ -1022,4 +1033,4 @@ end;
 
 {$endif ISDWS}
 
-end.
+end.
