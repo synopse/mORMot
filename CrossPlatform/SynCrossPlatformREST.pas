@@ -2709,7 +2709,7 @@ begin
     doc.Init(jsonres);
     if (doc.Kind=jvArray) and (doc.Count=fBatchCount) then
       for i := 0 to fBatchCount-1 do
-        Results[i] := doc.Values[i];
+        Results[i] := {$ifdef FPC}Int64{$endif}(doc.Values[i]);
   end;
   {$endif}
 end;
