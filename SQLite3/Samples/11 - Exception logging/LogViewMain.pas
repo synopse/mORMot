@@ -430,6 +430,10 @@ begin
     end;
 end;
 
+const
+  TIME_FORMAT: array[boolean] of string = (
+    'hh:mm:ss.zzz','hh:mm:ss');
+    
 procedure TMainLogView.ListDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
 var txt: string;
@@ -450,7 +454,7 @@ begin
         Font.Color  := LOG_COLORS[not b,FLog.EventLevel[Index]];
         FillRect(Rect);
         case ACol of
-        0: txt := TimeToStr(FLog.EventDateTime(Index));
+        0: DateTimeToString(txt,TIME_FORMAT[FLog.Freq=0],FLog.EventDateTime(Index));
         1: txt := FEventCaption[FLog.EventLevel[Index]];
         2: if FLog.EventThread<>nil then
              txt := IntToString(cardinal(FLog.EventThread[Index])) else
@@ -647,16 +651,34 @@ end;
 
 procedure TMainLogView.ListClick(Sender: TObject);
 var i: integer;
+    Selection: TGridRect;
+    elapsed: TDateTime;
+    s,tim: string;
 begin
   i := List.Row;
   if cardinal(i)>=cardinal(FLogSelectedCount) then
     if FLog<>nil then
-      MemoBottom.Text := FLog.Strings[i] else
-      MemoBottom.Text := '' else begin
-    MemoBottom.Text := FLog.Strings[FLogSelected[i]];
+      s := FLog.Strings[i] else
+      s := '' else begin
+    s := FLog.Strings[FLogSelected[i]];
     if FLog.EventThread<>nil then
       ThreadListBox.ItemIndex := FLog.EventThread[FLogSelected[i]]-1;
   end;
+  Selection := List.Selection;
+  if Selection.Bottom>Selection.Top then begin
+    elapsed := FLog.EventDateTime(Selection.Bottom)-FLog.EventDateTime(Selection.Top);
+    if FLog.Freq=0 then begin
+      DateTimeToString(tim,TIME_FORMAT[true],elapsed);
+      s := tim+#13#10+s;
+    end else begin
+      tim := IntToStr(trunc(elapsed*MSecsPerDay*1000) mod 1000);
+      s := StringOfChar('0',3-length(tim))+tim+#13#10+s;
+      DateTimeToString(tim,TIME_FORMAT[false],elapsed);
+      s := tim+'.'+s;
+    end;
+    s := IntToStr(Selection.Bottom-Selection.Top+1)+' lines - time elapsed: '+s;
+  end;
+  MemoBottom.Text := s;
 end;
 
 procedure TMainLogView.ListDblClick(Sender: TObject);
