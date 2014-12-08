@@ -30183,6 +30183,7 @@ function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
 var i, n, LenBytes: integer;
     P: PAnsiChar;
     FieldTable: PFieldTable;
+    NestedArray: TDynArray;
 begin
   if fValue=nil then begin
     result := Dest;
@@ -30261,6 +30262,12 @@ begin
         end;
       end;
     end;
+    tkDynArray:
+      for i := 1 to n do begin
+        NestedArray.Init(ElemType,P^);
+        Dest := NestedArray.SaveTo(Dest);
+        inc(P,ElemSize);
+      end;
   end;
   // store Hash32 checksum
   if Dest<>nil then  // may be nil if RecordSave() failed
@@ -30271,6 +30278,7 @@ end;
 function TDynArray.SaveToLength: integer;
 var i,n,L: integer;
     P: PAnsiChar;
+    NestedArray: TDynArray;
 begin
   if fValue=nil then begin
     result := 0;
@@ -30309,7 +30317,7 @@ begin
         inc(result,L);
       end;
     {$endif}
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
+    tkRecord{$ifdef FPC},tkObject{$endif}:
       for i := 1 to n do begin
         L := RecordSaveLength(P^,ElemType);
         if L=0 then
@@ -30317,7 +30325,12 @@ begin
         inc(result,L);
         inc(P,ElemSize);
       end;
-    end;
+    tkDynArray:
+      for i := 1 to n do begin
+        NestedArray.Init(ElemType,P^);
+        inc(result,NestedArray.SaveToLength);
+        inc(P,ElemSize);
+      end;
     end;
   end;
   inc(result,sizeof(Cardinal)); // Hash32 checksum
@@ -30698,6 +30711,7 @@ var i, n, LenBytes: integer;
     P: PAnsiChar;
     FieldTable: PFieldTable;
     Hash: PCardinalArray;
+    NestedArray: TDynArray;
 begin
   // check stored element size+type
   if Source=nil then begin
@@ -30775,20 +30789,27 @@ begin
         for i := 1 to n do begin
           Source := RecordLoad(P^,Source,ElemType);
           if Source=nil then
-            break; // invalid record type (wrong field type)
+            break; // invalid content (e.g. wrong field type)
           inc(P,ElemSize);
         end;
       end;
     end;
     {$ifndef NOVARIANTS}
-    tkVariant: begin
+    tkVariant:
       for i := 0 to n-1 do begin
         Source := VariantLoad(PVariantArray(P)^[i],Source);
         if Source=nil then
           break; // invalid/unhandled variant content
       end;
-    end;
     {$endif}
+    tkDynArray:
+      for i := 1 to n do begin
+        NestedArray.Init(ElemType,P^);
+        Source := NestedArray.LoadFrom(Source);
+        if Source=nil then
+          break; // invalid content (e.g. wrong field type)
+        inc(P,ElemSize);
+      end;
   end;
   // check security checksum
   if (Source=nil) or (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))<>Hash[0]) then

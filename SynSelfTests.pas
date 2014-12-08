@@ -4334,9 +4334,8 @@ var ab0,ab1: TSubAB;
     cd0,cd1,cd2: TSubCD;
     agg,agg2: TAggregate;
     X: RawUTF8;
-{$ifndef NOVARIANTS}
-    i: Integer;
-{$endif}
+    AA: TRawUTF8DynArrayDynArray;
+    i,a: Integer;
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
     nrtti,nrtti2: TNewRTTI;
@@ -4408,6 +4407,20 @@ begin
   Check(X='<A>0</A><B>0</B><C>0</C><D>null</D><E><E1>2</E1><E2>3</E2></E><F></F>');
   X := JSONToXML('[1,2,"three"]');
   Check(X='<?xml version="1.0" encoding="UTF-8"?>'#$D#$A'<0>1</0><1>2</1><2>three</2>');
+
+  SetLength(AA,100);
+  for i := 0 to high(AA) do begin
+    SetLength(AA[i],random(100));
+    for a := 0 to high(AA[i]) do
+      UInt32ToUtf8(i+a,AA[i,a]);
+  end;
+  j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
+  Finalize(AA);
+  Check(AA=nil);
+  Check(DynArrayLoadJSON(AA,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+  for i := 0 to high(AA) do
+    for a := 0 to high(AA[i]) do
+      Check(GetInteger(pointer(AA[i,a]))=i+a);
 
   ab0.a := 'AB0';
   ab0.b := 0;
