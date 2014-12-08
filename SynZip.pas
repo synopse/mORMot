@@ -29,6 +29,7 @@ unit SynZip;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+   - Alf
    - jpdk
    - Gigo
 
@@ -154,6 +155,9 @@ unit SynZip;
 
 {$ifdef FPC}
   {$define USEZLIB}
+  {$ifdef MSWINDOWS} // avoid link to zlib1.dll
+  {$define USEPASZLIB}
+  {$endif}
 {$else}
   {$ifdef Win32}
     {$define USEINLINEASM}
@@ -169,7 +173,11 @@ interface
 uses
   SysUtils, Classes
 {$ifdef USEZLIB}
+  {$ifdef USEPASZLIB}
+  ,zbase,paszlib
+  {$else}
   ,ZLib
+  {$endif}
 {$endif}
 {$ifdef MSWINDOWS}
   ,Windows
@@ -750,7 +758,7 @@ begin
       exit;
     if EventArchiveZipWrite=nil then
       EventArchiveZipWrite := TZipWrite.CreateFrom(
-        copy(aDestinationPath,1,length(aDestinationPath)-1)+'.zip');
+        system.copy(aDestinationPath,1,length(aDestinationPath)-1)+'.zip');
     n := EventArchiveZipWrite.Count;
     EventArchiveZipWrite.AddDeflated(aOldLogFileName,True);
     if (EventArchiveZipWrite.Count=n+1) and DeleteFile({$ifndef Linux}pointer{$endif}(aOldLogFileName)) then
@@ -1315,7 +1323,7 @@ begin
     Path := Path+'\';
   if DirectoryExists(Path) then
     result := true else begin
-    Parent := ExtractFilePath(copy(Path,1,length(Path)-1));
+    Parent := ExtractFilePath(system.copy(Path,1,length(Path)-1));
     if (Parent<>'') and not DirectoryExists(Parent) then
       if not EnsurePath(Parent) then exit;
     if CreateDirectory(pointer(path),nil) then
@@ -4318,52 +4326,52 @@ function inflateEnd; external;
 
 function ZLIB_VERSION: PAnsiChar;
 begin
-  result := ZLib.ZLIB_VERSION;
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}ZLIB_VERSION;
 end;
 
 function adler32(adler: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := ZLib.adler32(adler,pointer(buf),len);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}adler32(adler,pointer(buf),len);
 end;
 
 function crc32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := ZLib.crc32(crc,pointer(buf),len);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}crc32(crc,pointer(buf),len);
 end;
 
 function deflateInit2_(var strm: TZStream; level: integer; method: integer; windowBits: integer; memLevel: integer;strategy: integer; version: PAnsiChar; stream_size: integer): integer;
 begin
-  result := ZLib.deflateInit2_(z_streamp(@strm)^,level,method,windowBits,memLevel,strategy,version,stream_size);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflateInit2_(z_streamp(@strm)^,level,method,windowBits,memLevel,strategy,version,stream_size);
 end;
 
 function deflate(var strm: TZStream; flush: integer): integer;
 begin
-  result := ZLib.deflate(z_streamp(@strm)^,flush);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflate(z_streamp(@strm)^,flush);
 end;
 
 function deflateEnd(var strm: TZStream): integer;
 begin
-  result := ZLib.deflateEnd(z_streamp(@strm)^);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflateEnd(z_streamp(@strm)^);
 end;
 
 function inflateInit2_(var strm: TZStream; windowBits: integer; version: PAnsiChar; stream_size: integer): integer;
 begin
-  result := ZLib.inflateInit2_(z_streamp(@strm)^,windowBits,version,stream_size);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflateInit2_(z_streamp(@strm)^,windowBits,version,stream_size);
 end;
 
 function inflate(var strm: TZStream; flush: integer): integer;
 begin
-  result := ZLib.inflate(z_streamp(@strm)^,flush);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflate(z_streamp(@strm)^,flush);
 end;
 
 function inflateEnd(var strm: TZStream): integer;
 begin
-  result := ZLib.inflateEnd(z_streamp(@strm)^);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflateEnd(z_streamp(@strm)^);
 end;
 
 function get_crc_table: pointer;
 begin
-  result := ZLib.get_crc_table;
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}get_crc_table;
 end;
 
 {$else}
