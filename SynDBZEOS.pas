@@ -30,7 +30,7 @@ unit SynDBZEOS;
 
   Contributor(s):
   - delphinium
-  - Michael Hiergeist (EgonHugeist)
+  - EgonHugeist
   - alexpirate
   - Joe (jokussoftware)
 
@@ -129,10 +129,8 @@ uses
   // load physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to
   // exclude database engines you don't need
-  {$IFNDEF UNIX}
   {$IFDEF ENABLE_ADO}
   ZDbcAdo,
-  {$ENDIF}
   {$ENDIF}
   {$IFDEF ENABLE_DBLIB}
   ZDbcDbLib,
@@ -169,7 +167,6 @@ uses
 type
   /// Exception type associated to the ZEOS database components
   ESQLDBZEOS = class(ESQLDBException);
-
 
   /// implement properties shared by ZEOS connections
   TSQLDBZEOSConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
@@ -371,13 +368,21 @@ implementation
 
 constructor TSQLDBZEOSConnectionProperties.Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
 const
-  PCHARS: array[0..7] of PAnsiChar = (
-    'ORACLE','FREETDS_MSSQL','MSSQL','INTERBASE','FIREBIRD','MYSQL','SQLITE','POSTGRESQL');
+  PCHARS: array[0..8] of PAnsiChar = (
+    'ORACLE','FREETDS_MSSQL','MSSQL','INTERBASE','FIREBIRD','MYSQL','SQLITE','POSTGRESQL','JET');
   TYPES: array[-1..high(PCHARS)] of TSQLDBDefinition = (
-    dDefault,dOracle,dMSSQL,dMSSQL,dFirebird,dFirebird,dMySQL,dSQLite,dPostgreSQL);
+    dDefault,dOracle,dMSSQL,dMSSQL,dFirebird,dFirebird,dMySQL,dSQLite,dPostgreSQL,dJet{e.g. ADO[JET]});
   // expecting Sybase + ASA support in TSQLDBDefinition
-begin
-  fServerName :=  aServerName;
+var BrakedPos: Integer;
+begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
+  // make syntax like "ADO[ORACLE]"/"ADO[MSSQL]:"/"ADO[JET]" etc... possible
+  BrakedPos := PosEx('[', aServerName);
+  if (BrakedPos>0) and ((aServerName[Length(aServerName)]=']') or
+     (aServerName[Length(aServerName)-1]=']')) then begin
+    fServerName := Copy(aServerName,1,BrakedPos-1);
+    fDBMSName := Copy(aServerName,BrakedPos+1,PosEx(']',aServerName)-1-BrakedPos);
+  end else 
+    fServerName := aServerName; 
   if (fServerName<>'') and (PosEx(':',fServerName)=0) then
     fServerName := fServerName+':';
   if not IdemPChar(Pointer(aServerName),'ZDBC:') then
@@ -389,8 +394,41 @@ begin
     fURL.UserName := UTF8ToString(aUserID);
   if fURL.Password='' then
     fURL.Password := UTF8ToString(aPassWord);
-  StringToUTF8(fURL.Protocol,fDBMSName);
+  if fDBMSName = '' then
+    StringToUTF8(fURL.Protocol,fDBMSName);
   fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName),PCHARS)];
+  { Implementation/Enhancements Notes About settings below (from Michael):
+    ConnectionProperties:
+    Make it possible to Assign Parameters on the fly e.g.:
+    FireBird:
+      - add custom TIL's by hand if tiNone was set. or some more custom settings:
+        see ZDbcInterbaseUtils.pas: TransactionParams and DatabaseParams
+      - "hard_commit=true" False by default
+    PostgreSQL:
+      - "oidasblob=true" - False by default
+        notify Zeos should use Oid fields as BLob's
+      - "CheckFieldVisibility=True/False"
+        notify Zeos should determine temporary tables field meta informations too
+        required for mORMot?
+      - "NoTableInfoCache=True/False" - False by default
+        notify Zeos it should use internal TableInfo-cache.
+        Set the value to true to save memory
+    ADO:
+      7.3up
+      - "internal_buffer_size=X" in bytes default are 128KB
+       this is the max size in bytes you allow Zeos to use for batch-ole array_bindings
+       This parameter is only used if "use_ole_update_params=True"
+      - "use_ole_update_params=True/False" default = False
+       bypassing slow MSADO15.DLL and direct use OleDB parameters for all kind
+       of updates including batch Note: current code is also able to handle Out/InOut
+       params except for out/inout lob's.
+      note: both internal_buffer_size and use_ole_update_params can be used as
+       statement parameters as well
+    Oracle:
+      - "row_prefetch_size=x! in bytes
+       this value will be send to OCI and indicates Oracle which
+       row_prefetch_size you allow to execute a query
+  }
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
   if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'],false) then
     ThreadingMode := tmMainConnection;
@@ -439,15 +477,17 @@ begin
   dOracle: begin
     {$ifndef ZEOS72UP} // fixed since 7.2up
     // sets OCI_ATTR_PREFETCH_ROWS on prepare a fetch
-    // default = 100 on 7.1down and 1000 on 7.2up
+    // default = 100 on 7.1down
     fStatementParams.Add('prefetch_count=100000');
+    {$ELSE}
+    //max mem in bytes which OCI(Server) can use for a result on Server-Side
+    //fStatementParams.Add('row_prefetch_size=131072');
+    //max mem in bytes which Zeos can for batch or resultset buffers
+    //fStatementParams.Add('internal_buffer_size=131072');
     {$endif}
   end;
   dSQLite: begin
     {$ifdef ZEOS72UP} // new since 7.2up
-    // get access to the native resultset. This only works sequention/forwardonly
-    // (step) and YOU have to localize the values
-    fStatementParams.Add('ForceNativeResultSet=True');
     // Bind double values instead of ISO formated DateTime-strings
     //fStatementParams.Add('BindDoubleDateTimeValues=True');
     {$endif}
@@ -462,6 +502,11 @@ begin
     // see http://synopse.info/forum/viewtopic.php?pid=13260#p13260
     fURL.Properties.Add('NoTableInfoCache=true');
   end;
+  dMSSQL: begin
+    fUseCache := true;
+    //fStatementParams.Add('use_ole_update_params=True'); //see 'ADO'
+    //fStatementParams.Add('internal_buffer_size=131072'); //see 'ADO'
+  end;
   end;
   if fDBMS in [dOracle,dPostgreSQL,dMySQL] then begin
     // let's set 1024KB / chunk for synopse  or more?
@@ -470,7 +515,7 @@ begin
     // for Firebird we always using the blob-segment size
     fStatementParams.Add('chunk_size=1048576');
   end;
-  if fDBMS in [dOracle,dPostgreSQL,dFireBird] then begin
+  if fDBMS in [dPostgreSQL,dFireBird] then begin
     {$ifdef ZEOS72UP} // new since 7.2up
     // Always load the lobs? Or just on accessing them?
     // if you allways copy the data by fetching the row than it doesn't make sense.
@@ -556,7 +601,7 @@ var meta: IZDatabaseMetadata;
     FA: TDynArray;
 begin
   if GetDatabaseMetadata(meta) then begin
-    SQLSplitTableName(UpperCase(aTablename),Schema,TableName);
+    SQLSplitTableName(aTableName, Schema,TableName);
     sSchema := UTF8ToString(Schema);
     sTableName := meta.GetIdentifierConvertor.Quote(UTF8ToString(TableName));
     res := meta.GetColumns('',sSchema,sTableName,'');
@@ -643,6 +688,7 @@ begin
   inherited Create(aProperties);
   fDatabase := DriverManager.GetConnectionWithParams(
     (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
+  // about transactions, see http://synopse.info/forum/viewtopic.php?id=2209
   fDatabase.SetAutoCommit(true);
   fDatabase.SetTransactionIsolation(tiReadCommitted);
 end;
@@ -694,7 +740,6 @@ procedure TSQLDBZEOSConnection.StartTransaction;
 begin
   inherited StartTransaction;
   fDatabase.SetAutoCommit(false);
-  fDatabase.SetTransactionIsolation(tiReadCommitted);
 end;
 
 procedure TSQLDBZEOSConnection.Commit;
@@ -702,7 +747,6 @@ begin
   inherited Commit;
   fDatabase.Commit;
   fDatabase.SetAutoCommit(true);
-  fDatabase.SetTransactionIsolation(tiNone);
 end;
 
 procedure TSQLDBZEOSConnection.Rollback;
@@ -710,7 +754,6 @@ begin
   inherited Rollback;
   fDatabase.Rollback;
   fDatabase.SetAutoCommit(true);
-  fDatabase.SetTransactionIsolation(tiNone);
 end;
 
 
