@@ -30559,6 +30559,7 @@ var n, i: integer;
     EndOfObject: AnsiChar;
     Val: PUTF8Char;
     CustomReader: TDynArrayJSONCustomReader;
+    NestedDynArray: TDynArray;
 begin // code below must match TTextWriter.AddDynArrayJSON()
   result := nil;
   if (P=nil) or (fValue=nil) then
@@ -30580,8 +30581,15 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     exit; // handle '[]' array
   end;
   if GlobalJSONCustomParsers.DynArraySearch(ArrayType,ElemType,CustomReader) then
-    T := djCustom else
+    T := djCustom else 
     T := ToKnownType;
+  if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
+    Count := n; // fast allocation of the whole dynamic array memory at once
+    for i := 0 to n-1 do begin
+      NestedDynArray.Init(ElemType,PPointerArray(fValue^)^[i]);
+      P := NestedDynArray.LoadFromJSON(P,@EndOfObject);
+    end;
+  end else
   if (T=djNone) or
      (PCardinal(P)^=JSON_BASE64_MAGIC_QUOTE) then begin
     if n<>1 then
@@ -33129,6 +33137,7 @@ var i, n, Len: integer;
     customWriter: TDynArrayJSONCustomWriter;
     customParser: TJSONCustomParserAbstract;
     Options: TJSONCustomParserSerializationOptions;
+    NestedDynArray: TDynArray;
 begin // code below must match TDynArray.LoadFromJSON
   n := aDynArray.Count-1;
   if n<0 then begin
@@ -33142,10 +33151,19 @@ begin // code below must match TDynArray.LoadFromJSON
   P := aDynArray.fValue^;
   Add('[');
   case T of
-  djNone: begin
-    tmp := aDynArray.SaveTo;
-    WrBase64(pointer(tmp),length(tmp),true); // magic=true
-  end;
+  djNone:
+    if (aDynArray.ElemType<>nil) and
+       (PTypeKind(aDynArray.ElemType)^=tkDynArray) then begin
+      for i := 0 to n do begin
+        NestedDynArray.Init(aDynArray.ElemType,P^);
+        AddDynArrayJSON(NestedDynArray);
+        Add(',');
+        inc(PtrUInt(P),aDynArray.ElemSize);
+      end;
+    end else begin
+      tmp := aDynArray.SaveTo;
+      WrBase64(pointer(tmp),length(tmp),true); // magic=true
+    end;
   djCustom: begin
       if customParser=nil then
         byte(Options) := 0 else

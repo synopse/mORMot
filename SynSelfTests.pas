@@ -4105,7 +4105,7 @@ const // convention may be to use __ before the type name
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
 var J,U: RawUTF8;
-    zendframeworkJson,discogsJson: RawByteString;
+    binary,zendframeworkJson,discogsJson: RawByteString;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
@@ -4414,6 +4414,13 @@ begin
     for a := 0 to high(AA[i]) do
       UInt32ToUtf8(i+a,AA[i,a]);
   end;
+  binary := DynArraySave(AA,TypeInfo(TRawUTF8DynArrayDynArray));
+  Finalize(AA);
+  Check(AA=nil);
+  Check(DynArrayLoad(AA,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+  for i := 0 to high(AA) do
+    for a := 0 to high(AA[i]) do
+      Check(GetInteger(pointer(AA[i,a]))=i+a);
   j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
   Finalize(AA);
   Check(AA=nil);
