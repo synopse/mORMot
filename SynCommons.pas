@@ -30588,6 +30588,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     for i := 0 to n-1 do begin
       NestedDynArray.Init(ElemType,PPointerArray(fValue^)^[i]);
       P := NestedDynArray.LoadFromJSON(P,@EndOfObject);
+      if P=nil then
+        exit;
+      EndOfObject := P^; // ',' or ']' for the last item of the array
+      inc(P);
     end;
   end else
   if (T=djNone) or
@@ -30604,7 +30608,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     case T of
     {$ifndef NOVARIANTS}
     djVariant:
-      for i := 0 to n-1 do 
+      for i := 0 to n-1 do
         P := VariantLoadJSON(PVariantArray(fValue^)^[i],P,@EndOfObject,@JSON_OPTIONS[true]);
     {$endif}
     djCustom: begin

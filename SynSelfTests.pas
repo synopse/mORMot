@@ -4334,7 +4334,7 @@ var ab0,ab1: TSubAB;
     cd0,cd1,cd2: TSubCD;
     agg,agg2: TAggregate;
     X: RawUTF8;
-    AA: TRawUTF8DynArrayDynArray;
+    AA,AB: TRawUTF8DynArrayDynArray;
     i,a: Integer;
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
@@ -4415,19 +4415,22 @@ begin
       UInt32ToUtf8(i+a,AA[i,a]);
   end;
   binary := DynArraySave(AA,TypeInfo(TRawUTF8DynArrayDynArray));
-  Finalize(AA);
-  Check(AA=nil);
-  Check(DynArrayLoad(AA,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
-  for i := 0 to high(AA) do
+  Check(DynArrayLoad(AB,pointer(binary),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+  Check(length(AA)=length(AB));
+  for i := 0 to high(AA) do begin
+    Check(length(AA[i])=length(AB[i]));
     for a := 0 to high(AA[i]) do
-      Check(GetInteger(pointer(AA[i,a]))=i+a);
+      Check(AA[i,a]=AB[i,a]);
+  end;
   j := DynArraySaveJSON(AA,TypeInfo(TRawUTF8DynArrayDynArray));
-  Finalize(AA);
-  Check(AA=nil);
-  Check(DynArrayLoadJSON(AA,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
-  for i := 0 to high(AA) do
+  Finalize(AB);
+  Check(DynArrayLoadJSON(AB,pointer(j),TypeInfo(TRawUTF8DynArrayDynArray))<>nil);
+  Check(length(AA)=length(AB));
+  for i := 0 to high(AA) do begin
+    Check(length(AA[i])=length(AB[i]));
     for a := 0 to high(AA[i]) do
-      Check(GetInteger(pointer(AA[i,a]))=i+a);
+      Check(AA[i,a]=AB[i,a]);
+  end;
 
   ab0.a := 'AB0';
   ab0.b := 0;
