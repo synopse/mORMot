@@ -1587,10 +1587,13 @@ type
     /// direct export of a DB statement rows into a new table of this database
     // - the corresponding table will be created within the current connection,
     // if it does not exist
+    // - if the column types are not set, they will be identified from the
+    // first row of data
     // - INSERTs will be nested within a transaction if WithinTransaction is TRUE
     // - will raise an Exception in case of error
     function NewTableFromRows(const TableName: RawUTF8;
-      Rows: TSQLDBStatement; WithinTransaction: boolean): integer;
+      Rows: TSQLDBStatement; WithinTransaction: boolean;
+      ColumnForcedTypes: TSQLDBFieldTypeDynArray=nil): integer;
     {$ifdef WITH_PROXY}
     /// server-side implementation of a remote connection to any SynDB engine
     // - follow the compressed binary message format expected by the
@@ -2048,9 +2051,12 @@ type
     procedure ColumnsToJSON(WR: TJSONWriter); virtual;
     {/ compute the SQL INSERT statement corresponding to this columns row
     - and populate the Fields[] array with columns information (type and name)
+    - if the current column value is NULL, will return ftNull: it is up to the
+      caller to set the proper field type 
     - the SQL statement is prepared with bound parameters, e.g.
     $ insert into TableName (Col1,Col2) values (?,N)
-    - used e.g. to convert some data on the fly from one database to another }
+    - used e.g. to convert some data on the fly from one database to another,
+      via the TSQLDBConnection.NewTableFromRows method }
     function ColumnsToSQLInsert(const TableName: RawUTF8;
       var Fields: TSQLDBColumnCreateDynArray): RawUTF8; virtual;
     // append all rows content as a JSON stream
@@ -3956,9 +3962,9 @@ begin
 end;
 
 function TSQLDBConnection.NewTableFromRows(const TableName: RawUTF8;
-  Rows: TSQLDBStatement; WithinTransaction: boolean): integer;
+  Rows: TSQLDBStatement; WithinTransaction: boolean;
+  ColumnForcedTypes: TSQLDBFieldTypeDynArray): integer;
 var Fields: TSQLDBColumnCreateDynArray;
-    Types: TSQLDBFieldTypeDynArray;
     aTableName, SQL: RawUTF8;
     Tables: TRawUTF8DynArray;
     Ins: TSQLDBStatement;
@@ -3979,11 +3985,15 @@ begin
         if Ins=nil then begin
           SQL := Rows.ColumnsToSQLInsert(aTableName,Fields);
           n := length(Fields);
-          SetLength(Types,n);
-          for i := 0 to n-1 do
-            if Fields[i].DBType=ftUnknown then
-              Types[n] := ftInt64 else
-              Types[n] := Fields[i].DBType;
+          if Length(ColumnForcedTypes)<>n then begin
+            SetLength(ColumnForcedTypes,n);
+            for i := 0 to n-1 do
+            case Fields[i].DBType of
+            ftUnknown: ColumnForcedTypes[i] := ftInt64;
+            ftNull:    ColumnForcedTypes[i] := ftBlob; // assume NULL is a BLOB
+            else ColumnForcedTypes[i] := Fields[i].DBType;
+            end;
+          end;
           Properties.GetTableNames(Tables);
           if FindRawUTF8(Tables,TableName,false)<0 then
             with Properties do
@@ -3992,7 +4002,7 @@ begin
           Ins.Prepare(SQL,false);
         end;
         // write row data
-        Ins.BindFromRows(Types,Rows);
+        Ins.BindFromRows(ColumnForcedTypes,Rows);
         Ins.ExecutePrepared;
         Ins.Reset;
         inc(result);
@@ -6746,7 +6756,7 @@ end;
 
 function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
   var Fields: TSQLDBColumnCreateDynArray): RawUTF8;
-var F: integer;
+var F,size: integer;
 begin
   Result := '';
   if (self=nil) or (TableName='') then
@@ -6757,10 +6767,11 @@ begin
   Result := 'insert into '+TableName+' (';
   for F := 0 to high(Fields) do begin
     Fields[F].Name := ColumnName(F);
-    Fields[F].DBType := ColumnType(F);
+    Fields[F].DBType := ColumnType(F,@size);
+    Fields[F].Width := size;
     case Fields[F].DBType of
     ftNull:
-      Fields[F].DBType := ftUTF8; // if not identified, we'll set a flexible content
+      Fields[F].DBType := ftBlob; // if not identified, assume it is a BLOB
     ftUnknown:
       raise ESQLDBException.CreateUTF8(
         '%.ColumnsToSQLInsert: Invalid column %',[self,Fields[F].Name]);
