@@ -688,6 +688,7 @@ begin
   inherited Create(aProperties);
   fDatabase := DriverManager.GetConnectionWithParams(
     (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
+  fDatabase.SetReadOnly(false); 
   // about transactions, see http://synopse.info/forum/viewtopic.php?id=2209
   fDatabase.SetAutoCommit(true);
   fDatabase.SetTransactionIsolation(tiReadCommitted);
