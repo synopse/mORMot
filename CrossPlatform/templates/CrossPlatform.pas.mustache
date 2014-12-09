@@ -58,32 +58,6 @@ type // define some record types, used as properties below
 {{/withRecords}}
 {{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
 type
-{{#soa.services}}
-  /// service implemented by TService{{interfaceURI}}
-  // - you can access this service as such:
-  // !var a{{interfaceURI}}: I{{interfaceURI}};
-  // !begin
-  // !   a{{interfaceURI}} := T{{interfaceURI}}.Create(aClient);
-  // !   // now you can use a{{interfaceURI}} methods
-  // !...
-  I{{interfaceURI}} = interface(IServiceAbstract)
-    ['{{GUID}}']
-{{#methods}}
-    {{verb}} {{>method}}
-{{/methods}}
-  end;
-
-  /// implements I{{interfaceURI}} {{#uri}}from http://{{host}}/{{root}}/{{uri}}{{/uri}}
-  // - this service will run in sic{{instanceCreationName}} mode
-  TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}},I{{interfaceURI}})
-  public
-    constructor Create(aClient: TSQLRestClientURI); override;
-{{#methods}}
-    {{verb}} {{>method}}
-{{/methods}}
-  end;
-
-{{/soa.services}}
 {{#orm}}
 {{^isInMormotPas}}
   /// map "{{tableName}}" table
@@ -110,6 +84,32 @@ type
   
 {{/isInMormotPas}}
 {{/orm}}
+{{#soa.services}}
+  /// service implemented by TService{{interfaceURI}}
+  // - you can access this service as such:
+  // !var a{{interfaceURI}}: I{{interfaceURI}};
+  // !begin
+  // !   a{{interfaceURI}} := T{{interfaceURI}}.Create(aClient);
+  // !   // now you can use a{{interfaceURI}} methods
+  // !...
+  I{{interfaceURI}} = interface(IServiceAbstract)
+    ['{{GUID}}']
+{{#methods}}
+    {{verb}} {{>method}}
+{{/methods}}
+  end;
+
+  /// implements I{{interfaceURI}} {{#uri}}from http://{{host}}/{{root}}/{{uri}}{{/uri}}
+  // - this service will run in sic{{instanceCreationName}} mode
+  TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}},I{{interfaceURI}})
+  public
+    constructor Create(aClient: TSQLRestClientURI); override;
+{{#methods}}
+    {{verb}} {{>method}}
+{{/methods}}
+  end;
+
+{{/soa.services}}
 const
   /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};

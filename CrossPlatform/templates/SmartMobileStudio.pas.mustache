@@ -58,6 +58,26 @@ type // define some record types, used as properties below
 {{/withRecords}}
 type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
       onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
+{{#orm}}
+{{^isInMormotPas}}
+  /// map "{{tableName}}" table
+  {{className}} = class(TSQLRecord)
+  protected
+    {{#fields}}
+    f{{name}}: {{typePascal}}; 
+    {{/fields}}
+    // those overriden methods will emulate the needed RTTI
+    class function ComputeRTTI: TRTTIPropInfos; override;
+    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
+    function GetProperty(FieldIndex: integer): variant; override;
+  public
+    {{#fields}}
+    property {{name}}: {{typePascal}} read f{{name}} write f{{name}};
+    {{/fields}}
+  end;
+  
+{{/isInMormotPas}}
+{{/orm}}
 {{#soa.services}}
   /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
@@ -79,26 +99,6 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
   end;
 
 {{/soa.services}}
-{{#orm}}
-{{^isInMormotPas}}
-  /// map "{{tableName}}" table
-  {{className}} = class(TSQLRecord)
-  protected
-    {{#fields}}
-    f{{name}}: {{typePascal}}; 
-    {{/fields}}
-    // those overriden methods will emulate the needed RTTI
-    class function ComputeRTTI: TRTTIPropInfos; override;
-    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
-    function GetProperty(FieldIndex: integer): variant; override;
-  public
-    {{#fields}}
-    property {{name}}: {{typePascal}} read f{{name}} write f{{name}};
-    {{/fields}}
-  end;
-  
-{{/isInMormotPas}}
-{{/orm}}
 
 const
   /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
