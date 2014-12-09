@@ -142,6 +142,7 @@ unit SynZip;
    - addded CompressZLib() function, as expected by web browsers
    - any zip-related error will now raise a ESynZipException
    - fixed ticket [2e22dd25aa] about TZipRead.UnMap
+   - fixed ticket [431b8b3dd9d] about gzread() overoptimistic assertion
    - fixed UnZip() when crc and sizes are stored not within the file header,
      but in a separate data descriptor block, after the compressed data (this
      may occur e.g. if the .zip is created with latest Java JRE) - also added
@@ -1418,7 +1419,6 @@ begin
   if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^<>$88B1F) then
     exit; // it MUST be a true .gz file
   Len := pInteger(@gz[gzLen-4])^;
-  assert(cardinal(Len)<cardinal(gzLen)*64); // basic content check
   if Len=0 then
     exit;
   SetLength(result,Len);
