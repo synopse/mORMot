@@ -818,6 +818,7 @@ unit mORMot;
     - added TSQLRecord.GetAsDocVariant/GetSimpleFieldsAsDocVariant methods
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
       fields (including ID/RowID)
+    - TSQLRecord.CreateCopy will handle TStrings property via new CopyStrings()
     - added TSQLInitializeTableOptions parameter to CreateMissingTables and
       InitializeTable methods, to tune underlying table creation (e.g. indexes)
     - introducing TInterfaceStub and TInterfaceMock classes to define
@@ -1699,6 +1700,9 @@ function WriteObject(Value: TObject): RawUTF8; overload;
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular Delphi classes
 procedure CopyObject(aFrom, aTo: TObject);
+
+/// copy two TStrings instances
+procedure CopyStrings(Source, Dest: TStrings);
 
 {$ifndef LVCL}
 /// copy two TCollection instances
@@ -15445,7 +15449,9 @@ begin
 {$ifndef LVCL}
   if S.InheritsFrom(TCollection) then
     CopyCollection(TCollection(S),TCollection(D)) else
-{$endif} begin
+{$endif}
+  if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
+    CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous child
     if S=nil then
       D := nil else begin
@@ -33378,6 +33384,10 @@ begin
     exit;
   end;
   {$endif}
+  if aFrom.InheritsFrom(TStrings) then begin
+    CopyStrings(TStrings(aFrom),(aTo as TStrings));
+    exit;
+  end;
   C := PPointer(aFrom)^;
   if aTo.InheritsFrom(C) then
   while C<>nil do begin
@@ -33409,6 +33419,19 @@ begin
   end;
 end;
 {$endif}
+
+procedure CopyStrings(Source, Dest: TStrings);
+begin
+  if (Source=nil) or (Dest=nil) then
+    exit;
+  Dest.BeginUpdate;
+  try
+    Dest.Clear;
+    Dest.AddStrings(Source);
+  finally
+    Dest.EndUpdate;
+  end;
+end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;
   const SubCompName: RawUTF8=''); overload;
