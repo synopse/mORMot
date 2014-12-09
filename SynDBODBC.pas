@@ -1465,7 +1465,7 @@ begin
   if fSQL<>'' then
     with SynDBLog.Enter(Self,nil,true).Instance do
       if sllSQL in Family.Level then
-        LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+        Log(sllSQL,SQLWithInlinedParams,self,2048);
   try
     // 1. bind parameters
     if fParamsArrayCount>0 then

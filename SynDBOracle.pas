@@ -2523,7 +2523,7 @@ begin
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
   with SynDBLog.Add do
     if sllSQL in Family.Level then
-      LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+      Log(sllSQL,SQLWithInlinedParams,self,2048);
   {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
   {$endif}
