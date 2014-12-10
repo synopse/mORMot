@@ -46,7 +46,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.8.7.1 database engine
+       SQLite3 3.8.7.2 database engine
       *********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -134,7 +134,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.8.7.1
+  - updated SQLite3 engine to latest version 3.8.7.2
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1118,7 +1118,7 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ Return the version of the SQLite database engine, in ascii format
-      - currently returns '3.8.7.1', when used with our SynSQLite3Static unit
+      - currently returns '3.8.7.2', when used with our SynSQLite3Static unit
       - if an external SQLite3 library is used, version may vary }
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -3802,8 +3802,8 @@ begin
     InternalConcatStep,InternalConcatFinal,nil);
   // functions to handle some standard dynamic array BLOB content in SQL
   // IntegerDynArrayContains(BlobField,10) returning a boolean
-  sqlite3.create_function_v2(DB,'INTEGERDYNARRAYCONTAINS',2,SQLITE_ANY,nil,
-    InternalIntegerDynArray,nil,nil,nil);
+  sqlite3.create_function_v2(DB,'INTEGERDYNARRAYCONTAINS',2,SQLITE_ANY,
+    nil,InternalIntegerDynArray,nil,nil,nil);
   // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   sqlite3.create_function_v2(DB,'BYTEDYNARRAYCONTAINS',2,SQLITE_ANY,
     TypeInfo(TByteDynArray),InternalSimpleInt64DynArray,nil,nil,nil);
