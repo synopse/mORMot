@@ -70,6 +70,14 @@ uses
 // - to be used e.g. for client code generation via Mustache templates
 function ContextFromModel(aServer: TSQLRestServer): variant;
 
+/// compute the information of an interface method, ready to be exported as JSON
+// - to be used e.g. for the implementation of the MVC controller via interfaces
+function ContextFromMethod(const method: TServiceMethod): variant;
+
+/// compute the information of an interface, ready to be exported as JSON
+// - to be used e.g. for the implementation of the MVC controller via interfaces
+function ContextFromMethods(int: TInterfaceFactory): variant;
+
 /// generate a code wrapper for a given Model and Mustache template content
 // - will use all ORM and SOA properties of the supplied server
 // - aFileName will be transmitted as {{filename}}, e.g. 'mORMotClient'
@@ -238,6 +246,7 @@ type
     function ContextNestedProperties(rtti: TJSONCustomParserRTTI): variant;
     function ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
     function ContextFromMethods(int: TInterfaceFactory): variant;
+    function ContextFromMethod(const meth: TServiceMethod): variant;
   public
     constructor CreateFromModel(aServer: TSQLRestServer);
     function Context: variant;
@@ -325,51 +334,58 @@ begin
   end;
 end;
 
-function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
 const
-  VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
   DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
     'const','var','out','result');
   DIRTOSMS: array[TServiceMethodValueDirection] of string[7] = (
     'const','var','var','result');
-var m,a,r: integer;
-    method,arguments,arg: variant;
+var a,r: integer;
+    arg: variant;
+begin
+  TDocVariant.NewFast(result);
+  r := 0;
+  for a := 1 to high(meth.Args) do begin
+    with meth.Args[a] do begin
+      arg := ContextFromInfo(TYPES_SOA[ValueType],'',TypeInfo);
+      arg.argName := ParamName^;
+      arg.dir := ord(ValueDirection);
+      arg.dirName := DIRTODELPHI[ValueDirection];
+      arg.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
+      if ValueDirection in [smdConst,smdVar] then
+        arg.dirInput := true;
+      if ValueDirection in [smdVar,smdOut,smdResult] then
+        arg.dirOutput := true;
+      if ValueDirection=smdResult then
+        arg.dirResult := true;
+    end;
+    if a<meth.ArgsNotResultLast then
+      _ObjAddProps(['commaArg','; '],arg);
+    if (meth.args[a].ValueDirection in [smdConst,smdVar]) and (a<meth.ArgsInLast) then
+      _ObjAddProps(['commaInSingle',','],arg);
+    if (meth.args[a].ValueDirection in [smdVar,smdOut]) and (a<meth.ArgsOutNotResultLast) then
+      _ObjAddProps(['commaOut','; '],arg);
+    if meth.args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+      _ObjAddProps(['indexOutResult',UInt32ToUtf8(r)+']'],arg);
+      inc(r);
+      if a<meth.ArgsOutLast then
+        _ObjAddProps(['commaOutResult','; '],arg);
+    end;
+    TDocVariantData(result).AddItem(arg);
+  end;
+end;
+
+function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+const
+  VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+var m: integer;
+    method: variant;
 begin
   TDocVariant.NewFast(result);
   for m := 0 to int.MethodsCount-1 do
   with int.Methods[m] do begin
-    TDocVariant.NewFast(arguments);
-    r := 0;
-    for a := 1 to high(Args) do begin
-      with Args[a] do begin
-        arg := ContextFromInfo(TYPES_SOA[ValueType],'',TypeInfo);
-        arg.argName := ParamName^;
-        arg.dir := ord(ValueDirection);
-        arg.dirName := DIRTODELPHI[ValueDirection];
-        arg.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
-        if ValueDirection in [smdConst,smdVar] then
-          arg.dirInput := true;
-        if ValueDirection in [smdVar,smdOut,smdResult] then
-          arg.dirOutput := true;
-        if ValueDirection=smdResult then
-          arg.dirResult := true;
-      end;
-      if a<ArgsNotResultLast then
-        _ObjAddProps(['commaArg','; '],arg);
-      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
-        _ObjAddProps(['commaInSingle',','],arg);
-      if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
-        _ObjAddProps(['commaOut','; '],arg);
-      if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
-        _ObjAddProps(['indexOutResult',UInt32ToUtf8(r)+']'],arg);
-        inc(r);
-        if a<ArgsOutLast then
-          _ObjAddProps(['commaOutResult','; '],arg);
-      end;
-      TDocVariantData(arguments).AddItem(arg);
-    end;
     method := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
-      'args',arguments,'argsOutputCount',ArgsOutputValuesCount,
+      'args',ContextFromMethod(int.Methods[m]),'argsOutputCount',ArgsOutputValuesCount,
       'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
     if ArgsInFirst>=0 then
       method.hasInParams := true;
@@ -497,6 +513,8 @@ begin
     'typeWrapper',typeWrapper^,      'typeSource',typName,
     'typeDelphi',VarName(lngDelphi), 'typePascal',VarName(lngPascal),
     'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
+  if self=nil then
+    exit; // no need to have full info if called e.g. from MVC
   case typ of
   wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
   wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString: ; // simple types
@@ -511,7 +529,8 @@ begin
     _ObjAddProps(['isJson',true],result);
   wEnum: begin
     _ObjAddProps(['isEnum',true,'toVariant','ord','fromVariant','Variant2'+typName],result);
-    RegisterType(fEnumerates);
+    if self<>nil then
+      RegisterType(fEnumerates);
   end;
   wSet: begin
     enum := typInfo^.SetEnumType;
@@ -519,7 +538,8 @@ begin
       siz := 0 else
       siz := enum^.SizeInStorageAsSet;
     _ObjAddProps(['isSet',true,'toVariant',SIZETODELPHI[siz],'fromVariant',typName],result);
-    RegisterType(fSets);
+    if self<>nil then
+      RegisterType(fSets);
   end;
   wGUID:
     _ObjAddProps(['toVariant','GUIDToVariant','fromVariant','VariantToGUID'],result);
@@ -527,7 +547,8 @@ begin
      _ObjAddProps(['isRecord',true],result);
      if typInfo<>nil then begin
       _ObjAddProps(['toVariant',typName+'2Variant','fromVariant','Variant2'+typName],result);
-      RegisterType(fRecords);
+      if self<>nil then
+        RegisterType(fRecords);
     end;
   end;
   wObject,wSQLRecord: begin
@@ -541,7 +562,8 @@ begin
     _ObjAddProps(['isArray',true],result);
     if typInfo<>nil then begin
       _ObjAddProps(['toVariant',typName+'2Variant','fromVariant','Variant2'+typName],result);
-      RegisterType(fArrays);
+      if self<>nil then
+        RegisterType(fArrays);
     end;
   end;
   wBlob:
@@ -599,6 +621,16 @@ begin
   finally
     Free;
   end;
+end;
+
+function ContextFromMethod(const method: TServiceMethod): variant;
+begin
+  result := TWrapperContext(nil).ContextFromMethod(method);
+end;
+
+function ContextFromMethods(int: TInterfaceFactory): variant;
+begin
+  result := TWrapperContext(nil).ContextFromMethods(int);
 end;
 
 

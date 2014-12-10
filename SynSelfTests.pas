@@ -4109,7 +4109,7 @@ var J,U: RawUTF8;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
-    Parser: TJSONCustomParserFromTextDefinition;
+    Parser: TJSONRecordTextDefinition;
     JR,JR2: TTestCustomJSONRecord;
     JA,JA2: TTestCustomJSONArray;
     JAS: TTestCustomJSONArraySimple;
@@ -4957,42 +4957,42 @@ begin
   {$endif MSWINDOWS}
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
-  // test TJSONCustomParserFromTextDefinition parsing
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,'Int: double');
+  // test TJSONRecordTextDefinition parsing
+  Parser := TJSONRecordTextDefinition.FromCache(nil,'Int: double');
   Check(Length(Parser.Root.NestedProperty)=1);
   Check(Parser.Root.NestedProperty[0].PropertyName='Int');
   Check(Parser.Root.NestedProperty[0].PropertyType=ptDouble);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A , B,C  : integer; D: RawUTF8');
   Check(Length(Parser.Root.NestedProperty)=4);
   ABCD;
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C: integer; D: RawUTF8; E: record E1,E2: double; end;');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCDE(ptRecord);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B: integer; C: integer; D: RawUTF8; E: array of record E1,E2: double; end;');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCDE(ptArray);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E{E1,E2 double}');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCDE(ptRecord);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E{E1,E2 double}');
   Check(Length(Parser.Root.NestedProperty)=5,'from cache');
   ABCDE(ptRecord);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E[E1,E2 double]');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCDE(ptArray);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: string');
   Check(Length(Parser.Root.NestedProperty)=6);
   ABCDE(ptArray);
   Check(Parser.Root.NestedProperty[5].PropertyName='F');
   Check(Parser.Root.NestedProperty[5].PropertyType=ptString);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: array of string');
   Check(Length(Parser.Root.NestedProperty)=6);
   ABCDE(ptArray);
@@ -5000,7 +5000,7 @@ begin
   Check(Parser.Root.NestedProperty[5].PropertyType=ptArray);
   Check(length(Parser.Root.NestedProperty[5].NestedProperty)=1);
   Check(Parser.Root.NestedProperty[5].NestedProperty[0].PropertyType=ptString);
-  Parser := TJSONCustomParserFromTextDefinition.FromCache(nil,
+  Parser := TJSONRecordTextDefinition.FromCache(nil,
     'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime}E2 double]');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCD;
@@ -5026,7 +5026,7 @@ begin
   TestJSONSerialization;
   {$endif}
 
-  // test TJSONCustomParserFromTextDefinition JSON serialization
+  // test TJSONRecordTextDefinition JSON serialization
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubAB),__TSubAB);
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSubCD),__TSubCD);
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TAggregate),__TAggregate);
@@ -5063,7 +5063,7 @@ begin
   // tests parsing options
   Parser := TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONRecord),
-    copy(__TTestCustomJSONRecord,1,PosEx('}',__TTestCustomJSONRecord))) as TJSONCustomParserFromTextDefinition;
+    copy(__TTestCustomJSONRecord,1,PosEx('}',__TTestCustomJSONRecord))) as TJSONRecordTextDefinition;
   U := RecordSaveJSON(JR2,TypeInfo(TTestCustomJSONRecord));
   Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0}}');
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
@@ -5148,7 +5148,7 @@ begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2),'');
 
   Parser := TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomDiscogs),
-    __TTestCustomDiscogs) as TJSONCustomParserFromTextDefinition;
+    __TTestCustomDiscogs) as TJSONRecordTextDefinition;
   Parser.Options := [soReadIgnoreUnknownFields];
   fillchar(Disco,sizeof(Disco),0);
   Check(PtrUInt(@Disco.releases)-PtrUInt(@Disco)=3*sizeof(integer));
