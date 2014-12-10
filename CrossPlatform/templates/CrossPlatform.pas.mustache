@@ -56,6 +56,13 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
+{{#withArrays}}
+type // define some dynamic array types, used as properties below
+{{#arrays}}
+  {{name}} = array of {{typeSource}};
+{{/arrays}}
+
+{{/withArrays}}
 {{<method}}{{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typePascal}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/method}}
 type
 {{#orm}}
@@ -128,8 +135,36 @@ function GetModel: TSQLModel;
 function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
   aServerPort: integer=SERVER_PORT): TSQLRestClientHTTP;
 
+{{#withHelpers}}
+// publish some low-level helpers for variant conversion
+// - used internally: you should not need those functions in your end-user code
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+{{/enumerates}}
+{{#records}}
+function Variant2{{name}}(_variant: variant): {{name}};
+function {{name}}2Variant(const _record: {{name}}): variant;
+{{/records}}
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+function {{name}}2Variant(const _array: {{name}}): variant;
+{{/arrays}}
+
+{{/withHelpers}}
 
 implementation
+{{#withEnumerates}}
+
+{ Some helpers for enumerates types }
+
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+begin
+  result := {{name}}(VariantToEnum(_variant,[{{#values}}'{{.}}'{{^-last}},{{/-last}}{{/values}}]));
+end;
+
+{{/enumerates}}
+{{/withEnumerates}}
 {{#withRecords}}
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := _variant.{{fullPropName}};
@@ -160,20 +195,7 @@ implementation
       AddNameValue('{{propName}}',{{#toVariant}}{{toVariant}}({{/toVariant}}{{propName}}{{#toVariant}}){{/toVariant}});
 {{/fields}}
     end;
-{{/nestedRecordArray}}{{/fields}}{{/getrec}}
-{{#withEnumerates}}
-{ Some helpers for enumerates types }
-
-{{#enumerates}}
-function Variant2{{name}}(const _variant: variant): {{name}};
-begin
-  result := {{name}}(VariantToEnum(_variant,[{{#values}}'{{.}}'{{^-last}},{{/-last}}{{/values}}]));
-end;
-
-{{/enumerates}}
-
-{{/withEnumerates}}
-{ Some helpers for record types }
+{{/nestedRecordArray}}{{/fields}}{{/getrec}}{ Some helpers for record types }
 {{#records}}
 
 function Variant2{{name}}(_variant: variant): {{name}};
@@ -192,7 +214,35 @@ begin
   result := variant(res);
 end;
 {{/records}}
+
 {{/withRecords}}
+{{#withArrays}}
+
+{ Some helpers for dynamic array types }
+
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+var i: integer;
+    arr: PJSONVariantData;
+begin
+  arr := JSONVariantDataSafe(_variant,jvArray);
+  SetLength(result,arr^.Count);
+  for i := 0 to arr^.Count-1 do
+    result[i] := {{#fromVariant}}{{fromVariant}}{{/fromVariant}}(arr^.Values[i]);
+end;
+
+function {{name}}2Variant(const _array: {{name}}): variant;
+var i: integer;
+    res: TJSONVariantData;
+begin
+  res.Init;
+  for i := 0 to high(_array) do
+    res.AddValue({{#toVariant}}{{toVariant}}{{/toVariant}}(_array[i]));
+  result := variant(res);
+end;
+
+{{/arrays}}
+{{/withArrays}}
 
 function GetModel: TSQLModel;
 begin

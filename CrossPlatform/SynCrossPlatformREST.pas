@@ -104,8 +104,6 @@ type
   {$ifdef ISDWS}
 
   // circumvent limited DWS / SMS syntax
-  cardinal = integer;
-  Int64 = integer;
   TPersistent = TObject;
   TObjectList = array of TObject;
   TSQLRawBlob = variant;
@@ -235,7 +233,7 @@ type
   TSQLFieldKinds = set of TSQLFieldKind;
 
   /// the TSQLRecord primary key is a 64 bit integer
-  TID = type Int64;
+  TID = {$ifndef ISDWS}type{$endif} Int64;
 
   /// a dynamic array of TSQLRecord primary keys
   // - used e.g. for BATCH process
@@ -410,10 +408,15 @@ type
     // !   dosomethingwith(Rec);
     constructor CreateAndFillPrepare(aClient: TSQLRest; const FieldNames,
       SQLWhere: string; const BoundsSQLWhere: array of const);
+    /// this constructor will loads a record from its variant representation
+    // - will call internaly the FromJSON() method
+    constructor CreateFromVariant(const aValue: variant);
     /// finalize the record memory
     destructor Destroy; override;
     /// fill the specified record from the supplied JSON
     function FromJSON(const aJSON: string): boolean;
+    /// fill the specified record from its variant representation
+    function FromVariant(const aValue: variant): boolean;
     {$ifdef ISSMS}
     /// fill the specified record from Names/Values pairs
     function FromNamesValues(const Names: TStrArray; const Values: TVariantDynArray;
@@ -435,6 +438,8 @@ type
     /// get the object properties as JSON
     // - FieldNames='' to retrieve simple fields, '*' all fields, or as specified
     function ToJSON(aModel: TSQLModel; aFieldNames: string=''): string;
+    /// get the object properties as a TJSONVariant document
+    function ToVariant: variant;
     /// return the class type of this TSQLRecord
     function RecordClass: TSQLRecordClass;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1225,6 +1230,9 @@ function GUIDToVariant(const GUID: TGUID): variant;
 /// convert a text or integer enumeration representation into its ordinal value
 function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
 
+/// convert any TSQLRecord class instance into a TJSONVariant type
+function ObjectToVariant(value: TSQLRecord): variant;
+
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
 
@@ -1660,6 +1668,16 @@ begin
   end;
 end;
 
+constructor TSQLRecord.CreateFromVariant(const aValue: variant);
+begin
+  Create;
+  FromVariant(aValue);
+end;
+
+function TSQLRecord.FromVariant(const aValue: variant): boolean;
+begin
+  result := FromJSON(ValueToJSON(aValue));
+end;
 
 function TSQLRecord.ToJSON(aModel: TSQLModel; aFieldNames: string=''): String;
 var nfo: TSQLModelInfo;
@@ -1668,6 +1686,21 @@ begin
     result := 'null' else begin
     nfo := aModel.InfoExisting(RecordClass);
     result := nfo.ToJSON(self,nfo.FieldNamesToFieldBits(aFieldNames,false));
+  end;
+end;
+
+function TSQLRecord.ToVariant: variant;
+begin
+  if self=nil then
+    result := null else begin
+    {$ifdef ISSMS}
+    result := new JObject;
+    var rtti := GetRTTI;
+    for var f := 0 to high(rtti.Props) do
+      result[rtti.Props[f].Name] := GetProperty(f);
+    {$else}
+    result := JSONVariant(ObjectToJSON(self));
+    {$endif}
   end;
 end;
 
@@ -3389,6 +3422,11 @@ begin
 {$endif}
     result := 0; // return first item by default
   end;
+end;
+
+function ObjectToVariant(value: TSQLRecord): variant;
+begin
+  result := value.ToVariant;
 end;
 
 

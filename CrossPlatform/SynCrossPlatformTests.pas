@@ -503,15 +503,23 @@ begin
 end;
 
 procedure TSynCrossPlatformClient.Connection;
+var doremotelog: boolean;
+    dofilelog: boolean;
 begin
+  doremotelog := false;
+  dofilelog := false;
   if fAuthentication=TSQLRestServerAuthenticationDefault then begin
     fClient := GetClient('localhost','User','synopse');
-    //fClient.LogToFile(LOG_VERBOSE);
-    fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
+    if dofilelog then
+      fClient.LogToFile(LOG_VERBOSE);
+    if doremotelog then
+      fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
   end else begin
     fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,GetModel,true);
-    //fClient.LogToFile(LOG_VERBOSE);
-    fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
+    if dofilelog then
+      fClient.LogToFile(LOG_VERBOSE);
+    if doremotelog then
+      fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
     check(fClient.Connect);
     check(fClient.ServerTimeStamp<>0);
     if fAuthentication<>nil then

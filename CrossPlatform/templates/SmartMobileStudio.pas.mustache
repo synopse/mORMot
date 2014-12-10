@@ -56,6 +56,13 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
+{{#withArrays}}
+type // define some dynamic array types, used as properties below
+{{#arrays}}
+  {{name}} = array of {{typeSource}};
+{{/arrays}}
+
+{{/withArrays}}
 type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
       onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
 {{#orm}}
@@ -118,6 +125,22 @@ function GetModel: TSQLModel;
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
   onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
 
+{{#withHelpers}}
+// publish some low-level helpers for variant conversion
+// - used internally: you should not need those functions in your end-user code
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+{{/enumerates}}
+{{#records}}
+function Variant2{{name}}(const Value: variant): {{name}};
+function {{name}}2Variant(const Value: {{name}}): variant;
+{{/records}}
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+function {{name}}2Variant(const _array: {{name}}): variant;
+{{/arrays}}
+
+{{/withHelpers}}
 
 implementation
 {{#withRecords}}
@@ -163,7 +186,7 @@ implementation
 // defined by the SMS compiler for each enumeration
 
 {{#enumerates}}
-function Variant2{{name}}(_variant: variant): {{name}};
+function Variant2{{name}}(const _variant: variant): {{name}};
 begin
   asm return @VariantToEnum(@_variant,@{{name}}); end;
 end;
@@ -177,7 +200,7 @@ end;
   that the JSON used for transmission would match record fields naming }
 {{#records}}
 
-function Variant2{{name}}(Value: variant): {{name}};
+function Variant2{{name}}(const Value: variant): {{name}};
 begin
 {{>setrec}}
 end;
@@ -189,6 +212,32 @@ begin
 end;
 {{/records}}
 {{/withRecords}}
+{{#withArrays}}
+
+
+{ Some helpers for dynamic array types }
+
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+var tmp: {{typeSource}};
+begin
+  if VariantType(_variant)=jvArray then
+    for var i := 0 to integer(_variant.Length)-1 do begin
+      tmp := {{#fromVariant}}{{fromVariant}}{{/fromVariant}}(_variant[i]);
+      result.Add(tmp);
+    end;
+end;
+
+function {{name}}2Variant(const _array: {{name}}): variant;
+var i: integer;
+begin
+  result := TVariant.CreateArray;
+  for i := 0 to high(_array) do
+    result.push({{#toVariant}}{{toVariant}}{{/toVariant}}(_array[i]));
+end;
+
+{{/arrays}}
+{{/withArrays}}
 
 {{#orm}}
 {{^isInMormotPas}}

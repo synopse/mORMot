@@ -7836,7 +7836,7 @@ var i,siz: integer;
     Check(Client.Update(Rec));
     if Client.InheritsFrom(TSQLRestClientURI) then begin
       Check(TSQLRestClientURI(Client).UpdateFromServer([Rec2],Refreshed));
-      Check(Refreshed);
+      Check(Refreshed,'should have been refreshed');
     end else
       Check(Client.Retrieve(IDTOUPDATE,Rec2));
     Check(Rec.SameRecord(Rec2));

@@ -1311,7 +1311,7 @@ type
     // it is reset to 0
     sftID,
     /// an INTEGER field pointing to the ID/ROWID of another record
-    // (TRecordReference=PtrUInt Delphi property which can be typecasted to RecordRef)
+    // (TRecordReference=Int64 Delphi property which can be typecasted to RecordRef)
     // - coherency is always ensured: after a delete, all values pointing to
     // it is reset to 0
     sftRecord,
@@ -2107,6 +2107,9 @@ type
     function RecordType: PRecordType;
       {$ifdef FPC}inline;{$endif}
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+    /// get the dynamic array type information of the stored item 
+    function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
 {$ifdef FPC}
@@ -2587,6 +2590,7 @@ type
   TSQLPropInfoRTTI = class(TSQLPropInfo)
   protected
     fPropInfo: PPropInfo;
+    fPropType: PTypeInfo;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
@@ -2610,6 +2614,8 @@ type
     function GetFieldAddr(Instance: TObject): pointer; override;
     /// corresponding RTTI information
     property PropInfo: PPropInfo read fPropInfo;
+    /// corresponding type information, as retrieved from PropInfo RTTI
+    property PropType: PTypeInfo read fPropType;
   end;
 
   /// type of a TSQLPropInfoRTTI class
@@ -2835,6 +2841,7 @@ type
   protected
     function GetDynArray(Instance: TObject): TDynArray;
       {$ifdef HASINLINE}inline;{$endif}
+    function GetDynArrayElemType: PTypeInfo;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -2856,6 +2863,8 @@ type
     /// optional index of the dynamic array published property
     // - used e.g. for fast lookup by TSQLRecord.DynArray(DynArrayFieldIndex)
     property DynArrayIndex: integer read fFieldWidth;
+    /// read-only access to the low-level type information the array item type 
+    property DynArrayElemType: PTypeInfo read GetDynArrayElemType;
   end;
 
 {$ifndef NOVARIANTS}
@@ -2923,19 +2932,26 @@ type
     function GetFieldAddr(Instance: TObject): pointer; override;
   end;
 
+  /// information about a record property defined directly in code using RTTI
+  TSQLPropInfoRecordTyped = class(TSQLPropInfoCustom)
+  protected
+    fTypeInfo: PTypeInfo;
+  public
+    property TypeInfo: PTypeInfo read fTypeInfo;
+  end;
+  
   /// information about a record property defined directly in code
   // - Delphi does not publish RTTI for published record properties
   // - you can use this class to register a record property from its RTTI
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
   // - this class will use only binary RecordLoad/RecordSave methods
-  TSQLPropInfoRecordRTTI = class(TSQLPropInfoCustom)
+  TSQLPropInfoRecordRTTI = class(TSQLPropInfoRecordTyped)
   protected
-    fTypeInfo: PTypeInfo;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// define a record property from its RTTI definition
-    // - handle any kind of record with TypeInfo() generated
+    // - handle any kind of record with available generated TypeInfo() 
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
     // !  class TMainObject = class(TSQLRecord)
@@ -2980,9 +2996,8 @@ type
   // a record with no reference-counted types within) 
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
-  TSQLPropInfoRecordFixedSize = class(TSQLPropInfoCustom)
+  TSQLPropInfoRecordFixedSize = class(TSQLPropInfoRecordTyped)
   protected
-    fTypeInfo: PTypeInfo;
     fRecordSize: integer;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
@@ -3018,10 +3033,9 @@ type
   // - you can define any kind of property, either a record or any type
   // - this class will use JSON serialization, by type name or TypeInfo() pointer
   // - will store the content as TEXT by default, and SQLFieldType as sftUTF8Custom
-  TSQLPropInfoCustomJSON = class(TSQLPropInfoCustom)
+  TSQLPropInfoCustomJSON = class(TSQLPropInfoRecordTyped)
   protected
     fCustomParser: TJSONCustomParserRTTI;
-    fTypeInfo: PTypeInfo;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
     procedure SetCustomParser(aCustomParser: TJSONCustomParserRTTI);
   public
@@ -5254,7 +5268,7 @@ type
     {/ return the RTTI property information for this record }
     function ClassProp: PClassProp;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-    {/ return the TRecordReference pointing to this record }
+    {/ return the TRecordReference Int64 value pointing to this record }
     function RecordReference(Model: TSQLModel): TRecordReference;
 
     {/ return the UTF-8 encoded SQL source to INSERT the values contained
@@ -7584,8 +7598,8 @@ type
   // enhanced types handled by JSONToObject/ObjectToJSON functions (smvObject)
   // or TDynArray.LoadFromJSON / TTextWriter.AddDynArrayJSON methods (smvDynArray)
   // - records will be serialized as Base64 string, with our RecordSave/RecordLoad
-  // low-level format by default, or as true JSON objects, after registration
-  // via a TTextWriter.RegisterCustomJSONSerializer call
+  // low-level format by default, or as true JSON objects since Delphi 2010 or
+  // after registration via a TTextWriter.RegisterCustomJSONSerializer call
   // - smvRawJSON will transmit the raw JSON content, without serialization
   TServiceMethodValueType = (
     smvNone,
@@ -7680,13 +7694,6 @@ type
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TTextWriter);
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining this method argument
-    // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    // - if an enumeration is added to aRegisteredTypes.Objects[], this
-    // TJSONCustomParserCustomSimple instance shall be released by the caller
-    function ContextFromArgument(aRegisteredTypes: TRawUTF8List): variant;
-    {$endif}
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddJSON(WR: TTextWriter; V: pointer);
@@ -7807,13 +7814,6 @@ type
     /// find the next var / out / result argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgResultNext(var arg: integer): boolean;
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining this method arguments
-    // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    // - if an enumeration is added to aRegisteredTypes.Objects[], this
-    // TJSONCustomParserCustomSimple instance shall be released by the caller
-    function ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
-    {$endif}
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -7953,11 +7953,6 @@ type
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactoryException if the method is not known
     function CheckMethodIndex(aMethodName: PUTF8Char): integer; overload;
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining this interface methods
-    // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    function ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
-    {$endif}
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
@@ -8669,12 +8664,6 @@ type
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
     // is set to TRUE (which is not the default setting, for security reasons)
     function RetrieveSignature: RawUTF8; virtual; abstract;
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining this interface
-    // - will be used e.g. by mORMotWrapper.pas unit to export the service
-    function ContextFromInterface(aExpectMangledURI: boolean;
-      aRegisteredTypes: TRawUTF8List): variant; virtual;
-    {$endif}
     /// the associated RESTful instance
     property Rest: TSQLRest read fRest;
     /// access to the registered Interface RTTI information
@@ -9158,11 +9147,6 @@ type
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining the registered services
-    // - will be used e.g. by mORMotWrapper.pas unit to export the services
-    function ContextFromRegisteredServices(aRegisteredTypes: TRawUTF8List): Variant;
-    {$endif}
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -14796,7 +14780,7 @@ end;
 
 function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
 begin
-  result := ShortStringToUTF8(fPropInfo^.PropType^.Name);
+  result := ShortStringToUTF8(fPropType^.Name);
 end;
 
 function TSQLPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
@@ -14824,6 +14808,7 @@ begin
   inherited Create(ShortStringToAnsi7String(aPropInfo^.Name),aSQLFieldType,attrib,
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
+  fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
 end;
 
 
@@ -14923,7 +14908,7 @@ constructor TSQLPropInfoRTTISet.Create(aPropInfo: PPropInfo; aPropIndex: integer
   aSQLFieldType: TSQLFieldType);
 begin
   inherited;
-  fSetEnumType := fPropInfo^.PropType^.SetEnumType;
+  fSetEnumType := fPropType^.SetEnumType;
 end;
 
                           
@@ -14933,7 +14918,7 @@ constructor TSQLPropInfoRTTIEnum.Create(aPropInfo: PPropInfo; aPropIndex: intege
   aSQLFieldType: TSQLFieldType);
 begin
   inherited;
-  fEnumType := fPropInfo^.PropType^.EnumBaseType;
+  fEnumType := fPropType^.EnumBaseType;
 end;
 
 procedure TSQLPropInfoRTTIEnum.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -15369,9 +15354,9 @@ constructor TSQLPropInfoRTTIInstance.Create(aPropInfo: PPropInfo; aPropIndex: in
   aSQLFieldType: TSQLFieldType);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  fObjectClass := aPropInfo^.PropType^.ClassType^.ClassType;
+  fObjectClass := fPropType^.ClassType^.ClassType;
   if aSQLFieldType=sftRecord then
-    fCascadeDelete:= IdemPropName(aPropInfo^.PropType^.Name,'TRecordReferenceToBeDeleted')
+    fCascadeDelete:= IdemPropName(fPropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
 function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
@@ -15399,7 +15384,7 @@ var TypeName: PShortString;
     ItemClass: TClass;
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  TypeName := @aPropInfo^.PropType^.Name;
+  TypeName := @fPropType^.Name;
   if IdemPropName(TypeName^,'TID') or
      (ord(TypeName^[1]) and $df<>ord('T')) or // expect T...ID pattern
      (PWord(@TypeName^[ord(TypeName^[0])-1])^ and $dfdf<>ord('I')+ord('D') shl 8) or
@@ -16046,7 +16031,7 @@ end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
 begin
-  result.Init(fPropInfo^.PropType{$ifndef FPC}^{$endif},GetFieldAddr(Instance)^);
+  result.Init(fPropType,GetFieldAddr(Instance)^);
 end;
 
 function TSQLPropInfoRTTIDynArray.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
@@ -16067,12 +16052,12 @@ end;
 
 procedure TSQLPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Variant);
 begin
-  DynArrayToVariant(Dest,GetFieldAddr(Instance),fPropInfo^.PropType{$ifndef FPC}^{$endif});
+  DynArrayToVariant(Dest,GetFieldAddr(Instance),fPropType);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
 begin
-  DynArrayFromVariant(PPointer(GetFieldAddr(Instance))^,Source,fPropInfo^.PropType{$ifndef FPC}^{$endif});
+  DynArrayFromVariant(PPointer(GetFieldAddr(Instance))^,Source,fPropType);
 end;
 
 {$endif NOVARIANTS}
@@ -16133,6 +16118,11 @@ begin
   aValue.VType := ftBlob;
   aValue.VBlob := pointer(temp);
   aValue.VBlobLen := length(temp);
+end;
+
+function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: PTypeInfo;
+begin
+  result := GetDynArray(nil).ElemType;
 end;
 
 
@@ -21279,10 +21269,18 @@ end;
 
 function TTypeInfo.SetEnumType: PEnumType;
 begin
-  result := PPTypeInfo(PPointer(PtrUInt(AlignToPtr(@Name[ord(Name[0])+1]))+
-    sizeof(TOrdType))^)^.EnumBaseType;
+  if (@self=nil) or (Kind<>tkSet) then
+    result := nil else
+    result := PPTypeInfo(PPointer(PtrUInt(AlignToPtr(@Name[ord(Name[0])+1]))+
+      sizeof(TOrdType))^)^.EnumBaseType;
 end;
 
+function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
+begin
+  if @self=nil then
+    result := nil else
+    result := TypeInfoToRecordInfo(@self,aDataSize);
+end;
 
 { TClassProp }
 
@@ -37609,23 +37607,6 @@ begin
   result := nil;
 end;
 
-{$ifndef NOVARIANTS}
-function TServiceContainer.ContextFromRegisteredServices(
-  aRegisteredTypes: TRawUTF8List): Variant;
-var serv: variant;
-    i: integer;
-begin
-  SetVariantNull(result);
-  if (self=nil) or (fList.Count=0) then
-    exit;
-  TDocVariant.NewFast(serv);
-  for i := 0 to fList.Count-1 do
-    TDocVariantData(serv).AddItem(
-      Index(i).ContextFromInterface(ExpectMangledURI,aRegisteredTypes));
-  result := _ObjFast(['enabled',True,'services',serv,'expectMangledURI',ExpectMangledURI]);
-end;
-{$endif}
-
 
 { TInterfacedObjectFake (private class for TInterfaceFactory.CreateFakeInstance) }
 
@@ -38300,18 +38281,6 @@ begin
     WR.Free;
   end;
 end;
-
-{$ifndef NOVARIANTS}
-
-function TInterfaceFactory.ContextFromMethods(aRegisteredTypes: TRawUTF8List): variant;
-var m: integer;
-begin
-  TDocVariant.NewFast(result);
-  for m := 0 to fMethodsCount-1 do
-    TDocVariantData(result).AddItem(fMethods[m].ContextFromArguments(aRegisteredTypes));
-end;
-
-{$endif NOVARIANTS}
 
 procedure TInterfaceFactory.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 var P: Pointer;
@@ -39485,26 +39454,6 @@ begin
     fContractExpected := fContractHash; // for security
 end;
 
-{$ifndef NOVARIANTS}
-function TServiceFactory.ContextFromInterface(aExpectMangledURI: boolean;
-  aRegisteredTypes: TRawUTF8List): variant;
-var uri: RawUTF8;
-begin
-  if aExpectMangledURI then
-    uri := InterfaceMangledURI else
-    uri := InterfaceURI;
-  result := _ObjFast(['uri',uri,'interfaceURI',InterfaceURI,
-    'interfaceMangledURI',InterfaceMangledURI,
-    'GUID',GUIDToRawUTF8(fInterface.InterfaceIID),
-    'contractExpected',UnQuoteSQLString(ContractExpected),
-    'instanceCreation',ord(InstanceCreation),
-    'instanceCreationName',ToText(InstanceCreation),
-    'methods',InterfaceFactory.ContextFromMethods(aRegisteredTypes)]);
-  if InstanceCreation=sicClientDriven then
-    result.isClientDriven := true;
-end;
-{$endif}
-
 
 { TServiceContainerServer }
 
@@ -40241,69 +40190,6 @@ begin
   WR.AddShort('"},');
 end;
 
-{$ifndef NOVARIANTS}
-
-function TServiceMethodArgument.ContextFromArgument(
-  aRegisteredTypes: TRawUTF8List): variant;
-const
-  TYPETOSIMPLE: array[TServiceMethodValueType] of TJSONCustomParserRTTIType = (
-    ptCustom,ptCustom,ptBoolean,ptCustom,ptCustom,ptInteger,ptCardinal,ptInt64,
-    ptDouble,ptDateTime,ptCurrency,ptRawUTF8,ptString,ptWideString,ptRecord,
-    ptVariant,ptCustom,ptRawJSON,ptArray);
-  DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
-    'const','var','out','result');
-  DIRTOSMS: array[TServiceMethodValueDirection] of string[7] = (
-    'const','var','var','result');
-  SIZETODELPHI: array[1..4] of string[7] = (
-    'byte','word','integer','integer');
-var typRtti: RawUTF8;
-    typ: TJSONCustomParserRTTIType;
-    parser: TJSONCustomParserAbstract;
-begin
-  typRtti := ShortStringToAnsi7String(TypeInfo^.Name);
-  typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(typRtti);
-  if typ=ptCustom then // guess from RTTI type
-    typ := TYPETOSIMPLE[ValueType];
-  result := TJSONCustomParserRTTI.ContextProperty(typ,typRtti,'','');
-  result.argName := ParamName^;
-  result.dir := ord(ValueDirection);
-  result.dirName := DIRTODELPHI[ValueDirection];
-  result.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
-  if ValueDirection in [smdConst,smdVar] then
-    result.dirInput := true;
-  if ValueDirection in [smdVar,smdOut,smdResult] then
-    result.dirOutput := true;
-  if ValueDirection=smdResult then
-    result.dirResult := true;
-  case ValueType of // // handle some special complex types
-  smvEnum: begin
-    if (aRegisteredTypes<>nil) and (aRegisteredTypes.IndexOf(typRtti)<0) then
-      // warning; this instance should be released by caller!
-      aRegisteredTypes.AddObject(typRtti,TJSONCustomParserCustomSimple.Create('',typRtti,TypeInfo));
-    result.isEnum := true;
-    result.toVariant := 'ord';
-    result.fromVariant := typRtti; // always transmitted as integer
-  end;
-  smvSet: begin
-    result.isSet := true;
-    result.toVariant := SIZETODELPHI[SizeInStorage];
-    result.fromVariant := typRtti;
-  end;
-  smvRecord:
-    if (ValueDirection=smdResult) and
-       (TypeInfo=System.TypeInfo(TServiceCustomAnswer)) then
-      result.isCustomAnswer := true else
-    if aRegisteredTypes<>nil then begin
-      parser := TTextWriter.RegisterCustomJSONSerializerFindParser(TypeInfo,True);
-      if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
-        aRegisteredTypes.AddObjectIfNotExisting(parser.Root.CustomTypeName,parser.Root);
-    end;
-  smvObject:
-    result.isObject := true;
-  end;
-end;
-{$endif}
-
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
 begin
   if vIsString in ValueKindAsm then
@@ -40421,42 +40307,6 @@ begin
       inc(arg);
   result := false;
 end;
-
-{$ifndef NOVARIANTS}
-
-function TServiceMethod.ContextFromArguments(aRegisteredTypes: TRawUTF8List): variant;
-const VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
-var a,r: integer;
-    arguments,arg: variant;
-begin
-  r := 0;
-  TDocVariant.NewFast(arguments);
-  for a := 1 to high(args) do begin // ignore self as a=0
-    arg := args[a].ContextFromArgument(aRegisteredTypes);
-    if a<ArgsNotResultLast then
-      _ObjAddProps(['commaArg','; '],arg);
-    if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
-      _ObjAddProps(['commaInSingle',','],arg);
-    if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
-      _ObjAddProps(['commaOut','; '],arg);
-    if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
-      _ObjAddProps(['indexOutResult',UInt32ToUtf8(r)+']'],arg);
-      inc(r);
-      if a<ArgsOutLast then
-        _ObjAddProps(['commaOutResult','; '],arg);
-    end;
-    TDocVariantData(arguments).AddItem(arg);
-  end;
-  result := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
-    'args',arguments,'argsOutputCount',r,
-    'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
-  if ArgsInFirst>=0 then
-    result.AsInParams := true;
-  if ArgsOutFirst>=0 then
-    result.AsOutParams := true;
-end;
-
-{$endif NOVARIANTS}
 
 function TServiceMethod.InternalExecute(Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;

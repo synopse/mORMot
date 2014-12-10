@@ -54,6 +54,13 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
+{{#withArrays}}
+type // define some dynamic array types, used as properties below
+{{#arrays}}
+  {{name}} = array of {{typeSource}};
+{{/arrays}}
+
+{{/withArrays}}
 {{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
 type
   {{#orm}}

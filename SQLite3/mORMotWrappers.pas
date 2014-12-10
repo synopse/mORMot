@@ -122,6 +122,22 @@ const
     'sftUnspecified', 'sftDateTime', 'sftTimeLog', 'sftBlob', 'sftModTime',
     'sftCreateTime', 'sftRecord', 'sftVariant');
 
+type
+  /// types recognized and handled by this mORMotWrappers unit
+  TWrapperType = (
+    wUnknown,
+    wBoolean, wEnum, wSet,
+    wByte, wWord, wInteger, wCardinal,
+    wInt64, wID, wReference, wTimeLog, wModTime, wCreateTime,
+    wCurrency, wSingle, wDouble, wDateTime,
+    wRawUTF8, wString, wRawJSON, wBlob,
+    wGUID, wRecord, wArray, wVariant,
+    wObject, wSQLRecord);
+  /// supported languages typesets
+  TWrapperLanguage = (
+    lngDelphi, lngPascal, lngCS, lngJava);
+
+const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,    sftInteger,
     cpkDefault, cpkDefault,  cpkDefault,  cpkDefault,   cpkDefault,cpkDefault,
@@ -131,8 +147,76 @@ const
     cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif} cpkBlob, cpkDefault,
  // sftBlobCustom,sftUTF8Custom,sftMany, sftModTime,sftCreateTime, sftTID
     cpkDefault,   cpkRecord,  cpkDefault,cpkModTime,cpkCreateTime, cpkDefault);
-  CONST_SIZETODELPHI: array[0..4] of string[7] = (
-    'integer','byte','word','integer','integer');
+
+  SIZETODELPHI: array[0..8] of string[7] = (
+    'integer','byte','word','integer','integer','int64','int64','int64','int64');
+
+  TYPES_SIZE: array[0..8] of TWrapperType = (
+    winteger,wbyte,wword,winteger,winteger,wint64,wint64,wint64,wint64);
+
+  TYPES_LANG: array[TWrapperLanguage,TWrapperType] of RawUTF8 = (
+   // lngDelphi
+   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
+    'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'Currency', 'Single', 'Double', 'TDateTime',
+    'RawUTF8','String', 'RawJSON', 'TSQLRawBlob', 'TGUID', '', '', 'Variant', '', ''),
+   // lngPascal
+   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
+    'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'Currency', 'Single', 'Double', 'TDateTime',
+    'String', 'String', 'Variant', 'TSQLRawBlob', 'TGUID', '', '', 'Variant', '', ''),
+   // lngCS
+   ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
+    'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'decimal', 'single', 'double', 'double',
+    'string', 'string', 'dynamic', 'byte[]', 'Guid', '', '', 'dynamic', '', ''),
+   // lngJava
+   ('', 'boolean', '', '', 'byte', 'int', 'int', 'long',
+    'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'BigDecimal', 'single', 'double', 'double',
+    'String', 'String', 'Object', 'byte[]', 'String', '', '', 'Object', '', ''));
+
+  TYPES_ORM: array[TSQLFieldType] of TWrapperType =
+    (wUnknown,   // sftUnknown
+     wString,    // sftAnsiText
+     wRawUTF8,   // sftUTF8Text
+     wEnum,      // sftEnumerate
+     wSet,       // sftSet
+     wUnknown,   // sftInteger - wUnknown to force exact type 
+     wSQLRecord, // sftID
+     wReference, // sftRecord
+     wBoolean,   // sftBoolean
+     wUnknown,   // sftFloat - wUnknown to force exact type
+     wDateTime,  // sftDateTime
+     wTimeLog,   // sftTimeLog
+     wCurrency,  // sftCurrency
+     wObject,    // sftObject
+     wVariant,   // sftVariant
+     wBlob,      // sftBlob
+     wBlob,      // sftBlobDynArray
+     wRecord,    // sftBlobCustom
+     wRecord,    // sftUTF8Custom
+     wUnknown,   // sftMany
+     wModTime,   // sftModTime
+     wCreateTime,// sftCreateTime
+     wID);       // sftID
+
+  TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
+  //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
+    wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,
+  //ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
+    wInt64,  wInteger,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
+  //ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
+    wSingle,  wString,  wRawUTF8,     wDateTime,  wGUID,  wID, wTimeLog,
+  //ptVariant, ptWideString, ptWord, ptCustom
+    wVariant,  wRawUTF8,     wWord,  wUnknown);
+
+  TYPES_SOA: array[TServiceMethodValueType] of TWrapperType = (
+    wUnknown,wUnknown,wBoolean,wEnum,wSet,wUnknown,wUnknown,wUnknown,
+    wDouble,wDateTime,wCurrency,wRawUTF8,wString,wRawUTF8,wRecord,wVariant,
+    wObject,wRawJSON,wArray); // integers are wUnknown to force best type
+
+
 
 function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
 begin
@@ -141,190 +225,379 @@ begin
     result := 'null';
 end;
 
-function ContextFromModel(aServer: TSQLRestServer): variant;
-const
-  TYPETOSIMPLE: array[TSQLFieldType] of TJSONCustomParserRTTIType =
-    (ptCustom,   // sftUnknown
-     ptString,   // sftAnsiText
-     ptRawUTF8,  // sftUTF8Text
-     ptCustom,   // sftEnumerate
-     ptCustom,   // sftSet
-     ptInt64,    // sftInteger
-     ptInt64,    // sftID
-     ptInt64,    // sftRecord
-     ptBoolean,  // sftBoolean
-     ptDouble,   // sftFloat
-     ptDateTime, // sftDateTime
-     ptTimeLog,  // sftTimeLog
-     ptCurrency, // sftCurrency
-     ptCustom,   // sftObject
-{$ifndef NOVARIANTS}
-     ptVariant,  // sftVariant
-{$endif}
-     ptRawByteString, // sftBlob
-     ptRawByteString, // sftBlobDynArray
-     ptRawByteString, // sftBlobCustom
-     ptRecord,   // sftUTF8Custom
-     ptCustom,   // sftMany
-     ptTimeLog,  // sftModTime
-     ptTimeLog,  // sftCreateTime
-     ptInt64);   // sftID
-var orm,fields,records,enumerates,sets: TDocVariantData;
-    rec,field: variant;
+type
+  EWrapperContext = class(ESynException);
+
+  TWrapperContext = class
+  protected
+    fServer: TSQLRestServer;
+    fORM, fRecords,fEnumerates,fSets,fArrays: TDocVariantData;
+    fSOA: variant;
+    function ContextFromInfo(typ: TWrapperType; typName: RawUTF8='';
+      typInfo: PTypeInfo=nil): variant;
+    function ContextNestedProperties(rtti: TJSONCustomParserRTTI): variant;
+    function ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
+    function ContextFromMethods(int: TInterfaceFactory): variant;
+  public
+    constructor CreateFromModel(aServer: TSQLRestServer);
+    function Context: variant;
+  end;
+
+{ TWrapperContext }
+
+constructor TWrapperContext.CreateFromModel(aServer: TSQLRestServer);
+var t,f,s: integer;
     nfoList: TSQLPropInfoList;
     nfo: TSQLPropInfo;
-    t,f,s: integer;
-    typ: TJSONCustomParserRTTIType;
+    nfoSQLFieldRTTITypeName: RawUTF8;
     kind: TCrossPlatformSQLFieldKind;
     hasRecord: boolean;
-    nfoSQLFieldRTTITypeName: RawUTF8;
-    parser: TJSONCustomParserRTTI;
-    parsersPropInfo: TRawUTF8List;
-    parsersServices: TRawUTF8List;
-    typeNames: TPropNameList;
-    rtti: TJSONCustomParserRTTI;
-    simple: TJSONCustomParserCustomSimple;
-    authClass: TClass;
+    fields,services: TDocVariantData;
+    field,rec: variant;
+    srv: TServiceFactory;
+    uri: RawUTF8;
+begin
+  fServer := aServer;
+  TDocVariant.NewFast([@fields,@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,@services]);
+  // compute ORM information
+  for t := 0 to fServer.Model.TablesMax do begin
+    nfoList := fServer.Model.TableProps[t].Props.Fields;
+    fields.Clear;
+    fields.Init;
+    hasRecord := false;
+    for f := 0 to nfoList.Count-1 do begin
+      nfo := nfoList.List[f];
+      nfoSQLFieldRTTITypeName := nfo.SQLFieldRTTITypeName;
+      if nfo.InheritsFrom(TSQLPropInfoRTTI) then
+        field := ContextFromInfo(TYPES_ORM[nfo.SQLFieldType],nfoSQLFieldRTTITypeName,
+          TSQLPropInfoRTTI(nfo).PropType) else
+      if nfo.InheritsFrom(TSQLPropInfoRecordTyped) then begin
+        hasRecord := true;
+        field := ContextFromInfo(wRecord,nfoSQLFieldRTTITypeName,
+          TSQLPropInfoRecordTyped(nfo).TypeInfo);
+      end else
+        raise EWrapperContext.CreateUTF8('Unexpected type % for %.%',
+          [nfo,fServer.Model.Tables[t],nfo.Name]);
+      kind := CROSSPLATFORM_KIND[nfo.SQLFieldType];
+      _ObjAddProps(['index',f+1,'name',nfo.Name,'sql',ord(nfo.SQLFieldType),
+        'sqlName',nfo.SQLFieldTypeName^,'typeKind',ord(kind),
+        'typeKindName',CROSSPLATFORMKIND_TEXT[kind],'attr',byte(nfo.Attributes)],field);
+      if aIsUnique in nfo.Attributes then
+        _ObjAddProps(['unique',true],field);
+      if nfo.FieldWidth>0 then
+        _ObjAddProps(['width',nfo.FieldWidth],field);
+      if f<nfoList.Count-1 then
+        _ObjAddProps(['comma',','],field) else
+        _ObjAddProps(['comma',null],field); // may conflict with rec.comma otherwise
+      fields.AddItem(field);
+    end;
+    with fServer.Model.TableProps[t] do
+      rec := _JsonFastFmt('{tableName:?,className:?,fields:?,isInMormotPas:%,comma:%}',
+        [NULL_OR_TRUE[(Props.Table=TSQLAuthGroup) or (Props.Table=TSQLAuthUser)],
+         NULL_OR_COMMA[t<fServer.Model.TablesMax]],
+        [Props.SQLTableName,Props.Table.ClassName,Variant(fields)]);
+    if hasRecord then
+      rec.hasRecords := true;
+    fORM.AddItem(rec);
+  end;
+  // compute SOA information
+  if fServer.Services.Count>0 then begin
+    for s := 0 to fServer.Services.Count-1 do begin
+      srv := fServer.Services.Index(s);
+      if fServer.Services.ExpectMangledURI then
+        uri := srv.InterfaceMangledURI else
+        uri := srv.InterfaceURI;
+      with srv do
+        rec := _ObjFast(['uri',uri,'interfaceURI',InterfaceURI,
+          'interfaceMangledURI',InterfaceMangledURI,
+          'GUID',GUIDToRawUTF8(InterfaceFactory.InterfaceIID),
+          'contractExpected',UnQuoteSQLString(ContractExpected),
+          'instanceCreation',ord(InstanceCreation),
+          'instanceCreationName',GetEnumNameTrimed(
+            TypeInfo(TServiceInstanceImplementation),InstanceCreation),
+          'methods',ContextFromMethods(InterfaceFactory)]);
+      if srv.InstanceCreation=sicClientDriven then
+        rec.isClientDriven := true;
+      services.AddItem(rec);
+    end;
+    fSOA := _ObjFast(['enabled',True,'services',variant(services),
+      'expectMangledURI',fServer.Services.ExpectMangledURI]);
+  end;
+end;
+
+function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+const
+  VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
+  DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
+    'const','var','out','result');
+  DIRTOSMS: array[TServiceMethodValueDirection] of string[7] = (
+    'const','var','var','result');
+var m,a,r: integer;
+    method,arguments,arg: variant;
+begin
+  TDocVariant.NewFast(result);
+  for m := 0 to int.MethodsCount-1 do
+  with int.Methods[m] do begin
+    TDocVariant.NewFast(arguments);
+    r := 0;
+    for a := 1 to high(Args) do begin
+      with Args[a] do begin
+        arg := ContextFromInfo(TYPES_SOA[ValueType],'',TypeInfo);
+        arg.argName := ParamName^;
+        arg.dir := ord(ValueDirection);
+        arg.dirName := DIRTODELPHI[ValueDirection];
+        arg.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
+        if ValueDirection in [smdConst,smdVar] then
+          arg.dirInput := true;
+        if ValueDirection in [smdVar,smdOut,smdResult] then
+          arg.dirOutput := true;
+        if ValueDirection=smdResult then
+          arg.dirResult := true;
+      end;
+      if a<ArgsNotResultLast then
+        _ObjAddProps(['commaArg','; '],arg);
+      if (args[a].ValueDirection in [smdConst,smdVar]) and (a<ArgsInLast) then
+        _ObjAddProps(['commaInSingle',','],arg);
+      if (args[a].ValueDirection in [smdVar,smdOut]) and (a<ArgsOutNotResultLast) then
+        _ObjAddProps(['commaOut','; '],arg);
+      if args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+        _ObjAddProps(['indexOutResult',UInt32ToUtf8(r)+']'],arg);
+        inc(r);
+        if a<ArgsOutLast then
+          _ObjAddProps(['commaOutResult','; '],arg);
+      end;
+      TDocVariantData(arguments).AddItem(arg);
+    end;
+    method := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
+      'args',arguments,'argsOutputCount',ArgsOutputValuesCount,
+      'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
+    if ArgsInFirst>=0 then
+      method.hasInParams := true;
+    if ArgsOutFirst>=0 then
+      method.hasOutParams := true;
+    TDocVariantData(result).AddItem(method);
+  end;
+end;
+
+function TWrapperContext.ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
+var typ: pointer;
+    l,level: integer;
+begin
+  if prop.InheritsFrom(TJSONCustomParserCustom) then
+    typ := TJSONCustomParserCustom(prop).CustomTypeInfo else
+    typ := nil;
+  result := ContextFromInfo(TYPES_SIMPLE[prop.PropertyType],prop.CustomTypeName,typ);
+  if prop.PropertyName<>'' then
+    _ObjAddProps(['propName',prop.PropertyName,'fullPropName',prop.FullPropertyName],result);
+  level := 0;
+  for l := 1 to length(prop.FullPropertyName) do
+    if prop.FullPropertyName[l]='.' then
+      inc(level);
+  if level>0 then
+    result.nestedIdentation := StringOfChar(' ',level*2);
+  case prop.PropertyType of
+  ptRecord: begin
+    result.isSimple := null;
+    result.nestedRecord := _ObjFast(
+      ['nestedRecord',null,'fields',ContextNestedProperties(prop)]);
+  end;
+  ptArray: begin
+    result.isSimple := null;
+    if prop.NestedProperty[0].PropertyName='' then
+      result.nestedSimpleArray := ContextOneProperty(prop.NestedProperty[0]) else
+      result.nestedRecordArray := _ObjFast(
+        ['nestedRecordArray',null,'fields',ContextNestedProperties(prop)]);
+  end;
+  else
+    if TDocVariantData(result).GetValueIndex('toVariant')<0 then
+      result.isSimple := true else
+      result.isSimple := null;
+  end;
+end;
+
+function TWrapperContext.ContextNestedProperties(rtti: TJSONCustomParserRTTI): variant;
+var i: integer;
 begin
   SetVariantNull(result);
-  if aServer=nil then
-    exit;
-  // compute ORM Model information
-  orm.Init;
-  records.Init;
-  enumerates.Init;
-  sets.Init;
-  fields.Init;
-  typeNames.Init;
-  parsersPropInfo := TRawUTF8List.Create;
-  parsersServices := TRawUTF8List.Create;
+  if rtti.PropertyType in [ptRecord,ptArray] then begin
+    TDocVariant.NewFast(result);
+    for i := 0 to high(rtti.NestedProperty) do
+      TDocVariantData(result).AddItem(ContextOneProperty(rtti.NestedProperty[i]));
+  end;
+end;
+
+function TWrapperContext.ContextFromInfo(typ: TWrapperType; typName: RawUTF8;
+  typInfo: PTypeInfo): variant;
+var typeWrapper: PShortString;
+function VarName(lng: TWrapperLanguage): variant;
+begin
+  if TYPES_LANG[lng,typ]<>'' then
+    RawUTF8ToVariant(TYPES_LANG[lng,typ],result) else
+    if typName='' then
+      SetVariantNull(result) else
+      RawUTF8ToVariant(typName,result);
+end;
+procedure RegisterType(var list: TDocVariantData);
+var info: variant;
+    item: PTypeInfo;
+    itemSize: integer;
+    parser: TJSONRecordAbstract;
+begin
+  if list.SearchItemByProp('name',typName,false)>=0 then
+   exit; // already registered
+  if typInfo=nil then
+    raise EWrapperContext.CreateUTF8('%.RegisterType(%): no RTTI',[typeWrapper^,typName]);
+  case typ of
+  wEnum: info := _JsonFastFmt('{name:?,values:%}',
+          [typInfo^.EnumBaseType^.GetEnumNameAll(true)],[typName]);
+  wSet:  info := _JsonFastFmt('{name:?,values:%}',
+          [typInfo^.SetEnumType^.GetEnumNameAll(true)],[typName]);
+  wRecord: begin
+    parser := TTextWriter.RegisterCustomJSONSerializerFindParser(typInfo,true);
+    if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
+      info := _ObjFast(['name',typName,'fields',ContextNestedProperties(parser.Root)]);
+  end;
+  wArray: begin
+    item := typInfo^.DynArrayItemType(@itemSize);
+    if item=nil then
+      info := ContextFromInfo(TYPES_SIZE[itemSize]) else
+      info := ContextFromInfo(wUnknown,'',item);
+    info.name := typName;
+  end;
+  end;
+  list.AddItem(info);
+end;
+var siz: integer;
+    enum: PEnumType;
+begin
+  if typ=wUnknown then begin
+    if typInfo=nil then
+      raise EWrapperContext.CreateUTF8('No RTTI nor typ for "%"',[typName]);
+    typ := TYPES_ORM[typInfo.GetSQLFieldType];
+    if typ=wUnknown then begin
+      typ := TYPES_SIMPLE[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(typInfo,0)];
+      if typ=wUnknown then
+      case typInfo^.Kind of
+      tkRecord{$ifdef FPC},tkObject{$endif}:
+        typ := wRecord;
+      else
+        raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typName]);
+      end;
+    end;
+  end;
+  if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then
+    typ := wGUID else
+    if typName='' then begin
+      typName := TYPES_LANG[lngDelphi,typ];
+      if (typName='') and (typInfo<>nil) then
+        TypeInfoToName(typInfo,typName);
+    end;
+  typeWrapper := GetEnumName(TypeInfo(TWrapperType),ord(typ));
+  result := _ObjFast([
+    'typeWrapper',typeWrapper^,      'typeSource',typName,
+    'typeDelphi',VarName(lngDelphi), 'typePascal',VarName(lngPascal),
+    'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
+  case typ of
+  wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
+  wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString: ; // simple types
+  wDateTime:
+    _ObjAddProps(['isDateTime',true,'toVariant','DateTimeToIso8601',
+      'fromVariant','Iso8601ToDateTime'],result);
+  wCurrency:
+    _ObjAddProps(['isCurrency',true],result);
+  wVariant:
+    _ObjAddProps(['isVariant',true],result);
+  wRawJSON:
+    _ObjAddProps(['isJson',true],result);
+  wEnum: begin
+    _ObjAddProps(['isEnum',true,'toVariant','ord','fromVariant','Variant2'+typName],result);
+    RegisterType(fEnumerates);
+  end;
+  wSet: begin
+    enum := typInfo^.SetEnumType;
+    if enum=nil then
+      siz := 0 else
+      siz := enum^.SizeInStorageAsSet;
+    _ObjAddProps(['isSet',true,'toVariant',SIZETODELPHI[siz],'fromVariant',typName],result);
+    RegisterType(fSets);
+  end;
+  wGUID:
+    _ObjAddProps(['toVariant','GUIDToVariant','fromVariant','VariantToGUID'],result);
+  wRecord: begin
+     _ObjAddProps(['isRecord',true],result);
+     if typInfo<>nil then begin
+      _ObjAddProps(['toVariant',typName+'2Variant','fromVariant','Variant2'+typName],result);
+      RegisterType(fRecords);
+    end;
+  end;
+  wObject,wSQLRecord: begin
+    if (typ=wSQLRecord) and (fServer.Model.TableExact[typName]=nil) then
+      raise EWrapperContext.CreateUTF8('% should be part of the model',[typName]);
+   _ObjAddProps(['isObject',true],result);
+   if typInfo<>nil then
+     _ObjAddProps(['toVariant','ObjectToVariant','fromVariant',typName+'.CreateFromVariant'],result);
+  end;
+  wArray: begin
+    _ObjAddProps(['isArray',true],result);
+    if typInfo<>nil then begin
+      _ObjAddProps(['toVariant',typName+'2Variant','fromVariant','Variant2'+typName],result);
+      RegisterType(fArrays);
+    end;
+  end;
+  wBlob:
+    _ObjAddProps(['isBlob',true,
+      'toVariant','BlobToVariant','fromVariant','VariantToBlob'],result);
+  else raise EWrapperContext.CreateUTF8('Unexpected type % (%) for "%"',
+    [typeWrapper^,ord(typ),typName]);
+  end;
+end;
+
+function TWrapperContext.Context: variant;
+var s: integer;
+    authClass: TClass;
+begin
+  // compute the Model information as JSON
+  result := _ObjFast(['time',NowToString,'year',CurrentYear,
+    'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION, 'root',fServer.Model.Root,
+    'orm',variant(fORM), 'soa',fSOA]);
+  if fRecords.Count>0 then begin
+    result.records := variant(fRecords);
+    result.withRecords := true;
+    result.withHelpers := true;
+  end;
+  if fEnumerates.Count>0 then begin
+    result.enumerates := variant(fEnumerates);
+    result.withEnumerates := true;
+    result.withHelpers := true;
+  end;
+  if fSets.Count>0 then begin
+    result.sets := variant(fSets);
+    result.withsets := true;
+    result.withHelpers := true;
+  end;
+  if fArrays.Count>0 then begin
+    result.arrays := variant(fArrays);
+    result.withArrays := true;
+    result.withHelpers := true;
+  end;
+  // add the first registered supported authentication class type as default
+  for s := 0 to fServer.AuthenticationSchemesCount-1 do begin
+    authClass := fServer.AuthenticationSchemes[s].ClassType;
+    if (authClass=TSQLRestServerAuthenticationDefault) or
+       (authClass=TSQLRestServerAuthenticationNone) then begin
+      result.authClass := authClass.ClassName;
+      break;
+    end;
+  end;
+end;
+
+function ContextFromModel(aServer: TSQLRestServer): variant;
+begin
+  with TWrapperContext.CreateFromModel(aServer) do
   try
-    parsersPropInfo.CaseSensitive := false;
-    parsersServices.CaseSensitive := false;
-    for t := 0 to aServer.Model.TablesMax do begin
-      hasRecord := false;
-      nfoList := aServer.Model.TableProps[t].Props.Fields;
-      fields.Clear;
-      fields.Init;
-      for f := 0 to nfoList.Count-1 do begin
-        nfo := nfoList.List[f];
-        nfoSQLFieldRTTITypeName := nfo.SQLFieldRTTITypeName;
-        kind := CROSSPLATFORM_KIND[nfo.SQLFieldType];
-        typ := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(nfoSQLFieldRTTITypeName);
-        if typ=ptCustom then // guess from SQL type
-          typ := TYPETOSIMPLE[nfo.SQLFieldType];
-        field := TJSONCustomParserRTTI.ContextProperty(typ,nfoSQLFieldRTTITypeName,'','');
-        _ObjAddProps(['index',f+1,'name',nfo.Name,'sql',ord(nfo.SQLFieldType),
-          'sqlName',nfo.SQLFieldTypeName^,'typeKind',ord(kind),
-          'typeKindName',CROSSPLATFORMKIND_TEXT[kind],'attr',byte(nfo.Attributes)],field);
-        if aIsUnique in nfo.Attributes then
-          _ObjAddProps(['unique',true],field);
-        if nfo.FieldWidth>0 then
-          _ObjAddProps(['width',nfo.FieldWidth],field);
-        if f<nfoList.Count-1 then
-          _ObjAddProps(['comma',','],field) else
-          _ObjAddProps(['comma',null],field); // may conflict with rec.comma otherwise
-        case nfo.SQLFieldType of // handle some special complex types
-        sftEnumerate:
-          _ObjAddProps(['isEnum',True,'ToVariant','ord',
-            'fromVariant',nfoSQLFieldRTTITypeName],field);
-        sftSet: begin
-          _ObjAddProps(['isSet',True,'fromVariant',nfoSQLFieldRTTITypeName],field);
-          if nfo.InheritsFrom(TSQLPropInfoRTTISet) then
-            _ObjAddProps(['toVariant',CONST_SIZETODELPHI[
-              TSQLPropInfoRTTISet(nfo).SetEnumType^.SizeInStorageAsSet]],field) else
-            _ObjAddProps(['toVariant','byte'],field);
-        end;
-        end;
-        if nfo.InheritsFrom(TSQLPropInfoCustomJSON) then begin
-          parser := TSQLPropInfoCustomJSON(nfo).CustomParser;
-          if (parser<>nil) and (parser.PropertyType in [ptRecord,ptCustom]) then begin
-            hasRecord := true;
-            if typ=ptGuid then
-              _ObjAddProps(['fromVariant','VariantToGUID','toVariant','GUIDToVariant'],field) else
-              if typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
-                parsersPropInfo.AddObjectIfNotExisting(nfoSQLFieldRTTITypeName,nfo);
-          end;
-        end else
-        if nfo.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
-          if (typ<>ptBoolean) and typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
-            enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
-              [TSQLPropInfoRTTIEnum(nfo).EnumType^.GetEnumNameAll(true)],
-              [nfoSQLFieldRTTITypeName]));
-        end else
-        if nfo.InheritsFrom(TSQLPropInfoRTTISet) then begin
-          if typeNames.AddPropName(nfoSQLFieldRTTITypeName) then
-            sets.AddItem(_JsonFastFmt('{name:?,values:%}',
-              [TSQLPropInfoRTTISet(nfo).SetEnumType^.GetEnumNameAll(true)],
-              [nfoSQLFieldRTTITypeName]));
-        end;
-        fields.AddItem(field);
-      end;
-      with aServer.Model.TableProps[t] do
-        rec := _JsonFastFmt('{tableName:?,className:?,fields:?,isInMormotPas:%,comma:%}',
-          [NULL_OR_TRUE[(Props.Table=TSQLAuthGroup) or (Props.Table=TSQLAuthUser)],
-           NULL_OR_COMMA[t<aServer.Model.TablesMax]],
-          [Props.SQLTableName,Props.Table.ClassName,Variant(fields)]);
-      if hasRecord then
-        rec.hasRecords := true;
-      orm.AddItem(rec);
-    end;
-    for t := 0 to parsersPropInfo.Count-1 do
-      records.AddItem(_ObjFast(['name',parsersPropInfo.Strings[t],
-        'fields',TSQLPropInfoCustomJSON(parsersPropInfo.Objects[t]).
-          CustomParser.ContextNestedProperties(parsersServices)]));
-    // compute the Model information as JSON
-    result := _ObjFast(['time',NowToString,'year',TimeLogNow shr (6+6+5+5+4),
-      'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION, 'root',aServer.Model.Root,
-      'orm',variant(orm),
-      'soa',aServer.Services.ContextFromRegisteredServices(parsersServices)]);
-    // add the first registered supported authentication class type as default 
-    for s := 0 to aServer.AuthenticationSchemesCount-1 do begin
-      authClass := aServer.AuthenticationSchemes[s].ClassType;
-      if (authClass=TSQLRestServerAuthenticationDefault) or
-         (authClass=TSQLRestServerAuthenticationNone) then begin
-        result.authClass := authClass.ClassName;
-        break;
-      end;
-    end;
-    // add the traling RTTI defined for services to the list
-    for s := 0 to parsersServices.Count-1 do begin
-      rtti := TJSONCustomParserRTTI(parsersServices.Objects[s]);
-      if rtti.PropertyType=ptRecord then
-        if typeNames.AddPropName(rtti.CustomTypeName) then
-          records.AddItem(
-            _ObjFast(['name',rtti.CustomTypeName,
-              'fields',rtti.ContextNestedProperties(parsersServices)]));
-    end;
-    for s := 0 to parsersServices.Count-1 do begin
-      simple := TJSONCustomParserCustomSimple(parsersServices.Objects[s]);
-      if simple.InheritsFrom(TJSONCustomParserCustomSimple) then begin
-        if simple.KnownType=ktEnumeration then begin
-          if typeNames.AddPropName(simple.CustomTypeName) then
-            enumerates.AddItem(_JsonFastFmt('{name:?,values:%}',
-              [PTypeInfo(simple.CustomTypeInfo)^.EnumBaseType^.GetEnumNameAll(true)],
-              [simple.CustomTypeName]));
-          if simple.PropertyName='' then // <>'' if initialized from record
-            // TServiceMethodArgument.ContextFromArguments() simple is temporary
-            simple.Free;
-        end;
-      end;
-    end;
-    if records.Count>0 then begin
-      result.records := variant(records);
-      result.withRecords := true;
-    end;
-    if enumerates.Count>0 then begin
-      result.enumerates := variant(enumerates);
-      result.withEnumerates := true;
-    end;
-    if sets.Count>0 then begin
-      result.sets := variant(sets);
-      result.withsets := true;
-    end;
+    result := Context;
   finally
-    parsersServices.Free;
-    parsersPropInfo.Free;
+    Free;
   end;
 end;
 
@@ -457,4 +730,7 @@ begin
   Server.ServiceMethodByPassAuthentication('wrapper');
 end;
 
+
+
 end.
+

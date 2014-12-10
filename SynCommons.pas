@@ -3513,7 +3513,7 @@ type
       aCompare: TDynArraySortCompare): integer;
     function GetArrayTypeName: RawUTF8;
     /// will set fKnownType and fKnownOffset/fKnownSize fields
-    function ToKnownType: TDynArrayKind;
+    function ToKnownType(exactType: boolean=false): TDynArrayKind;
     /// faster equivalency of System.DynArraySetLength() function
     procedure InternalSetLength(NewLength: PtrUInt);
   public
@@ -4225,6 +4225,14 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
 /// compute the record size from its low-level RTTI
 function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 
+/// retrieve the type name from its low-level RTTI
+procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
+  const default: RawUTF8='');
+
+/// retrieve the item type information of a dynamic array low-level RTTI 
+function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
+  aDataSize: PInteger=nil): pointer;
+
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -4386,6 +4394,15 @@ function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8; overload;
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
 function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
   overload;
+
+/// compute a dynamic array element information
+// - will raise an exception if the supplied RTTI is not a dynamic array
+// - will return the element type name and set ElemTypeInfo otherwise
+// - if there is no element type information, an approximative element type name
+// will be returned (e.g. 'byte' for an array of 1 byte items), and ElemTypeInfo
+// will be set to nil
+// - this low-level function is used e.g. by mORMotWrappers unit
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
 
 /// compare two "array of byte" elements
 function SortDynArrayByte(const A,B): integer;
@@ -4764,7 +4781,7 @@ type
   TJSONCustomParserRTTIType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
     ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
-    ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptTimeLog,
+    ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
     {$ifndef NOVARIANTS}ptVariant, {$endif}
     ptWideString, ptWord, ptCustom);
 
@@ -4796,14 +4813,6 @@ type
   // do not need to remove any RTTI information
   TJSONCustomParserRTTIs = array of TJSONCustomParserRTTI;
 
-  /// some computing languages, used for automated code generation
-  // - lngDelphi is for Delphi in the mORMot context (including e.g. RawUTF8)
-  // - lngPascal is for standard Pascal types
-  // - lngCS is for the C# language
-  // - lngJava is for the Java language
-  TJSONCustomParserRTTILanguage = (
-    lngDelphi, lngPascal, lngCS, lngJava);
-    
   /// used to store additional RTTI in TJSONCustomParser internal structures
   TJSONCustomParserRTTI = class
   protected
@@ -4845,43 +4854,16 @@ type
     // - will return ptCustom for any unknown type
     class function TypeNameToSimpleRTTIType(TypeName: PUTF8Char; TypeNameLen: Integer;
       var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType; overload;
+    /// recognize a simple type from a supplied type information
+    // - to be called if TypeNameToSimpleRTTIType() did fail, i.e. return ptCustom
+    // - will return ptCustom for any unknown type
+    class function TypeInfoToSimpleRTTIType(Info: pointer; ItemSize: integer): TJSONCustomParserRTTIType;
     /// unserialize some JSON content into its binary internal representation
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
       Options: TJSONCustomParserSerializationOptions): boolean; virtual;
     /// serialize a binary internal representation into JSON content
     procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
       Options: TJSONCustomParserSerializationOptions); virtual;
-    /// the associated type name
-    // - either the simple type matching the specified language, or
-    // CustomTypeName for complex types
-    function TypeName(aLanguage: TJSONCustomParserRTTILanguage): RawUTF8; overload; virtual; 
-    /// compute the type name associated to a given property type
-    // - either the simple type matching the specified language, or
-    // aCustomTypeName for complex types
-    class function TypeName(aPropertyType: TJSONCustomParserRTTIType;
-      const aCustomTypeName: RawUTF8; aLanguage: TJSONCustomParserRTTILanguage): RawUTF8; overload;
-    {$ifndef NOVARIANTS}
-    /// retrieve a context document defining the corresponding record fields
-    // - will be used e.g. by mORMotWrapper.pas unit to export the record
-    // - aRegisteredTypes contains the already registered type, i.e. records and
-    // enumerates by now, with Objects[] as TJSONCustomParserRTTI
-    function ContextNestedProperties(aRegisteredTypes: TRawUTF8List): variant; virtual;
-    /// create a type context containing the propName (if any), type/typeName
-    // and typePascal/typeDelphi/typeCS/typeJava fields
-    // - will be used e.g. by the ContextNestedProperties() method
-    function ContextProperty(aRegisteredTypes: TRawUTF8List): variant; overload; virtual;
-    /// create a type context containing the propName (if any), type/typeName
-    // and typePascal/typeDelphi/typeCS/typeJava fields
-    // - will be used e.g. by the ContextNestedProperties() method
-    class function ContextProperty(aPropertyType: TJSONCustomParserRTTIType;
-      const aCustomTypeName, aPropertyName, aFullPropertyName: RawUTF8): variant; overload;
-    /// compute the type name associated to a given property type
-    // - either the simple type matching the specified language, or
-    // aCustomTypeName for complex types
-    // - this method will return null if there is no type information
-    class function TypeNameVariant(aPropertyType: TJSONCustomParserRTTIType;
-      const aCustomTypeName: RawUTF8; aLanguage: TJSONCustomParserRTTILanguage): variant; 
-    {$endif}
     /// the associated type name, e.g. for a record
     property CustomTypeName: RawUTF8 read fCustomTypeName;
     /// the property name
@@ -4926,17 +4908,17 @@ type
 
   /// which kind of property does TJSONCustomParserCustomSimple refer to
   TJSONCustomParserCustomSimpleKnownType = (
-    ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray
+    ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray, ktDynamicArray
     {$ifndef FPC}, ktSet{$endif});
 
   /// used to store additional RTTI for simple type as a ptCustom kind
-  // - this class handle currently enumerate, TGUID or a static array
+  // - this class handle currently enumerate, TGUID or static/dynamic arrays
   TJSONCustomParserCustomSimple = class(TJSONCustomParserCustom)
   protected
     fKnownType: TJSONCustomParserCustomSimpleKnownType;
     fTypeData: pointer;
     fFixedSize: integer;
-    fStaticArray: TJSONCustomParserRTTI;
+    fNestedArray: TJSONCustomParserRTTI;
   public
     /// initialize the instance from the given RTTI structure
     constructor Create(const aPropertyName, aCustomTypeName: RawUTF8;
@@ -4950,19 +4932,31 @@ type
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
     /// abstract method to read the instance from JSON
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
-    {$ifndef NOVARIANTS}
-    /// overriden method which will handle the client context
-    // - aRegisteredTypes contains the already registered type, i.e. records and
-    // enumerates by now, as TJSONCustomParserRTTI
-    function ContextNestedProperties(aRegisteredTypes: TRawUTF8List): variant; override;
-    /// overriden method which will handle the client context
-    function ContextProperty(aRegisteredTypes: TRawUTF8List): variant; overload; override;
-    {$endif}
     /// which kind of simple property this instance does refer to
     property KnownType: TJSONCustomParserCustomSimpleKnownType read fKnownType;
+    /// the element type for ktStaticArray and ktDynamicArray
+    property NestedArray: TJSONCustomParserRTTI read fNestedArray;
   end;
 
-  
+  /// implement a record over ptCustom kind of property
+  TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
+  protected
+    fCustomTypeIndex: integer;
+    function GetJSONCustomParserRegistration: pointer;
+  public
+    /// initialize the instance from the given RTTI name
+    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override;
+    /// initialize the instance from the given record custom serialization index
+    constructor Create(const aPropertyName: RawUTF8;
+      aCustomTypeIndex: integer); reintroduce; overload;
+    /// method to write the instance as JSON
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
+    /// method to read the instance from JSON
+    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
+    /// release any memory used by the instance
+    procedure FinalizeItem(Data: Pointer); override;
+  end;
+
   /// how an RTTI expression is expected to finish
   TJSONCustomParserRTTIExpectedEnd = (eeNothing, eeSquare, eeCurly, eeEndKeyWord);
 
@@ -4971,10 +4965,10 @@ type
   // with any version of Delphi
   // - this Abstract class is not to be used as-this, but contains all
   // needed information to provide CustomWriter/CustomReader methods
-  // - you can use e.g. TJSONCustomParserFromTextDefinition for text-based RTTI
+  // - you can use e.g. TJSONRecordTextDefinition for text-based RTTI
   // manual definition, or (not yet provided) a version based on Delphi 2010+
   // new RTTI information
-  TJSONCustomParserAbstract = class
+  TJSONRecordAbstract = class
   protected
     /// internal storage of TJSONCustomParserRTTI instances
     fItems: TObjectList;
@@ -5008,8 +5002,7 @@ type
   /// used to handle JSON record serialization using RTTI
   // - is able to handle any kind of record since Delphi 2010, thanks to
   // enhanced RTTI
-  // - for older version of Delphi, will only handle enumerates
-  TJSONCustomParserFromRTTI = class(TJSONCustomParserAbstract)
+  TJSONRecordRTTI = class(TJSONRecordAbstract)
   protected
     fRecordTypeInfo: pointer;
     function AddItemFromRTTI(const PropertyName: RawUTF8;
@@ -5028,7 +5021,7 @@ type
 
   /// used to handle text-defined additional RTTI for JSON record serialization
   // - is used by TTextWriter.RegisterCustomJSONSerializerFromText() method
-  TJSONCustomParserFromTextDefinition = class(TJSONCustomParserAbstract)
+  TJSONRecordTextDefinition = class(TJSONRecordAbstract)
   protected
      fDefinition: RawUTF8;
     procedure Parse(Props: TJSONCustomParserRTTI; var P: PUTF8Char;
@@ -5066,7 +5059,7 @@ type
     // ! FromCache('A,B,C integer D RawUTF8 E{E1,E2 double}');
     // ! FromCache('A,B,C integer D RawUTF8 E[E1,E2 double]');
     class function FromCache(aTypeInfo: pointer;
-      const aDefinition: RawUTF8): TJSONCustomParserFromTextDefinition;
+      const aDefinition: RawUTF8): TJSONRecordTextDefinition;
     /// the textual definition of this RTTI information
     property Definition: RawUTF8 read fDefinition;
   end;
@@ -5593,10 +5586,10 @@ type
     // or even : could be ignored:
     // ! 'A,B,C integer D RawUTF8 E{E1,E2 double}'
     // ! 'A,B,C integer D RawUTF8 E[E1,E2 double]'
-    // - it will return the cached TJSONCustomParserFromTextDefinition
+    // - it will return the cached TJSONRecordTextDefinition
     // instance corresponding to the supplied RTTI text definition
     class function RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
-      const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+      const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
     /// change options for custom serialization of dynamic array or record
     // - will return TRUE if the options have been changed, FALSE if the
     // supplied type info was not previously registered
@@ -5612,7 +5605,7 @@ type
     // Delphi 2010), you would be able to retrieve this type's parser even
     // if the record type has not been previously used
     class function RegisterCustomJSONSerializerFindParser(
-      aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONCustomParserAbstract;
+      aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONRecordAbstract;
     /// define a custom serialization for a given simple type
     // - you should be able to use this type in the RTTI text definition
     // of any further RegisterCustomJSONSerializerFromText() call
@@ -5909,7 +5902,6 @@ type
   TRawUTF8List = class
   protected
     fCount: PtrInt;
-    fCapacity: PtrInt;
     fList: TRawUTF8DynArray;
     fObjects: TObjectDynArray;
     fObjectsOwned: boolean;
@@ -6080,7 +6072,7 @@ type
   protected
     fEvents: TMethodDynArray;
   public
-    /// delete a stored RawUTF8 item, and its associated TObject
+    /// delete a stored RawUTF8 item, and its associated event
     // - raise no exception in case of out of range supplied index
     procedure Delete(Index: PtrInt); override;
     /// erase all stored RawUTF8 items and events
@@ -9791,8 +9783,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based content
     // - same as New(aValue,JSON_OPTIONS[true]);
-    class procedure NewFast(out aValue: variant); 
+    class procedure NewFast(out aValue: variant); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// initialize several variant instances to store document-based content
+    class procedure NewFast(const aValues: array of PDocVariantData); overload;
     /// initialize a variant instance to store some document-based content
     // - you can use this function to create a variant, which can be nested into
     // another document, e.g.:
@@ -10208,6 +10202,12 @@ type
     /// delete a value/item in this document, from its name
     // - return TRUE on success, FALSE if the supplied name does not exist
     function Delete(const aName: RawUTF8): boolean; overload;
+    /// search a property match in this document, handled as array
+    // - {aPropName:aPropValue} will be searched within the stored array,
+    // and the corresponding item index will be returned, on match
+    // - returns -1 if no match is found 
+    function SearchItemByProp(const aPropName,aPropValue: RawUTF8;
+      aCaseSensitive: boolean): integer;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -13609,8 +13609,8 @@ begin
   end;
 end;
 
-function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer): pointer;
-  {$ifdef HASINLINE}inline;{$endif}
+function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
+  aDataSize: PInteger=nil): pointer;
 var Typ: PDynArrayTypeInfo absolute aDynArrayTypeInfo;
 begin
   result := nil;
@@ -13622,12 +13622,13 @@ begin
     {$endif}
     if Typ^.elType<>nil then
       result := Typ^.elType{$ifndef FPC}^{$endif};
+    if aDataSize<>nil then
+      aDataSize^ := Typ^.elSize;
   end;
 end;
 
 procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8='');
-  {$ifdef HASINLINE}inline;{$endif}
 var Typ: PDynArrayTypeInfo absolute aTypeInfo;
 begin
   if Typ<>nil then
@@ -26079,12 +26080,12 @@ type
     RecordTypeInfo: pointer;
     Reader: TDynArrayJSONCustomReader;
     Writer: TDynArrayJSONCustomWriter;
-    RecordCustomParser: TJSONCustomParserAbstract;
+    RecordCustomParser: TJSONRecordAbstract;
   end;
   PJSONCustomParserRegistration = ^TJSONCustomParserRegistration;
   TJSONCustomParserRegistrations = array of TJSONCustomParserRegistration;
 
-  PTJSONCustomParserAbstract = ^TJSONCustomParserAbstract;
+  PTJSONCustomParserAbstract = ^TJSONRecordAbstract;
 
   /// used internally to manage custom record / dynamic array JSON serialization
   // - e.g. used by TTextWriter.RegisterCustomJSONSerializer*()
@@ -26116,7 +26117,7 @@ type
     procedure RegisterCallbacks(aTypeInfo: pointer;
       aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
     function RegisterFromText(aTypeInfo: pointer;
-      const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+      const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
     property Parser: TJSONCustomParserRegistrations read fParser;
     property ParsersCount: Integer read fParsersCount;
   end;
@@ -26160,7 +26161,7 @@ begin
   if RegRoot=nil then
     exit; // not enough RTTI for older versions of Delphi
   {$endif}
-  Reg.RecordCustomParser := TJSONCustomParserFromRTTI.Create(Reg.RecordTypeInfo,RegRoot);
+  Reg.RecordCustomParser := TJSONRecordRTTI.Create(Reg.RecordTypeInfo,RegRoot);
   Reg.Reader := Reg.RecordCustomParser.CustomReader;
   Reg.Writer := Reg.RecordCustomParser.CustomWriter;
   if self=nil then
@@ -26358,7 +26359,7 @@ begin
 end;
 
 function TJSONCustomParsers.RegisterFromText(aTypeInfo: pointer;
-  const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+  const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
 var Reg: TJSONCustomParserRegistration;
     ForAdding: boolean;
     ndx: integer;
@@ -26368,7 +26369,7 @@ begin
   ForAdding := aRTTIDefinition<>'';
   ndx := Search(aTypeInfo,Reg,ForAdding);
   if ForAdding then begin
-    result := TJSONCustomParserFromTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
+    result := TJSONRecordTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
     Reg.Reader := result.CustomReader;
     Reg.Writer := result.CustomWriter;
     Reg.RecordCustomParser := result;
@@ -26453,29 +26454,6 @@ end;
 
 { TJSONCustomParserCustomSimple }
 
-{$ifndef NOVARIANTS}
-function TJSONCustomParserCustomSimple.ContextNestedProperties(
-  aRegisteredTypes: TRawUTF8List): variant;
-begin
-  SetVariantNull(result);
-end;
-
-function TJSONCustomParserCustomSimple.ContextProperty(
-  aRegisteredTypes: TRawUTF8List): variant;
-begin
-  result := inherited ContextProperty(aRegisteredTypes);
-  case fKnownType of
-  ktEnumeration: begin
-    result.isEnum := true;
-    result.toVariant := 'ord';
-    // may be transmitted as integer or text -> use dedicated sub-function
-    result.fromVariant := 'Variant2'+fCustomTypeName;
-    aRegisteredTypes.AddObjectIfNotExisting(CustomTypeName,self)
-  end;
-  end;
-end;
-{$endif}
-
 constructor TJSONCustomParserCustomSimple.Create(
   const aPropertyName, aCustomTypeName: RawUTF8; aCustomType: pointer);
 begin
@@ -26519,9 +26497,11 @@ begin
       fKnownType := ktStaticArray;
       fDataSize := PArrayTypeInfo(fTypeData)^.Size;
       fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
-      fStaticArray := TJSONCustomParserRTTI.CreateFromRTTI(
+      fNestedArray := TJSONCustomParserRTTI.CreateFromRTTI(
         '',PArrayTypeInfo(fTypeData)^.elType^,fFixedSize);
-    end
+    end;
+    tkDynArray:
+      fKnownType := ktDynamicArray;
     else
       raise ESynException.CreateUTF8('%.Create("%") unsupported type: %',
         [self,aCustomTypeName,PByte(fCustomTypeInfo)^]);
@@ -26532,7 +26512,7 @@ end;
 constructor TJSONCustomParserCustomSimple.CreateFixedArray(
   const aPropertyName: RawUTF8; aFixedSize: cardinal);
 begin
-  inherited Create(aPropertyName,UInt32ToUtf8(aFixedSize));
+  inherited Create(aPropertyName,FormatUTF8('Fixed%Byte',[aFixedSize]));
   fKnownType := ktFixedArray;
   fFixedSize := aFixedSize;
   fDataSize := aFixedSize;
@@ -26541,7 +26521,7 @@ end;
 destructor TJSONCustomParserCustomSimple.Destroy;
 begin
   inherited;
-  fStaticArray.Free;
+  fNestedArray.Free;
 end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
@@ -26555,7 +26535,7 @@ begin
     aWriter.Add('[');
     V := @aValue;
     for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
-      fStaticArray.WriteOneLevel(aWriter,V,[]);
+      fNestedArray.WriteOneLevel(aWriter,V,[]);
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
@@ -26573,6 +26553,9 @@ begin
     aWriter.Add('}');
   end;
   {$endif}
+  ktDynamicArray:
+    raise ESynException.CreateUTF8('%.CustomWriter("%"): Unsupported',
+        [self,fCustomTypeName]);
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -26605,7 +26588,7 @@ begin
       exit; // invalid number of items
     Val := @aValue;
     for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
-      if not fStaticArray.ReadOneLevel(P,Val,[]) then
+      if not fNestedArray.ReadOneLevel(P,Val,[]) then
         exit else
       if P=nil then
         exit;
@@ -26619,6 +26602,9 @@ begin
   ktSet: // not implemented yet
     raise ESynException.CreateUTF8('%.CustomReader("%") set',[self,fCustomTypeName]);
   {$endif}
+  ktDynamicArray:
+    raise ESynException.CreateUTF8('%.CustomReader("%"): Unsupported',
+        [self,fCustomTypeName]);
   else begin // encoded as JSON strings
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
     if PropValue=nil then
@@ -26640,7 +26626,7 @@ begin
       else exit;
       end;
       result := P;
-    end;                     
+    end;
     ktFixedArray:
       if wasString and (StrLen(PropValue)=fFixedSize*2) and
          HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
@@ -26652,37 +26638,6 @@ end;
 
 
 { TJSONCustomParserCustomRecord }
-
-type
-  /// implement a record over ptCustom kind of property
-  TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
-  protected
-    fCustomTypeIndex: integer;
-    function GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
-  public
-    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override;
-    constructor Create(const aPropertyName: RawUTF8;
-      aCustomTypeIndex: integer); reintroduce; overload;
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
-    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
-    procedure FinalizeItem(Data: Pointer); override;
-    {$ifndef NOVARIANTS}
-    function ContextNestedProperties(aRegisteredTypes: TRawUTF8List): variant; override;
-    {$endif}
-  end;
-
-{$ifndef NOVARIANTS}
-function TJSONCustomParserCustomRecord.ContextNestedProperties(
-  aRegisteredTypes: TRawUTF8List): variant;
-var parser: PJSONCustomParserRegistration;
-begin
-  parser := GetJSONCustomParserRegistration;
-  if (parser^.RecordCustomParser=nil) or (parser^.RecordCustomParser.Root=nil) then
-    raise ESynException.CreateUTF8('%.ContextNestedProperties without custom parser',
-      [self]);
-  result := parser^.RecordCustomParser.Root.ContextNestedProperties(aRegisteredTypes);
-end;
-{$endif}
 
 constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName, aCustomTypeName: RawUTF8);
@@ -26714,7 +26669,7 @@ begin
   fDataSize := RecordTypeInfoSize(fCustomTypeInfo);
 end;
 
-function TJSONCustomParserCustomRecord.GetJSONCustomParserRegistration: PJSONCustomParserRegistration;
+function TJSONCustomParserCustomRecord.GetJSONCustomParserRegistration: pointer;
 begin
   result := nil;
   if GlobalJSONCustomParsers<>nil then begin
@@ -26732,8 +26687,10 @@ end;
 
 procedure TJSONCustomParserCustomRecord.CustomWriter(
   const aWriter: TTextWriter; const aValue);
+var parser: PJSONCustomParserRegistration;
 begin
-  GetJSONCustomParserRegistration^.Writer(aWriter,aValue);
+  parser := GetJSONCustomParserRegistration;
+  parser^.Writer(aWriter,aValue);
 end;
 
 function TJSONCustomParserCustomRecord.CustomReader(P: PUTF8Char;
@@ -26792,7 +26749,7 @@ const // we rely on TJSONCustomParserRTTIType enumeration to be sorted by name
   JSONCUSTOMPARSERRTTITYPE_NAMES: array[TJSONCustomParserRTTIType] of PUTF8Char =
     ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY','DOUBLE','INT64','INTEGER',
      'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE','STRING','SYNUNICODE',
-     'TDATETIME','TGUID','TTIMELOG',{$ifndef NOVARIANTS}'VARIANT',{$endif}
+     'TDATETIME','TGUID','TID','TTIMELOG',{$ifndef NOVARIANTS}'VARIANT',{$endif}
      'WIDESTRING','WORD',nil); // latest ptCustom=nil
 var ndx: integer;
 begin
@@ -26804,11 +26761,12 @@ begin
     // recognize some simple type aliases (.. = type ..) as defined in mORMot.pas
     case IdemPCharArray(pointer(ItemTypeName),['TSQLRAWBLOB','TRECORDREFERENCE',
       'TRECORDREFERENCETOBEDELETED','TMODTIME','TCREATETIME']) of
-      // warning: recognized types should match at binary storage level!
+      // see also PT_COMPLEXTYPES
       0:   result := ptRawByteString;
       1,2: result := ptPtrUInt;
       3,4: result := ptTimeLog;
       else result := ptCustom;
+      // warning: recognized types should match at binary storage level!
     end;
 end;
 
@@ -26830,92 +26788,99 @@ begin
     result := TypeNameToSimpleRTTIType(@TypeName^[1],Ord(TypeName^[0]),ItemTypeName);
 end;
 
+class function TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(Info: pointer;
+  ItemSize: integer): TJSONCustomParserRTTIType;
+var Item: PDynArrayTypeInfo absolute Info;
+    Typ: PByte;
+begin
+  result := ptCustom;
+  if Info=nil then
+    exit;
+  case Item^.Kind of
+  tkLString: result := ptRawUTF8;
+  tkWString: result := ptWideString;
+  {$ifdef UNICODE}
+  tkUString: result := ptSynUnicode;
+  tkClassRef, tkPointer, tkProcedure:
+    case ItemSize of
+    1: result := ptByte;
+    2: result := ptWord;
+    4: result := ptCardinal;
+    8: result := ptInt64;
+    else result := ptPtrInt;
+    end;
+  {$endif}
+  {$ifndef NOVARIANTS}
+  tkVariant: result := ptVariant;
+  {$endif}
+  tkDynArray: result := ptArray;
+  tkChar, tkClass, tkMethod, tkWChar, tkInterface,
+  tkInteger, tkSet: begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    Typ := GetFPCAlignPtr(pointer(Item));
+    {$else}
+    Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+    {$endif}
+    case TOrdType(Typ^) of
+    otSByte,otUByte: result := ptByte;
+    otSWord,otUWord: result := ptWord;
+    otSLong: result := ptInteger;
+    otULong: result := ptCardinal;
+    end;
+  end;
+  tkInt64: result := ptInt64;
+  {$ifdef FPC}
+  tkBool: result := ptBoolean;
+  {$else}
+  tkEnumeration:
+    if Item=TypeInfo(boolean) then
+      result := ptBoolean;
+      // other enumerates will use TJSONCustomParserCustomSimple below
+  {$endif}
+  tkFloat: begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    Typ := GetFPCAlignPtr(Item);
+    {$else}
+    Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
+    {$endif}
+    case TFloatType(Typ^) of
+    ftSingle: result := ptSingle;
+    ftDoub:   result := ptDouble;
+    ftCurr:   result := ptCurrency;
+    // ftExtended, ftComp: not implemented yet
+    end;
+  end;
+  end;
+end;
+
 class function TJSONCustomParserRTTI.CreateFromRTTI(
   const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
 var Item: PDynArrayTypeInfo absolute Info;
     ItemType: TJSONCustomParserRTTIType;
     ItemTypeName: RawUTF8;
-    Typ: PByte;
     ndx: integer;
 begin
-  if Item=nil then begin // no RTTI -> stored as hexa string
-    result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize);
-  end else begin
+  if Item=nil then // no RTTI -> stored as hexa string
+    result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize) else begin
     ItemType := TypeNameToSimpleRTTIType(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
-    if ItemType=ptCustom then begin
-      case Item^.Kind of
-      tkLString: if IdemPropName(ItemTypeName,'TSQLRawBlob') then
-                   ItemType := ptRawByteString else
-                   ItemType := ptRawUTF8;
-      tkWString: ItemType := ptWideString;
-      {$ifdef UNICODE}
-      tkUString: ItemType := ptSynUnicode;
-      tkClassRef, tkPointer, tkProcedure:
-        case ItemSize of
-        1: ItemType := ptByte;
-        2: ItemType := ptWord;
-        4: ItemType := ptCardinal;
-        8: ItemType := ptInt64;
-        else ItemType := ptPtrInt;
-        end;
-      {$endif}
-      {$ifndef NOVARIANTS}
-      tkVariant: ItemType := ptVariant;
-      {$endif}
-      tkDynArray: ItemType := ptArray;
-      tkChar, tkClass, tkMethod, tkWChar, tkInterface,
-      tkInteger, tkSet: begin
-        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        Typ := GetFPCAlignPtr(pointer(Item));
-        {$else}
-        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-        {$endif}
-        case TOrdType(Typ^) of
-        otSByte,otUByte: ItemType := ptByte;
-        otSWord,otUWord: ItemType := ptWord;
-        otSLong: ItemType := ptInteger;
-        otULong: ItemType := ptCardinal;
-        end;
-      end;
-      tkInt64: ItemType := ptInt64;
-      {$ifdef FPC}
-      tkBool: ItemType := ptBoolean;
-      {$else}
-      tkEnumeration:
-        if Item=TypeInfo(boolean) then
-          ItemType := ptBoolean;
-          // other enumerates will use TJSONCustomParserCustomSimple below
-      {$endif}
-      tkFloat: begin
-        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        Typ := GetFPCAlignPtr(Item);
-        {$else}
-        Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-        {$endif}
-        case TFloatType(Typ^) of
-        ftSingle: ItemType := ptSingle;
-        ftDoub:   ItemType := ptDouble;
-        ftCurr:   ItemType := ptCurrency;
-        // ftExtended, ftComp: not implemented yet
-        end;
-      end;
-      end;
-    end;
     if ItemType=ptCustom then
-      if Item^.kind in [tkEnumeration,tkArray] then
+      ItemType := TypeInfoToSimpleRTTIType(Info,ItemSize);
+    if ItemType=ptCustom then
+      if Item^.kind in [tkEnumeration,tkArray,tkDynArray] then
         result := TJSONCustomParserCustomSimple.Create(
           PropertyName,ItemTypeName,Item) else begin
         ndx := GlobalJSONCustomParsers.RecordSearch(Item);
         if ndx<0 then
           ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
         if ndx<0 then
-          raise ESynException.CreateUTF8('%.AddItemFromEnhancedRTTI("%")',
+          raise ESynException.CreateUTF8('%.CreateFromRTTI("%")',
             [self,ItemTypeName]);
         result := TJSONCustomParserCustomRecord.Create(PropertyName,ndx);
       end else
       result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
   end;
-  result.fDataSize := ItemSize;
+  if ItemSize<>0 then
+    result.fDataSize := ItemSize;
 end;
 
 class function TJSONCustomParserRTTI.CreateFromTypeName(
@@ -26965,7 +26930,7 @@ const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCust
     SizeOf(PtrUInt),SizeOf(Boolean),SizeOf(Byte),SizeOf(Cardinal),SizeOf(Currency),
     SizeOf(Double),SizeOf(Int64),SizeOf(Integer),SizeOf(RawByteString),
     SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single), SizeOf(String),SizeOf(SynUnicode),
-    SizeOf(TDateTime),SizeOf(TGUID), SizeOf(TTimeLog),
+    SizeOf(TDateTime),SizeOf(TGUID),SizeOf(Int64), SizeOf(TTimeLog),
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
     SizeOf(WideString),SizeOf(Word),0);
 var i: integer;
@@ -27183,7 +27148,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
-      ptInt64:     PInt64(Data)^ := GetInt64(PropValue);
+      ptInt64,ptID:PInt64(Data)^ := GetInt64(PropValue);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
       ptRawUTF8:   PRawUTF8(Data)^ := PropValue;
@@ -27290,17 +27255,17 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       j: integer;
   begin
     case Prop.PropertyType of
-    ptBoolean:  aWriter.AddString(JSON_BOOLEAN[PBoolean(Value)^]);
-    ptByte:     aWriter.AddU(PByte(Value)^);
-    ptCardinal: aWriter.AddU(PCardinal(Value)^);
-    ptCurrency: aWriter.AddCurr64(PInt64(Value)^);
-    ptDouble:   aWriter.Add(PDouble(Value)^);
-    ptInt64:    aWriter.Add(PInt64(Value)^);
-    ptInteger:  aWriter.Add(PInteger(Value)^);
-    ptSingle:   aWriter.Add(PSingle(Value)^);
-    ptWord:     aWriter.AddU(PWord(Value)^);
+    ptBoolean:   aWriter.AddString(JSON_BOOLEAN[PBoolean(Value)^]);
+    ptByte:      aWriter.AddU(PByte(Value)^);
+    ptCardinal:  aWriter.AddU(PCardinal(Value)^);
+    ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
+    ptDouble:    aWriter.Add(PDouble(Value)^);
+    ptInt64,ptID:aWriter.Add(PInt64(Value)^);
+    ptInteger:   aWriter.Add(PInteger(Value)^);
+    ptSingle:    aWriter.Add(PSingle(Value)^);
+    ptWord:      aWriter.AddU(PWord(Value)^);
     {$ifndef NOVARIANTS}
-    ptVariant:  aWriter.AddVariantJSON(PVariant(Value)^,twJSONEscape);
+    ptVariant:   aWriter.AddVariantJSON(PVariant(Value)^,twJSONEscape);
     {$endif}
     ptRawByteString:
       aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
@@ -27386,140 +27351,15 @@ begin
   aWriter.Add('}');
 end;
 
-function TJSONCustomParserRTTI.TypeName(aLanguage: TJSONCustomParserRTTILanguage): RawUTF8;
-begin
-  result := TypeName(PropertyType,CustomTypeName,aLanguage);
-end;
 
-const
-  /// textual representation of simple types, for lngDelphi,lngPascal,lngCS,lngJava:
-  SIMPLE_TYPES_LANG: array[TJSONCustomParserRTTILanguage,TJSONCustomParserRTTIType] of RawUTF8 = (
-    ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob','RawJSON',
-     'RawUTF8','**record**','single','string','SynUnicode',
-     'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
-     'WideString','word','**custom**'),
-    ('**array**','boolean','byte','cardinal','currency','double','int64','integer',
-     'TSQLRawBlob','variant','string','**record**','single','string','string',
-     'TDateTime','TGUID','TTimeLog',{$ifndef NOVARIANTS}'variant',{$endif}
-     'string','word','**custom**'),
-    ('**array**','bool','byte','uint','decimal','double','int64','integer',
-     'byte[]','dynamic','string','**record**','single','string','string',
-     'double','Guid','long',{$ifndef NOVARIANTS}'dynamic',{$endif}
-     'string','word','**custom**'),
-    ('**array**','boolean','byte','long','BigDecimal','double','long','int',
-     'byte[]','Object','String','**record**','single','String','String',
-     'double','String','long',{$ifndef NOVARIANTS}'Object',{$endif}
-     'String','int','**custom**'));
+{ TJSONRecordAbstract }
 
-class function TJSONCustomParserRTTI.TypeName(aPropertyType: TJSONCustomParserRTTIType;
-  const aCustomTypeName: RawUTF8; aLanguage: TJSONCustomParserRTTILanguage): RawUTF8;
-begin
-  if aPropertyType in PT_COMPLEXTYPES then
-    result := aCustomTypeName else // may be ''
-    result := SIMPLE_TYPES_LANG[aLanguage,aPropertyType];
-end;
-
-{$ifndef NOVARIANTS}
-
-class function TJSONCustomParserRTTI.TypeNameVariant(aPropertyType: TJSONCustomParserRTTIType;
-  const aCustomTypeName: RawUTF8; aLanguage: TJSONCustomParserRTTILanguage): variant;
-begin
-  if aPropertyType in PT_COMPLEXTYPES then
-    if aCustomTypeName='' then
-      result := null else
-      result := aCustomTypeName else
-    result := SIMPLE_TYPES_LANG[aLanguage,aPropertyType];
-end;
-
-function TJSONCustomParserRTTI.ContextProperty(
-  aRegisteredTypes: TRawUTF8List): variant;
-var i,level: integer;
-begin
-  result := ContextProperty(PropertyType,CustomTypeName,PropertyName,FullPropertyName);
-  level := 0;
-  for i := 1 to length(FullPropertyName) do
-    if FullPropertyName[i]='.' then
-      inc(level);
-  if level>0 then
-    result.nestedIdentation := StringOfChar(' ',level*2);
-  case PropertyType of
-  ptArray: begin
-    result.isArray := true;
-    if NestedProperty[0].PropertyName='' then  // array of simple
-      result.nestedSimpleArray := NestedProperty[0].ContextProperty(aRegisteredTypes) else
-      result.nestedRecordArray := _ObjFast(
-        ['nestedRecordArray',null,'fields',ContextNestedProperties(aRegisteredTypes)]);
-  end;
-  ptRecord:
-    result.nestedRecord := _ObjFast(
-      ['nestedRecord',null,'fields',ContextNestedProperties(aRegisteredTypes)]);
-  end; // sptCustom should be handled by overriden ContextProperty
-end;
-
-class function TJSONCustomParserRTTI.ContextProperty(
-  aPropertyType: TJSONCustomParserRTTIType;
-  const aCustomTypeName, aPropertyName, aFullPropertyName: RawUTF8): variant;
-begin
-  result := _ObjFast([
-     'typeName',GetEnumName(TypeInfo(TJSONCustomParserRTTIType),ord(aPropertyType))^,
-     'typeDelphi',TypeNameVariant(aPropertyType,aCustomTypeName,lngDelphi),
-     'typePascal',TypeNameVariant(aPropertyType,aCustomTypeName,lngPascal),
-     'typeCS',TypeNameVariant(aPropertyType,aCustomTypeName,lngCS),
-     'typeJava',TypeNameVariant(aPropertyType,aCustomTypeName,lngJava)]);
-  if aPropertyName<>'' then
-    _ObjAddProps(['propName',aPropertyName,'fullPropName',aFullPropertyName],result);
-  case aPropertyType of
-  ptRecord:
-    if aCustomTypeName<>'' then
-      _ObjAddProps(['isRecord',true,'toVariant',aCustomTypeName+'2Variant',
-        'fromVariant','Variant2'+aCustomTypeName],result);
-  ptRawByteString:
-    _ObjAddProps(['isBlob',true,'toVariant','BlobToVariant',
-      'fromVariant','VariantToBlob'],result);
-  ptGUID:
-    _ObjAddProps(['isGUID',true,'toVariant','GUIDToVariant',
-      'fromVariant','VariantToGUID'],result);
-  ptDateTime:
-    _ObjAddProps(['isDateTime',true,'toVariant','DateTimeToIso8601',
-      'fromVariant','Iso8601ToDateTime'],result);
-  ptCurrency: _ObjAddProps(['isCurrency',true],result);
-  ptVariant:  _ObjAddProps(['isVariant',true],result);
-  ptRawJSON:  _ObjAddProps(['isJson',true],result);
-  ptArray:    _ObjAddProps(['isArray',true],result);
-  end;
-end;
-
-function TJSONCustomParserRTTI.ContextNestedProperties(
-  aRegisteredTypes: TRawUTF8List): variant;
-var i: integer;
-    prop: variant;
-begin
-  SetVariantNull(result);
-  if PropertyType in [ptRecord,ptArray] then begin
-    TDocVariant.NewFast(result);
-    for i := 0 to high(NestedProperty) do begin
-      prop := NestedProperty[i].ContextProperty(aRegisteredTypes);
-      if (not(NestedProperty[i].PropertyType in [ptRecord,ptArray])) and
-        (TDocVariantData(prop).GetValueIndex('toVariant')<0) then
-        prop.isSimple := true else
-        prop.isSimple := null;
-      TDocVariantData(result).AddItem(prop);
-    end;
-  end;
-end;
-
-{$endif NOVARIANTS}
-
-
-{ TJSONCustomParserAbstract }
-
-constructor TJSONCustomParserAbstract.Create;
+constructor TJSONRecordAbstract.Create;
 begin
   fItems := TObjectList.Create;
 end;
 
-function TJSONCustomParserAbstract.AddItem(const aPropertyName: RawUTF8;
+function TJSONRecordAbstract.AddItem(const aPropertyName: RawUTF8;
   aPropertyType: TJSONCustomParserRTTIType;
   const aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
 begin
@@ -27534,7 +27374,7 @@ begin
   fItems.Add(result);
 end;
 
-function TJSONCustomParserAbstract.CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+function TJSONRecordAbstract.CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
 var Data: PByte;
 begin
   Data := @aValue;
@@ -27542,27 +27382,27 @@ begin
   result := P;
 end;
 
-procedure TJSONCustomParserAbstract.CustomWriter(const aWriter: TTextWriter; const aValue);
+procedure TJSONRecordAbstract.CustomWriter(const aWriter: TTextWriter; const aValue);
 var P: PByte;
 begin
   P := @aValue;
   Root.WriteOneLevel(aWriter,P,Options);
 end;
 
-destructor TJSONCustomParserAbstract.Destroy;
+destructor TJSONRecordAbstract.Destroy;
 begin
   FreeAndNil(fItems);
   inherited;
 end;
 
 
-{ TJSONCustomParserFromTextDefinition }
+{ TJSONRecordTextDefinition }
 
 var
   JSONCustomParserCache: TRawUTF8ListHashed;
 
-class function TJSONCustomParserFromTextDefinition.FromCache(aTypeInfo: pointer;
-  const aDefinition: RawUTF8): TJSONCustomParserFromTextDefinition;
+class function TJSONRecordTextDefinition.FromCache(aTypeInfo: pointer;
+  const aDefinition: RawUTF8): TJSONRecordTextDefinition;
 var i: integer;
 begin
   if JSONCustomParserCache=nil then begin
@@ -27571,15 +27411,15 @@ begin
   end else begin
     i := JSONCustomParserCache.IndexOf(aDefinition);
     if i>=0 then begin
-      result := TJSONCustomParserFromTextDefinition(JSONCustomParserCache.Objects[i]);
+      result := TJSONRecordTextDefinition(JSONCustomParserCache.Objects[i]);
       exit;
     end;
   end;
-  result := TJSONCustomParserFromTextDefinition.Create(aTypeInfo,aDefinition);
+  result := TJSONRecordTextDefinition.Create(aTypeInfo,aDefinition);
   JSONCustomParserCache.AddObject(aDefinition,result);
 end;
 
-constructor TJSONCustomParserFromTextDefinition.Create(aRecordTypeInfo: pointer;
+constructor TJSONRecordTextDefinition.Create(aRecordTypeInfo: pointer;
   const aDefinition: RawUTF8);
 var P: PUTF8Char;
     recordInfoSize: integer;
@@ -27600,7 +27440,7 @@ begin
       [self,fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
-procedure TJSONCustomParserFromTextDefinition.Parse(Props: TJSONCustomParserRTTI;
+procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
   function GetNextFieldType(var P: PUTF8Char;
     var TypIdent: RawUTF8): TJSONCustomParserRTTIType;
@@ -27706,9 +27546,9 @@ begin
 end;
 
 
-{ TJSONCustomParserFromRTTI }
+{ TJSONRecordRTTI }
 
-constructor TJSONCustomParserFromRTTI.Create(aRecordTypeInfo: pointer;
+constructor TJSONRecordRTTI.Create(aRecordTypeInfo: pointer;
   aRoot: TJSONCustomParserRTTI);
 begin
   inherited Create;
@@ -27729,7 +27569,7 @@ begin
   GarbageCollector.Add(self);
 end;
 
-function TJSONCustomParserFromRTTI.AddItemFromRTTI(
+function TJSONRecordRTTI.AddItemFromRTTI(
   const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
 begin
   result := TJSONCustomParserRTTI.CreateFromRTTI(PropertyName,Info,ItemSize);
@@ -27738,7 +27578,7 @@ end;
 
 {$ifdef ISDELPHI2010}
 
-procedure TJSONCustomParserFromRTTI.FromEnhancedRTTI(
+procedure TJSONRecordRTTI.FromEnhancedRTTI(
   Props: TJSONCustomParserRTTI; Info: pointer);
 var FieldTable: PFieldTable;
     i: integer;
@@ -29085,6 +28925,26 @@ begin
   result := VCount-1;
 end;
 
+function TDocVariantData.SearchItemByProp(const aPropName,aPropValue: RawUTF8;
+  aCaseSensitive: boolean): integer;
+var i: integer;
+begin
+  if VKind=dvArray then
+    for result := 0 to VCount-1 do
+      with TDocVariantData(VValue[result]) do
+        if VKind=dvObject then begin
+          i := GetValueIndex(aPropName);
+          if i>=0 then
+            if aCaseSensitive then begin
+              if VValue[i]=aPropValue then
+                exit;
+            end else
+            if IdemPropNameU(VariantToUTF8(VValue[i]),aPropValue) then
+              exit;
+        end;
+  result := -1;
+end;
+
 function TDocVariantData.Delete(Index: integer): boolean;
 begin
   if cardinal(Index)>=cardinal(VCount) then
@@ -29621,6 +29481,13 @@ begin
   TDocVariantData(aValue).Init(JSON_OPTIONS[true]);
 end;
 
+class procedure TDocVariant.NewFast(const aValues: array of PDocVariantData);
+var i: integer;
+begin
+  for i := 0 to high(aValues) do
+    aValues[i]^.Init(JSON_OPTIONS[true]);
+end;
+
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
 begin
   if not(TVarData(result).VType in VTYPE_STATIC) then
@@ -29877,6 +29744,24 @@ begin
   finally
     DynArray.Clear;
   end;
+end;
+
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer): RawUTF8;
+var DynArray: TDynArray;
+    VoidArray: pointer;
+const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = (
+    '','byte','word','integer','cardinal','single','Int64','double','currency',
+    'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','WideString',
+    'SynUnicode',{$ifndef NOVARIANTS}'variant',{$endif}'');
+begin
+  VoidArray := nil;
+  DynArray.Init(TypeInfo,VoidArray);
+  result := '';
+  if ElemTypeInfo<>nil then
+    ElemTypeInfo^ := DynArray.ElemType;
+  if DynArray.ElemType<>nil then
+    TypeInfoToName(ElemTypeInfo,result) else
+    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType];
 end;
 
 function SortDynArrayByte(const A,B): integer;
@@ -30450,7 +30335,7 @@ begin
   TypeInfoToName(fTypeInfo,result);
 end;
 
-function TDynArray.ToKnownType: TDynArrayKind;
+function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
 var FieldTable: PFieldTable;
 label Bin, Rec;
 begin
@@ -30482,6 +30367,7 @@ begin
     // not found directly from T*DynArray -> guess from RTTI
     fKnownType := djNone;
     fKnownSize := 0;
+    if not exactType then
     if ElemType=nil then
 Bin:  case ElemSize of
       1: fKnownType := djByte;
@@ -32790,7 +32676,7 @@ begin
 end;
 
 class function TTextWriter.RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
-  const aRTTIDefinition: RawUTF8): TJSONCustomParserAbstract;
+  const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
 begin
   result := GlobalJSONCustomParsers.RegisterFromText(aTypeInfo,aRTTIDefinition);
 end;
@@ -32818,7 +32704,7 @@ begin
 end;
 
 class function TTextWriter.RegisterCustomJSONSerializerFindParser(
-  aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONCustomParserAbstract;
+  aTypeInfo: pointer; aAddIfNotExisting: boolean=false): TJSONRecordAbstract;
 var ndx: integer;
 begin
   result := nil;
@@ -33139,7 +33025,7 @@ var i, n, Len: integer;
     T: TDynArrayKind;
     tmp: RawByteString;
     customWriter: TDynArrayJSONCustomWriter;
-    customParser: TJSONCustomParserAbstract;
+    customParser: TJSONRecordAbstract;
     Options: TJSONCustomParserSerializationOptions;
     NestedDynArray: TDynArray;
 begin // code below must match TDynArray.LoadFromJSON
@@ -36616,6 +36502,10 @@ end;
 
 function TRawUTF8List.AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt;
 begin
+  if self=nil then begin
+    result := -1;
+    exit;
+  end;
   result := IndexOf(aText);
   if result<0 then
     result := AddObject(aText,aObject);
