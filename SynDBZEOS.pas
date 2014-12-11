@@ -30,7 +30,7 @@ unit SynDBZEOS;
 
   Contributor(s):
   - delphinium
-  - EgonHugeist
+  - EgonHugeist (Michael)
   - alexpirate
   - Joe (jokussoftware)
 
@@ -123,9 +123,6 @@ uses
   Variants,
   {$ENDIF}
   Classes, Contnrs,
-  SynCommons,
-  SynLog,
-  SynDB,
   // load physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to
   // exclude database engines you don't need
@@ -157,7 +154,11 @@ uses
   ZDbcPooled,
   {$ENDIF}
   // main ZDBC units
-  ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet;
+  ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
+  // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
+  SynCommons,
+  SynLog,
+  SynDB;
 
 
 
