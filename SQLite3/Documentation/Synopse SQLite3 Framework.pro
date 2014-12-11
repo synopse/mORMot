@@ -6623,19 +6623,30 @@ The Windows Messages layer has the lowest overhead and is the fastest transport 
 A named pipe communication is able to be served from a Windows service, and is known to be more efficient when transmitting big messages. So it is the preferred mean of communication for a local application sharing data between clients.
 Due to security restriction of newer versions of Windows (i.e. starting with Vista), named pipes are not available by default over a network. This is the reason why this protocol is listed as local access mean only.
 \page
-: Network and Internet access via HTTP
+:140 Network and Internet access via HTTP
 For publishing a server via @*HTTP@/1.1 over TCP/IP, creates a {\f1\fs20 TSQLHttpServer} instance, and associate your running {\f1\fs20 TSQLRestServerDB} to it.
+Typical initialization code, as extracted from sample "{\f1\fs20 04 - HTTP Client-Server}", may be:
+!  Model := CreateSampleModel;
+!  DBServer := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'),true);
+!  DBServer.CreateMissingTables;
+!!  HttpServer := TSQLHttpServer.Create('8080',[DBServer],'+',HTTP_DEFAULT_MODE);
+The following options is usually defined:
+!  HttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
+And you can optionally define some per domain / per sub-domain hosting redirection:
+!  HttpServer.DomainHostRedirect('project.com','root');           // 'root' is current Model.Root
+!  HttpServer.DomainHostRedirect('blog.project.com','root/blog'); // MVC application
 In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate @*firewall@ settings.
 :  HTTP server(s)
+The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit:
+- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern;
+- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API.
 \graph HTTPServers THttpServerGeneric classes hierarchy
 \THttpApiServer\THttpServerGeneric
 \THttpServer\THttpServerGeneric
 \THttpServerGeneric\TThread
 \
-The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit:
-- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern;
-- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API.
 On production, {\f1\fs20 THttpApiServer} seems to give the best results, and has a proven and secure implementation. It is also the only one class implementing @*HTTPS@ / @*SSL@ secure communication, if needed. That's why {\f1\fs20 TSQLHttpServer} will first try to use fastest {\i http.sys} kernel-mode server, then fall-back to the generic WinSock-based {\f1\fs20 THttpServer} class in case of failure. You can also force to use the second server if {\f1\fs20 useHttpSocket} is set at constructor level.
+You can specify which kind of HTTP server class is to be used, via the {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} of the {\f1\fs20 TSQLHttpServer.Create} constructor. By default, it would be {\f1\fs20 HTTP_DEFAULT_MODE} (i.e. {\f1\fs20 useHttpApi} over Windows), but you may specify {\f1\fs20 useHttpApiRegisteringURI} for automatic registration of the URI - see @109@ - or {\f1\fs20 useHttpSocket} to use the socket-based {\f1\fs20 THttpServer}.
 The {\f1\fs20 THttpServerGeneric} abstract class provides one {\f1\fs20 OnRequest} property event, in which all high level process is to take place - it expects some input parameters, then will compute the output content to be sent as response:
 !TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 This event handler prototype is shared by both {\f1\fs20 TThread} classes instances able to implement a {\f1\fs20 HTTP/1.1} server.
@@ -10818,6 +10829,7 @@ This sample is implemented as such:
 |%
 For the sake of the simplicity, the sample will create some fake data in its own local {\i SQlite3} database, the first time it is executed.
 : MVCModel
+:  Data Model
 The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you would find the following type definitions:
 !  TSQLContent = class(TSQLRecordTimeStamped)
 !  private ...
@@ -10878,6 +10890,7 @@ Foreign keys and indexes are managed as such:
 !  if (FieldName='') or (FieldName='PublishedMonth') then
 !    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
 !end;
+:  Hosted in a REST server over HTTP
 The ORM is defined to run over a {\i SQLite3} database in the main {\f1\fs20 MVCServer.dpr} program, then served via a HTTP server as defined in {\f1\fs20 MVCServer.dpr}:
 !  aModel := CreateModel;
 !  try
@@ -10890,10 +10903,32 @@ The ORM is defined to run over a {\i SQLite3} database in the main {\f1\fs20 MVC
 !      try
 !        aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
 !        try
-!!          aHTTPServer.RootRedirectToURI('blog/default'); // redirect localhost:8092
+!!          aHTTPServer.RootRedirectToURI('blog/default'); // redirect server:8092
 !          writeln('"MVC Blog Server" launched on port 8092');
 !  ....
-In comparison to a regular @35@, we instantiated a {\f1\fs20 TBlogApplication}, which will {\i inject} the MVC behavior to {\f1\fs20 aServer} and {\f1\fs20 aHTTPServer}. The same {\i mORMot} program could be used as a @*REST@ful server for remote @13@ and @17@, and also for publishing a web application, sharing the same data and business logic, over a single HTTP URI and port.\line A call to {\f1\fs20 RootRedirectToURI()} will let any @http://localhost:8092 HTTP request be redirected to @http://localhost:8092/blog/default which is our BLOG application main page. The other URIs could be used as usual, as any {\i mORMot}'s @6@.
+In comparison to a regular @35@, we instantiated a {\f1\fs20 TBlogApplication}, which will {\i inject} the MVC behavior to {\f1\fs20 aServer} and {\f1\fs20 aHTTPServer}. The same {\i mORMot} program could be used as a @*REST@ful server for remote @13@ and @17@, and also for publishing a web application, sharing the same data and business logic, over a single HTTP URI and port.\line A call to {\f1\fs20 RootRedirectToURI()} will let any @http://server:8092 HTTP request be redirected to @http://server:8092/blog/default which is our BLOG application main page. The other URIs could be used as usual, as any {\i mORMot}'s @6@.
+You could also use sub-domain hosting, as defined for @140@, to make a difference between the REST methods and the MVC web site. For instance, you may define some per domain / per sub-domain hosting redirection:
+! aHttpServer.DomainHostRedirect('rest.project.com','root');      // 'root' is current Model.Root
+! aHttpServer.DomainHostRedirect('project.com','root/html');      // call the Html() method
+! aHttpServer.DomainHostRedirect('www.project.com','root/html');  // call the Html() method
+! aHttpServer.DomainHostRedirect('blog.project.com','root/blog'); // MVC application
+All ORM/SOA activity should be accessed remotely via {\f1\fs20 rest.project.com}, then would be handled as expected by the ORM/SOA methods of the {\f1\fs20 TSQLRestServer} instance.\line For proper AJAX / JavaScript process, you may have to write:
+! aHttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
+Any attempt to access to the {\f1\fs20 project.com} or {\f1\fs20 www.project.com} URI would be redirected to the following method-based service:
+!procedure TMyServer.Html(Ctxt: TSQLRestServerURIContext);
+!begin
+!  if fMyFileCache='' then
+!    fMyFileCache := StringFromFile(ChangeFileExt(paramstr(0),'.html'));
+!  Ctxt.Returns(fMyFileCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,true);
+!end;
+This method would serve some static HTML content as the main front end page of this server connected to the Internet. For best performance, this UTF-8 content is cached in memory, and the HTTP 304 command would be handled, if the browser supports it. Of course, your application may return some more complex content, even serving a set of files hosted in a local folder, e.g. by calling {\f1\fs20 Ctxt.ReturnFile()} method in this {\f1\fs20 Html()} service.
+In addition, you may have specified an expected sub-URI when initializing your {\f1\fs20 TMVCApplication}:
+!constructor TBlogApplication.Create(aServer: TSQLRestServer);
+!begin
+! ...
+! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog').
+! ...
+Here, any request to {\f1\fs20 blog.project.com} will be redirected to the {\f1\fs20 TBlogApplication} URIs.
 : MVCViewModel
 :  Defining the commands
 The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the "{\i 30 - MVC Server}" sample application.\line It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).

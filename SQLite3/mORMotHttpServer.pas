@@ -126,6 +126,8 @@ unit mORMotHttpServer;
       - TSQLHttpServer now handles sub-domains generic matching (via
         TSQLModel.URIMatch call) at database model level (e.g. you can set
         root='/root/sub1' URIs)
+      - added TSQLHttpServer.DomainHostRedirect() method for virtual-host
+        redirection of Internet domains or sub-domains
       - declared TSQLHttpServer.Request method as virtual, to allow easiest
         customization, like direct file sending to the clients
       - added TSQLHttpServerOptions parameter to TSQLHttpServer.Create(),
@@ -223,8 +225,9 @@ type
   // the program does not run as Administrator - it is therefore sufficient
   // to run such a program once as Administrator to register the URI, when this
   // useHttpApiRegisteringURI option is set
-  // - useHttpSocket will use the standard Sockets library (e.g. WinSock) - it
-  // will trigger the Windows firewall popup UAC window at first run
+  // - useHttpSocket will use the standard Sockets library (i.e. socket-based
+  // THttpServer) - it will trigger the Windows firewall popup UAC window at
+  // first execution
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TSQLHttpServerOptions =
     ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}useHttpSocket);
@@ -267,6 +270,7 @@ type
       Server: TSQLRestServer;
       RestAccessRights: PSQLAccessRights;
     end;
+    fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
     fRootRedirectToURI: RawUTF8;
@@ -358,6 +362,23 @@ type
     // identify which instance must handle a particular request from its URI
     // - return true on success, false on error (e.g. specified server not found)
     function RemoveServer(aServer: TSQLRestServer): boolean;
+    /// register a domain name to be redirected to a given Model.Root
+    // - i.e. can be used to support some kind of virtual hosting
+    // - by default, the URI would be used to identify which TSQLRestServer
+    // instance to use, and the incoming HOST value would just be ignored
+    // - you can specify here domain names which would be checked against
+    // the incoming HOST header, to redirect to a given URI, as such:
+    // ! DomainHostRedirect('project1.com','root1');
+    // ! DomainHostRedirect('project2.com','root2');
+    // ! DomainHostRedirect('blog.project2.com','root2/blog');
+    // for the last entry, you may have for instance initialized a MVC web
+    // server on the 'blog' sub-URI of the 'root2' TSQLRestServer via:
+    // !constructor TMyMVCApplication.Create(aRestModel: TSQLRest; aInterface: PTypeInfo);
+    // ! ...
+    // ! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog');
+    // ! ...
+    // - if aURI='' is given, the corresponding host redirection will be disabled
+    procedure DomainHostRedirect(const aDomain,aURI: RawUTF8);
     /// allow to temporarly redirect ip:port root URI to a given sub-URI
     // - by default, only sub-URI, as defined by TSQLRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
@@ -508,6 +529,13 @@ begin
   {$endif}
 end;
 
+procedure TSQLHttpServer.DomainHostRedirect(const aDomain,aURI: RawUTF8);
+begin
+  if aURI='' then
+    fHosts.Delete(aDomain) else
+    fHosts.Add(aDomain,aURI);
+end;
+
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
   const aServers: array of TSQLRestServer; const aDomainName: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
@@ -539,6 +567,7 @@ begin
   fLog.Enter(self);
   {$endif}
   inherited Create;
+  fHosts.Init(false);
   fDomainName := aDomainName;
   fPort := aPort;
   fHttpServerKind := aHttpServerKind;
@@ -687,6 +716,7 @@ function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
     i: integer;
     P: PUTF8Char;
+    host: RawUTF8;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI<>'' then begin
@@ -704,9 +734,25 @@ begin
       fAccessControlAllowOriginHeader;
     result := HTML_SUCCESS;
   end else begin
-    if Ctxt.URL[1]='/' then  // trim any left '/' from URL
-      call.Url := copy(Ctxt.URL,2,maxInt) else
-      call.Url := Ctxt.URL;
+    // compute URI, handling any virtual host domain
+    if fHosts.Count>0 then begin
+      host := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
+      i := PosEx(':',host);
+      if i>0 then
+        SetLength(host,i-1); // trim any port
+      if host<>'' then
+        host := fHosts.Value(host);
+    end;
+    if host<>'' then
+      if (Ctxt.URL='') or (Ctxt.URL='/') then
+        call.Url := host else
+        if Ctxt.URL[1]='/' then
+          call.Url := host+Ctxt.URL else
+          call.Url := host+'/'+Ctxt.URL else
+      if Ctxt.URL[1]='/' then
+        call.Url := copy(Ctxt.URL,2,maxInt) else
+        call.Url := Ctxt.URL;
+    // search and call any matching TSQLRestServer instance
     result := HTML_NOTFOUND; // page not found by default (in case of wrong URL)
     for i := 0 to high(fDBServers) do
     with fDBServers[i] do
