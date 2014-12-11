@@ -161,7 +161,7 @@ uses
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
-{$ifdef USE_ZEOS}
+{$ifdef USEZEOS}
   SynDBZeos,
 {$endif}
   SynCommons,
@@ -178,7 +178,7 @@ const
   {$ifdef MSWINDOWS}
   HTTP_DEFAULTPORT = '888';
 
-  // if this library file is available, will run
+  // if this library file is available and USEZEOS conditional is set, will run
   //   TTestExternalDatabase.FirebirdEmbeddedViaODBC
   // !! download driver from http://www.firebirdsql.org/en/odbc-driver
   FIREBIRDEMBEDDEDDLL = 'd:\Dev\Lib\SQLite3\Samples\15 - External DB performance\Firebird'+
@@ -668,13 +668,6 @@ type
     /// release used instances (e.g. server) and memory
     procedure CleanUp; override;
   published
-    {$ifdef MSWINDOWS}
-    {$ifdef USE_ZEOS}
-    /// test external Firebird embedded engine via Zeos/ZDBC (if available)
-    procedure FirebirdEmbeddedViaZDBC;
-    {$endif}
-    {$endif}
-
     {$ifndef LVCL}
     /// test TQuery emulation class
     procedure _TQuery;
@@ -707,6 +700,12 @@ type
     /// test external DB using the JET engine
     procedure JETDatabase;
     {$endif}
+    {$endif}
+    {$endif}
+    {$ifdef MSWINDOWS}
+    {$ifdef USEZEOS}
+    /// test external Firebird embedded engine via Zeos/ZDBC (if available)
+    procedure FirebirdEmbeddedViaZDBCOverHTTP;
     {$endif}
     {$endif}
   end;
@@ -8544,15 +8543,15 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifdef USE_ZEOS}
-procedure TTestExternalDatabase.FirebirdEmbeddedViaZDBC;
+{$ifdef USEZEOS}
+procedure TTestExternalDatabase.FirebirdEmbeddedViaZDBCOverHTTP;
 var R: TSQLRecordPeople;
     Model: TSQLModel;
     Props: TSQLDBConnectionProperties;
     Server: TSQLRestServerDB;
     Http: TSQLHttpServer;
     Client: TSQLRestClientURI;
-    i: integer;
+    i,n: integer;
     ids: array[0..3] of TID;
     res: TIDDynArray;
 begin
@@ -8567,7 +8566,8 @@ begin
         TSQLDBZEOSConnectionProperties.URI(dFirebird,'',FIREBIRDEMBEDDEDDLL,False),
         'test.fdb','','');
       try
-        VirtualTableExternalRegister(Model,TSQLRecordPeople,Props,'');
+        VirtualTableExternalMap(Model,TSQLRecordPeople,Props,'peopleext').
+          MapFields(['ID','key','YearOfBirth','yob']);
         Server := TSQLRestServerDB.Create(Model,SQLITE_MEMORY_DATABASE_NAME);
         try
           Server.CreateMissingTables;
@@ -8575,6 +8575,25 @@ begin
           Client := TSQLHttpClient.Create('localhost',HTTP_DEFAULTPORT,TSQLModel.Create(Model));
           Client.Model.Owner := Client;
           try
+            R.FillPrepare(fPeopleData);
+            if not CheckFailed(R.fFill<>nil) then begin
+              Client.BatchStart(TSQLRecordPeople,5000);
+              n := 0;
+              while R.FillOne do begin
+                R.YearOfBirth := n;
+                Client.BatchAdd(R,true);
+                inc(n);
+              end;
+              Check(Client.BatchSend(res)=HTML_SUCCESS);
+              Check(length(res)=n);
+              Check(length(res)=n);
+              for i := 1 to 100 do begin
+                R.ClearProperties;
+                Check(Client.Retrieve(res[Random(n)],R));
+                Check(R.ID<>0);
+                Check(res[R.YearOfBirth]=R.ID);
+              end;
+            end;
             for i := 0 to high(ids) do begin
               R.YearOfBirth := i;
               ids[i] := Client.Add(R,true);
@@ -8596,6 +8615,14 @@ begin
             for i := 0 to high(ids) do begin
               R.ID := ids[i];
               Check(Client.Update(R),'test locking');
+            end;
+            for i := 0 to high(ids) do begin
+              R.YearOfBirth := i;
+              ids[i] := Client.Add(R,true);
+            end;
+            for i := 0 to high(ids) do begin
+              Check(Client.Retrieve(ids[i],R));
+              Check(R.YearOfBirth=i);
             end;
           finally
             Client.Free;
