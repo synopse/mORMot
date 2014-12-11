@@ -8863,6 +8863,7 @@ var RInt,RInt1: TSQLRecordPeople;
     i,n, aID: integer;
     ok: Boolean;
     BatchID,BatchIDUpdate,BatchIDJoined: TIDDynArray;
+    ids: array[0..3] of TID;
     aExternalClient: TSQLRestClientDB;
     fProperties: TSQLDBConnectionProperties;
     {$ifndef NOVARIANTS}
@@ -8939,7 +8940,7 @@ begin
       historyDB.DB.LockingMode := lmExclusive;
       historyDB.CreateMissingTables;
       Check(aExternalClient.Server.RemoteDataCreate(TSQLRecordMyHistory,historyDB)<>nil,
-        'TSQLRecordMyHistory will be accessed from an external instance');
+        'TSQLRecordMyHistory should not be accessed from an external process');
     end;
     aExternalClient.Server.DB.Synchronous := smOff;
     aExternalClient.Server.DB.LockingMode := lmExclusive;
@@ -9130,6 +9131,28 @@ begin
         Check(aExternalClient.Update(RInt1)); // for RestoreGZ() below
         Check(aExternalClient.TableRowCount(TSQLRecordPeople)=n);
         {$endif} // life backup/restore does not work with current sqlite3-64.dll
+        for i := 0 to high(ids) do begin
+          RExt.YearOfBirth := i;
+          ids[i] := aExternalClient.Add(RExt,true);
+        end;
+        for i := 0 to high(ids) do begin
+          Check(aExternalClient.Retrieve(ids[i],RExt));
+          Check(RExt.YearOfBirth=i);
+        end;
+        for i := 0 to high(ids) do begin
+          aExternalClient.BatchStart(TSQLRecordPeopleExt);
+          aExternalClient.BatchDelete(ids[i]);
+          Check(aExternalClient.BatchSend(BatchID)=HTML_SUCCESS);
+          Check(length(BatchID)=1);
+          Check(BatchID[0]=HTML_SUCCESS);
+        end;
+        for i := 0 to high(ids) do
+          Check(not aExternalClient.Retrieve(ids[i],RExt));
+        RExt.ClearProperties;
+        for i := 0 to high(ids) do begin
+          RExt.ID := ids[i];
+          Check(aExternalClient.Update(RExt),'test locking');
+        end;
       finally
         RExt.Free;
       end;
@@ -9576,6 +9599,8 @@ end;
 {$ifdef MSWINDOWS}
 procedure TestClientDist(ClientDist: TSQLRestClientURI);
 var i: integer;
+    ids: array[0..3] of TID;
+    res: TIDDynArray;
 begin
   try
     Check(ClientDist.SetUser('User','synopse'));
@@ -9607,10 +9632,32 @@ begin
     V.FirstName := 'Leonard';
     Check(ClientDist.Update(V));
     checks(true,ClientDist,'check remote UPDATE/POST');
-//          time := GetTickCount; while time=GetTickCount do; time := GetTickCount;
+    for i := 0 to high(ids) do begin
+      V2.YearOfBirth := i;
+      ids[i] := ClientDist.Add(V2,true);
+    end;
+    for i := 0 to high(ids) do begin
+      Check(ClientDist.Retrieve(ids[i],V2));
+      Check(V2.YearOfBirth=i);
+    end;
+    for i := 0 to high(ids) do begin
+      ClientDist.BatchStart(TSQLRecordPeople);
+      ClientDist.BatchDelete(ids[i]);
+      Check(ClientDist.BatchSend(res)=HTML_SUCCESS);
+      Check(length(res)=1);
+      Check(res[0]=HTML_SUCCESS);
+    end;
+    for i := 0 to high(ids) do
+      Check(not ClientDist.Retrieve(ids[i],V2));
+    V2.ClearProperties;
+    for i := 0 to high(ids) do begin
+      V2.ID := ids[i];
+      Check(ClientDist.Update(V2),'test locking');
+    end;
+//  time := GetTickCount; while time=GetTickCount do; time := GetTickCount;
     for i := 1 to 400 do // speed test: named pipes are OK
       checks(true,ClientDist,'caching speed test');
-//          writeln('NamedPipe connection time is ',GetTickCount-time,'ms');
+//  writeln('NamedPipe connection time is ',GetTickCount-time,'ms');
   finally
     ClientDist.Free;
   end;
