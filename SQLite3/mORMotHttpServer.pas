@@ -714,9 +714,9 @@ end;
 
 function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
-    i: integer;
+    i,len: integer;
     P: PUTF8Char;
-    host: RawUTF8;
+    host,redirect: RawUTF8;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI<>'' then begin
@@ -729,6 +729,7 @@ begin
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTML_BADREQUEST else
   if Ctxt.Method='OPTIONS' then begin
+    // handle CORS headers control
     Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+
       FindIniNameValue(pointer(Ctxt.InHeaders),'ACCESS-CONTROL-REQUEST-HEADERS: ')+
       fAccessControlAllowOriginHeader;
@@ -762,7 +763,9 @@ begin
         call.InBody := Ctxt.InContent;
         call.RestAccessRights := RestAccessRights;
         Server.URI(call);
+        // set output content
         result := call.OutStatus;
+        Ctxt.OutContent := call.OutBody;
         P := pointer(call.OutHead);
         if IdemPChar(P,'CONTENT-TYPE: ') then begin
           // change mime type if modified in HTTP header (e.g. GET blob fields)
@@ -771,12 +774,22 @@ begin
         end else
           // default content type is JSON
           Ctxt.OutContentType := JSON_CONTENT_TYPE;
+        // handle HTTP redirection over virtual hosts
+        if (host<>'') and
+           ((result=HTML_MOVEDPERMANENTLY) or (result=HTML_TEMPORARYREDIRECT)) then begin
+          redirect := FindIniNameValue(P,'LOCATION: ');
+          len := length(host);
+          if (length(redirect)>len) and (redirect[len+1]='/') and
+             IdemPropNameU(host,pointer(redirect),len) then
+            // host/method -> method on same domain
+            call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
+        end;
+        // handle optional CORS origin
         Ctxt.OutCustomHeaders := Trim(call.OutHead)+
           #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
         if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
           Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
           Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);
-        Ctxt.OutContent := call.OutBody;
         break;
       end;
   end;
