@@ -734,6 +734,7 @@ unit mORMot;
       properties, able to define threading execution plan for ORM/SOA operations
     - added TSQLRestServer.InitializeTables() method to initialize void tables
     - changed RESTful URI to ModelRoot/Table?where=WhereClause to delete members
+    - added TSQLRestServer.RootRedirectGet property to allow easy redirection
     - added TSQLRestServer.URIPagingParameters property, to support alternate
       URI parameters sets for request paging (in addition to YUI syntax),
       and an optional "total":... field within the JSON result (calling
@@ -11397,6 +11398,7 @@ type
     fStats: TSQLRestServerStats;
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
+    fRootRedirectGet: RawUTF8;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistory: array of record
@@ -11919,6 +11921,9 @@ type
     // - as expected by TSQLRecord.InitializeTable methods
     property CreateMissingTablesOptions: TSQLInitializeTableOptions
       read fCreateMissingTablesOptions;
+    /// the URI to redirect any plain GET on root URI, without any method
+    // - could be used to ease access from web browsers URI 
+    property RootRedirectGet: RawUTF8 read fRootRedirectGet write fRootRedirectGet;
   published
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
@@ -29378,7 +29383,10 @@ begin
       Ctxt.Error('Unknown VERB') else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
-      Ctxt.Error('Invalid Root',HTML_NOTFOUND) else begin
+      Ctxt.Error('Invalid Root',HTML_NOTFOUND) else
+    if (RootRedirectGet<>'') and (Ctxt.Method=mGet) and
+       (Call.Url=Model.Root) and (Call.InBody='') then
+      Ctxt.Redirect(RootRedirectGet) else begin
       Ctxt.URIDecodeSOAByMethod;
       if (Ctxt.MethodIndex<0) and (Ctxt.URI<>'') then
         Ctxt.URIDecodeSOAByInterface;

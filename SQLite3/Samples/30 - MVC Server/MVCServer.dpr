@@ -33,7 +33,8 @@ begin
       try
         aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
         try
-          aHTTPServer.RootRedirectToURI('blog/default'); // redirect localhost:8092
+          aHTTPServer.RootRedirectToURI('blog/default'); // redirect / to blog/default
+          aServer.RootRedirectGet := 'blog/default';  // redirect blog to blog/default
           writeln('"MVC Blog Server" launched on port 8092 using ',aHttpServer.HttpServer.ClassName);
           writeln(#10'You can check http://localhost:8092/blog/mvc-info for information');
           writeln('or point to http://localhost:8092 to access the web app.');

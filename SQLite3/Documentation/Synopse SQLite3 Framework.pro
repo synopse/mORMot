@@ -7878,7 +7878,8 @@ This stateless @9@ model, would enable several levels of caching, even using an 
 :95 Returning file content
 Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
-Note that this is the preferred way of returning some static file content within {\i mORMot}.
+Another possibility may be to use the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method, which is able to efficiently return any file specified by its URI, from a local folder. It may be very handy to
+return some static web content from a {\i mORMot} HTTP server.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.
@@ -10927,13 +10928,13 @@ This method would serve some static HTML content as the main front end page of t
 !  Ctxt.ReturnFileFromFolder('c:\www');
 !end;
 This single method will search for any matching file in the local {\f1\fs20 c:\\www} folder and its sub-directories, returning the default {\f1\fs20 index.html} content if no file is specified at URI level. See the optional parameters to the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method for proper tuning, e.g. to change the default file name or disable the HTTP 304 answers. In all cases, the file content will be served by the @88@ directly from the kernel mode, so would be very fast.
-In addition, you may have specified an expected sub-URI when initializing your {\f1\fs20 TMVCApplication}:
+In order to have the BLOG content hosted in {\f1\fs20 root/blog} URI, you should specify the expected sub-URI when initializing your {\f1\fs20 TMVCApplication}:
 !constructor TBlogApplication.Create(aServer: TSQLRestServer);
 !begin
 ! ...
 ! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog').
 ! ...
-Here, any request to {\f1\fs20 blog.project.com} will be redirected to {\f1\fs20 root/blog}, so will match the expected {\f1\fs20 TBlogApplication} URIs.
+Here, any request to {\f1\fs20 blog.project.com} will be redirected to {\f1\fs20 root/blog}, so will match the expected {\f1\fs20 TBlogApplication} URIs. Note that by default, {\f1\fs20 TMVCRunOnRestServer.RunOnRestServerSub} will redirect any {\f1\fs20 root/blog} request to {\f1\fs20 root/blog/default}, so this URI would be transparent for the user.
 : MVCViewModel
 :  Defining the commands
 The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the "{\i 30 - MVC Server}" sample application.\line It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).

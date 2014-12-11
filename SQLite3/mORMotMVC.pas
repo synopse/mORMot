@@ -1628,7 +1628,9 @@ end;
 
 procedure TMVCRunOnRestServer.RunOnRestServerSub(Ctxt: TSQLRestServerURIContext);
 begin
-  InternalRunOnRestServer(Ctxt,Ctxt.URIBlobFieldName);
+  if Ctxt.URIBlobFieldName='' then
+    Ctxt.Redirect(Ctxt.URIWithoutSignature+'/default') else
+    InternalRunOnRestServer(Ctxt,Ctxt.URIBlobFieldName);
 end;
 
 
