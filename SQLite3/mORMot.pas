@@ -772,8 +772,9 @@ unit mORMot;
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
     - method-based services are now able to handle "304 Not Modified" optimized
       response to save bandwidth, in TSQLRestServerURIContext.Returns/Results
-    - added TSQLRestServerURIContext.ReturnFile() method, for direct fast
-      transmission to a HTTP client, handling "304 Not Modified" and mime type
+    - added TSQLRestServerURIContext.ReturnFile() and ReturnFileFromFolder()
+      methods, for direct fast transmission to a HTTP client, handling
+      "304 Not Modified" and proper mime type recognition
     - added TSQLRestServerURIContext.Input*OrVoid[] properties
     - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID,
       SessionUserName and ResourceFileName properties
@@ -4363,12 +4364,24 @@ type
     // that the file content will be sent back to the server only if it changed
     // - if ContentType is left to default '', method will guess the expected
     // mime-type from the file name extension
+    // - if the file name does not exist, a generic 404 error page would be
+    // returned, unless an explicit redirection is defined in Error404Redirect 
     // - you can also specify the resulting file name, as downloaded and written
     // by the client browser, in the optional AttachmentFileName parameter, if
     // the URI does not match the expected file name
     procedure ReturnFile(const FileName: TFileName;
       Handle304NotModified: boolean=false; const ContentType: RawUTF8='';
-      const AttachmentFileName: RawUTF8='');
+      const AttachmentFileName: RawUTF8=''; const Error404Redirect: RawUTF8='');
+    /// use this method to send back a file from a local folder to the caller
+    // - URIBlobFieldName value, as parsed from the URI, would containn the
+    // expected file name in the local folder, using DefaultFileName if the
+    // URI is void, and redirecting to Error404Redirect if the file is not found
+    // - this method will let the HTTP server return the file content
+    // - if Handle304NotModified is TRUE, will check the file age to ensure
+    // that the file content will be sent back to the server only if it changed
+    procedure ReturnFileFromFolder(const FolderName: TFileName;
+      Handle304NotModified: boolean=true; const DefaultFileName: TFileName='index.html';
+      const Error404Redirect: RawUTF8='');
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTML_TEMPORARYREDIRECT status with the specified location,
     // or HTML_MOVEDPERMANENTLY if PermanentChange is TRUE
@@ -29007,13 +29020,16 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
-  Handle304NotModified: boolean; const ContentType,AttachmentFileName: RawUTF8);
+  Handle304NotModified: boolean;
+  const ContentType,AttachmentFileName,Error404Redirect: RawUTF8);
 var FileTime: TDateTime;
     clientHash, serverHash: RawUTF8;
 begin
   FileTime := FileAgeToDateTime(FileName);
   if FileTime=0 then
-    Error('',HTML_NOTFOUND) else begin
+    if Error404Redirect<>'' then
+      Redirect(Error404Redirect) else
+      Error('',HTML_NOTFOUND) else begin
     if ContentType<>'' then
       Call.OutHead := HEADER_CONTENT_TYPE+ContentType else
       Call.OutHead := HEADER_CONTENT_TYPE+GetMimeContentType(nil,0,FileName);
@@ -29034,6 +29050,21 @@ begin
       Call.OutHead := Call.OutHead+
         #13#10'Content-Disposition: attachment; filename="'+AttachmentFileName+'"';
   end;
+end;
+
+procedure TSQLRestServerURIContext.ReturnFileFromFolder(const FolderName: TFileName;
+  Handle304NotModified: boolean; const DefaultFileName: TFileName;
+  const Error404Redirect: RawUTF8);
+var fileName: TFileName;
+begin
+  if URIBlobFieldName='' then
+    fileName := DefaultFileName else
+    if PosEx('..',URIBlobFieldName)>0 then
+      fileName := '' else
+      fileName := UTF8ToString(StringReplaceChars(URIBlobFieldName,'/','\'));
+  if fileName<>'' then
+    fileName := IncludeTrailingPathDelimiter(FolderName)+fileName;
+  ReturnFile(fileName,Handle304NotModified,'','',Error404Redirect);
 end;
 
 procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8;

@@ -1581,6 +1581,8 @@ begin
   end else 
   if (publishStatic in fPublishOptions) and
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
+    // code below will use a local in-memory cache, but would do the same as:
+    // Ctxt.ReturnFileFromFolder(fViews.ViewTemplateFolder+STATIC_URI);
     static := fStaticCache.Value(rawFormat,#0);
     if static=#0 then begin
       if PosEx('..',rawFormat)>0 then // avoid injection
