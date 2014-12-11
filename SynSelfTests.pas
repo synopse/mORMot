@@ -116,7 +116,6 @@ interface
   {.$define TEST_REGEXP}
 {$endif}
 
-
 uses
   {$ifdef MSWINDOWS}
   Windows,
@@ -162,6 +161,9 @@ uses
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
+{$ifdef USE_ZEOS}
+  SynDBZeos,
+{$endif}
   SynCommons,
   SynLog,
   SynTests;
@@ -175,9 +177,18 @@ uses
 const
   {$ifdef MSWINDOWS}
   HTTP_DEFAULTPORT = '888';
+
+  // if this library file is available, will run
+  //   TTestExternalDatabase.FirebirdEmbeddedViaODBC
+  // !! download driver from http://www.firebirdsql.org/en/odbc-driver
+  FIREBIRDEMBEDDEDDLL = 'd:\Dev\Lib\SQLite3\Samples\15 - External DB performance\Firebird'+
+    {$ifdef CPU64}'64'+{$endif=}'\fbembed.dll';
+
   {$else}
+
   HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
-  {$endif}
+
+  {$endif MSWINDOWS}
 
 
 type
@@ -657,6 +668,13 @@ type
     /// release used instances (e.g. server) and memory
     procedure CleanUp; override;
   published
+    {$ifdef MSWINDOWS}
+    {$ifdef USE_ZEOS}
+    /// test external Firebird embedded engine via Zeos/ZDBC (if available)
+    procedure FirebirdEmbeddedViaZDBC;
+    {$endif}
+    {$endif}
+
     {$ifndef LVCL}
     /// test TQuery emulation class
     procedure _TQuery;
@@ -689,8 +707,8 @@ type
     /// test external DB using the JET engine
     procedure JETDatabase;
     {$endif}
-    {$endif}                   
-    {$endif}                   
+    {$endif}
+    {$endif}
   end;
 
   /// a test case for multi-threading abilities of the framework
@@ -8524,6 +8542,80 @@ procedure TTestExternalDatabase.ExternalViaRESTWithChangeTracking;
 begin
   Test(true,true);
 end;
+
+{$ifdef MSWINDOWS}
+{$ifdef USE_ZEOS}
+procedure TTestExternalDatabase.FirebirdEmbeddedViaZDBC;
+var R: TSQLRecordPeople;
+    Model: TSQLModel;
+    Props: TSQLDBConnectionProperties;
+    Server: TSQLRestServerDB;
+    Http: TSQLHttpServer;
+    Client: TSQLRestClientURI;
+    i: integer;
+    ids: array[0..3] of TID;
+    res: TIDDynArray;
+begin
+  if not FileExists(FIREBIRDEMBEDDEDDLL) then
+    exit;
+  Model := TSQLModel.Create([TSQLRecordPeople]);
+  try
+    R := TSQLRecordPeople.Create;
+    try
+      DeleteFile('test.fdb'); // will be re-created at first connection
+      Props := TSQLDBZEOSConnectionProperties.Create(
+        TSQLDBZEOSConnectionProperties.URI(dFirebird,'',FIREBIRDEMBEDDEDDLL,False),
+        'test.fdb','','');
+      try
+        VirtualTableExternalRegister(Model,TSQLRecordPeople,Props,'');
+        Server := TSQLRestServerDB.Create(Model,SQLITE_MEMORY_DATABASE_NAME);
+        try
+          Server.CreateMissingTables;
+          Http := TSQLHttpServer.Create(HTTP_DEFAULTPORT,Server);
+          Client := TSQLHttpClient.Create('localhost',HTTP_DEFAULTPORT,TSQLModel.Create(Model));
+          Client.Model.Owner := Client;
+          try
+            for i := 0 to high(ids) do begin
+              R.YearOfBirth := i;
+              ids[i] := Client.Add(R,true);
+            end;
+            for i := 0 to high(ids) do begin
+              Check(Client.Retrieve(ids[i],R));
+              Check(R.YearOfBirth=i);
+            end;
+            for i := 0 to high(ids) do begin
+              Client.BatchStart(TSQLRecordPeople);
+              Client.BatchDelete(ids[i]);
+              Check(Client.BatchSend(res)=HTML_SUCCESS);
+              Check(length(res)=1);
+              Check(res[0]=HTML_SUCCESS);
+            end;
+            for i := 0 to high(ids) do
+              Check(not Client.Retrieve(ids[i],R));
+            R.ClearProperties;
+            for i := 0 to high(ids) do begin
+              R.ID := ids[i];
+              Check(Client.Update(R),'test locking');
+            end;
+          finally
+            Client.Free;
+            Http.Free;
+          end;
+        finally
+          Server.Free;
+        end;
+      finally
+        Props.Free;
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    Model.Free;
+  end;
+end;
+{$endif}
+{$endif}
 
 {$ifndef CPU64}
 {$ifndef LVCL}
