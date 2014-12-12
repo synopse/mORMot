@@ -942,12 +942,14 @@ type
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
     constructor Create;
     /// raise an exception on error
-    procedure Check(Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
+    procedure Check(Stmt: TSQLDBStatement; Status: SqlReturn;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean=false;
+      LogLevelNoRaise: TSynLogInfo=sllNone);
       {$ifdef HASINLINE} inline; {$endif}
     /// generic process of error handle
-    procedure HandleError(Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+    procedure HandleError(Stmt: TSQLDBStatement; Status: SqlReturn;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean;
+      LogLevelNoRaise: TSynLogInfo);
     /// wrapper around SQLGetDiagField() API call
     function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
     /// wrapper around GetInfo() API call
@@ -1010,11 +1012,11 @@ begin
   with ODBC do
   try
     // connect
-    Check(SetEnvAttr(fEnv,SQL_ATTR_ODBC_VERSION,SQL_OV_ODBC3,0),SQL_HANDLE_ENV,fEnv);
-    Check(AllocHandle(SQL_HANDLE_DBC,fEnv,fDbc),SQL_HANDLE_ENV,fEnv);
+    Check(nil,SetEnvAttr(fEnv,SQL_ATTR_ODBC_VERSION,SQL_OV_ODBC3,0),SQL_HANDLE_ENV,fEnv);
+    Check(nil,AllocHandle(SQL_HANDLE_DBC,fEnv,fDbc),SQL_HANDLE_ENV,fEnv);
     with fODBCProperties do
       if fServerName<>'' then
-        Check(ConnectA(fDbc,pointer(fServerName),length(fServerName),
+        Check(nil,ConnectA(fDbc,pointer(fServerName),length(fServerName),
           pointer(fUserID),length(fUserID),pointer(fPassWord),length(fPassWord)),
           SQL_HANDLE_DBC,fDbc) else
       if fDatabaseName='' then
@@ -1023,7 +1025,7 @@ begin
         SetString(fSQLDriverFullString,nil,1024);
         fSQLDriverFullString[1] := #0;
         Len := 0;
-        Check(SQLDriverConnectA(fDbc,
+        Check(nil,SQLDriverConnectA(fDbc,
           {$ifdef MSWINDOWS}GetDesktopWindow{$else}0{$endif},
           Pointer(fDatabaseName),length(fDatabaseName),pointer(fSQLDriverFullString),
           length(fSQLDriverFullString),Len,
@@ -1103,8 +1105,8 @@ procedure TODBCConnection.Commit;
 begin
   inherited Commit;
   with ODBC do begin
-    Check(EndTran(SQL_HANDLE_DBC,fDBc,SQL_COMMIT),SQL_HANDLE_DBC,fDBc);
-    Check(SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
+    Check(nil,EndTran(SQL_HANDLE_DBC,fDBc,SQL_COMMIT),SQL_HANDLE_DBC,fDBc);
+    Check(nil,SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
       SQL_HANDLE_DBC,fDBc); // back to default AUTO COMMIT ON mode
   end;
 end;
@@ -1113,8 +1115,8 @@ procedure TODBCConnection.Rollback;
 begin
   inherited RollBack;
   with ODBC do begin
-    Check(EndTran(SQL_HANDLE_DBC,fDBc,SQL_ROLLBACK),SQL_HANDLE_DBC,fDBc);
-    Check(SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
+    Check(nil,EndTran(SQL_HANDLE_DBC,fDBc,SQL_ROLLBACK),SQL_HANDLE_DBC,fDBc);
+    Check(nil,SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
       SQL_HANDLE_DBC,fDBc); // back to default AUTO COMMIT ON mode
   end;
 end;
@@ -1124,7 +1126,7 @@ begin
   if TransactionCount>0 then
     raise EODBCException.CreateUTF8('% do not support nested transactions',[self]);
   inherited StartTransaction;
-  ODBC.Check(ODBC.SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_OFF,0),
+  ODBC.Check(nil,ODBC.SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_OFF,0),
     SQL_HANDLE_DBC,fDBc);
 end;
 
@@ -1141,7 +1143,7 @@ begin
     fConnection.Connect;
   hDbc := (fConnection as TODBCConnection).fDbc;
   with ODBC do
-    Check(AllocHandle(SQL_HANDLE_STMT,hDBC,fStatement),SQL_HANDLE_DBC,hDBC);
+    Check(self,AllocHandle(SQL_HANDLE_STMT,hDBC,fStatement),SQL_HANDLE_DBC,hDBC);
 end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer): TSQLDBFieldType;
@@ -1189,10 +1191,10 @@ begin
   if (fColumnCount>0) or (fColData<>nil) then
     raise EODBCException.CreateUTF8('%.BindColumns twice',[self]);
   with ODBC do begin
-    Check(NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
+    Check(self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
     for c := 1 to nCols do begin
-      Check(DescribeColW(fStatement,c,Name,256,NameLength,DataType,ColumnSize,
+      Check(self,DescribeColW(fStatement,c,Name,256,NameLength,DataType,ColumnSize,
         DecimalDigits,Nullable),SQL_HANDLE_STMT,fStatement);
       with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(
          RawUnicodeToUtf8(Name,NameLength)))^ do begin
@@ -1236,7 +1238,7 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
       if (Status=SQL_SUCCESS_WITH_INFO) and
          (ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE) then
         Status := SQL_SUCCESS else // allow rounding problem
-        ODBC.HandleError(Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+        ODBC.HandleError(self,Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
     ColumnDataSize := Indicator;
     if Indicator>=0 then
       if Status=SQL_SUCCESS then
@@ -1421,7 +1423,7 @@ destructor TODBCStatement.Destroy;
 begin
   try
     if fStatement<>nil then
-      ODBC.Check(ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
+      ODBC.Check(self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
         (fConnection as TODBCConnection).fDbc);
   finally
     inherited Destroy;
@@ -1534,13 +1536,13 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           VData := RawUnicodeToUtf8(pointer(VData),StrLenW(pointer(VData)));
           goto retry; // circumvent restriction of non-Unicode ODBC drivers
         end;
-        ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+        ODBC.Check(self,status,SQL_HANDLE_STMT,fStatement);
       end;
     end;
     // 2. execute prepared statement
     status := ODBC.Execute(fStatement);
     if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
-      ODBC.HandleError(status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+      ODBC.HandleError(self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
   finally
     // 3. release and/or retrieve OUT bound parameters
     for p := 0 to fParamCount-1 do
@@ -1565,9 +1567,9 @@ begin
   if fStatement<>nil then
   with ODBC do begin
     if fColumnCount>0 then
-      Check(CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
+      Check(self,CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
     if fParamCount>0 then
-      Check(FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
+      Check(self,FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
   end;
   inherited Reset;
 end;
@@ -1576,7 +1578,7 @@ function TODBCStatement.UpdateCount: integer;
 var RowCount: SqlLen;
 begin
   if (fStatement<>nil) and not fExpectResults then
-    ODBC.Check(ODBC.RowCount(fStatement,RowCount),SQL_HANDLE_STMT,fStatement) else
+    ODBC.Check(self,ODBC.RowCount(fStatement,RowCount),SQL_HANDLE_STMT,fStatement) else
     RowCount := 0;
   result := RowCount;
 end;
@@ -1593,7 +1595,7 @@ begin
   // 2. prepare statement and bind result columns (if any)
   AllocStatement;
   try
-    ODBC.Check(ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
+    ODBC.Check(self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
     if fExpectResults then
       BindColumns;
@@ -1629,7 +1631,7 @@ begin
       inc(fTotalRowsRetrieved);
       result := true; // mark data available for Column*() methods
     end;
-    else HandleError(status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+    else HandleError(self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
     end;
   end;
 end;
@@ -1637,11 +1639,11 @@ end;
 
 { TODBCLib }
 
-procedure TODBCLib.Check(Status: SqlReturn; HandleType: SqlSmallint;
+procedure TODBCLib.Check(Stmt: TSQLDBStatement; Status: SqlReturn; HandleType: SqlSmallint;
   Handle: SqlHandle; InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
 begin
   if Status<>SQL_SUCCESS then
-    HandleError(Status,HandleType,Handle,InfoRaiseException,LogLevelNoRaise);
+    HandleError(Stmt,Status,HandleType,Handle,InfoRaiseException,LogLevelNoRaise);
 end;
 
 constructor TODBCLib.Create;
@@ -1679,12 +1681,12 @@ var Len: SqlSmallint;
     Info: array[byte] of WideChar;
 begin
   Len := 0;
-  Check(GetInfoW(ConnectionHandle,InfoType,@Info,sizeof(Info)shr 1,@Len),
+  Check(nil,GetInfoW(ConnectionHandle,InfoType,@Info,sizeof(Info)shr 1,@Len),
     SQL_HANDLE_DBC,ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info,Len shr 1);
 end;
   
-procedure TODBCLib.HandleError(Status: SqlReturn; HandleType: SqlSmallint;
+procedure TODBCLib.HandleError(Stmt: TSQLDBStatement; Status: SqlReturn; HandleType: SqlSmallint;
   Handle: SqlHandle; InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
 const FMT: PUTF8Char = '%[%] % (%)'#13#10;
 var Sqlstate: array[0..6] of WideChar;
@@ -1712,7 +1714,9 @@ begin
   end;
   if LogLevelNoRaise<>sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise,msg) else
-    raise EODBCException.CreateUTF8('% error: %',[self,msg]);
+    if Stmt=nil then
+      raise EODBCException.CreateUTF8('% error: %',[self,msg]) else
+      raise EODBCException.CreateUTF8('% - % error: %',[Stmt,self,msg]);
 end;
 
 
@@ -1758,7 +1762,7 @@ begin
         pointer(Table),SQL_NTS,nil,0);
       if status<>SQL_SUCCESS then // e.g. driver does not support schema
         status := ODBC.ColumnsA(fStatement,nil,0,nil,0,pointer(Table),SQL_NTS,nil,0);
-      ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+      ODBC.Check(nil,status,SQL_HANDLE_STMT,fStatement);
       BindColumns;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
@@ -1789,7 +1793,7 @@ begin
         if status<>SQL_SUCCESS then // e.g. driver does not support schema
           status := ODBC.StatisticsA(fStatement,nil,0,nil,0,pointer(Table),
             SQL_NTS,SQL_INDEX_ALL,SQL_QUICK);
-        ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+        ODBC.Check(nil,status,SQL_HANDLE_STMT,fStatement);
         BindColumns;
         while Step do begin
           F.ColumnName := Trim(ColumnUTF8(8));
@@ -1817,7 +1821,7 @@ begin
     with TODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
-      ODBC.Check(ODBC.TablesA(fStatement,nil,0,nil,0,nil,0,'TABLE',SQL_NTS),SQL_HANDLE_STMT,fStatement);
+      ODBC.Check(nil,ODBC.TablesA(fStatement,nil,0,nil,0,nil,0,'TABLE',SQL_NTS),SQL_HANDLE_STMT,fStatement);
       BindColumns;
       n := 0;
       while Step do begin
@@ -1843,7 +1847,7 @@ begin
     with TODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
-      ODBC.Check(ODBC.ForeignKeysA(fStatement,nil,0,nil,0,nil,0,nil,0,nil,0,'%',SQL_NTS),
+      ODBC.Check(nil,ODBC.ForeignKeysA(fStatement,nil,0,nil,0,nil,0,nil,0,nil,0,'%',SQL_NTS),
         SQL_HANDLE_STMT,fStatement);
       BindColumns;
       while Step do 

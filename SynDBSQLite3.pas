@@ -701,9 +701,17 @@ begin
   if fBindShouldStoreValue then
     SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,512);
   if not fExpectResults then
+  try
     // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
+  except
+    on Exception do begin
+      if not fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,4096);
+      raise;
+    end;
+  end;
 end;
 
 function TSQLDBSQLite3Statement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
@@ -746,7 +754,15 @@ begin
     fCurrentRow := 0;
     //fStatement.Reset;
   end;
-  result := fStatement.Step=SQLITE_ROW;
+  try
+    result := fStatement.Step=SQLITE_ROW;
+  except
+    on Exception do begin
+      if not fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,4096);
+      raise;
+    end;
+  end;
   if result then begin
     inc(fTotalRowsRetrieved);
     inc(fCurrentRow);

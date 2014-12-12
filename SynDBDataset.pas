@@ -78,7 +78,7 @@ type
   {$endif}
 
   /// Exception type associated to generic TDataSet / DB.pas unit Dataset connection
-  ESQLDBDataset = class(ESynException);
+  ESQLDBDataset = class(ESQLDBException);
 
   ///	implement properties shared by via the DB.pas TQuery-like connections
   TSQLDBDatasetConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)

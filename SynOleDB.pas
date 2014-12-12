@@ -745,7 +745,8 @@ type
     fOleDBErrorMessage, fOleDBInfoMessage: string;
     /// Error handler for OleDB COM objects
     // - will update ErrorMessage and InfoMessage
-    procedure OleDBCheck(aResult: HRESULT; const aStatus: TCardinalDynArray=nil); virtual;
+    procedure OleDBCheck(aStmt: TSQLDBStatement; aResult: HRESULT;
+      const aStatus: TCardinalDynArray=nil); virtual;
     /// called just after fDBInitialize.Initialized: could add parameters
     procedure OnDBInitialized; virtual;
   public
@@ -1541,7 +1542,7 @@ begin
   with OleDBConnection do begin
     if not IsConnected then
       Connect;
-    OleDBCheck((fSession as IDBCreateCommand).
+    OleDBCheck(self,(fSession as IDBCreateCommand).
       CreateCommand(nil,IID_ICommandText,ICommand(fCommand)));
   end;
   L := Length(fSQL);
@@ -1619,7 +1620,7 @@ begin
         inc(B);
       end;
       SetLength(ParamsStatus,fParamCount);
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         (fCommand as IAccessor).CreateAccessor(
           DBACCESSOR_PARAMETERDATA,fParamCount,Pointer(fParamBindings),0,
           fDBParams.HACCESSOR,pointer(ParamsStatus)),ParamsStatus);
@@ -1630,7 +1631,7 @@ begin
     if fExpectResults then
     try
       // 3.1 SELECT will allow access to resulting rows data from fRowSet
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet),ParamsStatus);
       FromRowSet(RowSet);
     except
@@ -1640,7 +1641,7 @@ begin
       end;
     end else
       // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
   except
     on E: Exception do begin
@@ -1694,7 +1695,7 @@ begin
     SynDBLog.Enter(self,'CreateAccessor',true);
     {$endif}
     SetLength(Status,fColumnCount);
-    OleDBConnection.OleDBCheck((fRowSet as IAccessor).CreateAccessor(
+    OleDBConnection.OleDBCheck(self,(fRowSet as IAccessor).CreateAccessor(
       DBACCESSOR_ROWDATA or DBACCESSOR_OPTIMIZED,fColumnCount,
       pointer(fColumnBindings),fRowSize,fRowSetAccessor,pointer(Status)),Status);
     fRowStepHandleRetrieved := 0;
@@ -1704,7 +1705,7 @@ begin
   if SeekFirst then begin
     // rewind to first row
     ReleaseRows;
-    OleDBConnection.OleDBCheck(fRowSet.RestartPosition(DB_NULL_HCHAPTER));
+    OleDBConnection.OleDBCheck(self,fRowSet.RestartPosition(DB_NULL_HCHAPTER));
     fRowStepResult := 0;
   end else
     FlushRowSetData;
@@ -1714,13 +1715,13 @@ begin
       exit; // no more row available -> return false
     fRowStepResult := fRowSet.GetNextRows(DB_NULL_HCHAPTER,0,length(fRowStepHandles),
       fRowStepHandleRetrieved,pointer(fRowStepHandles));
-    OleDBConnection.OleDBCheck(fRowStepResult);
+    OleDBConnection.OleDBCheck(self,fRowStepResult);
     fRowStepHandleCurrent := 0;
     if fRowStepHandleRetrieved=0 then
       exit; // no more row available
   end;
   // here we have always fRowStepHandleCurrent<fRowStepHandleRetrieved
-  OleDBConnection.OleDBCheck(fRowSet.GetData(fRowStepHandles[fRowStepHandleCurrent],
+  OleDBConnection.OleDBCheck(self,fRowSet.GetData(fRowStepHandles[fRowStepHandleCurrent],
     fRowSetAccessor,pointer(fRowSetData)));
   inc(fRowStepHandleCurrent);
   fCurrentRow := sav+1;
@@ -1843,7 +1844,7 @@ begin
   nCols := 0;
   Cols := nil;
   ColsNames := nil;
-  OleDBConnection.OleDBCheck(ColumnInfo.GetColumnInfo(nCols,Cols,ColsNames));
+  OleDBConnection.OleDBCheck(self,ColumnInfo.GetColumnInfo(nCols,Cols,ColsNames));
   try
     nfo := Cols;
     SetLength(fColumnBindings,nCols);
@@ -1962,9 +1963,10 @@ begin
       IID_IDBInitialize,IUnknown(fDBInitialize)));
     DataInitialize := nil;
     // open the connection to the DB
-    OleDBCheck(fDBInitialize.Initialize);
+    OleDBCheck(nil,fDBInitialize.Initialize);
     OnDBInitialized; // optionaly set parameters
-    OleDBCheck((fDBInitialize as IDBCreateSession).CreateSession(nil,IID_IOpenRowset,fSession));
+    OleDBCheck(nil,
+      (fDBInitialize as IDBCreateSession).CreateSession(nil,IID_IOpenRowset,fSession));
     // check if DB handle transactions
     if fSession.QueryInterface(IID_ITransactionLocal,unknown)=S_OK then
       fTransaction := unknown as ITransactionLocal else
@@ -2016,7 +2018,7 @@ begin
     if Connected then begin
       fTransaction := nil;
       fSession := nil;
-      OleDBCheck(fDBInitialize.Uninitialize);
+      OleDBCheck(nil,fDBInitialize.Uninitialize);
       fDBInitialize := nil;
     end;
   end;
@@ -2032,7 +2034,8 @@ begin
   result := TOleDBStatement.Create(self);
 end;
 
-procedure TOleDBConnection.OleDBCheck(aResult: HRESULT; const aStatus: TCardinalDynArray);
+procedure TOleDBConnection.OleDBCheck(aStmt: TSQLDBStatement; aResult: HRESULT;
+  const aStatus: TCardinalDynArray);
 procedure EnhancedTest;
 var ErrorInfo, ErrorInfoDetails: IErrorInfo;
     ErrorRecords: IErrorRecords;
@@ -2080,7 +2083,9 @@ begin // get OleDB specific error information
   if s<>'' then
     fOleDBErrorMessage :=  fOleDBErrorMessage+s;
   // raise exception
-  E := EOleDBException.Create(fOleDBErrorMessage);
+  if aStmt=nil then
+    E := EOleDBException.Create(fOleDBErrorMessage) else
+    E := EOleDBException.CreateUTF8('%: %',[self,fOleDBErrorMessage]);
   SynDBLog.Add.Log(sllError,E);
   raise E;
 end;
@@ -2100,7 +2105,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Commit;
-    OleDbCheck(fTransaction.Commit(False,XACTTC_SYNC,0));
+    OleDbCheck(nil,fTransaction.Commit(False,XACTTC_SYNC,0));
   end;
 end;
 
@@ -2109,7 +2114,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Rollback;
-    OleDbCheck(fTransaction.Abort(nil,False,False));
+    OleDbCheck(nil,fTransaction.Abort(nil,False,False));
   end;
 end;
 
@@ -2118,7 +2123,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited StartTransaction;   
-    OleDbCheck(fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
+    OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
   end;
 end;
 
@@ -2396,7 +2401,7 @@ begin
       Args[i] := UTF8ToWideString(Fields[i]); // expect parameter as BSTR
   aResult := nil;
   try
-    C.OleDBCheck(SRS.GetRowset(nil,aUID,length(Args),Args,IID_IRowset,0,nil,aResult));
+    C.OleDBCheck(nil,SRS.GetRowset(nil,aUID,length(Args),Args,IID_IRowset,0,nil,aResult));
     result := aResult<>nil; // mark some rows retrieved
   except
     on E: Exception do

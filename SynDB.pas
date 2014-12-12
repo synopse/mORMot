@@ -188,6 +188,9 @@ unit SynDB;
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
   - added TSQLDBConnectionProperties.LoggedSQLMaxSize property to limit the
     logged SQL content as requested by [0b6006e4f5]
+  - ESQLDBException will now append the current SQL statement to its message,
+    if TSQLDBConnectionProperties.LogSQLStatementOnException is defined, as
+    requested by [ea07928ae9]
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)
   - enhanced TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection speed
@@ -305,9 +308,6 @@ uses
 { -------------- TSQLDB* generic classes and types }
 
 type
-  /// generic Exception type, as used by the SynDB unit
-  ESQLDBException = class(ESynException);
-
   // NOTE: TSQLDBFieldType is defined in SynCommons.pas (used by TSQLVar)
   
   /// an array of RawUTF8, for each existing column type
@@ -1017,6 +1017,7 @@ type
     fBatchSendingAbilities: TSQLDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
     fLoggedSQLMaxSize: integer;
+    fLogSQLStatementOnException: boolean;
     fOnBatchInsert: TOnBatchInsert;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
@@ -1444,6 +1445,9 @@ type
     // - setting any value >0 will log statement and parameters up to the
     // number of bytes (could be set e.g. to 2048 to log up to 2KB per statement)
     property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
+    /// allow to log the SQL statement when any low-level ESQLDBException is raised
+    property LogSQLStatementOnException: boolean read fLogSQLStatementOnException
+      write fLogSQLStatementOnException;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
     // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
@@ -2440,6 +2444,15 @@ type
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
     property Columns: TSQLDBColumnPropertyDynArray read fColumns;
+  end;
+
+  /// generic Exception type, as used by the SynDB unit
+  ESQLDBException = class(ESynException)
+  public
+    /// constructor which will use FormatUTF8() instead of Format()
+    // - if the first Args[0] is a TSQLStatement class instance, the current
+    // SQL statement will be part of the exception message 
+    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
   end;
 
 {$ifdef WITH_PROXY}
@@ -4245,7 +4258,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
           ftDate:     Stmt.BindDateTime(i,PDateTime(@VInt64)^,VInOut);
           ftUTF8:     Stmt.BindTextU(i,VData,VInOut);
           ftBlob:     Stmt.BindBlob(i,VData,VInOut);
-          else raise ESQLDBException.CreateUTF8(
+          else raise ESQLDBRemote.CreateUTF8(
             'Invalid VType=% parameter #% in %.ProcessExec(cExecute)',
             [ord(VType),i,self]);
         end else
@@ -4274,7 +4287,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         Protocol.TransactionEnd(header.SessionID);
       Protocol.Authenticate.RemoveSession(header.SessionID);
     end;
-    else raise ESQLDBException.CreateUTF8(
+    else raise ESQLDBRemote.CreateUTF8(
       'Unknown %.RemoteProcessMessage() command %',[self,ord(header.Command)]);
     end;
   except
@@ -5915,8 +5928,8 @@ begin
         raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',[self]);
     vtVariant:    BindVariant(i,VVariant^,true,IO);
     else
-      raise ESQLDBException.CreateUTF8(
-        '%.BindArrayOfConst(Param=%,Type=%)',[self,i,VType]);
+      raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
+        [self,i,VType]);
   end;
 end;
       
@@ -5975,8 +5988,8 @@ begin
         BindTextU(Param,CurrentAnsiConvert.AnsiToUTF8(AnsiString(TVarData(Data).VAny)),IO);
     else
     {$ifdef LVCL}
-      raise ESQLDBException.CreateUTF8(                                  
-        'Unhandled variant type  % in %.BindVariant',[TVarData(Data).VType,self]);
+      raise ESQLDBException.CreateUTF8(
+        '%.BindVariant: Unhandled variant type %',[self,TVarData(Data).VType]);
     {$else}
       // also use TEXT for any non native VType parameter
       BindTextU(Param,StringToUTF8(string(Data)),IO);
@@ -6223,8 +6236,8 @@ begin
   ftDate:     TDateTime(Dest) := Temp;
   ftUTF8:     RawUTF8(Dest) := StringToUTF8(string(Temp));
   ftBlob:     TBlobData(Dest) := TBlobData(Temp);
-    else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
-      [self,TSQLDBFieldTypeToString(result)]);
+  else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
+    [self,TSQLDBFieldTypeToString(result)]);
   end;
 end;
 {$endif}
@@ -6414,7 +6427,8 @@ begin
         W.Write(ColumnUTF8(F));
       ftBlob:
         W.Write(ColumnBlob(F));
-      else raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
+      else
+      raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
         [self,ColumnName(F),ord(colType)]);
     end;
   end;
@@ -6451,7 +6465,8 @@ begin
       // initialize null handling
       NullRowSize := (FMax shr 3)+1;
       if NullRowSize>sizeof(Null) then
-        raise ESQLDBException.CreateUTF8('%.FetchAllToBinary: too many columns',[self]);
+        raise ESQLDBException.CreateUTF8(
+          '%.FetchAllToBinary: too many columns',[self]);
       // save all data rows
       StartPos := W.TotalWritten;
       if (CurrentRow=1) or Step then // Step may already be done (e.g. TQuery.Open)
@@ -7890,6 +7905,29 @@ begin
 end;
 
 {$endif WITH_PROXY}
+
+
+{ ESQLDBException }
+
+constructor ESQLDBException.CreateUTF8(Format: PUTF8Char; const Args: array of const);
+var msg,sql: RawUTF8;
+    Stmt: TSQLDBStatement;
+begin
+  msg := FormatUTF8(Format,Args);
+  if (length(Args)>0) and (Args[0].VType=vtObject) and (Args[0].VObject<>nil) then begin
+    Stmt := TSQLDBStatement(Args[0].VObject);
+    if Stmt.InheritsFrom(TSQLDBStatement) and
+       Stmt.Connection.Properties.LogSQLStatementOnException then begin
+      try
+        sql := Stmt.GetSQLWithInlinedParams;
+      except
+        sql := Stmt.SQL; // if parameter access failed -> append with ?
+      end;
+      msg := msg+' - '+sql;
+    end;
+  end;
+  inherited Create(UTF8ToString(msg));
+end;
 
 
 initialization

@@ -812,14 +812,14 @@ begin
     for p := 0 to fParamCount-1 do begin
       if fParams[p].VInt64<>fParamsArrayCount then
         raise ESQLDBZEOS.CreateUTF8(
-          '%.ExecutePrepared: % parameter expected array count %, got %',
-          [self,p,fParamsArrayCount,fParams[p].VInt64]);
+          '%.ExecutePrepared: #% parameter expected array count %, got %',
+          [aStatement,p,fParamsArrayCount,fParams[p].VInt64]);
       SetLength(fNullArray[p],fParamsArrayCount);
       with fParams[p] do begin
         case VType of
         ftUnknown:
           raise ESQLDBZEOS.CreateUTF8(
-            '%.ExecutePrepared: Unknown type array parameter #%',[self,p+1]);
+            '%.ExecutePrepared: Unknown type array parameter #%',[aStatement,p+1]);
         ftNull: begin
           // handle null column
           for j := 0 to fParamsArrayCount -1 do
