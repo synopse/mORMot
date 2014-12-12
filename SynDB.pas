@@ -5939,60 +5939,69 @@ procedure TSQLDBStatement.BindVariant(Param: Integer; const Data: Variant;
 var I64: Int64Rec;
 {$endif}
 begin
-  case TVarData(Data).VType of
+  with TVarData(Data) do
+  case VType of
     varNull:
       BindNull(Param,IO);
     varBoolean:
-      Bind(Param,ord(TVarData(Data).VBoolean),IO);
+      Bind(Param,ord(VBoolean),IO);
     varByte:
-      Bind(Param,TVarData(Data).VInteger,IO);
+      Bind(Param,VInteger,IO);
     varSmallint:
-      Bind(Param,TVarData(Data).VSmallInt,IO);
+      Bind(Param,VSmallInt,IO);
     {$ifndef DELPHI5OROLDER}
     varShortInt:
-      Bind(Param,TVarData(Data).VShortInt,IO);
+      Bind(Param,VShortInt,IO);
     varWord:
-      Bind(Param,TVarData(Data).VWord,IO);
+      Bind(Param,VWord,IO);
     varLongWord: begin
-      I64.Lo := TVarData(Data).VLongWord;
+      I64.Lo := VLongWord;
       I64.Hi := 0;
       Bind(Param,Int64(I64),IO);
     end;
     {$endif}
     varInteger:
-      Bind(Param,TVarData(Data).VInteger,IO);
+      Bind(Param,VInteger,IO);
     varInt64, varWord64:
-      Bind(Param,TVarData(Data).VInt64,IO);
+      Bind(Param,VInt64,IO);
     varSingle:
-      Bind(Param,TVarData(Data).VSingle,IO);
+      Bind(Param,VSingle,IO);
     varDouble:
-      Bind(Param,TVarData(Data).VDouble,IO);
+      Bind(Param,VDouble,IO);
     varDate:
-      BindDateTime(Param,TVarData(Data).VDate,IO);
+      BindDateTime(Param,VDate,IO);
     varCurrency:
-      BindCurrency(Param,TVarData(Data).VCurrency,IO);
+      BindCurrency(Param,VCurrency,IO);
     varOleStr: // handle special case if was bound explicitely as WideString
-      BindTextW(Param,WideString(TVarData(Data).VAny),IO);
+      BindTextW(Param,WideString(VAny),IO);
     {$ifdef HASVARUSTRING}
     varUString:
       if DataIsBlob then
         raise ESQLDBException.CreateUTF8(
           '%.BindVariant: BLOB should not be UnicodeString',[self]) else
-        BindTextU(Param,UnicodeStringToUtf8(UnicodeString(TVarData(Data).VAny)),IO);
+        BindTextU(Param,UnicodeStringToUtf8(UnicodeString(VAny)),IO);
     {$endif}
     varString:
       if DataIsBlob then
         // no conversion if was set via TQuery.AsBlob property e.g.
-        BindBlob(Param,RawByteString(TVarData(Data).VAny),IO) else
+        BindBlob(Param,RawByteString(VAny),IO) else
         // direct bind of AnsiString as UTF-8 value
-        BindTextU(Param,CurrentAnsiConvert.AnsiToUTF8(AnsiString(TVarData(Data).VAny)),IO);
+        BindTextU(Param,CurrentAnsiConvert.AnsiToUTF8(AnsiString(VAny)),IO);
     else
+    if VType=varByRef or varVariant then
+      BindVariant(Param,PVariant(VPointer)^,DataIsBlob,IO) else
+    if VType=varByRef or varOleStr then 
+      BindTextW(Param,PWideString(VAny)^,IO) else
     {$ifdef LVCL}
       raise ESQLDBException.CreateUTF8(
-        '%.BindVariant: Unhandled variant type %',[self,TVarData(Data).VType]);
+        '%.BindVariant: Unhandled variant type %',[self,VType]);
     {$else}
       // also use TEXT for any non native VType parameter
+      {$ifdef NOVARIANTS}
       BindTextU(Param,StringToUTF8(string(Data)),IO);
+      {$else}
+      BindTextU(Param,VariantToUTF8(Data),IO);
+      {$endif}
     {$endif}
   end;
 end;
@@ -6234,7 +6243,11 @@ begin
   ftDouble:   Double(Dest) := Temp;
   ftCurrency: Currency(Dest) := Temp;
   ftDate:     TDateTime(Dest) := Temp;
+  {$ifdef NOVARIANTS}
   ftUTF8:     RawUTF8(Dest) := StringToUTF8(string(Temp));
+  {$else}
+  ftUTF8:     RawUTF8(Dest) := VariantToUTF8(Temp);
+  {$endif}
   ftBlob:     TBlobData(Dest) := TBlobData(Temp);
   else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
     [self,TSQLDBFieldTypeToString(result)]);
@@ -6666,7 +6679,7 @@ end;
 function TSQLDBStatement.GetParamValueAsText(Param,MaxCharCount: integer): RawUTF8;
 {$ifdef LVCL}
 begin
-  raise ESQLDBException.CreateUTF8('Unhandled %.GetParamValueAsText()',[self]);
+  result := '?'; // no variant support with LVCL
 end;
 {$else}
 var V: variant;
@@ -6729,13 +6742,21 @@ begin
           RawUnicodeToUtf8(VAny,L,result);
         end;
         {$endif}
+        {$ifdef NOVARIANTS}
         else result := StringToUTF8(string(V));
+        {$else}
+        else result := VariantToUTF8(V);
+        {$endif}
       end;
       if truncated then // truncate very long TEXT in log
         result := QuotedStr(result+'...') else
         result := QuotedStr(result);
     end;
+    {$ifdef NOVARIANTS}
     else result := StringToUTF8(string(V));
+    {$else}
+    else result := VariantToUTF8(V);
+    {$endif}
     end;
   end;
 end;
