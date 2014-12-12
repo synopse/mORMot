@@ -6381,10 +6381,11 @@ end;
 procedure TTestBasicClasses._TSQLRecord;
 var i: integer;
     P: PPropInfo;
-    s,s1,s2,s3: RawUTF8;
+    s,s1,s2: RawUTF8;
     M: TSQLModel;
     T,T2: TSQLRecordTest;
 {$ifndef LVCL}
+    s3: RawUTF8;
     bin: RawByteString;
     valid: boolean;
 {$endif}

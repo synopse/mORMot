@@ -4713,11 +4713,9 @@ type
   /// used to store a field index in a Table
   // - note that -1 is commonly used for the ID/RowID field so the values should
   // be signed
-  {$if MAX_SQLFIELDS=64}
-  TSQLFieldIndex = ShortInt; // -128..127
-  {$else}
+  // - even if ShortInt (-128..127) may have been enough, we define a 16 bit
+  // safe unsigned integer to let the source compile with Delphi 5 
   TSQLFieldIndex = SmallInt; // -32768..32767
-  {$ifend}
 
   /// used to store field indexes in a Table
   // - same as TSQLFieldBits, but allowing to store the proper order
@@ -26526,7 +26524,11 @@ end;
 constructor TJSONCustomParserCustomSimple.CreateFixedArray(
   const aPropertyName: RawUTF8; aFixedSize: cardinal);
 begin
+  {$ifdef DELPHI5OROLDER}
+  inherited Create(aPropertyName,'FixedByte'+UInt32ToUTF8(aFixedSize));
+  {$else}
   inherited Create(aPropertyName,FormatUTF8('Fixed%Byte',[aFixedSize]));
+  {$endif}
   fKnownType := ktFixedArray;
   fFixedSize := aFixedSize;
   fDataSize := aFixedSize;
@@ -40615,7 +40617,9 @@ begin
         Where.Operator := opIsNull;
         Where.ValueSQL := P;
         Where.ValueSQLLen := 4;
+        {$ifndef NOVARIANTS}
         TVarData(Where.ValueVariant).VType := varNull;
+        {$endif}
         inc(P,4);
         result := true;
       end else
@@ -40624,7 +40628,9 @@ begin
         Where.Operator := opIsNotNull;
         Where.ValueSQL := P;
         Where.ValueSQLLen := 8;
+        {$ifndef NOVARIANTS}
         TVarData(Where.ValueVariant).VType := varNull;
+        {$endif}
         inc(P,8);
         result := true; // leave ValueVariant=unassigned
       end;

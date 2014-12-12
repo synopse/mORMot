@@ -9930,7 +9930,7 @@ type
     function RetrieveDocVariant(Table: TSQLRecordClass;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant; 
-    {$endif}
+    {$endif NOVARIANTS}
 
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
@@ -10047,7 +10047,7 @@ type
     function UpdateField(Table: TSQLRecordClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
-{$ifndef NOVARIANTS}
+    {$ifndef NOVARIANTS}
     /// update one field in a given member with a value specified as variant
     // - implements REST PUT collection with one field value
     // - any value can be set in FieldValue, but for BLOBs, you should better
@@ -10071,6 +10071,7 @@ type
     function UpdateField(Table: TSQLRecordClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
+    {$endif NOVARIANTS}
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
     // - e.g. you can add digital signature to a record to disallow record editing
@@ -10078,7 +10079,6 @@ type
     // error message
     function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action: TSQLEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; virtual;
-{$endif NOVARIANTS}
     /// delete a member
     // - implements REST DELETE collection
     // - return true on success
@@ -33567,13 +33567,17 @@ procedure CopyStrings(Source, Dest: TStrings);
 begin
   if (Source=nil) or (Dest=nil) then
     exit;
+  {$ifndef LVCL}
   Dest.BeginUpdate;
   try
+  {$endif}
     Dest.Clear;
     Dest.AddStrings(Source);
+  {$ifndef LVCL}
   finally
     Dest.EndUpdate;
   end;
+  {$endif}
 end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;

@@ -124,7 +124,9 @@ uses
   {$endif LVCL}
   {$ifdef MSWINDOWS}
   SynBigTable in '..\SynBigTable.pas',
+  {$ifndef LVCL}
   SynZipFiles in '..\SynZipFiles.pas',
+  {$endif}
   {$endif}
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
