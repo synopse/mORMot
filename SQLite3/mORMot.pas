@@ -1040,6 +1040,9 @@ unit mORMot;
     - added STATICFILE_CONTENT_TYPE[_HEADER] as aliases to HTTP_RESP_STATICFILE
       as defined in SynCrtSock.pas unit, for generic handling
     - added TSQLRestServer.Shutdown method for clean server stop - [55d5babb16]
+    - added TSQLRestServer.SessionsSaveToFile/SessionsLoadFromFile methods and
+      optional aStateFileName parameter to TSQLRestServer.Shutdown to allow
+      session persistence as requested by [a392945901] - warning: not for SOA!
     - added TSQLRestServerStats.CurrentThreadCount and CurrentRequestCount
     - now TSQLRestServerStats.ClientsMax/ClientsCurrent will reflect session
       authentication process, and OutcomingFiles the number of files
@@ -10822,7 +10825,7 @@ type
       content (for better speed)
     - you can inherit from this class, to add custom session process }
   TAuthSession = class
-  private
+  protected
     fUser: TSQLAuthUser;
     fLastAccess64: Int64;
     fID: RawUTF8;
@@ -10837,6 +10840,9 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimeStamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
+    procedure SaveTo(W: TFileBufferWriter);
+    procedure ComputeProtectedValues;
+    constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
   public
     /// initialize a session instance with the supplied TSQLAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
@@ -10881,7 +10887,7 @@ type
   end;
 
   /// used to define overridden session instances
-  // - this all sessions remain in memory, ensure they are not taking too
+  // - since all sessions data remain in memory, ensure they are not taking too
   // much resource (memory or process time)
   TAuthSessionClass = class of TAuthSession;
 
@@ -11677,8 +11683,11 @@ type
     /// you can call this method to prepare the server for shutting down
     // - it will reject any incoming request from now on, and will wait until
     // all pending requests are finished, for proper server termination
+    // - you could optionally save the current server state (e.g. user sessions)
+    // into a file, ready to be retrieved later on using SessionsLoadFromFile -
+    // note that this would work only for ORM sessions, NOT complex SOA state
     // - this method is called by Destroy itself
-    procedure Shutdown; virtual;
+    procedure Shutdown(const aStateFileName: TFileName=''); virtual;
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -11840,6 +11849,22 @@ type
     // - the returned TSQLAuthUser instance will have GroupRights=nil but will
     // have ID, LogonName, DisplayName, PasswordHashHexa and Data fields available
     function SessionGetUser(aSessionID: Cardinal): TSQLAuthUser;
+    /// persist all in-memory sessions into a compressed binary file
+    // - you should not call this method it directly, but rather use Shutdown()
+    // with a StateFileName parameter - to be used e.g. for a short maintainance
+    // server shutdown, without loosing the current logged user sessions
+    // - this method IS thread-safe, and call internaly fSessionCriticalSection
+    procedure SessionsSaveToFile(const aFileName: TFileName);
+    /// re-create all in-memory sessions from a compressed binary file
+    // - typical use is after a server restart, with the file supplied to the
+    // Shutdown() method: it could be used e.g. for a short maintainance server
+    // shutdown, without loosing the current logged user sessions
+    // - WARNING: this method would restore authentication sessions for the ORM,
+    // but not any complex state information used by interface-based services,
+    // like sicClientDriven class instances - DO NOT use this feature with SOA
+    // - this method IS thread-safe, and call internaly fSessionCriticalSection
+    procedure SessionsLoadFromFile(const aFileName: TFileName;
+      andDeleteExistingFileAfterRead: boolean);
 
     /// register a Service class on the server side
     // - this methods expects a class to be supplied, and the exact list of
@@ -11973,8 +11998,8 @@ type
     // table access
     property SQLAuthGroupClass: TSQLAuthGroupClass read fSQLAuthGroupClass;
     /// the class inheriting from TAuthSession to handle in-memory sessions
-    // - this all sessions remain in memory, ensure they are not taking too
-    // much resource (memory or process time)
+    // - since all sessions data remain in memory, ensure they are not taking
+    // too much resource (memory or process time)
     property SessionClass: TAuthSessionClass read fSessionClass write fSessionClass;
   published
     /// this method will be accessible from ModelRoot/Stat URI, and
@@ -27476,7 +27501,7 @@ begin
   inherited Destroy; // calls fServices.Free which will update fStats
 end;
 
-procedure TSQLRestServer.Shutdown;
+procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
 begin
   {$ifdef WITHLOG}
   fLogClass.Enter(self,'Shutdown').
@@ -27493,6 +27518,8 @@ begin
   repeat
     Sleep(5);
   until fStats.CurrentRequestCount=0;
+  if aStateFileName<>'' then
+    SessionsSaveToFile(aStateFileName);
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -27903,7 +27930,7 @@ begin
         result := fSessionAuthentication[i];
         exit; // method already there
       end;
-    // create and initilize new authentication instance
+    // create and initialize new authentication instance
     result := aMethod.Create(self);
     fSessionAuthentications.Add(result); // will be owned by fSessionAuthentications
     fHandleAuthentication := true;
@@ -29615,11 +29642,90 @@ begin
           result := User.CreateCopy as fSQLAuthUserClass;
           result.GroupRights := nil;
         end;
-        Break;  
+        Break;
       end;
   finally
     LeaveCriticalSection(fSessionCriticalSection);
   end;
+end;
+
+const
+  MAGIC_SESSION: cardinal = $A5ABA5AB;
+
+procedure TSQLRestServer.SessionsSaveToFile(const aFileName: TFileName);
+var i: integer;
+    MS: TRawByteStringStream;
+    W: TFileBufferWriter;
+    s: RawByteString;
+begin
+  if self=nil then
+    exit;
+  DeleteFile(aFileName);
+  MS := TRawByteStringStream.Create;
+  try
+    W := TFileBufferWriter.Create(MS);
+    EnterCriticalSection(fSessionCriticalSection);
+    try
+      W.WriteVarUInt32(InternalState);
+      SQLAuthUserClass.RecordProps.SaveBinaryHeader(W);
+      SQLAuthGroupClass.RecordProps.SaveBinaryHeader(W);
+      W.WriteVarUInt32(fSessions.Count);
+      for i := 0 to fSessions.Count-1 do
+        TAuthSession(fSessions.List[i]).SaveTo(W);
+      W.Write4(MAGIC_SESSION);
+      W.Flush;
+    finally
+      LeaveCriticalSection(fSessionCriticalSection);
+      W.Free;
+    end;
+    s := SynLZCompress(MS.DataString);
+    SymmetricEncrypt(MAGIC_SESSION,s);
+    FileFromString(s,aFileName,true);
+  finally
+    MS.Free;
+  end;
+end;
+
+procedure TSQLRestServer.SessionsLoadFromFile(const aFileName: TFileName;
+  andDeleteExistingFileAfterRead: boolean);
+procedure ContentError;
+begin
+  raise ESynException.CreateUTF8('%.SessionsLoadFromFile("%")',[self,aFileName]);
+end;
+var i,n: integer;
+    s: RawByteString;
+    R: TFileBufferReader;
+    P: PAnsiChar;
+begin
+  if self=nil then
+    exit;
+  s := StringFromFile(aFileName);
+  SymmetricEncrypt(MAGIC_SESSION,s);
+  s := SynLZDecompress(s);
+  if s='' then
+    exit;
+  R.OpenFrom(pointer(s),length(s));
+  EnterCriticalSection(fSessionCriticalSection);
+  try
+    InternalState := R.ReadVarUInt32;
+    if not SQLAuthUserClass.RecordProps.CheckBinaryHeader(R) or
+       not SQLAuthGroupClass.RecordProps.CheckBinaryHeader(R) then
+      ContentError;
+    n := R.ReadVarUInt32;
+    P := R.CurrentMemory;
+    fSessions.Clear;
+    for i := 1 to n do begin
+      fSessions.Add(fSessionClass.CreateFrom(P,self));
+      fStats.ClientConnect;
+    end;
+    if PCardinal(P)^<>MAGIC_SESSION then
+      ContentError;
+  finally
+    LeaveCriticalSection(fSessionCriticalSection);
+    R.Close;
+  end;
+  if andDeleteExistingFileAfterRead then
+    DeleteFile(aFileName);
 end;
 
 function TSQLRestServer.CacheWorthItForTable(aTableIndex: cardinal): boolean;
@@ -31938,7 +32044,7 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
-    IDs: TIntegerDynArray; // format limitation: IDs are stored as Int32
+    IDs: TIntegerDynArray; // format expectation: IDs are stored as Int32
     i, f: integer;
 begin
   result := 0;
@@ -36605,6 +36711,19 @@ end;
 
 { TAuthSession }
 
+procedure TAuthSession.ComputeProtectedValues;
+begin // here User.GroupRights and fPrivateKey should have been set
+  fLastAccess64 := GetTickCount64;
+  fTimeOutMS := User.GroupRights.SessionTimeout*(1000*60); // min to ms
+  fAccessRights := User.GroupRights.SQLAccessRights;
+  fPrivateSalt := fID+'+'+fPrivateKey;
+  fPrivateSaltHash :=
+    crc32(crc32(0,pointer(fPrivateSalt),length(fPrivateSalt)),
+      pointer(User.PasswordHashHexa),length(User.PasswordHashHexa));
+  fRemoteIP := FindIniNameValue(pointer(fSentHeaders),'REMOTEIP: ');
+  fConnectionID := FindIniNameValue(pointer(fSentHeaders),'CONNECTIONID: ');
+end;
+
 constructor TAuthSession.Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
 var GID: TSQLAuthGroup;
 begin
@@ -36624,20 +36743,11 @@ begin
           UInt32ToUtf8(fIDCardinal,fID);
       end;
       // set session parameters
-      fTimeOutMS := User.GroupRights.SessionTimeout*(1000*60); // min to ms
-      fAccessRights := User.GroupRights.SQLAccessRights;
       fPrivateKey := SHA256(NowToString+fID);
-      fPrivateSalt := fID+'+'+fPrivateKey;
-      fPrivateSaltHash :=
-        crc32(crc32(0,pointer(fPrivateSalt),length(fPrivateSalt)),
-          pointer(User.PasswordHashHexa),length(User.PasswordHashHexa));
-      fLastAccess64 := GetTickCount64;
       aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
-      if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then begin
+      if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
-        fRemoteIP := FindIniNameValue(pointer(fSentHeaders),'REMOTEIP: ');
-        fConnectionID := FindIniNameValue(pointer(fSentHeaders),'CONNECTIONID: ');
-      end;
+      ComputeProtectedValues;
       {$ifdef WITHLOG}
       aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
@@ -36660,6 +36770,39 @@ begin
     fUser.Free;
   end;
   inherited;
+end;
+
+const TAUTHSESSION_MAGIC = 1;
+
+procedure TAuthSession.SaveTo(W: TFileBufferWriter);
+begin
+  W.Write1(TAUTHSESSION_MAGIC);
+  W.WriteVarUInt32(IDCardinal);
+  W.WriteVarUInt32(fUser.fID);
+  fUser.GetBinaryValues(W); // User.fGroup is a pointer, but would be overriden
+  W.WriteVarUInt32(fUser.GroupRights.fID);
+  fUser.GroupRights.GetBinaryValues(W);
+  W.Write(fPrivateKey);
+  W.Write(fSentHeaders);
+end;
+
+constructor TAuthSession.CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
+var PB: PByte absolute P;
+begin
+  if PB^<>TAUTHSESSION_MAGIC then
+    raise ESynException.CreateUTF8('%.CreateFrom() with invalid format',[self]);
+  inc(PB);
+  fIDCardinal := FromVarUInt32(PB);
+  UInt32ToUtf8(fIDCardinal,fID);
+  fUser := Server.SQLAuthUserClass.Create;
+  fUser.fID := FromVarUInt32(PB);
+  fUser.SetBinaryValues(P); // fUser.fGroup would be overriden by true instance
+  fUser.fGroup := Server.SQLAuthGroupClass.Create;
+  fUser.fGroup.fID := FromVarUInt32(PB);
+  fUser.fGroup.SetBinaryValues(P);
+  fPrivateKey := FromVarString(PB);
+  fSentHeaders := FromVarString(PB);
+  ComputeProtectedValues;
 end;
 
 
@@ -41007,6 +41150,7 @@ initialization
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
 end.
+
 
 
 

@@ -9882,6 +9882,8 @@ begin
         end;
         List.Free;
       end;
+      Client.Server.SessionsSaveToFile('sessions.data');
+      Client.Server.SessionsLoadFromFile('sessions.data',false);
       Check(Client.TransactionBegin(TSQLRecordPeople)); // for UpdateBlob() below
       for i := 0 to high(IntArray) do begin
         Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
