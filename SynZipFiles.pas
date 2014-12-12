@@ -906,12 +906,10 @@ var Algo: TSynCompressionAlgoClass;
 begin
   fDestStream := outStream;
   fBlobDataHeaderPosition := -1; // not AsBlobData
-  with FStrm do begin
-    Init;
-    next_out := @FBufferOut;
-    avail_out := SizeOf(FBufferOut);
-    next_in := @FBufferIn;
-  end;
+  StreamInit(FStrm);
+  FStrm.next_out := @FBufferOut;
+  FStrm.avail_out := SizeOf(FBufferOut);
+  FStrm.next_in := @FBufferIn;
   if Algorithm<>0 then begin
     Algo := SynCompressionAlgos.Algo(Algorithm);
     if not Assigned(Algo) then // unknown algo -> error
@@ -2103,4 +2101,4 @@ end;
 initialization
   fillchar(BlobDataNull,sizeof(TBlobData),0);
 
-end.
+end.
