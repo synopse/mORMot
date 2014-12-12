@@ -5657,7 +5657,6 @@ type
     // - excluding the bytes in the internal buffer
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: cardinal read fTotalFileSize;
-      {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled
     procedure CancelLastChar;
       {$ifdef HASINLINE}inline;{$endif}
@@ -6333,6 +6332,9 @@ type
     /// append some UTF-8 encoded text at the current position
     // - will write the string length, then the string content
     procedure Write(const Text: RawByteString); overload;
+    /// append some UTF-8 encoded text at the current position
+    // - will write the string length, then the string content
+    procedure WriteShort(const Text: ShortString); 
     /// append some content at the current position
     // - will write the binary data, without any length prefix
     procedure WriteBinary(const Data: RawByteString);
@@ -10983,7 +10985,14 @@ function GetDelphiCompilerVersion: RawUTF8;
 /// compress a data content using the SynLZ algorithm from one stream into another
 // - returns the number of bytes written to Dest
 // - you should specify a Magic number to be used to identify the block
-function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream; Magic: cardinal): integer; overload;
+function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream;
+  Magic: cardinal): integer; overload;
+
+/// compress a data content using the SynLZ algorithm from one stream into a file
+// - returns the number of bytes written to the destination file
+// - you should specify a Magic number to be used to identify the block
+function StreamSynLZ(Source: TCustomMemoryStream; const DestFile: TFileName;
+  Magic: cardinal): integer; overload;
 
 /// uncompress using the SynLZ algorithm from one stream into another
 // - returns a newly create memory stream containing the uncompressed data
@@ -37514,6 +37523,12 @@ begin
   Write(pointer(Text),L);
 end;
 
+procedure TFileBufferWriter.WriteShort(const Text: ShortString);
+begin
+  Write1(ord(Text[0]));
+  Write(@Text[1],ord(Text[0]));
+end;
+
 procedure TFileBufferWriter.WriteBinary(const Data: RawByteString);
 begin
   Write(pointer(Data),Length(Data));
@@ -40993,6 +41008,18 @@ begin
     result := Head.CompressedSize+(sizeof(Head)+sizeof(Trailer));
   finally
     Freemem(P);
+  end;
+end;
+
+function StreamSynLZ(Source: TCustomMemoryStream; const DestFile: TFileName;
+  Magic: cardinal): integer;
+var F: TFileStream;
+begin
+  F := TFileStream.Create(DestFile,fmCreate);
+  try
+    result := StreamSynLZ(Source,F,Magic);
+  finally
+    F.Free;
   end;
 end;
 
