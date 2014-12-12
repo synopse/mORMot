@@ -186,6 +186,8 @@ unit SynDB;
     will ensure that the generated identifier won't be too long
   - added TSQLDBConnectionProperties.IsSQLKeyword() method for [7fbbd53966]
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
+  - added TSQLDBConnectionProperties.LoggedSQLMaxSize property to limit the
+    logged SQL content as requested by [0b6006e4f5]
   - added TSQLDBConnectionPropertiesThreadSafe.ForceOnlyOneSharedConnection
     property to by-pass internal thread-pool (e.g. for embedded engines)
   - enhanced TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection speed
@@ -1014,6 +1016,7 @@ type
     fMainConnection: TSQLDBConnection;
     fBatchSendingAbilities: TSQLDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
+    fLoggedSQLMaxSize: integer;
     fOnBatchInsert: TOnBatchInsert;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
@@ -1435,6 +1438,12 @@ type
     // - if OnBatchInsert points to MultipleValuesInsert(), this value is
     // ignored, and the maximum number of parameters is guessed per DBMS type
     property BatchMaxSentAtOnce: integer read fBatchMaxSentAtOnce write fBatchMaxSentAtOnce;
+    /// the maximum size, in bytes, of logged SQL statements
+    // - default 0 will log statement and parameters with no size limit
+    // - setting -1 will log statement without any parameter value (just ?)
+    // - setting any value >0 will log statement and parameters up to the
+    // number of bytes (could be set e.g. to 2048 to log up to 2KB per statement)
+    property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
     // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
@@ -1666,18 +1675,20 @@ type
     procedure SetForceBlobAsNull(value: boolean);
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
-    {/ will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
-      from a given column value
-     - internal conversion will use a temporary Variant and ColumnToVariant method
-     - expects Dest to be of the exact type (e.g. Int64, not Integer) }
+    /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
+    // from a given column value
+    // - internal conversion will use a temporary Variant and ColumnToVariant method
+    // - expects Dest to be of the exact type (e.g. Int64, not Integer) 
     function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
-    {/ retrieve the inlined value of a given parameter, e.g. 1 or 'name'
-    - use ParamToVariant() virtual method
-    - optional MaxCharCount will truncate the text to a given number of chars }
-    function GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8; virtual;
+    /// retrieve the inlined value of a given parameter, e.g. 1 or 'name'
+    // - use ParamToVariant() virtual method
+    // - optional MaxCharCount will truncate the text to a given number of chars
+    function GetParamValueAsText(Param, MaxCharCount: integer): RawUTF8; virtual;
     /// append the inlined value of a given parameter
     // - use GetParamValueAsText() method
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter); virtual;
+    // - optional MaxCharCount will truncate the text to a given number of chars
+    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+      MaxCharCount: integer); virtual;
     {$ifndef LVCL}
     {/ return a Column as a variant }
     function GetColumnVariant(const ColName: RawUTF8): Variant;
@@ -2259,7 +2270,8 @@ type
       IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam; overload;
     /// append the inlined value of a given parameter
     // - faster overridden method
-    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter); override;
+    procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
+      MaxCharCount: integer); override;
   public
     /// create a statement instance
     // - this overridden version will initialize the internal fParam* fields
@@ -6582,6 +6594,7 @@ end;
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
 var P,B: PUTF8Char;
     num: integer;
+    maxSize,maxAllowed: cardinal;
     W: TTextWriter;
 begin
   P := pointer(fSQL);
@@ -6591,6 +6604,11 @@ begin
   end;
   if fSQLWithInlinedParams<>'' then begin
     result := fSQLWithInlinedParams; // already computed
+    exit;
+  end;
+  maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+  if integer(maxSize)<0 then begin
+    result := fSQL; // -1 -> log statement without any parameter value (just ?)
     exit;
   end;
   num := 1;
@@ -6617,9 +6635,12 @@ begin
       if P^=#0 then
         break;
       inc(P); // jump P^='?'
-      AddParamValueAsText(num,W);
+      if maxSize>0 then
+        maxAllowed := W.TextLength-maxSize else
+        maxAllowed := maxInt;
+      AddParamValueAsText(num,W,maxAllowed);
       inc(num);
-    until P^=#0;
+    until (P^=#0) or ((maxSize>0)and(W.TextLength>=maxSize));
     result := W.Text;
     fSQLWithInlinedParams := result;
   finally
@@ -6627,7 +6648,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
+function TSQLDBStatement.GetParamValueAsText(Param,MaxCharCount: integer): RawUTF8;
 {$ifdef LVCL}
 begin
   raise ESQLDBException.CreateUTF8('Unhandled %.GetParamValueAsText()',[self]);
@@ -6705,9 +6726,10 @@ begin
 end;
 {$endif}
 
-procedure TSQLDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter);
+procedure TSQLDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
+  MaxCharCount: integer);
 begin
-  Dest.AddString(GetParamValueAsText(Param));
+  Dest.AddString(GetParamValueAsText(Param,MaxCharCount));
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -6973,7 +6995,8 @@ begin
 end;
 {$endif}
 
-procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer; Dest: TTextWriter);
+procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer; Dest: TTextWriter;
+  MaxCharCount: integer);
 begin
   dec(Param);
   if cardinal(Param)>=cardinal(fParamCount) then
@@ -6985,7 +7008,7 @@ begin
       ftDouble:   Dest.Add(PDouble(@VInt64)^);
       ftCurrency: Dest.AddCurr64(VInt64);
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
-      ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''');
+      ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
       ftBlob:     Dest.AddShort('*BLOB*');
       else        Dest.AddShort('???');
     end;

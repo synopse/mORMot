@@ -149,6 +149,9 @@ uses
   SynDBOracle in '..\SynDBOracle.pas',
   SynOleDB in '..\SynOleDB.pas',
   SynDBODBC in '..\SynDBODBC.pas',
+  {$ifdef USEZEOS}
+  SynDBZeos in '..\SynDBZeos.pas',
+  {$endif}
   {$endif}
 {$ifndef DELPHI5OROLDER}      
   SynDBRemote in '..\SynDBRemote.pas',

@@ -5371,8 +5371,8 @@ type
     // - this function implements what is specified in the official SQLite3
     // documentation: "A string constant is formed by enclosing the string in single
     // quotes ('). A single quote within the string can be encoded by putting two
-    // single quotes in a row - as in Pascal." 
-    procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
+    // single quotes in a row - as in Pascal."
+    procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar; TextLen: integer=0); 
     /// append some chars, escaping all HTML special chars as expected
     // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
     procedure AddHtmlEscape(Text: PUTF8Char); overload;
@@ -5650,11 +5650,14 @@ type
     /// return the last char appended
     function LastChar: AnsiChar;
     /// how many bytes are currently in the internal buffer and not on disk
+    // - see TextLength for the total number of bytes, on both disk and memory
     function PendingBytes: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// how many bytes were currently written on disk
     // - excluding the bytes in the internal buffer
+    // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: cardinal read fTotalFileSize;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled
     procedure CancelLastChar;
       {$ifdef HASINLINE}inline;{$endif}
@@ -5667,6 +5670,8 @@ type
     procedure CancelAll;
 
     /// count of added bytes to the stream
+    // - see PendingBytes for the number of bytes currently in the memory buffer
+    // or WrittenBytes for the number of bytes already written to disk 
     property TextLength: cardinal read GetLength;
     /// if a call to Flush should try to resize the internal buffer if it sounds
     // too small
@@ -33279,13 +33284,14 @@ begin
   dec(B); // allow CancelLastChar
 end;
 
-procedure TTextWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar);
+procedure TTextWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar;
+  TextLen: integer=0);
 var BMax: PUTF8Char;
 begin
-  BMax := BEnd-2;
+  BMax := BEnd-3;
   if B>=BMax then begin
     Flush;
-    BMax := BEnd-2;
+    BMax := BEnd-3;
   end;
   B[1] := Quote;
   inc(B);
@@ -33294,6 +33300,16 @@ begin
       if B<BMax then begin
         if Text^=#0 then
           break;
+        if TextLen>0 then begin
+          if TextLen=3 then begin
+            B[1] := '.'; // indicates truncated
+            B[2] := '.';
+            B[3] := '.';
+            inc(B,3);
+            break;
+          end else
+            dec(TextLen);
+        end;
         if Text^<>Quote then begin
           B[1] := Text^;
           inc(Text);
