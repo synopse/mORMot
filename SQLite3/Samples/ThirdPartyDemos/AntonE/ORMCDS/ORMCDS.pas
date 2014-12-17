@@ -4,6 +4,12 @@ interface
 
 uses Data.DB,DBClient,mORMot,SynCommons,RTTI,TypInfo,Classes;
 
+(*2014/12/01 - Version 1
+
+TODO:
+Ordered/(multi?)-Indexed or Ordered Arrays with TIDs
+TADTFields for SETs?
+*)
 
 (*This is Info record that will be attached to root CDS .Tag and to each nested dataset (array or sub-TSQLRecord list) to
 BOTH the TDatasetField.Tag and it's detail TClientdataset.Tag.
@@ -34,31 +40,53 @@ procedure ORM_AddSubField    (CDS:TClientdataset;AFieldName,ALinkField:RawUTF8;A
 (*Add a Dynamic Arrray nested field*)
 procedure ORM_AddSubField    (CDS:TClientdataset;AFieldName:RawUTF8;ADynArrayType:PTypeInfo);overload;
 procedure ORM_LoadCDSFields  (DB:TSQLRest;CDS:TClientdataset;AName:RawUTF8;AValue:TValue);
-function  ORM_SaveCDSFields  (DB:TSQLRest;CDS:TClientdataset;AName:RawUTF8;var AValue:TValue):Integer;
+function  ORM_SaveCDSFields  (DB:TSQLRest;CDS:TClientdataset;AName:RawUTF8;var AValue:TValue;AForceUpdate:Boolean):Integer;
 
 (*Link existing TClientdataset by creating TORMCDSinfo record.*)
-procedure ORM_LinkCDS(AParent:TClientDataset;ATypeInfo:PTypeInfo;ALinkField:RawUTF8);
+procedure ORM_LinkCDS(ASourceCDS:TClientDataset;ATypeInfo:PTypeInfo;ALinkField:RawUTF8);
 (*Free TORMCDSinfo record info, alternatively free dynamically created TClientdatasets*)
 procedure ORM_FreeCDSInfo(CDS:TClientdataset;AFreeCDS:Boolean);
+procedure ORM_LoadData(CDS:TClientdataset;aClient: TSQLRest;FormatSQLWhere: PUTF8Char;const BoundsSQLWhere: array of const;const aCustomFieldsCSV: RawUTF8='');
+procedure ClearCDS(CDS:TClientDataset);
 
 implementation
 
 uses SysUtils,Datasnap.Provider;
 
-procedure ORM_LinkCDS(AParent:TClientDataset;ATypeInfo:PTypeInfo;ALinkField:RawUTF8);
+procedure ClearCDS(CDS:TClientDataset);
+begin;
+ if CDS.Active
+    then begin
+          CDS.EmptyDataSet;
+          CDS.Close;
+         end;
+ CDS.DataSetField:=nil;
+ CDS.Fields.Clear;
+ CDS.FieldDefs.Clear;
+ CDS.IndexDefs.Clear;
+ CDS.Params.Clear;
+ CDS.Aggregates.Clear;
+ CDS.IndexName := '';
+ CDS.IndexFieldNames := '';
+end;
+
+procedure ORM_LinkCDS(ASourceCDS:TClientDataset;ATypeInfo:PTypeInfo;ALinkField:RawUTF8);
 var OInfo : TORMCDSinfo;
     Field : TField;
     I     : Integer;
     Cln   : TClientdataset;
 begin
  OInfo:=TORMCDSinfo.Create;
- OInfo.CDS:=AParent;
+ OInfo.CDS:=ASourceCDS;
  case ATypeInfo.Kind of
   tkClass :  begin
+              {$IFDEF DEBUG}
               if not GetTypeData(ATypeInfo).ClassType.InheritsFrom(TSQLRecord)
                  then raise Exception.Create('ErrorMessage22');
+              {$ENDIF DEBUG}
               OInfo.SQLRecordClass:=TSQLRecordClass(GetTypeData(ATypeInfo).ClassType);
-              if AParent.DataSetField<>nil
+              OInfo.DatasetField  :=ASourceCDS.DataSetField;
+              if ASourceCDS.DataSetField<>nil
                  then OInfo.LinkField:=ALinkField;
              end;
   tkDynArray:begin
@@ -68,10 +96,10 @@ begin
              end
  end;
 
- AParent.Tag:=Integer(OInfo);
- if AParent.DataSetField<>nil
+ ASourceCDS.Tag:=Integer(OInfo);
+ if ASourceCDS.DataSetField<>nil
     then begin
-          AParent.DataSetField.Tag:=Integer(OInfo);
+          ASourceCDS.DataSetField.Tag:=Integer(OInfo);
          end;
 end;
 
@@ -87,12 +115,44 @@ begin
    if (Field is TDatasetField)
       then begin
             OInfo:=TORMCDSinfo(Field.Tag);
-            ORM_FreeCDSInfo(OInfo.CDS,AFreeCDS);
+            if Assigned(OInfo)
+               then ORM_FreeCDSInfo(OInfo.CDS,AFreeCDS);
             Field.Tag:=0;
            end;
   end;
  if AFreeCDS
     then CDS.Free;
+end;
+
+procedure ORM_LoadData(CDS:TClientdataset;aClient: TSQLRest;
+                       FormatSQLWhere: PUTF8Char;
+                       const BoundsSQLWhere: array of const;
+                       const aCustomFieldsCSV: RawUTF8='');
+var qRec : TSQLRecord;
+    OInfo:TORMCDSinfo;
+    OldDisabled : Boolean;
+begin
+ OldDisabled:=CDS.ControlsDisabled;
+ if not OldDisabled
+    then CDS.DisableControls;
+
+ CDS.LogChanges:=False;
+ {$IFDEF DEBUG}
+ if not (TObject(CDS.Tag) is TORMCDSinfo)
+    then raise Exception.Create('ErrorMessage118');
+ {$ENDIF DEBUG}
+ OInfo:=TORMCDSinfo(CDS.Tag);
+
+ qRec:=OInfo.SQLRecordClass.CreateAndFillPrepare(aClient,FormatSQLWhere,BoundsSQLWhere,aCustomFieldsCSV);
+ while qRec.FillOne do
+  begin
+   ORM_LoadCDSFields(aClient,CDS,'root',qRec);
+  end;
+ qRec.Free;
+ CDS.MergeChangeLog;
+ CDS.LogChanges:=True;
+ if not OldDisabled
+    then CDS.EnableControls;
 end;
 
 procedure ORM_CreateCDSFields(CDS:TClientdataset;AName:RawUTF8;ATypeInfo:PTypeInfo);
@@ -111,6 +171,7 @@ begin
  Fld:=CDS.FindField(AName);
  case Typ.TypeKind of
    tkString,
+   tkUString,
    tkLString    : begin
                    if Fld<>nil
                       then exit;
@@ -264,6 +325,7 @@ begin
  Typ:=Ctx.GetType(AValue.TypeInfo);
  case Typ.TypeKind of
    tkString,
+   tkUString,
    tkLString    : begin
                    Fld.AsString:=AValue.AsString;
                   end;
@@ -271,7 +333,7 @@ begin
                    Fld.AsInteger:=AValue.AsInteger;
                   end;
    tkEnumeration: begin
-                   Fld.AsInteger:=Integer(AValue.GetReferenceToRawData^);
+                   Fld.AsVariant:=Integer(AValue.GetReferenceToRawData^);
                   end;
    tkSet        : begin
                    case TRttiSetType(typ).ElementType.TypeKind of
@@ -367,7 +429,8 @@ begin
  Ctx.Free;
 end;
 
-function ORM_SaveCDSFields(DB:TSQLRest;CDS:TClientdataset;AName:RawUTF8;var AValue:TValue):Integer;
+function ORM_SaveCDSFields(DB:TSQLRest;CDS:TClientdataset;AName:RawUTF8;var AValue:TValue;AForceUpdate:Boolean):Integer;
+(*AForceUpdate introduced to force update on usInserted record as TClientdataset does not always reflect OldValue=null on newly inserted record but rather OldValue=NewValue*)
 var Ctx : TRttiContext;
     Typ : TRttiType;
     Fld : TField;
@@ -386,7 +449,7 @@ var Ctx : TRttiContext;
     OInfo,
     BInfo  : TORMCDSinfo;
     ArrLen : NativeInt;
-    P      : Pointer;
+    P,PP   : Pointer;
     US     : TUpdateStatus;
 begin
  Result:=0;
@@ -399,24 +462,30 @@ begin
  case Typ.TypeKind of
    tkString,
    tkLString    : begin
-                   if Fld.OldValue=Fld.NewValue
+                   if not AForceUpdate and (Fld.OldValue=Fld.NewValue)
                       then exit;
                    Inc(Result);
                    AValue:=Fld.AsString;
                   end;
    tkInteger    : begin
-                   if Fld.OldValue=Fld.NewValue
+                   if not AForceUpdate and (Fld.OldValue=Fld.NewValue)
                       then exit;
                    Inc(Result);
                    AValue:=Fld.AsInteger;
                   end;
    tkEnumeration: begin
-                   if Fld.OldValue=Fld.NewValue
+                   if not AForceUpdate and (Fld.OldValue=Fld.NewValue)
                       then exit;
                    Inc(Result);
-                   Integer(AValue.GetReferenceToRawData^):=Fld.AsInteger;
+
+                   case Fld.DataType of
+                     ftInteger: Integer(AValue.GetReferenceToRawData^):=Fld.AsInteger;
+                     ftBoolean: Boolean(AValue.GetReferenceToRawData^):=Fld.AsBoolean
+                    else raise Exception.Create('ErrorMessage429');
+                   end;
                   end;
    tkSet        : begin
+                   Inc(Result);
                    I:=Integer(AValue.GetReferenceToRawData^);
                    case TRttiSetType(typ).ElementType.TypeKind of
                     tkEnumeration : begin
@@ -431,7 +500,7 @@ begin
                                                    then I2:=I2 or (1 shl I);
                                                end;
                                       end;
-                                     if I2<>Integer(AValue.GetReferenceToRawData^)
+                                     if AForceUpdate or (I2<>Integer(AValue.GetReferenceToRawData^))
                                         then begin
                                               Inc(Result);
                                               Integer(AValue.GetReferenceToRawData^):=I2;
@@ -441,13 +510,13 @@ begin
                    end;
                   end;
    tkFloat      : begin
-                   if Fld.OldValue=Fld.NewValue
+                   if not AForceUpdate and (Fld.OldValue=Fld.NewValue)
                       then exit;
                    Inc(Result);
                    AValue:=Fld.AsFloat;
                   end;
    tkInt64      : begin
-                   if Fld.OldValue=Fld.NewValue
+                   if not AForceUpdate and (Fld.OldValue=Fld.NewValue)
                       then exit;
                    Inc(Result);
                    AValue:=Fld.AsLargeInt;
@@ -456,23 +525,40 @@ begin
                    if Fld=nil
                       then exit;
                    BInfo:=TORMCDSinfo(Fld.Tag);
-                   {BValue.Make(nil,TRttiDynamicArrayType(Typ).ElementType.Handle,BValue);}
+                   BValue.Make(nil,TRttiDynamicArrayType(Typ).ElementType.Handle,BValue);
                    I:=AValue.GetArrayLength;
+                   P :=PPointer(AValue.GetReferenceToRawData)^;
                    if I<>BInfo.CDS.RecordCount
                       then begin
                             Inc(Result);
-                            ArrLen:=BInfo.CDS.RecordCount;
-                            P:=PPointer(AValue.GetReferenceToRawData)^;
-                            DynArraySetLength(P,Typ.Handle,1,@ArrLEn);
+ {                           ArrLen:=0;
+                            DynArraySetLength(P,Typ.Handle,1,@ArrLen);}
+
+(***************METHOD A *************************)
+                            DA.Init(Typ.Handle,P);
+                            I:=DA.Count;
+                            DA.Count:=I+1;
+                            I:=DA.Count;
+(*************************************************)
+
+
+(***************METHOD B *************************)
+ {                            ArrLen:=BInfo.CDS.RecordCount;
+                            DynArraySetLength(P,Typ.Handle,1,@ArrLen);}
+(*************************************************)
+
+                            AValue.Make(@P,Typ.Handle,AValue);(*Seems here old array in AValue is not dereferenced, causing memory leaks*)
+                            I:=AValue.GetArrayLength;
+                            (*I:=DA.Count;*)
                            end;
 
                    BInfo.CDS.First;
                    while not BInfo.CDS.Eof do
                     begin
                      US:=BInfo.CDS.UpdateStatus;
-                     BValue.From(AValue.GetArrayElement(Pred(BInfo.CDS.RecNo)));
+                     {TValue.Make(nil,TRttiDynamicArrayType(Typ).ElementType.Handle,BValue);}
                      BValue:=AValue.GetArrayElement(Pred(BInfo.CDS.RecNo));
-                     if ORM_SaveCDSFields(DB,BInfo.CDS,(*Fld.FieldName*)Int32ToUTF8(BInfo.CDS.RecNo),BValue)>0
+                     if ORM_SaveCDSFields(DB,BInfo.CDS,(*Fld.FieldName*)BInfo.CDS.RecNo.ToString,BValue,True{(US=usInserted)}{AForceUpdate})>0
                         then begin
                               AValue.SetArrayElement(Pred(BInfo.CDS.RecNo),BValue);
                               Inc(Result);
@@ -491,11 +577,16 @@ begin
                      RField:=Typ.GetField(Fld.FieldName);
 
                      {???}{Set/ENum fields!!!}
-
                      if RField=nil
                         then continue;
+
+                     BInfo:=TORMCDSinfo(CDS.Fields[I].Tag);
+                     if Assigned(BInfo) and not BInfo.IsArrayLink (*Skip sublists, do them separate later*)
+                        then continue;
+
+                     BValue.MakeWithoutCopy(nil,RField.FieldType.Handle,BValue);
                      BValue:=RField.GetValue(AValue.GetReferenceToRawData);
-                     if ORM_SaveCDSFields(DB,OInfo.CDS,Fld.FieldName,BValue)>0
+                     if ORM_SaveCDSFields(DB,OInfo.CDS,Fld.FieldName,BValue,AForceUpdate)>0
                         then begin
                               Inc(Result);
                               RField.SetValue(AValue.GetReferenceToRawData,BValue);
@@ -508,7 +599,7 @@ begin
                        tkSet  : begin
                                  BValue.From(RField.GetValue(AValue.GetReferenceToRawData));
                                  BValue:=RField.GetValue(AValue.GetReferenceToRawData);
-                                 if ORM_SaveCDSFields(DB,CDS,RField.Name,BValue)>0
+                                 if ORM_SaveCDSFields(DB,CDS,RField.Name,BValue,AForceUpdate)>0
                                     then begin
                                           RField.SetValue(AValue.GetReferenceToRawData,BValue);
                                           Inc(Result);
@@ -533,12 +624,12 @@ begin
                      if RProp=nil
                         then continue;
                      BInfo:=TORMCDSinfo(CDS.Fields[I].Tag);
-                     if Assigned(BInfo) and not BInfo.IsArrayLink
+                     if Assigned(BInfo) and not BInfo.IsArrayLink (*Skip sublists, do them separate later*)
                         then continue;
 
-                     BValue.Make(nil,RProp.PropertyType.Handle,BValue);
-                     BValue:=RProp.GetValue(AValue.AsObject);
-                     if ORM_SaveCDSFields(DB,CDS,Fld.FieldName,BValue)>0
+                     BValue.MakeWithoutCopy(nil,RProp.PropertyType.Handle,BValue);
+                     BValue:=RProp.GetValue(Rec);
+                     if ORM_SaveCDSFields(DB,CDS,Fld.FieldName,BValue,AForceUpdate)>0
                         then begin
                               Changed:=Changed+1;
                               RProp.SetValue(Rec,BValue);
@@ -547,9 +638,13 @@ begin
                    if Changed>0
                       then begin
                             if Rec.ID=0
-                               then I64:=DB.Add(Rec,True)
+                               then begin
+                                     I64:=DB.Add(Rec,True);
+                                     OInfo.CDS.Edit;
+                                     OInfo.CDS.FieldByName('ID').AsLargeInt:=I64;
+                                    end
                                else begin
-                                     I64:=0;
+                                     I64:=Rec.ID;
                                      DB.Update(Rec);
                                     end;
                            end;
@@ -566,23 +661,62 @@ begin
                         then raise Exception.Create('ErrorMessage457');
                      {$ENDIF}
 
-                     BValue.Make(nil,TypeInfo(TSQLRecordClass),BValue);
+                     BValue.MakeWithoutCopy(nil,TypeInfo(TSQLRecordClass),BValue);
                      BValue:=BInfo.SQLRecordClass;
-                     ORM_SaveCDSFields(DB,BInfo.CDS,CDS.Fields[I].FieldName,BValue);
+                     BInfo.CDS.First;
+                     while not BInfo.CDS.EOF do
+                      begin
+                       if (BInfo.CDS.FieldByName(BInfo.LinkField).AsLargeInt<>I64)
+                          then begin
+                                BInfo.CDS.Edit;
+                                BInfo.CDS.FieldByName(BInfo.LinkField).AsLargeInt:=I64;
+                               end;
+                       BInfo.CDS.Next;
+                      end;
+
+                     Changed:=Changed+ORM_SaveCDSFields(DB,BInfo.CDS,CDS.Fields[I].FieldName,BValue,AForceUpdate);
                      BInfo.CDS.EnableControls;
                     end;
+                   Result:=Changed;
                   end;
    tkClassRef   : begin
                    {$IFDEF DEBUG}
                    if not (TObject(CDS.Tag) is TORMCDSinfo)
                       then raise Exception.Create('ErrorMessage427');
                    {$ENDIF DEBUG}
-                   OInfo:=TORMCDSinfo(CDS.Tag);
+                   CDS.DisableControls;
+                   if CDS.State<>dsBrowse
+                      then try
+                            CDS.Post;
+                           except
+                            CDS.EnableControls;
+                            exit;
+                           end;
+
+                   CDS.First;(*Fix uplinks before TPacketDataset fix*)
 
                    PDS     := TPacketDataSet.Create(nil);
                    PDS.Data:=CDS.Data;
                    PDS.InitAltRecBuffers(True);
                    PDS.Free;
+
+                   OInfo:=TORMCDSinfo(CDS.Tag);
+                   CDS.First;(*Fix uplinks before TPacketDataset fix*)
+                   if OInfo.LinkField<>''
+                      then begin
+                            while not CDS.EOF do
+                             begin
+                              if CDS.FieldByName(OInfo.LinkField).AsLargeInt=0
+                                 then begin
+                                       CDS.Edit;
+                                       CDS.FieldByName(OInfo.LinkField).AsLargeInt:=TClientDataset(OInfo.DatasetField.DataSet).FieldByNAme('ID').AsLargeint;
+                                       Inc(Changed);
+                                      end;
+                              CDS.Next;
+                             end;
+                           end;
+                   CDS.First;
+
 
                    CDS.StatusFilter:=[usDeleted];
                    CDS.First;
@@ -600,6 +734,7 @@ begin
                       end;
                      DB.Delete(OInfo.SQLRecordClass,I64);
                      CDS.Next;
+                     Inc(Changed);
                     end;
 
                    CDS.StatusFilter:=[];
@@ -609,15 +744,14 @@ begin
                     begin
                      (*Check all fields for changes. Arrays must update as well.*)
                      US:=CDS.UpdateStatus;
-                     US:=TClientDataset(TDatasetField(CDS.Fields[2]).Dataset).UpdateStatus;
-{                     if (CDS.UpdateStatus=usModified)or(CDS.UpdateStatus=usInserted)
+                     {                     if (CDS.UpdateStatus=usModified)or(CDS.UpdateStatus=usInserted)
                         then begin}
-                              Changed:=0;
                               (*Update all fields+Arrays*)
                               I64:=CDS.FieldByName('ID').AsLargeInt;
                               {$IFDEF DEBUG}
-                              if (I64=0)and (CDS.UpdateStatus=usModified)
-                                 then raise Exception.Create('ErrorMessage506');
+{                              US:=CDS.UpdateStatus;
+                              if (I64=0)and (US=usModified)
+                                 then raise Exception.Create('ErrorMessage506');}
                               {$ENDIF DEBUG}
                               if I64=0
                                  then begin
@@ -626,13 +760,15 @@ begin
                                       end
                                  else DB.Retrieve(I64,Rec,True);
                               BValue:=Rec;
-                              Changed:=Changed+ORM_SaveCDSFields(DB,CDS,CDS.Fields[I].FieldName,BValue);
+                              Changed:=Changed+ORM_SaveCDSFields(DB,CDS,CDS.Fields[I].FieldName,BValue,(I64=0));
                               if I64<>0
                                  then DB.Unlock(Rec);
                             {end;}
                      CDS.Next;
                     end;
-                    Rec.Free;
+                   CDS.EnableControls;
+                   Rec.Free;
+                   Result:=Changed;
                   end
   else raise Exception.Create('Error Message');
   end;

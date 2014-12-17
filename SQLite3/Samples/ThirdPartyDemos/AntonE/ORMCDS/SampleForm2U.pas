@@ -41,7 +41,7 @@ var Value : TValue;
 begin
  Value.From(TSQLRecord);
  Value:=TSQLRecord;
- ORM_SaveCDSFields(MAinForm.DB,TmpCDS,'Person',Value);
+ ORM_SaveCDSFields(MAinForm.DB,TmpCDS,'Person',Value,False);
  Close;
 end;
 

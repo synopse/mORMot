@@ -1,7 +1,7 @@
 object MainForm: TMainForm
   Left = 0
   Top = 0
-  Caption = 'mORMot into Nested TClientdatasets'
+  Caption = 'mORMot into Nested TClientdatasets 1.1'
   ClientHeight = 287
   ClientWidth = 489
   Color = clBtnFace
