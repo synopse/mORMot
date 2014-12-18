@@ -44,11 +44,11 @@ begin
   try
     {$ifdef USEZEOSPOSTGRESQL}
     aExternalDB := TSQLDBZEOSConnectionProperties.Create(
-      TSQLDBZEOSConnectionProperties.URI(dPostgreSQL,'localhost:5432'),
+      TSQLDBZEOSConnectionProperties.URI(dPostgreSQL,'localhost:5433'),
     {$endif}
     {$ifdef USEFIREDACPOSTGRESQL}
     aExternalDB := TSQLDBFireDACConnectionProperties.Create(
-      'PG?Server=localhost;Port=5432',
+      'PG?Server=localhost;Port=5433',
     {$endif}
       'postgres','postgres','postgresPassword');
     try

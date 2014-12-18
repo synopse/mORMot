@@ -32,7 +32,7 @@ begin
   // ODBC driver e.g. from http://ftp.postgresql.org/pub/odbc/versions/msi
   aProps := TODBCConnectionProperties.Create('','Driver=PostgreSQL Unicode'+
       {$ifdef CPU64}'(x64)'+{$endif}';Database=postgres;'+
-      'Server=localhost;Port=5432;UID=postgres;Pwd=postgresPassword','','');
+      'Server=localhost;Port=5433;UID=postgres;Pwd=postgresPassword','','');
   try
     // get the shared data model
     aModel := DataModel;

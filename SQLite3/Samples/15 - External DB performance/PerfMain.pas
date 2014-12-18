@@ -351,24 +351,24 @@ begin
     // direct ZDBC driver needs only libpq.dll and libintl.dll e.g. from
     // http://www.enterprisedb.com/products-services-training/pgbindownload
     Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(
-      dPostgreSQL,'localhost:5432'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
+      dPostgreSQL,'localhost:5433'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     // ODBC driver e.g. from http://ftp.postgresql.org/pub/odbc/versions/msi
     Test(TODBCConnectionProperties,'','Driver=PostgreSQL Unicode'+
       {$ifdef CPU64}'(x64)'+{$endif}';Database=postgres;'+
-      'Server=localhost;Port=5432;UID=postgres;Pwd=postgresPassword','','',' PostgreSQL',false);
+      'Server=localhost;Port=5433;UID=postgres;Pwd=postgresPassword','','',' PostgreSQL',false);
     {$ifdef USEFIREDAC}
     {$ifdef CPU64} // 64-bit server installed locally
     TADPhysPGDriverLink.Create(Application).VendorLib :=
       'c:\Program Files\PostgreSQL\9.2\bin\libpq.dll';
     {$endif}
     // direct FireDAC driver needs only libpq.dll and libintl.dll
-      Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5432',
+      Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5433',
       'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     {$ifdef USEUNIDAC}
     Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
-      dPostgreSQL,'localhost:5432'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
+      dPostgreSQL,'localhost:5433'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     {$endif USELOCALPOSTGRESQL}
 
