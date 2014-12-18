@@ -5554,7 +5554,7 @@ $Name: Name 10  Number: 9
 $Name: Name 11  Number: 10
 In a GUI application, you could fill a VCL grid using a {\f1\fs20 TDocVariantArrayDataSet} as defined in {\f1\fs20 SynVirtualDataSet.pas}, for instance:
 ! ds1.DataSet.Free; // release previous TDataSet
-! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt,?}}',['John',21],null));
+! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
 This overloaded {\f1\fs20 FindDocs()} method takes a query filter as JSON and parameters (following the {\f1\fs20 MongoDB} syntax), and a {\f1\fs20 Projection} mapping ({\f1\fs20 null} to retrieve all properties). Its returns a {\f1\fs20 TVariantDynArray} result, which was mapped to an optimized read/only {\f1\fs20 TDataSet} using the overloaded {\f1\fs20 ToDataSet()} function. So in our case, the DB grid has been filled with all people named '{\f1\fs20 John}', with age greater than 21.
 If you want to retrieve the documents directly as JSON, we can write:
 !var json: RawUTF8;

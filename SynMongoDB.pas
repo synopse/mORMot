@@ -1066,8 +1066,8 @@ type
       opCode: TMongoOperation; requestID, responseTo: Integer); reintroduce;
     /// append a query parameter as a BSON document
     // - param can be a TDocVariant, e.g. created with:
-    // ! _JsonFast('{name:"John",age:{$gt,21}}');
-    // ! _JsonFastFmt('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! _JsonFast('{name:"John",age:{$gt:21}}');
+    // ! _JsonFastFmt('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! _JsonFastFmt('{name:?,field:/%/i}',['acme.*corp'],['John']);
     // - param can be a TBSONVariant containing a TBSONDocument raw binary block
     // created e.g. from:
@@ -1193,8 +1193,8 @@ type
     // - Query is the BSON document query to select the document, supplied as
     // TDocVariant - i.e. created via _JsonFast() or _JsonFastFmt() - or null
     // if all documents are to be retrieved - for instance:
-    // ! _JsonFast('{name:"John",age:{$gt,21}}');
-    // ! _JsonFastFmt('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! _JsonFast('{name:"John",age:{$gt:21}}');
+    // ! _JsonFastFmt('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! _JsonFastFmt('{name:?,field:/%/i}',['acme.*corp'],['John']);
     // - if Query is a string, it will be converted as expected by most
     // database commands, e.g.
@@ -1202,7 +1202,7 @@ type
     // will query   { buildinfo: 1 }  to the  admin.$cmd  collection, i.e.
     // $ admin.$cmd.findOne( { buildinfo: 1 } )
     // - Query can also be a TBSONVariant, e.g. created with:
-    // ! BSONVariant('{name:?,age:{$gt,?}}',[],['John',21])
+    // ! BSONVariant('{name:?,age:{$gt:?}}',[],['John',21])
     // - ReturnFieldsSelector is an optional selector (set to null if not
     // applicable) as a BSON document that limits the fields in the returned
     // documents, supplied as TDocVariant or TBSONVariant - e.g. created via:
@@ -1902,8 +1902,8 @@ type
     // instance containing the selected documents
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindDoc(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindDoc(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindDoc(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindDoc(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
@@ -1922,8 +1922,8 @@ type
     // instance containing the selected documents
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindDoc('{name:"John",age:{$gt,21}}',[]);
-    // ! FindDoc('{name:?,age:{$gt,?}}',['John',21]);
+    // ! FindDoc('{name:"John",age:{$gt:21}}',[]);
+    // ! FindDoc('{name:?,age:{$gt:?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -1952,7 +1952,7 @@ type
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
     // - you can e.g. fill a res: TVariantDynArray with the following query: 
-    // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res,null);
+    // ! FindDocs('{name:?,age:{$gt:?}}',['John',21],res,null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
@@ -1964,7 +1964,7 @@ type
     // TDocVariant instance containing the selected documents
     // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
     // as defined in SynVirtualDataSet.pas: 
-    // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt,?}}',['John',21],null));
+    // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
@@ -1976,8 +1976,8 @@ type
     // containing the selected documents
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindJSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindJSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindJSON(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindJSON(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
@@ -1998,8 +1998,8 @@ type
     // containing the selected documents
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindJSON('{name:"John",age:{$gt,21}}',[]);
-    // ! FindJSON('{name:?,age:{$gt,?}}',['John',21]);
+    // ! FindJSON('{name:"John",age:{$gt:21}}',[]);
+    // ! FindJSON('{name:?,age:{$gt:?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -2022,8 +2022,8 @@ type
     // containing the selected documents as a raw binary BSON array document
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindBSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindBSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindBSON(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindBSON(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindBSON(BSONVariant(['name','John']),null);
@@ -2205,7 +2205,7 @@ type
     // a specific query
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindCount('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! FindCount('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! FindCount('{ ord_dt: { $gt: new Date(?) } }',[],[trunc(Now)-7]);
     // - optional MaxNumberToReturn can specify a limit for the search (e.g. if
     // you do not want an exact count, but only check for a specific limit)
