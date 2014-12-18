@@ -31,6 +31,7 @@ unit SynCommons;
   Contributor(s):
    - Aleksandr (sha)
    - Alfred Glaenzer (alf)
+   - BigStar
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -36579,7 +36580,7 @@ end;
 procedure TRawUTF8List.BeginUpdate;
 begin
   inc(fOnChangeLevel);
-  if fOnChangeLevel>0 then
+  if fOnChangeLevel>1 then
     exit;
   fOnChangeHidden := fOnChange;
   fOnChange := OnChangeHidden;
