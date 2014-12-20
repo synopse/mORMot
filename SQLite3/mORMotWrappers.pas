@@ -552,7 +552,8 @@ begin
     end;
   end;
   wObject,wSQLRecord: begin
-    if (typ=wSQLRecord) and (fServer.Model.TableExact[typName]=nil) then
+    if (typ=wSQLRecord) and
+       (fServer.Model.GetTableIndexInheritsFrom(TSQLRecordClass(typInfo^.ClassType^.ClassType))<0) then
       raise EWrapperContext.CreateUTF8('% should be part of the model',[typName]);
    _ObjAddProps(['isObject',true],result);
    if typInfo<>nil then
