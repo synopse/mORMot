@@ -291,6 +291,9 @@ type
   {$ifdef USEPASZLIB}
   TZStream = z_stream;
   {$else}
+  {$ifdef USEZLIB}
+  TZStream = z_stream;
+  {$else}
   TZStream =  record
     next_in : PAnsiChar;
     avail_in : cardinal;
@@ -307,6 +310,7 @@ type
     adler : cardinal;
     reserved : cardinal;
   end;
+  {$endif}
   {$endif}
 
 /// initialize the internal memory structure as expected by the ZLib library
