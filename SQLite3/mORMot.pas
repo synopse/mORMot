@@ -10950,12 +10950,12 @@ type
     // - returns FALSE to let the next registered TSQLRestServerAuthentication
     // class to try implementing the content
     // - Ctxt.Parameters has been tested to contain an UserName=... value
-    // - method execution is protected by TSQLRestServer.fSessionCriticalSection
+    // - method execution is protected by TSQLRestServer.fSessions.Lock
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; virtual; abstract;
     /// called by the Server to check if the execution context match a session
     // - returns a session instance corresponding to the remote request
     // - returns nil if this remote request does not match this authentication
-    // - method execution is protected by TSQLRestServer.fSessionCriticalSection
+    // - method execution is protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; virtual; abstract;
     /// class method to be used on client side to create a remote session
     // - call this method instead of TSQLRestClientURI.SetUser() if you need
@@ -11382,11 +11382,9 @@ type
     // as SQLite3 virtual tables, therefore available from joined SQL statements
     fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
-    fSessions: TObjectList;
+    fSessions: TObjectListLocked;
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
-    /// mutex used to make fSessions[] use thread-safe
-    fSessionCriticalSection: TRTLCriticalSection;
     fSessionAuthentications: IObjectDynArray; // must be defined before the array
     fSessionAuthentication: TSQLRestServerAuthenticationDynArray;
 {$ifdef MSWINDOWS}
@@ -11455,11 +11453,11 @@ type
     /// fill the supplied context from the supplied aContext.Session ID
     // - returns nil if not found, or fill aContext.User/Group values if matchs
     // - this method will also check for outdated sessions, and delete them
-    // - this method is not thread-safe: caller should use fSessionCriticalSection
+    // - this method is not thread-safe: caller should use fSessions.Lock
     function SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
     /// delete a session from its index in fSessions[]
     // - will perform any needed clean-up, and log the event
-    // - this method is not thread-safe: caller should use fSessionCriticalSection
+    // - this method is not thread-safe: caller should use fSessions.Lock
     procedure SessionDelete(aSessionIndex: integer; Ctxt: TSQLRestServerURIContext);
     /// returns TRUE if this table is worth caching (e.g. already in memory)
     // - this overridden implementation returns FALSE for TSQLRestStorageInMemory
@@ -11843,7 +11841,7 @@ type
     // - returns nil if the session does not exist (e.g. if authentication is
     // disabled)
     // - caller MUST release the TSQLAuthUser instance returned (if not nil)
-    // - this method IS thread-safe, and call internaly fSessionCriticalSection
+    // - this method IS thread-safe, and call internaly fSessions.Lock
     // (the returned TSQLAuthUser is a private copy from fSessions[].User instance,
     // in order to be really thread-safe)
     // - the returned TSQLAuthUser instance will have GroupRights=nil but will
@@ -11853,7 +11851,7 @@ type
     // - you should not call this method it directly, but rather use Shutdown()
     // with a StateFileName parameter - to be used e.g. for a short maintainance
     // server shutdown, without loosing the current logged user sessions
-    // - this method IS thread-safe, and call internaly fSessionCriticalSection
+    // - this method IS thread-safe, and call internaly fSessions.Lock
     procedure SessionsSaveToFile(const aFileName: TFileName);
     /// re-create all in-memory sessions from a compressed binary file
     // - typical use is after a server restart, with the file supplied to the
@@ -11862,7 +11860,7 @@ type
     // - WARNING: this method would restore authentication sessions for the ORM,
     // but not any complex state information used by interface-based services,
     // like sicClientDriven class instances - DO NOT use this feature with SOA
-    // - this method IS thread-safe, and call internaly fSessionCriticalSection
+    // - this method IS thread-safe, and call internaly fSessions.Lock
     procedure SessionsLoadFromFile(const aFileName: TFileName;
       andDeleteExistingFileAfterRead: boolean);
 
@@ -26287,12 +26285,15 @@ begin
 end;
 
 {$ifdef LVCL} // SyncObjs.TEvent not available in LVCL yet
+
 function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
 begin
   result := InternalRemoteLogSend(Text);
 end;
+
 {$else}
+
 type
   TRemoteLogThread = class(TThread)
   protected
@@ -26382,6 +26383,7 @@ begin
     result := true;
   end;
 end;
+
 {$endif LVCL}
 
 function TSQLRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
@@ -27429,8 +27431,7 @@ var t,n: integer;
 begin
   // specific server initialization
   fVirtualTableDirect := true; // faster direct Static call by default
-  // needed by AuthenticationRegister() below
-  InitializeCriticalSection(fSessionCriticalSection);
+  fSessions := TObjectListLocked.Create; // needed by AuthenticationRegister() below
   fModel := aModel;
   fSQLAuthUserClass := TSQLAuthUser;
   fSQLAuthGroupClass := TSQLAuthGroup;
@@ -27452,7 +27453,6 @@ begin
   fAfterCreation := true;
   fStats := TSQLRestServerStats.Create;
   fPrivateGarbageCollector.Add(fStats);
-  fSessions := TObjectList.Create;
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   fSessionCounter := GetTickCount; // force almost-random session ID
   if fSessionCounter>cardinal(maxInt) then
@@ -27497,7 +27497,6 @@ begin
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
   fSessions.Free;
-  DeleteCriticalSection(fSessionCriticalSection);
   inherited Destroy; // calls fServices.Free which will update fStats
 end;
 
@@ -27507,13 +27506,13 @@ begin
   fLogClass.Enter(self,'Shutdown').
     Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
   {$endif}
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     if fShutdownRequested then
       exit; // Shutdown method already called
     fShutdownRequested := true; // will be identified by TSQLRestServer.URI()
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
   end;
   repeat
     Sleep(5);
@@ -27923,7 +27922,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     for i := 0 to fSessionAuthentications.Count-1 do
       if fSessionAuthentication[i].ClassType=aMethod then begin
@@ -27948,7 +27947,7 @@ begin
        (not TableHasRows(fSQLAuthGroupClass))) then
       CreateMissingTables(0,fCreateMissingTablesOptions);
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
   end;
 end;
 
@@ -27965,7 +27964,7 @@ var i: integer;
 begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     for i := 0 to fSessionAuthentications.Count-1 do
       if fSessionAuthentication[i].ClassType=aMethod then begin
@@ -27974,7 +27973,7 @@ begin
         break;
       end;
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
   end;
 end;
 
@@ -28194,7 +28193,7 @@ var aSession: TAuthSession;
 begin
   if Server.HandleAuthentication then begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
-    EnterCriticalSection(Server.fSessionCriticalSection);
+    Server.fSessions.Lock;
     try
       aSession := nil;
       if Server.fSessionAuthentication<>nil then
@@ -28211,7 +28210,7 @@ begin
           end;
         end;
     finally
-      LeaveCriticalSection(Server.fSessionCriticalSection);
+      Server.fSessions.UnLock;
     end;
     if aSession=nil then
       if (Service=nil) or not Service.ByPassAuthentication then
@@ -29571,13 +29570,13 @@ var i: integer;
 begin
   if fSessionAuthentication=nil then
     exit;
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     for i := 0 to fSessionAuthentications.Count-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
         exit;
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
   end;
 end;
 
@@ -29602,7 +29601,7 @@ end;
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
     Tix64: Int64;
-begin // caller shall be locked via fSessionCriticalSection
+begin // caller shall be locked via fSessions.Lock
   if (self<>nil) and (fSessions<>nil) then begin
     // first check for outdated sessions to be deleted
     Tix64 := GetTickCount64;
@@ -29633,7 +29632,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     for i := 0 to fSessions.Count-1 do
       with TAuthSession(fSessions.List[i]) do
@@ -29645,7 +29644,7 @@ begin
         Break;
       end;
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
   end;
 end;
 
@@ -29664,7 +29663,7 @@ begin
   MS := TRawByteStringStream.Create;
   try
     W := TFileBufferWriter.Create(MS);
-    EnterCriticalSection(fSessionCriticalSection);
+    fSessions.Lock;
     try
       W.WriteVarUInt32(InternalState);
       SQLAuthUserClass.RecordProps.SaveBinaryHeader(W);
@@ -29675,7 +29674,7 @@ begin
       W.Write4(MAGIC_SESSION);
       W.Flush;
     finally
-      LeaveCriticalSection(fSessionCriticalSection);
+      fSessions.UnLock;
       W.Free;
     end;
     s := SynLZCompress(MS.DataString);
@@ -29705,7 +29704,7 @@ begin
   if s='' then
     exit;
   R.OpenFrom(pointer(s),length(s));
-  EnterCriticalSection(fSessionCriticalSection);
+  fSessions.Lock;
   try
     InternalState := R.ReadVarUInt32;
     if not SQLAuthUserClass.RecordProps.CheckBinaryHeader(R) or
@@ -29721,7 +29720,7 @@ begin
     if PCardinal(P)^<>MAGIC_SESSION then
       ContentError;
   finally
-    LeaveCriticalSection(fSessionCriticalSection);
+    fSessions.UnLock;
     R.Close;
   end;
   if andDeleteExistingFileAfterRead then
@@ -37344,7 +37343,7 @@ begin
     try
       PasswordPlain := pass; // compute SHA-256 hash of the supplied password
       if PasswordHashHexa=result.User.PasswordHashHexa then begin
-        // match -> store header in result (locked by fSessionCriticalSection)
+        // match -> store header in result (locked by fSessions.Lock)
         result.fExpectedHttpAuthentication := userPass;
         exit;
       end;
@@ -38253,17 +38252,13 @@ begin
 end;
 
 var
-  InterfaceFactoryCache: TObjectList;
-  InterfaceFactoryCacheLock: TRTLCriticalSection; // deleted with process
+  InterfaceFactoryCache: TObjectListLocked;
 
 procedure EnterInterfaceFactoryCache;
 begin
-  if InterfaceFactoryCache=nil then begin
-    InitializeCriticalSection(InterfaceFactoryCacheLock);
-    EnterCriticalSection(InterfaceFactoryCacheLock);
-    GarbageCollectorFreeAndNil(InterfaceFactoryCache,TObjectList.Create);
-  end else
-    EnterCriticalSection(InterfaceFactoryCacheLock);
+  if InterfaceFactoryCache=nil then
+    GarbageCollectorFreeAndNil(InterfaceFactoryCache,TObjectListLocked.Create);
+  InterfaceFactoryCache.Lock;
 end;
 
 class function TInterfaceFactory.Get(aInterface: PTypeInfo): TInterfaceFactory;
@@ -38282,7 +38277,7 @@ begin
     result := TInterfaceFactory.Create(aInterface);
     InterfaceFactoryCache.Add(result);
   finally
-    LeaveCriticalSection(InterfaceFactoryCacheLock);
+    InterfaceFactoryCache.UnLock;
   end;
 end;
 
@@ -38687,7 +38682,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    // call shall be protected by InterfaceFactoryCacheLock critical section
+    // call shall be protected by InterfaceFactoryCache critical section
     class function Reserve(size: Cardinal): pointer;
   end;
 
@@ -38735,7 +38730,7 @@ var i: integer;
     P: PCardinal;
 begin
   if fFakeVTable=nil then begin
-    EnterCriticalSection(InterfaceFactoryCacheLock);
+    InterfaceFactoryCache.Lock;
     try
       if fFakeVTable=nil then begin // avoid race condition error
         SetLength(fFakeVTable,fMethodsCount+RESERVED_VTABLE_SLOTS);
@@ -38764,7 +38759,7 @@ begin
         end;
       end;
     finally
-      LeaveCriticalSection(InterfaceFactoryCacheLock);
+      InterfaceFactoryCache.UnLock;
     end;
   end;
   result := pointer(fFakeVTable);
