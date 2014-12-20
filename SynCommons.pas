@@ -10211,9 +10211,14 @@ type
     /// search a property match in this document, handled as array
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item index will be returned, on match
-    // - returns -1 if no match is found 
+    // - returns -1 if no match is found
     function SearchItemByProp(const aPropName,aPropValue: RawUTF8;
       aCaseSensitive: boolean): integer;
+    /// search a value in this document, handled as array
+    // - aValue will be searched within the stored array
+    // and the corresponding item index will be returned, on match
+    // - returns -1 if no match is found
+    function SearchItemByValue(const aValue: Variant): integer;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -15756,7 +15761,6 @@ begin
     if P2='' then
       exit;
   L := PStrRec(PtrInt(P1)-STRRECSIZE)^.length;
-
   if L<>PStrRec(PtrInt(P2)-STRRECSIZE)^.length then
     exit;
   j := 1;
@@ -28959,6 +28963,15 @@ begin
             if IdemPropNameU(VariantToUTF8(VValue[i]),aPropValue) then
               exit;
         end;
+  result := -1;
+end;
+
+function TDocVariantData.SearchItemByValue(const aValue: Variant): integer;
+begin
+  if VKind=dvArray then
+    for result := 0 to VCount-1 do
+      if VValue[result]=aValue then // rely on Variants.pas comparison
+        exit;
   result := -1;
 end;
 

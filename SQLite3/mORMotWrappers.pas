@@ -239,7 +239,7 @@ type
   TWrapperContext = class
   protected
     fServer: TSQLRestServer;
-    fORM, fRecords,fEnumerates,fSets,fArrays: TDocVariantData;
+    fORM, fRecords,fEnumerates,fSets,fArrays,fUnits: TDocVariantData;
     fSOA: variant;
     function ContextFromInfo(typ: TWrapperType; typName: RawUTF8='';
       typInfo: PTypeInfo=nil): variant;
@@ -267,7 +267,8 @@ var t,f,s: integer;
     uri: RawUTF8;
 begin
   fServer := aServer;
-  TDocVariant.NewFast([@fields,@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,@services]);
+  TDocVariant.NewFast([@fields,@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,
+    @fUnits,@services]);
   // compute ORM information
   for t := 0 to fServer.Model.TablesMax do begin
     nfoList := fServer.Model.TableProps[t].Props.Fields;
@@ -485,6 +486,7 @@ begin
 end;
 var siz: integer;
     enum: PEnumType;
+    unitName: RawUTF8;
 begin
   if typ=wUnknown then begin
     if typInfo=nil then
@@ -515,6 +517,14 @@ begin
     'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
   if self=nil then
     exit; // no need to have full info if called e.g. from MVC
+  if (typInfo<>nil) and (typInfo^.Kind=tkClass) then begin
+    unitName := ShortStringToAnsi7String(typInfo^.ClassType^.UnitName);
+    if not IdemPropNameU(unitName,'mORMot') then begin
+      _ObjAddProps(['unitName',unitName],result);
+      if fUnits.SearchItemByValue(unitName)<0 then
+        fUnits.AddItem(unitName);
+    end;
+  end;
   case typ of
   wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
   wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString: ; // simple types
@@ -603,6 +613,8 @@ begin
     result.withArrays := true;
     result.withHelpers := true;
   end;
+  if fUnits.Count>0 then
+    result.units := variant(fUnits);
   // add the first registered supported authentication class type as default
   for s := 0 to fServer.AuthenticationSchemesCount-1 do begin
     authClass := fServer.AuthenticationSchemes[s].ClassType;
@@ -636,7 +648,7 @@ end;
 
 
 procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName);
-var root, templateName, templateExt, unitName, template,
+var root, templateName, templateTitle, savedName, templateExt, unitName, template,
     result, host, uri, head: RawUTF8;
     context: variant;
     SR: TSearchRec;
@@ -671,17 +683,25 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   end;
   root := Ctxt.Server.Model.Root;
   if Ctxt.URIBlobFieldName='' then begin
-    result := '<html><body style="font-family:verdana;"><h1>Client Wrappers</h1>'+
+    result := '<html><title>mORMot Wrappers</title>'+
+      '<body style="font-family:verdana;"><h1>Generated Code Wrappers</h1>'+
       '<hr><h2>Available Templates:</h2><ul>';
     repeat
       Split(StringToUTF8(SR.Name),'.',templateName,templateExt);
+      templateTitle := templateName;
+      i := PosEx('-',templateName);
+      if i>0 then begin
+        SetLength(templateTitle,i-1);
+        savedName := copy(templateName,i+1,maxInt);
+      end else
+        savedName := 'mORMotClient';
       Split(templateExt,'.',templateExt);
-      uri := FormatUTF8('<a href=/%/wrapper/%/mORMotClient.%',
-        [root,templateName,templateExt,templateName]);
+      uri := FormatUTF8('<a href=/%/wrapper/%/%.%',
+        [root,templateName,savedName,templateExt]);
       result := FormatUTF8(
-       '%<li><b>%</b><br><i>mORMotClient.%</i>  -  %>download as file</a>  -  '+
+       '%<li><b>%</b><br><i>%.%</i>  -  %>download as file</a>  -  '+
        '%.txt>see as text</a> - %.mustache>see template</a></li><br>',
-       [result,templateName,templateExt,uri,uri,uri]);
+       [result,templateTitle,savedName,templateExt,uri,uri,uri]);
     until FindNext(SR)<>0;
     FindClose(SR);
     result := FormatUTF8('%</ul><p>You can also retrieve the corresponding '+
