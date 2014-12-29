@@ -4747,6 +4747,7 @@ procedure TSQLDatabaseBackupThread.Execute;
   end;
 var res: integer;
 begin
+  SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fDestDB.FileName]);
   try
     try
       NotifyProgressAndContinue(backupStart);

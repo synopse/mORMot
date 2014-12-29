@@ -11959,6 +11959,7 @@ type
   TTestMultiThreadProcessThread = class(TThread)
   protected
     fTest: TTestMultiThreadProcess;
+    fID: integer;
     fEvent: TEvent;
     fIterationCount: integer;
     fProcessFinished: boolean;
@@ -11966,7 +11967,7 @@ type
     procedure Execute; override;
     procedure LaunchProcess;
   public
-    constructor Create(aTest: TTestMultiThreadProcess);
+    constructor Create(aTest: TTestMultiThreadProcess; aID: integer);
     destructor Destroy; override;
   end;
 
@@ -12020,7 +12021,7 @@ begin
   fModel := TSQLModel.Create([TSQLRecordPeople]);
   fThreads := TObjectList.Create;
   for i := 1 to fMaxThreads do
-    fThreads.Add(TTestMultiThreadProcessThread.Create(self));
+    fThreads.Add(TTestMultiThreadProcessThread.Create(self,i));
   Check(fThreads.Count=fMaxThreads);
 end;
 
@@ -12204,12 +12205,13 @@ end;
 
 { TTestMultiThreadProcessThread }
 
-constructor TTestMultiThreadProcessThread.Create(aTest: TTestMultiThreadProcess);
+constructor TTestMultiThreadProcessThread.Create(aTest: TTestMultiThreadProcess; aID: integer);
 begin
   inherited Create(False);
   FreeOnTerminate := false;
   fEvent := TEvent.Create(nil,false,false,'');
   fTest := aTest;
+  fID := aID;
   SetLength(fIDs,fTest.fOperationCount);
 end;
 
@@ -12227,6 +12229,7 @@ var Rest: array of TSQLRest;
     Rec: TSQLRecordPeople;
     i,n,r: integer;
 begin
+  SetCurrentThreadName('% #%',[self,fID]);
   Rec := TSQLRecordPeople.Create;
   try
     Rec.LastName := 'Thread '+CardinalToHex(GetCurrentThreadId);

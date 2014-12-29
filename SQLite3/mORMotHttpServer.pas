@@ -806,9 +806,11 @@ end;
 procedure TSQLHttpServer.HttpThreadStart(Sender: TThread);
 var i: integer;
 begin
-  if self<>nil then
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.BeginCurrentThread(Sender);
+  if self=nil then
+    exit;
+  SetCurrentThreadName('% worker',[self]);
+  for i := 0 to high(fDBServers) do
+    fDBServers[i].Server.BeginCurrentThread(Sender);
 end;
 
 procedure TSQLHttpServer.SetAccessControlAllowOrigin(const Value: RawUTF8);

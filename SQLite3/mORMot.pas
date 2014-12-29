@@ -1104,6 +1104,7 @@ unit mORMot;
     - force almost-random session ID for TSQLRestServer to avoid collision
       after server restart
     - stronger client-generated nonce for TSQLRestServerAuthenticationDefault
+    - ORM/SOA threads will display a friendly name in the IDE for [6acfd0a3d3] 
     - introducing TSQLRestServerKind enumeration to identify the kind of
       TSQLRestServer instance running (SQlite3/static/virtual) for a table
     - TSQLRestServer.SessionGetUser method is now made public (e.g. when
@@ -11425,7 +11426,7 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
-    function CreateBackgroundThread: TSynBackgroundThreadMethod;
+    function CreateBackgroundThread(Format: PUTF8Char; const Args: array of const): TSynBackgroundThreadMethod;
     function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -26363,7 +26364,8 @@ procedure TRemoteLogThread.Execute;
 var aText: RawUTF8;
     i: integer;
 begin
-  while (fClient<>nil) and not Terminated do 
+  SetCurrentThreadName('% "%"',[Self,fClient.Model.Root]);
+  while (fClient<>nil) and not Terminated do
     if fNotifier.WaitFor(INFINITE)=wrSignaled then begin
       if Terminated or (fClient=nil) then
         break;
@@ -26778,7 +26780,8 @@ DoRetry:
 {$ifndef LVCL}
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
-        fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,OnIdle);
+        fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,OnIdle,
+          FormatUTF8('% "%" background',[self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTML_UNAVAILABLE;
     end else
@@ -27917,9 +27920,9 @@ begin
      result := false;
 end;
 
-function TSQLRestServer.CreateBackgroundThread: TSynBackgroundThreadMethod;
+function TSQLRestServer.CreateBackgroundThread(Format: PUTF8Char; const Args: array of const): TSynBackgroundThreadMethod;
 begin
-  result := TSynBackgroundThreadMethod.Create(nil);
+  result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args));
   result.OnBeforeExecute := BeginCurrentThread;
   result.OnAfterExecute := EndCurrentThread;
 end;
@@ -28325,7 +28328,9 @@ begin
     {$endif}
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
-        Thread := Server.CreateBackgroundThread;
+        Thread := Server.CreateBackgroundThread('% "%" %',[self,Server.Model.Root,
+          GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))
+          {$ifndef FPC}^{$endif}]);
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
     end;
@@ -30879,6 +30884,7 @@ var aPipe: cardinal;
     {$endif}
 begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
   //writeln('TSQLRestServerNamedPipe=',integer(TSQLRestServerNamedPipe),'.Execute');
+  SetCurrentThreadName('% "%"',[Self,fServer.Model.Root]);
   {$ifndef NOSECURITYFORNAMEDPIPECLIENTS}
   InitializeSecurity(fPipeSecurityAttributes,fPipeSecurityDescriptor);
   {$endif}
@@ -30957,7 +30963,8 @@ var call: TSQLRestURIParams;
 begin
   if (fPipe=0) or (fPipe=INVALID_HANDLE_VALUE) or (fServer=nil) then
     exit;
-  Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe); 
+  SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
+  Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe);
   fServer.BeginCurrentThread(self);
   Ticks64 := 0;
   Sleeper64 := 0;
@@ -40183,7 +40190,8 @@ begin
       exit;
     if optExecInPerInterfaceThread in fExecution[Ctxt.ServiceMethodIndex].Options then
       if fBackgroundThread=nil then
-        fBackgroundThread := RestServer.CreateBackgroundThread;
+        fBackgroundThread := RestServer.CreateBackgroundThread(
+          '% %',[self,fInterface.fInterfaceTypeInfo^.Name]);
     WR := TJSONSerializer.CreateOwnedStream;
     try
       Ctxt.fThreadServer^.Factory := self;
@@ -41191,6 +41199,7 @@ initialization
   {$ifdef MSWINDOWS}
   ExeVersionRetrieve; // the sooner the better
   {$endif}
+  SetCurrentThreadName('Main thread',[]);
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
 end.
