@@ -10136,6 +10136,10 @@ type
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
     function GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+    /// find an item in this document, and returns its value as integer
+    // - return false if aName is not found, or if the instance is not a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    function GetAsInt64(const aName: RawUTF8; out aValue: Int64): Boolean;
     /// find an item in this document, and returns its value as floating point
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -29058,6 +29062,15 @@ begin
   if found=nil then
     result := false else
     result := VariantToInteger(PVariant(found)^,aValue)
+end;
+
+function TDocVariantData.GetAsInt64(const aName: RawUTF8; out aValue: Int64): Boolean;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found=nil then
+    result := false else
+    result := VariantToInt64(PVariant(found)^,aValue)
 end;
 
 function TDocVariantData.GetAsDouble(const aName: RawUTF8; out aValue: double): Boolean;
