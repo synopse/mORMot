@@ -1000,6 +1000,8 @@ unit mORMot;
       BATCH process is now implemented by stand-alone TSQLRestBatch instances,
       which can safely be used at TSQLRestServer level, even from multi thread
     - fixed BATCH process to generate valid JSON content
+    - fixed BATCH process to check for the TSQLAccessRights of the current
+      logged user just like other CRUD methods, as reported by [27cf02be50]
     - added optional CustomFields parameter to TSQLRest.BatchUpdate()
       and BatchAdd() methods - TModTime fields will always be sent
     - implemented automatic transaction generation during BATCH process via
@@ -10692,6 +10694,12 @@ type
     /// unserialize the content from TEXT
     // - use the TSQLAuthGroup.AccessRights CSV format
     procedure FromString(P: PUTF8Char);
+    /// validate mPost/mPut/mDelete action against those access rights
+    // - used by TSQLRestServerURIContext.ExecuteORMWrite and
+    // TSQLRestServer.EngineBatchSend methods for proper security checks
+    function CanExecuteORMWrite(Method: TSQLURIMethod;
+      Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
+      Context: TSQLRestServerURIContext): boolean;
   end;
 
   TSQLRestStorageInMemory = class;
@@ -28661,22 +28669,26 @@ var OK: boolean;
     Blob: PPropInfo;
     SQLSelect, SQLWhere, SQLSort, SQLDir: RawUTF8;
 begin
+  if not Call.RestAccessRights^.CanExecuteORMWrite(
+     Method,Table,TableIndex,TableID,self) then begin
+    Call.OutStatus := HTML_NOTALLOWED;
+    exit;
+  end;
   case Method of
-  mPOST: begin       // POST=ADD=INSERT
+  mPOST: // POST=ADD=INSERT
     if Table=nil then begin
       // ModelRoot with free SQL statement sent as UTF-8 (only for Admin group)
-      // security note: multiple SQL statements can be run in EngineExecute()
+      // see e.g. TSQLRestClientURI.EngineExecute
       if (reSQL in Call.RestAccessRights^.AllowRemoteExecute) and
+         (Call.InBody<>'') and
+         (not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0,'[','{'])) and
          Server.EngineExecute(Call.InBody) then begin
         Call.OutStatus := HTML_SUCCESS; // 200 OK
         inc(Server.fStats.fModified);
       end;
-    end else
-    // here, Table<>nil and TableIndex in [0..MAX_SQLTABLES-1]
-    if not (TableIndex in Call.RestAccessRights^.POST) then // check rights
-      Call.OutStatus := HTML_NOTALLOWED else
-    if TableID<0 then begin
+    end else begin
       // ModelRoot/TableName with possible JSON SentData: create a new member
+      // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_SQLTABLES-1]
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
         Call.OutStatus := HTML_CREATED; // 201 Created
@@ -28684,88 +28696,72 @@ begin
         Server.fCache.Notify(TableIndex,TableID,Call.InBody,soInsert);
         inc(Server.fStats.fModified);
       end;
-    end else
-      Call.OutStatus := HTML_NOTALLOWED;
-  end;
-  mPUT: begin        // PUT=UPDATE
+    end;
+  mPUT: // PUT=UPDATE
     if TableID>0 then begin
       // PUT ModelRoot/TableName/TableID[/BlobFieldName] to update member/BLOB content
-      if (TableIndex in Call.RestAccessRights^.PUT) or // check rights
-         ((Session>CONST_AUTHENTICATION_NOT_USED) and 
-          (Table=Server.fSQLAuthUserClass) and (TableID=SessionUser) and
-          (reUserCanChangeOwnPassword in Call.RestAccessRights^.AllowRemoteExecute)) then
-        if Server.RecordCanBeUpdated(Table,TableID,seUpdate,@CustomErrorMsg) then begin
-          OK := false;
-          if URIBlobFieldName<>'' then begin
-            // PUT ModelRoot/TableName/TableID/BlobFieldName: update BLOB field content
-            Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
-            if Blob<>nil then
-              OK := TableEngine.EngineUpdateBlob(TableIndex,TableID,Blob,Call.InBody);
-          end else begin
-            // ModelRoot/TableName/TableID with JSON SentData: update a member
-            OK := TableEngine.EngineUpdate(TableIndex,TableID,Call.InBody);
-            if OK then
-              Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
-          end;
-          if OK then begin
-            Call.OutStatus := HTML_SUCCESS; // 200 OK
-            inc(Server.fStats.fModified);
-          end;
-        end else
-        Call.OutStatus := HTML_NOTMODIFIED else
-      Call.OutStatus := HTML_NOTALLOWED;
-    end else
-    if Parameters<>nil then // e.g. from TSQLRestClient.EngineUpdateField
-      // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
-      if not (TableIndex in Call.RestAccessRights^.PUT) then // check User
-        Call.OutStatus := HTML_NOTALLOWED else begin
-        repeat
-          UrlDecodeValue(Parameters,'SETNAME=',SQLSelect);
-          UrlDecodeValue(Parameters,'SET=',SQLDir);
-          UrlDecodeValue(Parameters,'WHERENAME=',SQLSort);
-          UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters);
-        until Parameters=nil;
-        if (SQLSelect<>'') and (SQLDir<>'') and (SQLSort<>'') and (SQLWhere<>'') then
-          if TableEngine.EngineUpdateField(TableIndex,
-               SQLSelect,SQLDir,SQLSort,SQLWhere) then begin
-            Call.OutStatus := HTML_SUCCESS; // 200 OK
-            inc(Server.fStats.fModified);
-          end;
-      end;
-  end;
-  mDELETE:
-    if Table<>nil then
-      if TableID>0 then
-        // ModelRoot/TableName/TableID to delete a member
-        if not (TableIndex in Call.RestAccessRights^.DELETE) then // check rights
-          Call.OutStatus := HTML_NOTALLOWED else
-        if not Server.RecordCanBeUpdated(Table,TableID,seDelete,@CustomErrorMsg) then
-          Call.OutStatus := HTML_NOTMODIFIED else begin
-          if TableEngine.EngineDelete(TableIndex,TableID) and
-             Server.AfterDeleteForceCoherency(Table,TableID) then begin
-            Call.OutStatus := HTML_SUCCESS; // 200 OK
-            Server.fCache.NotifyDeletion(TableIndex,TableID);
-            inc(Server.fStats.fModified);
-          end;
-        end else
-      if Parameters<>nil then
-        if (not (TableIndex in Call.RestAccessRights^.DELETE)) or
-           (not (reUrlEncodedDelete in Call.RestAccessRights^.AllowRemoteExecute)) then
-          Call.OutStatus := HTML_NOTALLOWED else begin
-          // ModelRoot/TableName?where=WhereClause to delete members
-          repeat
-            if UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters) then begin
-              SQLWhere := trim(SQLWhere);
-              if SQLWhere<>'' then begin
-                if Server.Delete(Table,SQLWhere) then begin
-                  Call.OutStatus := HTML_SUCCESS; // 200 OK
-                  inc(Server.fStats.fModified);
-                end;
-              end;
-              break;
-            end;
-          until Parameters=nil;
+      if Server.RecordCanBeUpdated(Table,TableID,seUpdate,@CustomErrorMsg) then begin
+        OK := false;
+        if URIBlobFieldName<>'' then begin
+          // PUT ModelRoot/TableName/TableID/BlobFieldName: update BLOB field content
+          Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
+          if Blob<>nil then
+            OK := TableEngine.EngineUpdateBlob(TableIndex,TableID,Blob,Call.InBody);
+        end else begin
+          // ModelRoot/TableName/TableID with JSON SentData: update a member
+          OK := TableEngine.EngineUpdate(TableIndex,TableID,Call.InBody);
+          if OK then
+            Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
         end;
+        if OK then begin
+          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          inc(Server.fStats.fModified);
+        end;
+      end else
+      Call.OutStatus := HTML_NOTMODIFIED;
+    end else
+    if Parameters<>nil then begin // e.g. from TSQLRestClient.EngineUpdateField
+      // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
+      repeat
+        UrlDecodeValue(Parameters,'SETNAME=',SQLSelect);
+        UrlDecodeValue(Parameters,'SET=',SQLDir);
+        UrlDecodeValue(Parameters,'WHERENAME=',SQLSort);
+        UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters);
+      until Parameters=nil;
+      if (SQLSelect<>'') and (SQLDir<>'') and (SQLSort<>'') and (SQLWhere<>'') then
+        if TableEngine.EngineUpdateField(TableIndex,
+             SQLSelect,SQLDir,SQLSort,SQLWhere) then begin
+          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          inc(Server.fStats.fModified);
+        end;
+    end;
+  mDELETE:
+    if TableID>0 then
+      // ModelRoot/TableName/TableID to delete a member
+      if not Server.RecordCanBeUpdated(Table,TableID,seDelete,@CustomErrorMsg) then
+        Call.OutStatus := HTML_NOTMODIFIED else begin
+        if TableEngine.EngineDelete(TableIndex,TableID) and
+           Server.AfterDeleteForceCoherency(Table,TableID) then begin
+          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          Server.fCache.NotifyDeletion(TableIndex,TableID);
+          inc(Server.fStats.fModified);
+        end;
+      end else
+    if Parameters<>nil then begin
+      // ModelRoot/TableName?where=WhereClause to delete members
+      repeat
+        if UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters) then begin
+          SQLWhere := trim(SQLWhere);
+          if SQLWhere<>'' then begin
+            if Server.Delete(Table,SQLWhere) then begin
+              Call.OutStatus := HTML_SUCCESS; // 200 OK
+              inc(Server.fStats.fModified);
+            end;
+          end;
+          break;
+        end;
+      until Parameters=nil;
+    end;
   mBEGIN: begin      // BEGIN TRANSACTION
     // TSQLVirtualTableJSON/External will rely on SQLite3 module
     // and also TSQLRestStorageInMemory, since COMMIT/ROLLBACK have Static=nil
@@ -30408,12 +30404,14 @@ var EndOfObject: AnsiChar;
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     RunTableTransactions: array of TSQLRest;
-    ID, Count: integer;
+    ID: TID;
+    Count: integer;
     batchOptions: TSQLRestBatchOptions;
     RunTable, RunningBatchTable: TSQLRecordClass;
     RunTableIndex,i: integer;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
+    CurrentContext: TSQLRestServerURIContext;
   procedure PerformAutomaticCommit;
   var i: integer;
   begin
@@ -30429,10 +30427,17 @@ var EndOfObject: AnsiChar;
       end;
     RowCountForCurrentTransaction := 0;
   end;
+  function IsNotAllowed: boolean;  
+  begin
+    result := (CurrentContext<>nil) and
+      not CurrentContext.Call.RestAccessRights^.CanExecuteORMWrite(
+        URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
+  end;
 begin
   Sent := pointer(Data);
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
+  CurrentContext := ServiceContext.Request;
   if Table<>nil then begin
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
     while not (Sent^ in ['{',#0]) do inc(Sent);
@@ -30507,7 +30512,7 @@ begin
           PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
         inc(RowCountForCurrentTransaction);
         if RunTableTransactions[RunTableIndex]=nil then
-          if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then 
+          if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
             RunTableTransactions[RunTableIndex] := RunningRest else
             InternalLog('%.TransactionBegin failed -> no transaction',[RunningRest],sllWarning);
       end;
@@ -30533,9 +30538,12 @@ begin
       // process CRUD method operation
       case URIMethod of
       mDELETE: begin // '{"Table":[...,"DELETE",ID,...]}' or '[...,"DELETE@Table",ID,...]'
-        ID := GetInteger(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
+        ID := GetInt64(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
         if (ID<=0) or wasString then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
+        if IsNotAllowed then
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE not allowed on %',
+            [self,RunTable]);
         if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE impossible: "%"',
             [self,ErrMsg]);
@@ -30551,6 +30559,10 @@ begin
         Value := JSONGetObject(Sent,nil,EndOfObject);
         if Sent=nil then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
+        ID := -1; // for CanExecuteORMWrite(TableID)
+        if IsNotAllowed then
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST/Add not allowed on %',
+            [self,RunTable]);
         if not RecordCanBeUpdated(RunTable,0,seAdd,@ErrMsg)  then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST impossible: %',
             [self,ErrMsg]);
@@ -30561,8 +30573,11 @@ begin
       end;
       mPUT: begin // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
         Value := JSONGetObject(Sent,@ID,EndOfObject);
-        if (Sent=nil) or (Value='') then
+        if (Sent=nil) or (Value='') or (ID<=0) then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);
+        if IsNotAllowed then
+          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: PUT/Update not allowed on %',
+            [self,RunTable]);
         OK := EngineUpdate(RunTableIndex,ID,Value);
         if OK then begin
           Results[Count] := HTML_SUCCESS; // 200 OK
@@ -36881,6 +36896,27 @@ begin
     [Byte(AllowRemoteExecute),
      GetBitCSV(GET,MAX_SQLTABLES), GetBitCSV(POST,MAX_SQLTABLES),
      GetBitCSV(PUT,MAX_SQLTABLES), GetBitCSV(DELETE,MAX_SQLTABLES)]);
+end;
+
+function TSQLAccessRights.CanExecuteORMWrite(Method: TSQLURIMethod;
+  Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
+  Context: TSQLRestServerURIContext): boolean;
+begin
+  result := true;
+  case Method of
+  mPOST:   // POST=ADD=INSERT
+    if Table<>nil then  // ExecuteORMWrite will check reSQL access right  
+      result := (TableID<0) and (TableIndex in POST);
+  mPUT:    // PUT=UPDATE
+    result := (Table<>nil) and
+     ((TableIndex in PUT) or
+      ((TableID>0) and (Context.Session>CONST_AUTHENTICATION_NOT_USED) and
+       (Table=Context.Server.fSQLAuthUserClass) and (TableID=Context.SessionUser) and
+       (reUserCanChangeOwnPassword in AllowRemoteExecute)));
+  mDelete:
+    result := (Table<>nil) and (TableIndex in DELETE) and
+      ((TableID>0) or (reUrlEncodedDelete in AllowRemoteExecute));
+  end;
 end;
 
 
