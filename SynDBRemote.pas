@@ -47,10 +47,6 @@ unit SynDBRemote;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
 
-  TODO: fix transaction support from concurrent clients (using the session ID
-  to block incoming new transactions until any existing transactions are not
-  finished)
-  
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER

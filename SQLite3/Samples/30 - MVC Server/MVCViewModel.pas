@@ -173,7 +173,7 @@ begin
   end;
   if RestModel.TableHasRows(TSQLArticle) then
     exit;
-  tmp := StringFromFile('d:\download\2014-10-31-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
+  tmp := StringFromFile('d:\download\2014-12-27-a8003957c2ae6bde5be6ea279c9c9ce4-backup.txt');
   if tmp<>'' then begin
     DotClearFlatImport(RestModel,tmp,fTagsLookup,'http://blog.synopse.info',
       (TMVCRunOnRestServer(fMainRunner).Views as TMVCViewsMustache).ViewStaticFolder);
