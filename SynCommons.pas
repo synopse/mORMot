@@ -15434,8 +15434,12 @@ begin
   end;
 end;
 begin
-  if (Format='') or (high(Args)<0) then begin
+  if (Format=nil) or (high(Args)<0) then begin
     result := Format; // no formatting to process
+    exit;
+  end;
+  if PWord(Format)^=ord('%') then begin
+    VarRecToUTF8(Args[0],result);
     exit;
   end;
   result := '';
