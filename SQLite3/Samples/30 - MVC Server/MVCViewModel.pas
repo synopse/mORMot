@@ -22,22 +22,22 @@ type
   // ! blog/main/login?name=...&plainpassword=... -> log as author
   // ! blog/main/articlecommit -> article edition commit (ID=0 for new)
   IBlogApplication = interface(IMVCApplication)
-    procedure ArticleView(ID: integer;
+    procedure ArticleView(ID: TID;
       var WithComments: boolean; Direction: integer; var Scope: variant;
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
-      var ID: integer; out Author: TSQLAuthor; out Articles: variant);
+      var ID: TID; out Author: TSQLAuthor; out Articles: variant);
     function Login(
       const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
-    function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
+    function ArticleComment(ID: TID; const Title,Comment: RawUTF8): TMVCAction;
     function ArticleMatch(const Match: RawUTF8): TMVCAction;
-    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
+    procedure ArticleEdit(var ID: TID; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
     function ArticleCommit(
-      ID: integer; const Title,Content: RawUTF8): TMVCAction;
+      ID: TID; const Title,Content: RawUTF8): TMVCAction;
   end;
 
   /// session information which will be stored on client side within a cookie
@@ -58,32 +58,32 @@ type
     fBlogMainInfo: variant;
     fTagsLookup: TSQLTags;
     fDefaultData: ILockedDocVariant;
-    fDefaultLastID: integer;
+    fDefaultLastID: TID;
     fHasFTS: boolean;
     procedure ComputeMinimalData; virtual;
     procedure FlushAnyCache; override;
     function GetViewInfo(MethodIndex: integer): variant; override;
-    function GetLoggedAuthorID(Right: TSQLAuthorRight; ContentToFillAuthor: TSQLContent): integer;
+    function GetLoggedAuthorID(Right: TSQLAuthorRight; ContentToFillAuthor: TSQLContent): TID;
     procedure MonthToText(const Value: variant; out result: variant);
     procedure TagToText(const Value: variant; out result: variant);
   public
     constructor Create(aServer: TSQLRestServer); reintroduce;
   public
     procedure Default(var Scope: variant);
-    procedure ArticleView(ID: integer;
+    procedure ArticleView(ID: TID;
       var WithComments: boolean; Direction: integer; var Scope: variant;
       out Article: TSQLArticle; out Author: variant;
       out Comments: TObjectList);
     procedure AuthorView(
-      var ID: integer; out Author: TSQLAuthor; out Articles: variant);
+      var ID: TID; out Author: TSQLAuthor; out Articles: variant);
     function Login(const LogonName,PlainPassword: RawUTF8): TMVCAction;
     function Logout: TMVCAction;
-    function ArticleComment(ID: integer; const Title,Comment: RawUTF8): TMVCAction;
+    function ArticleComment(ID: TID; const Title,Comment: RawUTF8): TMVCAction;
     function ArticleMatch(const Match: RawUTF8): TMVCAction;
-    procedure ArticleEdit(var ID: integer; const Title,Content: RawUTF8;
+    procedure ArticleEdit(var ID: TID; const Title,Content: RawUTF8;
       const ValidationError: variant;
       out Article: TSQLArticle);
-    function ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
+    function ArticleCommit(ID: TID; const Title,Content: RawUTF8): TMVCAction;
   end;
 
 
@@ -219,7 +219,7 @@ begin
 end;
 
 function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
-  ContentToFillAuthor: TSQLContent): integer;
+  ContentToFillAuthor: TSQLContent): TID;
 var SessionInfo: TCookieData;
     author: TSQLAuthor;
 begin
@@ -266,7 +266,8 @@ const
 
 procedure TBlogApplication.Default(var Scope: variant);
 var scop: PDocVariantData;
-    lastID,tag: integer;
+    lastID: TID;
+    tag: integer;
     whereClause,match: RawUTF8;
     articles: variant;
     rank: double;
@@ -291,7 +292,7 @@ begin
     scope := _ObjFast(['Articles',articles,'lastrank',rank,'match',match]);
     exit;
   end else begin
-    if scop^.GetAsInteger('lastID',lastID) then
+    if scop^.GetAsInt64('lastID',Int64(lastID)) then
       whereClause := 'RowID<?' else
       whereClause := 'RowID>?'; // will search ID>0 so always true
     if scop^.GetAsInteger('tag',tag) and (tag>0) then
@@ -315,7 +316,7 @@ begin
   end;
 end;
 
-procedure TBlogApplication.ArticleView(ID: integer;
+procedure TBlogApplication.ArticleView(ID: TID;
   var WithComments: boolean; Direction: integer; var Scope: variant;
   out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
 var newID: Int64;
@@ -338,7 +339,7 @@ begin
     raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
 end;
 
-procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
+procedure TBlogApplication.AuthorView(var ID: TID; out Author: TSQLAuthor;
   out Articles: variant);
 begin
   RestModel.Retrieve(ID,Author);
@@ -378,9 +379,9 @@ begin
   GotoDefault(result);
 end;
 
-function TBlogApplication.ArticleComment(ID: integer;
+function TBlogApplication.ArticleComment(ID: TID;
   const Title,Comment: RawUTF8): TMVCAction;
-var AuthorID: integer;
+var AuthorID: TID;
     comm: TSQLComment;
     error: string;
 begin
@@ -412,10 +413,10 @@ begin
     GotoView(result,'Default',['scope',_ObjFast(['match',Match])]);
 end;
 
-procedure TBlogApplication.ArticleEdit(var ID: integer;
+procedure TBlogApplication.ArticleEdit(var ID: TID;
   const Title,Content: RawUTF8; const ValidationError: variant;
   out Article: TSQLArticle);
-var AuthorID: integer;
+var AuthorID: PtrUInt;
 begin
   AuthorID := GetLoggedAuthorID(canPost,Article);
   if AuthorID=0 then
@@ -431,8 +432,8 @@ begin
     Article.Content := Content;
 end;
 
-function TBlogApplication.ArticleCommit(ID: integer; const Title,Content: RawUTF8): TMVCAction;
-var AuthorID: integer;
+function TBlogApplication.ArticleCommit(ID: TID; const Title,Content: RawUTF8): TMVCAction;
+var AuthorID: TID;
     Article: TSQLArticle;
     error: string;
 begin

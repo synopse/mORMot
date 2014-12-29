@@ -1595,7 +1595,7 @@ function IsNotAjaxJSON(P: PUTF8Char): Boolean;
 // - if ExtractID is set, it will contain the "ID":203 field value, and this
 // field won't be included in thre resulting UTF-8 encoded JSON object (will
 // expect this "ID" property to be the FIRST in the "Name":Value pairs
-function JSONGetObject(var P: PUTF8Char; ExtractID: PInteger;
+function JSONGetObject(var P: PUTF8Char; ExtractID: PID;
   var EndOfObject: AnsiChar): RawUTF8;
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
@@ -9899,8 +9899,8 @@ type
     // TSQLRecord layout, so complex types like dynamic array would be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
-      const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
-      LastRecordID: PInteger=nil): variant; overload;
+      const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
+      LastRecordID: PID=nil): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get a list of members from a SQL statement as a TDocVariant
     // - implements REST GET collection over a specified WHERE clause
@@ -9922,8 +9922,8 @@ type
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
-      const CustomFieldsCSV: RawUTF8; FirstRecordID: PInteger=nil;
-      LastRecordID: PInteger=nil): variant; overload;
+      const CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
+      LastRecordID: PID=nil): variant; overload;
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - the data will be converted to a TDocVariant variant following the
@@ -12943,7 +12943,7 @@ type
     // current selected row of this table, in order to refresh its value
     // - use this method to refresh the client UI, e.g. via a timer
     function UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
-      PCurrentRow: PInteger = nil): boolean; virtual;
+      PCurrentRow: PInteger=nil): boolean; virtual;
     /// send a flush command to the remote Server cache
     // - this method will remotely call the Cache.Flush() methods of the server
     // instance, to force cohesion of the data
@@ -19790,7 +19790,7 @@ begin
     GetRowCountNotExpanded(P); // returns RowCount=-1 if P^ is invalid
 end;
 
-function JSONGetObject(var P: PUTF8Char; ExtractID: PInteger;
+function JSONGetObject(var P: PUTF8Char; ExtractID: PID;
   var EndOfObject: AnsiChar): RawUTF8;
 var Beg, PC: PUTF8Char;
 begin
@@ -19810,7 +19810,7 @@ begin
       while PC^<>'"' do
         if PC^=#0 then exit else inc(PC);
       if IdemPChar(PC+1,'ID":') or IdemPChar(PC+1,'ROWID":') then begin
-        ExtractID^ := GetInteger(PosChar(PC,':')+1);
+        ExtractID^ := GetInt64(PosChar(PC,':')+1);
         PC := PosChar(PC,',');
         PC^ := '{';
         SetString(result,PAnsiChar(PC),P-PC-1); // extract the '"ID":203,' pair
@@ -24994,7 +24994,7 @@ end;
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
   const ObjectName: RawUTF8;
   FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
-  const CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PInteger): variant;
+  const CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PID): variant;
 var T: TSQLTable;
     res: variant;
 begin
@@ -25018,7 +25018,7 @@ begin
 end;
 
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PInteger): variant;
+  const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PID): variant;
 begin
   result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV,
     FirstRecordID,LastRecordID);
@@ -25646,8 +25646,8 @@ begin
   with Table.RecordProps do begin
     aMainField := MainField[false];
     if aMainField>=0 then
-      result := GetInt64(pointer(OneFieldValue(Table,'RowID',
-        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')));
+      SetInt64(pointer(OneFieldValue(Table,'RowID',
+        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')),Int64(result));
   end;
 end;
 
