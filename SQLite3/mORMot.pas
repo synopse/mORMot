@@ -958,7 +958,9 @@ unit mORMot;
     - changed TSQLAccessRights and TSQLAuthGroup.SQLAccessRights CSV format
       to use 'first-last,' pattern to regroup set bits (reduce storage size)
     - added overloaded TSQLAccessRights.Edit() method using TSQLOccasions set
-    - added reOneSessionPerUser flag in TSQLAccessRight.AllowRemoteExecute
+    - added reOneSessionPerUser flag to TSQLAccessRight.AllowRemoteExecute
+    - added reUserCanChangeOwnPassword flag to TSQLAccessRight.AllowRemoteExecute
+      as requested by [e6f113fc98]
     - enabled reUrlEncodedSQL by default for TSQLAccessRights (needed e.g. for
       plain HTTP GET request, without any body)
     - introducing TSQLRestClientURI.InternalCheckOpen/InternalClose methods to
@@ -10631,12 +10633,15 @@ type
   // for one user, even if connection comes from the same IP: in this case,
   // you may have to set the SessionTimeOut to a small value, in case the
   // session is not closed gracefully
+  // - by default, read/write access to the TSQLAuthUser table is disallowed,
+  // for obvious security reasons: but you can define reUserCanChangeOwnPassword
+  // so that the current logged user would be able to change its own password
   // - order of this set does matter, since it will be stored as a byte value
   // e.g. by TSQLAccessRights.ToString: ensure that new items would always be
   // appended to the list, not inserted within
   TSQLAllowRemoteExecute = set of (
     reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser,
-    reSQLSelectWithoutTable);
+    reSQLSelectWithoutTable, reUserCanChangeOwnPassword);
 
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
@@ -28668,7 +28673,7 @@ begin
       end;
     end else
     // here, Table<>nil and TableIndex in [0..MAX_SQLTABLES-1]
-    if not (TableIndex in Call.RestAccessRights^.POST) then // check User
+    if not (TableIndex in Call.RestAccessRights^.POST) then // check rights
       Call.OutStatus := HTML_NOTALLOWED else
     if TableID<0 then begin
       // ModelRoot/TableName with possible JSON SentData: create a new member
@@ -28685,27 +28690,30 @@ begin
   mPUT: begin        // PUT=UPDATE
     if TableID>0 then begin
       // PUT ModelRoot/TableName/TableID[/BlobFieldName] to update member/BLOB content
-      if not (TableIndex in Call.RestAccessRights^.PUT) then // check User
-        Call.OutStatus := HTML_NOTALLOWED else
-      if not Server.RecordCanBeUpdated(Table,TableID,seUpdate,@CustomErrorMsg) then
-        Call.OutStatus := HTML_NOTMODIFIED else begin
-        OK := false;
-        if URIBlobFieldName<>'' then begin
-          // PUT ModelRoot/TableName/TableID/BlobFieldName: update BLOB field content
-          Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
-          if Blob<>nil then
-            OK := TableEngine.EngineUpdateBlob(TableIndex,TableID,Blob,Call.InBody);
-        end else begin
-          // ModelRoot/TableName/TableID with JSON SentData: update a member
-          OK := TableEngine.EngineUpdate(TableIndex,TableID,Call.InBody);
-          if OK then
-            Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
-        end;
-        if OK then begin
-          Call.OutStatus := HTML_SUCCESS; // 200 OK
-          inc(Server.fStats.fModified);
-        end;
-      end;
+      if (TableIndex in Call.RestAccessRights^.PUT) or // check rights
+         ((Session>CONST_AUTHENTICATION_NOT_USED) and 
+          (Table=Server.fSQLAuthUserClass) and (TableID=SessionUser) and
+          (reUserCanChangeOwnPassword in Call.RestAccessRights^.AllowRemoteExecute)) then
+        if Server.RecordCanBeUpdated(Table,TableID,seUpdate,@CustomErrorMsg) then begin
+          OK := false;
+          if URIBlobFieldName<>'' then begin
+            // PUT ModelRoot/TableName/TableID/BlobFieldName: update BLOB field content
+            Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
+            if Blob<>nil then
+              OK := TableEngine.EngineUpdateBlob(TableIndex,TableID,Blob,Call.InBody);
+          end else begin
+            // ModelRoot/TableName/TableID with JSON SentData: update a member
+            OK := TableEngine.EngineUpdate(TableIndex,TableID,Call.InBody);
+            if OK then
+              Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
+          end;
+          if OK then begin
+            Call.OutStatus := HTML_SUCCESS; // 200 OK
+            inc(Server.fStats.fModified);
+          end;
+        end else
+        Call.OutStatus := HTML_NOTMODIFIED else
+      Call.OutStatus := HTML_NOTALLOWED;
     end else
     if Parameters<>nil then // e.g. from TSQLRestClient.EngineUpdateField
       // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
@@ -28729,7 +28737,7 @@ begin
     if Table<>nil then
       if TableID>0 then
         // ModelRoot/TableName/TableID to delete a member
-        if not (TableIndex in Call.RestAccessRights^.DELETE) then // check User
+        if not (TableIndex in Call.RestAccessRights^.DELETE) then // check rights
           Call.OutStatus := HTML_NOTALLOWED else
         if not Server.RecordCanBeUpdated(Table,TableID,seDelete,@CustomErrorMsg) then
           Call.OutStatus := HTML_NOTMODIFIED else begin
