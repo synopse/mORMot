@@ -649,7 +649,7 @@ type
   // - used e.g. by THttpServerGeneric.NotifyThreadStart()
   TNotifiedThread = class(TThread)
   protected
-    fNotified: TObject;
+    fStartNotified: TObject;
     {$ifndef LVCL}
     fOnTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
@@ -842,11 +842,12 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
-    /// event handler called when the Thread is just initiated
+    /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
       read fOnHttpThreadStart write fOnHttpThreadStart;
-    /// event handler called when the Thread is terminating, in the thread context
+    /// event handler called when a working Thread is terminating
+    // - called in the corresponding thread context
     // - the TThread.OnTerminate event will be called within a Synchronize()
     // wrapper, so it won't fit our purpose
     // - to be used e.g. to call CoUnInitialize from thread in which CoInitialize
@@ -2071,9 +2072,9 @@ procedure THttpServerGeneric.NotifyThreadStart(Sender: TNotifiedThread);
 begin
   if Sender=nil then
     raise ECrtSocket.Create('NotifyThreadStart(nil)');
-  if Assigned(fOnHttpThreadStart) and not Assigned(Sender.fNotified) then begin
+  if Assigned(fOnHttpThreadStart) and not Assigned(Sender.fStartNotified) then begin
     fOnHttpThreadStart(Sender);
-    Sender.fNotified := self;
+    Sender.fStartNotified := self;
   end;
 end;
 
@@ -3158,9 +3159,9 @@ end;
 {$ifndef LVCL}
 procedure TNotifiedThread.DoTerminate;
 begin
-  if Assigned(fNotified) and Assigned(fOnTerminate) then begin
+  if Assigned(fStartNotified) and Assigned(fOnTerminate) then begin
     fOnTerminate(self);
-    fNotified := nil;
+    fStartNotified := nil;
   end;
   inherited DoTerminate;
 end;  

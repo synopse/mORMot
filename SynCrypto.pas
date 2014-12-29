@@ -2580,7 +2580,7 @@ end;
 type
   TThreadParams = record
     bIn, bOut: pAESBlock;
-    BlockCount: integer;
+    BlockCount,BlockIndex: integer;
     Encrypt: boolean;
     ID: DWORD;
     AES: TAES;
@@ -2594,6 +2594,7 @@ type
    -> code is even shorter then original one using TThread }
 function ThreadWrapper(var P: TThreadParams): Integer; stdcall;
 begin
+  SetCurrentThreadName('AES #%',[P.BlockIndex]);
   with P do
     AES.DoBlocks(bIn,bOut,bIn,bOut,BlockCount,Encrypt);
   ExitThread(0);
@@ -2624,6 +2625,7 @@ begin
     bIn := pIn;
     bOut := pOut;
     BlockCount := nOne;
+    BlockIndex := i+1;
     Encrypt := doEncrypt;
     AES := self; // local copy of the AES context for every thread
     Handle[i] := CreateThread(nil,0,@ThreadWrapper,@Thread[i],0,ID);
@@ -2640,7 +2642,7 @@ begin
   {$endif}
   bIn := pIn;
   bOut := pOut;
-  WaitForMultipleObjects(nThread,@Handle[0],True,INFINITE); 
+  WaitForMultipleObjects(nThread,@Handle[0],True,INFINITE);
   for i := 0 to nThread-1 do
     CloseHandle(Handle[i]);
 end;
