@@ -815,6 +815,7 @@ unit mORMot;
       value will continue to return simple fields, excluding BLOBs)
     - TSQLRecord.CreateAndFillPrepareMany() will raise an exception when run
       on a TSQLRecord with no many-to-many published field
+    - fixed TSQLRecordMany Source/Dest fields serialization - see [22ce911c715]
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
     - added TSQLRecord.GetAsDocVariant/GetSimpleFieldsAsDocVariant methods
@@ -34064,7 +34065,7 @@ begin
   case IsObj of
   oSQLMany:
     if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
-      result := false else
+      result := true else
       result := not TSQLRecord(Value).fFill.JoinedFields;
   oSQLRecord:
     result := not TSQLRecord(Value).fFill.JoinedFields;
