@@ -318,6 +318,9 @@ function TextToHttpBody(const Text: string): THttpBody;
 /// convert a UTF-8 binary buffer into texts
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 
+/// will return the next CSV value from the supplied text 
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char=','; resultTrim: boolean=false): boolean;
 
 {$ifdef ISDWS}
 
@@ -336,8 +339,6 @@ function TryStrToInt(const S: string; var Value: integer): Boolean;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean;
 function StrToInt64Def(const S: string; const def: Int64): Int64;
 function UpCase(ch: Char): Char; inline;
-function GetNextCSV(const str: string; var index: Integer; var res: string;
-  Sep: char): boolean;
 
 type
   /// which kind of document the TJSONVariantData contains
@@ -419,6 +420,29 @@ begin
 end;
 {$endif}
 {$endif}
+
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char=','; resultTrim: boolean=false): boolean;
+var i,j,L: integer;
+begin
+  L := length(str);
+  if index<=L then begin
+    i := index;
+    while i<=L do
+      if str[i]=Sep then
+        break else
+        inc(i);
+    j := index;
+    index := i+1;
+    if resultTrim then begin
+      while (j<L) and (ord(str[j])<=32) do inc(j);
+      while (i>j) and (ord(str[i-1])<=32) do dec(i);
+    end;
+    res := copy(str,j,i-j);
+    result := true;
+  end else
+    result := false;
+end;
 
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 {$ifdef ISSMS}
@@ -768,24 +792,6 @@ begin
   result := ch.UpperCase;
 end;
 
-function GetNextCSV(const str: string; var index: Integer; var res: string;
-  Sep: char): boolean;
-var i,L: integer;
-begin
-  L := length(str);
-  if index<=L then begin
-    i := index;
-    while i<=L do
-      if str[i]=Sep then
-        break else
-        inc(i);
-    res := copy(str,index,i-index);
-    index := i+1;
-    result := true;
-  end else
-    result := false;
-end;
-
 function TryStrToInt(const S: string; var Value: Integer): Boolean;
 begin
   try
@@ -1033,4 +1039,4 @@ end;
 
 {$endif ISDWS}
 
-end.
+end.

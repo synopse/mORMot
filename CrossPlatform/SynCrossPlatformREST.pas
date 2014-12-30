@@ -1930,7 +1930,7 @@ begin
     result := AllFields else begin
     result := NO_SQLFIELDBITS;
     i := 1;
-    while GetNextCSV(FieldNames,i,field,',') do begin
+    while GetNextCSV(FieldNames,i,field,',',true) do begin
       {$ifdef ISSMS}
       var Info: TSQLModelInfoPropInfo;
       if Find(PropCache,field,info) then

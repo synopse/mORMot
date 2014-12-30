@@ -455,7 +455,9 @@ begin
   Check(PInteger(@fields)^=$37);
   fields := mdel.Info[0].FieldNamesToFieldBits('*',false);
   Check(PInteger(@fields)^=PInteger(@mdel.Info[0].AllFields)^);
-  fields := mdel.Info[0].FieldNamesToFieldBits('RowID,firstname',false);
+  fields := mdel.Info[0].FieldNamesToFieldBits('id,firstname',false);
+  Check(PInteger(@fields)^=3);
+  fields := mdel.Info[0].FieldNamesToFieldBits('RowID ,  firstname ',false);
   Check(PInteger(@fields)^=3);
   Check(mdel.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
   fields := mdel.Info[0].FieldNamesToFieldBits('firstname,id,toto',false);

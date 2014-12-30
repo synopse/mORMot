@@ -468,10 +468,6 @@ function UTF8FileToString(const aFileName: TFileName): string;
 procedure AppendChar(var str: string; chr: Char);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// will return the next CSV value from the supplied text 
-function GetNextCSV(const str: string; var index: Integer; out res: string;
-  Sep: char=','): boolean;
-
 /// check that two ASCII-7 latin text do match
 function IdemPropName(const PropName1,PropName2: string): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -546,24 +542,6 @@ begin
       {$ifdef UNICODE}$ffdf{$else}$df{$endif}<>0 then
       exit;
   result := true;
-end;
-
-function GetNextCSV(const str: string; var index: Integer; out res: string;
-  Sep: char=','): boolean;
-var i,L: integer;
-begin
-  L := length(str);
-  if index<=L then begin
-    i := index;
-    while i<=L do
-      if str[i]=Sep then
-        break else
-        inc(i);
-    res := copy(str,index,i-index);
-    index := i+1;
-    result := true;
-  end else
-    result := false;
 end;
 
 {$ifndef ISSMS} // there is no file within HTML5 DOM
