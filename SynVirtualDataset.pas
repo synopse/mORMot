@@ -31,6 +31,7 @@ unit SynVirtualDataSet;
   Contributor(s):
   - Alfred Glaenzer (alf)
   - mingda
+  - Murat Ak
     
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -366,6 +367,8 @@ begin
   if Mode<>bmRead then
     raise EDatabaseError.CreateFmt('%s BLOB should be ReadOnly',[ClassName]);
   result := GetBlobStream(Field,PRecInfo(ActiveBuffer).RowIndentifier);
+  if result=nil then
+    result := TSynMemoryStream.Create; // null BLOB returns a void TStream
 end;
 
 function TSynVirtualDataSet.GetRecNo: Integer;
