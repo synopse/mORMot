@@ -195,6 +195,12 @@ const
   ftDefaultVCLString = ftString;
   {$endif}
 
+  /// map the best ft*Memo type available, depending on the Delphi compiler version
+  {$ifdef ISDELPHI2007ANDUP}
+  ftDefaultMemo = ftWideMemo;
+  {$else}
+  ftDefaultMemo = ftMemo;
+  {$endif}
 
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet

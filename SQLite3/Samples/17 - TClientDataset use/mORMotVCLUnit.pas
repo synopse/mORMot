@@ -69,13 +69,14 @@ begin
 end;
 
 procedure TForm1.chkFromSQLClick(Sender: TObject);
+const SQL_PEOPLE = 'select * from People';
 var proxy: TSQLDBConnectionProperties;
     stmt: TSQLDBStatement;
     values: TDocVariantData;
     Timer: TPrecisionTimer;
 begin
   ds1.DataSet.Free;
-  chkViaTClientDataSet.Enabled := cbbDataSource.ItemIndex<>1;
+  chkViaTClientDataSet.Enabled := not (cbbDataSource.ItemIndex in [1,8]);
   Timer.Start;
   case cbbDataSource.ItemIndex of
   0: // test TSynSQLTableDataSet: reading from JSON content
@@ -106,7 +107,7 @@ begin
       end;
       stmt := proxy.NewThreadSafeStatement;
       try
-        stmt.Execute('select * from People',true);
+        stmt.Execute(SQL_PEOPLE,true);
         if chkViaTClientDataSet.Checked then
           ds1.DataSet := ToClientDataSet(self,stmt) else 
           ds1.DataSet := ToDataSet(self,stmt);
@@ -117,6 +118,12 @@ begin
       if proxy<>fProps then
         proxy.Free;
     end;
+  end;
+  8: begin // no TClientDataSet yet for TSynDBSQLDataSet
+    ds1.DataSet := TSynDBSQLDataSet.Create(self);
+    TSynDBSQLDataSet(ds1.DataSet).Connection := fProps;
+    TSynDBSQLDataSet(ds1.DataSet).CommandText := SQL_PEOPLE;
+    ds1.DataSet.Open;
   end;
   end;
   lblTiming.Caption := 'Processed in '+Ansi7ToString(Timer.Stop);

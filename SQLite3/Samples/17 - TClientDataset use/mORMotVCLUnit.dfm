@@ -79,7 +79,8 @@ object Form1: TForm1
         'SQLite3 proxy compressed'
         'SQLite3 HTTP WinHTTP'
         'SQLite3 HTTP WinINet'
-        'SQLite3 HTTP Sockets')
+        'SQLite3 HTTP Sockets'
+        'SQLite3 TSynDBSQLDataSet')
     end
     object btnRefresh: TButton
       Left = 360

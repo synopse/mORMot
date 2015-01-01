@@ -71,12 +71,12 @@ uses
 {$endif}
   SynCommons,
   SynDB, SynDBVCL,
-  DB
+  DB,
   {$ifdef FPC}
-  ,BufDataset
+  BufDataset
   {$else}
-  ,Contnrs
-  ,DBClient
+  Contnrs,
+  DBClient
   {$endif}
   ;
 
@@ -191,7 +191,7 @@ end;
 
 function ToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
   aMaxRowCount: integer; aMode: TClientDataSetMode; aLogChange: boolean): boolean; overload;
-var Source: TSynSQLStatementDataSet;
+var Source: TSynBinaryDataSet;
     Columns: array of record
       Field: TField;
       WasReadOnly: boolean;
@@ -232,9 +232,10 @@ begin
     aDataSet.Open;
     {$endif}
   end;
-  Source := TSynSQLStatementDataSet.Create(nil,aStatement,aMaxRowCount);
+  Source := TSynBinaryDataSet.Create(nil);
   try
     // load all data content into optimized in-memory buffer
+    Source.From(aStatement,aMaxRowCount);
     Source.Open;
     // handle columns
     SetLength(Columns,Source.DataAccess.ColumnCount);

@@ -2781,7 +2781,7 @@ type
 
 type
   /// generic Exception type raised by the TQuery class
-  ESQLQueryException = class(Exception)
+  ESQLQueryException = class(ESynException)
   public
     constructor CreateFromError(aMessage: string; aConnection: TSQLDBConnection);
   end;
@@ -2992,7 +2992,15 @@ type
     /// begin the SQL query, for a non SELECT statement
     // - will parse the entered SQL statement, and bind parameters
     // - the query will be released with a call to Close within this method
+    // - will return the number of updated rows (i.e.
+    // PreparedSQLDBStatement.UpdateCount)
     procedure ExecSQL;
+    /// begin the SQL query, for a non SELECT statement
+    // - will parse the entered SQL statement, and bind parameters
+    // - the query will be released with a call to Close within this method
+    // - this method will return the number of updated rows (i.e.
+    // PreparedSQLDBStatement.UpdateCount)
+    function ExecSQLAndReturnUpdateCount: integer;
     /// after a successfull Open, will get the first row of results
     procedure First;
     /// after successfull Open and First, go the the next row of results
@@ -3188,9 +3196,9 @@ begin
   if (aConnection=nil) or (aConnection.fErrorMessage='') then
     Create(aMessage) else
   if aConnection.fErrorException=nil then
-    CreateFmt('%s "%s"',[aMessage,aConnection.fErrorMessage]) else
-    CreateFmt('%s as %s with message "%s"',
-      [aMessage,aConnection.fErrorException.ClassName,aConnection.fErrorMessage]);
+    CreateUTF8('% "%"',[aMessage,aConnection.fErrorMessage]) else
+    CreateUTF8('% as % with message "%"',
+      [aMessage,aConnection.fErrorException,aConnection.fErrorMessage]);
 end;
 
 { TQueryValue }
@@ -3491,6 +3499,13 @@ begin
   Close;
 end;
 
+function TQuery.ExecSQLAndReturnUpdateCount: integer;
+begin
+  Execute(false);
+  result := fPrepared.UpdateCount;
+  Close;
+end;
+
 function TQuery.FieldByName(const aFieldName: string): PQueryValue;
 var i: integer;
 begin
@@ -3498,8 +3513,8 @@ begin
     result := nil else begin
     i := fResult.FindHashed(aFieldName);
     if i<0 then
-      raise ESQLQueryException.CreateFmt(
-        'FieldByName("%s"): unknown field name',[aFieldName]) else
+      raise ESQLQueryException.CreateUTF8(
+        '%.FieldByName("%"): unknown field name',[self,aFieldName]) else
       result := @fResults[i];
   end;
 end;
@@ -3638,7 +3653,7 @@ begin
     ColumnName := UTF8ToString(fPrepared.ColumnName(i));
     h := fResult.FindHashedForAdding(ColumnName,added);
     if not added then
-      raise ESQLQueryException.CreateFmt('Duplicated column name "%s"',[ColumnName]);
+      raise ESQLQueryException.CreateUTF8('Duplicated column name "%"',[ColumnName]);
     with fResults[h] do begin
       fQuery := self;
       fRowIndex := 0;
@@ -3719,7 +3734,7 @@ begin
     paramName := UTF8DecodeToString(B,P-B);
     i := fParam.FindHashed(paramName);
     if i<0 then
-      raise ESQLQueryException.CreateFmt('Parameter "%s" not bound for "%s"',[paramName,req]);
+      raise ESQLQueryException.CreateUTF8('Parameter "%" not bound for "%"',[paramName,req]);
     if col=length(cols) then
       SetLength(cols,col+64);
     cols[col] := i;
@@ -3749,9 +3764,9 @@ begin
           fPrepared.BindVariant(i+1,fValue,fValueBlob,DB2OLE[fParamType]);
       except
         on E: Exception do
-          raise ESQLQueryException.CreateFmt(
-            'Error "%s" at binding value for parameter "%s" in "%s"',
-            [E.Message,fParams[cols[i]].fName,req]);
+          raise ESQLQueryException.CreateUTF8(
+            '% "%" when binding value for parameter "%" in "%"',
+            [E,E.Message,fParams[cols[i]].fName,req]);
       end;
     fPrepared.ExecutePrepared;
   finally
