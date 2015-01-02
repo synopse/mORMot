@@ -84,7 +84,6 @@
     {$ifdef UNICODE}
       {$ifdef CPUX64}
         {$define CPU64}
-        {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
       {$endif}
     {$else}
       {$define USEOBJECTINSTEADOFRECORD}
@@ -105,11 +104,12 @@
       {$define ISDELPHIXE2} // e.g. for Vcl.Graphics
       {$ifndef MSWINDOWS}
       {$define USETMONITOR}
-      {$endif} 
+      {$endif}
     {$ifend}
     {$if CompilerVersion >= 25.0}
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
+      {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
     {$ifend}
   {$else}
     {$define ISDELPHI5OROLDER}
