@@ -6,7 +6,7 @@ unit SynCrossPlatformJSON;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformJSON;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -365,7 +365,7 @@ function ValueToJSON(const Value: variant): string;
 function JSONToValue(const JSON: string): variant;
 
 /// compute the ISO-8601 JSON text representation of the current date/time value
-// - e.g. "2014-06-27T20:59:29"
+// - e.g. "2015-06-27T20:59:29"
 function NowToIso8601: string;
 
 /// compute the unquoted ISO-8601 text representation of a date/time value
