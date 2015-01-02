@@ -456,7 +456,9 @@ end;
 procedure TSynDBDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
 begin
   fDataSet.From(Statement,MaxRowCount);
+  CommandText := ''; // ensure no SQL execution
   Open;
+  CommandText := UTF8ToString(Statement.SQL); // assign it AFTER Open
 end;
 
 procedure TSynDBDataSet.FetchParams;
