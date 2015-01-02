@@ -148,6 +148,8 @@ unit SynZip;
      may occur e.g. if the .zip is created with latest Java JRE) - also added
      corresponding TZipRead.RetrieveFileInfo() method and renamed TZipEntry
      info field into infoLocal, and introduced infoDirectory new field
+   - renamed ZipFormat parameter to ZlibFormat, and introduce it also for
+     uncompression, so that both deflate and zlib layout are handled
    - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
@@ -203,22 +205,31 @@ const
   soCurrent = soFromCurrent;
 {$endif}
 
-{/ in-memory ZLib DEFLATE compression }
+/// in-memory ZLib DEFLATE compression
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer=6; ZipFormat: Boolean=false) : integer;
+  CompressionLevel: integer=6; ZlibFormat: Boolean=false) : integer;
 
 /// in-memory ZLib INFLATE decompression
-function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer) : integer;
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
+function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer; ZlibFormat: Boolean=false) : integer;
 
 /// ZLib DEFLATE compression from memory into a stream
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel:integer=6; ZipFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel:integer=6; ZlibFormat: Boolean=false): cardinal;
 
 /// ZLib INFLATE decompression from memory into a stream
 // - return the number of bytes written into the stream
 // - if checkCRC if not nil, it will contain thecrc32  (if aStream is nil, it will
 // fast calculate the crc of the the uncompressed memory block)
-function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal): cardinal;
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
+function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
+  checkCRC: PCardinal; ZlibFormat: Boolean=false): cardinal;
 
 
 {$ifndef UNICODE}
@@ -317,7 +328,7 @@ type
 procedure StreamInit(var Stream: TZStream);
 
 /// prepare the internal memory structure as expected by the ZLib library for compression
-function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZipFormat: Boolean): Boolean;
+function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
 
 type
 {$A-} { force packed object (not allowed under Delphi 2009) }
@@ -4672,10 +4683,10 @@ begin // will use fastcode if compiled within
   FillChar(dest^, count, val);
 end;
 
-function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZipFormat: Boolean): Boolean;
+function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
 var Bits: integer;
 begin
-  if ZipFormat then
+  if ZlibFormat then
     Bits := MAX_WBITS else
     Bits := -MAX_WBITS;
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, Bits, DEF_MEM_LEVEL,
@@ -4743,7 +4754,7 @@ begin
 end;
 
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer=6; ZipFormat: Boolean=false) : integer;
+  CompressionLevel: integer=6; ZlibFormat: Boolean=false) : integer;
 var strm: TZStream;
 begin
   StreamInit(strm);
@@ -4751,8 +4762,7 @@ begin
   strm.avail_in := srcLen;
   strm.next_out := dst;
   strm.avail_out := dstLen;
-  // -MAX_WBITS -> no zLib header => .zip compatible !
-  if DeflateInit(strm,CompressionLevel,ZipFormat) then
+  if DeflateInit(strm,CompressionLevel,ZlibFormat) then
   try
     Check(deflate(strm,Z_FINISH),[Z_STREAM_END,Z_OK]);
   finally
@@ -4762,7 +4772,7 @@ begin
 end;
 
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel: integer=6; ZipFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false): cardinal;
 var strm: TZStream;
     code: integer;
     buf: array[word] of byte;
@@ -4781,8 +4791,8 @@ begin
   strm.avail_in := srcLen;
   strm.next_out := @buf;
   strm.avail_out := sizeof(buf);
-  if DeflateInit(strm,CompressionLevel,ZipFormat) then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if DeflateInit(strm,CompressionLevel,ZlibFormat) then
+  try
     repeat
       code := Check(deflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR]);
       FlushBuf;
@@ -4794,8 +4804,9 @@ begin
   result := strm.total_out;
 end;
 
-function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer) : integer;
+function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer; ZlibFormat: Boolean) : integer;
 var strm: TZStream;
+    Bits: integer;
 //    Z: TMemoryStream; R: Int64Rec;
 begin
   StreamInit(strm);
@@ -4803,8 +4814,11 @@ begin
   strm.avail_in := srcLen;
   strm.next_out := dst;
   strm.avail_out := dstLen;
-  if inflateInit2_(strm, -MAX_WBITS, ZLIB_VERSION, sizeof(strm))>=0 then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if ZlibFormat then
+    Bits := MAX_WBITS else
+    Bits := -MAX_WBITS; // -MAX_WBITS -> no zLib header => .zip compatible !
+  if inflateInit2_(strm, Bits, ZLIB_VERSION, sizeof(strm))>=0 then
+  try
     Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END]);
   finally
     inflateEnd(strm);
@@ -4816,10 +4830,12 @@ begin
 end;
 
 function UnCompressStream(
-  src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal): cardinal;
+  src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal;
+  ZlibFormat: Boolean): cardinal;
 // result:=dstLen  checkCRC(<>nil)^:=crc32  (if aStream=nil -> fast crc calc)
 var strm: TZStream;
     code: integer;
+    Bits: integer;
     buf: array[word] of byte;
 procedure FlushBuf;
 var Count: integer;
@@ -4841,8 +4857,11 @@ begin
   strm.avail_out := sizeof(buf);
   if checkCRC<>nil then
     CheckCRC^ := 0;
-  if inflateInit2_(strm, -MAX_WBITS, ZLIB_VERSION, sizeof(strm))>=0 then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if ZlibFormat then
+    Bits := MAX_WBITS else
+    Bits := -MAX_WBITS; // -MAX_WBITS -> no zLib header => .zip compatible !
+  if inflateInit2_(strm, Bits, ZLIB_VERSION, sizeof(strm))>=0 then
+  try
     repeat
       code := Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR]);
       FlushBuf;
