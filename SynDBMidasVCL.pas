@@ -31,6 +31,7 @@ unit SynDBMidasVCL;
   Contributor(s):
   - Alfred Glaenzer (alf)
   - mingda
+  - Murat Ak
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -50,6 +51,8 @@ unit SynDBMidasVCL;
   - first public release, corresponding to Synopse mORMot Framework 1.18,
     which is an extraction from former SynDBVCL.pas unit (which is faster
     but read/only)
+  - introducing TSynDBDataSet (under Delphi), which allows to apply updates:
+    will be used now for overloaded ToClientDataSet() functions result
   - BREAKING CHANGE: QueryToClientDataSet() and StatementToClientDataSet()
     renamed as overloaded functions ToClientDataSet()
 
@@ -76,16 +79,116 @@ uses
   BufDataset
   {$else}
   Contnrs,
-  DBClient
-  {$endif}
-  ;
+  DBClient,
+  Provider,
+  SqlConst
+  {$endif};
 
 
 {$ifdef FPC}
 type
   /// FPC's pure pascal in-memory buffer is used instead of TClientDataSet
   TClientDataSet = TBufDataset;
-{$endif}
+
+  /// wrapper functions will use FPC's pure pascal in-memory buffer 
+  TSynDBDataSet = TBufDataset;
+
+{$else FPC}
+type
+  /// a TClientDataSet which allows to apply updates on a SynDB connection
+  // - typical usage may be for instance over a SynDBRemote connection:
+  // ! props := TSQLDBWinHTTPConnectionProperties.Create(....);
+  // ! ds := TSynDBDataSet.Create(MainForm);
+  // ! ds.CommandText := 'select * from people';
+  // ! ds.Open;
+  // ! // ... use ds as usual, including modifications
+  // ! ds.ApplyUpdates(0);
+  TSynDBDataSet = class(TCustomClientDataSet)
+  protected
+    fDataSet: TSynDBSQLDataSet;
+    fProvider: TDataSetProvider;
+    function GetConnection: TSQLDBConnectionProperties; virtual;
+    procedure SetConnection(Value: TSQLDBConnectionProperties); virtual;
+    // from TDataSet
+    procedure OpenCursor(InfoQuery: Boolean); override;
+    {$ifdef ISDELPHI2007ANDUP}
+    // from IProviderSupport
+    function PSGetCommandText: string; override;
+    {$endif}
+  public
+    /// initialize the instance
+    constructor Create(AOwner: TComponent); override;
+    /// initialize the internal TDataSet from a SynDB TSQLDBStatement result set
+    // - the supplied TSQLDBStatement can then be freed by the caller, since
+    // a private binary copy will be owned by this instance (in fDataSet.Data)
+    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0);
+    procedure FetchParams;
+  published
+    property CommandText;
+    property Active;
+    property Aggregates;
+    property AggregatesActive;
+    property AutoCalcFields;
+    property Constraints;
+    property DisableStringTrim;
+    property FileName;
+    property Filter;
+    property Filtered;
+    property FilterOptions;
+    property FieldDefs;
+    property IndexDefs;
+    property IndexFieldNames;
+    property IndexName;
+    property FetchOnDemand;
+    property MasterFields;
+    property MasterSource;
+    property ObjectView;
+    property PacketRecords;
+    property Params;
+    property ReadOnly;
+    property StoreDefs;
+    property BeforeOpen;
+    property AfterOpen;
+    property BeforeClose;
+    property AfterClose;
+    property BeforeInsert;
+    property AfterInsert;
+    property BeforeEdit;
+    property AfterEdit;
+    property BeforePost;
+    property AfterPost;
+    property BeforeCancel;
+    property AfterCancel;
+    property BeforeDelete;
+    property AfterDelete;
+    property BeforeScroll;
+    property AfterScroll;
+    property BeforeRefresh;
+    property AfterRefresh;
+    property OnCalcFields;
+    property OnDeleteError;
+    property OnEditError;
+    property OnFilterRecord;
+    property OnNewRecord;
+    property OnPostError;
+    property OnReconcileError;
+    property BeforeApplyUpdates;
+    property AfterApplyUpdates;
+    property BeforeGetRecords;
+    property AfterGetRecords;
+    property BeforeRowRequest;
+    property AfterRowRequest;
+    property BeforeExecute;
+    property AfterExecute;
+    property BeforeGetParams;
+    property AfterGetParams;
+    /// the associated SynDB connection
+    property Connection: TSQLDBConnectionProperties read GetConnection write SetConnection;
+    /// the associated SynDB TDataSet, used to retrieve and update data
+    property DataSet: TSynDBSQLDataSet read fDataSet;
+  end;
+
+{$endif FPC}
 
 /// fetch a SynDB TQuery result set into a new VCL TClientDataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
@@ -97,7 +200,7 @@ type
 // but ToDataSet() as defined in SynDBVCL which is much faster and uses
 // much less resources
 function ToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
-  aMaxRowCount: integer=0): TClientDataSet; overload;
+  aMaxRowCount: integer=0): TSynDBDataSet; overload;
 
 /// fetch a SynDB TSQLDBStatement result set into a new VCL TClientDataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
@@ -109,13 +212,14 @@ function ToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
 // but ToDataSet() function as defined in SynDBVCL which is much faster and uses
 // much less resources
 function ToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
-  aMaxRowCount: integer=0): TClientDataSet; overload;
+  aMaxRowCount: integer=0): TSynDBDataSet; overload;
 
 /// fetch a SynDB ISQLDBRows result set into a new VCL TClientDataSet
-// - this overloade function can use directly a result of the
-// TSQLDBConnectionProperties.Execute() method
+// - this overloaded function can use directly a result of the
+// TSQLDBConnectionProperties.Execute() method, as such:
+// ! ds1.DataSet := ToClientDataSet(self,props.Execute('select * from table',[]));
 function ToClientDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
-  aMaxRowCount: integer=0): TClientDataSet; overload;
+  aMaxRowCount: integer=0): TSynDBDataSet; overload;
 
 
 type
@@ -157,7 +261,7 @@ begin
 end;
 
 function ToClientDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
-  aMaxRowCount: integer): TClientDataSet;
+  aMaxRowCount: integer): TSynDBDataSet;
 begin
   if aStatement=nil then
     result := nil else
@@ -165,16 +269,14 @@ begin
 end;
 
 function ToClientDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
-  aMaxRowCount: integer): TClientDataSet;
+  aMaxRowCount: integer): TSynDBDataSet;
 begin
-  result := TClientDataSet.Create(aOwner);
+  result := TSynDBDataSet.Create(aOwner);
   try
     result.Name := 'SynDBDS'+IntToStr(GlobalDataSetCount); // unique name
     inc(GlobalDataSetCount);
-    if aStatement=nil then
-      exit;
-    if not ToClientDataSet(result,aStatement,aMaxRowCount,cdsNew) then
-      FreeAndNil(result);
+    if aStatement<>nil then
+      result.From(aStatement,aMaxRowCount);
   except
     on Exception do
       FreeAndNil(result);
@@ -182,7 +284,7 @@ begin
 end;
 
 function ToClientDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
-  aMaxRowCount: integer=0): TClientDataSet; overload;
+  aMaxRowCount: integer=0): TSynDBDataSet; overload;
 begin
   if aStatement=nil then
     result := nil else
@@ -332,5 +434,75 @@ begin
   end;
 end;
 
+
+{$ifndef FPC}
+
+{ TSynDBDataSet }
+
+constructor TSynDBDataSet.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  fProvider := TDataSetProvider.Create(Self);
+  fProvider.Name := 'InternalProvider';                 { Do not localize }
+  fProvider.SetSubComponent(True);
+  fProvider.Options := fProvider.Options+[poAllowCommandText];
+  SetProvider(fProvider);
+  fDataSet := TSynDBSQLDataSet.Create(Self);
+  fDataSet.Name := 'InternalDataSet';                   { Do not localize }
+  fDataSet.SetSubComponent(True);
+  fProvider.DataSet := fDataSet;
+end;
+
+procedure TSynDBDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
+begin
+  fDataSet.From(Statement,MaxRowCount);
+  Open;
+end;
+
+procedure TSynDBDataSet.FetchParams;
+begin
+  if not HasAppServer and Assigned(FProvider) then
+    SetProvider(FProvider);
+  inherited FetchParams;
+end;
+
+procedure TSynDBDataSet.OpenCursor(InfoQuery: Boolean);
+begin
+  if Assigned(fProvider) then
+    SetProvider(fProvider);
+  if fProvider.DataSet=self then
+    raise ESQLDBException.Create(SCircularProvider);
+  inherited OpenCursor(InfoQuery);
+end;
+
+{$ifdef ISDELPHI2007ANDUP}
+function TSynDBDataSet.PSGetCommandText: string;
+{$ifdef ISDELPHIXE3}
+var IP: IProviderSupportNG;
+begin
+  if Supports(fDataSet, IProviderSupportNG, IP) then
+{$else}
+var IP: IProviderSupport;
+begin
+  if Supports(fDataSet, IProviderSupport, IP) then
+{$endif}
+    result := IP.PSGetCommandText else
+    result := CommandText;
+end;
+{$endif ISDELPHI2007ANDUP}
+
+function TSynDBDataSet.GetConnection: TSQLDBConnectionProperties;
+begin
+  result := fDataSet.Connection;
+end;
+
+procedure TSynDBDataSet.SetConnection(Value: TSQLDBConnectionProperties);
+begin
+  fDataSet.Connection := Value;
+end;
+
+{$endif FPC}
+
 end.
+
 

@@ -76,7 +76,7 @@ var proxy: TSQLDBConnectionProperties;
     Timer: TPrecisionTimer;
 begin
   ds1.DataSet.Free;
-  chkViaTClientDataSet.Enabled := not (cbbDataSource.ItemIndex in [1,8]);
+  chkViaTClientDataSet.Enabled := not (cbbDataSource.ItemIndex in [1]);
   Timer.Start;
   case cbbDataSource.ItemIndex of
   0: // test TSynSQLTableDataSet: reading from JSON content
@@ -119,12 +119,18 @@ begin
         proxy.Free;
     end;
   end;
-  8: begin // no TClientDataSet yet for TSynDBSQLDataSet
-    ds1.DataSet := TSynDBSQLDataSet.Create(self);
-    TSynDBSQLDataSet(ds1.DataSet).Connection := fProps;
-    TSynDBSQLDataSet(ds1.DataSet).CommandText := SQL_PEOPLE;
-    ds1.DataSet.Open;
-  end;
+  8: // test TSynDBSQLDataSet / TSynDBDataSet
+    if chkViaTClientDataSet.Checked then begin
+      ds1.DataSet := TSynDBDataSet.Create(self);
+      TSynDBDataSet(ds1.DataSet).Connection := fProps;
+      TSynDBDataSet(ds1.DataSet).CommandText := SQL_PEOPLE;
+      ds1.DataSet.Open;
+    end else begin
+      ds1.DataSet := TSynDBSQLDataSet.Create(self);
+      TSynDBSQLDataSet(ds1.DataSet).Connection := fProps;
+      TSynDBSQLDataSet(ds1.DataSet).CommandText := SQL_PEOPLE;
+      ds1.DataSet.Open;
+    end;
   end;
   lblTiming.Caption := 'Processed in '+Ansi7ToString(Timer.Stop);
 end;

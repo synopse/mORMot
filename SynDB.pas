@@ -4451,6 +4451,8 @@ begin
   if self=nil then
     exit;
   Query := PrepareInlined(aSQL,ExpectResults);
+  if Query=nil then
+    exit; // e.g. invalid aSQL 
   Query.ExecutePrepared;
   result := Query;
 end;

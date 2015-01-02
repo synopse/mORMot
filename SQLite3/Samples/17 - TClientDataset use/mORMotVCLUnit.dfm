@@ -66,6 +66,7 @@ object Form1: TForm1
       Width = 129
       Height = 21
       Style = csDropDownList
+      DropDownCount = 10
       ItemHeight = 13
       ItemIndex = 0
       TabOrder = 1
@@ -80,7 +81,7 @@ object Form1: TForm1
         'SQLite3 HTTP WinHTTP'
         'SQLite3 HTTP WinINet'
         'SQLite3 HTTP Sockets'
-        'SQLite3 TSynDBSQLDataSet')
+        'SQLite3 SQL TDataSet')
     end
     object btnRefresh: TButton
       Left = 360

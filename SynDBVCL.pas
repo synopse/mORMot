@@ -30,6 +30,7 @@ unit SynDBVCL;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
+  - Murat Ak
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -88,11 +89,11 @@ type
   public
     /// initialize the virtual TDataSet from a FetchAllToBinary() buffer
     procedure From(const BinaryData: RawByteString;
-      DataRowPosition: PCardinalDynArray=nil); overload;
+      DataRowPosition: PCardinalDynArray=nil); overload; virtual; 
     /// initialize the virtual TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied ISQLDBRows instance can safely be freed by the caller,
     // since a private binary copy will be owned by this instance (in Data)
-    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0); overload;
+    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0); overload; virtual;
     /// finalize the class instance
     destructor Destroy; override;
     /// read-only access to the internal binary buffer
@@ -102,8 +103,9 @@ type
   end;
 
   /// TDataSet able to execute any SQL as SynDB's TSQLStatement result set
-  // - no ISQLDBRows instance is supplied here: you should specify a Connection
-  // instance, then execute its CommandText SQL statement via its Open method
+  // - this class is not meant to be used by itself, but via TSynDBDataSet, 
+  // defined in SynDBMidasVCL.pas, as a data provider able to apply updates to
+  // the remote SynDB connection
   // - typical usage may be for instance over a SynDBRemote connection:
   // ! props := TSQLDBWinHTTPConnectionProperties.Create(....);
   // ! ds := TSynDBSQLDataSet.Create(MainForm);
@@ -133,6 +135,10 @@ type
     function PSExecuteStatement(const ASQL: string; AParams: TParams; ResultSet: Pointer=nil): Integer; overload; override;
     {$endif}
   public
+    /// initialize the internal TDataSet from a SynDB TSQLDBStatement result set
+    // - the supplied TSQLDBStatement can then be freed by the caller, since
+    // a private binary copy will be owned by this instance (in fDataSet.Data)
+    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0); override;
     /// the associated connection properties
     property Connection: TSQLDBConnectionProperties read fConnection write fConnection;
   published
@@ -162,6 +168,13 @@ function ToDataSet(aOwner: TComponent; aStatement: SynDB.TQuery;
 function ToDataSet(aOwner: TComponent; aStatement: TSQLDBStatement;
   aMaxRowCount: integer=0): TSynBinaryDataSet; overload;
 
+/// fetch a SynDB ISQLDBRows result set into a VCL DataSet
+// - this overloaded function can use directly a result of the
+// TSQLDBConnectionProperties.Execute() method, as such:
+// ! ds1.DataSet := ToDataSet(self,props.Execute('select * from table',[]));
+function ToDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
+  aMaxRowCount: integer=0): TSynBinaryDataSet; overload;
+
 /// fetch a SynDB's TSQLDBStatement.FetchAllToBinary buffer into a VCL DataSet
 // - just a wrapper around TSynBinaryDataSet.Create + Open
 // - if you need a writable TDataSet, you can use the slower ToClientDataSet()
@@ -188,6 +201,14 @@ begin
   result := TSynBinaryDataSet.Create(aOwner);
   result.From(aStatement,aMaxRowCount);
   result.Open;
+end;
+
+function ToDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
+  aMaxRowCount: integer): TSynBinaryDataSet; 
+begin
+  if aStatement=nil then
+    result  := nil else
+    result := ToDataSet(aOwner,aStatement.Instance,aMaxRowCount);
 end;
 
 function BinaryToDataSet(aOwner: TComponent; const aBinaryData: RawByteString): TSynBinaryDataSet;
@@ -285,6 +306,12 @@ end;
 
 { TSynDBSQLDataSet }
 
+procedure TSynDBSQLDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
+begin
+  inherited From(Statement,MaxRowCount);
+  fConnection := Statement.Connection.Properties;
+end;
+
 procedure TSynDBSQLDataSet.InternalClose;
 begin
   inherited InternalClose;
@@ -295,6 +322,11 @@ end;
 procedure TSynDBSQLDataSet.InternalOpen;
 var Rows: ISQLDBRows;
 begin
+  if fCommandText='' then begin
+    if fData<>'' then // called e.g. after From() method 
+      inherited InternalOpen;
+    exit;
+  end;
   Rows := fConnection.ExecuteInlined(StringToUTF8(fCommandText),true);
   if Rows<>nil then begin
     From(Rows.Instance);
