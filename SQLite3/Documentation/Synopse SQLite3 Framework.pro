@@ -29,7 +29,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 
 {\b Document License}
 THE ATTACHED DOCUMENTS DESCRIBE INFORMATION RELEASED BY SYNOPSE INFORMATIQUE UNDER A GPL 3.0 LICENSE.
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2014 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2015 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
 ;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 This document is free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 The {\i Synopse mORMot Framework Documentation} is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
@@ -5395,7 +5395,7 @@ The following {\i NoSQL} engines can be accessed from {\i mORMot}'s {\i Object D
 |{\i @*MongoDB@}|#1 NoSQL database engine
 |%
 We can in fact consider our {\f1\fs20 @**TSQLRestStorageInMemory@} instance, and its {\f1\fs20 TObjectList} storage, as a {\i NoSQL} very fast in-memory engine, written in pure Delphi. See @57@ for details about this feature.
-{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
+{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
 - Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
@@ -14880,7 +14880,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2014 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2015 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
 $    Will serve static content and DWS dynamic content via http.sys
@@ -14892,7 +14892,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
