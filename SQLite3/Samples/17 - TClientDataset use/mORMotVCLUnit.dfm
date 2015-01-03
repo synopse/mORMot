@@ -92,6 +92,15 @@ object Form1: TForm1
       TabOrder = 2
       OnClick = chkFromSQLClick
     end
+    object btnApply: TButton
+      Left = 648
+      Top = 8
+      Width = 81
+      Height = 25
+      Caption = 'Apply Updates'
+      TabOrder = 3
+      OnClick = btnApplyClick
+    end
   end
   object ds1: TDataSource
     Left = 96

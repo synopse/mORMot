@@ -351,25 +351,25 @@ function TSynDBSQLDataSet.PSExecuteStatement(const ASQL: string;
 function TSynDBSQLDataSet.PSExecuteStatement(const ASQL: string;
   AParams: TParams; ResultSet: Pointer): Integer;
 {$endif}
-var Query: TQuery; // TQuery is a common wrapper for our exact purpose here
+var Stmt: ISQLDBStatement;
     p: integer;
-begin
+begin // only execute writes in current implementation
   if fConnection=nil then
     raise ESQLQueryException.CreateUTF8('%.PSExecuteStatement with Connection=nil',[self]);
-  Query := TQuery.Create(fConnection.ThreadSafeConnection);
-  try
-    Query.SQL.Text := ASQL; // will do the :ABC -> ? parsing as expected
-    if AParams<>nil then
-      for p := 0 to AParams.Count-1 do
-        Query.ParamByName(AParams[p].Name).AsVariant := AParams[p].Value;
-    try  
-      result := Query.ExecSQLAndReturnUpdateCount;
+  Stmt := fConnection.NewThreadSafeStatementPrepared(StringToUTF8(ASQL),false);
+  if Stmt<>nil then
+    try
+      if AParams<>nil then
+        for p := 0 to AParams.Count-1 do
+          Stmt.BindVariant(p+1,AParams[p].Value,False);
+      Stmt.ExecutePrepared;
+      result := Stmt.UpdateCount;
+      if result=0 then
+        result := 1; // optimistic result, even if SynDB returned 0
     except
       result := 0;
-    end;
-  finally
-    Query.Free;
-  end;
+    end else
+      result := 0;
 end;
 
 function TSynDBSQLDataSet.PSGetTableName: string;

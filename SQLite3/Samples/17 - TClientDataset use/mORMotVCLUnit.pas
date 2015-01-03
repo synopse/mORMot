@@ -20,9 +20,11 @@ type
     cbbDataSource: TComboBox;
     lblFrom: TLabel;
     btnRefresh: TButton;
+    btnApply: TButton;
     procedure FormDestroy(Sender: TObject);
     procedure chkFromSQLClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure btnApplyClick(Sender: TObject);
   private
     fJSON: RawUTF8;
     fDBFileName: TFileName;
@@ -53,11 +55,11 @@ begin
   fJSON := StringFromFile('..\..\exe\People.json');
   if fJSON='' then
     fJSON := StringFromFile('..\..\People.json');
-  fDBFileName :=  '..\..\exe\test.db3';
+  fDBFileName :=  '..\..\exe\backupbackground.db3';
   if not FileExists(fDBFileName) then
-    fDBFileName :=  '..\..\test.db3';
+    fDBFileName :=  '..\..\backupbackground.db3';
   if not FileExists(fDBFileName) then
-    raise Exception.Create('impossible to find test.db3');
+    raise Exception.Create('impossible to find backupbackground.db3');
   fProps := TSQLDBSQLite3ConnectionProperties.Create(StringToUTF8(fDBFileName),'','','');
   fServer := SERVER_CLASS.Create(fProps,SERVER_NAME,SERVER_PORT,'user','pass');
 end;
@@ -136,5 +138,11 @@ begin
 end;
 
 
+
+procedure TForm1.btnApplyClick(Sender: TObject);
+begin
+  if ds1.DataSet is TSynDBDataSet then
+    TSynDBDataSet(ds1.DataSet).ApplyUpdates(0);
+end;
 
 end.
