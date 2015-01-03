@@ -1,4 +1,4 @@
-  /// MongoDB document-oriented database direct access classes
+/// MongoDB document-oriented database direct access classes
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynMongoDB;
@@ -2128,7 +2128,7 @@ type
     // - if Update contains update operators (like $set), it will update the
     // corresponding fields in the document:
     // ! book.insert('{_id:?,item:?,stock:?}',[11,'Divine Comedy',2]);
-    // ! book.update('{item:?},['Divine Comedy'],'{$set:{price:?},$inc:{$stock:?}},[18,5]);
+    // ! book.update('{item:?},['Divine Comedy'],'{$set:{price:?},$inc:{stock:?}},[18,5]);
     // ! // the updated document is now:
     // ! { "_id" : 11, "item" : "Divine Comedy", "price" : 18, "stock" : 7 }
     procedure Update(Query: PUTF8Char; const QueryParams: array of const;
