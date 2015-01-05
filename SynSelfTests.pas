@@ -4843,6 +4843,7 @@ begin
      J := ObjectToJSON(Coll,[woHumanReadable]);
      Check(Hash32(J)=$A7204D8A);
      Check(JSONReformat(J,jsonCompact)=U);
+     Check(JSONReformat('{ "empty": {} }')='{'#$D#$A'  "empty": {'#$D#$A'    }'#$D#$A'}');
      U := ObjectToJSON(Coll,[woStoreClassName]);
      Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
        '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+

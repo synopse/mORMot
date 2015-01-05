@@ -35,6 +35,7 @@ unit SynCommons;
    - RalfS
    - Sanyin
    - Pavel (mpv)
+   - Wloochacz
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -5792,7 +5793,11 @@ type
     // - returns TRUE if was flushed, i.e. if there was something in cache
     function Reset: boolean;
     /// number of entries in the cache
+    {$ifdef VER220} { circumvent Delphi XE compilation with packages }
+    function Count: integer;
+    {$else}
     property Count: integer read fNameValue.Count;
+    {$endif}
   end;
 
   /// abstract ancestor to manage a dynamic array of TObject
@@ -36547,6 +36552,13 @@ begin
   fFindLastAddedIndex := -1;
   fValueSize := 0;
 end;
+
+{$ifdef VER220}
+function TSynCache.Count: integer;
+begin
+  result := fNameValue.Count;
+end;
+{$endif}
 
 
 { TRawUTF8List }
