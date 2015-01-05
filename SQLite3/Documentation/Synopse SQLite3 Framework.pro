@@ -4512,7 +4512,7 @@ The {\f1\fs20 @**SynDB@.pas} units have the following features:
 - Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
 - @*Late-binding@ column access, via a custom variant type when accessing the result sets;
-- two kind of optimized {\f1\fs20 @*TDataSet@} result sets: one based on {\f1\fs20 @*TClientDataSet@}, and a much faster read-only {\f1\fs20 @*TSynSQLStatementDataSet@}
+- two kind of optimized {\f1\fs20 @*TDataSet@} result sets: one read-write based on {\f1\fs20 @*TClientDataSet@}, and a much faster read-only {\f1\fs20 @*TSynSQLStatementDataSet@}
 - Direct UTF-8 @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
 - High-level catalog / database layout abstract methods, able to retrieve the table and column properties (including indexes), for database reverse-engineering; provide also SQL statements to create a table or an index in a database-abstract manner; those features will be used directly by our ORM;
 - Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 @*TQuery@}-like wrapper;
@@ -4722,7 +4722,7 @@ As a benefit, those result sets would be much faster, when accessed from your ob
 In order to easily use the {\f1\fs20 SynDB.pas} unit with VCL components, you can create {\f1\fs20 TDataSet} results sets from any {\f1\fs20 SynDB} query.\line You have access to two kind of optimized {\f1\fs20 @*TDataSet@} result sets:
 |%30%15%25%30
 |\b TDataSet class|Operation|Unit|Remark\b0
-|{\f1\fs20 @*TClientDataSet@}|read/write|{\f1\fs20 SynDBMidasVCL.pas}|Slow due to memory copy
+|{\f1\fs20 @*TClientDataSet@}|read write|{\f1\fs20 SynDBMidasVCL.pas}|Slow due to memory copy
 |{\f1\fs20 @*TSynSQLStatementDataSet@}|read only|{\f1\fs20 SynDBVCL.pas}|Fast due to direct mapping
 |%
 You can therefore assign the result of a {\f1\fs20 SynDB} request to any {\f1\fs20 TDataSource}, as such for our fast {\f1\fs20 TSynSQLStatementDataSet} read/only storage:
@@ -5555,7 +5555,7 @@ $Name: Name 11  Number: 10
 In a GUI application, you could fill a VCL grid using a {\f1\fs20 TDocVariantArrayDataSet} as defined in {\f1\fs20 SynVirtualDataSet.pas}, for instance:
 ! ds1.DataSet.Free; // release previous TDataSet
 ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
-This overloaded {\f1\fs20 FindDocs()} method takes a query filter as JSON and parameters (following the {\f1\fs20 MongoDB} syntax), and a {\f1\fs20 Projection} mapping ({\f1\fs20 null} to retrieve all properties). Its returns a {\f1\fs20 TVariantDynArray} result, which was mapped to an optimized read/only {\f1\fs20 TDataSet} using the overloaded {\f1\fs20 ToDataSet()} function. So in our case, the DB grid has been filled with all people named '{\f1\fs20 John}', with age greater than 21.
+This overloaded {\f1\fs20 FindDocs()} method takes a query filter as JSON and parameters (following the {\f1\fs20 MongoDB} syntax), and a {\f1\fs20 Projection} mapping ({\f1\fs20 null} to retrieve all properties). Its returns a {\f1\fs20 TVariantDynArray} result, which was mapped to an optimized read-only {\f1\fs20 TDataSet} using the overloaded {\f1\fs20 ToDataSet()} function. So in our case, the DB grid has been filled with all people named '{\f1\fs20 John}', with age greater than 21.
 If you want to retrieve the documents directly as JSON, we can write:
 !var json: RawUTF8;
 !...
