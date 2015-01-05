@@ -32949,6 +32949,8 @@ begin
     inc(fHumanReadableLevel);
     if Format<>jsonCompact then
       AddCRAndIndent;
+    if JSON^='}' then
+      repeat inc(JSON) until not(JSON^ in [#1..' ']) else
     repeat
       Name := GetJSONPropName(JSON);
       if Name=nil then
