@@ -58,15 +58,14 @@ unit SynVirtualDataSet;
 interface
 
 uses
-  {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
+  {$ifdef ISDELPHIXE2}System.SysUtils,VCL.Forms,{$else}SysUtils,Forms,{$endif}
   Classes,
   Contnrs,
   {$ifndef DELPHI5OROLDER}
   Variants,
   {$endif}
   SynCommons,
-  DB,
-  Forms;
+  DB;
 
 
 type
