@@ -33048,22 +33048,24 @@ begin
   end;
   '{': begin
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    repeat
-      Name := GetJSONPropName(JSON);
-      if Name=nil then
-        exit;
-      if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
-      if JSON^='[' then // arrays are written as list of items, without root
-        JSON := AddJSONToXML(JSON,Name,@objEnd) else begin
-        Add('<');
-        AddXmlEscape(Name);
-        Add('>');
-        JSON := AddJSONToXML(JSON,Name,@objEnd);
-        Add('<','/');
-        AddXmlEscape(Name);
-        Add('>');
-      end;
-    until objEnd='}';
+    if JSON^='}' then
+      repeat inc(JSON) until not(JSON^ in [#1..' ']) else
+      repeat
+        Name := GetJSONPropName(JSON);
+        if Name=nil then
+          exit;
+        if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+        if JSON^='[' then // arrays are written as list of items, without root
+          JSON := AddJSONToXML(JSON,Name,@objEnd) else begin
+          Add('<');
+          AddXmlEscape(Name);
+          Add('>');
+          JSON := AddJSONToXML(JSON,Name,@objEnd);
+          Add('<','/');
+          AddXmlEscape(Name);
+          Add('>');
+        end;
+      until objEnd='}';
   end;
   else begin
     Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
