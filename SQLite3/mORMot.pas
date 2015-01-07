@@ -37973,6 +37973,7 @@ const
     {$ifndef NOVARIANTS}smvVariant,{$endif} smvDynArray];
 
   CONST_PSEUDO_RESULT_NAME: string[6] = 'Result';
+  CONST_PSEUDO_SELF_NAME: string[4] = 'Self';
 
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
@@ -38928,11 +38929,12 @@ begin
   meth := fMethod.AddUniqueName(aName,'%.% method: duplicated generated name for %',
     [fInterfaceTypeInfo^.Name,aName,self]);
   na := length(aParams) div ARGPERARG;
-  SetLength(meth^.Args,na);
-  arg := pointer(meth^.Args);
+  SetLength(meth^.Args,na+1); // leave Args[0]=self
+  meth^.Args[0].ParamName := @CONST_PSEUDO_SELF_NAME;
   ns := length(fTempStrings);
   SetLength(fTempStrings,ns+na);
   for a := 0 to na-1 do begin
+    arg := @meth^.Args[a+1];
     if aParams[a*ARGPERARG].VType<>vtInteger then
       raise EInterfaceFactoryException.CreateUTF8('%: invalid param type #% for %.AddMethod("%")',
         [fInterfaceTypeInfo^.Name,a,self,aName]);
