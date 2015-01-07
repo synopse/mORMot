@@ -230,6 +230,7 @@
   {.$define NOEXCEPTIONINTERCEPT}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+    {$define HASINTERFACERTTI} // interface RTTI (not FPC)
     {$ifdef LINUX}
       {$if RTLVersion = 14.5}
         // Kylix 3 will be handled just like Delphi 7

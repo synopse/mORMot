@@ -362,6 +362,8 @@ begin
     end;
     if a<meth.ArgsNotResultLast then
       _ObjAddProps(['commaArg','; '],arg);
+    if a=high(meth.Args) then
+      _ObjAddProps(['isArgLast',true],arg);
     if (meth.args[a].ValueDirection in [smdConst,smdVar]) and (a<meth.ArgsInLast) then
       _ObjAddProps(['commaInSingle',','],arg);
     if (meth.args[a].ValueDirection in [smdVar,smdOut]) and (a<meth.ArgsOutNotResultLast) then
@@ -385,8 +387,10 @@ begin
   TDocVariant.NewFast(result);
   for m := 0 to int.MethodsCount-1 do
   with int.Methods[m] do begin
-    method := _ObjFast(['methodName',URI,'verb',VERB_DELPHI[ArgsResultIndex>=0],
-      'args',ContextFromMethod(int.Methods[m]),'argsOutputCount',ArgsOutputValuesCount,
+    method := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
+      'verb',VERB_DELPHI[ArgsResultIndex>=0],
+      'args',ContextFromMethod(int.Methods[m]),
+      'argsOutputCount',ArgsOutputValuesCount,
       'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
     if ArgsInFirst>=0 then
       method.hasInParams := true;

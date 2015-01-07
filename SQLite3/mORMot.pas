@@ -756,6 +756,8 @@ unit mORMot;
     - sets including all enumerate values will be written in JSON as "*"
       with woHumanReadable option (and recognized as such e.g. by JSONToObject);
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
+    - introducing TInterfaceFactoryGenerated so that interface methods can be
+      described for FPC, which lacks of expected RTTI - see [9357b49fe2]
     - interface-based services are now able to work with TObjectList parameters
     - interface-based services will now avoid to transmit the "id":... value
       when ID equals 0
@@ -7683,10 +7685,10 @@ type
     TypeInfo: PTypeInfo;
     /// we do not handle all kind of Delphi variables
     ValueType: TServiceMethodValueType;
-    /// how the variable may be stored
-    ValueVar: TServiceMethodValueVar;
     /// the variable direction as defined at code level
     ValueDirection: TServiceMethodValueDirection;
+    /// how the variable may be stored
+    ValueVar: TServiceMethodValueVar;
     /// how the variable is to be passed at asm level
     // - vIsString is included for smvRawUTF8, smvString and smvWideString
     // kind of parameter (smvRecord has it to false, even if they are Base-64
@@ -7916,6 +7918,7 @@ type
   // and not manual TInterfaceFactory.Create / Free
   // - if you want to search the interfaces by name or TGUID, call once
   // Get(TypeInfo(IMyInterface)) or RegisterInterfaces() for proper registration
+  // - will use TInterfaceFactoryRTTI classes generated from Delphi RTTI
   TInterfaceFactory = class
   protected
     fInterfaceTypeInfo: PTypeInfo;
@@ -7923,14 +7926,14 @@ type
     fMethodsCount: cardinal;
     fMethods: TServiceMethodDynArray;
     fMethod: TDynArrayHashed;
-    fFakeVTable: array of pointer;
-    fFakeStub: PByteArray;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUTF8;
     {$ifndef NOVARIANTS}
     fDocVariantOptions: TDocVariantOptions;
     {$endif}
-    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+    fFakeVTable: array of pointer;
+    fFakeStub: PByteArray;
+    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
     /// this is the main entry point to the global interface factory cache
@@ -7952,12 +7955,13 @@ type
     /// register one or several interfaces to the global interface factory cache
     // - so that you can use TInterfaceFactory.Get(aGUID) or Get(aName)
     class procedure RegisterInterfaces(const aInterfaces: array of PTypeInfo);
+
     /// create a fake class instance implementing the corresponding interface
     // - aInvoke event will be called at method execution
     // - optional aNotifyDestroy event will be called when the fake
     // implementation instance will be released (e.g. for server notification)
     function CreateFakeInstance(aInvoke: TOnFakeInstanceInvoke;
-      aNotifyDestroy: TOnFakeInstanceDestroy=nil): TInterfacedObject;
+      aNotifyDestroy: TOnFakeInstanceDestroy=nil): TInterfacedObject; virtual;
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -7995,6 +7999,61 @@ type
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
     {$endif}
+  end;
+
+  {$ifdef HASINTERFACERTTI}
+
+  /// class handling interface RTTI and fake implementation class
+  // - this class only exists for Delphi 6 and up, since FPC does not generate
+  // the expected RTTI - see http://bugs.freepascal.org/view.php?id=26774
+  TInterfaceFactoryRTTI = class(TInterfaceFactory)
+  protected
+    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); override;
+  end;
+
+  {$endif HASINTERFACERTTI}
+
+  /// abstract class handling a generic interface implementation class 
+  TInterfacedObjectFromFactory = class(TInterfacedObject)
+  protected
+    fFactory: TInterfaceFactory;
+    fInvoke: TOnFakeInstanceInvoke;
+    fNotifyDestroy: TOnFakeInstanceDestroy;
+    fClientDrivenID: Cardinal;
+  public
+    /// create an instance, using the specified interface
+    constructor Create(aFactory: TInterfaceFactory;
+      aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+    /// release the remote server instance (in sicClientDriven mode);
+    destructor Destroy; override;
+    /// the associated interface factory class
+    property Factory: TInterfaceFactory read fFactory;
+    /// the ID used in sicClientDriven mode
+    property ClientDrivenID: Cardinal read fClientDrivenID;
+  end;
+
+  /// class for handling interface implementation generated from source
+  TInterfaceFactoryGeneratedClass = class of TInterfaceFactoryGenerated;
+
+  /// class handling interface implementation generated from source
+  // - this class targets FPC, which does not generate the expected RTTI - see
+  // http://bugs.freepascal.org/view.php?id=26774
+  // - mORMotWrapper.pas will generate a new inherited class, overriding
+  // both AddMethodsFromTypeInfo() and CreateFakeInstance()
+  TInterfaceFactoryGenerated = class(TInterfaceFactory)
+  protected
+    fTempStrings: TRawUTF8DynArray;
+    /// the overriden AddMethodsFromTypeInfo() method will call e.g. as
+    // ! AddMethod('Add',[
+    // !   0,'n1',TypeInfo(Integer),
+    // !   0,'n2',TypeInfo(Integer),
+    // !   3,'Result',TypeInfo(Integer)]);
+    // with 0=ord(smdConst) and 3=ord(smdResult)
+    procedure AddMethod(const aName: RawUTF8; const aParams: array of const); virtual;
+  public
+    /// register one interface type definition
+    class procedure RegisterInterface(aInterface: PTypeInfo;
+      aFactoryClass: TInterfaceFactoryGeneratedClass); virtual;
   end;
 
   TInterfaceStub = class;
@@ -37844,10 +37903,6 @@ begin
   result := nil;
 end;
 
-
-{ TInterfacedObjectFake (private class for TInterfaceFactory.CreateFakeInstance) }
-
-// see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 const
   // this is used to avoid creating dynamic arrays if not needed
   MAX_METHOD_ARGS = 32;
@@ -37855,8 +37910,13 @@ const
   // QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
 
-  {$ifdef CPU64}
-  
+
+{ TInterfacedObjectFake (private class for TInterfaceFactory.CreateFakeInstance) }
+
+// see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
+
+{$ifdef CPU64}
+const
   // maximum stack size at method execution must match .PARAMS 64 (minus 4 regs)
   MAX_EXECSTACK = 60*8;
 
@@ -37871,7 +37931,7 @@ const
   REG_FIRST = REGRCX;
   REG_LAST = REGR9;
 
-  {$else}
+{$else}
 
   // maximum stack size at method execution
   MAX_EXECSTACK = 1024;
@@ -37882,7 +37942,7 @@ const
   REG_FIRST = REGEAX;
   REG_LAST = REGECX;
 
-  {$endif CPU64}
+{$endif CPU64}
 
   PTRSIZ = sizeof(Pointer);
 
@@ -37929,13 +37989,9 @@ type
   end;
 
   /// instances of this class will emulate a given interface
-  TInterfacedObjectFake = class(TInterfacedObject)
+  TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
   protected
     fVTable: PPointerArray;
-    fFactory: TInterfaceFactory;
-    fInvoke: TOnFakeInstanceInvoke;
-    fNotifyDestroy: TOnFakeInstanceDestroy;
-    fClientDrivenID: Cardinal;
     function FakeCall(var aCall: TFakeCallStack): Int64;
     function FakeQueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function Fake_AddRef: Integer; stdcall;
@@ -37946,10 +38002,6 @@ type
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
-    /// release the remote server instance (in sicClientDriven mode);
-    destructor Destroy; override;
-    /// the ID used in sicClientDriven mode
-    property ClientDrivenID: Cardinal read fClientDrivenID;
   end;
 
   EInterfaceStub = class(EInterfaceFactoryException)
@@ -37964,28 +38016,11 @@ type
 constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
   aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
 begin
-  inherited Create;
+  inherited Create(aFactory,aInvoke,aNotifyDestroy);
   fFactory := aFactory;
   fVTable := aFactory.GetMethodsVirtualTable;
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
-end;
-
-destructor TInterfacedObjectFake.Destroy;
-var C: TClass;
-begin
-  if Assigned(fNotifyDestroy) then
-  try // release server instance
-    fNotifyDestroy(fClientDrivenID);
-  except
-    on E: Exception do begin
-      C := E.ClassType;
-      if (C=EInterfaceStub) or (C=EInterfaceFactoryException) or
-         (C=EAccessViolation) {$IFNDEF  LVCL}or (C=EInvalidPointer){$endif} then
-        raise; // ignore all low-level exceptions
-    end;
-  end;
-  inherited;
 end;
 
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
@@ -38233,6 +38268,39 @@ end;
 {$endif CPUARM}
 
 
+{ TInterfacedObjectFromFactory }
+
+constructor TInterfacedObjectFromFactory.Create(aFactory: TInterfaceFactory;
+  aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+begin
+  inherited Create;
+  fFactory := aFactory;
+  fInvoke := aInvoke;
+  fNotifyDestroy := aNotifyDestroy;
+end;
+
+destructor TInterfacedObjectFromFactory.Destroy;
+var C: TClass;
+begin
+  if Assigned(fNotifyDestroy) then
+  try // release server instance
+    fNotifyDestroy(fClientDrivenID);
+  except
+    on E: Exception do begin
+      C := E.ClassType;
+      if (C=EInterfaceStub) or (C=EInterfaceFactoryException) or
+         (C=EAccessViolation) {$IFNDEF  LVCL}or (C=EInvalidPointer){$endif} then
+        raise; // ignore all low-level exceptions
+    end;
+  end;
+  inherited;
+end;
+
+
+{ TInterfacedObjectGenerated }
+
+
+
 { TInterfaceFactory }
 
 function ToText(aValue: TServiceInstanceImplementation): RawUTF8;
@@ -38325,8 +38393,14 @@ begin
       if result.fInterfaceTypeInfo=aInterface then
         exit; // retrieved from cache
     end;
-    // not existing -> create new instance
-    result := TInterfaceFactory.Create(aInterface);
+    // not existing -> create new instance from RTTI
+    {$ifdef HASINTERFACERTTI}
+    result := TInterfaceFactoryRTTI.Create(aInterface);
+    {$else}
+    result := nil; // make compiler happy
+    raise EInterfaceFactoryException.CreateUTF8('No RTTI available for I%: please '+
+      'define the methods using a TInterfaceFactoryGenerated wrapper',[aInterface^.Name]);
+    {$endif}
     InterfaceFactoryCache.Add(result);
   finally
     InterfaceFactoryCache.UnLock;
@@ -38365,20 +38439,17 @@ begin
   result := nil;
 end;
 
-function TInterfaceFactory.CreateFakeInstance(aInvoke: TOnFakeInstanceInvoke;
-  aNotifyDestroy: TOnFakeInstanceDestroy): TInterfacedObject;
-begin
-  result := TInterfacedObjectFake.Create(self,aInvoke,aNotifyDestroy);
-end;
-
 constructor TInterfaceFactory.Create(aInterface: PTypeInfo);
 var m,a,reg: integer;
     WR: TTextWriter;
+    C: TClass;
+    ErrorMsg: RawUTF8;
 {$ifdef CPU64}
     resultIsRDX: boolean;
 {$else}
     offs: integer;
 {$endif}
+label error;
 begin
   {$ifndef NOVARIANTS}
   fDocVariantOptions := JSON_OPTIONS[true];
@@ -38387,11 +38458,82 @@ begin
   fInterfaceIID := PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid;
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,@fMethodsCount,true);
-  AddMethodsFromTypeInfo(aInterface);
+  AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount=0 then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): interface has no RTTI',[self,aInterface^.Name]);
   SetLength(fMethods,fMethodsCount);
+  // compute additional information for each method
+  for m := 0 to fMethodsCount-1 do
+  with fMethods[m] do begin
+    ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
+    ArgsInFirst := -1;
+    ArgsInLast := -2;
+    ArgsOutFirst := -1;
+    ArgsOutLast := -2;
+    ArgsNotResultLast := -2;
+    ArgsOutNotResultLast := -2;
+    ArgsResultIndex := -1;
+    ArgsManagedFirst := -1;
+    ArgsManagedLast := -2;
+    Args[0].ValueType := smvSelf;
+    for a := 1 to high(Args) do
+    with Args[a] do begin
+      ValueType := TypeInfoToMethodValueType(TypeInfo);
+      case ValueType of
+      smvNone: begin
+        case TypeInfo^.Kind of
+        tkClass: begin
+          C := TypeInfo^.ClassType^.ClassType;
+          if C.InheritsFrom(TList) then
+            ErrorMsg := ' - use TObjectList instead' else
+          {$ifndef LVCL}
+          if (C.InheritsFrom(TCollection) and not C.InheritsFrom(TInterfacedCollection)) and
+            (JSONSerializerRegisteredCollection.Find(TCollectionClass(C))=nil) then
+            ErrorMsg := ' - inherit from TInterfacedCollection '+
+              'or use TJSONSerializer.RegisterCollectionForJSON()' else
+          {$endif}
+            ErrorMsg := ' - use TJSONSerializer.RegisterCustomSerializer()';
+        end;
+        tkInteger: ErrorMsg := ' - use integer/cardinal instead';
+        tkFloat:   ErrorMsg := ' - use double/currency instead';
+        end;
+error:  raise EInterfaceFactoryException.CreateUTF8(
+          '%.Create: %.% "%" parameter has unexpected type %%',
+          [self,aInterface^.Name,URI,ParamName^,TypeInfo^.Name,ErrorMsg]);
+      end;
+      smvObject:
+        if ValueDirection=smdResult then begin
+          ErrorMsg := ' - class not allowed as function result: use a var/out parameter';
+          goto error;
+        end;
+      end;
+      if ValueDirection=smdResult then
+        ArgsResultIndex := a else begin
+        ArgsNotResultLast := a;
+        if ValueDirection<>smdOut then begin
+          inc(ArgsInputValuesCount);
+          if ArgsInFirst<0 then
+            ArgsInFirst := a;
+          ArgsInLast := a;
+        end;
+        if ValueDirection<>smdConst then
+          ArgsOutNotResultLast := a;
+      end;
+      if ValueDirection<>smdConst then begin
+        if ArgsOutFirst<0 then
+          ArgsOutFirst := a;
+        ArgsOutLast := a;
+        inc(ArgsOutputValuesCount);
+      end;
+      if ValueType in [smvObject,smvDynArray,smvRecord
+          {$ifndef NOVARIANTS},smvVariant{$endif}] then begin
+        if ArgsManagedFirst<0 then
+          ArgsManagedFirst := a;
+        ArgsManagedLast := a;
+      end;
+    end;
+  end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
@@ -38441,8 +38583,8 @@ begin
       if ValueDirection=smdResult then begin
         if not(ValueType in CONST_ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
-        {$ifdef CPU64} // Delphi always put the result pointer as RDX in x64 
-        InStackOffset := STACKOFFSET_NONE; 
+        {$ifdef CPU64} // Delphi always put the result pointer as RDX in x64
+        InStackOffset := STACKOFFSET_NONE;
         RegisterIdent := REGRDX;
         continue;
         {$endif}
@@ -38466,9 +38608,9 @@ begin
       end;
     end;
     if ArgsSizeInStack>MAX_EXECSTACK then
-        raise EInterfaceFactoryException.CreateUTF8(
-          '%.Create: Stack size % > % for %.% method',
-          [self,ArgsSizeInStack,MAX_EXECSTACK,fInterfaceTypeInfo^.Name,URI]);
+      raise EInterfaceFactoryException.CreateUTF8(
+        '%.Create: Stack size % > % for %.% method',
+        [self,ArgsSizeInStack,MAX_EXECSTACK,fInterfaceTypeInfo^.Name,URI]);
     {$ifndef CPU64}
     // pascal/register convention are passed left-to-right -> reverse order
     offs := ArgsSizeInStack;
@@ -38483,7 +38625,7 @@ begin
   end;
   WR := TTextWriter.CreateOwnedStream;
   try
-    // compute the default result as a JSON array containing all methods
+    // compute the default results JSON array for all methods
     for m := 0 to fMethodsCount-1 do
     with fMethods[m] do begin
       WR.CancelAll;
@@ -38496,7 +38638,7 @@ begin
       WR.Add(']');
       WR.SetText(DefaultResult);
     end;
-    // compute the method contract as a JSON object
+    // compute the service contract as a JSON array
     WR.CancelAll;
     WR.Add('[');
     for m := 0 to fMethodsCount-1 do
@@ -38512,165 +38654,6 @@ begin
     WR.SetText(fContract);
   finally
     WR.Free;
-  end;
-end;
-
-procedure TInterfaceFactory.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
-var P: Pointer;
-    PB: PByte absolute P;
-    PI: PInterfaceTypeData absolute P;
-    PW: PWord absolute P;
-    PS: PShortString absolute P;
-    PME: ^TIntfMethodEntryTail absolute P;
-    PF: ^TParamFlags absolute P;
-    PP: ^PPTypeInfo absolute P;
-    Ancestor: PTypeInfo;
-    Kind: TMethodKind;
-    f: TParamFlags;
-    m,a: integer;
-    n: cardinal;
-    aURI, ErrorMsg: RawUTF8;
-    C: TClass;
-procedure RaiseError(Format: PUTF8Char; const Args: array of const);
-begin
-  raise EInterfaceFactoryException.CreateUTF8(
-    '%.AddMethodsFromTypeInfo: %.% %',
-    [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
-end;
-begin
-  // handle interface inheritance via recursive calls
-  P := aInterface^.ClassType;
-  if PI^.IntfParent<>nil then
-    Ancestor := PI^.IntfParent{$ifndef FPC}^{$endif} else
-    Ancestor := nil;
-  if Ancestor<>nil then
-    AddMethodsFromTypeInfo(Ancestor);
-  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
-  // retrieve methods for this interface level
-  {$ifdef FPC}
-  PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // ignore iidstr
-  {$endif}
-  n := PW^; inc(PW);
-  if (PW^=$ffff) or (n=0) then
-    exit; // no RTTI or no method at this level of interface
-  inc(PW);
-  for m := fMethodsCount to fMethodsCount+n-1 do begin
-    // retrieve method name, and add to the methods list (with hashing)
-    SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
-    with PServiceMethod(fMethod.AddUniqueName(aURI,
-      '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
-      ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
-      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-      Kind := PME^.Kind;
-      if PME^.CC<>ccRegister then
-        RaiseError('method shall use register calling convention',[]);
-      // retrieve method call arguments
-      n := PME^.ParamCount;
-      inc(PME);
-      if Kind=mkFunction then
-        SetLength(Args,n+1) else
-        SetLength(Args,n);
-      if length(Args)>MAX_METHOD_ARGS then
-        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
-      ArgsInFirst := -1;
-      ArgsInLast := -2;
-      ArgsOutFirst := -1;
-      ArgsOutLast := -2;
-      ArgsNotResultLast := -2;
-      ArgsOutNotResultLast := -2;
-      ArgsManagedFirst := -1;
-      ArgsManagedLast := -2;
-      for a := 0 to n-1 do
-      with Args[a] do begin
-        f := PF^;
-        inc(PF);
-        if pfVar in f then
-          ValueDirection := smdVar else
-        if pfOut in f then
-          ValueDirection := smdOut;
-        ArgsNotResultLast := a;
-        if ValueDirection<>smdConst then
-          ArgsOutNotResultLast := a;
-        ParamName := PS;
-        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-        TypeName := PS;
-        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-        if PP^=nil then
-          RaiseError('"%" parameter has no information',[ParamName^]);
-        TypeInfo := PP^{$ifndef FPC}^{$endif};
-        inc(PP);
-        {$ifdef ISDELPHIXE}
-        inc(PB,PW^); // skip custom attributes
-        {$endif}
-        if a=0 then
-          ValueType := smvSelf else begin
-          if ValueDirection<>smdOut then begin
-            inc(ArgsInputValuesCount);
-            if ArgsInFirst<0 then
-              ArgsInFirst := a;
-            ArgsInLast := a;
-          end;
-          ValueType := TypeInfoToMethodValueType(TypeInfo);
-          case ValueType of
-          smvNone: begin
-            case TypeInfo^.Kind of
-            tkClass: begin
-              C := TypeInfo^.ClassType^.ClassType;
-              if C.InheritsFrom(TList) then
-                ErrorMsg := ' - use TObjectList instead' else
-              {$ifndef LVCL}
-              if (C.InheritsFrom(TCollection) and not C.InheritsFrom(TInterfacedCollection)) and
-                (JSONSerializerRegisteredCollection.Find(TCollectionClass(C))=nil) then
-                ErrorMsg := ' - inherit from TInterfacedCollection '+
-                  'or use TJSONSerializer.RegisterCollectionForJSON()' else
-              {$endif}
-                ErrorMsg := ' - use TJSONSerializer.RegisterCustomSerializer()';
-            end;
-            tkInteger: ErrorMsg := ' - use integer/cardinal instead';
-            tkFloat:   ErrorMsg := ' - use double/currency instead';
-            end;
-            RaiseError('"%" parameter has unexpected type %%',
-              [ParamName^,TypeInfo^.Name,ErrorMsg]);
-          end;
-          smvRecord: if f*[pfConst,pfVar,pfOut]=[] then
-            RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
-          end;
-        end;
-      end;
-      // add a pseudo argument after all arguments for functions
-      if Kind=mkFunction then
-        with Args[n] do begin
-          ParamName := @CONST_PSEUDO_RESULT_NAME;
-          ArgsResultIndex := n;
-          ValueDirection := smdResult;
-          TypeName := PS;
-          PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-          TypeInfo := PP^{$ifndef FPC}^{$endif};
-          inc(PP);
-          ValueType := TypeInfoToMethodValueType(TypeInfo);
-        end else
-          ArgsResultIndex := -1;
-      // compute ArgsOut* and ArgsManaged* indexes
-      for a := 1 to high(Args) do
-      with Args[a] do begin
-        if ValueDirection<>smdConst then begin
-          if ArgsOutFirst<0 then
-            ArgsOutFirst := a;
-          ArgsOutLast := a;
-          inc(ArgsOutputValuesCount);
-        end;
-        if ValueType in [smvObject,smvDynArray,smvRecord
-            {$ifndef NOVARIANTS},smvVariant{$endif}] then begin
-          if ArgsManagedFirst<0 then
-            ArgsManagedFirst := a;
-          ArgsManagedLast := a;
-        end;
-      end;
-      // go to next method
-      {$ifdef ISDELPHIXE}
-      inc(PB,PW^); // skip custom attributes
-      {$endif}
-    end;
   end;
 end;
 
@@ -38698,12 +38681,12 @@ begin
   result := CheckMethodIndex(RawUTF8(aMethodName));
 end;
 
+{ low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
+
 {$ifdef CPU64}
 procedure x64FakeStub;
 var smetndx, sxmm3, sxmm2, sxmm1: pointer;
 asm // mov ax,{MethodIndex}; jmp x64FakeStub
-  {$ifdef FPC} // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
-  {$else}
   .params 2 // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
   and rax,$ffff
   movsd sxmm1,xmm1
@@ -38718,7 +38701,6 @@ asm // mov ax,{MethodIndex}; jmp x64FakeStub
   call TInterfacedObjectFake.FakeCall
   // FakeCall should set Int64 result in method result, and float in aCall.XMM1
   movsd xmm0,sxmm1
-  {$endif}
 end;
 {$endif}
 
@@ -38776,7 +38758,6 @@ begin
   end;
 end;
 
-
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var i: integer;
     P: PCardinal;
@@ -38815,6 +38796,179 @@ begin
     end;
   end;
   result := pointer(fFakeVTable);
+end;
+
+function TInterfaceFactory.CreateFakeInstance(aInvoke: TOnFakeInstanceInvoke;
+  aNotifyDestroy: TOnFakeInstanceDestroy): TInterfacedObject;
+begin
+  result := TInterfacedObjectFake.Create(self,aInvoke,aNotifyDestroy);
+end;
+
+
+
+{$ifdef HASINTERFACERTTI} // see http://bugs.freepascal.org/view.php?id=26774
+
+{ TInterfaceFactoryRTTI }
+
+procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+var P: Pointer;
+    PB: PByte absolute P;
+    PI: PInterfaceTypeData absolute P;
+    PW: PWord absolute P;
+    PS: PShortString absolute P;
+    PME: ^TIntfMethodEntryTail absolute P;
+    PF: ^TParamFlags absolute P;
+    PP: ^PPTypeInfo absolute P;
+    Ancestor: PTypeInfo;
+    Kind: TMethodKind;
+    f: TParamFlags;
+    m,a: integer;
+    n: cardinal;
+    aURI: RawUTF8;
+procedure RaiseError(Format: PUTF8Char; const Args: array of const);
+begin
+  raise EInterfaceFactoryException.CreateUTF8(
+    '%.AddMethodsFromTypeInfo: %.% %',
+    [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
+end;
+begin
+  // handle interface inheritance via recursive calls
+  P := aInterface^.ClassType;
+  if PI^.IntfParent<>nil then
+    Ancestor := PI^.IntfParent{$ifndef FPC}^{$endif} else
+    Ancestor := nil;
+  if Ancestor<>nil then
+    AddMethodsFromTypeInfo(Ancestor);
+  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
+  // retrieve methods for this interface level
+  {$ifdef FPC}
+  PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // ignore iidstr
+  {$endif}
+  n := PW^; inc(PW);
+  if (PW^=$ffff) or (n=0) then
+    exit; // no RTTI or no method at this level of interface
+  inc(PW);
+  for m := fMethodsCount to fMethodsCount+n-1 do begin
+    // retrieve method name, and add to the methods list (with hashing)
+    SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
+    with PServiceMethod(fMethod.AddUniqueName(aURI,
+      '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
+      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+      Kind := PME^.Kind;
+      if PME^.CC<>ccRegister then
+        RaiseError('method shall use register calling convention',[]);
+      // retrieve method call arguments from RTTI
+      n := PME^.ParamCount;
+      inc(PME);
+      if Kind=mkFunction then
+        SetLength(Args,n+1) else
+        SetLength(Args,n);
+      if length(Args)>MAX_METHOD_ARGS then
+        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
+      for a := 0 to n-1 do
+      with Args[a] do begin
+        f := PF^;
+        inc(PF);
+        if pfVar in f then
+          ValueDirection := smdVar else
+        if pfOut in f then
+          ValueDirection := smdOut;
+        ArgsNotResultLast := a;
+        if ValueDirection<>smdConst then
+          ArgsOutNotResultLast := a;
+        ParamName := PS;
+        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+        TypeName := PS;
+        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+        if PP^=nil then
+          RaiseError('"%" parameter has no information',[ParamName^]);
+        TypeInfo := PP^{$ifndef FPC}^{$endif};
+        inc(PP);
+        {$ifdef ISDELPHIXE}
+        inc(PB,PW^); // skip custom attributes
+        {$endif}
+        if TypeInfoToMethodValueType(TypeInfo)=smvRecord then
+          if f*[pfConst,pfVar,pfOut]=[] then
+            RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
+      end;
+      // add a pseudo argument after all arguments for functions
+      if Kind=mkFunction then
+        with Args[n] do begin
+          ParamName := @CONST_PSEUDO_RESULT_NAME;
+          ValueDirection := smdResult;
+          TypeName := PS;
+          PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+          TypeInfo := PP^{$ifndef FPC}^{$endif};
+          inc(PP);
+        end;
+      // go to next method
+      {$ifdef ISDELPHIXE}
+      inc(PB,PW^); // skip custom attributes
+      {$endif}
+    end;
+  end;
+end;
+
+{$endif HASINTERFACERTTI} // see http://bugs.freepascal.org/view.php?id=26774
+
+
+{ TInterfaceFactoryGenerated }
+
+procedure TInterfaceFactoryGenerated.AddMethod(
+  const aName: RawUTF8; const aParams: array of const);
+const ARGPERARG = 3; // [ 0,'n1',TypeInfo(Integer), ... ]
+var meth: PServiceMethod;
+    arg: ^TServiceMethodArgument;
+    na,ns,a: integer;
+    u: RawUTF8;
+begin
+  if Length(aParams) mod ARGPERARG<>0 then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%: invalid aParams count for %.AddMethod("%")',[fInterfaceTypeInfo^.Name,self,aName]);
+  meth := fMethod.AddUniqueName(aName,'%.% method: duplicated generated name for %',
+    [fInterfaceTypeInfo^.Name,aName,self]);
+  na := length(aParams) div ARGPERARG;
+  SetLength(meth^.Args,na);
+  arg := pointer(meth^.Args);
+  ns := length(fTempStrings);
+  SetLength(fTempStrings,ns+na);
+  for a := 0 to na-1 do begin
+    if aParams[a*ARGPERARG].VType<>vtInteger then
+      raise EInterfaceFactoryException.CreateUTF8('%: invalid param type #% for %.AddMethod("%")',
+        [fInterfaceTypeInfo^.Name,a,self,aName]);
+    arg^.ValueDirection := TServiceMethodValueDirection(aParams[a*ARGPERARG].VInteger);
+    VarRecToUTF8(aParams[a*ARGPERARG+1],u);
+    if u='' then
+      raise EInterfaceFactoryException.CreateUTF8('%: invalid param name #% for %.AddMethod("%")',
+        [fInterfaceTypeInfo^.Name,a,self,aName]);
+    insert(AnsiChar(Length(u)),u,1); // create fake PShortString
+    arg^.ParamName := pointer(u);
+    fTempStrings[ns+a] := u;
+    if aParams[a*ARGPERARG+2].VType<>vtPointer then
+      raise EInterfaceFactoryException.CreateUTF8('%: expect TypeInfo() at #% for %.AddMethod("%")',
+        [fInterfaceTypeInfo^.Name,a,self,aName]);
+    arg^.TypeInfo := aParams[a*ARGPERARG+2].VPointer;
+    arg^.TypeName := @arg^.TypeInfo^.Name;
+    inc(arg);
+  end;
+end;
+
+class procedure TInterfaceFactoryGenerated.RegisterInterface(aInterface: PTypeInfo;
+  aFactoryClass: TInterfaceFactoryGeneratedClass);
+var i: integer;
+begin
+  if (aInterface=nil) or (aFactoryClass=nil) or (aFactoryClass=TInterfaceFactoryGenerated) then
+    raise EInterfaceFactoryException.CreateUTF8('%.RegisterInterface(nil)',[self]);
+  EnterInterfaceFactoryCache;
+  try
+    for i := 0 to InterfaceFactoryCache.Count-1 do
+      if TInterfaceFactory(InterfaceFactoryCache.List[i]).fInterfaceTypeInfo=aInterface then
+        raise EInterfaceFactoryException.CreateUTF8('Duplicated %.RegisterInterface(%)',
+          [self,aInterface^.Name]);
+    InterfaceFactoryCache.Add(aFactoryClass.Create(aInterface));
+  finally
+    InterfaceFactoryCache.UnLock;
+  end;
 end;
 
 
@@ -39791,12 +39945,13 @@ type
 procedure CallMethod(var Args: TCallMethodArgs);
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException.CreateUTF8('You encountered an ALF !!! This code is disabled on ARM !!!',[]);
+  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
 end;
 {$else}
 {$ifdef CPU64}
 asm
-{$ifdef FPC} // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
+{$ifdef FPC}
+  // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
 {$else}
     .params 64    // size for 64 parameters
     .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
