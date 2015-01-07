@@ -7620,6 +7620,8 @@ function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; o
 procedure SetCurrentThreadName(Format: PUTF8Char; const Args: array of const);
 
 /// name a thread so that it would be easily identified in the IDE debugger
+// - you can force this function to do nothing by setting the NOSETTHREADNAME
+// conditional, if you have issues with this feature when debugging your app
 procedure SetThreadName(ThreadID: cardinal; Format: PUTF8Char; const Args: array of const);
 
 type
@@ -41906,6 +41908,9 @@ var name: RawByteString;
 {$endif}
 {$endif}
 begin
+  {$ifdef NOSETTHREADNAME}
+  exit;
+  {$endif}
   {$ifdef MSWINDOWS}
   if not IsDebuggerPresent then
     exit;

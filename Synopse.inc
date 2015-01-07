@@ -127,6 +127,10 @@
 // be affected (unless you use the enhanced RTTI for record/dynamic array JSON
 // serialization) - left undefined by default to ensure minimal impact
 
+{.$define NOSETTHREADNAME}
+// if defined, SetThreadName() would not raise the exception used to set the
+// thread name: to be defined if you have issues when debugging your application
+
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL
   {$define OWNNORMTOUPPER}
