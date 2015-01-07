@@ -34,6 +34,7 @@ unit SynPdf;
    CoMPi
    Damien (ddemars)
    David Mead (MDW)
+   HaraldSimon
    Ondrej (reddwarf)
    Sinisa (sinisav)
    Pierre le Riche
@@ -264,6 +265,7 @@ unit SynPdf;
     optional parameter to TPdfCanvas.RenderMetaFile()
   - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
     thanks MChaos for the proposal!
+  - added HaraldSimon's patch for EMR_BITBLT/EMR_STRETCHBLT
 
 }
 
@@ -8485,7 +8487,7 @@ type
     procedure DrawBitmap(xs,ys,ws,hs, xd,yd,wd,hd,usage: integer;
       Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm; dwRop: DWord;
       transparent: TColorRef = $FFFFFFFF);
-    procedure FillRectangle(const Rect: TRect);
+    procedure FillRectangle(const Rect: TRect; ResetNewPath: boolean);
     // the current value set to SetRGBFillColor (rg)
     property FillColor: integer read fFillColor write SetFillColor;
     // the current value set to SetRGBStrokeColor (RG)
@@ -8626,7 +8628,7 @@ begin
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
-    E.FillRectangle(PRgnDataHeader(@PEMRFillRgn(R)^.RgnData[0])^.rcBound);
+    E.FillRectangle(PRgnDataHeader(@PEMRFillRgn(R)^.RgnData[0])^.rcBound,false);
   end;
   EMR_POLYGON, EMR_POLYLINE, EMR_POLYGON16, EMR_POLYLINE16:
   if (not brush.null) or (not pen.null) then begin
@@ -8854,7 +8856,7 @@ begin
     case PEMRBitBlt(R)^.dwRop of // we only handle PATCOPY = fillrect
       PATCOPY:
         with PEMRBitBlt(R)^ do
-          E.FillRectangle(Rect(xDest,yDest,xDest+cxDest,yDest+cyDest));
+          E.FillRectangle(Rect(xDest,yDest,xDest+cxDest,yDest+cyDest),true);
     end;
   end;
   EMR_STRETCHBLT: begin
@@ -8867,7 +8869,7 @@ begin
     case PEMRStretchBlt(R)^.dwRop of // we only handle PATCOPY = fillrect
       PATCOPY:
         with PEMRStretchBlt(R)^ do
-          E.FillRectangle(Rect(xDest,yDest,xDest+cxDest,yDest+cyDest));
+          E.FillRectangle(Rect(xDest,yDest,xDest+cxDest,yDest+cyDest),true);
     end;
   end;
   EMR_STRETCHDIBITS:
@@ -9278,7 +9280,7 @@ begin
   end;
 end;
 
-procedure TPdfEnum.FillRectangle(const Rect: TRect);
+procedure TPdfEnum.FillRectangle(const Rect: TRect; ResetNewPath: boolean);
 begin
   if DC[nDC].brush.null then
     exit;
@@ -9287,6 +9289,8 @@ begin
   with Canvas.BoxI(Rect,true) do
     Canvas.Rectangle(Left,Top,Width,Height);
   Canvas.Fill;
+  if ResetNewPath then
+    Canvas.FNewPath := false; 
 end;
 
 procedure TPdfEnum.FlushPenBrush;
@@ -9803,7 +9807,7 @@ begin
       Canvas.ClosePath;
       Canvas.Clip;
       if bOpaque then begin
-        FillRectangle(backRect);
+        FillRectangle(backRect,false);
         bOpaque := False; //do not handle more
       end else
         Canvas.NewPath;
@@ -9820,12 +9824,10 @@ begin
       end;
     end;
     // draw background (if any)
-    if bOpaque then begin
+    if bOpaque then
       // don't handle BkMode, since global to the page, but only specific text
       // don't handle rotation here, since should not be used much
-      FillRectangle(backRect);
-      Canvas.fNewPath := False;
-    end;
+      FillRectangle(backRect,true);
     // draw text
     FillColor := font.color;
 {$ifdef USE_UNISCRIBE}
