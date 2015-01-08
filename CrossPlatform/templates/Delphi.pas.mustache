@@ -156,14 +156,15 @@ end;
 {{/soa.enabled}}
 
 {{#withRecords}}
-const
+const // text-based types definition for records and dynamic arrays
 {{#records}}
   __{{name}} = '{{>textrec}}';
 {{/records}}
 
 initialization
 {{#enumerates}}
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo({{name}}));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
+    TypeInfo({{name}}));
 {{/enumerates}}
 {{#records}}
   TTextWriter.RegisterCustomJSONSerializerFromText(

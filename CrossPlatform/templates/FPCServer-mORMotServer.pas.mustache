@@ -80,6 +80,8 @@ end;
 interface
 
 uses
+  SysUtils,
+  Classes,
   SynCommons,
   mORMot{{#units}},
   {{.}}{{/units}};
@@ -109,7 +111,7 @@ begin
   if aInterface=TypeInfo(I{{interfaceURI}}) then begin
 {{#methods}}
     AddMethod('{{methodName}}',[
-{{#args}}      {{dir}},'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
+{{#args}}      ord(smd{{dirName}}),'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
 {{/isArgLast}}{{/args}}
 {{/methods}}
     exit;
@@ -124,7 +126,7 @@ end;
 
 {$ifndef ISDELPHI2010}
 
-const // text-based  types definition for records and dynamic arrays
+const // text-based types definition for records and dynamic arrays
 {{#records}}
   __{{name}} = '{{>textrec}}';
 {{/records}}
@@ -132,7 +134,8 @@ const // text-based  types definition for records and dynamic arrays
 {{/withRecords}}
 initialization
 {{#enumerates}}
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo({{name}}));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
+    TypeInfo({{name}}));
 {{/enumerates}}
 {{#records}}
   TTextWriter.RegisterCustomJSONSerializerFromText(
@@ -141,7 +144,8 @@ initialization
 {{#soa.enabled}}
 {$ifdef FPC} // circumvent a FPC-only bug
 {{#soa.services}}
-  TInterfaceFactoryDefinition.RegisterInterface(TypeInfo(I{{interfaceURI}}));
+  TInterfaceFactoryDefinition.RegisterInterface(
+    TypeInfo(I{{interfaceURI}}));
 {{/soa.services}}
 {$endif FPC}
 {{/soa.enabled}}

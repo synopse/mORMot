@@ -23,10 +23,12 @@ unit {{fileName}};
   for interfaces - see http://bugs.freepascal.org/view.php?id=26774
   
   USAGE:
-   Add this {{fileName}} unit to your uses clause, so that the following
-   interfaces would be defined as expected by mORMot under FPC:
+
+  Add this {{fileName}} unit to your uses clause, so that the following
+  interfaces would be defined as expected by mORMot under FPC:
+
 {{#soa.services}}
-   - I{{interfaceURI}}
+   - {{interfaceName}}
 {{/soa.services}}
   
 }
@@ -34,6 +36,8 @@ unit {{fileName}};
 interface
 
 uses
+  SysUtils,
+  Classes,
   SynCommons,
   mORMot{{#units}},
   {{.}}{{/units}};
@@ -52,7 +56,7 @@ type
   protected
     /// will declare the following types to the interface factory:
 {{#soa.services}}
-    // - I{{interfaceURI}}
+    // - {{interfaceName}}
 {{/soa.services}}
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); override;
   end;
@@ -60,10 +64,10 @@ type
 procedure TInterfaceFactoryDefinition.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 begin
 {{#soa.services}}
-  if aInterface=TypeInfo(I{{interfaceURI}}) then begin
+  if aInterface=TypeInfo({{interfaceName}}) then begin
 {{#methods}}
     AddMethod('{{methodName}}',[
-{{#args}}      {{dir}},'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
+{{#args}}      ord(smd{{dirName}}),'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
 {{/isArgLast}}{{/args}}
 {{/methods}}
     exit;
@@ -71,9 +75,9 @@ begin
 {{/soa.services}}
 end;
 
-implementation
+initialization
 {{#soa.services}}
-  TInterfaceFactoryDefinition.RegisterInterface(TypeInfo(I{{interfaceURI}}));
+  TInterfaceFactoryDefinition.RegisterInterface(TypeInfo({{interfaceName}}));
 {{/soa.services}}
 
 {$endif FPC}

@@ -7981,6 +7981,9 @@ type
     /// register one or several interfaces to the global interface factory cache
     // - so that you can use TInterfaceFactory.Get(aGUID) or Get(aName)
     class procedure RegisterInterfaces(const aInterfaces: array of PTypeInfo);
+    /// returns the list of all declared TInterfaceFactory
+    // - as used by SOA and mocking/stubing features of this unit
+    class function GetUsedInterfaces: TObjectList;
 
     /// create a fake class instance implementing the corresponding interface
     // - aInvoke event will be called at method execution
@@ -38462,6 +38465,11 @@ begin
   result := nil;
 end;
 
+class function TInterfaceFactory.GetUsedInterfaces: TObjectList;
+begin
+  result := InterfaceFactoryCache;
+end;
+
 constructor TInterfaceFactory.Create(aInterface: PTypeInfo);
 var m,a,reg: integer;
     WR: TTextWriter;
@@ -38828,7 +38836,6 @@ begin
 end;
 
 
-
 {$ifdef HASINTERFACERTTI} // see http://bugs.freepascal.org/view.php?id=26774
 
 { TInterfaceFactoryRTTI }
@@ -38954,7 +38961,8 @@ begin
   SetLength(meth^.Args,na+1); // leave Args[0]=self
   with meth^.Args[0] do begin
     ParamName := @CONST_PSEUDO_SELF_NAME;
-    TypeName := @CONST_PSEUDO_SELF_NAME;
+    TypeInfo := fInterfaceTypeInfo;
+    TypeName := @TypeInfo^.Name;
   end;
   ns := length(fTempStrings);
   SetLength(fTempStrings,ns+na);
@@ -41386,6 +41394,7 @@ initialization
   SetCurrentThreadName('Main thread',[]);
 
   assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
+
 end.
 
 

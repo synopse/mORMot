@@ -799,7 +799,6 @@ type
     property Imaginary: Double read fImaginary write fImaginary;
   end;
 
-  {$ifndef FPC}
   /// a record used by IComplexCalculator.EchoRecord
   TConsultaNav = object
   public
@@ -910,6 +909,8 @@ type
     ['{5237A687-C0B2-46BA-9F39-BEEA7C3AA6A9}']
   end;
 
+  /// a test interface, used by TTestServiceOrientedArchitecture
+  // - to test threading implementation pattern
   ITestPerThread = interface(IInvokable)
     ['{202B6C9F-FCCB-488D-A425-5472554FD9B1}']
     function GetContextServiceInstanceID: cardinal;
@@ -918,10 +919,35 @@ type
     function GetCurrentRunningThreadID: cardinal;
   end;
 
+  /// a test value object, used by IUserRepository/ISmsSender interfaces
+  // - to test stubing/mocking implementation pattern
+  TUser = record
+    Name: RawUTF8;
+    Password: RawUTF8;
+    MobilePhoneNumber: RawUTF8;
+    ID: Integer;
+  end;
+
+  /// a test interface, used by TTestServiceOrientedArchitecture
+  // - to test stubing/mocking implementation pattern
+  IUserRepository = interface(IInvokable)
+    ['{B21E5B21-28F4-4874-8446-BD0B06DAA07F}']
+    function GetUserByName(const Name: RawUTF8): TUser;
+    procedure Save(const User: TUser);
+  end;
+
+  /// a test interface, used by TTestServiceOrientedArchitecture
+  // - to test stubing/mocking implementation pattern
+  ISmsSender = interface(IInvokable)
+    ['{8F87CB56-5E2F-437E-B2E6-B3020835DC61}']
+    function Send(const Text, Number: RawUTF8): boolean;
+  end;
+
 
 const
   IID_ICalculator: TGUID = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}';
 
+{$ifndef FPC}
 type
   TTestServiceInstances = record
     I: ICalculator;
@@ -993,7 +1019,7 @@ type
     /// test interface stubbing / mocking
     procedure MocksAndStubs;
   end;
-  {$endif FPC}
+{$endif FPC}
 
 {$endif DELPHI5OROLDER}
 
@@ -1001,6 +1027,7 @@ type
 implementation
 
 uses
+  TestSQL3FPCInterfaces,
 {$ifndef LVCL}
   SyncObjs,
 {$endif}
@@ -11753,22 +11780,6 @@ begin
 end;
 
 type
-  TUser = record
-    Name: RawUTF8;
-    Password: RawUTF8;
-    MobilePhoneNumber: RawUTF8;
-    ID: Integer;
-  end;
-  IUserRepository = interface(IInvokable)
-    ['{B21E5B21-28F4-4874-8446-BD0B06DAA07F}']
-    function GetUserByName(const Name: RawUTF8): TUser;
-    procedure Save(const User: TUser);
-  end;
-  ISmsSender = interface(IInvokable)
-    ['{8F87CB56-5E2F-437E-B2E6-B3020835DC61}']
-    function Send(const Text, Number: RawUTF8): boolean;
-  end;
-
   TLoginController = class
   protected
     fUserRepository: IUserRepository;
@@ -12305,4 +12316,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+

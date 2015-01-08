@@ -967,6 +967,8 @@ type
   PMethodDynArray = ^TMethodDynArray;
   TObjectListDynArray = array of TObjectList;
   PObjectListDynArray = ^TObjectListDynArray;
+  TFileNameDynArray = array of TFileName;
+  PFileNameDynArray = ^TFileNameDynArray;
 
   PByteArray = ^TByteArray;
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}

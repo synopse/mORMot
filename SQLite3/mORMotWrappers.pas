@@ -112,6 +112,29 @@ procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFi
 // ! AddToServerWrapperMethod(aServer,['..']);
 procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
 
+/// you can call this procedure to generate the mORMotServer.pas unit needed
+// to compile a given server source code using FPC
+// - will locate FPCServer-mORMotServer.pas.mustache in the given Path[] array
+// - will write the unit using specified file name or to mORMotServer.pas in the
+// current directory if DestFileName is '', or to a sub-folder of the matching
+// Path[] if DestFileName starts with '\' (to allow relative folder use)
+// - the missing RTTI for records and interfaces would be defined, together
+// with some patch comments for published record support (if any) for the ORM
+procedure ComputeFPCServerUnit(Server: TSQLRestServer; const Path: array of TFileName;
+  DestFileName: TFileName='');
+
+/// you can call this procedure to generate the mORMotInterfaces.pas unit needed
+// to register all needed interface RTTI for FPC
+// - to circumvent http://bugs.freepascal.org/view.php?id=26774 unresolved issue
+// - will locate FPC-mORMotInterfaces.pas.mustache in the given Path[] array
+// - will write the unit using specified file name or to mORMotInterfaces.pas in
+// the current directory if DestFileName is '', or to a sub-folder of the
+// matching Path[] if DestFileName starts with '\' (to allow relative folder use)
+// - all used interfaces will be exported, including SOA and mocking/stubing
+// types: so you may have to run this function AFTER all process is done
+procedure ComputeFPCInterfacesUnit(const Path: array of TFileName;
+  DestFileName: TFileName='');
+
 
 implementation
 
@@ -225,7 +248,6 @@ const
     wObject,wRawJSON,wArray); // integers are wUnknown to force best type
 
 
-
 function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
 begin
   if Value>0 then
@@ -249,11 +271,18 @@ type
     function ContextFromMethods(int: TInterfaceFactory): variant;
     function ContextFromMethod(const meth: TServiceMethod): variant;
   public
+    constructor Create;
     constructor CreateFromModel(aServer: TSQLRestServer);
+    constructor CreateFromUsedInterfaces;
     function Context: variant;
   end;
 
 { TWrapperContext }
+
+constructor TWrapperContext.Create;
+begin
+  TDocVariant.NewFast([@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,@fUnits]);
+end;
 
 constructor TWrapperContext.CreateFromModel(aServer: TSQLRestServer);
 var t,f,s: integer;
@@ -267,9 +296,9 @@ var t,f,s: integer;
     srv: TServiceFactory;
     uri: RawUTF8;
 begin
+  Create;
   fServer := aServer;
-  TDocVariant.NewFast([@fields,@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,
-    @fUnits,@services]);
+  TDocVariant.NewFast([@fields,@services]);
   // compute ORM information
   for t := 0 to fServer.Model.TablesMax do begin
     nfoList := fServer.Model.TableProps[t].Props.Fields;
@@ -325,6 +354,7 @@ begin
       with srv do
         rec := _ObjFast(['uri',uri,'interfaceURI',InterfaceURI,
           'interfaceMangledURI',InterfaceMangledURI,
+          'interfaceName',InterfaceFactory.InterfaceTypeInfo^.Name,
           'GUID',GUIDToRawUTF8(InterfaceFactory.InterfaceIID),
           'contractExpected',UnQuoteSQLString(ContractExpected),
           'instanceCreation',ord(InstanceCreation),
@@ -338,6 +368,26 @@ begin
     fSOA := _ObjFast(['enabled',True,'services',variant(services),
       'expectMangledURI',fServer.Services.ExpectMangledURI]);
   end;
+end;
+
+constructor TWrapperContext.CreateFromUsedInterfaces;
+var interfaces: TObjectList;
+    i: Integer;
+    services: TDocVariantData;
+    fact: TInterfaceFactory;
+begin
+  Create;
+  interfaces := TInterfaceFactory.GetUsedInterfaces;
+  if interfaces=nil then
+    exit;
+  services.Init(JSON_OPTIONS[true]);
+  for i := 0 to interfaces.Count-1 do begin
+    fact := interfaces.List[i];
+    services.AddItem(_ObjFast([
+      'interfaceName',fact.InterfaceTypeInfo^.Name,
+      'methods',ContextFromMethods(fact)]));
+  end;
+  fSOA := _ObjFast(['enabled',True,'services',variant(services)]);
 end;
 
 function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
@@ -601,9 +651,10 @@ begin
   // compute the Model information as JSON
   result := _ObjFast(['time',NowToString, 'year',CurrentYear,
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-    'root',fServer.Model.Root,
     'orm',variant(fORM),
     'soa',fSOA]);
+  if fServer<>nil then
+    _ObjAddProps(['root',fServer.Model.Root],result);
   if fHasAnyRecord then
     result.ORMWithRecords := true; 
   if fRecords.Count>0 then begin
@@ -629,14 +680,15 @@ begin
   if fUnits.Count>0 then
     result.units := variant(fUnits);
   // add the first registered supported authentication class type as default
-  for s := 0 to fServer.AuthenticationSchemesCount-1 do begin
-    authClass := fServer.AuthenticationSchemes[s].ClassType;
-    if (authClass=TSQLRestServerAuthenticationDefault) or
-       (authClass=TSQLRestServerAuthenticationNone) then begin
-      result.authClass := authClass.ClassName;
-      break;
+  if fServer<>nil then
+    for s := 0 to fServer.AuthenticationSchemesCount-1 do begin
+      authClass := fServer.AuthenticationSchemes[s].ClassType;
+      if (authClass=TSQLRestServerAuthenticationDefault) or
+         (authClass=TSQLRestServerAuthenticationNone) then begin
+        result.authClass := authClass.ClassName;
+        break;
+      end;
     end;
-  end;
 end;
 
 function ContextFromModel(aServer: TSQLRestServer): variant;
@@ -766,7 +818,7 @@ end;
 type
   TWrapperMethodHook = class(TPersistent)
   public
-    SearchPath: array of TFileName;
+    SearchPath: TFileNameDynArray;
   published
     procedure Wrapper(Ctxt: TSQLRestServerURIContext);
   end;
@@ -776,27 +828,84 @@ begin
   WrapperMethod(Ctxt,SearchPath);
 end;
 
+procedure ComputeSearchPath(const Path: array of TFileName;
+  out SearchPath: TFileNameDynArray);
+var i: integer;
+begin
+  if length(Path)=0 then begin
+    SetLength(SearchPath,1);
+    SearchPath[0] := ExtractFilePath(paramstr(0)); // use .exe path
+  end else begin
+    SetLength(SearchPath,length(Path));
+    for i := 0 to high(Path) do
+      SearchPath[i] := Path[i];
+  end;
+end;
+
 procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
 var hook: TWrapperMethodHook;
-    i: integer;
 begin
   if Server=nil then
     exit;
   hook := TWrapperMethodHook.Create;
   Server.PrivateGarbageCollector.Add(hook); // Server.Free will call hook.Free
-  if length(Path)=0 then begin
-    SetLength(hook.SearchPath,1);
-    hook.SearchPath[0] := ExtractFilePath(paramstr(0)); // use .exe path
-  end else begin
-    SetLength(hook.SearchPath,length(Path));
-    for i := 0 to high(Path) do
-      hook.SearchPath[i] := Path[i];
-  end;
+  ComputeSearchPath(Path,hook.SearchPath);
   Server.ServiceMethodRegisterPublishedMethods('',hook);
   Server.ServiceMethodByPassAuthentication('wrapper');
 end;
 
 
+function FindTemplate(const TemplateName: TFileName; const Path: array of TFileName): TFileName;
+var SearchPath: TFileNameDynArray;
+    i: integer;
+begin
+  ComputeSearchPath(Path,SearchPath);
+  for i := 0 to High(SearchPath) do begin
+    result := IncludeTrailingPathDelimiter(SearchPath[i])+TemplateName;
+    if FileExists(result) then
+      exit;
+  end;
+  result := '';
+end;
+
+procedure ComputeFPCServerUnit(Server: TSQLRestServer; const Path: array of TFileName;
+  DestFileName: TFileName);
+var TemplateName: TFileName;
+begin
+  TemplateName := FindTemplate('FPCServer-mORMotServer.pas.mustache',Path);
+  if TemplateName='' then
+    exit;
+  if DestFileName='' then
+    DestFileName := 'mORMotServer.pas' else
+    if DestFileName[1]='\' then
+      DestFileName := ExtractFilePath(TemplateName)+DestFileName;
+  FileFromString(WrapperFromModel(Server,StringFromFile(TemplateName),
+    StringToUTF8(ExtractFileName(DestFileName)),0),DestFileName);
+end;
+
+procedure ComputeFPCInterfacesUnit(const Path: array of TFileName;
+  DestFileName: TFileName);
+const TEMPLATE_NAME = 'FPC-mORMotInterfaces.pas.mustache';
+var TemplateName: TFileName;
+    ctxt: variant;
+begin
+  TemplateName := FindTemplate(TEMPLATE_NAME,Path);
+  if TemplateName='' then
+    exit;
+  if DestFileName='' then
+    DestFileName := 'mORMotInterfaces.pas' else
+    if DestFileName[1]='\' then
+      DestFileName := ExtractFilePath(TemplateName)+DestFileName;
+  with TWrapperContext.CreateFromUsedInterfaces do
+  try
+    ctxt := Context;
+  finally
+    Free;
+  end;
+  ctxt.fileName := GetFileNameWithoutExt(ExtractFileNAme(DestFileName));
+  FileFromString(TSynMustache.Parse(StringFromFile(TemplateName)).
+    Render(ctxt,nil,nil,nil,true),DestFileName);
+end;
 
 end.
 
