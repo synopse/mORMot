@@ -290,10 +290,8 @@
     {$if CompilerVersion >= 26.0}
       {$define ISDELPHIXE5}
       {$define PUBLISHRECORD}
-      // if defined, a sftUtf8Record will be defined in order to serialize published
-      // properties with a record type: but even if such properties can be defined,
-      // there is RTTI generated only since Delphi XE5: so it won't work before :( see
-      // http://docwiki.embarcadero.com/RADStudio/en/Classes_and_Objects#Published_Members
+      // if defined, will handle RTTI available only since Delphi XE5 for
+      // record published properties 
     {$ifend}
     {$if CompilerVersion >= 27.0}
       {$define ISDELPHIXE6}

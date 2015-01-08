@@ -19,7 +19,8 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit would work on Delphi 6 and later, under Win32 and Win64 platforms.
+  This unit would work on Delphi 6 and later, under Win32 and Win64 platforms,
+  and with FPC 2.7/trunk revision, under Win32 and Linux32.
 }
 
 interface
@@ -66,7 +67,7 @@ type
   {{#orm}}
   {{^isInMormotPas}}
   /// map "{{tableName}}" table
-  {{className}} = class(TSQLRecord)
+  {{className}} = class({{classParent}})
   protected
     {{#fields}}
     f{{name}}: {{typeDelphi}}; 

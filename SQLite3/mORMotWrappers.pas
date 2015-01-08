@@ -241,6 +241,7 @@ type
     fServer: TSQLRestServer;
     fORM, fRecords,fEnumerates,fSets,fArrays,fUnits: TDocVariantData;
     fSOA: variant;
+    fHasAnyRecord: boolean;
     function ContextFromInfo(typ: TWrapperType; typName: RawUTF8='';
       typInfo: PTypeInfo=nil): variant;
     function ContextNestedProperties(rtti: TJSONCustomParserRTTI): variant;
@@ -283,6 +284,7 @@ begin
           TSQLPropInfoRTTI(nfo).PropType) else
       if nfo.InheritsFrom(TSQLPropInfoRecordTyped) then begin
         hasRecord := true;
+        fHasAnyRecord := true;
         field := ContextFromInfo(wRecord,nfoSQLFieldRTTITypeName,
           TSQLPropInfoRecordTyped(nfo).TypeInfo);
       end else
@@ -302,10 +304,13 @@ begin
       fields.AddItem(field);
     end;
     with fServer.Model.TableProps[t] do
-      rec := _JsonFastFmt('{tableName:?,className:?,fields:?,isInMormotPas:%,comma:%}',
+      rec := _JsonFastFmt(
+        '{tableName:?,className:?,classParent:?,fields:?,isInMormotPas:%,unitName:?,comma:%}',
         [NULL_OR_TRUE[(Props.Table=TSQLAuthGroup) or (Props.Table=TSQLAuthUser)],
          NULL_OR_COMMA[t<fServer.Model.TablesMax]],
-        [Props.SQLTableName,Props.Table.ClassName,Variant(fields)]);
+        [Props.SQLTableName,Props.Table.ClassName,
+         Props.Table.ClassParent.ClassName,Variant(fields),
+         Props.ClassType^.UnitName]);
     if hasRecord then
       rec.hasRecords := true;
     fORM.AddItem(rec);
@@ -594,9 +599,13 @@ var s: integer;
     authClass: TClass;
 begin
   // compute the Model information as JSON
-  result := _ObjFast(['time',NowToString,'year',CurrentYear,
-    'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION, 'root',fServer.Model.Root,
-    'orm',variant(fORM), 'soa',fSOA]);
+  result := _ObjFast(['time',NowToString, 'year',CurrentYear,
+    'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
+    'root',fServer.Model.Root,
+    'orm',variant(fORM),
+    'soa',fSOA]);
+  if fHasAnyRecord then
+    result.ORMWithRecords := true; 
   if fRecords.Count>0 then begin
     result.records := variant(fRecords);
     result.withRecords := true;
