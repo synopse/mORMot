@@ -8032,14 +8032,11 @@ type
     property ClientDrivenID: Cardinal read fClientDrivenID;
   end;
 
-  /// class for handling interface implementation generated from source
-  TInterfaceFactoryGeneratedClass = class of TInterfaceFactoryGenerated;
-
   /// class handling interface implementation generated from source
   // - this class targets FPC, which does not generate the expected RTTI - see
   // http://bugs.freepascal.org/view.php?id=26774
-  // - mORMotWrapper.pas will generate a new inherited class, overriding
-  // both AddMethodsFromTypeInfo() and CreateFakeInstance()
+  // - mORMotWrapper.pas will generate a new inherited class, overriding abstract
+  // AddMethodsFromTypeInfo() to define the interface methods
   TInterfaceFactoryGenerated = class(TInterfaceFactory)
   protected
     fTempStrings: TRawUTF8DynArray;
@@ -8051,9 +8048,10 @@ type
     // with 0=ord(smdConst) and 3=ord(smdResult)
     procedure AddMethod(const aName: RawUTF8; const aParams: array of const); virtual;
   public
-    /// register one interface type definition
-    class procedure RegisterInterface(aInterface: PTypeInfo;
-      aFactoryClass: TInterfaceFactoryGeneratedClass); virtual;
+    /// register one interface type definition from the current class
+    // - will be called by mORMotWrapper.pas generated code, in initialization
+    // section, so that the needed type information would be available
+    class procedure RegisterInterface(aInterface: PTypeInfo); virtual;
   end;
 
   TInterfaceStub = class;
@@ -37931,6 +37929,9 @@ const
   REG_FIRST = REGRCX;
   REG_LAST = REGR9;
 
+  // x64 calling convention under Linux: rax,rsi,rdi,rcx,rdx,r8,r9 + xmm0..xmm7
+  // see http://www.yankeerino.com/windowsx64callingconvention.bhs
+  
 {$else}
 
   // maximum stack size at method execution
@@ -38296,9 +38297,6 @@ begin
   end;
   inherited;
 end;
-
-
-{ TInterfacedObjectGenerated }
 
 
 
@@ -38955,11 +38953,10 @@ begin
   end;
 end;
 
-class procedure TInterfaceFactoryGenerated.RegisterInterface(aInterface: PTypeInfo;
-  aFactoryClass: TInterfaceFactoryGeneratedClass);
+class procedure TInterfaceFactoryGenerated.RegisterInterface(aInterface: PTypeInfo);
 var i: integer;
 begin
-  if (aInterface=nil) or (aFactoryClass=nil) or (aFactoryClass=TInterfaceFactoryGenerated) then
+  if (aInterface=nil) or (self=TInterfaceFactoryGenerated) then
     raise EInterfaceFactoryException.CreateUTF8('%.RegisterInterface(nil)',[self]);
   EnterInterfaceFactoryCache;
   try
@@ -38967,7 +38964,7 @@ begin
       if TInterfaceFactory(InterfaceFactoryCache.List[i]).fInterfaceTypeInfo=aInterface then
         raise EInterfaceFactoryException.CreateUTF8('Duplicated %.RegisterInterface(%)',
           [self,aInterface^.Name]);
-    InterfaceFactoryCache.Add(aFactoryClass.Create(aInterface));
+    InterfaceFactoryCache.Add(Create(aInterface));
   finally
     InterfaceFactoryCache.UnLock;
   end;
@@ -39913,6 +39910,7 @@ begin
       InternalInstanceRetrieve(Inst,INTERNALINSTANCERETRIEVE_FREEINSTANCE);
 end;
 
+
 { TInterfacedObjectWithCustomCreate }
 
 constructor TInterfacedObjectWithCustomCreate.Create;
@@ -39947,14 +39945,16 @@ type
 procedure CallMethod(var Args: TCallMethodArgs);
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException.Create('You encountered an ALF !!! This code is disabled on ARM !!!');
+  raise EInterfaceFactoryException.Create('FPC+ARM not supported yet');
 end;
 {$else}
 {$ifdef CPU64}
-asm
 {$ifdef FPC}
-  // still blocked by FPC bug http://bugs.freepascal.org/view.php?id=26774
+begin
+  raise EInterfaceFactoryException.Create('FPC+x64 not supported/tested yet');
+end;
 {$else}
+asm
     .params 64    // size for 64 parameters
     .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
     mov r12,Args
@@ -39984,8 +39984,8 @@ asm
     jne @e
 @d: movsd [r12].TCallMethodArgs.res64,xmm0
 @e:
-{$endif}
 end;
+{$endif}
 {$else}
 asm
     push esi

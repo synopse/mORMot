@@ -19,7 +19,8 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit would work on Delphi 6 and later, under Win32 and Win64 platforms.
+  This unit is intended to work on FPC compilers, which lacks of RTTI
+  for interfaces - see http://bugs.freepascal.org/view.php?id=26774
 }
 
 interface
@@ -28,174 +29,41 @@ uses
   SynCommons,
   mORMot{{#units}},
   {{.}}{{/units}};
-{{! recursive partials used to write records type definition}}
-{{<writerec}}packed record
-{{#fields}}
-{{nestedIdentation}}    {{propName}}: {{#typeDelphi}}{{typeDelphi}};{{/typeDelphi}}{{#nestedRecord}}{{>writerec}}{{nestedIdentation}}    end;{{/nestedRecord}}{{#nestedSimpleArray}}array of {{typeDelphi}};{{/nestedSimpleArray}}{{#nestedRecordArray}}array of {{>writerec}}{{nestedIdentation}}    end;{{/nestedRecordArray}}
-{{/fields}}{{/writerec}}
-{{<textrec}}{{#fields}}{{propName}} {{#typeDelphi}}{{typeDelphi}}{{/typeDelphi}}{{#nestedRecord}}{ {{>textrec}} }{{/nestedRecord}}{{#nestedSimpleArray}}array of {{typeDelphi}}{{/nestedSimpleArray}}{{#nestedRecordArray}}[ {{>textrec}} ]{{/nestedRecordArray}} {{/fields}}{{/textrec}}
-{{#withEnumerates}}
-type // define some enumeration types, used below
-{{#enumerates}}
-  {{name}} = ({{#values}}{{.}}{{^-last}}, {{/-last}}{{/values}});
-{{/enumerates}}
-
-{{/withEnumerates}}
-{{#withSets}}
-type // define some set types, used below
-{{#sets}}
-  {{name}} = set of({{#values}}{{.}}{{^-last}}, {{/-last}}{{/values}});
-{{/sets}}
-
-{{/withSets}}
-{{#withRecords}}
-type // define some record types, used as properties below
-{{#records}}
-  {{name}} = {{>writerec}}  end;
-
-{{/records}}
-{{/withRecords}}
-{{#withArrays}}
-type // define some dynamic array types, used as properties below
-{{#arrays}}
-  {{name}} = array of {{typeSource}};
-{{/arrays}}
-
-{{/withArrays}}
-{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
-type
-  {{#orm}}
-  {{^isInMormotPas}}
-  /// map "{{tableName}}" table
-  {{className}} = class(TSQLRecord)
-  protected
-    {{#fields}}
-    f{{name}}: {{typeDelphi}}; 
-    {{/fields}}
-  {{#hasRecords}}
-  public
-    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
-    {{#fields}}
-    {{#isrecord}}
-    property {{name}}: {{typeDelphi}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
-    {{/isrecord}}
-    {{/fields}}
-  {{/hasRecords}}
-  published
-    {{#fields}}
-    {{^isrecord}}
-    property {{name}}: {{typeDelphi}}{{#width}} index {{width}}{{/width}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
-    {{/isrecord}}
-    {{/fields}}
-  end;
-  
-  {{/isInMormotPas}}
-  {{/orm}}
-  {{#soa.services}}
-  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
-  // - this service will run in sic{{instanceCreationName}} mode
-  I{{interfaceURI}} = interface(IInvokable)
-    ['{{GUID}}']
-{{#methods}}
-    {{>method}}
-{{/methods}}
-  end;
-
-  {{/soa.services}}
-
-  {{#soa.services}}
-  /// define and manage an I{{interfaceURI}} interface since FPC does not have such RTTI
-  TInterfaceFactoryGenerated{{interfaceURI}} = class(TInterfaceFactoryGenerated)
-  protected
-    /// will declare the I{{interfaceURI}} members to the interface factory
-    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); override;
-  end;
-
-  {{/soa.services}}
-
-
-/// return the database Model corresponding to this server
-function GetModel: TSQLModel;
-
-const
-  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
-  SERVER_PORT = {{port}};
-
-
-{{#soa.enabled}}
-/// define the interface-based services to be consummed by the client
-// - will define the following interfaces:
-{{#soa.services}}
-// ! I{{interfaceURI}}   sic{{instanceCreationName}}   {{GUID}}
-{{/soa.services}}
-procedure RegisterServices(Client: TSQLRestClientURI);
-{{/soa.enabled}}
-
 
 implementation
 
-{{#orm}}
-{{#hasRecords}}
-{ {{className}} }
-
-class procedure {{className}}.InternalRegisterCustomProperties(
-  Props: TSQLRecordProperties);
-begin
-{{#fields}}
-{{#isrecord}}
-  Props.RegisterCustomPropertyFromRTTI(Self,TypeInfo({{typeDelphi}}),
-    '{{name}}',@{{className}}(nil).f{{name}});
-{{/isrecord}}
-{{/fields}}
-end;
-
-{{/hasRecords}}
-{{/orm}}
-
-function GetModel: TSQLModel;
-begin
-  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
-end;
-
 {{#soa.enabled}}
 
-{{#soa.services}}
-{ TInterfaceFactoryGenerated{{interfaceURI}} }
+{ TInterfaceFactoryDefinition }
 
-procedure TInterfaceFactoryGenerated{{interfaceURI}}.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+type
+  /// define and manage missing interface RTTI for defined interfaces
+  TInterfaceFactoryDefinition = class(TInterfaceFactoryGenerated)
+  protected
+    /// will declare the following types to the interface factory:
+{{#soa.services}}
+    // - I{{interfaceURI}}
+{{/soa.services}}
+    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); override;
+  end;
+
+procedure TInterfaceFactoryDefinition.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 begin
+{{#soa.services}}
+  if aInterface=TypeInfo(I{{interfaceURI}}) then begin
 {{#methods}}
-  AddMethod('{{methodName}}',[
-{{#args}}    {{dir}},'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
+    AddMethod('{{methodName}}',[
+{{#args}}      {{dir}},'{{argName}}',TypeInfo({{typeSource}}){{#isArgLast}}]);{{/isArgLast}}{{^isArgLast}},
 {{/isArgLast}}{{/args}}
 {{/methods}}
-end;
-{{/soa.services}}
-
-procedure RegisterServices(Client: TSQLRestClientURI);
-begin
-{{#soa.services}}
-  Client.ServiceRegister(TypeInfo(I{{interfaceURI}}),sic{{instanceCreationName}});
+    exit;
+  end;
 {{/soa.services}}
 end;
-{{/soa.enabled}}
-
-{{#withRecords}}
-const
-{{#records}}
-  __{{name}} = '{{>textrec}}';
-{{/records}}
 
 initialization
-{{#enumerates}}
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo({{name}}));
-{{/enumerates}}
-{{#records}}
-  TTextWriter.RegisterCustomJSONSerializerFromText(
-    TypeInfo({{name}}),__{{name}});
-{{/records}}
-{{/withRecords}}
 {{#soa.services}}
-  TInterfaceFactoryGenerated.RegisterInterface(TypeInfo(I{{interfaceURI}}),TInterfaceFactoryGenerated{{interfaceURI}});
+  TInterfaceFactoryDefinition.RegisterInterface(TypeInfo(I{{interfaceURI}}));
 {{/soa.services}}
+{{/soa.enabled}}
 end.
