@@ -1928,33 +1928,34 @@ type
     PropList: record end;
     /// retrieve a Field property RTTI information from a Property Name
     function FieldProp(const PropName: shortstring): PPropInfo;
-    /// return the total count of the published properties in this class
-    // and all its parents
-    function FieldCountWithParents: integer;
   end;
 
   PClassType = ^TClassType;
   /// a wrapper to class type information, as defined by the Delphi RTTI
-  TClassType = {$ifndef ISDELPHI2010}object{$else}record{$endif}
-     /// the class type
-     ClassType: TClass;
-     /// the parent class type information
-     ParentInfo: PPTypeInfo;
-     /// the number of published properties
-     PropCount: SmallInt;
-     /// the name (without .pas extension) of the unit were the class was defined
-     // - then the PClassProp follows: use the method ClassProp to retrieve its
-     // address
-     UnitName: string[255];
-     /// get the information about the published properties of this class
-     // - stored after UnitName memory
-     function ClassProp: PClassProp;
-       {$ifdef HASINLINE}inline;{$endif}
-     /// fast and easy find if this class inherits from a specific class type
-     function InheritsFrom(AClass: TClass): boolean;
-     /// return the size (in bytes) of this class type information
-     // - can be used to create class types at runtime
-     function RTTISize: integer;
+  {$ifndef ISDELPHI2010}
+  TClassType = object
+  {$else}
+  TClassType = record
+  {$endif}
+    /// the class type
+    ClassType: TClass;
+    /// the parent class type information
+    ParentInfo: PPTypeInfo;
+    /// the number of published properties
+    PropCount: SmallInt;
+    /// the name (without .pas extension) of the unit were the class was defined
+    // - then the PClassProp follows: use the method ClassProp to retrieve its
+    // address
+    UnitName: string[255];
+    /// get the information about the published properties of this class
+    // - stored after UnitName memory
+    function ClassProp: PClassProp;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fast and easy find if this class inherits from a specific class type
+    function InheritsFrom(AClass: TClass): boolean;
+    /// return the size (in bytes) of this class type information
+    // - can be used to create class types at runtime
+    function RTTISize: integer;
   end;
 
   PEnumType = ^TEnumType;
@@ -1962,7 +1963,11 @@ type
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
-  TEnumType = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifndef ISDELPHI2010}
+  TEnumType = object
+  {$else}
+  TEnumType = record
+  {$endif}
     /// specify ordinal storage size and sign
     OrdType: TOrdType;
     /// first value of enumeration type, typicaly 0
@@ -2083,7 +2088,11 @@ type
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
-  TTypeInfo = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifndef ISDELPHI2010}
+  TTypeInfo = object
+  {$else}
+  TTypeInfo = record
+  {$endif}
     /// the value type family
     Kind: TTypeKind;
     /// the declared name of the type ('String','Word','RawUnicode'...)
@@ -2383,7 +2392,11 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   {/ a wrapper around method returned result definition }
-  TReturnInfo = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifndef ISDELPHI2010}
+  TReturnInfo = object
+  {$else}
+  TReturnInfo = record
+  {$endif}
     /// RTTI version
     // - 2 up to Delphi 2010, 3 for Delphi XE and up
     Version: byte;
@@ -2403,7 +2416,11 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around an individual method parameter definition
-  TParamInfo = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifndef ISDELPHI2010}
+  TParamInfo = object
+  {$else}
+  TParamInfo = record
+  {$endif}
     /// the kind of parameter
     Flags: TParamFlags;
     /// the parameter type information
@@ -2422,7 +2439,11 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   {/ a wrapper around a method definition }
-  TMethodInfo = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifndef ISDELPHI2010}
+  TMethodInfo = object
+  {$else}
+  TMethodInfo = record
+  {$endif}
     {$ifdef FPC}
     /// method name
     Name: PShortString;
@@ -3295,6 +3316,9 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
 
+/// retrieve the total number of properties for a class, including its parents
+function ClassFieldCountWithParents(ClassType: TClass): integer;
+
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -3698,6 +3722,8 @@ type
      - e.g. 'TEST.' for TSQLRecordTest class
      - can be used with IdemPChar() for fast check of a table name }
     SQLTableNameUpperWithDot: RawUTF8;
+    /// fast access to the RTTI properties attribute
+    ClassType: PClassType;
     /// fast access to the RTTI properties attribute
     ClassProp: PClassProp;
     /// if this class has any BLOB or TSQLRecodMany fields
@@ -14343,6 +14369,19 @@ asm // this code is the fastest possible
 {$endif FPC}
 end;
 
+function ClassFieldCountWithParents(ClassType: TClass): integer;
+var CP: PClassProp;
+begin
+  result := 0;
+  while ClassType<>nil do begin
+    CP := InternalClassProp(ClassType);
+    if CP=nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    inc(result,CP^.PropCount);
+    ClassType := ClassType.ClassParent;
+  end;
+end;
+
 function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
 var P: PPropInfo;
     CP: PClassProp;
@@ -21194,7 +21233,7 @@ begin
     else begin
       result := sftObject; // published properties, TStrings TRawUTF8List TCollection
       exit;
-    end else begin 
+    end else begin
       result := sftID; // TSQLRecord field value is pointer(RecordID), not any Instance
       exit;
     end else begin
@@ -21395,24 +21434,8 @@ begin
     result := TypeInfoToRecordInfo(@self,aDataSize);
 end;
 
-{ TClassProp }
 
-function TClassProp.FieldCountWithParents: integer;
-var aClassType: TClass;
-    CP: PClassProp;
-begin
-  result := 0;
-  if @self=nil then
-    exit;
-  aClassType := TClass(@self);
-  repeat
-    CP := InternalClassProp(aClassType);
-    if CP=nil then
-      break; // no RTTI information (e.g. reached TObject level)
-    inc(result,CP^.PropCount);
-    aClassType := aClassType.ClassParent;
-  until aClassType=nil;
-end;
+{ TClassProp }
 
 function TClassProp.FieldProp(const PropName: shortstring): PPropInfo;
 var i: integer;
@@ -35362,9 +35385,10 @@ begin
   SQLTableNameUpperWithDot := SynCommons.UpperCase(SQLTableName)+'.';
   isTSQLRecordMany := aTable.InheritsFrom(TSQLRecordMany);
   // add properties to internal Fields list
+  ClassType := PTypeInfo(aTable.ClassInfo)^.ClassType;
   ClassProp := InternalClassProp(aTable);
   assert(ClassProp<>nil);
-  nProps := PClassProp(aTable)^.FieldCountWithParents;
+  nProps := ClassFieldCountWithParents(aTable);
   if nProps>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8('% has too many fields: %>=%',
       [Table,nProps,MAX_SQLFIELDS]);
@@ -38928,7 +38952,10 @@ begin
     [fInterfaceTypeInfo^.Name,aName,self]);
   na := length(aParams) div ARGPERARG;
   SetLength(meth^.Args,na+1); // leave Args[0]=self
-  meth^.Args[0].ParamName := @CONST_PSEUDO_SELF_NAME;
+  with meth^.Args[0] do begin
+    ParamName := @CONST_PSEUDO_SELF_NAME;
+    TypeName := @CONST_PSEUDO_SELF_NAME;
+  end;
   ns := length(fTempStrings);
   SetLength(fTempStrings,ns+na);
   for a := 0 to na-1 do begin
