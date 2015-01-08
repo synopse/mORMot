@@ -1635,7 +1635,8 @@ begin
         DecodeSaved := true;
       until ndx=fBatchValuesCount;
       // INSERT Values[] into the DB
-      SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
+      if rowCount>1 then
+        SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
       Statement := nil; // make compiler happy
       DB.LockAndFlushCache;
       try

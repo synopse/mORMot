@@ -902,7 +902,7 @@ begin
   finally
     Free;
   end;
-  ctxt.fileName := GetFileNameWithoutExt(ExtractFileNAme(DestFileName));
+  ctxt.fileName := GetFileNameWithoutExt(ExtractFileName(DestFileName));
   FileFromString(TSynMustache.Parse(StringFromFile(TemplateName)).
     Render(ctxt,nil,nil,nil,true),DestFileName);
 end;
