@@ -60,8 +60,8 @@ program TestSQL3;
 
   Version 1.16
   - all tests are now implemented in a separated SQLite3SelfTests unit -
-    this is requested by Delphi XE2 background compiler issues 
-	
+    this is requested by Delphi XE2 background compiler issues
+
   Version 1.18
   - renamed SQLite3*.pas units to mORMot*.pas
   - included Windows 64 bit regression tests (and potential FullDebugMode)
@@ -92,13 +92,14 @@ uses
   {$endif}
   {$ifdef FPC}
   {$ifdef Linux}
-  //cmem, // told to be faster in multi-thread, but triggers GPF! :( 
+  //cmem, // told to be faster in multi-thread, but triggers GPF! :(
   cthreads, // we need it to use TThread
   // widestring manager for Linux !!
   // could also be put in another unit ... but doc states: as early as possible
   cwstring,
   {$endif}
   {$endif}
+  SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   mORMotSelfTests in 'mORMotSelfTests.pas',
   SynLZ in '..\SynLZ.pas',
@@ -171,4 +172,10 @@ begin
   {$endif}
   {$endif}
   SQLite3ConsoleTests;
+  {$ifdef COMPUTEFPCINTERFACES}
+  ChDir(ExtractFilePath(ParamStr(0)));
+  ComputeFPCInterfacesUnit(
+    ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
+     '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
+  {$endif}
 end.
