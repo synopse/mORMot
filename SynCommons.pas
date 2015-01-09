@@ -41910,6 +41910,9 @@ var name: RawByteString;
 {$endif}
 {$endif}
 begin
+  {$ifdef FPC}
+  exit;
+  {$endif}
   {$ifdef NOSETTHREADNAME}
   exit;
   {$endif}

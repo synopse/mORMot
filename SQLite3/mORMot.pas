@@ -38002,6 +38002,7 @@ const
 
   CONST_PSEUDO_RESULT_NAME: string[6] = 'Result';
   CONST_PSEUDO_SELF_NAME: string[4] = 'Self';
+  CONST_INTEGER_NAME: string[7] = 'Integer';
 
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
@@ -38097,7 +38098,7 @@ end;
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
 {$ifdef CPUARM}
 begin
-  raise EInterfaceFactoryException.CreateUTF8('You encountered an ALF !!! This code is disabled on ARM !!!',[]);
+  raise EInterfaceFactoryException.Create('You encountered an ALF! ARM not yet supported');
 end;
 {$else}
 var method: ^TServiceMethod;
@@ -38367,7 +38368,7 @@ begin
       ftDoub: result := smvDouble;
       ftCurr: result := smvCurrency;
     end;
-  tkLString:
+  {$ifdef FPC}tkAString,{$endif} tkLString:
     if P=TypeInfo(RawUTF8) then
       result := smvRawUTF8 else
     if P=TypeInfo(RawJSON) then
@@ -38582,7 +38583,8 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       include(ArgsUsed,ValueType);
       if ValueType in [smvRawUTF8..smvWideString] then
         Include(ValueKindAsm,vIsString);
-      if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) or
+      if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
+          {$ifdef FPC},smvDynArray{$endif}]) or
          (ValueDirection in [smdVar,smdOut]) or
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
@@ -38625,7 +38627,10 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ;
-      if (reg>REG_LAST) or (SizeInStack<>PTRSIZ) then begin
+      if (reg>REG_LAST) or (SizeInStack<>PTRSIZ)
+        // TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
+        {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
+          not (vPassedByReference in ValueKindAsm)){$endif} then begin
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack,SizeInStack);
       end else begin
@@ -38917,7 +38922,7 @@ begin
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
-        if TypeInfoToMethodValueType(TypeInfo)=smvRecord then
+        if TypeInfoToMethodValueType(TypeInfo) in [smvRecord,smvDynArray] then
           if f*[pfConst,pfVar,pfOut]=[] then
             RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
       end;
@@ -38983,7 +38988,11 @@ begin
       raise EInterfaceFactoryException.CreateUTF8('%: expect TypeInfo() at #% for %.AddMethod("%")',
         [fInterfaceTypeInfo^.Name,a,self,aName]);
     arg^.TypeInfo := aParams[a*ARGPERARG+2].VPointer;
-    arg^.TypeName := @arg^.TypeInfo^.Name;
+    {$ifdef FPC} // under FPC, TypeInfo(Integer)=TypeInfo(Longint)
+    if arg^.TypeInfo=TypeInfo(Integer) then
+      arg^.TypeName := @CONST_INTEGER_NAME else
+    {$endif}
+      arg^.TypeName := @arg^.TypeInfo^.Name;
     inc(arg);
   end;
 end;

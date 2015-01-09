@@ -833,7 +833,7 @@ type
     function SpecialCall(Txt: RawUTF8; var Int: integer; var Card: cardinal; field: TSynTableFieldTypes;
       fields: TSynTableFieldTypes; var options: TSynTableFieldOptions): TSynTableFieldTypes;
     /// test integer, strings and wide strings dynamic arrays, together with records
-    function ComplexCall(const Ints: TIntegerDynArray; Strs1: TRawUTF8DynArray;
+    function ComplexCall(const Ints: TIntegerDynArray; const Strs1: TRawUTF8DynArray;
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
   end;
@@ -947,7 +947,6 @@ type
 const
   IID_ICalculator: TGUID = '{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}';
 
-{$ifndef FPC}
 type
   TTestServiceInstances = record
     I: ICalculator;
@@ -1019,7 +1018,6 @@ type
     /// test interface stubbing / mocking
     procedure MocksAndStubs;
   end;
-{$endif FPC}
 
 {$endif DELPHI5OROLDER}
 
@@ -10464,8 +10462,6 @@ end;
 
 
 
-{$ifndef FPC}
-
 { TServiceCalculator }
 
 type
@@ -10478,7 +10474,7 @@ type
     function ToTextFunc(Value: double): string;
     function SpecialCall(Txt: RawUTF8; var Int: integer; var Card: cardinal; field: TSynTableFieldTypes;
       fields: TSynTableFieldTypes; var options: TSynTableFieldOptions): TSynTableFieldTypes;
-    function ComplexCall(const Ints: TIntegerDynArray; Strs1: TRawUTF8DynArray;
+    function ComplexCall(const Ints: TIntegerDynArray; const Strs1: TRawUTF8DynArray;
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
     function Test(A,B: Integer): RawUTF8;
@@ -10579,7 +10575,7 @@ begin
 end;
 
 function TServiceCalculator.ComplexCall(const Ints: TIntegerDynArray;
-  Strs1: TRawUTF8DynArray; var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
+  const Strs1: TRawUTF8DynArray; var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
   var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
 var i: integer;
 begin
@@ -10821,6 +10817,8 @@ begin
     Check(i3=i1+length(s));
     Check(c=cardinal(i2)+1);
     Check(o=[tfoUnique,tfoCaseInsensitive]);
+    {$ifndef FPC} // FPC dynamic arrays parameters are not consistent with Delphi
+                  // see by fpc\compiler\i386\cpupara.pas :(
     Ints[0] := i1;
     Ints[1] := i2;
     SetLength(Str2,3);
@@ -10853,6 +10851,7 @@ begin
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));
     CheckSame(n1,n2);
     Rec1.FileExtension := ''; // to avoid memory leak
+    {$endif}
   end;
 end;
 var s: RawUTF8;
@@ -11230,10 +11229,10 @@ begin
   // create model, client and server
   fModel := TSQLModel.Create([TSQLRecordPeople,TSQLAuthUser,TSQLAuthGroup]);
   fClient := TSQLRestClientDB.Create(fModel,nil,'test.db3',TSQLRestServerDB,true);
-  Check(fClient.SetUser('User','synopse')); // default user for Security tests
-  // register TServiceCalculator as the ICalculator implementation on the server
+  Check(fClient.SetUser('User','synopse'),'default user for Security tests');
   Check(fClient.Server.
-    ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared)<>nil);
+    ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared)<>nil,
+    'register TServiceCalculator as the ICalculator implementation on the server');
   // verify ICalculator RTTI-generated details
   Check(fClient.Server.Services<>nil);
   if CheckFailed(fClient.Server.Services.Count=1) then exit;
@@ -11273,7 +11272,7 @@ begin
         Check(Args[2].ParamName^='n2');
         Check(Args[2].ValueDirection=smdConst);
         Check(Args[2].ValueType=ExpectedType[i]);
-        Check(IdemPropName(Args[3].TypeName^,ExpectedTypes[i]));
+        Check(IdemPropName(Args[3].TypeName^,ExpectedTypes[i]),string(Args[3].TypeName^));
         Check(Args[3].ValueDirection=smdResult);
         Check(Args[3].ValueType=ExpectedType[i]);
       end else begin
@@ -11960,8 +11959,6 @@ end;
 
 
 {$endif DELPHI5OROLDER}
-
-{$endif FPC}
 
 {$ifndef DELPHI5OROLDER}
 
