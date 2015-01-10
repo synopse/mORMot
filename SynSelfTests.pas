@@ -11413,7 +11413,7 @@ begin
   fClient.Server.ServicesRouting := TSQLRestRoutingREST; // back to default
   GlobalInterfaceTestMode := itmHttp;
   HTTPServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fClient.Server],'+',
-    useHttpApiRegisteringURI,16,secNone);
+    {$ifdef MSWINDOWS}useHttpApiRegisteringURI{$else}useHttpSocket{$endif},16,secNone);
   try
     fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
@@ -11458,7 +11458,8 @@ procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuthentication;
 begin
   fClient.Server.ServicesRouting := TSQLRestRoutingJSON_RPC; // back to previous
   fClient.Server.AuthenticationUnregister(
-    [TSQLRestServerAuthenticationSSPI,TSQLRestServerAuthenticationDefault]);
+    [{$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI,{$endif}
+     TSQLRestServerAuthenticationDefault]);
   fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationNone);
   TSQLRestServerAuthenticationNone.ClientSetUser(fClient,'User','');
   ClientTest(TSQLRestRoutingREST,false);
@@ -11474,7 +11475,8 @@ begin
   fClient.Server.AuthenticationUnregister(TSQLRestServerAuthenticationHttpBasic);
   // register default authentications
   fClient.Server.AuthenticationRegister(
-    [TSQLRestServerAuthenticationSSPI,TSQLRestServerAuthenticationDefault]);
+    [{$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI,{$endif}
+     TSQLRestServerAuthenticationDefault]);
   fClient.SetUser('User','synopse');
 end;
 
@@ -12313,4 +12315,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+
