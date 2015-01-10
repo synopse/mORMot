@@ -11172,7 +11172,7 @@ begin
     {$else}
     {$ifdef FPC}
     widestringmanager.Ansi2UnicodeMoveProc(Source,
-      {$ifdef VER2_7}fCodePage,{$endif}tmp,SourceChars);
+      {$ifdef ISFPC27}fCodePage,{$endif}tmp,SourceChars);
     move(Pointer(tmp)^,Dest^,length(tmp)*2);
     result := Dest+SourceChars;
     {$else}
@@ -11408,7 +11408,7 @@ begin
     {$else}
     {$ifdef FPC}
     widestringmanager.Unicode2AnsiMoveProc(Source,tmp,
-      {$ifdef VER2_7}fCodePage,{$endif}SourceChars);
+      {$ifdef ISFPC27}fCodePage,{$endif}SourceChars);
     move(Pointer(tmp)^,Dest^,length(tmp));
     result := Dest+length(tmp);
     {$else}
@@ -42273,4 +42273,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

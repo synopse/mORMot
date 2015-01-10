@@ -203,15 +203,21 @@
   // exceptions interception code in FPC differs from Delphi
   {$define NOEXCEPTIONINTERCEPT}
 
-   {$ifdef VER2_7_1}
-     {$define ISFPC271}
-     {$define HASVARUSTRING}
-     {$define HASVARUSTRARG}
-     // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
-     // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
-     // => this will change the TInvokeableVariantType.SetProperty() signature
-     {$define FPC_VARIANTSETVAR}
-   {$endif}
+  {$ifdef VER2_7}
+    {$define ISFPC27}
+  {$endif}
+  {$ifdef VER3_1}
+    {$define ISFPC27}
+  {$endif}
+  {$ifdef ISFPC27}
+    {$define ISFPC271}
+    {$define HASVARUSTRING}
+    {$define HASVARUSTRARG}
+    // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
+    // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
+    // => this will change the TInvokeableVariantType.SetProperty() signature
+    {$define FPC_VARIANTSETVAR}
+  {$endif}
 
 {$else FPC}
 
@@ -365,4 +371,4 @@
   {$define NOSQLITE3ENCRYPT}
 {$endif}
 
-
+

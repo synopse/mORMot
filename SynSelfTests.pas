@@ -10640,7 +10640,7 @@ end;
 
 function TServiceComplexCalculator.GetCurrentThreadID: cardinal;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$endif}GetCurrentThreadId;
+  result := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadId;
 end;
 
 function TServiceComplexCalculator.GetCustomer(CustomerId: Integer;
@@ -10734,12 +10734,12 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation := {$ifdef MSWINDOWS}Windows.{$endif}GetCurrentThreadID;
+  fThreadIDAtCreation := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadID;
 end;
 
 function TServicePerThread.GetCurrentThreadID: cardinal;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$endif}GetCurrentThreadID;
+  result := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadID;
   with PServiceRunningContext(@ServiceContext)^ do
     if Request<>nil then
       if Result<>Request.ServiceInstanceID then
