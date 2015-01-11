@@ -158,8 +158,8 @@ unit SynZip;
 
 {$ifdef FPC}
   {$define USEZLIB}
-  {$ifdef MSWINDOWS} // avoid link to zlib1.dll
-  {$define USEPASZLIB}
+  {$ifdef MSWINDOWS} // avoid link to zlib1.dll (will use zlib.so under Linux)
+    {$define USEPASZLIB}
   {$endif}
 {$else}
   {$ifdef Win32}
@@ -167,28 +167,32 @@ unit SynZip;
     // if defined, we use a special inlined asm version for uncompress:
     // seems 50% faster than BC++ generated .obj, and is 3KB smaller in code size
   {$else}
-    {$define USEZLIB}
+    {$define USEZLIB} // e.g. for Kylix
   {$endif}
 {$endif}
 
 interface
 
 uses
-  SysUtils, Classes
+  SysUtils,
+  Classes,
 {$ifdef USEZLIB}
   {$ifdef USEPASZLIB}
-  ,zbase,paszlib
+  zbase,
+  paszlib,
   {$else}
-  ,ZLib
+  ZLib,
   {$endif}
 {$endif}
 {$ifdef MSWINDOWS}
-  ,Windows
+  Windows
 {$else}
-  //,LibC;
-  //,FileUtil
-  //,baseunix, unix
-  ,clocale,Types
+  Types,
+  {$ifdef KYLIX3}
+  LibC
+  {$else}
+  clocale
+  {$endif}
 {$endif}
   ;
 
@@ -303,7 +307,11 @@ type
   TZStream = z_stream;
   {$else}
   {$ifdef USEZLIB}
+  {$ifdef KYLIX3}
+  TZStream = TZStreamRec;
+  {$else}
   TZStream = z_stream;
+  {$endif}
   {$else}
   TZStream =  record
     next_in : PAnsiChar;
@@ -571,12 +579,12 @@ type
     // - for real seek, this method will raise an error: it's a compression-only stream
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// the number of byte written, i.e. the current uncompressed size
-    property SizeIn: cardinal read FStrm.total_in;
+    property SizeIn: {$ifdef KYLIX3}integer{$else}cardinal{$endif} read FStrm.total_in;
     /// write all pending compressed data into outStream 
     procedure Flush;
     /// the number of byte sent to the destination stream, i.e. the current
     // compressed size
-    property SizeOut: cardinal read FStrm.total_out;
+    property SizeOut: {$ifdef KYLIX3}integer{$else}cardinal{$endif} read FStrm.total_out;
     /// the current CRC of the written data, i.e. the uncompressed data CRC
     property CRC: cardinal read fCRC;
   end;
@@ -754,8 +762,13 @@ implementation
 
 {$ifdef Linux}
 uses
-  SynFPCLinux,BaseUnix;
-{$endif}
+  {$ifdef FPC}
+  SynFPCLinux,
+  BaseUnix;
+  {$else}
+  SynKylix;
+  {$endif}
+{$endif Linux}
 
 const
   FIRSTHEADER_SIGNATURE = $04034b50;  // PK#3#4
@@ -930,10 +943,12 @@ begin
 end;
 
 procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
-      CompressLevel: integer=6);
-var Time: TFileTime;
-    ZipName: TFileName;
+  CompressLevel: integer=6);
+var {$ifndef Linux}
+    Time: TFileTime;
     FileTime: LongRec;
+    {$endif}
+    ZipName: TFileName;
     Size: Int64;
     Size64: Int64Rec absolute Size;
     OffsHead, OffsEnd: cardinal;
@@ -962,7 +977,7 @@ begin
     try
       Z.CopyFrom(S,Size64.Lo);
       Z.Flush;
-      assert(Z.SizeIn=Size64.Lo);
+      assert(Z.SizeIn={$ifdef KYLIX3}integer{$endif}(Size64.Lo));
       with Entry[Count] do begin
         with fhr.fileInfo do begin
           zcrc32 := Z.CRC;

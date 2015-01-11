@@ -1,4 +1,4 @@
-/// wrapper for Windows functions translated to Linux
+/// wrapper for Windows functions translated to Linux for FPC
 unit SynFPCLinux;
 
 {
@@ -63,10 +63,13 @@ uses
   {$endif};
 
 const
-{ HRESULT codes, delphi-like }
+  { HRESULT codes, delphi-like }
   NOERROR = 0;
   NO_ERROR = 0;
-  INVALID_HANDLE_VALUE =  THandle(-1);
+  INVALID_HANDLE_VALUE = THandle(-1);
+
+  LOCALE_USER_DEFAULT = $400;
+  NORM_IGNORECASE = 1;
 
 /// compatibility function, wrapping Win32 API mutex initialization
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
@@ -145,8 +148,7 @@ end;
 // from Lazarus this allows for the use of only FPC for command line compilation
 {$ifdef Linux}
 
-const
-{Date Translation}
+const { Date Translation }
   C1970=2440588;
   D0   =   1461;
   D1   = 146097;
@@ -185,12 +187,9 @@ Begin
 End;
 
 function GetNowUTC: TDateTime;
-var tz: timeval;
-    SystemTime: TSystemTime;
+var SystemTime: TSystemTime;
 begin
-  fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,SystemTime.year,SystemTime.month,SystemTime.day,SystemTime.hour,SystemTime.Minute,SystemTime.Second);
-  SystemTime.MilliSecond:=tz.tv_usec div 1000;
+  SystemTime := GetNowUTCSystem;
   result := systemTimeToDateTime(SystemTime);
 end;
 
@@ -279,8 +278,13 @@ end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
+var W1,W2: WideString;
 begin
-  result := WideCompareText(Pwidechar(lpString1),Pwidechar(lpString2));
+  W1 := lpString1;
+  W2 := lpString2;
+  if dwCmpFlags and NORM_IGNORECASE<>0 then
+    result := WideCompareText(W1,W2) else
+    result := WideCompareStr(W1,W2);
 end;
 
 function GetFileAgeAsDateTime(const FileName: string): TDateTime;

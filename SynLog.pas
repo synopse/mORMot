@@ -99,6 +99,8 @@ uses
 {$endif}
 {$ifdef KYLIX3}
   Types,
+  LibC,
+  SynKylix,
 {$endif}
   Classes,
 {$ifndef LVCL}
@@ -3052,7 +3054,7 @@ begin
     if fFamily.IncludeComputerNameInFileName then
       fFileName := fFileName+' ('+UTF8ToString(ExeVersion.Host)+')';
     {$else}
-    split(ExtractFileName(ParamStr(0)),'.',fFileName);
+    fFileName := GetFileNameWithoutExt(ExtractFileName(ParamStr(0)));
     {$endif}
   end;
   fFileRotationSize := 0;

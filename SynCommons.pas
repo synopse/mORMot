@@ -678,6 +678,8 @@ uses
 {$endif}
 {$ifdef KYLIX3}
   Types,
+  LibC,
+  SynKylix,
 {$endif}
   Classes,
 {$ifndef LVCL}
@@ -3010,12 +3012,10 @@ function FindAnsi(A, UpperValue: PAnsiChar): boolean;
 // - UTF-8 decoding is done on the fly (no temporary decoding buffer is used)
 function FindUTF8(U: PUTF8Char; UpperValue: PAnsiChar): boolean;
 
-{$ifdef MSWINDOWS}
-/// return true if Uppe (Unicode encoded) is contained in U^ (UTF-8 encoded)
+/// return true if Upper (Unicode encoded) is contained in U^ (UTF-8 encoded)
 // - will use the slow but accurate Operating System API to perform the
 // comparison at Unicode-level
 function FindUnicode(PW: PWideChar; Upper: PWideChar; UpperLen: integer): boolean;
-{$endif}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a PUTF8Char to avoid any memory allocation
@@ -16725,7 +16725,6 @@ begin
   until false;
 end;
 
-{$ifdef MSWINDOWS}
 function FindUnicode(PW, Upper: PWideChar; UpperLen: integer): boolean;
 var Start: PWideChar;
 begin
@@ -16758,7 +16757,6 @@ begin
     until false;
   until false;
 end;
-{$endif}
 
 function FindUTF8(U: PUTF8Char; UpperValue: PAnsiChar): boolean;
 var ValueStart: PAnsiChar;
@@ -36465,7 +36463,7 @@ begin
   {$ifdef VER100} 'Delphi 3'{$endif}
   {$ifdef VER120} 'Delphi 4'{$endif}
   {$ifdef VER130} 'Delphi 5'{$endif}
-  {$ifdef LINUX}  'Kylix'   {$endif}
+  {$ifdef LINUX}  'Kylix'   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     'Delphi'
     {$if     defined(VER140)}+' 6'
@@ -36485,6 +36483,7 @@ begin
     {$elseif defined(VER280)}+' XE7'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
+  {$endif LINUX}
 {$endif}
 {$ifdef CPU64}
   +' 64 bit'
@@ -37353,7 +37352,8 @@ begin
       raise ESynException.CreateFmt('fpmmap(aCustomOffset=%d) with pagesize=%d',
         [aCustomOffset,_SC_PAGE_SIZE]) else
       aCustomOffset := aCustomOffset div _SC_PAGE_SIZE;
-  fBuf := fpmmap(nil,fBufSize,PROT_READ,MAP_SHARED,fFile,aCustomOffset);
+  fBuf := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(
+    nil,fBufSize,PROT_READ,MAP_SHARED,fFile,aCustomOffset);
   if fBuf=MAP_FAILED then begin
     fBuf := nil;
   {$endif}
@@ -37396,7 +37396,7 @@ begin
   end;
   {$else}
   if fBuf<>nil then 
-    fpmunmap(fBuf,fBufSize);
+    {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
   if fFile<>0 then begin

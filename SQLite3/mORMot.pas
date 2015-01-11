@@ -1159,6 +1159,8 @@ uses
 {$endif}
 {$ifdef KYLIX3}
   Types,
+  LibC,
+  SynKylix,
 {$endif}
 {$ifdef UNICODE}
   Generics.Collections,
@@ -14221,10 +14223,13 @@ implementation
 
 uses
   SynCrypto // for TSQLRecordSigned
-  {$ifndef MSWINDOWS}
-  ,SynFPCLinux
-  ,BaseUnix, Unix
-  ,dynlibs
+  {$ifdef FPC}
+  {$ifndef MSWINDOWS},
+  SynFPCLinux,
+  BaseUnix,
+  Unix,
+  dynlibs
+  {$endif}
   {$endif}
   ;
 
@@ -19141,7 +19146,6 @@ begin
       inc(Result);
     end;
   end else
-  {$ifdef MSWINDOWS}
   if UnicodeComparison then begin
     // slowest but always accurate Unicode comparison
     UpperUnicode := UTF8DecodeToRawUnicodeUI(RawUTF8(Search),@UpperUnicodeLen);
@@ -19153,7 +19157,6 @@ begin
       inc(Result);
     end
   end else
-  {$endif}
     // default fast Win1252 search
     while cardinal(result)<=cardinal(RowCount) do
     if FindUTF8(U^,Search) then
@@ -28350,7 +28353,8 @@ begin
         Method := ExecuteORMWrite;
         Start64 := GetTickCount64;
         repeat
-          if TryEnterCriticalSection(Lock){$ifndef MSWINDOWS}<>0{$endif} then
+          if TryEnterCriticalSection(Lock)
+            {$ifdef FPC}{$ifndef MSWINDOWS}<>0{$endif}{$endif} then
           try
             if (Server.fTransactionActiveSession=0) or // avoid transaction mixups
                (Server.fTransactionActiveSession=Session) then begin
@@ -28393,7 +28397,8 @@ begin
       end else begin
       Start64 := GetTickCount64;
       repeat
-        if TryEnterCriticalSection(Lock){$ifndef MSWINDOWS}<>0{$endif} then
+        if TryEnterCriticalSection(Lock)
+           {$ifdef FPC}{$ifndef MSWINDOWS}<>0{$endif}{$endif} then
         try
           Method;
         finally
@@ -30720,10 +30725,14 @@ constructor TSQLRestClientURIDll.Create(aModel: TSQLModel; const DllName: TFileN
 var aRequest: TURIMapRequest;
     aDLL: cardinal;
 begin
+  {$ifdef KYLIX3}
+  aDLL := LoadLibrary(pointer(DllName));
+  {$else}
   {$ifndef MSWINDOWS}
   aDLL := LoadLibrary(DllName);
   {$else}
   aDLL := LoadLibrary(pointer(DllName));
+  {$endif}
   {$endif}
   if aDLL=0 then
     raise ECommunicationException.CreateUTF8('%.Create: LoadLibrary(%)',[self,DllName]);
@@ -38764,7 +38773,8 @@ begin
   {$ifdef MSWINDOWS}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
   {$else}
-  fStub := fpmmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
+  fStub := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(
+    nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
   {$endif}
 end;
 
@@ -38773,7 +38783,7 @@ begin
   {$ifdef MSWINDOWS}
   VirtualFree(fStub,0,MEM_RELEASE);
   {$else}
-  Fpmunmap(fStub,0);
+  {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fStub,0);
   {$endif}
   inherited;
 end;
@@ -38993,7 +39003,6 @@ begin
       arg^.TypeName := @CONST_INTEGER_NAME else
     {$endif}
       arg^.TypeName := @arg^.TypeInfo^.Name;
-    inc(arg);
   end;
 end;
 
