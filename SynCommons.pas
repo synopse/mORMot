@@ -2929,6 +2929,9 @@ function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
 // - extension match is case-insensitive
 function GetFileNameExtIndex(const FileName, CSVExt: TFileName): integer;
 
+/// copy one file to another, similar to the Windows API
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+
 /// retrieve a property value in a text-encoded class
 // - follows the Delphi serialized text object format, not standard .ini
 // - if the property is a string, the simple quotes ' are trimed
@@ -18354,6 +18357,38 @@ begin
 end;
 {$endif}
 
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+{$ifdef MSWINDOWS}
+begin
+  result := Windows.CopyFile(pointer(Source),pointer(Target),FailIfExists);
+end;
+{$else}
+var SourceF, DestF: TFileStream;
+begin
+  result := false;
+  if FailIfExists then
+    if FileExists(Target) then
+      exit else
+      DeleteFile(Target);
+  try
+    SourceF := TFileStream.Create(Source, fmOpenRead);
+    try
+      DestF := TFileStream.Create(Target, fmCreate);
+      try
+        DestF.CopyFrom(SourceF, SourceF.Size);
+      finally
+        DestF.Free;
+      end;
+    finally
+      SourceF.Free;
+    end;
+    result := true;
+  except
+    result := false;
+  end;
+end;
+{$endif}
+
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
   DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
 var F: TSearchRec;
@@ -31694,7 +31729,7 @@ end;
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal): integer;
 begin
-  if aHashCode=0 then 
+  if aHashCode=0 then
     aHashCode := HashOneFromTypeInfo(Elem);
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
@@ -42290,4 +42325,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

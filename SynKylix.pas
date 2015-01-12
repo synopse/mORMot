@@ -72,12 +72,12 @@ type
 
 const
   NOERROR = 0;
+  NO_ERROR = 0;
+  INVALID_HANDLE_VALUE = THandle(-1);
+
   LOCALE_USER_DEFAULT = $400;
   NORM_IGNORECASE = 1;
   INFINITE = LongWord(-1);
-
-/// copy one file to another place
-function CopyFile(const Source, Target: string; FailIfExists: boolean): boolean;
 
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64);
@@ -127,21 +127,6 @@ function SystemTimeToDateTime(const SystemTime: TSystemTime): TDateTime;
 
 
 implementation
-
-function CopyFile(const Source, Target: string; FailIfExists: boolean): boolean;
-var SourceF, DestF: TFileStream;
-begin
-  result:=True;
-  if FailIfExists then
-    if FileExists(Target) then
-      exit else
-      DeleteFile(Target);
-  SourceF := TFileStream.Create(Source, fmOpenRead);
-  DestF := TFileStream.Create(Target, fmCreate);
-  DestF.CopyFrom(SourceF, SourceF.Size);
-  SourceF.Free;
-  DestF.Free;
-end;
 
 const
   CLOCK_REALTIME  = 0;

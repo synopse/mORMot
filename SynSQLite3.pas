@@ -182,6 +182,18 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef KYLIX3}
+  LibC,
+  SyncObjs,
+  SynKylix,
+  {$endif}
+  {$ifdef FPC}
+  {$ifdef Linux}
+  SynFPCLinux,
+  DynLibs,
+  {$endif}
+  {$endif}
   {$endif}
   SysUtils,
   Classes,
@@ -2896,14 +2908,6 @@ function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 
 implementation
 
-{$ifdef Linux}
-uses
-  SynFPCLinux,
-  DynLibs
-  //,BaseUnix
-  ;
-{$endif}
-
 
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
@@ -3660,7 +3664,7 @@ begin
       if Log<>nil then
         Log.Log(sllTrace,'copy file',self);
       {$endif}
-      result := CopyFile({$ifdef MSWINDOWS}pointer{$endif}(fFileName),{$ifdef MSWINDOWS}pointer{$endif}(BackupFileName),false);
+      result := CopyFile(fFileName,BackupFileName,false);
     finally
       {$ifdef WITHLOG}
       if Log<>nil then

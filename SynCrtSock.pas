@@ -219,15 +219,22 @@ uses
   {$ifdef USEWININET}
   WinInet,
   {$endif}
-{$else}
+{$else MSWINDOWS}
   {$undef USEWININET}
   {$ifdef CONDITIONALEXPRESSIONS}
   Types,
   {$endif}
+  {$ifdef FPC}
   Sockets,
   SynFPCSock,
   SynFPCLinux,
-{$endif}
+  {$endif}
+  {$ifdef KYLIX3}
+  LibC,
+  SynFPCSock, // shared with Kylix
+  SynKylix,
+  {$endif}
+{$endif MSWINDOWS}
 {$ifndef LVCL}
   Contnrs,
 {$endif}
@@ -1812,8 +1819,10 @@ const
 
 
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
+{$ifdef MSWINDOWS}
 var tmpLen: DWORD;
     err: PChar;
+{$endif}
 begin
   if Code=NO_ERROR then begin
     result := '';

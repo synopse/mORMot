@@ -79,9 +79,6 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef Linux}
 
-/// copy one file to another place
-function CopyFile(const Source, Target: string; FailIfExists:boolean): boolean;
-
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64); inline;
 
@@ -220,21 +217,6 @@ end;
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
-end;
-
-function CopyFile(const Source, Target: string; FailIfExists:boolean): boolean;
-var SourceF, DestF: TFileStream;
-begin
-  result:=True;
-  if FailIfExists then
-    if FileExists(Target) then
-      exit else
-      DeleteFile(Target);
-  SourceF := TFileStream.Create(Source, fmOpenRead);
-  DestF := TFileStream.Create(Target, fmCreate);
-  DestF.CopyFrom(SourceF, SourceF.Size);
-  SourceF.Free;
-  DestF.Free;
 end;
 
 const

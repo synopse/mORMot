@@ -31,6 +31,7 @@ unit SynFPCSock;
   All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -55,24 +56,49 @@ unit SynFPCSock;
 
 }
 
-{$IFDEF FPC}
-  {$MODE DELPHI}
-{$ENDIF}
+{$ifdef FPC}
+
+{$MODE DELPHI}
 {$H+}
 
-
-{$IF DEFINED(FREEBSD) or DEFINED(SUNOS)} 
-{$DEFINE SOCK_HAS_SINLEN}                // BSD definition of scoketaddr
+// BSD definition of scoketaddr
+{$ifdef FREEBSD}
+  {$DEFINE SOCK_HAS_SINLEN}
+{$endif}
+{$ifdef SUNOS}
+  {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
 {$ifdef darwin}
-{$DEFINE SOCK_HAS_SINLEN}                // BSD definition of scoketaddr
+  {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
+
+{$else}
+
+{$ifdef LINUX}
+  {$define KYLIX3}
+{$else}
+  this unit is for FPC or (Cross-)Kylix only!
+{$endif}
+
+{$endif FPC}
 
 interface
 
 uses
-  SyncObjs, SysUtils, Classes,
-  BaseUnix, Unix, termio, sockets, netdb;
+  {$ifdef FPC}
+  BaseUnix,
+  Unix,
+  termio,
+  netdb,
+  Sockets,
+  {$else}
+  {$ifdef KYLIX3}
+  LibC,
+  Types,
+  KernelIoctl,
+  {$endif}
+  {$endif}
+  SyncObjs, SysUtils, Classes;
 
 function InitSocketInterface: Boolean;
 function DestroySocketInterface: Boolean;
@@ -90,45 +116,20 @@ const
   c6Localhost = '::1';
   cLocalHostStr = 'localhost';
 
+{$ifdef FPC}
 type
   TSocket = longint;
 
-type
   TFDSet = Baseunix.TFDSet;
   PFDSet = ^TFDSet;
   Ptimeval = Baseunix.ptimeval;
   Ttimeval = Baseunix.ttimeval;
 
-const
-  FIONREAD        = termio.FIONREAD;
-  FIONBIO         = termio.FIONBIO;
-  FIOASYNC        = termio.FIOASYNC;
-
-const
-  IPPROTO_IP     =   0;		{ Dummy					}
-  IPPROTO_ICMP   =   1;		{ Internet Control Message Protocol }
-  IPPROTO_IGMP   =   2;		{ Internet Group Management Protocol}
-  IPPROTO_TCP    =   6;		{ TCP           			}
-  IPPROTO_UDP    =   17;	{ User Datagram Protocol		}
-  IPPROTO_IPV6   =   41;
-  IPPROTO_ICMPV6 =   58;
-  IPPROTO_RM     =  113;
-
-  IPPROTO_RAW    =   255;
-  IPPROTO_MAX    =   256;
-
-type
   PInAddr = ^TInAddr;
   TInAddr = sockets.in_addr;
 
   PSockAddrIn = ^TSockAddrIn;
   TSockAddrIn = sockets.TInetSockAddr;
-
-  TIP_mreq =  record
-    imr_multiaddr: TInAddr;     // IP multicast address of group
-    imr_interface: TInAddr;     // local IP address of interface
-  end;
-
 
   PInAddr6 = ^TInAddr6;
   TInAddr6 = sockets.Tin6_addr;
@@ -136,21 +137,11 @@ type
   PSockAddrIn6 = ^TSockAddrIn6;
   TSockAddrIn6 = sockets.TInetSockAddr6;
 
-  TIPv6_mreq = record
-    ipv6mr_multiaddr: TInAddr6; // IPv6 multicast address.
-    ipv6mr_interface: integer;   // Interface index.
-  end;
-
 const
-  INADDR_ANY       = $00000000;
-  INADDR_LOOPBACK  = $7F000001;
-  INADDR_BROADCAST = $FFFFFFFF;
-  INADDR_NONE      = $FFFFFFFF;
-  ADDR_ANY		 = INADDR_ANY;
-  INVALID_SOCKET		= TSocket(NOT(0));
-  SOCKET_ERROR			= -1;
+  FIONREAD        = termio.FIONREAD;
+  FIONBIO         = termio.FIONBIO;
+  FIOASYNC        = termio.FIOASYNC;
 
-Const
   IP_TOS             = sockets.IP_TOS;             { int; IP type of service and precedence.  }
   IP_TTL             = sockets.IP_TTL;             { int; IP time to live.  }
   IP_HDRINCL         = sockets.IP_HDRINCL;         { int; Header is included with data.  }
@@ -181,9 +172,9 @@ Const
   SO_RCVTIMEO   = sockets.SO_RCVTIMEO;
   SO_SNDTIMEO   = sockets.SO_SNDTIMEO;
 {$IFDEF DARWIN}
-  SO_NOSIGPIPE = $1022;
+  SO_NOSIGPIPE  = $1022;
 {$ENDIF}
-  SOMAXCONN       = 1024;
+  SOMAXCONN     = 1024;
 
   IPV6_UNICAST_HOPS     = sockets.IPV6_UNICAST_HOPS;
   IPV6_MULTICAST_IF     = sockets.IPV6_MULTICAST_IF;
@@ -192,7 +183,20 @@ Const
   IPV6_JOIN_GROUP       = sockets.IPV6_JOIN_GROUP;
   IPV6_LEAVE_GROUP      = sockets.IPV6_LEAVE_GROUP;
 
-const
+  MSG_OOB       = sockets.MSG_OOB;      // Process out-of-band data.
+  MSG_PEEK      = sockets.MSG_PEEK;     // Peek at incoming messages.
+
+  {$ifdef DARWIN}
+  MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+  // Works under MAC OS X, but is undocumented, so FPC doesn't include it
+  {$else}
+  {$ifdef SUNOS}
+  MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+  {$else}
+  MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
+  {$endif}
+  {$endif}
+
   SOCK_STREAM     = 1;               { stream socket }
   SOCK_DGRAM      = 2;               { datagram socket }
   SOCK_RAW        = 3;               { raw-protocol interface }
@@ -205,35 +209,12 @@ const
   { Address families. }
   AF_UNSPEC       = 0;               { unspecified }
   AF_INET         = 2;               { internetwork: UDP, TCP, etc. }
-  AF_INET6        = 10;              { Internetwork Version 6 }
   AF_MAX          = 24;
 
   { Protocol families, same as address families for now. }
   PF_UNSPEC       = AF_UNSPEC;
   PF_INET         = AF_INET;
-  PF_INET6        = AF_INET6;
   PF_MAX          = AF_MAX;
-
-type
-  { Structure used for manipulating linger option. }
-  PLinger = ^TLinger;
-  TLinger = packed record
-    l_onoff: integer;
-    l_linger: integer;
-  end;
-
-const
-
-  MSG_OOB       = sockets.MSG_OOB;      // Process out-of-band data.
-  MSG_PEEK      = sockets.MSG_PEEK;     // Peek at incoming messages.
-
-  {$IF DEFINED(DARWIN) or DEFINED(SUNOS)} 
-  MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
-                           // Works under MAC OS X, but is undocumented,
-                           // So FPC doesn't include it
-  {$else}
-  MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
-  {$endif}
 
 const
   WSAEINTR = ESysEINTR;
@@ -288,9 +269,86 @@ const
   WSANO_RECOVERY = 3;
   WSANO_DATA = -6;
 
+{$else FPC}
+
+type
+  TInAddr6 = packed record
+  case byte of
+    0: (u6_addr8  : array[0..15] of byte);
+    1: (u6_addr16 : array[0..7] of Word);
+    2: (u6_addr32 : array[0..3] of Cardinal);
+    3: (s6_addr8  : array[0..15] of shortint);
+    4: (s6_addr   : array[0..15] of shortint);
+    5: (s6_addr16 : array[0..7] of smallint);
+    6: (s6_addr32 : array[0..3] of LongInt);
+  end;
+  PInAddr6 = ^TInAddr6;
+
+  TSockAddrIn6 = packed Record
+    sin6_family   : sa_family_t;
+    sin6_port     : word;
+    sin6_flowinfo : cardinal;
+    sin6_addr     : TInAddr6;
+    sin6_scope_id : cardinal;
+  end;
+
+const
+  ESYSEAGAIN = EAGAIN;
+  WSAEPROTONOSUPPORT = EPROTONOSUPPORT;
+  WSAHOST_NOT_FOUND = HOST_NOT_FOUND;
+  
+{$endif FPC}
+
+
+const
+  IPPROTO_IP     =   0;		{ Dummy					}
+  IPPROTO_ICMP   =   1;		{ Internet Control Message Protocol }
+  IPPROTO_IGMP   =   2;		{ Internet Group Management Protocol}
+  IPPROTO_TCP    =   6;		{ TCP           			}
+  IPPROTO_UDP    =   17;	{ User Datagram Protocol		}
+  IPPROTO_IPV6   =   41;
+  IPPROTO_ICMPV6 =   58;
+  IPPROTO_RM     =  113;
+
+  IPPROTO_RAW    =   255;
+  IPPROTO_MAX    =   256;
+
+  AF_INET6       = 10;              { Internetwork Version 6 }
+  PF_INET6       = AF_INET6;
+
+type
+  TIP_mreq =  record
+    imr_multiaddr: TInAddr;     // IP multicast address of group
+    imr_interface: TInAddr;     // local IP address of interface
+  end;
+
+  TIPv6_mreq = record
+    ipv6mr_multiaddr: TInAddr6; // IPv6 multicast address.
+    ipv6mr_interface: integer;   // Interface index.
+  end;
+
+const
+  INADDR_ANY       = $00000000;
+  INADDR_LOOPBACK  = $7F000001;
+  INADDR_BROADCAST = $FFFFFFFF;
+  INADDR_NONE      = $FFFFFFFF;
+  ADDR_ANY		     = INADDR_ANY;
+  INVALID_SOCKET	 = TSocket(NOT(0));
+  SOCKET_ERROR		 = -1;
+
+
+type
+  { Structure used for manipulating linger option. }
+  PLinger = ^TLinger;
+  TLinger = packed record
+    l_onoff: integer;
+    l_linger: integer;
+  end;
+
 const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
+
 type
   PWSAData = ^TWSAData;
   TWSAData = packed record
@@ -315,10 +373,12 @@ procedure SET_LOOPBACK_ADDR6 (const a: PInAddr6);
 var
   in6addr_any, in6addr_loopback : TInAddr6;
 
+{$ifdef FPC}
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
 function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 procedure FD_ZERO(var FDSet: TFDSet);
+{$endif FPC}
 
 
 var
@@ -456,8 +516,10 @@ end;
 
 function WSAGetLastError: Integer;
 begin
-  result := fpGetErrno; 
+  result := {$ifdef KYLIX3}errno{$else}fpGetErrno{$endif}; 
 end;
+
+{$ifdef FPC}
 
 function FD_ISSET(Socket: TSocket; var fdset: TFDSet): Boolean;
 begin
@@ -479,6 +541,8 @@ begin
   fpFD_ZERO(fdset);
 end;
 
+{$endif FPC}
+
 function SizeOfVarSin(sin: TVarSin): integer;
 begin
   case sin.sin_family of
@@ -492,14 +556,22 @@ end;
 
 function Bind(s: TSocket; const addr: TVarSin): Integer;
 begin
+  {$ifdef KYLIX3}
+  if LibC.Bind(s,PSockAddr(@addr)^,SizeOfVarSin(addr))=0 then
+  {$else}
   if fpBind(s,@addr,SizeOfVarSin(addr))=0 then
+  {$endif}
     result := 0 else
     result := SOCKET_ERROR;
 end;
 
 function Connect(s: TSocket; const name: TVarSin): Integer;
 begin
+  {$ifdef KYLIX3}
+  if LibC.Connect(s,PSockAddr(@name)^,SizeOfVarSin(name))=0 then
+  {$else}
   if fpConnect(s,@name,SizeOfVarSin(name))=0 then
+  {$endif}
     result := 0 else
     result := SOCKET_ERROR;
 end;
@@ -509,7 +581,11 @@ var len: integer;
 begin
   len := SizeOf(name);
   FillChar(name,len,0);
-  result := fpGetSockName(s,@name,@Len);
+  {$ifdef KYLIX3}
+  result := LibC.getsockname(s,PSockAddr(@name)^,PSocketLength(@len)^);
+  {$else}
+  result := fpGetSockName(s,@name,@len);
+  {$endif}
 end;
 
 function GetPeerName(s: TSocket; var name: TVarSin): Integer;
@@ -517,18 +593,34 @@ var len: integer;
 begin
   len := SizeOf(name);
   FillChar(name,len,0);
-  result := fpGetPeerName(s,@name,@Len);
+  {$ifdef KYLIX3}
+  result := LibC.getpeername(s,PSockAddr(@name)^,PSocketLength(@len)^);
+  {$else}
+  result := fpGetPeerName(s,@name,@len);
+  {$endif}
 end;
 
 function GetHostName: string;
+{$ifdef KYLIX3}
+var tmp: array[byte] of char;
+begin
+  LibC.gethostname(tmp,sizeof(tmp)-1);
+  result := tmp;
+end;
+{$else}
 begin
   result := unix.GetHostName;
 end;
+{$endif}
 
 function Send(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
 begin
   repeat
+    {$ifdef KYLIX3}
+    result := LibC.Send(s,Buf^,len,flags);
+    {$else}
     result := fpSend(s,pointer(Buf),len,flags);
+    {$endif}
     if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
     sleep(0);
@@ -538,7 +630,11 @@ end;
 function Recv(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
 begin
   repeat
+    {$ifdef KYLIX3}
+    result := LibC.Recv(s,Buf^,len,flags);
+    {$else}
     result := fpRecv(s,pointer(Buf),len,flags);
+    {$endif}
     if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
     sleep(0);
@@ -547,75 +643,104 @@ end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 begin
+  {$ifdef KYLIX3}
+  result := LibC.sendto(s,Buf^,len,flags,PSockAddr(@addrto)^,SizeOfVarSin(addrto));
+  {$else}
   result := fpSendTo(s,pointer(Buf),len,flags,@addrto,SizeOfVarSin(addrto));
+  {$endif}
 end;
 
 function RecvFrom(s: TSocket; Buf: pointer; len,flags: Integer; var from: TVarSin): Integer;
 var x: integer;
 begin
   x := SizeOf(from);
+  {$ifdef KYLIX3}
+  result := LibC.recvfrom(s,Buf^,len,flags,PSockAddr(@from),PSocketLength(@x));
+  {$else}
   result := fpRecvFrom(s,pointer(Buf),len,flags,@from,@x);
+  {$endif}
 end;
 
 function Accept(s: TSocket; var addr: TVarSin): TSocket;
 var x: integer;
 begin
   x := SizeOf(addr);
+  {$ifdef KYLIX3}
+  result := LibC.accept(s,PSockAddr(@addr),PSocketLength(@x));
+  {$else}
   result := fpAccept(s,@addr,@x);
+  {$endif}
 end;
 
 function Shutdown(s: TSocket; how: Integer): Integer;
 begin
+  {$ifdef KYLIX3}
+  result := LibC.shutdown(s,how);
+  {$else}
   result := fpShutdown(s,how);
+  {$endif}
 end;
 
 function SetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   optlen: Integer): Integer;
 begin
-  result := fpsetsockopt(s,level,optname,pointer(optval),optlen);
+  result := {$ifdef KYLIX3}LibC.setsockopt{$else}fpsetsockopt{$endif}(
+    s,level,optname,pointer(optval),optlen);
 end;
 
 function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   var optlen: Integer): Integer;
 begin
+  {$ifdef KYLIX3}
+  result := LibC.getsockopt(s,level,optname,pointer(optval),socklen_t(optlen));
+  {$else}
   result := fpgetsockopt(s,level,optname,pointer(optval),@optlen);
+  {$endif}
 end;
 
-function  ntohs(netshort: word): word;
+function ntohs(netshort: word): word;
 begin
-  result := sockets.ntohs(NetShort);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohs(NetShort);
 end;
 
-function  ntohl(netlong: longword): longword;
+function ntohl(netlong: longword): longword;
 begin
-  result := sockets.ntohl(NetLong);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohl(NetLong);
 end;
 
-function  Listen(s: TSocket; backlog: Integer): Integer;
+function Listen(s: TSocket; backlog: Integer): Integer;
 begin
-  if fpListen(s,backlog)=0 then
+  if {$ifdef KYLIX3}LibC.listen{$else}fpListen{$endif}(s,backlog)=0 then
     result := 0 else
     result := SOCKET_ERROR;
 end;
 
 function  IoctlSocket(s: TSocket; cmd: DWORD; var arg: integer): Integer;
 begin
+  {$ifdef KYLIX3}
+  result := ioctl(s,cmd,@arg);
+  {$else}
   result := fpIoctl(s,cmd,@arg);
+  {$endif}
 end;
 
-function  htons(hostshort: word): word;
+function htons(hostshort: word): word;
 begin
-  result := sockets.htons(Hostshort);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(Hostshort);
 end;
 
 function  htonl(hostlong: longword): longword;
 begin
-  result := sockets.htonl(HostLong);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(HostLong);
 end;
 
 function CloseSocket(s: TSocket): Integer;
 begin
+  {$ifdef KYLIX3}
+  result := Libc.__close(s);
+  {$else}
   result := sockets.CloseSocket(s);
+  {$endif}
 end;
 
 function Socket(af,Struc,Protocol: Integer): TSocket;
@@ -623,7 +748,7 @@ function Socket(af,Struc,Protocol: Integer): TSocket;
 var on_off: integer;
 {$ENDIF}
 begin
-  result := fpSocket(af,struc,protocol);
+  result := {$ifdef KYLIX3}LibC.socket{$else}fpSocket{$endif}(af,struc,protocol);
 // ##### Patch for Mac OS to avoid "Project XXX raised exception class 'External: SIGPIPE'" error.
 {$IFDEF DARWIN}
   if result <> INVALID_SOCKET then begin
@@ -636,7 +761,8 @@ end;
 function Select(nfds: Integer; readfds,writefds,exceptfds: PFDSet;
   timeout: PTimeVal): Longint;
 begin
-  result := fpSelect(nfds,readfds,writefds,exceptfds,timeout);
+  result := {$ifdef KYLIX3}LibC.select{$else}fpSelect{$endif}(
+    nfds,readfds,writefds,exceptfds,timeout);
 end;
 
 function IsNewApi(Family: integer): Boolean;
@@ -652,8 +778,8 @@ var TwoPass: boolean;
     f1,f2: integer;
 
   function GetAddr(f:integer): integer;
-  var a4: array[1..1] of in_addr;
-      a6: array[1..1] of Tin6_addr;
+  var a4: array[1..1] of TInAddr;
+      a6: array[1..1] of TInAddr6;
       he: THostEntry;
   begin
     result := WSAEPROTONOSUPPORT;
@@ -834,4 +960,4 @@ initialization
 finalization
   SynSockCS.Free;
 
-end.
+end.
