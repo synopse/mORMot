@@ -74,6 +74,7 @@ uses
   Classes,
   SynSMAPI,
   SynSM,
+  SynCrtSock,
   DateUtils;
 
 const
@@ -515,11 +516,17 @@ procedure TTestSynSMAPI.JslintSupport;
 var
   uString: SynUnicode;
   rVal: jsval;
+  jsLintFN: TFileName;
+  jsLint: RawByteString;
 begin
-  uString := AnyTextFileToSynUnicode(scriptDir + '\jslint.js');
+  jsLintFN := scriptDir + '\jslint.js';
+  uString := AnyTextFileToSynUnicode(jsLintFN);
+  if uString='' then begin
+    jsLint := TWinINet.Get('https://github.com/douglascrockford/JSLint/raw/master/jslint.js');
+    FileFromString(jsLint,jsLintFN);
+    uString := SynUnicode(jsLint);
+  end;
   Check(JS_EvaluateUCScript(cx, global, Pjschar(uString), length(uString), 'jslint', 1, rVal) = JS_TRUE, 'compile jslint');
-//  JS_GetProperty()
-//  JS_CallFunctionValue(cx, global, )
 end;
 
 type
@@ -1818,9 +1825,23 @@ procedure TTestSynSM.LoadMustacheTemplate;
 var
   engine: TSMEngine;
   mSource: SynUnicode;
+  mustacheFN: TFileName;
+  mustache: RawByteString;
+  i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
-  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\mustache.js');
+  mustacheFN := ExtractFilePath(ParamStr(0)) + 'js\mustache.js';
+  mSource := AnyTextFileToSynUnicode(mustacheFN);
+  if mSource='' then begin
+    mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
+    if PosEx('return send(result);',mustache)=0 then begin
+      i := PosEx('send(result);',mustache);
+      if i>0 then
+        insert('return ',mustache,i); // fix syntax error in official libary! :)
+    end;
+    FileFromString(mustache,mustacheFN);
+    mSource := SynUnicode(mustache);
+  end;
   Check(mSource <> '', 'exist js\mustache.js');
   engine.Evaluate(mSource, 'mustache.js');
 end;
