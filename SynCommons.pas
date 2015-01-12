@@ -5962,7 +5962,7 @@ type
     function AddObject(const aText: RawUTF8; aObject: TObject): PtrInt;
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
-    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt;
+    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt; virtual;
     /// append a specified list to the current content
     procedure AddRawUTF8List(List: TRawUTF8List);
     /// delete a stored RawUTF8 item, and its associated TObject
@@ -6052,6 +6052,10 @@ type
     // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
     function IndexOf(const aText: RawUTF8): PtrInt; override;
+    /// store a new RawUTF8 item if not already in the list, and its associated TObject
+    // - returns -1 and raise no exception in case of self=nil
+    // - this overridden method will update and use the internal hash table
+    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt; override;
   end;
 
   /// a TRawUTF8List with an internal hash, with locking methods
@@ -36589,10 +36593,6 @@ end;
 
 function TRawUTF8List.AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt;
 begin
-  if self=nil then begin
-    result := -1;
-    exit;
-  end;
   result := IndexOf(aText);
   if result<0 then
     result := AddObject(aText,aObject);
@@ -37221,6 +37221,23 @@ begin
     fChanged := false;
   end;
   result := fHash.FindHashed(aText);
+end;
+
+function TRawUTF8ListHashed.AddObjectIfNotExisting(
+  const aText: RawUTF8; aObject: TObject): PtrInt;
+var added: boolean;
+begin
+  if fChanged then begin
+    fHash.ReHash; // rough, but working implementation
+    fChanged := false;
+  end;
+  result := fHash.FindHashedForAdding(aText,added);
+  if added then begin
+    fList[result] := aText;
+    if length(fObjects)<>length(fList) then
+      SetLength(fObjects,length(fList));
+    fObjects[result] := aObject;
+  end;
 end;
 
 
@@ -42273,4 +42290,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

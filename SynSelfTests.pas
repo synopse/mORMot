@@ -1297,6 +1297,8 @@ const MAX=20000;
 var i: integer;
     L: TRawUTF8List;
     C: TComponent;
+    Rec: TSynFilterOrValidate;
+    s: RawUTF8;
 begin
   L := TRawUTF8List.Create(true);
   try
@@ -1316,6 +1318,23 @@ begin
     Check(L.Count=MAX div 2);
     for i := 0 to L.Count-1 do
       Check(GetInteger(Pointer(L[i]))=TComponent(L.Objects[i]).Tag);
+  finally
+    L.Free;
+  end;
+  L := TRawUTF8ListHashed.Create(true);
+  try
+    for i := 1 to MAX do begin
+     Rec := TSynFilterOrValidate.create;
+     Rec.Parameters := Int32ToUTF8(i);
+     L.AddObjectIfNotExisting(Rec.Parameters,Rec);
+    end;
+    Check(L.IndexOf('')<0);
+    Check(L.IndexOf('abcd')<0);
+    for i := 1 to MAX do begin
+      Int32ToUTF8(i,s);
+      Check(L.IndexOf(s)=i-1);
+      Check(TSynFilterOrValidate(L.Objects[i-1]).Parameters=s);
+    end;
   finally
     L.Free;
   end;
