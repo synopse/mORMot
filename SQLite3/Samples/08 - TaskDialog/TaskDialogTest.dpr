@@ -11,9 +11,29 @@ uses
 
 {$R Vista.res} // to enable XP/Vista/Seven theming
 
+var
+  MainCounter: integer;
+
+type
+  TCallBack = class
+  public
+    class procedure TaskDialogButtonClicked(Sender: PTaskDialog; AButtonID: Integer; var ACanClose: Boolean);
+  end;
+
+class procedure TCallBack.TaskDialogButtonClicked(Sender: PTaskDialog;
+  AButtonID: Integer; var ACanClose: Boolean);
+begin
+  if AButtonID=100 then begin
+    inc(MainCounter);
+    Sender^.SetElementText(tdeContent,IntToStr(MainCounter));
+    ACanClose := False;
+  end;
+end;
+
 procedure Test;
 var aUserName, aPassWord: string;
     Task: TTaskDialog;
+    TaskEx: TTaskDialogEx;
     res: boolean;
     Enum: TTaskDialogIcon;
 begin
@@ -55,6 +75,18 @@ begin
   ShowMessage(IntToStr(Task.RadioRes));
   if Task.VerifyChecked then
     ShowMessage(Task.Verify);
+  TaskEx.Init; // or TaskEx := DefaultTaskDialog;
+  TaskEx.Base.Title := 'Task Dialog Test';
+  TaskEx.Base.Inst := 'Callback Test';
+  MainCounter := 0;
+  TaskEx.Base.Content := '0';
+  TaskEx.Base.Buttons := 'Increment Counter';
+  TaskEx.CommonButtons := [cbCancel];
+  TaskEx.ButtonDef := 100;
+  TaskEx.Flags := [tdfUseCommandLinks];
+  TaskEx.DialogIcon := tiQuestion;
+  TaskEx.OnButtonClicked := TCallBack.TaskDialogButtonClicked;
+  TaskEx.Execute;
   ShowMessage(Format('User=%s Password=%s',[aUserName,aPassword]),
     not TLoginForm.Login('Title','Please login',aUserName,aPassWord,true,''));
   ShowMessage(Format('User=%s Password=%s',[aUserName,aPassword]),
