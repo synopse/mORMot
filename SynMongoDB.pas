@@ -67,7 +67,12 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef KYLIX3}
+  SynKylix,
+  LibC,
+  {$else}
   SynFPCLinux,
+  {$endif}
   {$endif}
   Classes,
   Variants, // this unit expects Variants to be available for storage

@@ -197,6 +197,10 @@ uses
 {$ifdef MSWINDOWS}
   Windows,
 {$endif}
+{$ifdef KYLIX3}
+  Types,
+  LibC,
+{$endif}
   SysUtils,
   Classes,
 {$ifdef COMPRESSDEFLATE}
@@ -452,7 +456,7 @@ implementation
 
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
-var i,n,err: integer;
+var i,n{$ifndef ONLYUSEHTTPSOCKET},err{$endif}: integer;
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
@@ -541,11 +545,11 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString;
   const aQueueName: SynUnicode);
+{$ifndef ONLYUSEHTTPSOCKET}
 procedure RegURL(const URI: RawByteString);
 var err: integer;
     ErrMsg: RawUTF8;
 begin
-  {$ifndef ONLYUSEHTTPSOCKET}
   err := THttpApiServer(fHttpServer).AddUrl(URI,aPort,
     (aHttpServerSecurity=secSSL),aDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
   if err=NO_ERROR then
@@ -554,8 +558,8 @@ begin
   if err=ERROR_ACCESS_DENIED then
     ErrMsg := ErrMsg+' (administrator rights needed)';
   raise ECommunicationException.CreateUTF8('%.Create: % for %',[self,ErrMsg,URI]);
-  {$endif}
 end;
+{$endif}
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: RawUTF8;

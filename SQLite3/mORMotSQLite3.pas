@@ -255,12 +255,22 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  BaseUnix,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
   {$endif}
   SysUtils,
   Classes,
-{$ifndef LVCL}
+  {$ifndef LVCL}
   Contnrs,
-{$endif}
+  {$endif}
   SynZip,
   SynCommons,
   SynLog,
@@ -301,7 +311,7 @@ type
     // - if the SQL statement is in the DB cache, it's retrieved from its cached
     //   value: our JSON parsing is a lot faster than SQLite3 engine itself,
     //   and uses less memory
-    // - will raise an ESQLException on any error }
+    // - will raise an ESQLException on any error 
     constructor Create(aDB: TSQLDatabase; const Tables: array of TSQLRecordClass;
       const aSQL: RawUTF8; Expand: boolean); reintroduce;
   end;
@@ -395,13 +405,13 @@ type
     // - to be used to speed up some SQL statements like Insert/Update/Delete
     // - must be ended with Commit on success
     // - must be aborted with Rollback if any SQL statement failed
-    // - return true if no transaction is active, false otherwise }
+    // - return true if no transaction is active, false otherwise 
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
-    // - write all pending SQL statements to the disk }
+    // - write all pending SQL statements to the disk
     procedure Commit(SessionID: cardinal=1); override;
     /// abort a transaction (implements REST ABORT Member)
-    // - restore the previous state of the database, before the call to TransactionBegin }
+    // - restore the previous state of the database, before the call to TransactionBegin
     procedure RollBack(SessionID: cardinal=1); override;
 
      /// overridden method for direct SQLite3 database engine call
@@ -411,34 +421,37 @@ type
      // - it will retrieve all BLOB fields at once, in one SQL statement
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
 
+    {$ifndef KYLIX3}
     /// backup of the opened Database into an external stream (e.g. a file,
-    //  compressed or not) - deprecated - use DB.BackupBackground() instead
+    //  compressed or not)
+    // - DEPRECATED: use DB.BackupBackground() instead
     // - this method doesn't use the SQLite Online Backup API, but low-level
     // database file copy which may lock the database process if the data
     // is consistent - consider using DB.BackupBackground() method instead
-    // - database is closed, VACCUUMed, copied, then reopened }
+    // - database is closed, VACCUUMed, copied, then reopened
     function Backup(Dest: TStream): boolean; deprecated;
-    /// backup of the opened Database into a .gz compressed file  - deprecated -
-    //   use DB.BackupBackground() instead
+    /// backup of the opened Database into a .gz compressed file
+    // - DEPRECATED: use DB.BackupBackground() instead
     // - this method doesn't use the SQLite Online Backup API, but low-level
     //   database file copy which may lock the database process if the data
     //   is consistent - consider using DB.BackupBackground() method instead
     // - database is closed, VACCUUMed, compressed into .gz file, then reopened
     // - default compression level is 2, which is very fast, and good enough for
-    //   a database file content: you may change it into the default 6 level }
-    function BackupGZ(const DestFileName: TFileName; CompressionLevel: integer=2): boolean;
-      deprecated;
+    //   a database file content: you may change it into the default 6 level
+    function BackupGZ(const DestFileName: TFileName;
+      CompressionLevel: integer=2): boolean; deprecated;
+    {$endif}
     /// restore a database content on the fly
     // - database is closed, source DB file is replaced by the supplied content,
     //   then reopened
     // - there are cases where this method will fail and return FALSE: consider
-    //   shuting down the server, replace the file, then relaunch the server instead }
+    //   shuting down the server, replace the file, then relaunch the server instead 
     function Restore(const ContentToRestore: RawByteString): boolean;
     /// restore a database content on the fly, from a .gz compressed file
     // - database is closed, source DB file is replaced by the supplied content,
     //  then reopened
     // - there are cases where this method will fail and return FALSE: consider
-    //   shuting down the server, replace the file, then relaunch the server instead }
+    //   shuting down the server, replace the file, then relaunch the server instead 
     function RestoreGZ(const BackupFileName: TFileName): boolean;
 
     /// initialize the associated DB connection
@@ -556,7 +569,7 @@ type
 
   /// define a Virtual Table module for a stand-alone SQLite3 engine
   // - it's not needed to free this instance: it will be destroyed by the SQLite3
-  // engine together with the DB connection }
+  // engine together with the DB connection 
   TSQLVirtualTableModuleSQLite3 = class(TSQLVirtualTableModule)
   protected
     fDB: TSQLDataBase;
@@ -584,7 +597,7 @@ type
     property DB: TSQLDataBase read fDB;
   end;
 
-  /// define a Virtual Table module for a TSQLRestServerDB SQLite3 engine }
+  /// define a Virtual Table module for a TSQLRestServerDB SQLite3 engine 
   TSQLVirtualTableModuleServerDB = class(TSQLVirtualTableModuleSQLite3)
   public
     /// register the Virtual Table to the database connection of a TSQLRestServerDB server
@@ -618,12 +631,6 @@ procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
 
 
 implementation
-
-{$ifdef Linux}
-uses
-  SynFPCLinux;
-{$endif}
-
 
 { TSQLTableDB }
 
@@ -1361,6 +1368,8 @@ begin
   end;
 end;
 
+{$ifndef KYLIX3}
+
 function TSQLRestServerDB.Backup(Dest: TStream): boolean;
 {$ifndef WITHUNSAFEBACKUP} // deprecated - use DB.BackupBackground() instead
 begin
@@ -1442,6 +1451,8 @@ begin
   end;
 end;
 {$endif}
+
+{$endif KYLIX3}
 
 function TSQLRestServerDB.RestoreGZ(const BackupFileName: TFileName): boolean;
 {$ifndef WITHUNSAFEBACKUP} // deprecated - use DB.BackupBackground() instead

@@ -136,6 +136,10 @@ uses
   {$define USEWININET}
 {$else}
   {$undef USEWININET}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  {$endif}
 {$endif}
   SysUtils,
   Classes,

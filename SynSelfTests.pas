@@ -120,8 +120,15 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
+  {$ifdef FPC}
   SynFPCLinux,
   BaseUnix,
+  {$endif}
   {$endif}
   Classes,
 {$ifndef NOVARIANTS}
@@ -136,11 +143,11 @@ uses
   SysUtils,
 {$ifndef LVCL}
   Contnrs,
-{$ifndef FPC}
-  SynPdf,
-{$endif FPC}
   {$ifdef MSWINDOWS}
   SynOleDB,
+  {$ifndef FPC}
+  SynPdf,
+  {$endif}
   {$endif}
 {$endif LVCL}
   SynDB,
@@ -312,10 +319,8 @@ type
   // defined and implemented in the mORMot.pas unit
   TTestLowLevelTypes = class(TSynTestCase)
 {$ifndef NOVARIANTS}
-{$ifndef FPC}
   protected
     procedure MustacheTranslate(var English: string);
-{$endif}
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
@@ -332,7 +337,6 @@ type
 {$ifndef NOVARIANTS}
     /// some low-level variant process
     procedure Variants;
-{$ifndef FPC}
     /// test the Mustache template rendering unit
     procedure MustacheRenderer;
 {$ifndef DELPHI5OROLDER}
@@ -341,7 +345,6 @@ type
     procedure _TDocVariant;
     /// BSON process (using TDocVariant)
     procedure _BSON;
-{$endif}
 {$endif}
 {$endif}
 {$endif}
@@ -417,8 +420,9 @@ type
     procedure _CompressShaAes;
   end;
 
-{$ifndef FPC}
+{$ifdef MSWINDOWS}
 {$ifndef LVCL}
+{$ifndef FPC}
   /// this test case will test most functions, classes and types defined and
   // implemented in the SynPDF unit
   TTestSynopsePDF = class(TSynTestCase)
@@ -434,6 +438,7 @@ type
     // data from NIST)
     procedure _TPdfDocumentGDI;
   end;
+{$endif}
 {$endif}
 {$endif}
 
@@ -1029,11 +1034,13 @@ uses
 {$ifndef LVCL}
   SyncObjs,
 {$endif}
+{$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifdef ISDELPHIXE2}
   VCL.Graphics,
 {$else}
   Graphics,
+{$endif}
 {$endif}
 {$endif}
   //mORMotUILogin,
@@ -2137,7 +2144,11 @@ var A,B,C: TR;
     {$endif}
 begin
   {$ifdef LINUX}
+  {$ifdef FPC}
   FPUname(uts);
+  {$else}
+  uname(uts);
+  {$endif}
   {$endif}
   if PosEx('Synopse framework',RawUTF8(Owner.CustomVersions),1)=0 then
     Owner.CustomVersions := Owner.CustomVersions+#13#10'Synopse framework used: '+
@@ -3632,8 +3643,6 @@ begin
   Check(boolean(v));
 end;
 
-{$ifndef FPC}
-
 type
   TMustacheTest = packed record
     desc: string;
@@ -3792,7 +3801,7 @@ begin
     mustacheJsonFileName := MUSTACHE_SPECS[spec]+'.json';
     mustacheJson := StringFromFile(mustacheJsonFileName);
     if mustacheJson='' then begin
-      mustacheJson := TWinINet.Get(
+      mustacheJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
         'https://raw.githubusercontent.com/mustache/spec/master/specs/'+
         StringToAnsi7(mustacheJsonFileName));
       FileFromString(mustacheJson,mustacheJsonFileName);
@@ -3819,8 +3828,6 @@ begin
   if English='You have just won' then
     English := 'Vous venez de gagner';
 end;
-
-{$endif FPC}
 
 {$endif NOVARIANTS}
 
@@ -5170,7 +5177,7 @@ begin
   {$ifdef MSWINDOWS}
   zendframeworkJson := StringFromFile(zendframeworkFileName);
   if zendframeworkJson='' then begin
-    zendframeworkJson := TWinINet.Get(
+    zendframeworkJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
       'https://api.github.com/users/zendframework/repos');
     FileFromString(zendframeworkJson,zendframeworkFileName);
   end;
@@ -5178,7 +5185,7 @@ begin
   TestGit([soReadIgnoreUnknownFields,soWriteHumanReadable]);
   discogsJson := StringFromFile(discogsFileName);
   if discogsJson='' then begin
-    discogsJson := TWinINet.Get(
+    discogsJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
       'http://api.discogs.com/artists/45/releases?page=1&per_page=100');
     FileFromString(discogsJson,discogsFileName);
   end;
@@ -5265,7 +5272,6 @@ end;
 
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
-{$ifndef FPC}
 
 procedure TTestLowLevelTypes._BSON;
 const BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
@@ -5614,7 +5620,7 @@ begin
 end;
 
 procedure TTestLowLevelTypes._TDocVariant;
-procedure CheckDoc(const Doc: TDocVariantData; ExpectedYear: integer=1972);
+procedure CheckDoc(var Doc: TDocVariantData; ExpectedYear: integer=1972);
 var JSON: RawUTF8;
 begin
   if CheckFailed(Doc.VarType=DocVariantType.VarType) then
@@ -5649,7 +5655,8 @@ var JSON, JSON2: RawUTF8;
     Doc2Doc, V, Disco: variant;
     i: Integer;
 begin
-  Check(_JSON('["one",2,3]',aOptions)._JSON='["one",2,3]');
+  V := _JSON('["one",2,3]',aOptions);
+  Check(V._JSON='["one",2,3]');
   Doc.InitObject(['name','John','birthyear',1972],
     aOptions+[dvoReturnNullForUnknownProperty,dvoReturnNullForOutOfRangeIndex]);
   CheckDoc(Doc);
@@ -5851,8 +5858,6 @@ begin
   Check(V.result.data.Value('1000')='D1');
   Check(V.result.data.Value('1001')='D2');
 end;
-
-{$endif FPC}
 
 {$endif LVCL}
 
@@ -7205,6 +7210,7 @@ begin
 end;
 
 
+{$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifndef LVCL}
 
@@ -7466,6 +7472,7 @@ begin
     MS.Free;
   end;
 end;
+{$endif}
 {$endif}
 {$endif}
 
@@ -10659,7 +10666,7 @@ end;
 
 function TServiceComplexCalculator.GetCurrentThreadID: cardinal;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadId;
+  result := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadId;
 end;
 
 function TServiceComplexCalculator.GetCustomer(CustomerId: Integer;
@@ -10753,12 +10760,12 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadID;
+  fThreadIDAtCreation := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
 end;
 
 function TServicePerThread.GetCurrentThreadID: cardinal;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$else}System.{$endif}GetCurrentThreadID;
+  result := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
   with PServiceRunningContext(@ServiceContext)^ do
     if Request<>nil then
       if Result<>Request.ServiceInstanceID then
@@ -12334,4 +12341,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+

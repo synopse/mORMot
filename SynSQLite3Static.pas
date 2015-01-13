@@ -119,8 +119,15 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef FPC}
   SynFPCLinux,
   BaseUnix,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
   {$endif}
   SysUtils,
   SynCommons,
@@ -266,20 +273,24 @@ extern int unixWrite(
 }
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
-{$ifdef MSWINDOWS}
-{$L fpc-win32\sqlite3.o}
-{$linklib fpc-win32\libkernel32.a}
-{$linklib fpc-win32\libgcc.a}
+  {$ifdef MSWINDOWS}
+  {$L fpc-win32\sqlite3.o}
+  {$linklib fpc-win32\libkernel32.a}
+  {$linklib fpc-win32\libgcc.a}
+  {$else}
+  {$L fpc-linux32\sqlite3.o}
+  {$linklib fpc-linux32\gcc.a}
+  {$endif MSWINDOWS}
 {$else}
-{$L fpc-linux32\sqlite3.o}
-{$linklib fpc-linux32\gcc.a}
-{$endif}
-{$else} // Delphi
-{$ifdef INCLUDE_FTS3}
-{$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
-{$else}
-{$L sqlite3.obj}       // link SQlite3 database engine
-{$endif}
+  {$ifdef MSWINDOWS} // Delphi
+    {$ifdef INCLUDE_FTS3}
+    {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+    {$else}
+    {$L sqlite3.obj}       // link SQlite3 database engine
+    {$endif INCLUDE_FTS3}
+  {$else}           // Kylix
+  {$L fpc-linux32\sqlite3.o}
+  {$endif MSWINDOWS}
 {$endif}
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
@@ -711,6 +722,14 @@ end;
 
 {$ifndef NOSQLITE3ENCRYPT}
 
+{$ifdef MSWINDOWS}
+  {$define MSWINDOWSORKYLIX}
+{$endif}
+{$ifdef KYLIX3}
+  {$define MSWINDOWSORKYLIX}
+{$endif}
+
+
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 var F: THandle;
@@ -739,7 +758,7 @@ begin
   if NewPassword<>'' then
     CreateSQLEncryptTableBytes(NewPassWord,@NewP);
   Int64(Posi) := 1024; // don't change first page, which is uncrypted
-  {$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWSORKYLIX}
   SetFilePointer(F,1024,nil,FILE_BEGIN); // move to first page after 1024
   {$else}
   FPLseek(F,Int64(1024),Seek_Set);
@@ -752,7 +771,7 @@ begin
       XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
     if NewPassword<>'' then
       XorOffset(@Buf,Posi.Lo,R,@NewP); // crypt with new key
-    {$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWSORKYLIX}
     SetFilePointer(F,Posi.Lo,@Posi.Hi,FILE_BEGIN); // rewind
     {$else}
     FPLseek(F,Int64(Posi),Seek_Set);
@@ -801,8 +820,8 @@ type
     pMethods: pointer;          // sqlite3.io_methods_ptr
     pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
     unixInodeInfo: pointer;     // Info about locks on this inode
-    h: cint;                    // Handle for accessing the file
-    eFileLock:cuchar;           // The type of lock held on this fd
+    h: THandle;                 // Handle for accessing the file
+    eFileLock: cuchar;          // The type of lock held on this fd
     ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
     lastErrno: cint;            // The unix errno from the last I/O error
     lockingContext : PAnsiChar; // Locking style specific state
@@ -924,7 +943,7 @@ label err;
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
-      if offset.Lo+buflen<=F.mmapSize.Lo then begin // 32 bit arithmetic is OK
+      if off+buflen<=Int64(F.mmapSize) then begin
         Move(buf^,F.pMapRegion[offset.Lo],bufLen);
         result := SQLITE_OK;
         exit;
@@ -938,7 +957,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  {$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWSORKYLIX}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
   {$else}
   result := FPLseek(F.h,Int64(offset),Seek_Set);
@@ -963,12 +982,12 @@ begin
   b := buf;
   n := buflen;
   while n>0 do begin
-    {$ifdef MSWINDOWS}
-    if not WriteFile(F.h,b^,n,cardinal(result),nil) then begin
+    {$ifdef MSWINDOWSORKYLIX}
+    result := FileWrite(F.h,b^,n);
     {$else}
     result := FPWrite(F.h,b^,n);
-    if result=-1 then begin
     {$endif}
+    if result=-1 then begin
 err:  F.lastErrno := GetLastError;
       result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
@@ -1010,9 +1029,9 @@ var offset: Int64Rec absolute off;
     nCopy: cardinal;
     i: integer;
 begin
-  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17) 
+  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
-      if offset.Lo+buflen<=F.mmapSize.Lo then begin // 32 bit arithmetic is OK
+      if off+buflen<=Int64(F.mmapSize) then begin
         Move(F.pMapRegion[offset.Lo],buf^,bufLen);
         result := SQLITE_OK;
         exit;
@@ -1026,7 +1045,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  {$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWSORKYLIX}
   result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
   {$else}
   result := FPLseek(F.h,Int64(offset),Seek_Set);
@@ -1039,12 +1058,12 @@ begin
       exit;
     end;
   end;
-  {$ifdef MSWINDOWS}
-  if not ReadFile(F.h,buf^,buflen,cardinal(result),nil) then begin
+  {$ifdef MSWINDOWSORKYLIX}
+  result := FileRead(F.h,buf^,buflen);
   {$else}
   result := FPRead(F.h,buf^,buflen);
-  if result=-1 then begin
   {$endif}
+  if result=-1 then begin
     F.lastErrno := GetLastError;
     result := SQLITE_IOERR_READ;
     exit;

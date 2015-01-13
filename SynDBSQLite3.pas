@@ -96,7 +96,15 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef FPC}
   SynFPCLinux,
+  {$else}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
+  {$endif}
   {$endif}
   SysUtils,
   {$ifndef DELPHI5OROLDER}

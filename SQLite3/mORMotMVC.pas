@@ -59,7 +59,14 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef FPC}
   SynFPCLinux,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
   {$endif}
   SysUtils,
   Classes,

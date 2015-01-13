@@ -1584,6 +1584,7 @@ const
     (Num: 1252; Charset: 31;  Text: 'WE8ISO8859P1'));
 
 function EnvVariableToCodePage: cardinal;
+{$ifdef MSWINDOWS}
 var i: integer;
     nlslang: array[byte] of AnsiChar;
 begin
@@ -1599,6 +1600,11 @@ begin
     result := GetACP;
   end;
 end;
+{$else}
+begin
+  result := GetACP;
+end;
+{$endif}
 
 function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
 var i1,i2: integer;
@@ -1643,15 +1649,19 @@ function TSQLDBOracleLib.CodePageToCharSetID(env: pointer;
   aCodePage: cardinal): cardinal;
 var ocp: PUTF8Char;
     i: integer;
+    {$ifdef MSWINDOWS}
     nlslang: array[byte] of AnsiChar;
+    {$endif}
 begin
   case aCodePage of
   0: begin
+    {$ifdef MSWINDOWS}
     i := GetEnvironmentVariableA('NLS_LANG',nlslang,sizeof(nlslang));
     if i>0 then begin
       nlslang[i] := #0;
       result := NlsCharSetNameToID(env,nlslang);
     end else
+    {$endif}
       result := CodePageToCharSetID(env,GetACP);
   end;
   CP_UTF8:
@@ -1675,7 +1685,7 @@ end;
 constructor TSQLDBOracleLib.Create;
 var P: PPointer;
     i: integer;
-    orhome: array[byte] of Char;
+    orhome: string;
 begin
   fLibraryPath := 'oci.dll';
   if (SynDBOracleOCIpath<>'') and DirectoryExists(SynDBOracleOCIpath) then
@@ -1683,14 +1693,9 @@ begin
   fHandle := SafeLoadLibrary(fLibraryPath);
   if fHandle=0 then begin
     if fHandle=0 then begin
-      i := Windows.GetEnvironmentVariable(PChar('ORACLE_HOME'),orhome,sizeof(orhome));
-      if i<>0 then begin
-        if orhome[i-1]<>'\' then begin
-          orhome[i] := '\';
-          inc(i);
-        end;
-        SetString(fLibraryPath,orhome,i);
-        fLibraryPath := fLibraryPath+'bin\oci.dll';
+      orhome := GetEnvironmentVariable('ORACLE_HOME');
+      if orhome<>'' then begin
+        fLibraryPath := IncludeTrailingPathDelimiter(orhome)+'bin\oci.dll';
         fHandle := SafeLoadLibrary(fLibraryPath);
       end;
     end;
@@ -2637,9 +2642,11 @@ begin
         ftUTF8:
           Type_List := (Connection as TSQLDBOracleConnection).fType_strList;
         else
-          raise ESQLDBOracle.CreateUTF8(
-            '%.ExecutePrepared: Unsupported array parameter type #%',[self,i+1]);
+          Type_List := nil;
         end;
+        if Type_List=nil then
+         raise ESQLDBOracle.CreateUTF8(
+            '%.ExecutePrepared: Unsupported array parameter type #%',[self,i+1]);
         ociArrays[ociArraysCount] := nil;
         OCI.Check(self,OCI.ObjectNew(Env, fError, Context, OCI_TYPECODE_VARRAY, Type_List, nil,
           OCI_DURATION_SESSION, True, ociArrays[ociArraysCount]), fError);

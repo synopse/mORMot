@@ -70,6 +70,9 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$endif}
+  {$ifdef KYLIX3}
+  LibC,
+  {$endif}
   SysUtils,
   Classes,
   Variants,

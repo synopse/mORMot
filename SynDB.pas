@@ -290,8 +290,15 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef KYLIX3}
+  LibC,
+  Types,
+  SynKylix,
+  {$endif}
+  {$ifdef FPC}
   SynFPCLinux,
   dynlibs,
+  {$endif}
   {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,

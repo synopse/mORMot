@@ -200,6 +200,7 @@
   {$endif CPU64}
 
   {$define FPC_OR_PUREPASCAL}
+  {$define FPC_OR_KYLIX}
   // exceptions interception code in FPC differs from Delphi
   {$define NOEXCEPTIONINTERCEPT}
 
@@ -245,6 +246,8 @@
         {$define NOVARCOPYPROC}
         {$define NOEXCEPTIONINTERCEPT} // no exception interception yet
         {$define KYLIX3}
+        {$define FPC_OR_KYLIX}
+        {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
       {$else}
       Kylix1/2 are unsupported
       {$ifend}

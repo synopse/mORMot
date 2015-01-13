@@ -15940,6 +15940,11 @@ begin
   DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
   {$endif FPC}
+  {$ifdef KYLIX3}
+  // if default locale is set to *.UTF-8, which is the case in most modern
+  // linux default configuration, unicode decode will fail in SysUtils.CheckLocale
+  setlocale(LC_ALL,'en_US.UTF-8'); // force right locale for a UTF-8 server
+  {$endif}
 {$ifndef EXTENDEDTOSTRING_USESTR}
   {$ifdef ISDELPHIXE}
   SettingsUS := TFormatSettings.Create($0409);

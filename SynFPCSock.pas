@@ -100,9 +100,10 @@ uses
   {$endif}
   SyncObjs, SysUtils, Classes;
 
-function InitSocketInterface: Boolean;
-function DestroySocketInterface: Boolean;
+const
+  InitSocketInterface = true;
 
+procedure DestroySocketInterface;
 
 {$MINENUMSIZE 4}
 
@@ -196,12 +197,6 @@ const
   MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
   {$endif}
   {$endif}
-
-  SOCK_STREAM     = 1;               { stream socket }
-  SOCK_DGRAM      = 2;               { datagram socket }
-  SOCK_RAW        = 3;               { raw-protocol interface }
-  SOCK_RDM        = 4;               { reliably-delivered message }
-  SOCK_SEQPACKET  = 5;               { sequenced packet stream }
 
   { TCP options. }
   TCP_NODELAY     = $0001;
@@ -316,6 +311,12 @@ const
   AF_INET6       = 10;              { Internetwork Version 6 }
   PF_INET6       = AF_INET6;
 
+  SOCK_STREAM     = 1;               { stream socket }
+  SOCK_DGRAM      = 2;               { datagram socket }
+  SOCK_RAW        = 3;               { raw-protocol interface }
+  SOCK_RDM        = 4;               { reliably-delivered message }
+  SOCK_SEQPACKET  = 5;               { sequenced packet stream }
+
 type
   TIP_mreq =  record
     imr_multiaddr: TInAddr;     // IP multicast address of group
@@ -374,17 +375,21 @@ var
   in6addr_any, in6addr_loopback : TInAddr6;
 
 {$ifdef FPC}
+
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
 function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 procedure FD_ZERO(var FDSet: TFDSet);
+
+function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
+function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
+
 {$endif FPC}
 
-
-var
-  SynSockCS: SyncObjs.TCriticalSection;
-  SockEnhancedApi: Boolean;
-  SockWship6Api: Boolean;
+const
+  // we assume that the OS has IP6 compatibility
+  SockEnhancedApi = true;
+  SockWship6Api = true;
 
 type
   TVarSin = packed record
@@ -439,12 +444,10 @@ function Select(nfds: Integer; readfds,writefds,exceptfds: PFDSet;
 function IsNewApi(Family: integer): Boolean;
 function SetVarSin(var Sin: TVarSin; const IP,Port: string;
   Family,SockProtocol,SockType: integer; PreferIP4: Boolean): integer;
-function GetSinIP(Sin: TVarSin): string;
-function GetSinPort(Sin: TVarSin): Integer;
+function GetSinIP(const Sin: TVarSin): string;
+function GetSinPort(const Sin: TVarSin): Integer;
 procedure ResolveNameToIP(const Name: string;  Family,SockProtocol,SockType: integer;
-  const IPList: TStrings);
-function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
-function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
+  IPList: TStrings);
 
 
 implementation
@@ -501,8 +504,14 @@ begin
   with WSData do begin
     wVersion := wVersionRequired;
     wHighVersion := $202;
-    szDescription := 'SynFPCSock - CrossPlatform Socket Layer';
+    {$ifdef FPC}
+    szDescription := 'Synopse CrossPlatform Socket Layer';
     szSystemStatus := 'Running on Unix/Linux by FreePascal';
+    {$endif}
+    {$ifdef KYLIX3}
+    {$endif}
+    szDescription := 'Synopse CrossPlatform Socket Layer';
+    szSystemStatus := 'Running on Unix/Linux by Kylix';
     iMaxSockets := 32768;
     iMaxUdpDg := 8192;
   end;
@@ -772,6 +781,137 @@ begin
     result := (Family=AF_INET6) and SockWship6Api;
 end;
 
+function GetSinPort(const Sin: TVarSin): Integer;
+begin
+  if (Sin.sin_family=AF_INET6) then
+    result := ntohs(Sin.sin6_port) else
+    result := ntohs(Sin.sin_port);
+end;
+
+{$ifdef KYLIX3} // those functions only use the new API 
+
+function SetVarSin(var Sin: TVarSin; const IP,Port: string;
+  Family,SockProtocol,SockType: integer; PreferIP4: Boolean): integer;
+  function GetAddr(const IP, port: string; var Hints: addrinfo; var Sin: TVarSin): integer;
+  var Addr: PAddressInfo;
+  begin
+    Addr := nil;
+    try
+      FillChar(Sin, Sizeof(Sin), 0);
+      if Hints.ai_socktype=SOCK_RAW then begin
+        Hints.ai_socktype := 0;
+        Hints.ai_protocol := 0;
+        result := LibC.getaddrinfo(pointer(IP), nil, @Hints, Addr);
+      end else
+        if (IP=cAnyHost) or (IP=c6AnyHost) then begin
+          Hints.ai_flags := AI_PASSIVE;
+          result := LibC.getaddrinfo(nil, pointer(Port), @Hints, Addr);
+        end else
+          if (IP = cLocalhost) or (IP = c6Localhost) then
+            result := LibC.getaddrinfo(nil, pointer(Port), @Hints, Addr) else
+            result := LibC.getaddrinfo(pointer(IP), pointer(Port), @Hints, Addr);
+      if (Result=0) and (Addr<>nil) then
+        Move(Addr^.ai_addr^, Sin, Addr^.ai_addrlen);
+    finally
+      if Assigned(Addr) then
+        LibC.freeaddrinfo(Addr);
+    end;
+  end;
+
+var Hints1, Hints2: addrinfo;
+    Sin1, Sin2: TVarSin;
+    TwoPass: boolean;
+begin
+  FillChar(Hints1, Sizeof(Hints1), 0);
+  FillChar(Hints2, Sizeof(Hints2), 0);
+  TwoPass := False;
+  if Family=AF_UNSPEC then begin
+    if PreferIP4 then begin
+      Hints1.ai_family := AF_INET;
+      Hints2.ai_family := AF_INET6;
+      TwoPass := True;
+    end else begin
+      Hints2.ai_family := AF_INET;
+      Hints1.ai_family := AF_INET6;
+      TwoPass := True;
+    end;
+  end else
+    Hints1.ai_family := Family;
+  Hints1.ai_socktype := SockType;
+  Hints1.ai_protocol := SockProtocol;
+  Hints2.ai_socktype := SockType;
+  Hints2.ai_protocol := SockProtocol;
+  result := GetAddr(IP, Port, Hints1, Sin1);
+  if result=0 then
+    sin := sin1 else
+    if TwoPass then begin
+      result := GetAddr(IP, Port, Hints2, Sin2);
+      if result=0 then
+        sin := sin2;
+    end;
+end;
+
+function GetSinIP(const Sin: TVarSin): string;
+var host: array[0..NI_MAXHOST] of char;
+    serv: array[0..NI_MAXSERV] of char;
+    r: integer;
+begin
+  r := LibC.getnameinfo(PSockAddr(@sin)^,SizeOfVarSin(sin), host,NI_MAXHOST,
+    serv,NI_MAXSERV, NI_NUMERICHOST+NI_NUMERICSERV);
+  if r=0 then
+    result := host else
+    result := '';
+end;
+
+procedure ResolveNameToIP(const Name: string; Family, SockProtocol, SockType: integer;
+  IPList: TStrings);
+var
+  Hints: TAddressInfo;
+  Addr: PAddressInfo;
+  AddrNext: PAddressInfo;
+  r: integer;
+  host, serv: string;
+  hostlen, servlen: integer;
+begin
+  IPList.Clear;
+  Addr := nil;
+  try
+    FillChar(Hints, Sizeof(Hints), 0);
+    Hints.ai_family := AF_UNSPEC;
+    Hints.ai_socktype := SockType;
+    Hints.ai_protocol := SockProtocol;
+    Hints.ai_flags := 0;
+    r := LibC.getaddrinfo(PChar(Name), nil, @Hints, Addr);
+    if r=0 then begin
+      AddrNext := Addr;
+      while not(AddrNext=nil) do begin
+        if not(((Family=AF_INET6) and (AddrNext^.ai_family=AF_INET))
+          or ((Family=AF_INET) and (AddrNext^.ai_family=AF_INET6))) then begin
+          hostlen := NI_MAXHOST;
+          servlen := NI_MAXSERV;
+          setlength(host,hostlen);
+          setlength(serv,servlen);
+          r := LibC.getnameinfo(AddrNext^.ai_addr^, AddrNext^.ai_addrlen,
+            PChar(host), hostlen, PChar(serv), servlen,
+            NI_NUMERICHOST + NI_NUMERICSERV);
+          if r=0 then begin
+            host := PChar(host);
+            IPList.Add(host);
+          end;
+        end;
+        AddrNext := AddrNext^.ai_next;
+      end;
+    end;
+  finally
+    if Assigned(Addr) then
+      LibC.freeaddrinfo(Addr);
+  end;
+  if IPList.Count=0 then
+    IPList.Add(cAnyHost);
+end;
+
+{$else} // FPC version
+
 function SetVarSin(var Sin: TVarSin; const IP,Port: string;
   Family,SockProtocol,SockType: integer; PreferIP4: Boolean): integer;
 var TwoPass: boolean;
@@ -851,7 +991,7 @@ begin
       result := GetAddr(f2);
 end;
 
-function GetSinIP(Sin: TVarSin): string;
+function GetSinIP(const Sin: TVarSin): string;
 begin
   result := '';
   case sin.AddressFamily of
@@ -860,15 +1000,8 @@ begin
   end;
 end;
 
-function GetSinPort(Sin: TVarSin): Integer;
-begin
-  if (Sin.sin_family=AF_INET6) then
-    result := ntohs(Sin.sin6_port) else
-    result := ntohs(Sin.sin_port);
-end;
-
 procedure ResolveNameToIP(const Name: string;
-  Family,SockProtocol,SockType: integer; const IPList: TStrings);
+  Family,SockProtocol,SockType: integer; IPList: TStrings);
 var x,n: integer;
     a4: array[1..255] of in_addr;
     a6: array[1..255] of Tin6_addr;
@@ -921,8 +1054,8 @@ end;
 
 function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
 var n: integer;
-    a4: array[1..1] of in_addr;
-    a6: array[1..1] of Tin6_addr;
+    a4: array[1..1] of TInAddr;
+    a6: array[1..1] of TInAddr6;
     a: array[1..1] of string;
 begin
   result := IP;
@@ -939,25 +1072,15 @@ begin
   end;
 end;
 
+{$endif KYLIX3}
 
-function InitSocketInterface: Boolean;
+procedure DestroySocketInterface;
 begin
-  SockEnhancedApi := false;
-  SockWship6Api := false;
-  result := true;
-end;
-
-function DestroySocketInterface: Boolean;
-begin
-  result := true;
+  // nothing to do, since we use either the FPC units, either LibC.pas
 end;
 
 initialization
-  SynSockCS := SyncObjs.TCriticalSection.Create;
-  SET_IN6_IF_ADDR_ANY (@in6addr_any);
-  SET_LOOPBACK_ADDR6  (@in6addr_loopback);
-
-finalization
-  SynSockCS.Free;
+  SET_IN6_IF_ADDR_ANY(@in6addr_any);
+  SET_LOOPBACK_ADDR6(@in6addr_loopback);
 
 end.

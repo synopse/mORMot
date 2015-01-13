@@ -231,6 +231,7 @@ uses
   {$endif}
   {$ifdef KYLIX3}
   LibC,
+  KernelIoctl,
   SynFPCSock, // shared with Kylix
   SynKylix,
   {$endif}
@@ -1318,7 +1319,12 @@ function OpenHttp(const aServer, aPort: RawByteString): THttpClientSocket;
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
-function HttpGet(const server, port: RawByteString; const url: RawByteString): RawByteString;
+function HttpGet(const server, port: RawByteString; const url: RawByteString): RawByteString; overload;
+
+/// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
+// - this method will use a low-level THttpClientSock socket: if you want
+// something able to use your computer proxy, take a look at TWinINet.Get()
+function HttpGet(const aURI: RawByteString): RawByteString; overload;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: RawByteString; const url, Data, DataType: RawByteString): boolean;
@@ -2149,9 +2155,10 @@ function CallServer(const Server, Port: RawByteString; doBind: boolean;
    aLayer: TCrtSocketLayer): TSocket;
 var Sin: TVarSin;
     IP: RawByteString;
-    li: TLinger;
     SOCK_TYPE, IPPROTO: integer;
-    {$ifndef MSWINDOWS}
+    {$ifdef MSWINDOWS}
+    li: TLinger;
+    {$else}
     SO_True: integer;
     serveraddr: sockaddr;
     {$endif}
@@ -2176,8 +2183,13 @@ begin
       if doBind then begin
         fillchar(serveraddr,sizeof(serveraddr),0);
         //http://publib.boulder.ibm.com/infocenter/iseries/v5r3/index.jsp?topic=/rzab6/rzab6uafunix.htm
+        {$ifdef KYLIX3}
+        if (Libc.bind(result,serveraddr,sizeof(serveraddr))<0) or
+           (Libc.listen(result,SOMAXCONN)<0) then begin
+        {$else}
         if (fpbind(result,@serveraddr,sizeof(serveraddr))<0) or
            (fplisten(result,SOMAXCONN)<0) then begin
+        {$endif}
           //close(sd);
           result := -1;
         end;
@@ -2848,6 +2860,14 @@ begin
   end;
 end;
 
+function HttpGet(const aURI: RawByteString): RawByteString; 
+var URI: TURI;
+begin
+  if URI.From(aURI) then
+    result := HttpGet(URI.Server,URI.Port,URI.Address) else
+    result := '';
+end;
+
 function HttpPost(const server, port: RawByteString; const url, Data, DataType: RawByteString): boolean;
 var Http: THttpClientSocket;
 begin
@@ -2975,8 +2995,10 @@ begin
 {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
 {$endif}
+{$ifdef FPC}
 {$ifdef LINUX}
   KillThread(ThreadID);  // manualy do it here
+{$endif}
 {$endif}
   FreeAndNil(Sock);
   inherited Destroy;         // direct Thread abort, no wait till ended
@@ -3525,6 +3547,9 @@ end;
 
 procedure GetSinIPFromCache(const Sin: TVarSin; var result: RawByteString);
 begin
+  {$ifdef KYLIX3}
+  result := GetSinIP(Sin);
+  {$else}
   if (Sin.AddressFamily=AF_INET6) and SockWship6Api then
     result := GetSinIP(Sin) else
   if Sin.AddressFamily=AF_INET then
@@ -3532,6 +3557,7 @@ begin
       Sin.sin_addr.S_bytes[0],Sin.sin_addr.S_bytes[1],
       Sin.sin_addr.S_bytes[2],Sin.sin_addr.S_bytes[3]])) else
     result := '';
+  {$endif}
 end;
 
 

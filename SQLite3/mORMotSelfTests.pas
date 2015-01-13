@@ -96,28 +96,28 @@ uses
   mORMotHttpClient,
   mORMotHttpServer,
 {$ifndef FPC}
+{$ifdef MSWINDOWS}
+  SynPdf,
+  SynGdiPlus,
   mORMotService,
   mORMotFastCgiServer,
   //mORMotBigTable,
 {$endif}
 {$endif}
+{$endif}
 {$ifndef LVCL}
   Contnrs,
   SynDB,
+  SynDBSQLite3,
   {$ifdef MSWINDOWS}
   SynOleDB,
   SynDBOracle,
   SynDBODBC,
-  {$endif}
-  SynDBSQLite3,
-{$ifndef FPC}
-  SynPdf,
-  SynGdiPlus,
+  {$endif MSWINDOWS}
 {$ifndef DELPHI5OROLDER}
   mORMotDB,
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
-{$endif FPC}
   SynZip,
   SynSelfTests;
 
@@ -148,12 +148,14 @@ begin
   // exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
+{$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
     TTestBigTable,
 {$endif}
 {$ifndef LVCL}
     TTestSynopsePDF, // PDF uses SynGDIPlus or Jpeg.pas
+{$endif}
 {$endif}
 {$endif}
     TTestCryptographicRoutines, TTestCompression

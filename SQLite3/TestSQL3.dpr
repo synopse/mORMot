@@ -29,7 +29,6 @@ program TestSQL3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -101,7 +100,6 @@ uses
   {$endif}
   SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
-  mORMotSelfTests in 'mORMotSelfTests.pas',
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',
   SynCrypto in '..\SynCrypto.pas',
@@ -109,6 +107,7 @@ uses
   SynCommons in '..\SynCommons.pas',
   SynLog in '..\SynLog.pas',
   SynTests in '..\SynTests.pas',
+  mORMotSelfTests in 'mORMotSelfTests.pas',
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',

@@ -70,14 +70,22 @@ type
     Millisecond: Word;
   end;
 
+  cint = integer;
+  cuchar = byte;
+  cushort = word;
+
 const
   NOERROR = 0;
   NO_ERROR = 0;
   INVALID_HANDLE_VALUE = THandle(-1);
+  INFINITE = LongWord(-1);
 
   LOCALE_USER_DEFAULT = $400;
   NORM_IGNORECASE = 1;
-  INFINITE = LongWord(-1);
+
+  FILE_BEGIN = SEEK_SET;
+  FILE_CURRENT = SEEK_CUR;
+  FILE_END = SEEK_END;
 
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64);

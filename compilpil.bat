@@ -44,6 +44,7 @@ mkdir tempbuild\dcu
 del tempbuild\dcu\*.dcu
 
 cd \dev\lib\sqlite3
+del TestSQL3.cfg
 
 %DCC% TestSQL3.dpr %Switches%
 @if errorlevel 1 pause

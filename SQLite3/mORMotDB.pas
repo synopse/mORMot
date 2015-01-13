@@ -143,7 +143,12 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$else}
+  {$ifdef KYLIX3}
+  LibC,
+  {$endif}
+  {$ifdef FPC}
   SynFPCLinux,
+  {$endif}
   {$endif}
   SysUtils,
   Classes,
