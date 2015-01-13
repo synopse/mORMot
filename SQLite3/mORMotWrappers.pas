@@ -270,6 +270,7 @@ type
     function ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
     function ContextFromMethods(int: TInterfaceFactory): variant;
     function ContextFromMethod(const meth: TServiceMethod): variant;
+    function ContextArgsFromMethod(const meth: TServiceMethod): variant;
   public
     constructor Create;
     constructor CreateFromModel(aServer: TSQLRestServer);
@@ -390,7 +391,7 @@ begin
   fSOA := _ObjFast(['enabled',True,'services',variant(services)]);
 end;
 
-function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
+function TWrapperContext.ContextArgsFromMethod(const meth: TServiceMethod): variant;
 const
   DIRTODELPHI: array[TServiceMethodValueDirection] of string[7] = (
     'const','var','out','result');
@@ -433,26 +434,29 @@ begin
   end;
 end;
 
-function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+function TWrapperContext.ContextFromMethod(const meth: TServiceMethod): variant;
 const
   VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
-var m: integer;
-    method: variant;
 begin
-  TDocVariant.NewFast(result);
-  for m := 0 to int.MethodsCount-1 do
-  with int.Methods[m] do begin
-    method := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
+  with meth do begin
+    result := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
-      'args',ContextFromMethod(int.Methods[m]),
+      'args',ContextArgsFromMethod(meth),
       'argsOutputCount',ArgsOutputValuesCount,
       'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
     if ArgsInFirst>=0 then
-      method.hasInParams := true;
+      result.hasInParams := true;
     if ArgsOutFirst>=0 then
-      method.hasOutParams := true;
-    TDocVariantData(result).AddItem(method);
+      result.hasOutParams := true;
   end;
+end;
+
+function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
+var m: integer;
+begin
+  TDocVariant.NewFast(result);
+  for m := 0 to int.MethodsCount-1 do
+    TDocVariantData(result).AddItem(ContextFromMethod(int.Methods[m]));
 end;
 
 function TWrapperContext.ContextOneProperty(prop: TJSONCustomParserRTTI): variant;

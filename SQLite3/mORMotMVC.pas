@@ -642,8 +642,8 @@ const
   MUSTACHE_VOIDVIEW = MUSTACHE_METHODPARTIAL+
   '<<! void template created for the {{interfaceName}}.{{methodName}} View:'#13#10+
   ' defined as'#13#10'   {{>method}}'#13#10' with the following data context:'#13#10+
-  '   * Main: variant'#13#10'{{#args}}{{#dirOutput}}   * {{argName}}: {{typePascal}}'+
-  #13#10'{{/dirOutput}}{{/args}}>>'#13#10;
+  '   * Main: variant'#13#10'{{#args}}{{#dirOutput}}   * {{argName}}:'+
+  ' {{typePascal}}'#13#10'{{/dirOutput}}{{/args}}>>'#13#10;
 
   MUSTACHE_MVCINFO = MUSTACHE_METHODPARTIAL+
   '{{<url}}/{{root}}/{{methodName}}{{#hasInParams}}?'+
