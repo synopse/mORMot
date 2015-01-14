@@ -1067,14 +1067,13 @@ begin
     if Dialog.Emulated then
       Dialog.Form.Element[element].Caption := CR(Text) else
       SendMessageW(Dialog.Wnd,TDM_UPDATE_ELEMENT_TEXT,ord(element),
-        NativeInt(pointer(WS(Text))));
+        {$ifdef UNICODE}NativeInt{$else}integer{$endif}(pointer(WS(Text))));
   tdeEdit:
     if Dialog.Emulated then
       Dialog.Form.Edit.Text := Text; // only in emulation
   tdeVerif:
     if Dialog.Emulated then
       Dialog.Form.Verif.Caption := Text
-
   end;
 end;
 
