@@ -292,11 +292,11 @@ type
      - must be aborted with Rollback if any SQL statement failed
      - return true if no transaction is active, false otherwise }
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
-    {{ end a transaction (implements REST END Member)
-     - write all pending SQL statements to the external database }
+    /// end a transaction (implements REST END Member)
+    // - write all pending SQL statements to the external database 
     procedure Commit(SessionID: cardinal=1); override;
-    {{ abort a transaction (implements REST ABORT Member)
-     - restore the previous state of the database, before the call to TransactionBegin }
+    /// abort a transaction (implements REST ABORT Member)
+    // - restore the previous state of the database, before the call to TransactionBegin 
     procedure RollBack(SessionID: cardinal=1); override;
      /// overridden method for direct external database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
@@ -345,8 +345,8 @@ type
       write fEngineUseSelectMaxID;
   end;
 
-  {{ A Virtual Table cursor for reading a TSQLDBStatement content
-    - this is the cursor class associated to TSQLVirtualTableExternal }
+  /// A Virtual Table cursor for reading a TSQLDBStatement content
+  // - this is the cursor class associated to TSQLVirtualTableExternal 
   TSQLVirtualTableCursorExternal = class(TSQLVirtualTableCursor)
   protected
     fStatement: ISQLDBStatement;
@@ -383,10 +383,10 @@ type
     property SQL: RawUTF8 read fSQL;
   end;
   
-  {{ A SynDB-based virtual table for accessing any external database
-   - for ORM access, you should use VirtualTableExternalRegister method to
-     associated this virtual table module to any TSQLRecord class
-   - transactions are handled by this module, according to the external database }
+  /// A SynDB-based virtual table for accessing any external database
+  // - for ORM access, you should use VirtualTableExternalRegister method to
+  //   associated this virtual table module to any TSQLRecord class
+  // - transactions are handled by this module, according to the external database 
   TSQLVirtualTableExternal = class(TSQLVirtualTable)
   public { overridden methods }
     /// returns the main specifications of the associated TSQLVirtualTableModule

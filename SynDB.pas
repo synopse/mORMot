@@ -2416,8 +2416,8 @@ type
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; override;
     {$endif}
 
-    {/ Reset the previous prepared statement
-     - this overridden implementation will just do reset the internal fParams[] }
+    /// Reset the previous prepared statement
+    // - this overridden implementation will just do reset the internal fParams[] 
     procedure Reset; override;
   end;
 

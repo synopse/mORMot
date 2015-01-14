@@ -223,67 +223,67 @@ type
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
   public
-    {{ create a ODBC statement instance, from an existing ODBC connection
-     - the Execute method can be called once per TODBCStatement instance,
-       but you can use the Prepare once followed by several ExecutePrepared methods
-     - if the supplied connection is not of TOleDBConnection type, will raise
-       an exception }
+    /// create a ODBC statement instance, from an existing ODBC connection
+    // - the Execute method can be called once per TODBCStatement instance,
+    //   but you can use the Prepare once followed by several ExecutePrepared methods
+    // - if the supplied connection is not of TOleDBConnection type, will raise
+    //   an exception 
     constructor Create(aConnection: TSQLDBConnection); override;
-    {{ release all associated memory and ODBC handles }
+    // release all associated memory and ODBC handles
     destructor Destroy; override;
 
-    {{ Prepare an UTF-8 encoded SQL statement
-     - parameters marked as ? will be bound later, before ExecutePrepared call
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - raise an EODBCException or ESQLDBException on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    //   to retrieve the data rows
+    // - raise an EODBCException or ESQLDBException on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
-    {{ Execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - this overridden method will log the SQL statement if sllSQL has been
-       enabled in SynDBLog.Family.Level
-     - raise an EODBCException or ESQLDBException on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - this overridden method will log the SQL statement if sllSQL has been
+    //   enabled in SynDBLog.Family.Level
+    // - raise an EODBCException or ESQLDBException on any error 
     procedure ExecutePrepared; override;
-    {/ Reset the previous prepared statement
-     - this overridden implementation will reset all bindings and the cursor state 
-     - raise an EODBCException on any error }
+    /// Reset the previous prepared statement
+    // - this overridden implementation will reset all bindings and the cursor state
+    // - raise an EODBCException on any error
     procedure Reset; override;
 
-    {/ After a statement has been prepared via Prepare() + ExecutePrepared() or
-       Execute(), this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - raise an EODBCException or ESQLDBException exception on any error }
+    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    //   Execute(), this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    //  is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    //   if SeekFirst is TRUE, will put the cursor on the first row of results,
+    //   otherwise, it will fetch one row of data, to be called within a loop
+    // - raise an EODBCException or ESQLDBException exception on any error 
     function Step(SeekFirst: boolean=false): boolean; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0
-     - should retrieve directly the 64 bit Currency content, to avoid
-     any rounding/conversion error from floating-point types }
+    /// return a Column currency value of the current Row, first Col is 0
+    // - should retrieve directly the 64 bit Currency content, to avoid
+    // any rounding/conversion error from floating-point types 
     function ColumnCurrency(Col: integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0 
     function ColumnUTF8(Col: integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0
-    - ColumnBlob() will return the binary content of the field is was not ftBlob,
-      e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
-      or a direct mapping of the RawUnicode  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - ColumnBlob() will return the binary content of the field is was not ftBlob,
+    //  e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
+    //  or a direct mapping of the RawUnicode  
     function ColumnBlob(Col: integer): RawByteString; override;
-    {{ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - fast overridden implementation with no temporary variable
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - fast overridden implementation with no temporary variable
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    //   format and contains true BLOB data 
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
@@ -1923,4 +1923,4 @@ begin
   Dest^ := '"';
 end;
 
-end.
+end.
