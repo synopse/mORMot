@@ -222,6 +222,7 @@ type
     procedure BindColumns;
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
+    function MoreResults: boolean;
   public
     /// create a ODBC statement instance, from an existing ODBC connection
     // - the Execute method can be called once per TODBCStatement instance,
@@ -868,6 +869,8 @@ type
       Sqlstate: PWideChar; var NativeError: SqlInteger;
       MessageText: PWideChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+    MoreResults: function(StatementHandle: SqlHStmt): SqlReturn;
+      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
     PrepareA: function(StatementHandle: SqlHStmt;
       StatementText: PAnsiChar; TextLength: SqlInteger): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -958,7 +961,7 @@ type
   end;
 
 const
-  ODBC_ENTRIES: array[0..62] of PChar =
+  ODBC_ENTRIES: array[0..63] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
      'SQLColAttribute','SQLColAttributeW','SQLColumns','SQLColumnsW',
@@ -971,7 +974,7 @@ const
      'SQLGetCursorName','SQLGetCursorNameW','SQLGetData',
      'SQLGetDescField','SQLGetDescFieldW','SQLGetDescRec','SQLGetDescRecW',
      'SQLGetDiagField','SQLGetDiagFieldW','SQLGetDiagRec','SQLGetDiagRecW',
-     'SQLPrepare','SQLPrepareW','SQLRowCount','SQLNumResultCols',
+     'SQLMoreResults','SQLPrepare','SQLPrepareW','SQLRowCount','SQLNumResultCols',
      'SQLGetInfo','SQLGetInfoW','SQLSetStmtAttr','SQLSetStmtAttrW','SQLSetEnvAttr',
      'SQLSetConnectAttr','SQLSetConnectAttrW','SQLTables','SQLTablesW',
      'SQLForeignKeys','SQLForeignKeysW','SQLDriverConnect','SQLDriverConnectW');
@@ -1188,8 +1191,11 @@ var nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
     c, siz: integer;
     Name: array[byte] of WideChar;
 begin
-  if (fColumnCount>0) or (fColData<>nil) then
-    raise EODBCException.CreateUTF8('%.BindColumns twice',[self]);
+  if (fColumnCount>0) or (fColData<>nil) then begin
+    Finalize(fColData);
+    fColumn.Clear;
+    fColumn.ReHash;
+  end;
   with ODBC do begin
     Check(self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
@@ -1271,6 +1277,22 @@ begin
     SetString(fColData[Col],nil,MINIMUM_CHUNK_SIZE);
   fColumns[Col].ColumnDataState := colNone; // force ODBC.GetData() call
   result := GetCol(Col,ftNull); // ftNull to never return colWrongType here
+end;
+
+function TODBCStatement.MoreResults: Boolean;
+var R: SqlReturn;
+begin
+  R := ODBC.MoreResults(fStatement);
+  case R of
+    SQL_NO_DATA:
+      result := false; // no more results
+    SQL_SUCCESS, SQL_SUCCESS_WITH_INFO:
+      result := true; // got next
+    else begin
+      ODBC.Check(self, R, SQL_HANDLE_STMT, fStatement); // error
+      result := false; // makes compiler happy
+    end;
+  end;
 end;
 
 function TODBCStatement.ColumnBlob(Col: integer): RawByteString;
@@ -1543,6 +1565,8 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
     status := ODBC.Execute(fStatement);
     if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
       ODBC.HandleError(self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+    if fExpectResults then
+      BindColumns;
   finally
     // 3. release and/or retrieve OUT bound parameters
     for p := 0 to fParamCount-1 do
@@ -1597,8 +1621,6 @@ begin
   try
     ODBC.Check(self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
-    if fExpectResults then
-      BindColumns;
   except
     on E: Exception do begin
       Log.Log(sllError,E);
@@ -1625,7 +1647,7 @@ begin
     status := FetchScroll(fStatement,CMD[SeekFirst],0);
     case status of
     SQL_NO_DATA:
-      exit; // no more data
+      exit;
     SQL_SUCCESS, SQL_SUCCESS_WITH_INFO: begin // ignore WITH_INFO messages
       fCurrentRow := sav+1;
       inc(fTotalRowsRetrieved);
