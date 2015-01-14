@@ -6662,7 +6662,7 @@ function JSONDecode(var JSON: RawUTF8; const aName: RawUTF8='result';
 // - returns 0 if no such field exist, or returns the numerical field value
 // - this function won't touch the JSON buffer, so you can call it before
 // using in-place escape process via JSONDecode() or GetJSONField()
-function JSONRetrieveIDField(P: PUTF8Char): integer;
+function JSONRetrieveIDField(P: PUTF8Char): Int64;
 
 /// retrieve a pointer to JSON string field content
 // - returns either ':' for name field, either '}',',' for value field
@@ -34778,7 +34778,7 @@ begin
   result := P; // return either ':' for name field, either '}',',' for value
 end;
 
-function JSONRetrieveIDField(P: PUTF8Char): integer;
+function JSONRetrieveIDField(P: PUTF8Char): Int64;
 var FieldName: PUTF8Char;
     FieldNameLen: Integer;
     EndOfObject: AnsiChar;
@@ -34795,7 +34795,7 @@ begin
     P := JSONRetrieveStringField(P,FieldName,FieldNameLen,true);
     repeat inc(P) until not(P^ in [#1..' ']);
     if IsRowID(FieldName,FieldNameLen) then begin
-      result := GetInteger(P);
+      SetInt64(P,result);
       exit;
     end;
     P := GotoNextJSONItem(P,1,@EndOfObject);
