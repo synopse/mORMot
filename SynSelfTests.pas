@@ -1239,7 +1239,7 @@ begin
   if CheckFailed(FileUnSynLZ('test.ini.synlz','test2.ini',$ABA51051),'unSynLZ') then
     Exit;
   S := StringFromFile('test2.ini');
-  Check(S=Content,'test2.ini'+S);
+  Check(S=Content,'test2.ini');
 end;
 
 procedure TTestLowLevelCommon.Soundex;
