@@ -172,6 +172,10 @@ unit SynSQLite3;
     by the latest inserted ID - see ticket [799a2c114c]
   - small fix of TOnSQLStoredProc callback parameter (TSQLRequest as const)
   - added SQLITE_MEMORY_DATABASE_NAME constant as alias to ':memory:'
+  - added sqlite3.config() experimental support
+  - added TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager method (run by
+    default in SynSQLite3Static), to let external SQlite3 library use the same
+    memory manager than Delphi, for better performance and stability 
 
 }
 
@@ -430,6 +434,28 @@ const
   //  will create two independent in-memory databases
   SQLITE_MEMORY_DATABASE_NAME = ':memory:';
 
+  SQLITE_CONFIG_SINGLETHREAD = 1;
+  SQLITE_CONFIG_MULTITHREAD = 2;
+  SQLITE_CONFIG_SERIALIZED = 3;
+  SQLITE_CONFIG_MALLOC = 4;
+  SQLITE_CONFIG_GETMALLOC = 5;
+  SQLITE_CONFIG_SCRATCH = 6;
+  SQLITE_CONFIG_PAGECACHE = 7;
+  SQLITE_CONFIG_HEAP = 8;
+  SQLITE_CONFIG_MEMSTATUS = 9;
+  SQLITE_CONFIG_MUTEX = 10;
+  SQLITE_CONFIG_GETMUTEX = 11;
+  SQLITE_CONFIG_LOOKASIDE = 13;
+  SQLITE_CONFIG_PCACHE = 14;
+  SQLITE_CONFIG_GETPCACHE = 15;
+  SQLITE_CONFIG_LOG = 16;
+  SQLITE_CONFIG_URI = 17;
+  SQLITE_CONFIG_PCACHE2 = 18;
+  SQLITE_CONFIG_GETPCACHE2 = 19;
+  SQLITE_CONFIG_COVERING_INDEX_SCAN = 20;
+  SQLITE_CONFIG_SQLLOG = 21;
+  SQLITE_CONFIG_MMAP_SIZE = 22;
+  SQLITE_CONFIG_WIN32_HEAPSIZE = 23;
 
 type
   /// type for a custom destructor for the text or BLOB content
@@ -1059,6 +1085,34 @@ type
   TSQLProfileCallback = procedure(ProfileArg: Pointer; Profile: PUTF8Char;
     ProfileNanoSeconds: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
+  /// defines the interface between SQLite and low-level memory allocation routines
+  // - as used by sqlite3.config(SQLITE_CONFIG_MALLOC,pMemMethods);
+  TSQLite3MemMethods = record
+    /// Memory allocation function
+    xMalloc: function(size: integer): pointer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Free a prior allocation
+     xFree: procedure(ptr: pointer);
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Resize an allocation
+    xRealloc: function(ptr: pointer; size: integer): pointer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Return the size of an allocation
+    xSize: function(ptr: pointer): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Round up request size to allocation size
+    xRoundup: function(size: integer): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Initialize the memory allocator
+    xInit: function(appData: pointer): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Deinitialize the memory allocator
+    xShutdown: procedure(appData: pointer);
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    /// Argument to xInit() and xShutdown()
+    pAppData: pointer;
+  end;
+  
   /// wrapper around all SQLite3 library API calls
   // - abstract class allowing direct binding of static sqlite3.obj
   // (TSQLite3LibrayStatic) or with an external library (TSQLite3LibraryDynamic)
@@ -1574,7 +1628,6 @@ type
       If parameters of the ?NNN are used, there may be gaps in the list. }
     bind_parameter_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} 
 
-
     {/ Open a BLOB For Incremental I/O
       - returns a BLOB handle for row RowID, column ColumnName, table TableName
         in database DBName; in other words, the same BLOB that would be selected by:
@@ -1793,6 +1846,7 @@ type
     backup_init: function(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
       SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
     {/ perform a backup step to transfer the data between the two databases
     - backup_step() will copy up to nPages pages between the source and
     destination databases specified by TSQLite3Backup object Backup.
@@ -1853,6 +1907,7 @@ type
     permanent error and does not affect the return value of backup_finish(). }
     backup_finish: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
     /// returns the number of pages still to be backed up for a given Backup
     // - The values returned by this function is only updated by backup_step().
     // If the source database is modified during a backup operation, then the
@@ -1860,6 +1915,7 @@ type
     // updated or the size of the source database file changing.
     backup_remaining: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
     /// returns the the total number of pages in the source database file
     // for a given Backup process
     // - The values returned by this function is only updated by backup_step().
@@ -1868,6 +1924,9 @@ type
     // updated or the size of the source database file changing.
     backup_pagecount: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
+    /// used to make global configuration changes to current database
+    config: function(operation: integer): integer; cdecl varargs;
   end;
 
   /// allow access to an exernal SQLite3 library engine
@@ -1881,6 +1940,10 @@ type
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
     constructor Create(const LibraryName: TFileName='sqlite3.dll'); reintroduce;
+    /// will change the SQLite3 configuration to use Delphi/FPC memory manager
+    // - this will reduce memory fragmentation, and enhance speed, especially
+    // under multi-process activity
+    procedure ForceToUseSharedMemoryManager;
     /// unload the external library
     destructor Destroy; override;
   end;
@@ -2071,7 +2134,11 @@ type
   PSQLRequest = ^TSQLRequest;
 
   /// wrapper to a SQLite3 request
-  TSQLRequest = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}
+  TSQLRequest = record
+  {$else}
+  TSQLRequest = object
+  {$endif}
   private
     fDB: TSQLite3DB;
     fRequest: TSQLite3Statement;
@@ -4798,7 +4865,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..83] of TFileName =
+  SQLITE3_ENTRIES: array[0..84] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close','libversion',
    'errmsg','create_function_v2','create_collation','last_insert_rowid',
    'busy_timeout','busy_handler','prepare_v2','finalize','next_stmt','reset',
@@ -4816,7 +4883,7 @@ const
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
    'free','memory_used','memory_highwater','trace','profile','limit',
    'backup_init','backup_step','backup_finish','backup_remaining',
-   'backup_pagecount');
+   'backup_pagecount','config');
 
 constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
@@ -4852,6 +4919,64 @@ begin
     FreeLibrary(fHandle);
   inherited;
 end;
+
+procedure TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager;
+function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  GetMem(result,size+4);
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+procedure xFree(ptr: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  dec(PInteger(ptr));
+  FreeMem(ptr);
+end;
+function xRealloc(ptr: pointer; size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  dec(PInteger(ptr));
+  ReallocMem(ptr,size+4);
+  PInteger(ptr)^ := size;
+  inc(PInteger(ptr));
+  result := ptr;
+end;
+function xSize(ptr: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  if ptr=nil then
+    result := 0 else begin
+    dec(PInteger(ptr));
+    result := PInteger(ptr)^;
+  end;
+end;
+function xRoundup(size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  result := size;
+end;
+function xInit(appData: pointer): integer;
+begin
+  result := SQLITE_OK;
+end;
+procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+end;
+var mem: TSQLite3MemMethods;
+begin
+  if fHandle=0 then
+    exit;
+  mem.xMalloc := @xMalloc;
+  mem.xFree := @xFree;
+  mem.xRealloc := @xRealloc;
+  mem.xSize := @xSize;
+  mem.xRoundup := @xRoundup;
+  mem.xInit := @xInit;
+  mem.xShutdown := @xShutdown;
+  mem.pAppData := nil; 
+  if config(SQLITE_CONFIG_MALLOC,@mem)<>0 then
+  {$ifdef WITHLOG}
+  SynSQLite3Log.Add.Log(sllError,'Error SQLITE_CONFIG_MALLOC for FastMM4');
+  {$endif}
+end;
+
 
 initialization
 

@@ -110,10 +110,11 @@ initialization
     {$ifdef Linux}
     sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.so.0');
     {$else}
-    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib'); 
+    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib');
     {$endif}
     //{$LINK libsqlite3}
     {$endif}
+    TSQLite3LibraryDynamic(sqlite3).ForceToUseSharedMemoryManager;
   except
     on E: Exception do
       {$ifdef LINUX}
@@ -1158,7 +1159,7 @@ function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; 
 function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-
+function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 {$ifdef INCLUDE_TRACE}
 function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
   UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
@@ -1257,7 +1258,8 @@ begin
   backup_step          := @sqlite3_backup_step;
   backup_finish        := @sqlite3_backup_finish;
   backup_remaining     := @sqlite3_backup_remaining;
-  backup_pagecount     := @sqlite3_backup_pagecount;  
+  backup_pagecount     := @sqlite3_backup_pagecount;
+  config               := @sqlite3_config;  
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
   sqlite3_initialize;
