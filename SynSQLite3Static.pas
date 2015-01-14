@@ -65,6 +65,9 @@ unit SynSQLite3Static;
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
+  To retrieve and install the latest sqlite3 debian package on Ubuntu:
+  - retrieve latest .deb from https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0
+  - install e.g. as sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
 
 
   Version 1.18
@@ -105,13 +108,17 @@ initialization
     {$endif}
     {$else}
     {$ifdef Linux}
-    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.so');
+    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.so.0');
     {$else}
-    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib');
+    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib'); 
     {$endif}
     //{$LINK libsqlite3}
     {$endif}
   except
+    on E: Exception do
+      {$ifdef LINUX}
+      writeln(E.ClassName,': ',E.Message);
+      {$endif}
   end;
 
 {$else}
@@ -129,6 +136,7 @@ uses
   SynKylix,
   {$endif}
   {$endif}
+  Classes,
   SysUtils,
   SynCommons,
   SynSQLite3;
@@ -722,14 +730,6 @@ end;
 
 {$ifndef NOSQLITE3ENCRYPT}
 
-{$ifdef MSWINDOWS}
-  {$define MSWINDOWSORKYLIX}
-{$endif}
-{$ifdef KYLIX3}
-  {$define MSWINDOWSORKYLIX}
-{$endif}
-
-
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 var F: THandle;
@@ -758,11 +758,7 @@ begin
   if NewPassword<>'' then
     CreateSQLEncryptTableBytes(NewPassWord,@NewP);
   Int64(Posi) := 1024; // don't change first page, which is uncrypted
-  {$ifdef MSWINDOWSORKYLIX}
-  SetFilePointer(F,1024,nil,FILE_BEGIN); // move to first page after 1024
-  {$else}
-  FPLseek(F,Int64(1024),Seek_Set);
-  {$endif}
+  FileSeek(F,1024,soFromBeginning);
   while Int64(Posi)<Int64(Size) do begin
     R := FileRead(F,Buf,sizeof(Buf)); // read buffer
     if R<0 then
@@ -771,11 +767,7 @@ begin
       XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
     if NewPassword<>'' then
       XorOffset(@Buf,Posi.Lo,R,@NewP); // crypt with new key
-    {$ifdef MSWINDOWSORKYLIX}
-    SetFilePointer(F,Posi.Lo,@Posi.Hi,FILE_BEGIN); // rewind
-    {$else}
-    FPLseek(F,Int64(Posi),Seek_Set);
-    {$endif}
+    FileSeek64(F,Int64(Posi),soFromBeginning);
     FileWrite(F,Buf,R); // update buffer
     inc(Int64(Posi),cardinal(R));
   end;
@@ -957,12 +949,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  {$ifdef MSWINDOWSORKYLIX}
-  result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
-  {$else}
-  result := FPLseek(F.h,Int64(offset),Seek_Set);
-  {$endif}
-  if result=-1 then begin
+  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -981,12 +968,9 @@ begin
       end;
   b := buf;
   n := buflen;
+  result := 0;
   while n>0 do begin
-    {$ifdef MSWINDOWSORKYLIX}
     result := FileWrite(F.h,b^,n);
-    {$else}
-    result := FPWrite(F.h,b^,n);
-    {$endif}
     if result=-1 then begin
 err:  F.lastErrno := GetLastError;
       result := SQLITE_FULL;
@@ -1045,12 +1029,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  {$ifdef MSWINDOWSORKYLIX}
-  result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
-  {$else}
-  result := FPLseek(F.h,Int64(offset),Seek_Set);
-  {$endif}
-  if result=-1 then begin
+  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -1058,11 +1037,7 @@ begin
       exit;
     end;
   end;
-  {$ifdef MSWINDOWSORKYLIX}
   result := FileRead(F.h,buf^,buflen);
-  {$else}
-  result := FPRead(F.h,buf^,buflen);
-  {$endif}
   if result=-1 then begin
     F.lastErrno := GetLastError;
     result := SQLITE_IOERR_READ;

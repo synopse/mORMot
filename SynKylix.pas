@@ -91,10 +91,10 @@ const
 procedure QueryPerformanceCounter(var Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
-function QueryPerformanceFrequency(var Value: Int64):boolean;
+function QueryPerformanceFrequency(var Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
-function SetFilePointer(hFile,lDistanceToMove: integer;
+function SetFilePointer(hFile: THandle; lDistanceToMove: integer;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: integer): dword;
 
 /// compatibility function, wrapping Win32 API file truncate at current position
@@ -108,7 +108,7 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 function GetFileAgeAsDateTime(const FileName: string): TDateTime;
 
 /// a wrapper around stat() to retrieve a file size
-function GetFileSize(hFile: Integer; lpFileSizeHigh: PDWORD): DWORD;
+function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
 
 /// a wrapper around stat() to retrieve a file size
 function GetLargeFileSize(const aFile: AnsiString): int64;
@@ -158,7 +158,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-function QueryPerformanceFrequency(var Value: Int64):boolean;
+function QueryPerformanceFrequency(var Value: Int64): boolean;
 var r: TTimeSpec;
     FIsHighResolution: boolean;
 begin
@@ -169,18 +169,18 @@ begin
   result := FIsHighResolution;
 end;
 
-function SetFilePointer(hFile,lDistanceToMove: integer;
+function SetFilePointer(hFile: THandle; lDistanceToMove: integer;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: integer): dword;
-var Offs: Int64;
+var offs: Int64;
 begin
   Int64Rec(Offs).Lo := lDistanceToMove;
   if lpDistanceToMoveHigh=nil then
     Int64Rec(Offs).Hi := 0 else
     Int64Rec(Offs).Hi := PDWord(lpDistanceToMoveHigh)^;
   offs := lseek64(hFile,offs,dwMoveMethod);
-  result := Int64Rec(Offs).Lo;
+  result := Int64Rec(offs).Lo;
   if lpDistanceToMoveHigh<>nil then
-    PDWord(lpDistanceToMoveHigh)^ := Int64Rec(Offs).Hi;
+    PDWord(lpDistanceToMoveHigh)^ := Int64Rec(offs).Hi;
 end;
 
 procedure SetEndOfFile(hFile: integer);
@@ -207,15 +207,15 @@ begin
     result := 0;
 end;
 
-function GetFileSize(hFile: Integer; lpFileSizeHigh: PDWORD): DWORD;
-var FileInfo: TStatBuf64;
-begin
-  if fstat64(hFile,FileInfo)=0 then begin
-    result := Int64Rec(FileInfo.st_size).Lo;
-    if lpFileSizeHigh<>nil then
-      lpFileSizeHigh^ := Int64Rec(FileInfo.st_Size).Hi;
-  end else
-    result := 0;
+function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
+var current,size: Int64;
+begin // fstat64() returns error EBADF depending on open flags -> use lseek64
+  current := lseek64(hFile,0,SEEK_CUR);
+  size := lseek64(hFile,0,SEEK_END);
+  lseek64(hFile,current,SEEK_SET);
+  result := Int64Rec(size).Lo;
+  if lpFileSizeHigh<>nil then
+    lpFileSizeHigh^ := Int64Rec(size).Hi;
 end;
 
 function GetLargeFileSize(const aFile: AnsiString): int64;

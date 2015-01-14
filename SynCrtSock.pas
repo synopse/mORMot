@@ -2860,12 +2860,18 @@ begin
   end;
 end;
 
-function HttpGet(const aURI: RawByteString): RawByteString; 
+function HttpGet(const aURI: RawByteString): RawByteString;
 var URI: TURI;
 begin
   if URI.From(aURI) then
-    result := HttpGet(URI.Server,URI.Port,URI.Address) else
+    if URI.Https then
+      raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
+      result := HttpGet(URI.Server,URI.Port,URI.Address) else
     result := '';
+  {$ifdef LINUX}
+  if result='' then
+    writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
+  {$endif}
 end;
 
 function HttpPost(const server, port: RawByteString; const url, Data, DataType: RawByteString): boolean;

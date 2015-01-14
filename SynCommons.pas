@@ -37556,7 +37556,6 @@ begin
 end;
 
 
-
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
 {$ifdef MSWINDOWS}
 var R64: packed record Lo, Hi: integer; end absolute Result;
@@ -37567,8 +37566,17 @@ begin
     R64.Hi := -1; // so result=-1
 end;
 {$else}
-begin // warning: this won't handle file size > 2 GB :(
+begin
+  {$ifdef FPC}
+  result := FPLSeek(Handle,Offset,Origin);
+  {$else}
+  {$ifdef KYLIX3}
+  result := LibC.lseek64(Handle,Offset,Origin);
+  {$else}
+  // warning: this won't handle file size > 2 GB :(
   result := FileSeek(Handle,Offset,Origin);
+  {$endif}
+  {$endif}
 end;
 {$endif}
 

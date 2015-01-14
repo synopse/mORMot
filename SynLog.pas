@@ -2750,6 +2750,9 @@ begin
     {$ifdef MSWINDOWS}
     OutputDebugStringA(pointer(Msg));
     {$endif}
+    {$ifdef LINUX}
+    Writeln(Msg);
+    {$endif}
   end;
   {$ifndef FPC_OR_PUREPASCAL}
   if DebugHook<>0 then

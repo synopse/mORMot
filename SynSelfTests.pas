@@ -1234,11 +1234,12 @@ begin
     Check(FindIniEntry(Content,S,'no')='');
     Check(FindIniEntry(Content,'no',N)='');
   end;
-  Check(FileFromString(Content,'test.ini'));
-  Check(FileSynLZ('test.ini','test.ini.synlz',$ABA51051));
-  if CheckFailed(FileUnSynLZ('test.ini.synlz','test2.ini',$ABA51051)) then
+  Check(FileFromString(Content,'test.ini'),'test.ini');
+  Check(FileSynLZ('test.ini','test.ini.synlz',$ABA51051),'synLZ');
+  if CheckFailed(FileUnSynLZ('test.ini.synlz','test2.ini',$ABA51051),'unSynLZ') then
     Exit;
-  Check(StringFromFile('test2.ini')=Content);
+  S := StringFromFile('test2.ini');
+  Check(S=Content,'test2.ini'+S);
 end;
 
 procedure TTestLowLevelCommon.Soundex;
@@ -2690,6 +2691,25 @@ begin
   Randomize; // we fixed the RandSeed value above -> get true random now
 end;
 
+function LowerCaseReference(const S: RawByteString): RawByteString;
+var Ch: AnsiChar;
+    L: Integer;
+    Source, Dest: PAnsiChar;
+begin
+  L := Length(S);
+  SetLength(Result, L);
+  Source := Pointer(S);
+  Dest := Pointer(Result);
+  while L<>0 do begin
+    Ch := Source^;
+    if (Ch >= 'A') and (Ch <= 'Z') then Inc(Ch, 32);
+    Dest^ := Ch;
+    Inc(Source);
+    Inc(Dest);
+    Dec(L);
+  end;
+end;
+
 procedure TTestLowLevelCommon._UTF8;
 procedure Test(CP: cardinal; const W: WinAnsiString);
 var C: TSynAnsiConvert;
@@ -2777,10 +2797,7 @@ begin
     Check(UTF8IComp(pointer(U),pointer(Up))=0);
     Check(UTF8ILComp(pointer(U),pointer(U),length(U),length(U))=0);
     Check(UTF8ILComp(pointer(U),pointer(Up),length(U),length(Up))=0);
-    {$ifndef ENHANCEDRTL}
-    Check(LowerCase(U)=RawUTF8(SysUtils.LowerCase(string(U))));
-    Check(SynCommons.UpperCase(U)=RawUTF8(SysUtils.UpperCase(string(U))));
-    {$endif}
+    Check(LowerCase(U)=LowerCaseReference(U));
     L := Length(U);
     SetString(Up,nil,L);
     SetString(Up2,PAnsiChar(pointer(U)),L);
@@ -5174,7 +5191,12 @@ begin
   Check(JA.D='1234');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONArrayWithoutF),'');
 
-  {$ifdef MSWINDOWS}
+  discogsJson := StringFromFile(discogsFileName);
+  if discogsJson='' then begin
+    discogsJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
+      'http://api.discogs.com/artists/45/releases?page=1&per_page=100');
+    FileFromString(discogsJson,discogsFileName);
+  end;
   zendframeworkJson := StringFromFile(zendframeworkFileName);
   if zendframeworkJson='' then begin
     zendframeworkJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
@@ -5183,13 +5205,6 @@ begin
   end;
   TestGit([soReadIgnoreUnknownFields]);
   TestGit([soReadIgnoreUnknownFields,soWriteHumanReadable]);
-  discogsJson := StringFromFile(discogsFileName);
-  if discogsJson='' then begin
-    discogsJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
-      'http://api.discogs.com/artists/45/releases?page=1&per_page=100');
-    FileFromString(discogsJson,discogsFileName);
-  end;
-  {$endif}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2Title),
     __TTestCustomJSON2Title).Options := [soWriteHumanReadable];
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2),
@@ -5346,7 +5361,7 @@ begin
   Check(Abs(NowUTC-TDateTime(o))<0.1);
   oid.FromText(string(o));
   Check(Abs(NowUTC-oid.CreateDateTime)<0.1);
-  Check(oid.ProcessID=GetCurrentThreadId);
+  Check(oid.ProcessID=word(GetCurrentThreadId)); // word for Linux
   o2 := ObjectID;
   Check(TDateTime(o2)>=TDateTime(o),o);
   oid2.ComputeNew;

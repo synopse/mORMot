@@ -86,7 +86,8 @@ procedure QueryPerformanceCounter(var Value: Int64); inline;
 function QueryPerformanceFrequency(var Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
-function SetFilePointer(hFile: cInt; lDistanceToMove: TOff; lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff; inline;
+function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
+  lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff; inline;
 
 /// compatibility function, wrapping Win32 API file size retrieval
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
@@ -244,8 +245,16 @@ end;
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
+var offs: Int64;
 begin
-  result := FpLseek(hFile,lDistanceToMove,SEEK_CUR );
+  Int64Rec(offs).Lo := lDistanceToMove;
+  if lpDistanceToMoveHigh=nil then
+    Int64Rec(offs).Hi := 0 else
+    Int64Rec(offs).Hi := PDWord(lpDistanceToMoveHigh)^;
+  offs := FpLseek(hFile,offs,dwMoveMethod);
+  result := Int64Rec(offs).Lo;
+  if lpDistanceToMoveHigh<>nil then
+    PDWord(lpDistanceToMoveHigh)^ := Int64Rec(offs).Hi;
 end;
 
 procedure SetEndOfFile(hFile: cInt);
