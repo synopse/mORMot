@@ -211,8 +211,10 @@ begin
   finally
     Free;
   end;
+  {$ifndef LINUX}
   WriteLn(#13#10'Done - Press ENTER to Exit');
   ReadLn;
+  {$endif}
 end;
 
 end.

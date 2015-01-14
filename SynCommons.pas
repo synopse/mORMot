@@ -1031,6 +1031,9 @@ type
   protected
     fCodePage: cardinal;
     fAnsiCharShift: byte;
+    {$ifdef KYLIX3}
+    fIConvCodeName: RawUTF8;
+    {$endif}
   public
     /// initialize the internal conversion engine
     constructor Create(aCodePage: cardinal); reintroduce; virtual;
@@ -11144,8 +11147,17 @@ var c: cardinal;
 {$ifdef FPC}
     tmp: UnicodeString;
 {$endif}
+{$ifdef KYLIX3}
+    ic: iconv_t;
+    DestBegin: PAnsiChar;
+    SourceCharsBegin: integer;
+{$endif}
 {$endif}
 begin
+  {$ifdef KYLIX3}
+  SourceCharsBegin := SourceChars;
+  DestBegin := pointer(Dest);
+  {$endif}
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   if SourceChars>=4 then
   repeat
@@ -11183,8 +11195,20 @@ begin
     move(Pointer(tmp)^,Dest^,length(tmp)*2);
     result := Dest+SourceChars;
     {$else}
+    {$ifdef KYLIX3}
+    result := Dest; // makes compiler happy
+    ic := LibC.iconv_open('UTF-16LE',Pointer(fIConvCodeName));
+    if PtrInt(ic)>=0 then
+    try
+      result := IconvBufConvert(ic,Source,SourceChars,1,
+        Dest,SourceCharsBegin*2-(PAnsiChar(Dest)-DestBegin),2);
+    finally
+      LibC.iconv_close(ic);
+    end else
+    {$else}
     raise ESynException.CreateUTF8('%.AnsiBufferToUnicode() not supported yet for CP=%',
       [self,CodePage]);
+    {$endif KYLIX3}
     {$endif FPC}
     {$endif MSWINDOWS}
     {$endif ISDELPHIXE}
@@ -11343,6 +11367,9 @@ constructor TSynAnsiConvert.Create(aCodePage: cardinal);
 begin
   fCodePage := aCodePage;
   fAnsiCharShift := 1; // default is safe
+  {$ifdef KYLIX3}
+  fIConvCodeName := 'CP'+UInt32ToUTF8(aCodePage);
+  {$endif}
 end;
 
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
@@ -11385,8 +11412,17 @@ var c: cardinal;
 {$ifdef FPC}
     tmp: RawByteString;
 {$endif}
+{$ifdef KYLIX3}
+    ic: iconv_t;
+    DestBegin: PAnsiChar;
+    SourceCharsBegin: integer;
+{$endif}
 {$endif}
 begin
+  {$ifdef KYLIX3}
+  SourceCharsBegin := SourceChars;
+  DestBegin := Dest;
+  {$endif}
   // first handle trailing 7 bit ASCII chars, by pairs (Sha optimization)
   if SourceChars>=2 then
     repeat
@@ -11419,8 +11455,20 @@ begin
     move(Pointer(tmp)^,Dest^,length(tmp));
     result := Dest+length(tmp);
     {$else}
+    {$ifdef KYLIX3}
+    result := Dest; // makes compiler happy
+    ic := LibC.iconv_open(Pointer(fIConvCodeName),'UTF-16LE');
+    if PtrInt(ic)>=0 then
+    try
+      result := IconvBufConvert(ic,Source,SourceChars,2,
+        Dest,SourceCharsBegin*3-(PAnsiChar(Dest)-DestBegin),1);
+    finally
+      LibC.iconv_close(ic);
+    end else
+    {$else}
     raise ESynException.CreateUTF8('%.UnicodeBufferToAnsi() not supported yet for CP=%',
       [self,CodePage]);
+    {$endif KYLIX3}
     {$endif FPC}
     {$endif MSWINDOWS}
 end;
@@ -15943,7 +15991,7 @@ begin
   {$ifdef KYLIX3}
   // if default locale is set to *.UTF-8, which is the case in most modern
   // linux default configuration, unicode decode will fail in SysUtils.CheckLocale
-  setlocale(LC_ALL,'en_US.UTF-8'); // force right locale for a UTF-8 server
+  setlocale(LC_CTYPE,'en_US'); // force locale for a UTF-8 server
   {$endif}
 {$ifndef EXTENDEDTOSTRING_USESTR}
   {$ifdef ISDELPHIXE}

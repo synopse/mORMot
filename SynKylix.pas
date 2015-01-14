@@ -133,6 +133,13 @@ procedure GetLocalTime(var result: TSystemTime);
 /// compatibility function, available in SysUtils.pas only for Windows
 function SystemTimeToDateTime(const SystemTime: TSystemTime): TDateTime;
 
+/// wrapper around libiconv buffer conversion
+// - will write any invalid chars as '?'
+// - returns the final Dest position
+function IconvBufConvert(context: iconv_t;
+  Src: pointer; SrcBytes, SrcCharSize: Integer;
+  Dest: pointer; DestBytes, DestCharSize: integer): pointer;
+
 
 implementation
 
@@ -312,6 +319,35 @@ begin
       result := result+time else
       result := result-time;
   end;
+end;
+
+function IconvBufConvert(context: iconv_t;
+  Src: pointer; SrcBytes, SrcCharSize: Integer;
+  Dest: pointer; DestBytes, DestCharSize: integer): pointer;
+var SrcBytesLeft, DestBytesLeft, Zero: size_t;
+    LastError: Integer;
+    pNil: pointer;
+begin
+  DestBytesLeft := DestBytes;
+  SrcBytesLeft := SrcBytes;
+  repeat
+    if LibC.iconv(context,PChar(Src),SrcBytesLeft,Dest,DestBytesLeft)<>size_t(-1) then
+      break; // success
+    LastError := GetLastError;
+    if (LastError=E2BIG) and (SrcBytesLeft>0) and (DestBytesLeft>0) then
+      continue;
+    if (LastError<>EINVAL) and (LastError<>EILSEQ) then
+      raise Exception.CreateFmt('SynKylix: iconv() fatal error %d',[LastError]);
+    Zero := 0;
+    pNil := nil;
+    LibC.iconv(context,PChar(pNil),Zero,pNil,Zero); // reset
+    inc(PByte(Src),SrcCharSize);
+    dec(SrcBytesLeft,SrcCharSize);
+    PWord(Dest)^ := ord('?');
+    inc(PByte(Dest),DestCharSize);
+    dec(DestBytesLeft,DestCharSize);
+  until false;
+  result := Dest;
 end;
 
 
