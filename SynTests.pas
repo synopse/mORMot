@@ -685,7 +685,7 @@ end;
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
   {$ifndef DELPHI5OROLDER}
-  TSynLogTestLog.DebuggerNotify([msg],'Test failed: %');
+  TSynLogTestLog.DebuggerNotify([fAssertions-fAssertionsBeforeRun,msg],'Test #% failed: %');
   {$endif}
   if Owner<>nil then // avoid GPF
     Owner.Failed(msg,self);
