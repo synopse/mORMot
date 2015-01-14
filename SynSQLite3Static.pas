@@ -114,7 +114,7 @@ initialization
     {$endif}
     //{$LINK libsqlite3}
     {$endif}
-    TSQLite3LibraryDynamic(sqlite3).ForceToUseSharedMemoryManager;
+    sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do
       {$ifdef LINUX}
@@ -1263,6 +1263,9 @@ begin
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
   sqlite3_initialize;
+  {$ifdef FPC} // only Delphi .obj are using already FastMM4
+  ForceToUseSharedMemoryManager;
+  {$endif}
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
@@ -1277,4 +1280,4 @@ initialization
   sqlite3 := TSQLite3LibraryStatic.Create;
 {$endif NOSQLITE3STATIC}
 
-end.
+end.

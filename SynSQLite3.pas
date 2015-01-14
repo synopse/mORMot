@@ -1927,6 +1927,11 @@ type
 
     /// used to make global configuration changes to current database
     config: function(operation: integer): integer; cdecl varargs;
+
+    /// will change the SQLite3 configuration to use Delphi/FPC memory manager
+    // - this will reduce memory fragmentation, and enhance speed, especially
+    // under multi-process activity
+    procedure ForceToUseSharedMemoryManager;
   end;
 
   /// allow access to an exernal SQLite3 library engine
@@ -1940,10 +1945,6 @@ type
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
     constructor Create(const LibraryName: TFileName='sqlite3.dll'); reintroduce;
-    /// will change the SQLite3 configuration to use Delphi/FPC memory manager
-    // - this will reduce memory fragmentation, and enhance speed, especially
-    // under multi-process activity
-    procedure ForceToUseSharedMemoryManager;
     /// unload the external library
     destructor Destroy; override;
   end;
@@ -4862,6 +4863,67 @@ begin
 end;
 
 
+{ TSQLite3Library }
+
+procedure TSQLite3Library.ForceToUseSharedMemoryManager;
+function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  GetMem(result,size+4);
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+procedure xFree(ptr: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  dec(PInteger(ptr));
+  FreeMem(ptr);
+end;
+function xRealloc(ptr: pointer; size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  dec(PInteger(ptr));
+  ReallocMem(ptr,size+4);
+  PInteger(ptr)^ := size;
+  inc(PInteger(ptr));
+  result := ptr;
+end;
+function xSize(ptr: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  if ptr=nil then
+    result := 0 else begin
+    dec(PInteger(ptr));
+    result := PInteger(ptr)^;
+  end;
+end;
+function xRoundup(size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  result := size;
+end;
+function xInit(appData: pointer): integer;
+begin
+  result := SQLITE_OK;
+end;
+procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+end;
+var mem: TSQLite3MemMethods;
+begin
+  if not Assigned(config) then
+    exit;
+  mem.xMalloc := @xMalloc;
+  mem.xFree := @xFree;
+  mem.xRealloc := @xRealloc;
+  mem.xSize := @xSize;
+  mem.xRoundup := @xRoundup;
+  mem.xInit := @xInit;
+  mem.xShutdown := @xShutdown;
+  mem.pAppData := nil; 
+  if config(SQLITE_CONFIG_MALLOC,@mem)<>SQLITE_OK then begin
+    {$ifdef WITHLOG}
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failure');
+    {$endif}
+  end;
+end;
+
+
 { TSQLite3LibraryDynamic }
 
 const
@@ -4920,66 +4982,9 @@ begin
   inherited;
 end;
 
-procedure TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager;
-function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  GetMem(result,size+4);
-  PInteger(result)^ := size;
-  inc(PInteger(result));
-end;
-procedure xFree(ptr: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  dec(PInteger(ptr));
-  FreeMem(ptr);
-end;
-function xRealloc(ptr: pointer; size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  dec(PInteger(ptr));
-  ReallocMem(ptr,size+4);
-  PInteger(ptr)^ := size;
-  inc(PInteger(ptr));
-  result := ptr;
-end;
-function xSize(ptr: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  if ptr=nil then
-    result := 0 else begin
-    dec(PInteger(ptr));
-    result := PInteger(ptr)^;
-  end;
-end;
-function xRoundup(size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  result := size;
-end;
-function xInit(appData: pointer): integer;
-begin
-  result := SQLITE_OK;
-end;
-procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-end;
-var mem: TSQLite3MemMethods;
-begin
-  if fHandle=0 then
-    exit;
-  mem.xMalloc := @xMalloc;
-  mem.xFree := @xFree;
-  mem.xRealloc := @xRealloc;
-  mem.xSize := @xSize;
-  mem.xRoundup := @xRoundup;
-  mem.xInit := @xInit;
-  mem.xShutdown := @xShutdown;
-  mem.pAppData := nil; 
-  if config(SQLITE_CONFIG_MALLOC,@mem)<>0 then
-  {$ifdef WITHLOG}
-  SynSQLite3Log.Add.Log(sllError,'Error SQLITE_CONFIG_MALLOC for FastMM4');
-  {$endif}
-end;
-
 
 initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.
