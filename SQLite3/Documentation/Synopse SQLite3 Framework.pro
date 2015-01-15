@@ -6792,6 +6792,7 @@ Once those parameters have been set, a new proprietary encoding will be defined 
 $ ACCEPT-ENCODING: synshaaes
 Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CTR/256 encryption.
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
+On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
@@ -13124,7 +13125,7 @@ Client-Server logic will be detailed in the next paragraph.
 The main form of the Client is void, if you open its {\f1\fs20 FileMain.dfm} file. All the User Interface is created by the framework, dynamically from the database model and some constant values and enumeration types (thanks to {\i Delphi} @*RTTI@) as defined in @!TFileRibbonTabParameters.Actions!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit (the first one, which defines also the classes/tables).
 It's main method is {\f1\fs20 TMainForm.ActionClick}, which will handle the actions, triggered when a button is pressed.
 The @**report@s use {\i GDI+} for anti-aliased drawing, can be zoomed and saved as @*pdf@ or text files.
-The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the form used for editing the data. It also performs the encryption of "safe memo" and "safe data" records, using our @!TAESFull.EncodeDecode!Lib\SynCrypto.pas@ unit.
+The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the form used for editing the data. It also performs the encryption of "safe memo" and "safe data" records, using our @!TAESFull.EncodeDecode!Lib\SynCrypto.pas@ unit. It will @*AES-NI@ hardware instructions, if available, so will be very fast, even for big content.
 You'll discover how the @*ORM@ plays its role here: you change the data, just like changing any class instance properties.
 It also uses our @!SaveAsRawByteString!Lib\SynGdiPlus.pas@ unit to create thumbnails of any picture ({\f1\fs20 emf+jpg+tif+gif+bmp}) of data inserted in the database, and add a @*BLOB@ data field containing these thumbnails.
 \page
@@ -13759,7 +13760,7 @@ The {\f1\fs20 InitCrc32Tab} shall be called only once, at application startup. I
 :  SHA-256
 The well-known @*SHA-256@ algorithm is a proven way of creating an unique identifier from any data input. You can use it for instance to sign any content, or store efficiently a password. It is mathematically proven to be impossible to find out the input data from its hashed reduction (at least for the next decade of computer power). And it has a very low potential of "collision" (i.e. two diverse data having the same resulting hash). It is "Top Secret" enabled - U.S. National Institute of Standards and Technology says, "Federal agencies must use the SHA-2 family of hash functions for applications  that require collision resistance after 2010". This is the hashing pattern used within {\i mORMot}.
 But it is also more complex than the {\i crc32} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
-You have an optimized implementation in the {\f1\fs20 SynCrypto} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
+You have an optimized implementation in the {\f1\fs20 SynCrypto.pas} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
 First of all, we'll define a {\f1\fs20 record} type. We may have used a {\f1\fs20 class}, but since we have an extended {\f1\fs20 record} type at hand with {\i DWS} (including properties and methods), we will stay to it.
 !type
 !  TSHA256Buffer = array[0..63] of integer;
