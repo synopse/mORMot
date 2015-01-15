@@ -7510,14 +7510,20 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
-{$ifdef PUREPASCAL}
-{$ifdef CPU64DELPHI}
-function SupportSSE42: boolean;
-function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$endif CPU64DELPHI}
-{$else}
-/// returns TRUE if Intel Streaming SIMD Extensions 4.2 is available
-function SupportSSE42: boolean;
+{$ifdef NOTPUREPASCALNORCPU64DELPHI}
+var
+  /// the available CPU features, as recognized at program startup
+  CpuFeatures: set of
+   ( { in EDX }
+   cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
+   cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
+   cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
+   cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA_64, cfPBE,
+   { in ECX }
+   cfSSE3, cf_c1, cf_c2, cfMON, cfDS_CPL, cf_c5, cf_c6, cfEIST,
+   cfTM2, cfSSSE3, cfCID, cfSSE5, cf_c12, cfCX16, cfxTPR, cf_c15,
+   cf_c16, cf_c17, cf_c18, cfSSE41, cfSSE42, cf_c21, cf_c22, cfPOPCNT,
+   cf_c24, cfAESNI, cf_c26, cf_c27, cfAVX, cf_c29, cf_c30, cf_c31);
 
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
@@ -7525,7 +7531,7 @@ function SupportSSE42: boolean;
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$endif PUREPASCAL}
+{$endif}
 
 /// naive symmetric encryption scheme using a 32 bit key
 // - fast, but not very secure
@@ -15968,91 +15974,6 @@ begin
   result := true;
 end;
 
-procedure InitSynCommonsConversionTables;
-var i,n: integer;
-    v: byte;
-    crc: cardinal;
-{$ifdef OWNNORMTOUPPER}
-    d: integer;
-const n2u: array[138..255] of byte =
-  (83,139,140,141,90,143,144,145,146,147,148,149,150,151,152,153,83,155,140,
-   157,90,89,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,
-   176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,65,65,65,
-   65,65,65,198,67,69,69,69,69,73,73,73,73,68,78,79,79,79,79,79,215,79,85,85,
-   85,85,89,222,223,65,65,65,65,65,65,198,67,69,69,69,69,73,73,73,73,68,78,79,
-   79,79,79,79,247,79,85,85,85,85,89,222,89);
-{$endif OWNNORMTOUPPER}
-begin
-  {$ifdef FPC}
-  {$ifdef VER2_7}
-  DefaultSystemCodepage := CODEPAGE_US;
-  {$endif}
-  {$endif FPC}
-  {$ifdef KYLIX3}
-  // if default locale is set to *.UTF-8, which is the case in most modern
-  // linux default configuration, unicode decode will fail in SysUtils.CheckLocale
-  setlocale(LC_CTYPE,'en_US'); // force locale for a UTF-8 server
-  {$endif}
-{$ifndef EXTENDEDTOSTRING_USESTR}
-  {$ifdef ISDELPHIXE}
-  SettingsUS := TFormatSettings.Create($0409);
-  {$else}
-  GetLocaleFormatSettings($0409,SettingsUS);
-  {$endif}
-{$endif}
-  for i := 0 to 255 do
-    NormToUpperAnsi7Byte[i] := i;
-  for i := ord('a') to ord('z') do
-    dec(NormToUpperAnsi7Byte[i],32);
-{$ifdef OWNNORMTOUPPER}
-  // initialize custom NormToUpper[] and NormToLower[] arrays
-  move(NormToUpperAnsi7,NormToUpper,138);
-  move(n2u,NormToUpperByte[138],sizeof(n2u));
-  for i := 0 to 255 do begin
-    d := NormToUpperByte[i];
-    if d in [ord('A')..ord('Z')] then
-      inc(d,32);
-    NormToLowerByte[i] := d;
-  end;
-{$endif OWNNORMTOUPPER}
-  // code below is 55 bytes long, therefore shorter than a const array
-  fillchar(ConvertHexToBin[0],sizeof(ConvertHexToBin),255); // all to 255
-  v := 0;
-  for i := ord('0') to ord('9') do begin
-    ConvertHexToBin[i] := v;
-    inc(v);
-  end;
-  for i := ord('A') to ord('F') do begin
-    ConvertHexToBin[i] := v;
-    ConvertHexToBin[i+(ord('a')-ord('A'))] := v;
-    inc(v);
-  end;
-  // initialize our internaly used TSynAnsiConvert engines
-  TSynAnsiConvert.Engine(0);
-  // initialize tables for crc32cfast()
-  for i := 0 to 255 do begin
-    crc := i;
-    for n := 1 to 8 do
-      if (crc and 1)<>0 then // polynom is not the same as with zlib's crc32()
-        crc := (crc shr 1) xor $82f63b78 else
-        crc := crc shr 1;
-    crc32ctab[0,i] := crc;
-  end;
-  for i := 0 to 255 do begin
-    crc := crc32ctab[0,i];
-    for n := 1 to high(crc32ctab) do begin
-      crc := (crc shr 8) xor crc32ctab[0,byte(crc)];
-      crc32ctab[n,i] := crc;
-    end;
-  end;
-{$ifndef PUREPASCAL}
-  if SupportSSE42 then
-    crc32c := @crc32csse42 else
-{$endif PUREPASCAL}
-    crc32c := @crc32cfast;
-  DefaultHasher := crc32c;
-end;
-
 {$ifdef MSWINDOWS}
 const
   // lpMinimumApplicationAddress retrieved from Windows is very low $10000
@@ -21720,18 +21641,27 @@ asm // eax=crc, edx=buf, ecx=len
 end;
 {$endif}
 
+type
+ TRegisters = record
+   eax,ebx,ecx,edx: cardinal;
+ end;
+
 {$ifdef CPU64DELPHI}
-function SupportSSE42: boolean;
+procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
-    .NOFRAME
-    push rbx
-    mov eax,1
-    cpuid
-    test ecx,$100000
-    setnz al
-    pop rbx
-    ret
-@0: xor eax,eax
+  .NOFRAME
+  mov eax,ecx
+  mov r9,rdx
+  mov r10,rbx
+  xor ebx,ebx
+  xor ecx,ecx
+  xor edx,edx
+  cpuid
+  mov TRegisters(r9).&eax,eax
+  mov TRegisters(r9).&ebx,ebx
+  mov TRegisters(r9).&ecx,ecx
+  mov TRegisters(r9).&edx,edx  
+  mov rbx,r10   
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -21919,30 +21849,37 @@ asm
   not eax
 end;
 
-function SupportSSE42: boolean;
+procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
-    pushfd
-    pop eax
-    mov edx,eax
-    xor eax,$200000
-    push eax
-    popfd
-    pushfd
-    pop eax
-    xor eax,edx
-    jz @0
-    push ebx
-    mov eax,1
-    {$ifdef DELPHI5OROLDER}
-    db $0f,$a2
-    {$else}
-    cpuid
-    {$endif}
-    test ecx,$100000
-    setnz al
-    pop ebx
-    ret
-@0: xor eax,eax
+  push esi
+  push edi
+  mov esi,edx
+  mov edi,eax
+  pushfd
+  pop eax
+  mov edx,eax
+  xor eax,$200000
+  push eax
+  popfd
+  pushfd
+  pop eax
+  xor eax,edx
+  jz @nocpuid
+  push ebx
+  mov eax,edi
+  {$ifdef DELPHI5OROLDER}
+  db $0f,$a2
+  {$else}
+  cpuid
+  {$endif}
+  mov TRegisters(esi).&eax,eax
+  mov TRegisters(esi).&ebx,ebx
+  mov TRegisters(esi).&ecx,ecx
+  mov TRegisters(esi).&edx,edx
+  pop ebx
+@nocpuid:
+  pop edi
+  pop esi
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -42356,6 +42293,98 @@ procedure GlobalUnLock;
 begin
   if GlobalCriticalSectionInitialized then
     LeaveCriticalSection(GlobalCriticalSection);
+end;
+
+procedure InitSynCommonsConversionTables;
+var i,n: integer;
+    v: byte;
+    crc: cardinal;
+{$ifdef NOTPUREPASCALNORCPU64DELPHI}
+  regs: TRegisters;
+{$endif}
+{$ifdef OWNNORMTOUPPER}
+    d: integer;
+const n2u: array[138..255] of byte =
+  (83,139,140,141,90,143,144,145,146,147,148,149,150,151,152,153,83,155,140,
+   157,90,89,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,
+   176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,65,65,65,
+   65,65,65,198,67,69,69,69,69,73,73,73,73,68,78,79,79,79,79,79,215,79,85,85,
+   85,85,89,222,223,65,65,65,65,65,65,198,67,69,69,69,69,73,73,73,73,68,78,79,
+   79,79,79,79,247,79,85,85,85,85,89,222,89);
+{$endif OWNNORMTOUPPER}
+begin
+  {$ifdef FPC}
+  {$ifdef VER2_7}
+  DefaultSystemCodepage := CODEPAGE_US;
+  {$endif}
+  {$endif FPC}
+  {$ifdef KYLIX3}
+  // if default locale is set to *.UTF-8, which is the case in most modern
+  // linux default configuration, unicode decode will fail in SysUtils.CheckLocale
+  setlocale(LC_CTYPE,'en_US'); // force locale for a UTF-8 server
+  {$endif}
+{$ifndef EXTENDEDTOSTRING_USESTR}
+  {$ifdef ISDELPHIXE}
+  SettingsUS := TFormatSettings.Create($0409);
+  {$else}
+  GetLocaleFormatSettings($0409,SettingsUS);
+  {$endif}
+{$endif}
+  for i := 0 to 255 do
+    NormToUpperAnsi7Byte[i] := i;
+  for i := ord('a') to ord('z') do
+    dec(NormToUpperAnsi7Byte[i],32);
+{$ifdef OWNNORMTOUPPER}
+  // initialize custom NormToUpper[] and NormToLower[] arrays
+  move(NormToUpperAnsi7,NormToUpper,138);
+  move(n2u,NormToUpperByte[138],sizeof(n2u));
+  for i := 0 to 255 do begin
+    d := NormToUpperByte[i];
+    if d in [ord('A')..ord('Z')] then
+      inc(d,32);
+    NormToLowerByte[i] := d;
+  end;
+{$endif OWNNORMTOUPPER}
+  // code below is 55 bytes long, therefore shorter than a const array
+  fillchar(ConvertHexToBin[0],sizeof(ConvertHexToBin),255); // all to 255
+  v := 0;
+  for i := ord('0') to ord('9') do begin
+    ConvertHexToBin[i] := v;
+    inc(v);
+  end;
+  for i := ord('A') to ord('F') do begin
+    ConvertHexToBin[i] := v;
+    ConvertHexToBin[i+(ord('a')-ord('A'))] := v;
+    inc(v);
+  end;
+  // initialize our internaly used TSynAnsiConvert engines
+  TSynAnsiConvert.Engine(0);
+  // initialize tables for crc32cfast()
+  for i := 0 to 255 do begin
+    crc := i;
+    for n := 1 to 8 do
+      if (crc and 1)<>0 then // polynom is not the same as with zlib's crc32()
+        crc := (crc shr 1) xor $82f63b78 else
+        crc := crc shr 1;
+    crc32ctab[0,i] := crc;
+  end;
+  for i := 0 to 255 do begin
+    crc := crc32ctab[0,i];
+    for n := 1 to high(crc32ctab) do begin
+      crc := (crc shr 8) xor crc32ctab[0,byte(crc)];
+      crc32ctab[n,i] := crc;
+    end;
+  end;
+  {$ifdef NOTPUREPASCALNORCPU64DELPHI}
+  fillchar(regs,sizeof(regs),0);
+  GetCPUID(1,regs);
+  PIntegerArray(@CpuFeatures)^[0] := regs.edx;
+  PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
+  if cfSSE42 in CpuFeatures then
+    crc32c := @crc32csse42 else
+  {$endif}
+    crc32c := @crc32cfast;
+  DefaultHasher := crc32c;
 end;
 
 

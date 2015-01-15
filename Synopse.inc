@@ -325,6 +325,11 @@
   {$define NODELPHIASM}
   {$define FPC_OR_PUREPASCAL}
   {$undef DOPATCHTRTL}
+  {$ifdef CPU64DELPHI}
+    {$define NOTPUREPASCALNORCPU64DELPHI}
+  {$endif CPU64DELPHI}
+{$else}
+  {$define NOTPUREPASCALNORCPU64DELPHI}
 {$endif PUREPASCAL}
 
 {$R-} // disable Range checking in our code

@@ -2430,11 +2430,11 @@ begin
   Test(crc32cpas,'pas');
   Test(crc32cfast,'fast');
   {$ifdef CPU64DELPHI}
-  if SupportSSE42 then
+  if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
   {$else}
   {$ifndef PUREPASCAL}
-  if SupportSSE42 then
+  if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
   {$endif}
   {$endif}
@@ -7095,7 +7095,7 @@ begin
           s2 := copy(orig,1,len);
           Check(DecryptPKCS7(EncryptPKCS7(s2))=s2,IntToStr(len));
         end;
-        //fRunConsole := Format('%s %s%d:%s',[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
+        //fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
         if m<length(ValuesCrypted) then begin
           ValuesCrypted[m] := Copy(crypted,1,len);
           ValuesOrig[m] := s2;
