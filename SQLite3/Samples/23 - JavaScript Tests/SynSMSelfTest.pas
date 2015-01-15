@@ -46,21 +46,13 @@ unit SynSMSelfTest;
 
   Version 0.1
   - initial release. Use SpiderMonkey 24
-  
+
 }
 
 interface
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 {$I SynSM.inc}   // define SM_DEBUG JS_THREADSAFE CONSIDER_TIME_IN_Z
-
-uses
-  SysUtils,
-  Math,
-  SynCrtSock,
-  SynCommons,
-  SynLog,
-  SynTests;
 
 /// this is the main entry point of the tests
 // - this procedure will create a console, then run all available tests
@@ -72,6 +64,11 @@ implementation
 uses
   Windows,
   Classes,
+  SysUtils,
+  Math,
+  SynCommons,
+  SynLog,
+  SynTests,
   SynSMAPI,
   SynSM,
   SynCrtSock,
