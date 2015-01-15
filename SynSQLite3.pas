@@ -4906,7 +4906,9 @@ begin
 end;
 var mem: TSQLite3MemMethods;
 begin
+  {$ifndef CPU64} // not working under Win64
   if not Assigned(config) then
+  {$endif}
     exit;
   mem.xMalloc := @xMalloc;
   mem.xFree := @xFree;
