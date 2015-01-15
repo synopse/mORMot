@@ -1,6 +1,6 @@
 /// fast cryptographic routines (hashing and cypher)
-// - implements AES, XOR, ADLER32, MD5, SHA1, SHA256 algorithms
-// - optimized for speed (tuned assembler and VIA PADLOCK optional support)
+// - implements AES, XOR, ADLER32, MD5, RC4, SHA1, SHA256 algorithms
+// - optimized for speed (tuned assembler and AES-NI / PADLOCK support)
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynCrypto;
@@ -163,6 +163,7 @@ unit SynCrypto;
    - USETHREADSFORBIGAESBLOCKS will help on modern multi-threaded CPU
    - AES speed: W.Ehrhardt's pascal is 55MB/s, A.Bouchez's asm is 84MB/s
    - AES-256 is faster than a simple XOR() on a dedibox with a C7 cpu ;)
+   - see below for benchmarks using AES-NI, which see a huge performance boost
 
    Initial version (C) 2008-2009 Arnaud Bouchez http://bouchez.info
 
@@ -208,6 +209,8 @@ unit SynCrypto;
    - added pure pascal version (for XE2 64 compilation) of all algorithms
 
    Version 1.18
+   - added AES-NI hardware support on newer CPUs, for huge performance boost
+     and enhanced security
    - tested compilation for Win64 platform
    - added overloaded procedure TMD5.Final() and function SHA256()
    - introduce ESynCrypto exception class dedicated to this unit
@@ -227,6 +230,7 @@ interface
 
 {.$define USEPADLOCK}
 
+{.$define PUREPASCAL} // for debug
 
 {$ifdef Linux} // padlock is dedibox linux tested only, but may be OK on Windows
   {$undef USETHREADSFORBIGAESBLOCKS}
@@ -249,6 +253,15 @@ interface
 {$endif}
 {$endif}
 
+{$ifndef DELPHI5OROLDER}
+{$ifndef CPU64}
+  {$define USEAESNI}
+{$endif}
+{$endif}
+{$ifdef ISDELPHIXE4}
+  {$define HASAESNI}
+{$endif}
+
 uses
 {$ifdef MSWINDOWS}
   Windows,
@@ -256,7 +269,7 @@ uses
   SysUtils,
 {$ifndef LVCL}
   {$ifdef CONDITIONALEXPRESSIONS}
-  RtlConsts,
+  RTLConsts,
   {$endif}
 {$endif}
   Classes,
@@ -266,8 +279,7 @@ uses
 
 const
   /// hide all AES Context complex code
-  AESContextSize = 280
-    {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
+  AESContextSize = 275 {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
   /// hide all SHA Context complex code
   SHAContextSize = 108;
   /// standard AES block size (in bytes) during cypher/uncypher
@@ -290,6 +302,10 @@ type
   PAES = ^TAES;
   /// handle AES cypher/uncypher
   // - this is the default Electronic codebook (ECB) mode
+  // - this class will use AES-NI hardware instructions, if available
+  {$ifdef USEPADLOCK}
+  // - this class will use VIA PadLock instructions, if available
+  {$endif}
   TAES = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
@@ -334,6 +350,8 @@ type
     // - call either Encrypt() either Decrypt() method
     procedure DoBlocksThread(var bIn, bOut: PAESBlock; Count: integer; doEncrypt: boolean);
 {$endif}
+    /// return TRUE if the AES-NI instruction sets are available on this CPU
+    function UsesAESNI: boolean;
   end;
 
   TAESAbstractClass = class of TAESAbstract;
@@ -375,6 +393,7 @@ type
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
+  // - this class will use AES-NI hardware instructions, if available
   TAESAbstractSyn = class(TAESAbstract)
   protected
     fIn, fOut: PAESBlock;
@@ -405,6 +424,8 @@ type
   // - this mode is known to be less secure than the others
   // - IV value set on constructor is used to code the trailing bytes
   // of the buffer (by a simple XOR)
+  // - this class will use AES-NI hardware instructions, if available, e.g.
+  // ! ECB128: 19.70ms in x86 optimized code, 6.97ms with AES-NI
   TAESECB = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the ECB mode
@@ -414,6 +435,8 @@ type
   end;
 
   /// handle AES cypher/uncypher with Cipher-block chaining (CBC)
+  // - this class will use AES-NI hardware instructions, if available, e.g.
+  // ! CBC192: 24.91ms in x86 optimized code, 9.75ms with AES-NI
   TAESCBC = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the CBC mode
@@ -423,6 +446,8 @@ type
   end;
 
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
+  // - this class will use AES-NI hardware instructions, if available, e.g.
+  // ! CFB128: 22.25ms in x86 optimized code, 9.29ms with AES-NI
   TAESCFB = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the CFB mode
@@ -432,6 +457,8 @@ type
   end;
 
   /// handle AES cypher/uncypher with Output feedback (OFB)
+  // - this class will use AES-NI hardware instructions, if available, e.g.
+  // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
   TAESOFB = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the OFB mode
@@ -441,6 +468,8 @@ type
   end;
 
   /// handle AES cypher/uncypher with Counter mode (CTR)
+  // - this class will use AES-NI hardware instructions, e.g.
+  // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
   TAESCTR = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the CTR mode
@@ -464,6 +493,8 @@ type
   // ! AES128 - ECB_API:102.88ms CBC_API:124.91ms
   // ! AES192 - ECB_API:115.75ms CBC_API:129.95ms
   // ! AES256 - ECB_API:139.50ms CBC_API:154.02ms
+  // - but the CryptoAPI does not supports AES-NI, whereas our classes do on Win32,
+  // with a huge speed benefit
   // - under Win64, the official CryptoAPI is faster than our PUREPASCAL version,
   // and the Win32 version of CryptoAPI itself:
   // ! AES128 - ECB:107.95ms CBC:112.65ms CFB:109.62ms OFB:107.23ms CTR:109.42ms
@@ -889,7 +920,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString; const IV: RawByteString
 // according to the expected compression Key and Initialization Vector, e.g.
 // via a call to the CompressShaAesSetKey() global procedure
 // - if you want to change the chaining mode, you can customize the global
-// CompressShaAesClass variable to the expected TAES* class name 
+// CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
 // data is corrupted during transmission, will instantly return ''
 function CompressShaAes(var Data: RawByteString; Compress: boolean): RawByteString;
@@ -1057,21 +1088,20 @@ const
 
 type
   TKeyArray   = packed array[0..AESMaxRounds] of TAESBlock;
-{$A-} { packed memory structure }
-  TAESContext = record
+
+  TAESContext = packed record
     // don't change the structure below: it is fixed in the asm code
     // -> use PUREPASCAL if you really have to change it
     RK: TKeyArray;   // Key (encr. or decr.)
     IV: TAESBlock;   // IV or CTR
     buf: TAESBlock;  // Work buffer
-    bLen: word;      // Bytes used in buf
-    Rounds: word;    // Number of rounds
-    KeyBits: cardinal;   // Number of bits in key
     {$ifdef USEPADLOCK}
     ViaCtx: pointer; // padlock_*() context
     {$endif}
+    AesNi: boolean;  // if the CPU supports AES-NI new asm instructions
+    Rounds: byte;    // Number of rounds
+    KeyBits: byte;   // Number of bits in key
   end;
-{$A+}
 
 
 // helper types for better code generation
@@ -1607,7 +1637,7 @@ begin
   result := false;
   Randomize;
   st := '1234essai';
-  PInteger(@st[1])^ := Random(MaxInt); 
+  PInteger(@st[1])^ := Random(MaxInt);
   for k := 0 to 2 do begin
     ks := 128+k*64; // test keysize of 128,192 and 256 bits
 //    write('Test AES ',ks);
@@ -1621,7 +1651,9 @@ begin
       A.Decrypt(b,p);
       A.Done;
       if not CompareMem(@p,@s,AESBLockSize) then begin
-        write(' AESSelfTest compareError'); exit; end;
+        writeln('AESSelfTest compareError with keysize=',ks);
+        exit;
+      end;
       st := st+AnsiChar(Random(255));
     end;
   end;
@@ -1680,13 +1712,13 @@ begin
   // Wolfgang Ehrhardt rolled version - faster on modern CPU than unrolled one below
   Inc(PK);
   for I := 1 to ctx.Rounds-1 do begin
-      t0 := Te0[s0 and $ff] xor Te1[s1 shr 8 and $ff] xor Te2[s2 shr 16 and $ff] xor Te3[s3 shr 24];
-      t1 := Te0[s1 and $ff] xor Te1[s2 shr 8 and $ff] xor Te2[s3 shr 16 and $ff] xor Te3[s0 shr 24];
-      t2 := Te0[s2 and $ff] xor Te1[s3 shr 8 and $ff] xor Te2[s0 shr 16 and $ff] xor Te3[s1 shr 24];
-      s3 := Te0[s3 and $ff] xor Te1[s0 shr 8 and $ff] xor Te2[s1 shr 16 and $ff] xor Te3[s2 shr 24] xor PK[3];
-      s0 := t0 xor PK[0];
-      s1 := t1 xor PK[1];
-      s2 := t2 xor PK[2];
+    t0 := Te0[s0 and $ff] xor Te1[s1 shr 8 and $ff] xor Te2[s2 shr 16 and $ff] xor Te3[s3 shr 24];
+    t1 := Te0[s1 and $ff] xor Te1[s2 shr 8 and $ff] xor Te2[s3 shr 16 and $ff] xor Te3[s0 shr 24];
+    t2 := Te0[s2 and $ff] xor Te1[s3 shr 8 and $ff] xor Te2[s0 shr 16 and $ff] xor Te3[s1 shr 24];
+    s3 := Te0[s3 and $ff] xor Te1[s0 shr 8 and $ff] xor Te2[s1 shr 16 and $ff] xor Te3[s2 shr 24] xor PK[3];
+    s0 := t0 xor PK[0];
+    s1 := t1 xor PK[1];
+    s2 := t2 xor PK[2];
       Inc(pK);
     end;
   TWA4(BO)[0] := ((SBox[s0        and $ff])        xor
@@ -1796,8 +1828,115 @@ begin
 {$endif}
 end;
 {$else}
-asm // rolled optimized encryption asm version by A. Bouchez
-  // eax=TAES(self) edx=BI ecx=BO
+asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
+{$ifdef USEAESNI}
+  // AES-NI hardware accelerated version by A. Bouchez
+  cmp byte ptr [eax].TAESContext.AesNi,0
+  je @noAesNi
+  movdqu xmm7,[edx]
+  mov dl,[eax].TAESContext.Rounds
+  movdqu xmm0,[eax+16*0]
+  movdqu xmm1,[eax+16*1]
+  movdqu xmm2,[eax+16*2]
+  movdqu xmm3,[eax+16*3]
+  movdqu xmm4,[eax+16*4]
+  movdqu xmm5,[eax+16*5]
+  movdqu xmm6,[eax+16*6]
+  pxor xmm7,xmm0
+  cmp dl,10
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  {$else}
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  {$endif}
+  movdqu xmm0,[eax+16*7]
+  movdqu xmm1,[eax+16*8]
+  movdqu xmm2,[eax+16*9]
+  movdqu xmm3,[eax+16*10]
+  je @128
+  cmp dl,12
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  {$endif}
+  movdqu xmm4,[eax+16*11]
+  movdqu xmm5,[eax+16*12]
+  je @192
+@256:
+  movdqu xmm6,[eax+16*13]
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  {$else}
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  {$endif}
+  movdqu xmm1,[eax+16*14]
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenclast xmm7,xmm1
+  {$else}
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  db $66,$0F,$38,$DD,$F9
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@128:
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenclast xmm7,xmm3
+  {$else}
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DD,$FB
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@192:
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenclast xmm7,xmm5
+  {$else}
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  db $66,$0F,$38,$DD,$FD
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@noAesNi:
+{$endif USEAESNI}
+  // rolled optimized encryption asm version by A. Bouchez
 {$ifdef USEPADLOCK}
   cmp dword [eax].TAESContext.ViaCtx,0
   jz @DoAsm
@@ -1820,7 +1959,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
   add esp,-24
   mov [esp+4],ecx
   mov ecx,eax // ecx=pk
-  movzx eax,byte ptr [eax+$112] // round count
+  movzx eax,byte ptr [eax].TAESContext.Rounds
   dec eax
   mov [esp+20],eax
   mov ebx,[edx]
@@ -2014,6 +2153,110 @@ end;
 {$endif}
 
 function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
+{$ifdef USEAESNI}
+procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
+asm // eax=KeySize edx=pk
+  movdqu xmm1,[edx]
+  movdqu xmm5,dqword ptr [@shuffle_mask]
+  cmp al,128
+  je @128
+  cmp al,192
+  je @end // 192 bits is very complicated -> skip by now (we mostly use 128+256)
+@256:
+  movdqu xmm3,[edx+16]
+  add edx,32
+  db $66,$0F,$3A,$DF,$D3,$01 // aeskeygenassist xmm2,xmm3,1
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$02 // aeskeygenassist xmm2,xmm3,2
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$04 // aeskeygenassist xmm2,xmm3,4
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$08 // aeskeygenassist xmm2,xmm3,8
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$10 // aeskeygenassist xmm2,xmm3,$10
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$20 // aeskeygenassist xmm2,xmm3,$20
+  call @key_expansion256
+  db $66,$0F,$3A,$DF,$D3,$40 // aeskeygenassist xmm2,xmm3,$40
+  pshufd xmm2,xmm2,$FF
+  movdqu xmm4,xmm1
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  pxor xmm1,xmm2
+  movdqu [edx],xmm1
+  jmp @end
+@shuffle_mask:
+  dd $ffffffff
+  dd $03020100
+  dd $07060504
+  dd $0b0a0908
+@key_expansion256:
+  pshufd xmm2,xmm2,$ff
+  movdqu xmm4,xmm1
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm1,xmm4
+  pxor xmm1,xmm2
+  movdqu [edx],xmm1
+  add edx,$10
+  db $66,$0F,$3A,$DF,$E1,$00 // aeskeygenassist xmm4,xmm1,0
+  pshufd xmm2,xmm4,$AA
+  movdqu xmm4,xmm3
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm3,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm3,xmm4
+  db $66,$0F,$38,$00,$E5 // pshufb xmm4,xmm5
+  pxor xmm3,xmm4
+  pxor xmm3,xmm2
+  movdqu [edx],xmm3
+  add edx,$10
+  ret
+@key_expansion128:
+  pshufd xmm2,xmm2,$FF
+  movdqu xmm3,xmm1
+  db $66,$0F,$38,$00,$DD // pshufb xmm3,xmm5
+  pxor xmm1,xmm3
+  db $66,$0F,$38,$00,$DD // pshufb xmm3,xmm5
+  pxor xmm1,xmm3
+  db $66,$0F,$38,$00,$DD // pshufb xmm3,xmm5
+  pxor xmm1,xmm3
+  pxor xmm1,xmm2
+  movdqu [edx],xmm1
+  add edx,$10
+  ret
+@128:
+  add edx,16
+  db $66,$0F,$3A,$DF,$D1,$01 // aeskeygenassist xmm2,xmm1,1
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$02 // aeskeygenassist xmm2,xmm1,2
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$04 // aeskeygenassist xmm2,xmm1,4
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$08 // aeskeygenassist xmm2,xmm1,8
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$10 // aeskeygenassist xmm2,xmm1,$10
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$20 // aeskeygenassist xmm2,xmm1,$20
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$40 // aeskeygenassist xmm2,xmm1,$40
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$80 // aeskeygenassist xmm2,xmm1,$80
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$1b // aeskeygenassist xmm2,xmm1,$1b
+  call @key_expansion128
+  db $66,$0F,$3A,$DF,$D1,$36 // aeskeygenassist xmm2,xmm1,$36
+  call @key_expansion128
+@end:
+end;
+{$endif USEAESNI}
 procedure Shift(KeySize: cardinal; pk: PAWK);
 var i: integer;
     temp: cardinal;
@@ -2078,9 +2321,8 @@ begin
     end;
   end;
 end;
-var
-  Nk: word;
-  ctx: TAESContext absolute Context;
+var Nk: integer;
+    ctx: TAESContext absolute Context;
 begin
   result := true;
   Initialized := true;
@@ -2091,7 +2333,6 @@ begin
   with ctx do begin
     // Clear only the necessary context data at init. IV and buf
     // remain uninitialized, other fields are initialized below.
-    bLen :=0;
 {$ifdef USEPADLOCK}
     ctx.ViaCtx := nil;
 {$endif}
@@ -2103,17 +2344,75 @@ begin
   end;
   Nk := KeySize div 32;
   Move(Key, ctx.RK, 4*Nk);
+  {$ifdef NOTPUREPASCALNORCPU64DELPHI}
+  ctx.AesNi := cfAESNI in CpuFeatures;
+  {$else}
+  ctx.AesNi := false;
+  {$endif}
+  ctx.Rounds  := 6+Nk;
   ctx.KeyBits := KeySize;
-  ctx.Rounds  := 6 + Nk;
   // Calculate encryption round keys
-  Shift(KeySize,pointer(@ctx.RK));
+  {$ifdef USEAESNI} // 192 is more complex -> skip by now
+  if (KeySize<>192) and ctx.AESNI then
+    ShiftAesNi(KeySize,@ctx.RK) else
+  {$endif}
+    Shift(KeySize,pointer(@ctx.RK));
 end;
 
 {$ifndef PURE_PASCAL}
-{$define AES_ROLLED} // asm version is rolled 
+  {$define AES_ROLLED} // asm version is rolled
 {$endif}
 
 function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+{$ifdef USEAESNI}
+procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
+asm // eax=Rounds edx=RK
+  sub eax,9
+  movdqu xmm0,[edx+$10]
+  movdqu xmm1,[edx+$20]
+  movdqu xmm2,[edx+$30]
+  movdqu xmm3,[edx+$40]
+  movdqu xmm4,[edx+$50]
+  movdqu xmm5,[edx+$60]
+  movdqu xmm6,[edx+$70]
+  movdqu xmm7,[edx+$80]
+  {$ifdef HASAESNI}
+  aesimc xmm0,xmm0
+  aesimc xmm1,xmm1
+  aesimc xmm2,xmm2
+  aesimc xmm3,xmm3
+  aesimc xmm4,xmm4
+  aesimc xmm5,xmm5
+  aesimc xmm6,xmm6
+  aesimc xmm7,xmm7
+  {$else}
+  db $66,$0F,$38,$DB,$C0
+  db $66,$0F,$38,$DB,$C9
+  db $66,$0F,$38,$DB,$D2
+  db $66,$0F,$38,$DB,$DB
+  db $66,$0F,$38,$DB,$E4
+  db $66,$0F,$38,$DB,$ED
+  db $66,$0F,$38,$DB,$F6
+  db $66,$0F,$38,$DB,$FF
+  {$endif}
+  movdqu [edx+$10],xmm0
+  movdqu [edx+$20],xmm1
+  movdqu [edx+$30],xmm2
+  movdqu [edx+$40],xmm3
+  movdqu [edx+$50],xmm4
+  movdqu [edx+$60],xmm5
+  movdqu [edx+$70],xmm6
+  movdqu [edx+$80],xmm7
+  lea edx,[edx+$90]
+@loop:
+  movdqu xmm0,[edx]
+  db $66,$0F,$38,$DB,$C0 // aesimc xmm0,xmm0
+  movdqu [edx],xmm0
+  dec eax
+  lea edx,[edx+16]
+  jnz @loop
+end;
+{$endif}
 procedure MakeDecrKey(var ctx: TAESContext);
 // Calculate decryption key from encryption key
 var i: integer;
@@ -2152,17 +2451,21 @@ begin
 end;
 var ctx: TAESContext absolute Context;
 begin
-{$ifdef USEPADLOCK}
+  {$ifdef USEPADLOCK}
   if DoPadlockInit(Key,KeySize) then begin
     result := true;
     Initialized := true;
     exit; // Init OK
   end;
-{$endif}
+  {$endif}
   result := EncryptInit(Key, KeySize); // contains Initialized := true
   if not result then
     exit;
-  MakeDecrKey(ctx);
+  {$ifdef USEAESNI}
+  if ctx.AESNI then
+    MakeDecrKeyAesNi(ctx.Rounds,@ctx.RK) else
+  {$endif}
+    MakeDecrKey(ctx);
 end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
@@ -2328,8 +2631,164 @@ begin
 {$endif}
 end;
 {$else}
-asm // rolled optimized decryption asm version by A. Bouchez
-  // eax=TAES(self) edx=BI ecx=BO
+asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
+{$ifdef USEAESNI}
+  // AES-NI hardware accelerated version by A. Bouchez
+  cmp byte ptr [eax].TAESContext.AesNi,0
+  je @noAesNi
+  movdqu xmm7,[edx]
+  mov dl,[eax].TAESContext.Rounds
+  cmp dl,10
+  je @128
+  cmp dl,12
+  je @192
+@256:
+  movdqu xmm0,[eax+16*14]
+  movdqu xmm1,[eax+16*13]
+  movdqu xmm2,[eax+16*12]
+  movdqu xmm3,[eax+16*11]
+  movdqu xmm4,[eax+16*10]
+  movdqu xmm5,[eax+16*9]
+  movdqu xmm6,[eax+16*8]
+  pxor xmm7,xmm0
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  {$endif}
+  movdqu xmm0,[eax+16*7]
+  movdqu xmm1,[eax+16*6]
+  movdqu xmm2,[eax+16*5]
+  movdqu xmm3,[eax+16*4]
+  movdqu xmm4,[eax+16*3]
+  movdqu xmm5,[eax+16*2]
+  movdqu xmm6,[eax+16*1]
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DE,$F8
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  {$endif}
+  movdqu xmm0,[eax+16*0]
+  {$ifdef HASAESNI}
+  aesdeclast xmm7,xmm0
+  {$else}
+  db $66,$0F,$38,$DF,$F8
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@192:
+  movdqu xmm0,[eax+16*12]
+  movdqu xmm1,[eax+16*11]
+  movdqu xmm2,[eax+16*10]
+  movdqu xmm3,[eax+16*9]
+  movdqu xmm4,[eax+16*8]
+  movdqu xmm5,[eax+16*7]
+  movdqu xmm6,[eax+16*6]
+  pxor xmm7,xmm0
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  {$endif}
+  movdqu xmm0,[eax+16*5]
+  movdqu xmm1,[eax+16*4]
+  movdqu xmm2,[eax+16*3]
+  movdqu xmm3,[eax+16*2]
+  movdqu xmm4,[eax+16*1]
+  movdqu xmm5,[eax+16*0]
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdeclast xmm7,xmm5
+  {$else}
+  db $66,$0F,$38,$DE,$F8
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DF,$FD
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@128:
+  movdqu xmm0,[eax+16*10]
+  movdqu xmm1,[eax+16*9]
+  movdqu xmm2,[eax+16*8]
+  movdqu xmm3,[eax+16*7]
+  movdqu xmm4,[eax+16*6]
+  movdqu xmm5,[eax+16*5]
+  movdqu xmm6,[eax+16*4]
+  pxor xmm7,xmm0
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  {$else}
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  {$endif}
+  movdqu xmm0,[eax+16*3]
+  movdqu xmm1,[eax+16*2]
+  movdqu xmm2,[eax+16*1]
+  movdqu xmm3,[eax+16*0]
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  aesdec xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdeclast xmm7,xmm3
+  {$else}
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  db $66,$0F,$38,$DE,$F8
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DF,$FB
+  {$endif}
+  movdqu [ecx],xmm7
+  ret
+@noAesNi:
+{$endif USEAESNI}
+// rolled optimized decryption asm version by A. Bouchez
 {$ifdef USEPADLOCK}
   cmp dword [eax].TAESContext.ViaCtx,0
   jz @DoAsm
@@ -2351,7 +2810,7 @@ asm // rolled optimized decryption asm version by A. Bouchez
   push ebp
   add esp,-20
   mov [esp],ecx
-  movzx ecx,word ptr [eax+274]
+  movzx ecx,byte ptr [eax].TAESContext.Rounds
   lea esi,4*ecx
   lea ecx,ecx-1
   lea eax,[eax+4*esi] // eax=@ctx.rk[ctx.rounds]=pk
@@ -2558,7 +3017,14 @@ begin
   DoBlocks(pIn,pOut,pIn,pOut,Count,doEncrypt);
 end;
 
-
+function TAES.UsesAESNI: boolean;
+begin
+  {$ifdef USEAESNI}
+  result := TAESContext(Context).AesNi;
+  {$else}
+  result := False;
+  {$endif}
+end;
 
 {$ifdef USEPADLOCK}
 procedure TAES.Done;
@@ -2609,6 +3075,7 @@ var Thread: array[0..3] of TThreadParams; // faster than dynamic array
 begin
   if Count=0 then exit;
   if {$ifdef USEPADLOCK} padlock_available or {$endif}
+     {$ifdef USEAESNI} (cfAESNI in CpuFeatures) or {$endif}
     (SystemInfo.dwNumberOfProcessors<=1) or // (DebugHook<>0) or
     (Count<((512*1024) div AESBlockSize)) then begin // not needed below 512 KB
     DoBlocks(bIn,bOut,bIn,bOut,Count,doEncrypt);
