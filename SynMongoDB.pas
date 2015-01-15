@@ -2201,11 +2201,11 @@ type
     function Drop: RawUTF8;
 
     /// calculate the number of documents in the collection
-    function Count: integer;
+    function Count: Int64;
     /// calculate the number of documents in the collection that match
     // a specific query
     // - Criteria can specify the query selector as a BSONVariant/TDocVariant
-    function FindCount(const Query: variant): integer; overload;
+    function FindCount(const Query: variant): Int64; overload;
     /// calculate the number of documents in the collection that match
     // a specific query
     // - Criteria can specify the query selector as (extended) JSON and
@@ -2217,7 +2217,7 @@ type
     // - optional NumberToSkip can specify the number of matching documents
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
-      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer; overload;
+      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
@@ -5621,14 +5621,14 @@ begin
   EnsureIndex(k,opt);
 end;
 
-function TMongoCollection.Count: integer;
+function TMongoCollection.Count: Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name]),res);
   result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
-function TMongoCollection.FindCount(const Query: variant): integer;
+function TMongoCollection.FindCount(const Query: variant): Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name,'query',Query]),res);
@@ -5637,7 +5637,7 @@ end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
   const Args,Params: array of const;
-  MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer;
+  MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64;
 var cmd: RawUTF8;
     res: variant;
 begin

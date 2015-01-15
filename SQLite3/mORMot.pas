@@ -9694,7 +9694,7 @@ type
     // - return -1 on error
     // - return the row count of the table on success
     // - calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
-    function TableRowCount(Table: TSQLRecordClass): integer; virtual;
+    function TableRowCount(Table: TSQLRecordClass): Int64; virtual;
     /// check if there is some data rows in a specified table
     // - calls internaly a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
@@ -11646,7 +11646,7 @@ type
     // notifications together with a low-level SQL deletion work (if possible)
     function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; override;
     /// overridden method for direct static class call (if any)
-    function TableRowCount(Table: TSQLRecordClass): integer; override;
+    function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// overridden method for direct static class call (if any)
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
     /// virtual method called when a record is updated
@@ -12470,7 +12470,7 @@ type
     /// overridden method for direct in-memory database engine call
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
     /// overridden method for direct in-memory database engine call
-    function TableRowCount(Table: TSQLRecordClass): integer; override;
+    function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// overridden method for direct in-memory database engine call
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
     /// search for a field value, according to its SQL content representation
@@ -25665,7 +25665,7 @@ begin
   result := true;
 end;
 
-function TSQLRest.TableRowCount(Table: TSQLRecordClass): integer;
+function TSQLRest.TableRowCount(Table: TSQLRecordClass): Int64;
 var T: TSQLTableJSON;
 begin
   if (self=nil) or (Table=nil) then
@@ -25674,7 +25674,7 @@ begin
       'SELECT Count(*) FROM '+Table.RecordProps.SQLTableName);
   if T<>nil then
   try
-    Result := T.GetAsInteger(1,0);
+    Result := T.GetAsInt64(1,0);
   finally
     T.Free;
   end else
@@ -27842,7 +27842,7 @@ begin
       AfterDeleteForceCoherency(Table,IDs[i]);
 end;
 
-function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): integer;
+function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): Int64;
 var Rest: TSQLRest;
 begin
   Rest := GetStaticDataServerOrVirtualTable(Table);
@@ -32428,7 +32428,7 @@ begin
     result := true; // as TSQLRest.UpdateblobFields()
 end;
 
-function TSQLRestStorageInMemory.TableRowCount(Table: TSQLRecordClass): integer;
+function TSQLRestStorageInMemory.TableRowCount(Table: TSQLRecordClass): Int64;
 begin
   if Table<>fStoredClass then
     result := 0 else
@@ -32552,7 +32552,7 @@ end;
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
   var ResultID: TIDDynArray): boolean;
 var n, WhereField: integer;
-    {$ifdef CPU64}i: integer;{$endif}
+    {$ifndef CPU64}i: integer;{$endif}
     Where: TList;
 begin
   result := false;
@@ -32577,12 +32577,12 @@ begin
     if n=0 then
       exit;
     SetLength(ResultID,n);
-    {$ifdef CPU64} // on x64, TList[]=Pointer does not map an integer
+    {$ifdef CPU64} // on x64 TList[]=Pointer does map an TID/Int64
+    move(Where.List[0],ResultID[0],n*sizeof(TID));
+    {$else}
     with Where do
       for i := 0 to Count-1 do
         ResultID[i] := PPtrIntArray(List)^[i];
-    {$else}
-    move(Where.List[0],ResultID[0],n*sizeof(Integer));
     {$endif}
   finally
     Where.Free;

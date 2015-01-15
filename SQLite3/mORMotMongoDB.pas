@@ -160,7 +160,7 @@ type
     /// get the row count of a specified table
     // - return -1 on error
     // - return the row count of the table on success
-    function TableRowCount(Table: TSQLRecordClass): integer; override;
+    function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// check if there is some data rows in a specified table
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
     /// delete a row, calling the current MongoDB server
@@ -361,7 +361,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.TableRowCount(
-  Table: TSQLRecordClass): integer;
+  Table: TSQLRecordClass): Int64;
 begin
   if (fCollection=nil) or (Table<>fStoredClass) then
     result := 0 else

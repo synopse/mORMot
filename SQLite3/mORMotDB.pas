@@ -172,7 +172,7 @@ type
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
     fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
     fEngineUseSelectMaxID: Boolean;
-    fEngineLockedLastID: integer;
+    fEngineLockedLastID: TID;
     /// external column layout as retrieved by fProperties
     // - used internaly to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
@@ -187,7 +187,8 @@ type
     fFieldsInternalToExternal: TIntegerDynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
-    fBatchCapacity, fBatchCount, fBatchFirstAddedID: integer;
+    fBatchCapacity, fBatchCount: integer;
+    fBatchFirstAddedID: TID;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchValues: TRawUTF8DynArray;
     fBatchIDs: TIDDynArray;
@@ -213,11 +214,12 @@ type
       ExpectResults: Boolean): ISQLDBRows;
     /// overloaded method using FormatUTF8() and binding SynDB parameters
     function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
-       var Params: TSQLVarDynArray; LastIntegerParam: integer; ParamsMatchCopiableFields: boolean): boolean;
+       var Params: TSQLVarDynArray; const LastIntegerParam: Int64;
+       ParamsMatchCopiableFields: boolean): boolean;
     // overridden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
-    function EngineLockedNextID: Integer; virtual;
+    function EngineLockedNextID: TID; virtual;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
@@ -239,7 +241,7 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    function InternalBatchAdd(const aValue: RawUTF8; aID: TID): integer;
+    function InternalBatchAdd(const aValue: RawUTF8; aID: TID): TID;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -256,7 +258,7 @@ type
     // the real external table columns (e.g. as TEXT for variant)
     // - returns 0 on error, or the Updated/Inserted ID 
     function ExecuteFromJSON(const SentData: RawUTF8; Occasion: TSQLOccasion;
-      UpdatedID: TID): integer;
+      UpdatedID: TID): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
@@ -283,7 +285,7 @@ type
     function SearchField(const FieldName, FieldValue: RawUTF8;
       var ResultID: TIDDynArray): boolean; overload; override;
     /// overridden method for direct external database engine call
-    function TableRowCount(Table: TSQLRecordClass): integer; override;
+    function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// overridden method for direct external database engine call
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
      {{ begin a transaction (implements REST BEGIN Member)
@@ -904,7 +906,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.EngineLockedNextID: Integer;
+function TSQLRestStorageExternal.EngineLockedNextID: TID;
 // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
 // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
 var Rows: ISQLDBRows;
@@ -1087,7 +1089,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.InternalBatchAdd(
-  const aValue: RawUTF8; aID: TID): integer;
+  const aValue: RawUTF8; aID: TID): TID;
 begin
   result := fBatchFirstAddedID+fBatchCount;
   if fBatchCount>=fBatchCapacity then begin
@@ -1185,7 +1187,7 @@ begin
         if length(IDs)<(i+1)*length(InClause) then
           n := length(IDs)-i*length(InClause) else
           n := length(InClause);
-        Move(IDs[i*length(InClause)],InClause[0],n*sizeof(Integer));
+        Move(IDs[i*length(InClause)],InClause[0],n*sizeof(TID));
         if ExecuteInlined('delete from % where %',[fTableName,
             Int64DynArrayToCSV(TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
@@ -1251,7 +1253,7 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.TableRowCount(Table: TSQLRecordClass): integer;
+function TSQLRestStorageExternal.TableRowCount(Table: TSQLRecordClass): Int64;
 var Rows: ISQLDBRows;
 begin
   if (self=nil) or (Table<>fStoredClass) then
@@ -1481,7 +1483,7 @@ begin
 end;
 
 function TSQLRestStorageExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
-  const Args: array of const; var Params: TSQLVarDynArray; LastIntegerParam: integer;
+  const Args: array of const; var Params: TSQLVarDynArray; const LastIntegerParam: Int64;
   ParamsMatchCopiableFields: boolean): boolean;
 var Query: ISQLDBStatement;
     ParamsCount, f: integer;
@@ -1644,12 +1646,13 @@ begin
 end;
   
 function TSQLRestStorageExternal.ExecuteFromJSON(
-  const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: TID): integer;
+  const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: TID): TID;
 var Decoder: TJSONObjectDecoder;
     SQL: RawUTF8;
     Types: TSQLDBFieldTypeArray;
     ExternalFields: TRawUTF8DynArray;
-    InsertedID, F: integer;
+    InsertedID: TID;
+    F: integer;
     Query: ISQLDBStatement;
 begin
   result := 0;
