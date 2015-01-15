@@ -1895,8 +1895,8 @@ type
     fDatabase: TMongoDatabase;
     fName: RawUTF8;
     fFullCollectionName: RawUTF8;
-    function AggregateCall(const pipelineJSON: RawUTF8; var reply,res: variant): boolean; overload;
-    function AggregateCall(const pipelineArray: variant; var reply,res: variant): boolean; overload;
+    function AggregateCallFromJSON(const pipelineJSON: RawUTF8; var reply,res: variant): boolean; overload;
+    function AggregateCallFromVariant(const pipelineArray: variant; var reply,res: variant): boolean; overload;
   public
     /// initialize a reference to a given MongoDB Collection
     // - you should not use this constructor directly, but rather use
@@ -2249,11 +2249,11 @@ type
     // and return the result as a TDocVariant instance
     // - overloaded method to specify the pipeline as a BSON raw document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateDoc(const pipelineArray: variant): variant; overload;
+    function AggregateDocFromVariant(const pipelineArray: variant): variant;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - overloaded method to specify the pipeline as a BSON raw document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateJSON(const pipelineArray: variant;
+    function AggregateJSONFromVariant(const pipelineArray: variant;
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
@@ -2262,11 +2262,11 @@ type
     // - for instance, the following will return the maximum _id value of
     // the collection:
     // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}').max
-    function AggregateDoc(const PipelineJSON: RawUTF8): variant; overload;
+    function AggregateDocFromJson(const PipelineJSON: RawUTF8): variant;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - overloaded method to specify the pipeline as a JSON text object
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateJSON(const PipelineJSON: RawUTF8;
+    function AggregateJSONFromJson(const PipelineJSON: RawUTF8;
       Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
   published
     /// the collection name
@@ -5477,7 +5477,7 @@ begin
   fFullCollectionName := fDatabase.Name+'.'+fName;
 end;
 
-function TMongoCollection.AggregateCall(const pipelineJSON: RawUTF8;
+function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUTF8;
   var reply,res: variant): boolean;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
@@ -5492,16 +5492,16 @@ end;
 function TMongoCollection.AggregateDoc(Operators: PUTF8Char;
   const Params: array of const): variant;
 begin
-  result := AggregateDoc(FormatUTF8(Operators,Params));
+  result := AggregateDocFromJson(FormatUTF8(Operators,Params));
 end;
 
 function TMongoCollection.AggregateJSON(Operators: PUTF8Char;
   const Params: array of const; Mode: TMongoJSONMode): RawUTF8;
 begin
-  result := AggregateJSON(FormatUTF8(Operators,Params),Mode);
+  result := AggregateJSONFromJson(FormatUTF8(Operators,Params),Mode);
 end;
 
-function TMongoCollection.AggregateCall(const pipelineArray: variant; var reply,res: variant): boolean;
+function TMongoCollection.AggregateCallFromVariant(const pipelineArray: variant; var reply,res: variant): boolean;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
@@ -5512,36 +5512,36 @@ begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   result := not VarIsNull(res);
 end;
 
-function TMongoCollection.AggregateDoc(const pipelineArray: variant): variant;
+function TMongoCollection.AggregateDocFromVariant(const pipelineArray: variant): variant;
 var reply: variant;
 begin
-  if AggregateCall(pipelineArray,reply,result) then
+  if AggregateCallFromVariant(pipelineArray,reply,result) then
     TDocVariant.GetSingleOrDefault(result,result,result) else
     SetVariantNull(result);
 end;
 
-function TMongoCollection.AggregateJSON(const pipelineArray: variant;
+function TMongoCollection.AggregateJSONFromVariant(const pipelineArray: variant;
   Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 var reply,res: variant;
 begin
-  if AggregateCall(pipelineArray,reply,res) then
+  if AggregateCallFromVariant(pipelineArray,reply,res) then
     result := VariantSaveMongoJSON(res,Mode) else
     result := '';
 end;
 
-function TMongoCollection.AggregateDoc(const PipelineJSON: RawUTF8): variant;
+function TMongoCollection.AggregateDocFromJson(const PipelineJSON: RawUTF8): variant;
 var reply: variant;
 begin
-  if AggregateCall(PipelineJSON,reply,result) then
+  if AggregateCallFromJSON(PipelineJSON,reply,result) then
     TDocVariant.GetSingleOrDefault(result,result,result) else
     SetVariantNull(result);
 end;
 
-function TMongoCollection.AggregateJSON(const PipelineJSON: RawUTF8;
+function TMongoCollection.AggregateJSONFromJson(const PipelineJSON: RawUTF8;
   Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 var reply,res: variant;
 begin
-  if AggregateCall(PipelineJSON,reply,res) then
+  if AggregateCallFromJson(PipelineJSON,reply,res) then
     result := VariantSaveMongoJSON(res,Mode) else
     result := '';
 end;
