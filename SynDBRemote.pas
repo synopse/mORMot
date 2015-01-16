@@ -414,7 +414,8 @@ begin
         '%.Create: administrator rights needed to register URI % on port %',
         [self,fDatabaseName,fPort]) else
       raise ESQLDBRemote.CreateUTF8(
-        '%.Create: error registering URI % on port %',[self,fDatabaseName,fPort]);
+        '%.Create: error registering URI % on port %: is not another server '+
+        'instance running on this port?',[self,fDatabaseName,fPort]);
   fServer.OnRequest := Process;
   if fThreadPoolCount>1 then
     THttpApiServer(fServer).Clone(fThreadPoolCount-1);

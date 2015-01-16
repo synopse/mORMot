@@ -4238,7 +4238,11 @@ function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 
 /// retrieve the type name from its low-level RTTI
 procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
-  const default: RawUTF8='');
+  const default: RawUTF8=''); overload;
+
+/// retrieve the type name from its low-level RTTI
+function TypeInfoToName(aTypeInfo: pointer): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the item type information of a dynamic array low-level RTTI 
 function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
@@ -13736,6 +13740,11 @@ begin
   if Typ<>nil then
     SetRawUTF8(result,PAnsiChar(@Typ.NameLen)+1,Typ.NameLen) else
     result := default;
+end;
+
+function TypeInfoToName(aTypeInfo: pointer): RawUTF8;
+begin
+  TypeInfoToName(aTypeInfo,Result,'');
 end;
 
 function RecordTypeInfoFieldTable(aRecordTypeInfo: Pointer): PFieldTable;
@@ -27635,9 +27644,11 @@ begin
     FromEnhancedRTTI(fRoot,aRecordTypeInfo);
     if fRoot.fNestedDataSize<>RecordTypeInfoSize(aRecordTypeInfo) then
       raise ESynException.CreateUTF8(
-        '%.Create: error when retrieving enhanced RTTI for %',[self,aRecordTypeInfo]);
+        '%.Create: error when retrieving enhanced RTTI for %',
+          [self,fRoot.CustomTypeName]);
     {$else}
-    raise ESynException.CreateUTF8('%.Create with no enhanced RTTI',[self]);
+    raise ESynException.CreateUTF8('%.Create with no enhanced RTTI for %',
+      [self,TypeInfoToName(aRecordTypeInfo)]);
     {$endif}
   end;
   fItems.Add(fRoot);
