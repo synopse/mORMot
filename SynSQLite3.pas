@@ -1122,42 +1122,42 @@ type
   // TSQLite3LibrayStatic instance
   TSQLite3Library = class
   public
-    {/ initialize the SQLite3 database code
-      - automaticaly called by the initialization block of this unit
-      - so sqlite3.c is compiled with SQLITE_OMIT_AUTOINIT defined }
+    /// initialize the SQLite3 database code
+    // - automaticaly called by the initialization block of this unit
+    // - so sqlite3.c is compiled with SQLITE_OMIT_AUTOINIT defined
     initialize: function: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ shutdown the SQLite3 database core
-      - automaticaly called by the finalization block of this unit }
+    /// shutdown the SQLite3 database core
+    // - automaticaly called by the finalization block of this unit
     shutdown: function: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Open a SQLite3 database filename, creating a DB handle
-      - filename must be UTF-8 encoded (filenames containing international
-        characters must be converted to UTF-8 prior to passing them)
-      - allocate a sqlite3 object, and return its handle in DB
-      - return SQLITE_OK on success
-      - an error code (see SQLITE_* const) is returned otherwise - sqlite3.errmsg()
-        can be used to obtain an English language description of the error
-     - Whatever or not an error occurs when it is opened, resources associated with
-       the database connection handle should be released by passing it to
-       sqlite3.close() when it is no longer required }
+    /// Open a SQLite3 database filename, creating a DB handle
+    // - filename must be UTF-8 encoded (filenames containing international
+    // characters must be converted to UTF-8 prior to passing them)
+    // - allocate a sqlite3 object, and return its handle in DB
+    // - return SQLITE_OK on success
+    // - an error code (see SQLITE_* const) is returned otherwise - sqlite3.errmsg()
+    // can be used to obtain an English language description of the error
+    // - Whatever or not an error occurs when it is opened, resources associated with
+    // the database connection handle should be released by passing it to
+    // sqlite3.close() when it is no longer required
     open: function(filename: PUTF8Char; var DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Open a SQLite3 database filename, creating a DB handle
-     - sqlite3.open_v2() interface works like sqlite3.open() except that it
-       accepts two additional parameters for additional control over the new
-       database connection.
-     - flags parameter to sqlite3.open_v2() can take one of SQLITE_OPEN_READONLY,
-       SQLITE_OPEN_READWRITE or (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)
-       values, optionally combined with the SQLITE_OPEN_NOMUTEX,
-       SQLITE_OPEN_FULLMUTEX, SQLITE_OPEN_SHAREDCACHE, SQLITE_OPEN_PRIVATECACHE,
-       and/or SQLITE_OPEN_URI flags
-     - If the flags parameter is not one of the combinations shown above optionally
-      combined with other SQLITE_OPEN_* bits then the behavior is undefined.
-     - The fourth parameter is the name of the sqlite3_vfs object that defines
-       the operating system interface that the new database connection should use.
-       If the fourth parameter is a nil pointer then the default sqlite3_vfs
-       object is used }
+    /// Open a SQLite3 database filename, creating a DB handle
+    // - sqlite3.open_v2() interface works like sqlite3.open() except that it
+    // accepts two additional parameters for additional control over the new
+    // database connection.
+    // - flags parameter to sqlite3.open_v2() can take one of SQLITE_OPEN_READONLY,
+    // SQLITE_OPEN_READWRITE or (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)
+    // values, optionally combined with the SQLITE_OPEN_NOMUTEX,
+    // SQLITE_OPEN_FULLMUTEX, SQLITE_OPEN_SHAREDCACHE, SQLITE_OPEN_PRIVATECACHE,
+    // and/or SQLITE_OPEN_URI flags
+    // - If the flags parameter is not one of the combinations shown above optionally
+    // combined with other SQLITE_OPEN_* bits then the behavior is undefined.
+    // - The fourth parameter is the name of the sqlite3_vfs object that defines
+    // the operating system interface that the new database connection should use.
+    // If the fourth parameter is a nil pointer then the default sqlite3_vfs
+    // object is used
     open_v2: function(filename: PUTF8Char; var DB: TSQLite3DB; flags: integer;
       zVfszVfs: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -1174,26 +1174,26 @@ type
     // you shall call ChangeSQLEncryptTablePassWord() procedure instead
     rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Destructor for the sqlite3 object, which handle is DB
-      - Applications should finalize all prepared statements and close all BLOB handles
-        associated with the sqlite3 object prior to attempting to close the object
-        (sqlite3.next_stmt() interface can be used for this task)
-      - if invoked while a transaction is open, the transaction is automatically rolled back
-      - SynSQLite3Static will use its own internal function for handling properly
-        its own encryption format  }
+    /// Destructor for the sqlite3 object, which handle is DB
+    //  - Applications should finalize all prepared statements and close all BLOB handles
+    // associated with the sqlite3 object prior to attempting to close the object
+    // (sqlite3.next_stmt() interface can be used for this task)
+    // - if invoked while a transaction is open, the transaction is automatically rolled back
+    //  - SynSQLite3Static will use its own internal function for handling properly
+    // its own encryption format
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Return the version of the SQLite database engine, in ascii format
-      - currently returns '3.8.7.4', when used with our SynSQLite3Static unit
-      - if an external SQLite3 library is used, version may vary }
+    /// Return the version of the SQLite database engine, in ascii format
+    //  - currently returns '3.8.7.4', when used with our SynSQLite3Static unit
+    //  - if an external SQLite3 library is used, version may vary
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Returns English-language text that describes an error,
-       using UTF-8 encoding (which, with English text, is the same as Ansi).
-      - Memory to hold the error message string is managed internally.
-      The application does not need to worry about freeing the result.
-      However, the error string might be overwritten or deallocated by
-      subsequent calls to other SQLite interface functions. }
+    /// Returns English-language text that describes an error,
+    // using UTF-8 encoding (which, with English text, is the same as Ansi).
+    // - Memory to hold the error message string is managed internally.
+    // The application does not need to worry about freeing the result.
+    // However, the error string might be overwritten or deallocated by
+    // subsequent calls to other SQLite interface functions.
     errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ Function creation routine used to add SQL functions or aggregates or to redefine

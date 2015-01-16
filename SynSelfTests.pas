@@ -7590,10 +7590,10 @@ begin
   SoundexValues[3] := 'mohammad';
   SoundexValues[4] := 'mohhhammeeet';
   SoundexValues[5] := 'bonjourtr'+_uE8+'slongmotquid'+_uE9+'passe';
-  if (PosEx(RawUTF8('SQlite3 engine'),Owner.CustomVersions,1)=0) and
+  if (PosEx(RawUTF8(' engine used:'),Owner.CustomVersions,1)=0) and
      (sqlite3<>nil) then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10'SQlite3 engine used: '+
-      sqlite3.libversion;
+    Owner.CustomVersions := Format('%s'#13#10'%s engine used: %s',
+      [Owner.CustomVersions,sqlite3.ClassName,sqlite3.libversion]);
   if ClassType=TTestMemoryBased then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';
@@ -8902,6 +8902,9 @@ end;
 var Server: TSQLDBServerAbstract;
 const ADDR='localhost:'+HTTP_DEFAULTPORT;
 begin
+  {$ifdef KYLIX3}
+  exit; // in the meanwhile
+  {$endif}
   Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
   try
     DoTest(Props);
