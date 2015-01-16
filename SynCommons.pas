@@ -26956,7 +26956,11 @@ begin
     if ItemType=ptCustom then
       if Item^.kind in [tkEnumeration,tkArray,tkDynArray] then
         result := TJSONCustomParserCustomSimple.Create(
-          PropertyName,ItemTypeName,Item) else begin
+          PropertyName,ItemTypeName,Item) else
+      {$ifdef ISDELPHI2010} // do not register local types like ':TRECB:1'
+      if (ItemTypeName<>'') and (ItemTypeName[1]=':') then
+        result := TJSONCustomParserRTTI.Create(PropertyName,ptCustom) else
+      {$endif} begin
         ndx := GlobalJSONCustomParsers.RecordSearch(Item);
         if ndx<0 then
           ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
@@ -27689,6 +27693,8 @@ begin // only tkRecord is needed here
   if FieldTable^.AllCount=0 then
     exit; // not enough RTTI -> will raise an error in Create()
   TypeInfoToName(Info,Props.fCustomTypeName);
+  if (Props.fCustomTypeName<>'') and (Props.fCustomTypeName[1]=':') then
+    Props.fCustomTypeName := ''; // ignore local types like ':TRECB:1'
   RecField := @FieldTable^.AllFields[0];
   SetLength(ItemFields,FieldTable^.AllCount);
   for i := 0 to FieldTable^.AllCount-1 do begin
