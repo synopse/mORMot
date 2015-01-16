@@ -18335,7 +18335,7 @@ type
     // - CPU64 ready
     FieldCountNextPtr, FieldIndexNextPtr: PtrInt;
     // temp vars (avoid stack usage):
-    PID: Integer;
+    PID: Int64;
     PP, CI, CJ: PPUTF8Char;
     I, J: PtrInt;
 {$ifdef PUREPASCAL}
@@ -18358,8 +18358,8 @@ begin
   PP := aPP;
   // PID must be updated every time PP is modified
   if Assigned(IDColumn) then
-    PID := GetInteger(IDColumn[aP]) else
-    PID := GetInteger(PPUTF8Char(PtrInt(aPP)-FieldIndexNextPtr)^);
+    SetInt64(IDColumn[aP],PID) else
+    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIndexNextPtr)^,PID);
 end;
 
 function TUTF8QuickSort.CompI: integer;
@@ -18368,8 +18368,8 @@ begin
   if result=0 then
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInteger(IDColumn[I])-PID else
-      result := GetInteger(PPUTF8Char(PtrInt(CI)-FieldIndexNextPtr)^)-PID;
+      result := GetInt64(IDColumn[I])-PID else
+      result := GetInt64(PPUTF8Char(PtrInt(CI)-FieldIndexNextPtr)^)-PID;
 end;
 
 function TUTF8QuickSort.CompJ: integer;
@@ -18378,8 +18378,8 @@ begin
   if result=0 then
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInteger(IDColumn[J])-PID else
-      result := GetInteger(PPUTF8Char(PtrInt(CJ)-FieldIndexNextPtr)^)-PID;
+      result := GetInt64(IDColumn[J])-PID else
+      result := GetInt64(PPUTF8Char(PtrInt(CJ)-FieldIndexNextPtr)^)-PID;
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: integer); 
@@ -18565,7 +18565,7 @@ begin
      if ndx>=0 then
        result := Comp(Results[A*FieldCount+ndx],Results[B*FieldCount+ndx]) else
        // Fields[].ndx=-1 for hidden ID column
-       result := GetInteger(IDColumn[A])-GetInteger(IDColumn[B]);
+       result := GetInt64(IDColumn[A])-GetInt64(IDColumn[B]);
      if result<>0 then begin
        if Desc then
          result := -result; // descending order -> inverse comparison 
@@ -21895,7 +21895,7 @@ begin
     for f := 0 to fTableMapCount-1 do
       with fTableMap[f] do
         if DestField=nil then
-          Dest.ID := GetInteger(aTableRow[TableIndex]) else
+          SetInt64(aTableRow[TableIndex],PInt64(@Dest.fID)^) else
           DestField.SetValue(Dest,aTableRow[TableIndex],false);
 end;
 
@@ -21906,7 +21906,7 @@ begin
   for f := 0 to fTableMapCount-1 do
     with fTableMap[f] do
       if DestField=nil then
-        aDest.ID := GetInteger(aTableRow[TableIndex]) else
+        SetInt64(aTableRow[TableIndex],PInt64(@aDest.fID)^) else
         DestField.SetValue(aDest,aTableRow[TableIndex],false);
 end;
 
@@ -22278,7 +22278,7 @@ var field: TSQLPropInfo;
 begin
   if self<>nil then
     if IsRowID(pointer(PropName)) then
-      fID := GetInteger(Value) else begin
+      SetInt64(Value,PInt64(@fID)^) else begin
       field := RecordProps.Fields.ByName(PropName);
       if field<>nil then
         field.SetValue(self,Value,wasString);
@@ -28244,7 +28244,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   if i>0 then begin
     Par := @URI[i+1];
     if Par^ in ['0'..'9'] then // "ModelRoot/TableName/TableID/URIBlobFieldName"
-      TableID := GetNextItemCardinal(Par,'/') else
+      TableID := GetNextItemInt64(Par,'/') else
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     if (Par<>nil) and (Par^<>#0) then begin
       P := PosChar(Par,'?');
@@ -31703,6 +31703,7 @@ function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   FoundLimit,FoundOffset: integer): PtrInt;
 var i, ndx: integer;
     aValue: PtrInt;
+    aID: Int64;
     err, currentRow: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
@@ -31715,9 +31716,9 @@ begin
   if Assigned(OnFind) then
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
-      aValue := GetInteger(pointer(WhereValue),err);
-      if (err=0) and (aValue>0) then begin
-        ndx := IDToIndex(aValue); // use fast binary search
+      aID := GetInt64(pointer(WhereValue),err);
+      if (err=0) and (aID>0) then begin
+        ndx := IDToIndex(aID); // use fast binary search
         if ndx>=0 then begin
           OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
           result := 1;
@@ -32032,12 +32033,13 @@ end;
 
 procedure TSQLRestStorageInMemory.LoadFromJSON(JSONBuffer: PUTF8Char; JSONBufferLen: integer);
   function IsSorted(U: PPUTF8Char; RowCount, FieldCount: integer): boolean;
-  var i, aID, lastID: integer;
+  var i: integer;
+      aID, lastID: Int64;
   begin
     result := false;
     lastID := 0;
     for i := 1 to RowCount do begin
-      aID := GetInteger(U^);
+      SetInt64(U^,aID);
       if aID<=lastID then
         exit else
         lastID := aID;
@@ -34420,7 +34422,7 @@ begin
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject); 
       if (PropValue=nil) or wasString or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content
-      V := GetInteger(PropValue,err);
+      V := GetInteger(PropValue,err); // PtrInt is enough (TID=Int64 uneeded) 
       if err<>0 then
         exit;
       TSQLRecord(Value).fID := V;
@@ -35952,7 +35954,7 @@ end;
 
 function TSynValidateUniqueField.Process(aFieldIndex: integer; const Value: RawUTF8;
   var ErrorMsg: string): boolean;
-var aID: TID;
+var aID: Int64;
 begin
   result := false;
   if Value='' then
@@ -35962,8 +35964,8 @@ begin
   with fProcessRec.RecordProps do
     if cardinal(aFieldIndex)>=cardinal(Fields.Count) then
       result := true else begin
-      aID := GetInteger(pointer(fProcessRest.OneFieldValue(Table,'RowID',
-        Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):')));
+      SetInt64(pointer(fProcessRest.OneFieldValue(Table,'RowID',
+        Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):')),aID);
       if (aID>0) and (aID<>fProcessRec.fID) then
         ErrorMsg := sValidationFieldDuplicate else
         result := true;
