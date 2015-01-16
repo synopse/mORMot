@@ -870,6 +870,8 @@ type
     function GetCurrentThreadID: cardinal;
     /// validate record transmission
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
+    //// validate TSQLRecord transmission
+    procedure FillPeople(var People: TSQLRecordPeople);
     {$ifdef UNICODE}
     /// validate simple record transmission
     // - older Delphi versions (e.g. 6-7) do not allow records without
@@ -10538,6 +10540,7 @@ type
     function GetCurrentThreadID: cardinal;
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
+    procedure FillPeople(var People: TSQLRecordPeople);
   end;
 
   TServiceComplexNumber = class(TInterfacedObject,IComplexNumber)
@@ -10690,6 +10693,12 @@ begin
   CustomerData.Id := CustomerId;
   CustomerData.AccountNum := Int32ToUtf8(CustomerID);
   result := True;
+end;
+
+procedure TServiceComplexCalculator.FillPeople(var People: TSQLRecordPeople);
+begin
+  People.LastName := FormatUTF8('Last %',[People.ID]);
+  People.FirstName := FormatUTF8('First %',[People.ID]);
 end;
 
 {$ifndef LVCL}
@@ -10898,6 +10907,7 @@ end;
 var s: RawUTF8;
 {$ifndef LVCL}
     data: TCustomerData;
+    people: TSQLRecordPeople;
     cust: TServiceCustomAnswer;
     c: cardinal;
     n1,n2: double;
@@ -10963,6 +10973,16 @@ begin
       Check(Inst.CC.GetCustomer(c,data));
       Check(data.Id=integer(c));
       Check(GetCardinal(pointer(data.AccountNum))=c);
+      people := TSQLRecordPeople.Create;
+      try
+        people.ID := c;
+        Inst.CC.FillPeople(people);
+        Check(people.ID=c);
+        Check(people.LastName=FormatUTF8('Last %',[c]));
+        Check(people.FirstName=FormatUTF8('First %',[c]));
+      finally
+        people.Free;
+      end;
 {$ifdef UNICODE}
       Nav.MaxRows := c;
       Nav.Row0 := c*2;
