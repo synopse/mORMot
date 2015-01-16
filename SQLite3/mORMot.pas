@@ -12423,6 +12423,10 @@ type
     // - will write JSON content by default, or binary content if BinaryFile
     // property was set to true
     procedure UpdateFile;
+    /// will reload all content from the current disk file
+    // - any not saved modification will be lost (e.g. if Updatefile has not
+    // been called since)
+    procedure ReloadFromFile;
     /// retrieve the index in Items[] of a particular ID
     // - return -1 if this ID was not found
     // - use fast binary search algorithm (since Items[].ID should be increasing)
@@ -31427,9 +31431,7 @@ end;
 
 constructor TSQLRestStorageInMemory.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
   const aFileName: TFileName = ''; aBinaryFile: boolean=false);
-var JSON: RawUTF8;
-    Stream: TStream;
-    F: integer;
+var F: integer;
 begin
   inherited Create(aClass,aServer);
   if (fStoredClassProps<>nil) and (fStoredClassProps.Kind in INSERT_WITH_ID) then
@@ -31454,19 +31456,7 @@ begin
         // CaseInsensitive=true just like
         fUniqueFields.Add(TListFieldHash.Create(fValue,F,Fields.List[F],true));
   end;
-  if (fFileName<>'') and FileExists(fFileName) then begin
-    if aBinaryFile then begin
-      Stream := TSynMemoryStreamMapped.Create(fFileName);
-      try
-        LoadFromBinary(Stream)
-      finally
-        Stream.Free;
-      end;
-    end else begin
-      JSON := StringFromFile(fFileName);
-      LoadFromJSON(JSON);
-    end;
-  end;
+  ReloadFromFile;
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
@@ -32549,6 +32539,25 @@ begin
   fLogFamily.SynLog.Log(sllDB,'UpdateFile(%) done in %',
     [fStoredClassRecordProps.SQLTableName,Timer.Stop],self);
   {$endif}
+end;
+
+procedure TSQLRestStorageInMemory.ReloadFromFile;
+var JSON: RawUTF8;
+    Stream: TStream;
+begin
+  if (fFileName<>'') and FileExists(fFileName) then begin
+    if fBinaryFile then begin
+      Stream := TSynMemoryStreamMapped.Create(fFileName);
+      try
+        LoadFromBinary(Stream)
+      finally
+        Stream.Free;
+      end;
+    end else begin
+      JSON := StringFromFile(fFileName);
+      LoadFromJSON(JSON);
+    end;
+  end;
 end;
 
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
