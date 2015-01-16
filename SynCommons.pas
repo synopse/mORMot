@@ -6306,12 +6306,13 @@ type
   // - wkVarInt32 will write the content using our 32-bit variable-length integer
   // encoding and the by-two complement (0=0,1=1,2=-1,3=2,4=-2...)
   // - wkSorted will write an increasing array of integers, handling the special
-  // case of a difference of 1 between two values (therefore is very optimized
-  // to store an array of IDs)
+  // case of a difference of similar value (e.g. 1) between two values
   // - wkOffsetU and wkOffsetI will write the difference between two successive
   // values, handling constant difference (Unsigned or Integer) in an optimized manner
+  // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
+  // custom encoding
   TFileBufferWriterKind = (wkUInt32, wkVarUInt32, wkVarInt32, wkSorted,
-    wkOffsetU, wkOffsetI);
+    wkOffsetU, wkOffsetI, wkFakeMarker);
 
   /// this class can be used to speed up writing to a file
   // - big speed up if data is written in small blocks
@@ -6501,7 +6502,10 @@ type
     /// read one Int64 value encoded using our 64-bit variable-length integer
     function ReadVarInt64: Int64;
     /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
-    // - returns the number of items read into Values[] (may differ from length(Values))
+    // - returns the number of items read into Values[] (may differ from
+    // length(Values), which will be resized, so could be void before calling)
+    // - if the returned integer is negative, it is -Count, and testifies from
+    // wkFakeMarker and the content should be retrieved by the caller
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// retrieved Int64 values encoded with TFileBufferWriter.WriteVarUInt64DynArray
     // - returns the number of items read into Values[] (may differ from length(Values))
@@ -24345,7 +24349,7 @@ begin
   {$ifndef CPU64}
   if Value<MaxInt then begin
     result := ToVarUInt32(Int64Rec(Value).Lo,Dest);
-    Exit;
+    exit;
   end;
   {$endif}
   if Value>$7f then
@@ -38423,11 +38427,15 @@ begin
   result := ReadVarUInt32;
   if result=0 then
     exit;
+  DataLayout := TFileBufferWriterKind(ReadByte);
+  if DataLayout=wkFakeMarker then begin
+    result := -result;
+    exit; 
+  end;
   count := result;
   if count>length(Values) then // only set length is not big enough
     SetLength(Values,count);
   PI := pointer(Values);
-  DataLayout := TFileBufferWriterKind(ReadByte);
   if DataLayout in [wkOffsetU, wkOffsetI] then begin
     PI^ := ReadVarUInt32;
     dec(count);

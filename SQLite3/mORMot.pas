@@ -32111,10 +32111,11 @@ const
 function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
     MS: TMemoryStream;
-    i, f: integer;
-    IDs: TIntegerDynArray; // format limitation: IDs are stored as Int32
+    i,n,f: integer;
+    ID32: TIntegerDynArray;
     P: PAnsiChar;
     aRecord: TSQLRecord;
+    lastID,newID: TID;
 begin
   result := false;
   if self=nil then
@@ -32131,12 +32132,23 @@ begin
     // read IDs
     fModified := false;
     fValue.Clear;
-    fValue.Count := R.ReadVarUInt32Array(IDs); // faster than fValue.Add()
-    for i := 0 to high(IDs) do begin
-      aRecord := fStoredClass.Create;
-      aRecord.fID := IDs[i];
-      fValue.List[i] := aRecord;
-    end;
+    n := R.ReadVarUInt32Array(ID32);
+    fValue.Count := abs(n); // faster than fValue.Add() to allocate all at once
+    if n<0 then begin // was wkFakeMarker -> TID were stored as Int64
+      lastID := 0;
+      for i := 0 to -n-1 do begin
+        aRecord := fStoredClass.Create;
+        newID := lastID+R.ReadVarUInt64;
+        aRecord.fID := newID;
+        lastID := newID;
+        fValue.List[i] := aRecord;
+      end;
+    end else
+      for i := 0 to n-1 do begin
+        aRecord := fStoredClass.Create;
+        aRecord.fID := ID32[i];
+        fValue.List[i] := aRecord;
+      end;
     // read content, grouped by field (for better compression)
     P := R.CurrentMemory;
     for f := 0 to Fields.Count-1 do
@@ -32158,8 +32170,11 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
-    IDs: TIntegerDynArray; // format expectation: IDs are stored as Int32
+    ID32: TIntegerDynArray; 
     i, f: integer;
+    hasInt64ID: boolean;
+    p: PID;
+    lastID,newID: TID;
 begin
   result := 0;
   if (self=nil) or (Stream=nil) then
@@ -32174,11 +32189,32 @@ begin
       W.Write(RawUTF8(ClassName));
       SaveBinaryHeader(W);
       // write IDs
-      SetLength(IDs,Count);
+      hasInt64ID := false;
+      SetLength(ID32,Count);
       with fValue do
-        for i := 0 to Count-1 do
-          IDs[i] := TSQLRecord(List[i]).fID;
-      W.WriteVarUInt32Array(IDs,Count,wkSorted); // efficient ID storage
+        for i := 0 to Count-1 do begin
+          p := @TSQLRecord(List[i]).fID;
+          if p^>high(cardinal) then begin
+            hasInt64ID := true;
+            break;
+          end else
+            ID32[i] := PInteger(p)^;
+        end;
+      if hasInt64ID then begin
+        W.WriteVarUInt32(fValue.Count);
+        W.Write1(ord(wkFakeMarker)); // fake marker
+        lastID := 0;
+        with fValue do
+        for i := 0 to Count-1 do begin // a bit less efficient than wkSorted
+          newID := TSQLRecord(List[i]).fID;
+          if newID<=lastID then
+            raise EORMException.CreateUTF8('%.SaveToBinary(%): IDs not sorted',
+              [self,fStoredClass]);
+          W.WriteVarUInt64(newID-lastID);
+          lastID := newID;
+        end;
+      end else
+        W.WriteVarUInt32Array(ID32,Count,wkSorted); // efficient ID storage
       // write content, grouped by field (for better compression)
       for f := 0 to Fields.Count-1 do
         with Fields.List[f], fValue do

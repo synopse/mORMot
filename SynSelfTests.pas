@@ -10092,7 +10092,7 @@ begin
           JS := Demo.ExecuteJSON('SELECT * From People');
           aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestStorageInMemory;
           Check(aStatic<>nil);
-          aStatic.LoadFromJSON(JS); // test Add()
+          aStatic.LoadFromJSON(JS); // test Add() and JSON fast loading
           for i := 0 to aStatic.Count-1 do begin
             Check(Client.Retrieve(aStatic.ID[i],V),'test statement+bind speed');
             Check(V.SameRecord(aStatic.Items[i]),'static retrieve');
@@ -10238,18 +10238,38 @@ begin
             end;
             Check(n=length(Results));
             V.FillClose;
+            V.LastName := 'last';
+            V.FirstName := 'first';
+            V.ID := 4294967297;
+            Check(ClientDist.Add(V,true,True)=V.ID);
+            V.ClearProperties;
+            ClientDist.Retrieve(4294967297,V);
+            Check(V.FirstName='first');
+            Check(V.ID=4294967297);
           finally
             ClientDist.Free;
           end;
-          aStatic.Modified := true;
           aStatic.UpdateFile; // force People.data file content write
+          aStatic.ReloadFromFile;
+          Check(aStatic.Retrieve(11,V),'reload from people.data');
+          Check(V.FirstName='Jane1');
+          Check(aStatic.Retrieve(4294967297,V));
+          Check(V.FirstName='first');
           aStatic.FileName := 'People.json';
           aStatic.BinaryFile := false;
-          aStatic.Modified := true; // so aStatic.Free will write People.json file
+          aStatic.Modified := true;
+          aStatic.UpdateFile; // force People.json file content write
+          aStatic.ReloadFromFile;
+          Check(aStatic.Retrieve(11,V),'reload from people.json');
+          Check(V.FirstName='Jane1');
+          Check(aStatic.Retrieve(4294967297,V));
+          Check(V.FirstName='first');
+          aStatic.Delete(TSQLRecordPeople,4294967297);
+          aStatic.UpdateFile;
+        finally
           {$ifdef MSWINDOWS}
           USEFASTMM4ALLOC := false;
           {$endif}
-        finally
           Server.Free;
         end;
       end;
