@@ -152,10 +152,10 @@ implementation
       result.{{fullPropName}}.Add({{typePascal}}(Value.{{fullPropName}}[i]));
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  if VariantType(Value.{{fullPropName}})=jvArray then begin
     var tmp: {{name}};
-    tmp.J.SetLength(1);
+    tmp.{{propName}}.SetLength(1);
     for var n := 0 to integer(Value.{{fullPropName}}.length)-1 do begin
       var source := Value.{{fullPropName}}[n];
-      var dest := tmp.J[0];
+      var dest := tmp.{{propName}}[0];
 {{#fields}}
       dest.{{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}source.{{propName}}{{#fromVariant}}){{/fromVariant}};
 {{/fields}}
