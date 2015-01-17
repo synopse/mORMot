@@ -269,7 +269,7 @@ const
   SQLITE_UTF16BE  = 3;
   {/ text is UTF-16 encoded, using the system native byte order }
   SQLITE_UTF16    = 4;
-  {/ sqlite3.create_function_v2 don't care about text encoding }
+  {/ sqlite3.create_function don't care about text encoding }
   SQLITE_ANY      = 5;
   {/ used by sqlite3.create_collation() only }
   SQLITE_UTF16_ALIGNED = 8;
@@ -1198,8 +1198,8 @@ type
     // subsequent calls to other SQLite interface functions.
     errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Function creation routine used to add SQL functions or aggregates or to redefine
-       the behavior of existing SQL functions or aggregates
+    {/ add SQL functions or aggregates or to redefine the behavior of existing
+       SQL functions or aggregates
       - The first parameter is the database connection to which the SQL function is
         to be added. If an application uses more than one database connection then
         application-defined SQL functions must be added to each database connection
@@ -1229,15 +1229,24 @@ type
         SQL function requires an implementation of xStep and xFinal and nil pointer
         must be passed for xFunc. To delete an existing SQL function or aggregate,
         pass nil pointers for all three function callbacks.
-      - If the tenth parameter is not NULL, then it is invoked when the function is
-        deleted, either by being overloaded or when the database connection closes.
-        When the destructure callback of the tenth parameter is invoked, it is
-        passed a single argument which is a copy of the pointer which was the fifth
-        parameter to sqlite3.create_function_v2().
       - It is permitted to register multiple implementations of the same functions
         with the same name but with either differing numbers of arguments or
         differing preferred text encodings. SQLite will use the implementation
         that most closely matches the way in which the SQL function is used. }
+    create_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
+      nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
+      xFinal: TSQLFunctionFinal): Integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
+    {/ add SQL functions or aggregates or to redefine the behavior of existing
+       SQL functions or aggregates, including destruction
+      - if the additinal xDestroy parameter is not NULL, then it is invoked when
+        the function is deleted, either by being overloaded or when the database
+        connection closes.
+      - When the destructure callback of the tenth parameter is invoked, it is
+        passed a single argument which is a copy of the pointer which was the fifth
+        parameter to sqlite3.create_function_v2().
+      - this function is not available in older revisions - e.g. 3.6.* }
     create_function_v2: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
@@ -1520,14 +1529,14 @@ type
     result_error: procedure(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ returns a copy of the pointer that was the pUserData parameter (the 5th
-      parameter) of the sqlite3.create_function_v2() routine that originally
+      parameter) of the sqlite3.create_function() routine that originally
       registered the application defined function
       - This routine must be called from the same thread in which the
         application-defined function is running }
     user_data: function(Context: TSQLite3FunctionContext): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ returns a copy of the pointer to the database connection (the 1st parameter)
-      of the sqlite3.create_function_v2() routine that originally registered the
+      of the sqlite3.create_function() routine that originally registered the
       application defined function }
     context_db_handle: function(Context: TSQLite3FunctionContext): TSQLite3DB; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -2416,13 +2425,13 @@ type
   public
     /// initialize the corresponding SQL function
     // - expects at least the low-level TSQLFunctionFunc implementation (in
-    // sqlite3.create_function_v2() format) and the number of expected parameters
+    // sqlite3.create_function() format) and the number of expected parameters
     // - if the function name is not specified, it will be retrieved from the type
     // information (e.g. TReferenceDynArray will declare 'ReferenceDynArray')
     constructor Create(aFunction: TSQLFunctionFunc; aFunctionParametersCount: Integer;
       const aFunctionName: RawUTF8=''); reintroduce;
     /// the internal function prototype
-    // - ready to be assigned to sqlite3.create_function_v2() xFunc parameter
+    // - ready to be assigned to sqlite3.create_function() xFunc parameter
     property InternalFunction: TSQLFunctionFunc read fInternalFunction;
     /// the SQL function name, as called from the SQL statement
     // - the same function name may be registered several times with a diverse
@@ -3861,7 +3870,7 @@ begin
     exit;
   end;
   if Assigned(sqlite3.key) and (fPassword<>'') and
-     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) and (fFileName<>'') then 
+     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) and (fFileName<>'') then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
@@ -3872,36 +3881,36 @@ begin
   sqlite3.create_collation(DB,'WIN32CASE',SQLITE_UTF16,nil,Utf16SQLCompCase);
   sqlite3.create_collation(DB,'WIN32NOCASE',SQLITE_UTF16,nil,Utf16SQLCompNoCase);
   // register the MOD() user function, similar to the standard % operator
-  sqlite3.create_function_v2(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil,nil);
+  sqlite3.create_function(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil);
   // some user functions
-  sqlite3.create_function_v2(DB,'SOUNDEX',1,SQLITE_UTF8,nil,InternalSoundex,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'SOUNDEXFR',1,SQLITE_UTF8,nil,InternalSoundexFr,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'SOUNDEXES',1,SQLITE_UTF8,nil,InternalSoundexEs,nil,nil,nil);
+  sqlite3.create_function(DB,'SOUNDEX',1,SQLITE_UTF8,nil,InternalSoundex,nil,nil);
+  sqlite3.create_function(DB,'SOUNDEXFR',1,SQLITE_UTF8,nil,InternalSoundexFr,nil,nil);
+  sqlite3.create_function(DB,'SOUNDEXES',1,SQLITE_UTF8,nil,InternalSoundexEs,nil,nil);
   // rank() function as proposed in http://www.sqlite.org/fts3.html#appendix_a
-  sqlite3.create_function_v2(DB,'RANK',-1,SQLITE_ANY,nil,InternalRank,nil,nil,nil);
+  sqlite3.create_function(DB,'RANK',-1,SQLITE_ANY,nil,InternalRank,nil,nil);
   // CONCAT() function to process fast string concatenation
-  sqlite3.create_function_v2(DB,'CONCAT',2,SQLITE_UTF8,nil,nil,
-    InternalConcatStep,InternalConcatFinal,nil);
+  sqlite3.create_function(DB,'CONCAT',2,SQLITE_UTF8,nil,nil,
+    InternalConcatStep,InternalConcatFinal);
   // functions to handle some standard dynamic array BLOB content in SQL
   // IntegerDynArrayContains(BlobField,10) returning a boolean
-  sqlite3.create_function_v2(DB,'INTEGERDYNARRAYCONTAINS',2,SQLITE_ANY,
-    nil,InternalIntegerDynArray,nil,nil,nil);
+  sqlite3.create_function(DB,'INTEGERDYNARRAYCONTAINS',2,SQLITE_ANY,
+    nil,InternalIntegerDynArray,nil,nil);
   // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
-  sqlite3.create_function_v2(DB,'BYTEDYNARRAYCONTAINS',2,SQLITE_ANY,
-    TypeInfo(TByteDynArray),InternalSimpleInt64DynArray,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'WORDDYNARRAYCONTAINS',2,SQLITE_ANY,
-    TypeInfo(TWordDynArray),InternalSimpleInt64DynArray,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'CARDINALDYNARRAYCONTAINS',2,SQLITE_ANY,
-    TypeInfo(TCardinalDynArray),InternalSimpleInt64DynArray,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'INT64DYNARRAYCONTAINS',2,SQLITE_ANY,
-    TypeInfo(TInt64DynArray),InternalSimpleInt64DynArray,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'CURRENCYDYNARRAYCONTAINS',2,SQLITE_ANY,
-    TypeInfo(TInt64DynArray),InternalSimpleInt64DynArray,nil,nil,nil);
+  sqlite3.create_function(DB,'BYTEDYNARRAYCONTAINS',2,SQLITE_ANY,
+    TypeInfo(TByteDynArray),InternalSimpleInt64DynArray,nil,nil);
+  sqlite3.create_function(DB,'WORDDYNARRAYCONTAINS',2,SQLITE_ANY,
+    TypeInfo(TWordDynArray),InternalSimpleInt64DynArray,nil,nil);
+  sqlite3.create_function(DB,'CARDINALDYNARRAYCONTAINS',2,SQLITE_ANY,
+    TypeInfo(TCardinalDynArray),InternalSimpleInt64DynArray,nil,nil);
+  sqlite3.create_function(DB,'INT64DYNARRAYCONTAINS',2,SQLITE_ANY,
+    TypeInfo(TInt64DynArray),InternalSimpleInt64DynArray,nil,nil);
+  sqlite3.create_function(DB,'CURRENCYDYNARRAYCONTAINS',2,SQLITE_ANY,
+    TypeInfo(TInt64DynArray),InternalSimpleInt64DynArray,nil,nil);
   // RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
-  sqlite3.create_function_v2(DB,'RAWUTF8DYNARRAYCONTAINSCASE',2,SQLITE_ANY,nil,
-    InternalRawUTF8DynArray,nil,nil,nil);
-  sqlite3.create_function_v2(DB,'RAWUTF8DYNARRAYCONTAINSNOCASE',2,SQLITE_ANY,
-    @UTF8ILComp,InternalRawUTF8DynArray,nil,nil,nil);
+  sqlite3.create_function(DB,'RAWUTF8DYNARRAYCONTAINSCASE',2,SQLITE_ANY,nil,
+    InternalRawUTF8DynArray,nil,nil);
+  sqlite3.create_function(DB,'RAWUTF8DYNARRAYCONTAINSNOCASE',2,SQLITE_ANY,
+    @UTF8ILComp,InternalRawUTF8DynArray,nil,nil);
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
@@ -4711,8 +4720,8 @@ end;
 function TSQLDataBaseSQLFunction.CreateFunction(DB: TSQLite3DB): Integer;
 begin
   if self<>nil then begin
-    result := sqlite3.create_function_v2(DB,pointer(fSQLName),
-      FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil,nil);
+    result := sqlite3.create_function(DB,pointer(fSQLName),
+      FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil);
     {$ifdef WITHLOGSQLFUNCTION}
     if (result<>SQLITE_OK) and (fLog<>nil) then
       fLog.Add.Log(sllError,'register SQL function failed: '+FunctionName,self);
@@ -4958,14 +4967,14 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..84] of TFileName =
-  ('initialize','shutdown','open','open_v2','key','rekey','close','libversion',
-   'errmsg','create_function_v2','create_collation','last_insert_rowid',
-   'busy_timeout','busy_handler','prepare_v2','finalize','next_stmt','reset',
-   'stmt_readonly','step','column_count','column_type','column_decltype',
-   'column_name','column_bytes','column_value','column_double','column_int',
-   'column_int64','column_text','column_text16','column_blob',
-   'value_type','value_numeric_type',
+  SQLITE3_ENTRIES: array[0..85] of TFileName =
+  ('initialize','shutdown','open','open_v2','key','rekey','close',
+   'libversion','errmsg','create_function','create_function_v2',
+   'create_collation','last_insert_rowid','busy_timeout','busy_handler',
+   'prepare_v2','finalize','next_stmt','reset','stmt_readonly','step',
+   'column_count','column_type','column_decltype','column_name','column_bytes',
+   'column_value','column_double','column_int','column_int64','column_text',
+   'column_text16','column_blob','value_type','value_numeric_type',
    'value_bytes','value_double','value_int64','value_text','value_blob',
    'result_null','result_int64','result_double','result_blob','result_text',
    'result_value','result_error','user_data','context_db_handle',
@@ -4990,7 +4999,7 @@ begin
   for i := 0 to High(SQLITE3_ENTRIES) do
     P^[i] := GetProcAddress(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
   if not Assigned(initialize) or not Assigned(libversion) or
-     not Assigned(open) or not Assigned(close) or
+     not Assigned(open) or not Assigned(close) or not Assigned(create_function) or
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
     FreeLibrary(fHandle);
     fHandle := 0;
@@ -5018,4 +5027,4 @@ initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.

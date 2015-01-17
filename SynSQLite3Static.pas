@@ -109,7 +109,7 @@ begin
     libName := 'sqlite3.dll';
     {$endif}
     {$else}
-    {$ifdef Linux}
+    {$ifdef Linux}      
     libName := 'libsqlite3.so.0';
     {$else}
     libName := 'libsqlite3.dylib';
@@ -118,7 +118,7 @@ begin
     sqlite3 := TSQLite3LibraryDynamic.Create(libName);        
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
-    on E: Exception do
+    on E: Exception do  
       {$ifdef LINUX}
       writeln(libName,' initialization failed with ',E.ClassName,': ',E.Message);
       {$endif}
@@ -615,7 +615,7 @@ begin
   atm.tm_year := S.wYear-1900;
   atm.tm_wday := S.wDayOfWeek;
   {$else}
-  S := GetNowUTCSystem;
+  GetNowUTCSystem(S);
   atm.tm_sec := S.Second;
   atm.tm_min := S.Minute;
   atm.tm_hour := S.Hour;
@@ -1073,6 +1073,10 @@ function sqlite3_initialize: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} e
 function sqlite3_shutdown: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
+  xFinal: TSQLFunctionFinal): Integer;
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
   xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
@@ -1190,6 +1194,7 @@ begin
   close                := @sqlite3_closeInternal;
   libversion           := @sqlite3_libversion;
   errmsg               := @sqlite3_errmsg;
+  create_function      := @sqlite3_create_function;
   create_function_v2   := @sqlite3_create_function_v2;
   create_collation     := @sqlite3_create_collation;
   last_insert_rowid    := @sqlite3_last_insert_rowid;
