@@ -8485,6 +8485,11 @@ var
   // will emulate it for older Windows versions
   GetTickCount64: function: Int64; stdcall;
 
+/// similar to Windows sleep() API call, to be truly cross-platform
+// - it should have a millisecond resolution, and handle ms=0 as a switch to
+// another pending thread, i.e. under Windows will call SwitchToThread API
+procedure SleepHiRes(ms: cardinal);
+
 {$else MSWINDOWS}
 
 /// compatibility function for Linux
@@ -8517,6 +8522,9 @@ procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 /// self-modifying code - restore a code from its RedirectCode() backup
 procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
 
+/// allow to fix TEvent.WaitFor() method for Kylix
+// - under Windows or with FPC, will call original TEvent.WaitFor() method
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
 
 
 type
@@ -16045,6 +16053,16 @@ begin
    {$else}
    result := trunc(PInt64(@fileTime)^/10000); // 100 ns unit
    {$endif}
+end;
+
+{$ifdef FPC} // oddly not defined in fpc\rtl\win
+function SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
+{$endif}
+
+procedure SleepHiRes(ms: cardinal);
+begin
+  if (ms<>0) or not SwitchToThread then
+    Windows.Sleep(ms);
 end;
 
 procedure RetrieveSystemInfo;
@@ -42040,15 +42058,92 @@ begin
   InitializeCriticalSection(fPendingProcessLock);
 end;
 
-{$ifndef MSWINDOWS}
-const INFINITE = LongWord(-1);
+{$ifdef KYLIX3}
+type
+  // see http://stackoverflow.com/a/3085509/458259 about the Kylix only bug
+  TEventHack = class(THandleObject) // should match EXACTLY SyncObjs.pas source!
+  private
+    FEvent: TSemaphore;
+    FManualReset: Boolean;
+  end;
+
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+var E: TEventHack absolute Event;
+procedure SetResult(res: integer);
+begin
+  if res=0 then
+    result := wrSignaled else
+  if errno in [EAGAIN,ETIMEDOUT] then
+    result := wrTimeOut else begin
+    write(TimeOut,':',errno,' ');
+    result := wrError;
+  end;
+end;
+{$define USESEMTRYWAIT} // sem_timedwait() is slower than our manual wait
+{$ifdef USESEMTRYWAIT}
+var time: timespec;
+{$else}
+var start,current: Int64;
+    elapsed: LongWord;
 {$endif}
+begin
+  if Timeout=INFINITE then begin
+    SetResult(sem_wait(E.FEvent));
+    exit;
+  end;
+  if TimeOut=0 then begin
+    SetResult(sem_trywait(E.FEvent));
+    exit;
+  end;
+  {$ifdef USESEMTRYWAIT}
+  clock_gettime(CLOCK_REALTIME,time);
+  inc(time.tv_sec,TimeOut div 1000);
+  inc(time.tv_nsec,(TimeOut mod 1000)*1000000);
+  while time.tv_nsec>1000000000 do begin
+    inc(time.tv_sec);
+    dec(time.tv_nsec,1000000000);
+  end;
+  SetResult(sem_timedwait(E.FEvent,time));
+  {$else}
+  start := GetTickCount64;
+  repeat
+     if sem_trywait(E.FEvent)=0 then begin
+       result := wrSignaled;
+       break;
+     end;
+     current := GetTickCount64;
+     elapsed := current-start;
+     if elapsed=0 then
+       sched_yield else
+     if elapsed>TimeOut then begin
+       result := wrTimeOut;
+       break;
+     end else
+     if elapsed<5 then
+       usleep(50) else
+       usleep(1000);
+  until false;
+  {$endif}
+  if E.FManualReset then begin
+    repeat until sem_trywait(E.FEvent)<>0; // reset semaphore state
+    sem_post(E.FEvent);
+  end;
+end;
+
+{$else KYLIX3} // original FPC or Windows is OK:
+
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+begin
+  result := Event.WaitFor(TimeOut);
+end;
+
+{$endif KYLIX3}
 
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
   SetPendingProcess(flagDestroying);
   fProcessEvent.SetEvent;  // notify terminated
-  fCallerEvent.WaitFor(INFINITE);
+  FixedWaitFor(fCallerEvent,INFINITE);
   FreeAndNil(fProcessEvent);
   FreeAndNil(fCallerEvent);
   DeleteCriticalSection(fPendingProcessLock);
@@ -42078,7 +42173,7 @@ begin
     fOnBeforeExecute(self);
   try
     while not Terminated do
-      case fProcessEvent.WaitFor(INFINITE) of
+      case FixedWaitFor(fProcessEvent,INFINITE) of
         wrSignaled:
           case GetPendingProcess of
           flagDestroying: begin
@@ -42127,7 +42222,7 @@ function OnIdleProcessNotify: integer;
 begin
   result := GetTickCount64-start;
   if result<0 then
-    result := maxInt; // just ignore any 32 bit overflow
+    result := MaxInt; // should happen only under XP -> ignore
   if Assigned(fOnIdle) then
     fOnIdle(self,result) ;
 end;
@@ -42153,20 +42248,25 @@ begin
     end;
     if IsIdle then
       break;
-    case OnIdleProcessNotify of // GetTickCount64 resolution is 10-16 ms
-    0..30:   Sleep(0);
-    31..100: Sleep(1);
-    else     Sleep(5);
+    case OnIdleProcessNotify of // Windows.GetTickCount64 res is 10-16 ms
+    0..30:   SleepHiRes(0);
+    31..100: SleepHiRes(1);
+    else     SleepHiRes(5);
     end;
   until false;
-  // process execution in the background thread 
+  // process execution in the background thread
   fBackgroundException := nil;
   fCallerThreadID := ThreadID;
   fParam := OpaqueParam;
   try
     fProcessEvent.SetEvent; // notify background thread for Call pending process
-    while fCallerEvent.WaitFor(100)<>wrSignaled do
-      OnIdleProcessNotify;
+    {$ifdef MSWINDOWS} // do process the OnIdle only if UI
+    if Assigned(fOnIdle) then begin
+      while FixedWaitFor(fCallerEvent,100)<>wrSignaled do
+        OnIdleProcessNotify;
+    end else
+    {$endif}
+      FixedWaitFor(fCallerEvent,INFINITE);
     assert(fPendingProcessFlag=flagFinished);
     if fBackgroundException<>nil then begin
       E := fBackgroundException;

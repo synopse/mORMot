@@ -1399,7 +1399,7 @@ begin
   // 5. if we worked on a .tmp file (recreated from a TZipReader) -> make it new
   if fDestFileName<>'' then begin
     if not DeleteFile(fDestFileName) then begin
-      Sleep(100);
+      SleepHiRes(100);
       if not DeleteFile(fDestFileName) then assert(false); end;
     RenameFile(fFileName,fDestFileName); // '.tmp' -> '.bjt' ou '.zip'
   end;

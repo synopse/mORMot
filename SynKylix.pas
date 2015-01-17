@@ -78,7 +78,7 @@ const
   NOERROR = 0;
   NO_ERROR = 0;
   INVALID_HANDLE_VALUE = THandle(-1);
-  INFINITE = LongWord(-1);
+  INFINITE = LongWord($FFFFFFFF);
 
   LOCALE_USER_DEFAULT = $400;
   NORM_IGNORECASE = 1;
@@ -87,7 +87,12 @@ const
   FILE_CURRENT = SEEK_CUR;
   FILE_END = SEEK_END;
 
+  CLOCK_MONOTONIC = 1;
+  CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
+
+  
 /// compatibility function, wrapping Win32 API high resolution timer
+// - this version will return the CLOCK_MONOTONIC value, with a 1 ns resolution
 procedure QueryPerformanceCounter(var Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
@@ -117,10 +122,12 @@ function GetLargeFileSize(const aFile: AnsiString): int64;
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time as TSystemTime
-function GetNowUTCSystem: TSystemTime;
+procedure GetNowUTCSystem(var result: TSystemTime);
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
+// - will use CLOCK_MONOTONIC_COARSE, available since Linux 2.6.32, which
+// is very fast, and has a 1 ms resolution
 function GetTickCount64: Int64;
 
 /// compatibility function, to be implemented according to the running OS
@@ -140,13 +147,15 @@ function IconvBufConvert(context: iconv_t;
   Src: pointer; SrcBytes, SrcCharSize: Integer;
   Dest: pointer; DestBytes, DestCharSize: integer): pointer;
 
+/// similar to Windows sleep() API call, to be truly cross-platform
+// - it should have a millisecond resolution, and handle ms=0 as a switch to
+// another pending thread, i.e. call sched_yield() API
+procedure SleepHiRes(ms: cardinal); 
+
 
 implementation
 
 const
-  CLOCK_REALTIME  = 0;
-  CLOCK_MONOTONIC = 1;
-
   C_THOUSAND = Int64(1000);
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
@@ -160,13 +169,10 @@ end;
 
 function QueryPerformanceFrequency(var Value: Int64): boolean;
 var r: TTimeSpec;
-    FIsHighResolution: boolean;
 begin
-  FIsHighResolution := (clock_getres(CLOCK_MONOTONIC,r) = 0);
-  FIsHighResolution := FIsHighResolution and (r.tv_nsec <> 0);
-  if (r.tv_nsec <> 0) then
+  result := (clock_getres(CLOCK_MONOTONIC,r)=0) and (r.tv_nsec<>0);
+  if result then
     value := C_BILLION div (r.tv_nsec+(r.tv_sec*C_BILLION));
-  result := FIsHighResolution;
 end;
 
 function SetFilePointer(hFile: THandle; lDistanceToMove: integer;
@@ -226,58 +232,61 @@ begin
     result := 0;
 end;
 
-const { Date Translation }
-  C1970=2440588;
-  D0   =   1461;
-  D1   = 146097;
-  D2   =1721119;
+const  
+  HoursPerDay = 24;
+  MinsPerHour = 60;
+  SecsPerMin  = 60;
+  SecsPerHour = MinsPerHour*SecsPerMin;
+  SecsPerDay  = HoursPerDay*SecsPerHour;
+  C1970       = 2440588;
+  D0          = 1461;
+  D1          = 146097;
+  D2          = 1721119;
 
-Procedure JulianToGregorian(JulianDN:LongInt;out Year,Month,Day:Word);
-Var YYear,XYear,Temp,TempMonth : LongInt;
-Begin
+procedure JulianDaysNumberToGregorian(JulianDN: integer; out Year,Month,Day: Word);
+var YYear,XYear,Temp,TempMonth: integer;
+begin // see http://en.wikipedia.org/wiki/Julian_day
   Temp := ((JulianDN-D2) shl 2)-1;
-  JulianDN := Temp Div D1;
-  XYear := (Temp Mod D1) or 3;
-  YYear := (XYear Div D0);
+  JulianDN := Temp div D1;
+  XYear := (Temp mod D1) or 3;
+  YYear := (XYear div D0);
   Temp := ((((XYear mod D0)+4) shr 2)*5)-3;
-  Day := ((Temp Mod 153)+5) Div 5;
-  TempMonth := Temp Div 153;
-  If TempMonth>=10 Then Begin
-     inc(YYear);
-     dec(TempMonth,12);
-   End;
+  Day := ((Temp mod 153)+5) div 5;
+  TempMonth := Temp div 153;
+  if TempMonth>=10 then begin
+    inc(YYear);
+    dec(TempMonth,12);
+  end;
   inc(TempMonth,3);
   Month := TempMonth;
   Year := YYear+(JulianDN*100);
 end;
 
-Procedure EpochToLocal(epoch:longint; out year,month,day,hour,minute,second:Word);
-{ Transforms Epoch time into local time (hour, minute,seconds) }
-Var DateNum: LongInt;
+procedure TimeValToSystemTime(const tz: TTimeVal; var result: TSystemTime);
+var days, secs: integer;
 begin
-  Datenum := (Epoch Div 86400) + c1970;
-  JulianToGregorian(DateNum,Year,Month,day);
-  Epoch := Abs(Epoch Mod 86400);
-  Hour := Epoch Div 3600;
-  Epoch := Epoch Mod 3600;
-  Minute := Epoch Div 60;
-  Second := Epoch Mod 60;
+  days := tz.tv_sec div SecsPerDay;
+  JulianDaysNumberToGregorian(days+c1970,result.Year,result.Month,result.Day);
+  secs := abs(tz.tv_sec mod SecsPerDay);
+  result.hour := secs div SecsPerHour;
+  secs := secs mod SecsPerHour;
+  result.minute := secs div SecsPerMin;
+  result.second := secs mod SecsPerMin;
+  result.MilliSecond := tz.tv_usec div 1000;
 end;
 
 function GetNowUTC: TDateTime;
 var SystemTime: TSystemTime;
 begin
-  SystemTime := GetNowUTCSystem;
+  GetNowUTCSystem(SystemTime);
   result := SystemTimeToDateTime(SystemTime);
 end;
 
-function GetNowUTCSystem: TSystemTime;
+procedure GetNowUTCSystem(var result: TSystemTime);
 var tz: TTimeVal;
 begin
   gettimeofday(tz,nil);
-  EpochToLocal(tz.tv_sec,result.Year,result.Month,result.Day,
-    result.Hour,result.Minute,result.Second);
-  result.MilliSecond := tz.tv_usec div 1000;
+  TimeValToSystemTime(tz,result);
 end;
 
 procedure GetLocalTime(var result: TSystemTime);
@@ -298,10 +307,10 @@ begin
 end;
 
 function GetTickCount64: Int64;
-var tp: TTimeVal;
+var r: TTimeSpec;
 begin
-  gettimeofday(tp, nil);
-  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_usec div 1000);
+  clock_gettime(CLOCK_MONOTONIC_COARSE,r);
+  result := Int64(r.tv_sec)*C_THOUSAND+(cardinal(r.tv_nsec) div 1000000); // in ms
 end;
 
 function GetTickCount: cardinal;
@@ -350,5 +359,11 @@ begin
   result := Dest;
 end;
 
+procedure SleepHiRes(ms: cardinal);
+begin
+  if ms=0 then
+    sched_yield else
+    usleep(ms shl 10); // from ms to us
+end;
 
 end.

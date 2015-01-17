@@ -5304,7 +5304,7 @@ begin
       if fConnections[result].Opened then
         if fConnections[result].Locked then
           if retry mod length(fConnections)=0 then
-            Sleep(2) else
+            SleepHiRes(2) else
             continue else
           break;
     end;

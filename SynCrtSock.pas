@@ -2657,6 +2657,16 @@ begin
   result := GetPeerName(Sock,Sin)=0;
 end;
 
+{$ifdef MSWINDOWS}
+procedure SleepHiRes(ms: cardinal);
+begin
+  {$ifndef FPC} // function SwitchToThread oddly not defined in fpc\rtl\win
+  if (ms<>0) or not SwitchToThread then
+  {$endif}
+    Windows.Sleep(ms);
+end;
+{$endif}
+
 function TCrtSocket.SockReceiveString: RawByteString;
 var Size, L, Read: integer;
 begin
@@ -2665,12 +2675,12 @@ begin
     exit;
   L := 0;
   repeat
-    Sleep(0);
+    SleepHiRes(0);
     if IOCtlSocket(Sock, FIONREAD, Size)<>0 then // get exact count
       exit;
     if Size=0 then // connection broken
       if result='' then begin // wait till something
-        Sleep(10); // 10 ms delay in infinite loop
+        SleepHiRes(10); // 10 ms delay in infinite loop
         continue;
       end else
         break;
@@ -2992,7 +3002,7 @@ begin
       if fInternalHttpServerRespList.Count=0 then
         break;
       LeaveCriticalSection(fProcessCS);
-      sleep(100);
+      SleepHiRes(100);
       EnterCriticalSection(fProcessCS);
     until (GetTickCount>StopTick) or (GetTickCount<StartTick);
     FreeAndNil(fInternalHttpServerRespList);
@@ -3033,7 +3043,7 @@ begin
     while not Terminated do begin
       ClientSock := Accept(Sock.Sock,Sin);
       if ClientSock<0 then begin
-        sleep(0);
+        SleepHiRes(0);
         continue;
       end;
       if Terminated or (Sock=nil) then begin
@@ -3059,7 +3069,7 @@ abort:  Shutdown(ClientSock,1);
       if not fThreadPool.Push(ClientSock) then begin
         for i := 1 to 1500 do begin
           inc(fThreadPoolContentionCount);
-          sleep(20); // wait a little until a thread gets free
+          SleepHiRes(20); // wait a little until a thread gets free
           if fThreadPool.Push(ClientSock) then
             Break;
         end;
@@ -3260,12 +3270,12 @@ begin
           // no data available -> wait for keep alive timeout
           inc(nSleep);
           if nSleep<150 then
-            sleep(0) else
+            SleepHiRes(0) else
           if nSleep<160 then
-            sleep(1) else
+            SleepHiRes(1) else
           if nSleep<200 then
-            sleep(2) else
-            sleep(10);
+            SleepHiRes(2) else
+            SleepHiRes(10);
         end else begin
           // get request and headers
           nSleep := 0;
@@ -5107,7 +5117,7 @@ begin
     for i := 1 to 500 do
       if fExecuteFinished then
         break else
-        sleep(10);
+        SleepHiRes(10);
     {$endif}
   finally
     inherited Destroy;

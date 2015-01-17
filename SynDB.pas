@@ -4140,7 +4140,7 @@ begin
     end;
     if result or (GetTickCount64>endTrial) then
       break;
-    sleep(1);
+    SleepHiRes(1);
   until false;
 end;
 
@@ -7550,7 +7550,7 @@ begin
     fProxy.Process(cTryStartTransaction,self,started);
     if started or (GetTickCount64>endTrial) then
       break;
-    sleep(10); // retry every 10 ms
+    SleepHiRes(10); // retry every 10 ms
   until false;
   if not started then begin
     inherited Rollback; // dec(fTransactionCount)

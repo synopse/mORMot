@@ -2161,8 +2161,7 @@ begin
     ' with code page '+IntToString(GetACP)
     {$else}
     {$ifdef LINUX}
-    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)+' '+
-    string(uts.version)
+    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)+' '+string(uts.version)
     {$endif}
     {$endif};
   fillchar(A,sizeof(A),0);
@@ -7590,10 +7589,8 @@ begin
   SoundexValues[3] := 'mohammad';
   SoundexValues[4] := 'mohhhammeeet';
   SoundexValues[5] := 'bonjourtr'+_uE8+'slongmotquid'+_uE9+'passe';
-  if (PosEx(RawUTF8(' engine used:'),Owner.CustomVersions,1)=0) and
-     (sqlite3<>nil) then
-    Owner.CustomVersions := Format('%s'#13#10'%s engine used: %s',
-      [Owner.CustomVersions,sqlite3.ClassName,sqlite3.libversion]);
+  if Pos('TSQLite3Library',Owner.CustomVersions)=0 then
+    Owner.CustomVersions := Owner.CustomVersions+#13#10+string(sqlite3.Information);
   if ClassType=TTestMemoryBased then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';
@@ -12191,7 +12188,7 @@ begin
       if (fDatabase<>nil) and (fDatabase.AcquireWriteMode=amMainThread) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
       {$endif}
-      Sleep(0);
+      SleepHiRes(0);
       allFinished := true;
       for n := 0 to fRunningThreadCount-1 do
         if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then begin
@@ -12329,7 +12326,7 @@ begin
   try
     Rec.LastName := 'Thread '+CardinalToHex(GetCurrentThreadId);
     while not Terminated do
-    case fEvent.WaitFor(INFINITE) of
+    case FixedWaitFor(fEvent,INFINITE) of
       wrSignaled:
         if fProcessFinished then // from Destroy
           break else

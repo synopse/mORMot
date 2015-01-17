@@ -1121,6 +1121,8 @@ type
   // - if your project refers to SynSQLite3Static unit, it will initialize a
   // TSQLite3LibrayStatic instance
   TSQLite3Library = class
+  protected
+    fUseInternalMM: boolean;
   public
     /// initialize the SQLite3 database code
     // - automaticaly called by the initialization block of this unit
@@ -1931,7 +1933,10 @@ type
     /// will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
     // under multi-process activity
+    // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
+    /// will return the class name and SQLite3 version number
+    function Information: RawUTF8;
   end;
 
   /// allow access to an exernal SQLite3 library engine
@@ -3324,7 +3329,7 @@ begin
   if sqlite3=nil then
     raise ESQLite3Exception.Create('No SQLite3 libray available: you shall '+
       'either add SynSQLite3Static to your project uses clause, '+
-      'either set sqlite3 := TSQLite3LibraryDynamic.Create to load sqlite3.dll');
+      'or run sqlite3 := TSQLite3LibraryDynamic.Create');
   {$ifdef WITHLOG}
   fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
@@ -3332,7 +3337,8 @@ begin
   fOpenV2Flags := aOpenV2Flags;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
-    raise ESQLite3Exception.Create('Your version of SQLite3 does not support custom OpenV2Flags');
+    raise ESQLite3Exception.Create(
+      'Your version of SQLite3 does not support custom OpenV2Flags');
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
@@ -3781,7 +3787,7 @@ begin
     if TimeOutSeconds<0 then // TimeOutSeconds=-1 for infinite wait
       while fBackupBackgroundInProcess<>nil do Sleep(10) else begin
       for i := 1 to TimeOutSeconds*100 do begin // wait for process end
-        Sleep(10);
+        SleepHiRes(10);
         if fBackupBackgroundInProcess=nil then
           exit;
       end;
@@ -3790,7 +3796,7 @@ begin
         fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion 
       UnLock;
       for i := 1 to 500 do begin // wait 5 seconds for process to be aborted
-        Sleep(10);
+        SleepHiRes(10);
         if fBackupBackgroundInProcess=nil then
           break;
       end;
@@ -3828,22 +3834,26 @@ begin
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
-  {$ifndef MSWINDOWS}
+  {$ifdef LINUX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,'unix-excl');
+  if assigned(sqlite3.open_v2) then begin
+    result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,'unix-excl');
+    if result<>SQLITE_OK then // may be 'unix-excl' is not supported by the library
+      result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,nil);
+  end else
   {$else}
   if fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE) then
     result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,nil) else
-    result := sqlite3.open(pointer(utf8),fDB);
   {$endif}
+    result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
     if Log<>nil then
       {$ifdef DELPHI5OROLDER}
       Log.Log(sllError,'Open('+utf8+') error '+sqlite3_resultToErrorText(result));
       {$else}
-      Log.Log(sllError,'open ("%") failed with error % (%)',
-        [utf8,sqlite3_resultToErrorText(result),result]);
+      Log.Log(sllError,'open ("%") failed with error % (%): %',
+        [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
       {$endif}
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
@@ -3922,12 +3932,12 @@ end;
 
 procedure TSQLDataBase.SetCacheSize(const Value: cardinal);
 begin
-  ExecuteNoException('PRAGMA cache_size='+Int32ToUTF8(Value));
+  ExecuteNoException('PRAGMA cache_size='+UInt32ToUTF8(Value));
 end;
 
 procedure TSQLDataBase.SetSynchronous(const Value: TSQLSynchronousMode);
 begin
-  ExecuteNoException('PRAGMA synchronous='+Int32ToUTF8(ord(Value)));
+  ExecuteNoException('PRAGMA synchronous='+UInt32ToUTF8(ord(Value)));
 end;
 
 procedure TSQLDataBase.SetMemoryMappedMB(const Value: cardinal);
@@ -4842,7 +4852,7 @@ begin
         end;
         if Terminated then
           raise ESQLite3Exception.Create('Backup process forced to terminate');
-        Sleep(fStepSleepMS);
+        SleepHiRes(fStepSleepMS);
       until false;
       NotifyProgressAndContinue(backupSuccess);
     finally
@@ -4905,9 +4915,12 @@ procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
 end;
 var mem: TSQLite3MemMethods;
+    res: integer;
 begin
+  {$ifndef FPC}   // better stay away from FPC memory manager
   {$ifndef CPU64} // not working under Win64
   if not Assigned(config) then
+  {$endif}
   {$endif}
     exit;
   mem.xMalloc := @xMalloc;
@@ -4918,11 +4931,27 @@ begin
   mem.xInit := @xInit;
   mem.xShutdown := @xShutdown;
   mem.pAppData := nil; 
-  if config(SQLITE_CONFIG_MALLOC,@mem)<>SQLITE_OK then begin
+  res := config(SQLITE_CONFIG_MALLOC,@mem);
+  if res<>SQLITE_OK then begin
+    writeln('external MM failure');
     {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failure');
+    {$ifdef DELPHI5OROLDER}
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed');
+    {$else}
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]);
     {$endif}
-  end;
+    {$endif}
+  end else
+    fUseInternalMM := true;
+end;
+
+function TSQLite3Library.Information: RawUTF8;
+const MM: array[boolean] of string[2] = ('ex','in');
+begin
+  if self=nil then
+    result := 'No TSQLite3Library available' else
+    result := FormatUTF8('% running % with %ternal MM',
+      [ClassName,libversion,MM[fUseInternalMM]]);
 end;
 
 
@@ -4965,7 +4994,7 @@ begin
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
     FreeLibrary(fHandle);
     fHandle := 0;
-    raise ESQLite3Exception.CreateFmt('Invalid %s - need a recent Sqlite3 engine',
+    raise ESQLite3Exception.CreateFmt('TOO OLD %s - need revision 3.7 at least!',
       [LibraryName]);
   end; // some APIs like Lib.key() or Lib.trace() may not be available
   {$ifdef WITHLOG}
@@ -4989,4 +5018,4 @@ initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.

@@ -96,31 +96,37 @@ uses
 implementation
 
 
-initialization
+procedure DoInitialization;
+var libName: TFileName;
+begin
   FreeAndNil(sqlite3);
   try
     {$ifdef MSWINDOWS}
     {$ifdef CPU64}
     // see http://synopse.info/files/SQLite3-64.7z
-    sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3-64.dll');
+    libName := 'sqlite3-64.dll';
     {$else}
-    sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll');
+    libName := 'sqlite3.dll';
     {$endif}
     {$else}
     {$ifdef Linux}
-    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.so.0');
+    libName := 'libsqlite3.so.0';
     {$else}
-    sqlite3 := TSQLite3LibraryDynamic.Create('libsqlite3.dylib');
+    libName := 'libsqlite3.dylib';
     {$endif}
-    //{$LINK libsqlite3}
     {$endif}
+    sqlite3 := TSQLite3LibraryDynamic.Create(libName);        
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do
       {$ifdef LINUX}
-      writeln(E.ClassName,': ',E.Message);
+      writeln(libName,' initialization failed with ',E.ClassName,': ',E.Message);
       {$endif}
   end;
+end;
+
+initialization
+  DoInitialization;
 
 {$else}
 uses
@@ -317,6 +323,8 @@ asm
   jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
 {$endif FPC}
+
+// those functions will be called only under Windows
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
   {$ifdef FPC}alias : '_malloc';{$endif}
@@ -1262,10 +1270,12 @@ begin
   config               := @sqlite3_config;  
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
-  sqlite3_initialize;
-  {$ifdef FPC} // only Delphi .obj are using already FastMM4
-  ForceToUseSharedMemoryManager;
+  {$ifdef FPC}
+  ForceToUseSharedMemoryManager; // before sqlite3_initialize
+  {$else}
+  fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$endif}
+  sqlite3_initialize;
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
@@ -1280,4 +1290,4 @@ initialization
   sqlite3 := TSQLite3LibraryStatic.Create;
 {$endif NOSQLITE3STATIC}
 
-end.
+end.

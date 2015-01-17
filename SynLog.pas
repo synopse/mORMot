@@ -2083,7 +2083,7 @@ begin
   SetCurrentThreadName('TSynLog AutoFlush',[]);
   repeat
     for i := 1 to 10 do begin // check every second for pending data
-      Sleep(100);
+      SleepHiRes(100);
       if AutoFlushThread=0 then
         exit; // avoid GPF
     end;
@@ -2751,7 +2751,7 @@ begin
     OutputDebugStringA(pointer(Msg));
     {$endif}
     {$ifdef LINUX}
-    Writeln(Msg);
+    //write(Msg);
     {$endif}
   end;
   {$ifndef FPC_OR_PUREPASCAL}
@@ -3114,7 +3114,7 @@ begin
           break;
         except
           on Exception do
-            Sleep(100);
+            SleepHiRes(100);
         end;
         if fWriterStream<>nil then
           break;

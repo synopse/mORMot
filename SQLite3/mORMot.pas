@@ -26427,14 +26427,14 @@ begin
   if fPendingRows<>'' then begin
     fNotifier.SetEvent;
     for i := 1 to 200 do begin
-      Sleep(10);
+      SleepHiRes(10);
       if fPendingRows='' then
         break;
     end;
   end;
   fClient := nil; // will notify Execute that the process is finished
   fNotifier.SetEvent;
-  Sleep(50); // wait for Execute to finish
+  SleepHiRes(50); // wait for Execute to finish
   fNotifier.Free;
   DeleteCriticalSection(fLock);
   inherited;
@@ -26456,7 +26456,7 @@ var aText: RawUTF8;
 begin
   SetCurrentThreadName('% "%"',[Self,fClient.Model.Root]);
   while (fClient<>nil) and not Terminated do
-    if fNotifier.WaitFor(INFINITE)=wrSignaled then begin
+    if FixedWaitFor(fNotifier,INFINITE)=wrSignaled then begin
       if Terminated or (fClient=nil) then
         break;
       EnterCriticalSection(fLock);
@@ -26467,7 +26467,7 @@ begin
       try
         while not fClient.InternalRemoteLogSend(aText) do
           for i := 1 to 1000 do begin // retry after 2 seconds delay
-            sleep(10); // 10<50 as in Destroy
+            SleepHiRes(10); // 10<50 as in Destroy
             if Terminated or (fClient=nil) then
               exit;
           end;
@@ -26736,7 +26736,7 @@ begin
       exit;
     dec(Retries);
     if Retries<=0 then break;
-    sleep(100);
+    SleepHiRes(100);
   until false;
 end;
 
@@ -27289,7 +27289,7 @@ begin
     repeat
       Read := FileRead(Handle,P^,L);
       if Read=0 then begin
-        sleep(100); // nothing available -> wait a little and retry
+        SleepHiRes(100); // nothing available -> wait a little and retry
         Read := FileRead(Handle,P^,L);
         if Read=0 then begin // server may be down -> abort
           raise ECommunicationException.Create('ReadString');
@@ -27400,7 +27400,7 @@ function TSQLRestServer.CloseServerNamedPipe: boolean;
 begin
   if fExportServerNamedPipeThread<>nil then begin
     fExportServerNamedPipeThread.Terminate;
-    Sleep(200); // we have sleep(128) in TSQLRestServerNamedPipe.EngineExecute
+    SleepHiRes(200); // we have sleep(128) in TSQLRestServerNamedPipe.EngineExecute
     FreeAndNil(fExportServerNamedPipeThread);
     result := true;
   end else
@@ -27593,7 +27593,7 @@ begin
   Shutdown;
   if GlobalURIRequestServer=self then begin
     GlobalURIRequestServer := nil;
-    sleep(200); // way some time any request is finished in another thread
+    SleepHiRes(200); // way some time any request is finished in another thread
   end;
   // close any running named-pipe or GDI-messages server instance
   {$ifdef MSWINDOWS}
@@ -27622,7 +27622,7 @@ begin
     fSessions.UnLock;
   end;
   repeat
-    Sleep(5);
+    SleepHiRes(5);
   until fStats.CurrentRequestCount=0;
   if aStateFileName<>'' then
     SessionsSaveToFile(aStateFileName);
@@ -28375,7 +28375,7 @@ begin
             TimeOut; // wait up to 2 second by default
             exit;
           end;
-          Sleep(1); // retry every 1 ms
+          SleepHiRes(1); // retry every 1 ms
         until false;
       end;
       else raise EORMException.CreateUTF8('Unexpected Command=% in %.Execute',
@@ -28410,7 +28410,7 @@ begin
         end;
         if GetTickCount64>Start64+LockedTimeOut then
           break; // wait up to 2 second by default
-        Sleep(1); // retry every 1 ms
+        SleepHiRes(1); // retry every 1 ms
       until false;
       TimeOut;
     end;
@@ -30963,7 +30963,7 @@ begin
       TSQLRestServerNamedPipeResponse(fChild[i]).Terminate;
     end;
   while fChildCount>0 do
-    Sleep(64); // wait for all TSQLRestServerNamedPipeResponse.Destroy
+    SleepHiRes(64); // wait for all TSQLRestServerNamedPipeResponse.Destroy
   fChild.Free;
   inherited;
 end;
@@ -31003,7 +31003,7 @@ begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
           break;
         end
         else break // invalid request
-      else Sleep(128); // doesn't slow down connection but decreases CSwitch
+      else SleepHiRes(128); // doesn't slow down connection but decreases CSwitch
     if aPipe<>0 then begin
       DisconnectNamedPipe(aPipe);
       CloseHandle(aPipe);
@@ -31092,7 +31092,7 @@ begin
           Ticks64 := GetTickCount64+20; // start sleeping after 20 ms
           ClientTimeOut64 := Ticks64+30*60*1000;
           Sleeper64 := 0;
-          Sleep(0);
+          SleepHiRes(0);
         except
           on Exception do // error in ReadString() or fServer.URI()
             break; // disconnect client
@@ -31102,12 +31102,12 @@ begin
     if (Ticks64=0) or (GetTickCount64>Ticks64) then begin
       if Sleeper64<128 then
         inc(Sleeper64,16);
-      Sleep(Sleeper64); // doesn't slow down connection but decreases CSwitch
+      SleepHiRes(Sleeper64); // doesn't slow down connection but decreases CSwitch
       Ticks64 := 0;
       if GetTickCount64>ClientTimeOut64 then
         break; // disconnect client after 30 min of inactivity
     end else
-      Sleep(0);
+      SleepHiRes(0);
   finally
     DisconnectNamedPipe(fPipe);
     CloseHandle(fPipe);
@@ -31162,7 +31162,7 @@ begin
   StartTime64 := GetTickCount64;
   CreatePipe;
   while (Pipe=INVALID_HANDLE_VALUE) and (GetLastError=ERROR_FILE_NOT_FOUND) do begin
-    sleep(10); // wait for TSQLRestServerNamedPipe.EngineExecute to be reached
+    SleepHiRes(10); // wait for TSQLRestServerNamedPipe.EngineExecute to be reached
     CreatePipe;
     if (Pipe<>INVALID_HANDLE_VALUE) or (GetTickCount64>StartTime64+500) then
       break;
@@ -31173,7 +31173,7 @@ begin
     Log.Log(sllDebug,'Busy % -> retry',[fPipeName],self);
     {$endif}
     repeat
-      sleep(10);
+      SleepHiRes(10);
       if WaitNamedPipe(pointer(fPipeName),50) then begin
         CreatePipe;
         if GetLastError<>ERROR_PIPE_BUSY then
@@ -31234,10 +31234,10 @@ begin
     try
       Card := MAGIC_SYN; // magic word
       if FileWrite(fServerPipe,Card,4)<>4 then begin
-        Sleep(0); 
+        SleepHiRes(0); 
         WaitNamedPipe(pointer(fPipeName),200);
         if FileWrite(fServerPipe,Card,4)<>4 then begin // pipe may be broken
-          Sleep(10); 
+          SleepHiRes(10); 
           FileClose(fServerPipe);
           fServerPipe := 0;
           if not InternalCheckOpen then // recreate connection
@@ -31271,7 +31271,7 @@ begin
           Call.OutBody := ReadString(fServerPipe);
           exit;
         end else
-        Sleep(i);
+        SleepHiRes(i);
       Call.OutStatus := HTML_TIMEOUT; // 408 Request Timeout Error
 {$else}
       if FileRead(fServerPipe,Call.OutStatus,sizeof(Int64))=sizeof(Int64) then begin
@@ -34879,7 +34879,7 @@ begin
             TranslateMessage(aMsg);
             DispatchMessage(aMsg);
           end;
-        Sleep(0);
+        SleepHiRes(0);
         if GetTickCount64>Finished64 then begin
           Call.OutStatus := HTML_TIMEOUT; // 408 Request Timeout Error
           exit;

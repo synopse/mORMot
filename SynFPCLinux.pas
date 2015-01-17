@@ -106,7 +106,7 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time as TSystemTime
-function GetNowUTCSystem: TSystemTime;
+procedure GetNowUTCSystem(var result: TSystemTime);
 
 /// a wrapper around stat() to retrieve a file age
 function GetFileAgeAsDateTime(const FileName: string): TDateTime;
@@ -123,6 +123,11 @@ function GetTickCount64: Int64;
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
 function GetTickCount: cardinal;
+
+/// similar to Windows sleep() API call, to be truly cross-platform
+// - it should have a millisecond resolution, and handle ms=0 as a switch to
+// another pending thread, i.e. call sched_yield() API
+procedure SleepHiRes(ms: cardinal); 
 
 
 implementation
@@ -142,56 +147,57 @@ begin
   DoneCriticalSection(cs);
 end;
 
-// some of these functions are copied from lazutf8sysutils to remove the dependency
-// from Lazarus this allows for the use of only FPC for command line compilation
 {$ifdef Linux}
 
-const { Date Translation }
-  C1970=2440588;
-  D0   =   1461;
-  D1   = 146097;
-  D2   =1721119;
+const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
+  HoursPerDay = 24;
+  MinsPerHour = 60;
+  SecsPerMin  = 60;
+  MinsPerDay  = HoursPerDay*MinsPerHour;
+  SecsPerDay  = MinsPerDay*SecsPerMin;
+  SecsPerHour = MinsPerHour*SecsPerMin;
+  C1970       = 2440588;
+  D0          = 1461;
+  D1          = 146097;
+  D2          = 1721119;
 
-Procedure JulianToGregorian(JulianDN:LongInt;out Year,Month,Day:Word);
-Var YYear,XYear,Temp,TempMonth : LongInt;
-Begin
+procedure JulianToGregorian(JulianDN: integer; out Year,Month,Day: Word);
+var YYear,XYear,Temp,TempMonth: integer;
+begin
   Temp := ((JulianDN-D2) shl 2)-1;
-  JulianDN := Temp Div D1;
-  XYear := (Temp Mod D1) or 3;
-  YYear := (XYear Div D0);
+  JulianDN := Temp div D1;
+  XYear := (Temp mod D1) or 3;
+  YYear := (XYear div D0);
   Temp := ((((XYear mod D0)+4) shr 2)*5)-3;
-  Day := ((Temp Mod 153)+5) Div 5;
-  TempMonth := Temp Div 153;
-  If TempMonth>=10 Then Begin
-     inc(YYear);
-     dec(TempMonth,12);
-   End;
+  Day := ((Temp mod 153)+5) div 5;
+  TempMonth := Temp div 153;
+  if TempMonth>=10 then begin
+    inc(YYear);
+    dec(TempMonth,12);
+  end;
   inc(TempMonth,3);
   Month := TempMonth;
   Year := YYear+(JulianDN*100);
 end;
 
-Procedure EpochToLocal(epoch:longint;out year,month,day,hour,minute,second:Word);
-{ Transforms Epoch time into local time (hour, minute,seconds) }
-Var DateNum: LongInt;
-Begin
-  Datenum := (Epoch Div 86400) + c1970;
-  JulianToGregorian(DateNum,Year,Month,day);
-  Epoch := Abs(Epoch Mod 86400);
-  Hour := Epoch Div 3600;
-  Epoch := Epoch Mod 3600;
-  Minute := Epoch Div 60;
-  Second := Epoch Mod 60;
-End;
+procedure EpochToLocal(epoch: integer; out year,month,day,hour,minute,second: Word);
+begin
+  JulianToGregorian((Epoch div SecsPerDay)+c1970,year,month,day);
+  Epoch := abs(Epoch mod SecsPerDay);
+  Hour := Epoch div SecsPerHour;
+  Epoch := Epoch mod SecsPerHour;
+  Minute := Epoch div SecsPerMin;
+  Second := Epoch mod SecsPerMin;
+end;
 
 function GetNowUTC: TDateTime;
 var SystemTime: TSystemTime;
 begin
-  SystemTime := GetNowUTCSystem;
-  result := systemTimeToDateTime(SystemTime);
+  GetNowUTCSystem(SystemTime);
+  result := SystemTimeToDateTime(SystemTime);
 end;
 
-function GetNowUTCSystem: TSystemTime;
+procedure GetNowUTCSystem(var result: TSystemTime);
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
@@ -304,6 +310,12 @@ begin
     result := FileInfo.st_size else
     result := 0;
 end;
+
+procedure SleepHiRes(ms: cardinal);
+begin
+  SysUtils.Sleep(ms);
+end;
+
 
 {$endif}
 
