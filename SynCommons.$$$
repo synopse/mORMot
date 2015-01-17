@@ -4951,16 +4951,14 @@ type
     property NestedArray: TJSONCustomParserRTTI read fNestedArray;
   end;
 
-  /// implement a reference to a registered record type
-  // - i.e. ptCustom kind of property, handled by the
-  // TTextWriter.RegisterCustomJSONSerializer*() internal list
+  /// implement a record over ptCustom kind of property
   TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
   protected
     fCustomTypeIndex: integer;
     function GetJSONCustomParserRegistration: pointer;
   public
-{    /// initialize the instance from the given RTTI name
-    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override; }
+    /// initialize the instance from the given RTTI name
+    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override;
     /// initialize the instance from the given record custom serialization index
     constructor Create(const aPropertyName: RawUTF8;
       aCustomTypeIndex: integer); reintroduce; overload;
@@ -4974,28 +4972,6 @@ type
 
   /// how an RTTI expression is expected to finish
   TJSONCustomParserRTTIExpectedEnd = (eeNothing, eeSquare, eeCurly, eeEndKeyWord);
-
-  TJSONRecordAbstract = class;
-
-{/// implement a reference to a unregistered record type
-  // - i.e. ptCustom kind of property, not handled by the
-  // TTextWriter.RegisterCustomJSONSerializer*() internal list
-  TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
-  protected
-    fCustomRecord: TJSONRecordAbstract;
-  public
-    /// initialize the instance from the given RTTI name
-    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override;
-    /// initialize the instance from the given record custom serialization index
-    constructor Create(const aPropertyName: RawUTF8;
-      aCustomTypeIndex: integer); reintroduce; overload;
-    /// method to write the instance as JSON
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
-    /// method to read the instance from JSON
-    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
-    /// release any memory used by the instance
-    procedure FinalizeItem(Data: Pointer); override;
-  end;}
 
   /// used to handle additional RTTI for JSON record serialization
   // - this class is used to define how a record is defined, and will work
@@ -26751,7 +26727,7 @@ end;
 
 { TJSONCustomParserCustomRecord }
 
-{constructor TJSONCustomParserCustomRecord.Create(
+constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName, aCustomTypeName: RawUTF8);
 begin
   inherited Create(aPropertyName,aCustomTypeName);
@@ -26767,7 +26743,7 @@ begin
   if fDataSize=0 then
     raise ESynException.CreateUTF8('%.Create("%" non record type)',
       [self,aCustomTypeName]);
-end;}
+end;
 
 constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName: RawUTF8; aCustomTypeIndex: integer);
@@ -26980,7 +26956,11 @@ begin
     if ItemType=ptCustom then
       if Item^.kind in [tkEnumeration,tkArray,tkDynArray] then
         result := TJSONCustomParserCustomSimple.Create(
-          PropertyName,ItemTypeName,Item) else begin
+          PropertyName,ItemTypeName,Item) else
+      {$ifdef ISDELPHI2010} // do not register local types like ':TRECB:1'
+      if (ItemTypeName<>'') and (ItemTypeName[1]=':') then
+        result := TJSONCustomParserRTTI.Create(PropertyName,ptCustom) else
+      {$endif} begin
         ndx := GlobalJSONCustomParsers.RecordSearch(Item);
         if ndx<0 then
           ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
@@ -27713,6 +27693,8 @@ begin // only tkRecord is needed here
   if FieldTable^.AllCount=0 then
     exit; // not enough RTTI -> will raise an error in Create()
   TypeInfoToName(Info,Props.fCustomTypeName);
+  if (Props.fCustomTypeName<>'') and (Props.fCustomTypeName[1]=':') then
+    Props.fCustomTypeName := ''; // ignore local types like ':TRECB:1'
   RecField := @FieldTable^.AllFields[0];
   SetLength(ItemFields,FieldTable^.AllCount);
   for i := 0 to FieldTable^.AllCount-1 do begin
@@ -42458,4 +42440,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
