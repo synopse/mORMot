@@ -2837,7 +2837,7 @@ begin
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
-    AddShort(' '+SYNOPSE_FRAMEWORK_VERSION+' ');
+    AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');
     AddDateTime(Now);
     if WithinEvents then
       AddEndOfLine(sllNone) else
