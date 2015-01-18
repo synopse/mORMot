@@ -241,8 +241,8 @@
     {$ifdef LINUX}
       {$if RTLVersion = 14.5}
         // Kylix 3 will be handled just like Delphi 7
-        {$undef ENHANCEDRTL} // Enhanced Runtime library not fully tested yet
-        {$undef DOPATCHTRTL}
+        {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
+        {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOEXCEPTIONINTERCEPT} // no exception interception yet
         {$define KYLIX3}
