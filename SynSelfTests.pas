@@ -324,11 +324,9 @@ type
 {$endif}
   published
 {$ifndef DELPHI5OROLDER}
-{$ifndef FPC}
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
     procedure RTTI;
-{$endif}
 {$endif}
     /// some low-level Url encoding from parameters
     procedure UrlEncoding;
@@ -2131,10 +2129,8 @@ type TR = record
        Three: byte;
        S2: WideString;
        Five: boolean;
-       {$ifndef LINUX}
-       {$ifndef LVCL}
+       {$ifndef NOVARIANTS}
        V: Variant;
-       {$endif}
        {$endif}
        R: Int64Rec;
        Arr: array[0..10] of AnsiString;
@@ -2153,15 +2149,15 @@ begin
   uname(uts);
   {$endif}
   {$endif}
-  if PosEx('Synopse framework',RawUTF8(Owner.CustomVersions),1)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10'Synopse framework used: '+
-      SYNOPSE_FRAMEWORK_VERSION
+  if Pos('Using mORMot',Owner.CustomVersions)=0 then
+    Owner.CustomVersions := Owner.CustomVersions+#13#10'Using mORMot '+
+      SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+
     {$ifdef MSWINDOWS}
-    +#13#10'Running on '+string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
+    string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
     ' with code page '+IntToString(GetACP)
     {$else}
     {$ifdef LINUX}
-    +#13#10'Running on '+string(uts.sysname)+' '+string(uts.release)+' '+string(uts.version)
+    string(uts.sysname)+' '+string(uts.release)+' '+string(uts.version)
     {$endif}
     {$endif};
   fillchar(A,sizeof(A),0);
@@ -2169,9 +2165,9 @@ begin
   A.S2 := 'two';
   A.Five := true;
   A.Three := $33;
-{$ifndef LINUX}{$ifndef LVCL}
+  {$ifndef NOVARIANTS}
   A.V := 'One Two';
-{$endif}{$endif}
+  {$endif}
   A.R.Lo := 10;
   A.R.Hi := 20;
   A.Arr[5] := 'five';
@@ -2183,7 +2179,9 @@ begin
   Check(A.Three=B.Three);
   Check(A.S2=B.S2);
   Check(A.Five=B.Five);
-  {$ifndef LINUX}{$ifndef LVCL} Check(A.V=B.V); {$endif}{$endif}
+  {$ifndef NOVARIANTS}
+  Check(A.V=B.V);
+  {$endif}
   Check(Int64(A.R)=Int64(B.R));
   Check(A.Arr[5]=B.Arr[5]);
   Check(A.Arr[0]=B.Arr[0]);
@@ -2197,7 +2195,9 @@ begin
   Check(C.Three=3);
   Check(A.S2=C.S2);
   Check(A.Five=C.Five);
-  {$ifndef LINUX}{$ifndef LVCL} Check(A.V=C.V); {$endif}{$endif}
+  {$ifndef NOVARIANTS}
+  Check(A.V=C.V);
+  {$endif}
   Check(Int64(A.R)=Int64(C.R));
   Check(A.Arr[5]=C.Arr[5]);
   Check(A.Arr[0]=C.Arr[0]);
@@ -3120,7 +3120,6 @@ begin
       check(data.Field['ansi']=u);
       check(data.Field['ID']=1);
       // test TSynTableVariantType
-      {$ifndef FPC} // waiting for bug fix for DispInvoke/SetProperty
       rec := T.Data;
       check(rec.ID=0);
       rec.ID := 1;
@@ -3160,7 +3159,6 @@ begin
       check(rec.text=u);
       check(rec.ansi=u);
       check(rec.ID=1);
-      {$endif}
     except
       on E: Exception do // variant error could raise exceptions
         Check(false,E.Message);
@@ -5877,7 +5875,6 @@ end;
 
 {$endif LVCL}
 
-{$ifndef FPC}
 type TOrdTypeSet = set of TOrdType;
 
 procedure TTestLowLevelTypes.RTTI;
@@ -5919,7 +5916,6 @@ begin
   Check(InternalMethodInfo(TSQLRestServer,'timestamp')^.MethodAddr=
     TSQLRestServer.MethodAddress('TIMEstamp'));
 end;
-{$endif FPC}
 {$endif DELPHI5OROLDER}
 
 procedure TTestLowLevelTypes.UrlEncoding;
@@ -12396,4 +12392,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+
