@@ -7204,12 +7204,16 @@ type
     ECode: DWord;
     /// the address where the exception occured
     EAddr: PtrUInt;
-    /// the current logging level
+    /// the optional stack trace
+    EStack: PPtrUInt;
+    /// the logging level corresponding to this exception
     // - may be either sllException or sllExceptionOS
-    Level: TSynLogInfo;
+    ELevel: TSynLogInfo;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog
+  // - should return TRUE if all needed information has been logged by the
+  // event handler 
   // - should return FALSE if Context.EAddr and Stack trace is to be appended
   TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 
@@ -18375,11 +18379,6 @@ end;
 {$endif}
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
-{$ifdef LINUX}
-begin
-  result := GetFileAgeAsDateTime(FileName);
-end;
-{$else}
 {$ifdef HASNEWFILEAGE}
 begin
   if not FileAge(FileName,result) then
@@ -18392,7 +18391,6 @@ begin
 {$endif}
     result := 0;
 end;
-{$endif}
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 {$ifdef MSWINDOWS}

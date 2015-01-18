@@ -109,9 +109,6 @@ procedure SetEndOfFile(hFile: integer);
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
-/// a wrapper around stat() to retrieve a file age
-function GetFileAgeAsDateTime(const FileName: string): TDateTime;
-
 /// a wrapper around stat() to retrieve a file size
 function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
 
@@ -203,14 +200,6 @@ begin
   if dwCmpFlags and NORM_IGNORECASE<>0 then
     result := WideCompareText(W1,W2) else
     result := WideCompareStr(W1,W2);
-end;
-
-function GetFileAgeAsDateTime(const FileName: string): TDateTime;
-var FileInfo: TStatBuf64;
-begin
-  if stat64(pointer(FileName),FileInfo)=0 then
-    result := FileDateToDateTime(FileInfo.st_mtime) else
-    result := 0;
 end;
 
 function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;

@@ -244,7 +244,6 @@
         {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
-        {$define NOEXCEPTIONINTERCEPT} // no exception interception yet
         {$define KYLIX3}
         {$define FPC_OR_KYLIX}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
@@ -379,4 +378,4 @@
   {$define NOSQLITE3ENCRYPT}
 {$endif}
 
-
+

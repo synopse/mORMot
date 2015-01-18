@@ -48,6 +48,7 @@ unit SynLog;
   - first public release, extracted from SynCommons.pas unit
   - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
+  - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
   - added TSynLogFile.Freq read-only property
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
     variable, and ESynException.CustomLog() method to customize how raised
@@ -126,9 +127,11 @@ type
     /// symbol internal name
     Name: RawUTF8;
     /// starting offset of this symbol in the executable
-    Start: cardinal;
+    // - addresses are integer, since map be <0 in Kylix .map files
+    Start: integer;
     /// end offset of this symbol in the executable
-    Stop: cardinal;
+    // - addresses are integer, since map be <0 in Kylix .map files
+    Stop: integer;
   end;
   PSynMapSymbol = ^TSynMapSymbol;
   /// a dynamic array of symbols, as decoded by TSynMapFile from a .map file
@@ -159,7 +162,8 @@ type
     fUnit: TSynMapUnitDynArray;
     fSymbols: TDynArray;
     fUnits: TDynArrayHashed;
-    fGetModuleHandle: PtrUInt;
+    fUnitSynLogIndex,fUnitSystemIndex: integer;
+    fCodeOffset: cardinal;
     fHasDebugInfo: boolean;
   public
     /// get the available debugging information
@@ -190,15 +194,15 @@ type
     // necessary
     // - if no debugging information is available (.map or .mab), will write
     // the address as hexadecimal
-    class procedure Log(W: TTextWriter; Addr: PtrUInt);
+    class procedure Log(W: TTextWriter; Addr: PtrUInt; AllowNotCodeAddr: boolean);
     /// retrieve a symbol according to an absolute code address
-    function FindSymbol(aAddr: cardinal): integer;
+    function FindSymbol(aAddr: integer): integer;
     /// retrieve an unit and source line, according to an absolute code address
-    function FindUnit(aAddr: cardinal; out LineNumber: integer): integer;
+    function FindUnit(aAddr: integer; out LineNumber: integer): integer;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
-    function FindLocation(aAddr: Cardinal): RawUTF8;
+    function FindLocation(aAddr: integer): RawUTF8;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -1062,6 +1066,7 @@ uses
   {$endif} ;
 {$endif}
 
+
 { TSynMapFile }
 
 const
@@ -1144,7 +1149,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
       if (P<PEnd) and (P^=#13) then inc(P);
       if (P<PEnd) and (P^=#10) then inc(P);
     end;
-    function GetCode(var Ptr: cardinal): boolean;
+    function GetCode(var Ptr: integer): boolean;
     begin
       while (P<PEnd) and (P^=' ') do inc(P);
       result := false;
@@ -1261,7 +1266,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
             SetLength(U^.Addr,n);
           end;
           U^.Line[Count] := GetNextItemCardinal(P,' ');
-          if not GetCode(cardinal(U^.Addr[Count])) then
+          if not GetCode(U^.Addr[Count]) then
             break;
           if U^.Addr[Count]<>0 then
             inc(Count); // occured with Delphi 2010 :(
@@ -1352,18 +1357,22 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
 var SymCount, UnitCount, i: integer;
     MabFile: TFileName;
     MapAge, MabAge: TDateTime;
+    U: RawUTF8;
 begin
   fSymbols.Init(TypeInfo(TSynMapSymbolDynArray),fSymbol,@SymCount);
   fUnits.Init(TypeInfo(TSynMapUnitDynArray),fUnit,nil,nil,nil,@UnitCount);
+  fUnitSynLogIndex := -1;
+  fUnitSystemIndex := -1;
   // 1. search for an external .map file matching the running .exe/.dll name
   if aExeName='' then begin
     fMapFile := GetModuleName(hInstance);
     {$ifdef MSWINDOWS}
-    fGetModuleHandle := GetModuleHandle(pointer(
+    fCodeOffset := GetModuleHandle(pointer(ExtractFileName(fMapFile)))+CODE_SECTION;
     {$else}
-    fGetModuleHandle := LoadLibrary(PChar(
+    {$ifdef KYLIX3}
+    fCodeOffset := GetTextStart; // from SysInit.pas
     {$endif}
-      ExtractFileName(fMapFile)))+CODE_SECTION;
+    {$endif}
   end else
     fMapFile := aExeName;
   fMapFile := ChangeFileExt(fMapFile,'.map');
@@ -1372,7 +1381,7 @@ begin
   try
     MapAge := FileAgeToDateTime(fMapFile);
     MabAge := FileAgeToDateTime(MabFile);
-    if (MabAge<=MapAge) and (MapAge>0) then
+    if (MapAge>0) and (MabAge<MapAge) then
       LoadMap; // if no faster-to-load .mab available and accurate
     // 2. search for a .mab file matching the running .exe/.dll name
     if (SymCount=0) and (MabAge<>0) then
@@ -1390,6 +1399,10 @@ begin
       fUnits.Init(TypeInfo(TSynMapUnitDynArray),fUnit);
       if MabCreate then
         SaveToFile(MabFile); // if just created from .map -> create .mab file
+      U := 'SynLog';
+      fUnitSynLogIndex := fUnits.Find(U);
+      U := 'System';
+      fUnitSystemIndex := fUnits.Find(U);
       fHasDebugInfo := true;
     end else
       fMapFile := '';
@@ -1400,7 +1413,7 @@ end;
 
 procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
 var i, n: integer;
-    Diff: cardinal;
+    Diff: integer;
     S: PSynMapSymbol;
     P: PByte;
     Beg: PtrUInt;
@@ -1500,7 +1513,7 @@ begin
   end;
 end;
 
-function TSynMapFile.FindSymbol(aAddr: cardinal): integer;
+function TSynMapFile.FindSymbol(aAddr: integer): integer;
 var L,R: integer;
 begin
   R := high(fSymbol);
@@ -1518,7 +1531,7 @@ begin
   result := -1;
 end;
 
-function TSynMapFile.FindUnit(aAddr: cardinal; out LineNumber: integer): integer;
+function TSynMapFile.FindUnit(aAddr: integer; out LineNumber: integer): integer;
 var L,R,n,max: integer;
 begin
   LineNumber := 0;
@@ -1540,9 +1553,9 @@ begin
         if R>=0 then
         repeat
           n := (L+R) shr 1;
-          if aAddr<cardinal(Addr[n]) then
+          if aAddr<Addr[n] then
             R := n-1 else
-          if (n<max) and (aAddr>=cardinal(Addr[n+1])) then
+          if (n<max) and (aAddr>=Addr[n+1]) then
             L := n+1 else begin
             LineNumber := Line[n];
             exit;
@@ -1557,27 +1570,31 @@ end;
 var
   InstanceMapFile: TSynMapFile;
   
-class procedure TSynMapFile.Log(W: TTextWriter; Addr: PtrUInt);
+class procedure TSynMapFile.Log(W: TTextWriter; Addr: PtrUInt;
+  AllowNotCodeAddr: boolean);
 var u, s, Line: integer;
 begin
   if (W=nil) or (Addr=0) or (InstanceMapFile=nil) then
     exit;
   with InstanceMapFile do
   if HasDebugInfo then begin
-    dec(Addr,fGetModuleHandle);
+    dec(Addr,fCodeOffset);
     s := FindSymbol(Addr);
     u := FindUnit(Addr,Line);
     if s<0 then begin
-      if u<0 then
+      if u<0 then begin
+        if AllowNotCodeAddr then begin
+          W.AddPointer(Addr);
+          W.Add(' ');
+        end;
         exit;
-    end else
-      with PInt64Rec(Symbols[s].Name)^ do
-      if Lo=ord('T')+ord('S')shl 8+ord('y')shl 16+ord('n')shl 24 then
-      case Hi of
-        ord('L')+ord('o')shl 8+ord('g')shl 16+ord('.')shl 24,
-        ord('T')+ord('e')shl 8+ord('s')shl 16+ord('t')shl 24:
-          exit; // don't log stack trace internal to TSynLog.*/TSynTest* methods
       end;
+    end else
+      if (u>=0) and (s>=0) and not AllowNotCodeAddr then
+        if u=fUnitSynLogIndex  then
+          exit else // don't log stack trace internal to SynLog.pas :)
+        if (u=fUnitSystemIndex) and (PosEx('Except',Symbols[s].Name)>0) then
+          exit; // do not log stack trace of System.SysRaiseException
     W.AddPointer(Addr); // only display addresses inside known Delphi code
     W.Add(' ');
     if u>=0 then begin
@@ -1601,13 +1618,13 @@ begin
   end;
 end;
 
-function TSynMapFile.FindLocation(aAddr: Cardinal): RawUTF8;
+function TSynMapFile.FindLocation(aAddr: integer): RawUTF8;
 var u,s,Line: integer;
 begin
   result := '';
   if (aAddr=0) or not HasDebugInfo then
     exit;
-  dec(aAddr,fGetModuleHandle);
+  dec(aAddr,fCodeOffset);
   s := FindSymbol(aAddr);
   u := FindUnit(aAddr,Line);
   if (s<0) and (u<0) then
@@ -1659,15 +1676,108 @@ threadvar
 // - so default method using RTLUnwindProc should be prefered
 {.$define WITH_VECTOREXCEPT}
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+
+var
+  /// used internaly by function GetHandleExceptionSynLog
+  CurrentHandleExceptionSynLog: TSynLog;
+
+// this is the main entry point for all intercepted exceptions
+procedure SynLogException(const Ctxt: TSynLogExceptionContext);
+  function GetHandleExceptionSynLog: TSynLog;
+  var Index: ^TSynLogFileIndex;
+      i: integer;
+      ndx, n: cardinal;
+  begin
+    result := nil;
+    if SynLogFileList=nil then begin
+      // we are here if no log content was generated yet (i.e. no log file yet)
+      for i := 0 to SynLogFamily.Count-1 do
+        with TSynLogFamily(SynLogFamily.List[i]) do
+        if fHandleExceptions then begin
+          result := SynLog;
+          exit;
+        end;
+    end else begin
+      SynLogFileList.Lock;
+      try
+        Index := @SynLogFileIndexThreadVar;
+        n := SynLogFileList.Count;
+        for i := 0 to high(Index^) do begin
+          ndx := Index^[i]-1;
+          if ndx<=n then begin
+            result := TSynLog(SynLogFileList.List[ndx]);
+            if result.fFamily.fHandleExceptions then
+              exit;
+          end;
+        end;
+        for i := 0 to n-1 do begin
+          result := TSynLog(SynLogFileList.List[i]);
+          if result.fFamily.fHandleExceptions then
+            exit;
+        end;
+        result := nil;
+      finally
+        SynLogFileList.UnLock;
+      end;
+    end;
+  end;
+var SynLog: TSynLog;
+begin
+  SynLog := CurrentHandleExceptionSynLog;
+  if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then 
+    SynLog := GetHandleExceptionSynLog;
+  if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
+    exit;
+  if SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0 then
+    exit;
+  if SynLog.LogHeaderLock(Ctxt.ELevel) then
+  try
+    repeat
+      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) and
+         Ctxt.EInstance.InheritsFrom(ESynException) then begin
+        if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
+          break;
+      end else
+      if Assigned(TSynLogExceptionToStrCustom) then begin
+        if TSynLogExceptionToStrCustom(SynLog.fWriter,Ctxt) then
+          break;
+      end else
+        if DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
+          break;
+      SynLog.fWriter.AddShort(' at ');
+      TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
+      {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
+      SynLog.AddStackTrace(Ctxt.EStack);
+      {$endif}
+      break;
+    until false;
+    SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
+    SynLog.fWriter.Flush; // we expect exceptions to be available on disk
+  finally
+    LeaveCriticalSection(SynLog.fThreadLock);
+  end;
+end;
+
 {$ifdef CPU64}
   {$define WITH_VECTOREXCEPT}
 {$endif}
 
 {$ifdef DELPHI5OROLDER}
-// Delphi 5 doesn't define the needed RTLUnwindProc variable :(
-// so we will patch the System.pas RTL in-place
+  {$define WITH_PATCHEXCEPT}
+{$endif}
+
+{$ifdef KYLIX3}
+  // Kylix has a totally diverse exception scheme
+  // see 
+  {$define WITH_MAPPED_EXCEPTIONS}
+{$endif}
+
+{$ifdef WITH_PATCHEXCEPT}
 
 var
+  // Delphi 5 doesn't define the needed RTLUnwindProc variable :(
+  // so we will patch the System.pas RTL in-place
   RTLUnwindProc: Pointer;
 
 procedure PatchCallRtlUnWind;
@@ -1708,54 +1818,118 @@ asm
   mov eax,offset System.@HandleAnyException+200
   call Patch
 end;
-{$endif DELPHI5OROLDER}
 
-{$ifndef NOEXCEPTIONINTERCEPT}
+// the original unwider function, from the Windows API
+procedure oldUnWindProc; external kernel name 'RtlUnwind';
 
-var
-  /// used internaly by function GetHandleExceptionSynLog
-  CurrentHandleExceptionSynLog: TSynLog;
+{$endif WITH_PATCHEXCEPT}
 
-function GetHandleExceptionSynLog: TSynLog;
-var Index: ^TSynLogFileIndex;
-    i: integer;
-    ndx, n: cardinal;
+{$ifdef WITH_MAPPED_EXCEPTIONS} // Kylix specific exception handling
+
+{$W-} // disable stack frame generation (duplicate from Synopse.inc) 
+
+threadvar
+  CurrentTopOfStack: Cardinal;
+
+procedure ComputeCurrentTopOfStack;
+const UNWINDFI_TOPOFSTACK  = $BE00EF00; // from SysInit.pas
+var top: cardinal;
 begin
-  result := CurrentHandleExceptionSynLog;
-  if (result<>nil) and result.fFamily.fHandleExceptions then
-    exit;
-  if SynLogFileList=nil then begin
-    // we are here if no log content was generated yet (i.e. no log file yet)
-    for i := 0 to SynLogFamily.Count-1 do
-      with TSynLogFamily(SynLogFamily.List[i]) do
-      if fHandleExceptions then begin
-        result := SynLog;
-        exit;
-      end;
-  end else begin
-    SynLogFileList.Lock;
-    try
-      Index := @SynLogFileIndexThreadVar;
-      n := SynLogFileList.Count;
-      for i := 0 to high(Index^) do begin
-        ndx := Index^[i]-1;
-        if ndx<=n then begin
-          result := TSynLog(SynLogFileList.List[ndx]);
-          if result.fFamily.fHandleExceptions then
-            exit;
-        end;
-      end;
-      for i := 0 to n-1 do begin
-        result := TSynLog(SynLogFileList.List[i]);
-        if result.fFamily.fHandleExceptions then
-          exit;
-      end;
-    finally
-      SynLogFileList.UnLock;
-    end;
+  asm
+    mov top,esp
   end;
-  result := nil;
+  top := (top and (not 3))+4;
+  try
+    while PCardinal(top)^<>UNWINDFI_TOPOFSTACK do
+      inc(top,4);
+  except
+  end;
+  CurrentTopOfStack := top;
 end;
+
+function IsBadReadPtr(addr: pointer; len: integer): boolean;
+begin
+  try
+    asm
+      mov eax,addr
+      mov ecx,len
+ @s:  mov dl,[eax]
+      inc eax
+      dec ecx
+      jnz @s
+ @e:end;
+    result := false; // if we reached here, everything is ok
+  except
+    result := true;
+  end;
+end;
+
+// types and constants from from System.pas / unwind.h
+
+type
+  PInternalUnwindException = ^TInternalUnwindException; 
+  TInternalUnwindException = packed record
+    exception_class: LongWord;
+    exception_cleanup: Pointer;
+    private_1: pointer;
+    private_2: LongWord;
+  end;
+
+  PInternalRaisedException = ^TInternalRaisedException;
+  TInternalRaisedException = packed record
+    RefCount: Integer;
+    ExceptObject: Exception;
+    ExceptionAddr: PtrUInt;
+    HandlerEBP: LongWord;
+    Flags: LongWord;
+    Cleanup: Pointer;
+    Prev: PInternalRaisedException;
+    ReleaseProc: Pointer;
+  end;
+
+const
+  Internal_UW_EXC_CLASS_BORLANDCPP = $FBEE0001;
+  Internal_UW_EXC_CLASS_BORLANDDELPHI = $FBEE0101;
+  Internal_excIsBeingHandled = $00000001;
+  Internal_excIsBeingReRaised = $00000002;
+
+var oldUnwinder, newUnwinder: TUnwinder;
+
+function HookedRaiseException(Exc: Pointer): LongBool; cdecl;
+var ExcRec: PInternalRaisedException;
+    Ctxt: TSynLogExceptionContext;
+begin
+  if CurrentHandleExceptionSynLog<>nil then
+    if Exc<>nil then begin
+      Ctxt.ECode := PInternalUnwindException(Exc)^.exception_class;
+      case Ctxt.ECode of
+      Internal_UW_EXC_CLASS_BORLANDDELPHI: begin
+        ExcRec := PInternalUnwindException(Exc)^.private_1;
+        if (ExcRec<>nil) and (ExcRec^.ExceptObject is Exception) then begin
+          Ctxt.EInstance := ExcRec^.ExceptObject;
+          Ctxt.EClass := PPointer(Ctxt.EInstance)^;
+          if Ctxt.EInstance is EExternal then begin
+            Ctxt.EAddr := EExternal(Ctxt.EInstance).ExceptionAddress;
+            Ctxt.ELevel := sllExceptionOS;
+          end else begin
+            Ctxt.EAddr := ExcRec^.ExceptionAddr;
+            Ctxt.ELevel := sllException;
+          end;
+          Ctxt.EStack := nil;
+          SynLogException(Ctxt);
+        end;
+        // (ExcRec^.Flags and Internal_excIsBeingHandled)<>0,
+        // (ExcRec^.Flags and Internal_excIsBeingReRaised)<>0);
+      end;
+      Internal_UW_EXC_CLASS_BORLANDCPP: ; // not handled
+      end;
+    end;
+  if Assigned(oldUnwinder.RaiseException) then
+    result := oldUnwinder.RaiseException(Exc) else
+    result := false;
+end;
+
+{$else} // "regular" exception handling as defined in System.pas
 
 type
   PExceptionRecord = ^TExceptionRecord;
@@ -1774,7 +1948,9 @@ type
 const
   cDelphiExcept = $0EEDFAE0;
   cDelphiException = $0EEDFADE;
-  // see http://msdn.microsoft.com/en-us/library/xcb2z8hs 
+
+{$ifdef MSWINDOWS}
+  // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
   cSetThreadNameException = $406D1388;
 
   DOTNET_EXCEPTIONNAME: array[0..83] of RawUTF8 = (
@@ -1835,13 +2011,20 @@ begin // avoid linking of ComObj.pas just for EOleSysError
   result := false;
 end;
 
+{$endif MSWINDOWS}
+
+{$endif WITH_MAPPED_EXCEPTIONS}
+
 function InternalDefaultSynLogExceptionToStr(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
+{$ifdef MSWINDOWS}
 var i: integer;
+{$endif}
 begin
   WR.AddClassName(Context.EClass);
-  if (Context.Level=sllException) and (Context.EInstance<>nil) and
+  if (Context.ELevel=sllException) and (Context.EInstance<>nil) and
      (Context.EClass<>EExternalException) then begin
+    {$ifdef MSWINDOWS}
     if ExceptionInheritsFrom(Context.EClass,'EOleSysError') then begin
       WR.Add(' ');
       WR.AddPointer(EOleSysError(Context.EInstance).ErrorCode);
@@ -1852,6 +2035,7 @@ begin
           WR.AddShort('Exception]');
         end; // no break on purpose, if ErrorCode matches more than one Exception
     end;
+    {$endif}
     WR.AddShort(' ("');
     WR.AddJSONEscapeString(Context.EInstance.Message);
     WR.AddShort('")');
@@ -1863,24 +2047,26 @@ begin
   result := false; // caller should append "at EAddr" and the stack trace
 end;
 
+{$ifdef WITH_MAPPED_EXCEPTIONS}
+
+{$else NO WITH_MAPPED_EXCEPTIONS}
+
 procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
-var SynLog: TSynLog;
-    Ctxt: TSynLogExceptionContext;
+var Ctxt: TSynLogExceptionContext;
     LastError: DWORD;
 begin
+  {$ifdef MSWINDOWS}
   if Exc.ExceptionCode=cSetThreadNameException then
     exit;
-  SynLog := GetHandleExceptionSynLog;
-  if SynLog=nil then
-    exit;
+  {$endif}
   LastError := GetLastError;
+  Ctxt.ECode := Exc.ExceptionCode;
   if (Exc.ExceptionCode=cDelphiException) and (Exc.ExceptObject<>nil) then begin
     if Exc.ExceptObject.InheritsFrom(Exception) then
       Ctxt.EClass := PPointer(Exc.ExceptObject)^ else
       Ctxt.EClass := EExternalException;
-    if sllException in SynLog.fFamily.Level then
-      Ctxt.Level := sllException else
-      Ctxt.Level := sllError;
+    Ctxt.EInstance := Exc.ExceptObject;
+    Ctxt.ELevel := sllException;
     Ctxt.EAddr := Exc.ExceptAddr;
   end else begin
     {$ifdef MSWINDOWS}
@@ -1888,45 +2074,17 @@ begin
       Ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc) else
     {$endif}
       Ctxt.EClass := EExternal;
-    Ctxt.Level := sllExceptionOS;
+    Ctxt.EInstance := nil;
+    Ctxt.ELevel := sllExceptionOS;
     Ctxt.EAddr := Exc.ExceptionAddress;
   end;
-  if (Ctxt.Level<>sllError) and
-     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)<0) then begin
-    if SynLog.LogHeaderLock(Ctxt.Level) then
-    try
-      Ctxt.EInstance := Exc.ExceptObject;
-      Ctxt.ECode := Exc.ExceptionCode;
-      repeat
-        if (Ctxt.Level=sllException) and (Exc.ExceptionCode=cDelphiException) and
-           Ctxt.EInstance.InheritsFrom(ESynException) then begin
-          if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
-            break;
-        end else
-        if Assigned(TSynLogExceptionToStrCustom) then begin
-          if TSynLogExceptionToStrCustom(SynLog.fWriter,Ctxt) then
-            break;
-        end else
-          if DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
-            break;
-        SynLog.fWriter.AddShort(' at ');
-        TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr);
-  {$ifndef WITH_VECTOREXCEPT} // stack frame is only correct for RTLUnwindProc
-        SynLog.AddStackTrace(stack);
-  {$endif}
-        break;
-      until false;
-      SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
-      SynLog.fWriter.Flush; // we expect exceptions to be available on disk
-    finally
-      LeaveCriticalSection(SynLog.fThreadLock);
-    end;
-  end;
+  Ctxt.EStack := stack;
+  SynLogException(Ctxt);
   SetLastError(LastError); // code above could have changed this
 end;
 
-
 {$ifdef WITH_VECTOREXCEPT}
+
 type
   PExceptionInfo = ^TExceptionInfo;
   TExceptionInfo = packed record
@@ -1939,8 +2097,7 @@ var
     VectoredHandler: pointer): PtrInt; stdcall;
 
 function SynLogVectoredHandler(ExceptionInfo : PExceptionInfo): PtrInt; stdcall;
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
+const EXCEPTION_CONTINUE_SEARCH = 0;
 begin
   if CurrentHandleExceptionSynLog<>nil then
     LogExcept(nil,ExceptionInfo^.ExceptionRecord^);
@@ -1949,12 +2106,7 @@ end;
 
 {$else WITH_VECTOREXCEPT}
 
-{$ifdef DELPHI5OROLDER}
-procedure RtlUnwind; external kernel32 name 'RtlUnwind';
-{$else}
-var
-  oldUnWindProc: pointer;
-{$endif DELPHI5OROLDER}
+var oldUnWindProc: pointer;
 
 procedure SynRtlUnwind(TargetFrame, TargetIp: pointer;
   ExceptionRecord: PExceptionRecord; ReturnValue: Pointer); stdcall;
@@ -1968,16 +2120,15 @@ asm
 @oldproc:
   popad
   pop ebp // hidden push ebp at asm level
-{$ifdef DELPHI5OROLDER}
-  jmp RtlUnwind
-{$else}
   jmp oldUnWindProc
-{$endif}
 end;
 
 {$endif WITH_VECTOREXCEPT}
 
+{$endif WITH_MAPPED_EXCEPTIONS}
+
 {$endif NOEXCEPTIONINTERCEPT}
+
 
 procedure TSynLogFamily.SetDestinationPath(const value: TFileName);
 begin
@@ -1996,22 +2147,29 @@ begin
   // intercept exceptions, if necessary
   fHandleExceptions := (sllExceptionOS in aLevel) or (sllException in aLevel);
   if fHandleExceptions and (CurrentHandleExceptionSynLog=nil) then begin
-    SynLog; // force define CurrentHandleExceptionSynLog
-  {$ifdef WITH_VECTOREXCEPT}
+    SynLog; // force CurrentHandleExceptionSynLog definition
+    {$ifdef WITH_MAPPED_EXCEPTIONS}
+    GetUnwinder(oldUnwinder);
+    newUnwinder := oldUnwinder;
+    newUnwinder.RaiseException := HookedRaiseException;
+    SetUnwinder(newUnwinder);
+    {$else}
+    {$ifdef WITH_VECTOREXCEPT}
     AddVectoredExceptionHandler :=
       GetProcAddress(GetModuleHandle(kernel32),'AddVectoredExceptionHandler');
     // RemoveVectoredContinueHandler() is available under 64 bit editions only
     if Assigned(AddVectoredExceptionHandler) then
       // available since Windows XP
       AddVectoredExceptionHandler(0,@SynLogVectoredHandler);
-  {$else WITH_VECTOREXCEPT}
-  {$ifdef DELPHI5OROLDER}
+    {$else WITH_VECTOREXCEPT}
+    {$ifdef WITH_PATCHEXCEPT}
     PatchCallRtlUnWind;
-  {$else}
+    {$else}
     oldUnWindProc := RTLUnwindProc;
-  {$endif}
+    {$endif}
     RTLUnwindProc := @SynRtlUnwind;
-  {$endif WITH_VECTOREXCEPT}
+    {$endif WITH_VECTOREXCEPT}
+    {$endif WITH_MAPPED_EXCEPTIONS}
   end;
 {$endif NOEXCEPTIONINTERCEPT}
 end;
@@ -2734,7 +2892,7 @@ begin
     {$else}
     aCaller := 0; // no stack trace yet under Linux
     {$endif}
-    TSynMapFile.Log(fWriter,aCaller);
+    TSynMapFile.Log(fWriter,aCaller,false);
   finally
     LogTrailerUnLock(Level);
   end;
@@ -2792,15 +2950,15 @@ begin
   if InstanceMapFile=nil then
     GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   WithinEvents := fWriter.WrittenBytes>0;
-  // array of const is buggy under Delphi 5 :( -> use fWriter.Add*()
+  // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
+  if WithinEvents then begin
+    LogCurrentTime;
+    fWriter.AddShort(LOG_LEVEL_TEXT[sllNewRun]);
+    fWriter.AddChars('=',50);
+    NewLine;
+  end;
   {$ifdef MSWINDOWS}
   with ExeVersion, SystemInfo, OSVersionInfo, fWriter do begin
-    if WithinEvents then begin
-      LogCurrentTime;
-      AddShort(LOG_LEVEL_TEXT[sllNewRun]);
-      AddChars('=',50);
-      NewLine;
-    end;
     AddString(ProgramFullSpec);
     NewLine;
     AddShort('Host=');  AddString(Host);
@@ -2833,7 +2991,7 @@ begin
     CancelLastChar; // trim last #9
     {$else}
   with fWriter do begin
-    AddShort('Host=linux User=user CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=1234');
+    AddShort('Host=linux User=user CPU=1*0-15-1027 OS=0.0=5.1.2600 Wow64=0 Freq=1234');
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
@@ -3194,7 +3352,7 @@ begin
             MethodNameLocal := mnLeave;
         end;
       end else
-        TSynMapFile.Log(fWriter,Caller);
+        TSynMapFile.Log(fWriter,Caller,false);
     end;
     if fFamily.HighResolutionTimeStamp
        {$ifdef MSWINDOWS}and (fFrequencyTimeStamp<>0){$endif} then
@@ -3235,7 +3393,6 @@ const
   MINIMUM_EXPECTED_STACKTRACE_DEPTH = 2;
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-{$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifndef CPU64}
 procedure AddStackManual(Stack: PPtrUInt);
@@ -3254,22 +3411,30 @@ var st, max_stack, min_stack, depth: PtrUInt;
 {$endif}
 begin
   depth := fFamily.StackTraceLevel;
-  if Stack=nil then // if no Stack pointer set, retrieve current one
-    asm
-      mov eax,ebp // push ebp; mov ebp,esp done at begin level above
-      mov Stack,eax
-    end;
+  if depth=0 then
+    exit;
   asm
-    mov eax,fs:[18h]
-    mov ecx,dword ptr [eax+4]
-    mov max_stack,ecx
-    mov ecx,dword ptr [eax+8]
-    mov min_stack,ecx
+    mov min_stack,ebp
   end;
+  if Stack=nil then // if no Stack pointer set, retrieve current one
+    Stack := pointer(min_stack);
+  {$ifdef WITH_MAPPED_EXCEPTIONS}
+  max_stack := CurrentTopOfStack;
+  if max_stack=0 then begin
+    ComputeCurrentTopOfStack;
+    max_stack := CurrentTopOfStack;         
+  end;
+  {$else}
+  asm
+    mov eax,fs:[4]
+    mov max_stack, eax
+    // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
+  end;
+  {$endif}
   fWriter.AddShort(' stack trace ');
-  {$ifndef NOEXCEPTIONINTERCEPT}
+  {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
   prevState := CurrentHandleExceptionSynLog;
-  CurrentHandleExceptionSynLog := nil; // for IsBadCodePtr
+  CurrentHandleExceptionSynLog := nil;
   try
   {$endif}
     if PtrUInt(stack)>=min_stack then
@@ -3279,7 +3444,7 @@ begin
         if ((st>max_stack) or (st<min_stack)) and
            not IsBadReadPtr(pointer(st-8),12) and
            ((pByte(st-5)^=$E8) or check2(st)) then begin
-          TSynMapFile.Log(fWriter,st); // will ignore any TSynLog.* methods
+          TSynMapFile.Log(fWriter,st,false); // ignore any TSynLog.* methods
           dec(depth);
           if depth=0 then break;
         end;
@@ -3296,6 +3461,11 @@ begin
 end;
 {$endif}
 {$endif}
+{$ifdef WITH_MAPPED_EXCEPTIONS}
+begin
+  AddStackManual(Stack);
+end;
+{$else}
 var n, i: integer;
     BackTrace: array[byte] of PtrUInt;
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -3304,13 +3474,14 @@ var n, i: integer;
 begin
   if fFamily.StackTraceLevel<=0 then
     exit;
+  {$ifdef MSWINDOWS}
   if (fFamily.StackTraceUse=stOnlyManual) or
      (RtlCaptureStackBackTraceRetrieved<>btOK) then begin
-{$ifndef FPC}
-{$ifndef CPU64}
+    {$ifndef FPC}
+    {$ifndef CPU64}
     AddStackManual(Stack);
-{$endif}
-{$endif}
+    {$endif}
+    {$endif}
   end else begin
     {$ifndef NOEXCEPTIONINTERCEPT}
     prevState := CurrentHandleExceptionSynLog;
@@ -3329,7 +3500,7 @@ begin
         end else begin
           fWriter.AddShort(' stack trace API ');
           for i := 0 to n-1 do
-            TSynMapFile.Log(fWriter,BackTrace[i]); // will ignore any TSynLog.* methods
+            TSynMapFile.Log(fWriter,BackTrace[i],false); // ignore any TSynLog.* 
         end;
       except
         // just ignore any access violation here
@@ -3340,12 +3511,9 @@ begin
     end;
     {$endif}
   end;
+  {$endif MSWINDOWS}
 end;
-{$else}
-begin // do not write any stack trace yet
-end;
-{$endif}
-
+{$endif WITH_MAPPED_EXCEPTIONS}
 
 
 { TSynLogFile }

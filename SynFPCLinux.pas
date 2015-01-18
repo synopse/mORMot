@@ -108,9 +108,6 @@ function GetNowUTC: TDateTime;
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
-/// a wrapper around stat() to retrieve a file age
-function GetFileAgeAsDateTime(const FileName: string): TDateTime;
-
 /// a wrapper around stat() to retrieve a file size
 function GetLargeFileSize(const aFile: string): int64;
 
@@ -282,14 +279,6 @@ begin
   if dwCmpFlags and NORM_IGNORECASE<>0 then
     result := WideCompareText(W1,W2) else
     result := WideCompareStr(W1,W2);
-end;
-
-function GetFileAgeAsDateTime(const FileName: string): TDateTime;
-var FileInfo: TStat;
-begin
-  if fpStat(FileName,FileInfo)=0 then
-    result := FileDateToDateTime(FileInfo.st_mtime) else
-    result := 0;
 end;
 
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
