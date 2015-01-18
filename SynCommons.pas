@@ -28677,6 +28677,10 @@ end;
   {$define DOPATCHDISPINVOKE}
   // we NEED our patched DispInvoke to circumvent some Delphi bugs on Win64
 {$endif}
+{$ifdef DELPHI6OROLDER}
+  {$define DOPATCHDISPINVOKE}
+  // to circumvent LIdent := Uppercase() in TInvokeableVariantType.DispInvoke()
+{$endif}
 
 {$endif FPC}
 
