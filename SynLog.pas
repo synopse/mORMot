@@ -622,9 +622,7 @@ type
     fThreadIndex: integer;
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
-    {$ifdef MSWINDOWS}
     fFrequencyTimeStamp: Int64;
-    {$endif}
     fFileName: TFileName;
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
@@ -891,11 +889,11 @@ type
     /// as extracted from the .log header
     fExeName, fExeVersion, fHost, fUser, fCPU, fOSDetailed, fInstanceName: RawUTF8;
     fExeDate: TDateTime;
-{$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS}
     fOS: TWindowsVersion;
     fOSServicePack: integer;
     fWow64: boolean;
-{$endif}
+    {$endif}
     fStartDateTime: TDateTime;
     /// retrieve all used event levels
     fLevelUsed: TSynLogInfos;
@@ -1005,6 +1003,8 @@ type
     {$endif MSWINDOWS}
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
+    // - under Linux, it will return the full system version, e.g.
+    // 'Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
     property DetailedOS: RawUTF8 read fOSDetailed;
     /// the date and time at which the log file was started
     property StartDateTime: TDateTime read fStartDateTime;
@@ -2920,12 +2920,15 @@ end;
 {$endif}
 
 procedure TSynLog.LogFileHeader;
+var WithinEvents: boolean;
 {$ifdef MSWINDOWS}
-var Env: PAnsiChar;
+    Env: PAnsiChar;
     P: PUTF8Char;
     L: Integer;
+{$else}
+    ExecutableName: string;
+    uts: UtsName;
 {$endif}
-var WithinEvents: boolean;
 procedure NewLine;
 begin
   if WithinEvents then begin
@@ -2936,12 +2939,10 @@ begin
     fWriter.Add(#13);
 end;
 begin
-  {$ifdef MSWINDOWS}
   if not QueryPerformanceFrequency(fFrequencyTimeStamp) then begin
     fFamily.HighResolutionTimeStamp := false;
     fFrequencyTimeStamp := 0;
   end else
-  {$endif}
     if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
       fFamily.HighResolutionTimeStamp := false;
   {$ifdef MSWINDOWS}
@@ -2991,7 +2992,26 @@ begin
     CancelLastChar; // trim last #9
     {$else}
   with fWriter do begin
-    AddShort('Host=linux User=user CPU=1*0-15-1027 OS=0.0=5.1.2600 Wow64=0 Freq=1234');
+    ExecutableName := GetModuleName(hInstance);
+    AddNoJSONEscapeString(ExecutableName);
+    AddShort(' unknown (');
+    AddDateTime(FileAgeToDateTime(ExecutableName));
+    Add(')');
+    NewLine;
+    AddShort('Host='); AddString(GetHostName);
+    AddShort(' User=unknown CPU=');
+    {$ifdef KYLIX3} // LibC.getlogin() returns ''
+    Add(LibC.get_nprocs); Add('/'); Add(LibC.get_nprocs_conf);
+    AddShort(' OS=');
+    uname(uts);
+    {$else}
+    AddShort('unknown OS=');
+    FPUname(uts);
+    {$endif}
+    AddNoJSONEscape(@uts.sysname); Add('-'); AddNoJSONEscape(@uts.release);
+    AddReplace(@uts.version,' ','-');
+    AddShort(' Wow64=0 Freq=');
+    Add(fFrequencyTimeStamp);
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
@@ -3045,8 +3065,7 @@ end;
 
 procedure TSynLog.LogCurrentTime;
 begin
-  if fFamily.HighResolutionTimeStamp
-     {$ifdef MSWINDOWS}and (fFrequencyTimeStamp<>0){$endif} then begin
+  if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then begin
     QueryPerformanceCounter(fCurrentTimeStamp);
     dec(fCurrentTimeStamp,fStartTimeStamp);
     fWriter.AddBinToHexDisplay(@fCurrentTimeStamp,sizeof(fCurrentTimeStamp));
@@ -3354,19 +3373,14 @@ begin
       end else
         TSynMapFile.Log(fWriter,Caller,false);
     end;
-    if fFamily.HighResolutionTimeStamp
-       {$ifdef MSWINDOWS}and (fFrequencyTimeStamp<>0){$endif} then
+    if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then
 DoEnt:case aLevel of
       sllEnter:
         EnterTimeStamp := fCurrentTimeStamp;
       sllLeave: begin
-        {$ifdef MSWINDOWS}
         if fFrequencyTimeStamp=0 then
           MS := 0 else // avoid div per 0 exception
           MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
-        {$else}
-        MS := fCurrentTimeStamp-EnterTimeStamp;
-        {$endif}
         fWriter.AddMicroSec(MS);
       end;
       end else
@@ -3698,7 +3712,7 @@ begin
     if fStartDateTime=0 then
       exit;
     P := pointer(fOSDetailed);
-    {$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS} // use fOSDetailed under Linux
     fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
     fOSServicePack := GetNextItemCardinal(P);
     {$endif}

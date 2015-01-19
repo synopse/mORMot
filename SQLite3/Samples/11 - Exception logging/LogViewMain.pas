@@ -794,7 +794,7 @@ begin
         if InstanceName<>'' then
           s := ' / '+UTF8ToString(InstanceName);
         if OS=wUnknown then
-          win := sUnknown else
+          win := UTF8ToString(DetailedOS) else
           win := format('Windows %s (service pack %d)',
             [GetCaptionFromEnum(TypeInfo(TWindowsVersion),ord(OS)),ServicePack]);
         s := format(sStats,

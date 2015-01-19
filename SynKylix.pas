@@ -149,6 +149,9 @@ function IconvBufConvert(context: iconv_t;
 // another pending thread, i.e. call sched_yield() API
 procedure SleepHiRes(ms: cardinal); 
 
+/// similar to FPC's unix.GetHostName function
+function GetHostName: string;
+
 
 implementation
 
@@ -354,5 +357,13 @@ begin
     sched_yield else
     usleep(ms shl 10); // from ms to us
 end;
+
+function GetHostName: string;
+var tmp: array[byte] of AnsiChar;
+begin
+  LibC.gethostname(tmp,sizeof(tmp)-1);
+  result := tmp;
+end;
+
 
 end.

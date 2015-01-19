@@ -5436,6 +5436,8 @@ type
     // - and all control chars (i.e. #1..#31) as &#..;
     // - see @http://www.w3.org/TR/xml/#syntax
     procedure AddXmlEscape(Text: PUTF8Char);
+    /// append some chars, replacing a given character with another
+    procedure AddReplace(Text: PUTF8Char; Orig,Replaced: AnsiChar);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
     /// fast conversion from binary data into hexa chars, ready to be displayed
@@ -33647,6 +33649,17 @@ begin
       inc(i);
     until false;
   until false;
+end;
+
+procedure TTextWriter.AddReplace(Text: PUTF8Char; Orig,Replaced: AnsiChar);
+begin
+  if Text<>nil then
+    while Text^<>#0 do begin
+      if Text^=Orig then
+        Add(Replaced) else
+        Add(Text^);
+      inc(Text);
+    end;
 end;
 
 procedure TTextWriter.AddByteToHex(Value: byte);
