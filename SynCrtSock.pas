@@ -31,6 +31,7 @@ unit SynCrtSock;
   Contributor(s):
   - Alfred Glaenzer (alf)
   - EMartin
+  - EvaF
   - Pavel (mpv)
   
   Alternatively, the contents of this file may be used under the terms of
@@ -131,7 +132,7 @@ unit SynCrtSock;
   - deep code refactoring of thread process, especially for TSynThreadPool as
     used by THttpServer: introducing TNotifiedThread and TSynThreadPoolSubThread;
     as a result, it fixes OnHttpThreadStart and OnHttpThreadTerminate to be
-    triggered from every thread, as expected
+    triggered from every thread, and propagated from THttpApiServer's clones
   - converted any AnsiString type into a more neutral RawByteString (this is
     correct for URIs or port numbers, and avoid any dependency to SynCommons)
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
@@ -820,6 +821,7 @@ type
     /// set by RegisterCompress method
     fCompressAcceptEncoding: RawByteString;
     fOnHttpThreadStart: TNotifyThreadEvent;
+    procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
     procedure NotifyThreadStart(Sender: TNotifiedThread);
   public
@@ -864,7 +866,7 @@ type
     // ! begin // TSQLDBConnectionPropertiesThreadSafe
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
-    property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write fOnTerminate;
+    property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
   published
     /// returns the API version used by the inherited implementation
     property APIVersion: string read GetAPIVersion;
@@ -909,6 +911,7 @@ type
     procedure SetMaxBandwidth(aValue: Cardinal);
     function GetMaxConnections: Cardinal;
     procedure SetMaxConnections(aValue: Cardinal);
+    procedure SetOnTerminate(const Event: TNotifyThreadEvent); override;
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
@@ -2091,6 +2094,11 @@ begin
     fOnHttpThreadStart(Sender);
     Sender.fStartNotified := self;
   end;
+end;
+
+procedure THttpServerGeneric.SetOnTerminate(const Event: TNotifyThreadEvent);
+begin
+  fOnTerminate := Event;
 end;
 
 
@@ -5042,6 +5050,15 @@ end;
 function THttpApiServer.GetAPIVersion: string;
 begin
   result := Format('HTTP API %d.%d',[Http.Version.MajorVersion,Http.Version.MinorVersion]);
+end;
+
+procedure THttpApiServer.SetOnTerminate(const Event: TNotifyThreadEvent);
+var i: integer;
+begin
+  inherited SetOnTerminate(Event);
+  if (Clones<>nil) and (fOwner=nil) then
+    for i := 0 to Clones.Count-1 do
+      THttpApiServer(Clones[i]).OnHttpThreadTerminate := Event;
 end;
 
 constructor THttpApiServer.Create(CreateSuspended: Boolean; QueueName: SynUnicode);
