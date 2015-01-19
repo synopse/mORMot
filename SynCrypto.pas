@@ -212,6 +212,7 @@ unit SynCrypto;
    - added AES-NI hardware support on newer CPUs, for huge performance boost
      and enhanced security
    - tested compilation for Win64 platform
+   - run with FPC under Win32 and Linux (including AES-NI support), and Kylix
    - added overloaded procedure TMD5.Final() and function SHA256()
    - introduce ESynCrypto exception class dedicated to this unit
    - added AES encryption using official Microsoft AES Cryptographic Provider
@@ -259,6 +260,9 @@ interface
 {$endif}
 {$endif}
 {$ifdef ISDELPHIXE4}
+  {$define HASAESNI}
+{$endif}
+{$ifdef FPC}
   {$define HASAESNI}
 {$endif}
 
@@ -1665,8 +1669,10 @@ begin
   Encrypt(B,B);
 end;
 
+{$ifndef FPC}
 {$ifndef CONDITIONALEXPRESSIONS}
   {$define PURE_PASCAL} // Delphi 5 internal asm is buggy :(
+{$endif}
 {$endif}
 
 procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
@@ -1970,7 +1976,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   xor eax,[ecx+8]
   mov edx,[edx+12]
   xor edx,[ecx+12]
-  lea ecx,ecx+16
+  lea ecx,[ecx+16]
 @1: // pK=ecx s0=ebx s1=esi s2=eax s3=edx
   movzx edi,bl
   mov edi,[4*edi+te0]
@@ -2028,7 +2034,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   mov eax,[ecx+8]
   xor eax,[esp+16]
   xor edx,[ecx+12]
-  lea ecx,ecx+16
+  lea ecx,[ecx+16]
   dec byte ptr [esp+20]
   jne @1
 
@@ -2152,8 +2158,7 @@ begin
 end;
 {$endif}
 
-function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
-{$ifdef USEAESNI}
+{$ifdef USEAESNI} // should be put outside the main method for FPC :(
 procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
 asm // eax=KeySize edx=pk
   movdqu xmm1,[edx]
@@ -2257,6 +2262,8 @@ asm // eax=KeySize edx=pk
 @end:
 end;
 {$endif USEAESNI}
+
+function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
 procedure Shift(KeySize: cardinal; pk: PAWK);
 var i: integer;
     temp: cardinal;
@@ -2294,7 +2301,7 @@ begin
       pK^[11] := pK^[5] xor pK^[10];
       inc(PtrUInt(pK),6*4);
     end;
-  else
+  else // 256:
     for i := 0 to 6 do begin
       temp := pK^[7];
       // SubWord(RotWord(temp)) if "word" count mod 8 = 0
@@ -2363,8 +2370,7 @@ end;
   {$define AES_ROLLED} // asm version is rolled
 {$endif}
 
-function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
-{$ifdef USEAESNI}
+{$ifdef USEAESNI} // should be put outside the main method for FPC :(
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
 asm // eax=Rounds edx=RK
   sub eax,9
@@ -2413,6 +2419,8 @@ asm // eax=Rounds edx=RK
   jnz @loop
 end;
 {$endif}
+
+function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
 procedure MakeDecrKey(var ctx: TAESContext);
 // Calculate decryption key from encryption key
 var i: integer;
@@ -2803,7 +2811,8 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
 {$endif}
   add esp,16 // padlock_aes_decrypt is cdecl -> caller must restore stack
   ret
-@DoAsm: {$endif}
+@DoAsm:
+{$endif}
   push ebx
   push esi
   push edi
@@ -2811,8 +2820,8 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   add esp,-20
   mov [esp],ecx
   movzx ecx,byte ptr [eax].TAESContext.Rounds
-  lea esi,4*ecx
-  lea ecx,ecx-1
+  lea esi,[4*ecx]
+  lea ecx,[ecx-1]
   lea eax,[eax+4*esi] // eax=@ctx.rk[ctx.rounds]=pk
   mov [esp+16],ecx // [esp+16]=ctx.round
   mov ebx,[edx]
@@ -2823,7 +2832,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   xor ecx,[eax+8]
   mov edx,[edx+12]
   xor edx,[eax+12]
-  lea eax,eax-16
+  lea eax,[eax-16]
 @1: // pk=eax s0=ebx s1=esi s2=ecx s3=edx
   movzx edi,bl
   mov edi,[4*edi+td0]
@@ -2879,7 +2888,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   xor esi,[esp+8]
   mov ecx,[eax+8]
   xor ecx,[esp+12]
-  lea eax,eax-16
+  lea eax,[eax-16]
   dec byte ptr [esp+16]
   jnz @1
 
@@ -2971,6 +2980,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   pop ebx
 end;
 {$endif}
+
 procedure TAES.DoBlocks(pIn, pOut: PAESBlock;
   out oIn, oOut: PAESBLock; Count: integer; doEncrypt: Boolean);
 var i: integer;
@@ -3822,24 +3832,19 @@ asm
 	jne       @31
 	mov       eax,1
 	jmp       @32
-@31:
-	test      ebp,ebp
+@31:    test      ebp,ebp
 	jbe       @34
-@33:
-	cmp       ebp,5552
+@33:    cmp       ebp,5552
 	jae        @35
 	mov       eax,ebp
 	jmp        @36
-@35:
-	mov       eax,5552
-@36:
-	sub       ebp,eax
+@35:    mov       eax,5552
+@36:    sub       ebp,eax
 	cmp       eax,16
 	jl        @38
 	xor       edx,edx
 	xor       ecx,ecx
-@39:
-	sub       eax,16
+@39:    sub       eax,16
 	mov       dl,[esi]
 	mov       cl,[esi+1]
 	add       ebx,edx
@@ -3891,18 +3896,15 @@ asm
 	lea       esi,[esi+16]
 	lea       edi,[edi+ebx]
 	jge       @39
-@38:
-	test      eax,eax
+@38:    test      eax,eax
 	je         @42
-@43:
-	movzx     edx,byte ptr [esi]
+@43:    movzx     edx,byte ptr [esi]
 	add       ebx,edx
 	dec       eax
 	lea       esi,[esi+1]
-  lea       edi,[edi+ebx]
+        lea       edi,[edi+ebx]
 	jg        @43
-@42:
-	mov       ecx,65521
+@42:    mov       ecx,65521
 	mov       eax,ebx
 	xor       edx,edx
 	div       ecx
@@ -3914,13 +3916,10 @@ asm
 	test      ebp,ebp
 	mov       edi,edx
 	ja        @33
-@34:
-	mov       eax,edi
+@34:    mov       eax,edi
 	shl       eax,16
 	or        eax,ebx
-@45:
-@32:
-	pop       ebp
+@45:@32:pop       ebp
 	pop       edi
 	pop       esi
 	pop       ebx
@@ -4036,10 +4035,7 @@ end;
 var
   Xor32Byte: TByteArray absolute Td0;  // $2000=8192 bytes of XOR tables ;)
 
-procedure XorOffset(p: pByte; Index,Count: integer);
-// XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
-// Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
-{$ifndef PURE_PASCAL}
+{$ifndef PURE_PASCAL} // should be put outside XorOffset() for FPC :(
 procedure Xor64(PI: PIntegerArray; P: pByte; Count: integer);
 asm // eax=PI edx=P ecx=Count64
   push ebx
@@ -4052,14 +4048,18 @@ asm // eax=PI edx=P ecx=Count64
   xor [edx],ebx
   xor [edx+4],esi
   dec ecx
-  lea eax,eax+8
-  lea edx,edx+8
+  lea eax,[eax+8]
+  lea edx,[edx+8]
   jnz @1
 @z:
   pop esi
   pop ebx
 end;
 {$endif PURE_PASCAL}
+
+procedure XorOffset(p: pByte; Index,Count: integer);
+// XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
+// Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
 var i, Len: integer;
 begin
   if Count>0 then
@@ -5177,4 +5177,4 @@ finalization
     FreeLibrary(CryptoAPI.Handle);
   end;
 {$endif}
-end.
+end.
