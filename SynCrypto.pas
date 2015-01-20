@@ -254,18 +254,6 @@ interface
 {$endif}
 {$endif}
 
-{$ifndef DELPHI5OROLDER}
-{$ifndef CPU64}
-  {$define USEAESNI}
-{$endif}
-{$endif}
-{$ifdef ISDELPHIXE4}
-  {$define HASAESNI}
-{$endif}
-{$ifdef FPC}
-  {$define HASAESNI}
-{$endif}
-
 uses
 {$ifdef MSWINDOWS}
   Windows,
@@ -1620,8 +1608,20 @@ end;
 {$define AES_ROLLED}
 // if defined, use rolled version, which is faster (at least on my AMD CPU)
 
-{$ifdef PUREPASCAL}
-  {$define PURE_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
+{$ifdef DELPHI5OROLDER}
+  {$define PURE_PASCAL} // Delphi 5 internal asm is buggy :(
+{$else}
+  {$ifdef PUREPASCAL} // e.g. for x64 (CPU64) or ARM
+    {$define PURE_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
+  {$else}
+    {$define USEAESNI}
+    {$ifdef ISDELPHIXE4}
+      {$define HASAESNI}
+    {$endif}
+    {$ifdef FPC}
+      {$define HASAESNI}
+    {$endif}
+  {$endif PUREPASCAL}
 {$endif}
 
 function AESSelfTest: boolean;
@@ -1668,12 +1668,6 @@ procedure TAES.Encrypt(var B: TAESBlock);
 begin
   Encrypt(B,B);
 end;
-
-{$ifndef FPC}
-{$ifndef CONDITIONALEXPRESSIONS}
-  {$define PURE_PASCAL} // Delphi 5 internal asm is buggy :(
-{$endif}
-{$endif}
 
 procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
 // encrypt one block: Context contains encryption key
