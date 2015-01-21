@@ -42239,7 +42239,7 @@ end;
 
 function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
 var start: Int64;
-   ThreadID: cardinal;
+    ThreadID: cardinal;
     E: Exception;
     IsIdle: boolean;
 function OnIdleProcessNotify: integer;
@@ -42254,8 +42254,9 @@ begin
   result := false;
   ThreadID := GetCurrentThreadId;
   if (self=nil) or (ThreadID=fCallerThreadID) then
-    exit; // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
-  // wait for any previous request to be finished (should not happen in most cases)
+    // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
+    exit;
+  // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
   start := GetTickCount64;
@@ -42273,12 +42274,12 @@ begin
     if IsIdle then
       break;
     case OnIdleProcessNotify of // Windows.GetTickCount64 res is 10-16 ms
-    0..30:   SleepHiRes(0);
-    31..100: SleepHiRes(1);
+    0..20:   SleepHiRes(0);
+    21..100: SleepHiRes(1);
     else     SleepHiRes(5);
     end;
   until false;
-  // process execution in the background thread
+  // 2. process execution in the background thread
   fBackgroundException := nil;
   fCallerThreadID := ThreadID;
   fParam := OpaqueParam;

@@ -317,15 +317,17 @@ type
   protected
     procedure InternalSetClass; override;
   end;
-
-  /// HTTP/1.1 RESTFUL JSON default mORMot Client class
-  // - under Windows, maps the TSQLHttpClientWinHTTP class 
-  TSQLHttpClient = TSQLHttpClientWinHTTP;
-{$else}
-  /// HTTP/1.1 RESTFUL JSON deault mORMot Client class
-  // - not under Windows: maps the WinSock (raw socket) implementation class
-  TSQLHttpClient = TSQLHttpClientWinSock;
 {$endif}
+
+{$ifdef ONLYUSEHTTPSOCKET} 
+  /// HTTP/1.1 RESTFUL JSON deault mORMot Client class
+  // -  maps the raw socket implementation class
+  TSQLHttpClient = TSQLHttpClientWinSock;
+{$else}
+  /// HTTP/1.1 RESTFUL JSON default mORMot Client class
+  // - under Windows, maps the TSQLHttpClientWinHTTP class
+  TSQLHttpClient = TSQLHttpClientWinHTTP;
+{$endif ONLYUSEHTTPSOCKET}
 
 
 implementation

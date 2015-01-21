@@ -431,7 +431,7 @@ constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   aHttps: boolean; aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
 begin
   inherited;
-  fServer := THttpServer.Create(aPort{$ifdef MSWINDOWS},fThreadPoolCount{$endif});
+  fServer := THttpServer.Create(aPort{$ifdef USETHREADPOOL},fThreadPoolCount{$endif});
   fServer.OnRequest := Process;
 end;
 

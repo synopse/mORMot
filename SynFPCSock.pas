@@ -221,6 +221,7 @@ const
   WSAEWOULDBLOCK = ESysEWOULDBLOCK;
   WSAEINPROGRESS = ESysEINPROGRESS;
   WSAEALREADY = ESysEALREADY;
+  WSATRY_AGAIN = ESysEAGAIN;
   WSAENOTSOCK = ESysENOTSOCK;
   WSAEDESTADDRREQ = ESysEDESTADDRREQ;
   WSAEMSGSIZE = ESysEMSGSIZE;
@@ -260,11 +261,10 @@ const
   WSANOTINITIALISED = -4;
   WSAEDISCON = -5;
   WSAHOST_NOT_FOUND = 1;
-  WSATRY_AGAIN = 2;
   WSANO_RECOVERY = 3;
   WSANO_DATA = -6;
 
-{$else FPC}
+{$else FPC} // Kylix3 definitions:
 
 type
   TInAddr6 = packed record
@@ -288,7 +288,8 @@ type
   end;
 
 const
-  ESYSEAGAIN = EAGAIN;
+  WSATRY_AGAIN = EAGAIN;
+  WSAEWOULDBLOCK = EWOULDBLOCK;
   WSAEPROTONOSUPPORT = EPROTONOSUPPORT;
   WSAHOST_NOT_FOUND = HOST_NOT_FOUND;
   
@@ -630,7 +631,7 @@ begin
     {$else}
     result := fpSend(s,pointer(Buf),len,flags);
     {$endif}
-    if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
+    if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
     sleep(0);
   until false;
@@ -644,7 +645,7 @@ begin
     {$else}
     result := fpRecv(s,pointer(Buf),len,flags);
     {$endif}
-    if (result<>ESYSEAGAIN) or (flags<>MSG_NOSIGNAL) then
+    if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
     sleep(0);
   until false;
@@ -694,7 +695,7 @@ function SetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   optlen: Integer): Integer;
 begin
   result := {$ifdef KYLIX3}LibC.setsockopt{$else}fpsetsockopt{$endif}(
-    s,level,optname,pointer(optval),optlen);
+    s,level,optname,optval  ,optlen);
 end;
 
 function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
@@ -875,13 +876,12 @@ var
 begin
   IPList.Clear;
   Addr := nil;
-  try
+  try // we force to find TCP/IP
     FillChar(Hints, Sizeof(Hints), 0);
-    Hints.ai_family := AF_UNSPEC;
-    Hints.ai_socktype := SockType;
+    Hints.ai_family := Family;
     Hints.ai_protocol := SockProtocol;
-    Hints.ai_flags := 0;
-    r := LibC.getaddrinfo(PChar(Name), nil, @Hints, Addr);
+    Hints.ai_socktype := SockType;
+    r := LibC.getaddrinfo(pointer(Name), nil, @Hints, Addr);
     if r=0 then begin
       AddrNext := Addr;
       while not(AddrNext=nil) do begin
@@ -979,8 +979,8 @@ begin
       f2 := AF_INET6;
       TwoPass := true;
     end else begin
-      f2 := AF_INET;
-      f1 := AF_INET6;
+      f2 := AF_INET6;
+      f1 := AF_INET;
       TwoPass := true;
     end;
   end else
@@ -1083,4 +1083,4 @@ initialization
   SET_IN6_IF_ADDR_ANY(@in6addr_any);
   SET_LOOPBACK_ADDR6(@in6addr_loopback);
 
-end.
+end.

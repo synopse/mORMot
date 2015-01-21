@@ -194,24 +194,22 @@ unit SynCrtSock;
 
 interface
 
-{ $define DEBUG2}
-{ $define DEBUG23}
+{.$define DEBUGAPI}
+{.$define DEBUG23}
 
 {$ifdef MSWINDOWS}
   /// define this to publish TWinINet / TWinHttp / TWinHttpAPI classes
   {$define USEWININET}
   // define this to use TSynThreadPool for faster multi-connection on THttpServer
-  // with Thread Pool: 3394 requests / second (each request received 4 KB of data)
-  // without the Pool: 140/s in the IDE (i.e. one core), 2637/s on a dual core
-  {$define USETHREADPOOL}
+  // USETHREADPOOL is defined in Synopse.inc
 {$else}
   {$undef USEWININET}    // WinINet / WinHTTP / HttpAPI expect a Windows system
-  {$undef USETHREADPOOL} // our IOCP patternis Windows-specific
 {$endif}
 
 {$ifdef DEBUG2}
 {.$define DEBUG}
 {$endif}
+
 
 uses
 {$ifdef MSWINDOWS}
@@ -439,10 +437,11 @@ type
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: RawByteString);
     /// set the TCP_NODELAY option for the connection
-    // - 1 (true) will disable the Nagle buffering algorithm; it should only be
+    // - default 1 (true) will disable the Nagle buffering algorithm; it should only be
     // set for applications that send frequent small bursts of information
     // without getting an immediate response, where timely delivery of data
-    // is required - so it expects buffering before calling Write() or *SndLow()
+    // is required - so it expects buffering before calling Write() or SndLow()
+    // - you can set 0 (false) here to enable the Nagle algorithm, if needed
     // - see http://www.unixguide.net/network/socketfaq/2.16.shtml
     property TCPNoDelay: Integer index TCP_NODELAY write SetInt32OptionByIndex;
     /// set the SO_SNDTIMEO option for the connection
@@ -1033,12 +1032,12 @@ type
   protected
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
-{$ifdef USETHREADPOOL}
+    {$ifdef USETHREADPOOL}
     /// the associated Thread Pool
     fThreadPool: TSynThreadPoolTHttpServer;
     fThreadPoolContentionCount: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
-{$endif}
+    {$endif}
     fInternalHttpServerRespList: TList;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
@@ -1301,7 +1300,7 @@ type
     /// relase the connection
     destructor Destroy; override;
   end;
-        
+
   /// type of a TWinHttpAPI class
   TWinHttpAPIClass = class of TWinHttpAPI;
 
@@ -1370,7 +1369,9 @@ const
 function StatusCodeToReason(Code: integer): RawByteString;
 
 /// retrieve the IP adress from a computer name
-function ResolveName(const Name: RawByteString): RawByteString;
+function ResolveName(const Name: RawByteString;
+  Family: Integer=AF_INET; SockProtocol: Integer=IPPROTO_TCP;
+  SockType: integer=SOCK_STREAM): RawByteString;
 
 /// Base64 encoding of a string
 function Base64Encode(const s: RawByteString): RawByteString;
@@ -2144,13 +2145,13 @@ end;
 
 { ************ Socket API access - TCrtSocket and THttp*Socket }
 
-function ResolveName(const Name: RawByteString): RawByteString;
+function ResolveName(const Name: RawByteString;
+  Family, SockProtocol, SockType: integer): RawByteString;
 var l: TStringList;
 begin
   l := TStringList.Create;
   try
-    // use AF_INET+PF_INET instead of AF_UNSPEC+PF_UNSPEC: IP6 is buggy!
-    ResolveNameToIP(Name, AF_INET, PF_INET, SOCK_STREAM, l);
+    ResolveNameToIP(Name, Family, SockProtocol, SockType, l);
     if l.Count=0 then
       result := Name else
       result := RawByteString(l[0]);
@@ -2164,9 +2165,8 @@ function CallServer(const Server, Port: RawByteString; doBind: boolean;
 var Sin: TVarSin;
     IP: RawByteString;
     SOCK_TYPE, IPPROTO: integer;
-    {$ifdef MSWINDOWS}
     li: TLinger;
-    {$else}
+    {$ifndef MSWINDOWS}
     SO_True: integer;
     serveraddr: sockaddr;
     {$endif}
@@ -2182,9 +2182,9 @@ begin
       IPPROTO := IPPROTO_UDP;
     end;
     cslUNIX: begin
-{$ifdef MSWINDOWS}
+      {$ifdef MSWINDOWS}
       exit; // not handled under Win32
-{$else} // special version for UNIX sockets
+      {$else} // special version for UNIX sockets
       result := socket(AF_UNIX,SOCK_STREAM,0);
       if result<0 then
         exit;
@@ -2203,7 +2203,7 @@ begin
         end;
       end;
       exit;
-{$endif}
+      {$endif}
     end;
     else exit; // make this stupid compiler happy
   end;
@@ -2211,21 +2211,19 @@ begin
   if (Server='') and not doBind then
     IP := cLocalHost else
   {$endif}
-    IP := ResolveName(Server);
-  //IP := cAnyHost;
-  // use AF_INET+PF_INET instead of AF_UNSPEC+PF_UNSPEC: IP6 is buggy!
-  if SetVarSin(Sin, IP, Port, AF_INET, PF_INET, SOCK_TYPE, true)<>0 then
+    IP := ResolveName(Server, AF_INET, IPPROTO, SOCK_TYPE);
+  // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
+  if SetVarSin(Sin, IP, Port, AF_INET, IPPROTO, SOCK_TYPE, false)<>0 then
     exit;
   result := Socket(integer(Sin.AddressFamily), SOCK_TYPE, IPPROTO);
   if result=-1 then
     exit;
   if doBind then begin
-    {$ifdef MSWINDOWS}
-    // Socket should remain open for 5 seconds after a closesocket() call
+    // Socket should remain open for 10 seconds after a closesocket() call
     li.l_onoff := Ord(true);
-    li.l_linger := 5;
+    li.l_linger := 10;
     SetSockOpt(result, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
-    {$else}
+    {$ifdef LINUX}
     SO_True := 1;
     SetSockOpt(result, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
     {$endif}
@@ -2374,15 +2372,21 @@ var timeval: TTimeval;
 begin
   if (self=nil) or (Sock<=0) then
     raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
-  {$ifndef MSWINDOWS}
-  timeval.tv_sec:=OptVal div 1000;
-  timeval.tv_usec:=(OptVal mod 1000) * 1000;
-  if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))<>0 then
-  {$else}
-  if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))<>0 then
-  {$endif}
-    raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
-      [WSAGetLastError,OptName,OptVal]);
+  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) or
+     (OptName=SO_KEEPALIVE) then begin
+    {$ifndef MSWINDOWS} // POSIX expects a timeval parameter for time out values
+    timeval.tv_sec := OptVal div 1000;
+    timeval.tv_usec := (OptVal mod 1000)*1000;
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))=0 then
+    {$else}
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
+    {$endif}
+      exit;
+  end else
+  if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
+    exit;
+  raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
+    [WSAGetLastError,OptName,OptVal]);
 end;
   
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawByteString;
@@ -2403,6 +2407,7 @@ begin
   if (aSock<0) and (TimeOut>0) then begin // set timeout in OPEN/BIND modes
     ReceiveTimeout := TimeOut;
     SendTimeout := TimeOut;
+    TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
   end;
 end;
 
@@ -2783,10 +2788,8 @@ begin
     SockSend(['User-Agent: ',UserAgent]);
     aData := Data; // need var for Data to be eventually compressed
     CompressDataAndWriteHeaders(DataType,aData);
-    {$ifdef MSWINDOWS} // keep alive still buggy under Linux
     if KeepAlive>0 then
       SockSend(['Keep-Alive: ',KeepAlive,#13#10'Connection: Keep-Alive']) else
-    {$endif}
       SockSend('Connection: Close');
     if header<>'' then
       SockSend(header);
@@ -3252,41 +3255,45 @@ end;
 
 procedure THttpServerResp.Execute;
 procedure HandleRequestsProcess;
-var c: char;
-    StartTick, StopTick, Tick: cardinal;
-    Size, nSleep: integer;
+var StartTick, StopTick, Tick: cardinal;
+    Size: integer;
+    tv: TTimeVal;
+    fdset: TFDSet;
 begin
   {$ifdef USETHREADPOOL}
   if fThreadPool<>nil then
     InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
   {$endif}
   try
-    nSleep := 0;
     repeat
       StartTick := GetTickCount;
       StopTick := StartTick+fServer.ServerKeepAliveTimeOut;
       repeat // within this loop, break=wait for next command, exit=quit
         if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
           exit; // server is down -> close connection
-        Size := Recv(fServerSock.Sock,@c,1,MSG_PEEK or MSG_NOSIGNAL);
+        FillChar(fdset,sizeof(fdset),0);
+        FD_SET(fServerSock.Sock,fdset);
+        tv.tv_usec := 50*1000;
+        tv.tv_sec := 0; // 50 ms timeout
+        Size := Select(fServerSock.Sock+1,@fdset,nil,nil,@tv);
         // Recv() may return Size=0 if no data is pending, but no TCP/IP error
         if (fServer=nil) or fServer.Terminated then
           exit; // server is down -> disconnect the client
         if Size<0 then
-          exit; // socket error -> disconnect the client
+          {$ifdef LINUX}
+          if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
+            Size := 0 else
+          {$endif}
+            exit; // socket error -> disconnect the client
         if Size=0 then begin
           // no data available -> wait for keep alive timeout
-          inc(nSleep);
-          if nSleep<150 then
-            SleepHiRes(0) else
-          if nSleep<160 then
-            SleepHiRes(1) else
-          if nSleep<200 then
-            SleepHiRes(2) else
-            SleepHiRes(10);
+          Tick := GetTickCount;
+          if Tick<StartTick then // time wrap after continuous run for 49.7 days
+            break; // reset Ticks count + retry
+          if Tick>=StopTick then
+            exit; // reached time out -> close connection
         end else begin
           // get request and headers
-          nSleep := 0;
           if not fServerSock.GetRequest(True) then
             // fServerSock connection was down or headers are not correct
             exit;
@@ -3297,12 +3304,9 @@ begin
             break else
             exit;
         end;
-        Tick := GetTickCount;
-        if Tick<StartTick then // time wrap after continuous run for 49.7 days
-          break; // reset Ticks count + retry
-        if Tick>StopTick then
-          exit; // reached time out -> close connection
+        //write('.');
        until false;
+       //write('!');
     until false;
     {$ifdef USETHREADPOOL}
     if fThreadPool<>nil then
@@ -3325,6 +3329,7 @@ begin
         fServerSock.InitRequest(aSock); // now fClientSock is in fServerSock
         if fServer<>nil then
           HandleRequestsProcess;
+        //write('*');
       end else begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not fServerSock.fBodyRetrieved then
@@ -3640,9 +3645,7 @@ begin
     P := pointer(Command);
     Method := GetNextItem(P,' '); // 'GET'
     URL := GetNextItem(P,' ');    // '/path'
-    {$ifdef MSWINDOWS} // we still have an issue with keep alive under linux
     KeepAliveClient := IdemPChar(P,'HTTP/1.1');
-    {$endif}
     Content := '';
     // get headers and content
     GetHeader;
@@ -6034,7 +6037,7 @@ end;
 
 
 initialization
-  {$ifdef DEBUGAPI}AllocConsole;{$endif}
+  {$ifdef DEBUGAPI}{$ifdef MSWINDOWS}AllocConsole;{$endif}{$endif}
   {$ifdef CPU64}
   Assert((sizeof(HTTP_REQUEST)=864) and
     (sizeof(HTTP_SSL_INFO)=48) and
@@ -6082,4 +6085,4 @@ finalization
   end;
   {$endif}
   DestroySocketInterface;
-end.
+end.

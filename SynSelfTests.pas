@@ -767,12 +767,14 @@ type
     procedure _TSQLRestClientURINamedPipe;
     /// test via TSQLRestClientURIMessage instances
     procedure _TSQLRestClientURIMessage;
+    {$endif}
+    {$ifndef ONLYUSEHTTPSOCKET}
     /// test via TSQLHttpClientWinHTTP instances over http.sys (HTTP API) server
     procedure _TSQLHttpClientWinHTTP_HTTPAPI;
-    /// test via TSQLHttpClientWinSock instances over WinSocks API server
+    {$endif}
+    /// test via TSQLHttpClientWinSock instances over OS's socket API server
     // - this test won't work within the Delphi IDE debugger
     procedure _TSQLHttpClientWinSock_WinSock;
-    {$endif}
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amLocked
     procedure Locked;
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amUnlocked
@@ -7834,6 +7836,7 @@ procedure TTestClientServerAccess._TSQLHttpClient;
 var Resp: TSQLTable;
 begin
   Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
+  fRunConsole := fRunConsole+'using '+string(Client.ClassName);
   (Client as TSQLHttpClientGeneric).Compression := [];
   Resp := Client.List([TSQLRecordPeople],'*');
   if CheckFailed(Resp<>nil) then
@@ -11490,7 +11493,7 @@ begin
   fClient.Server.ServicesRouting := TSQLRestRoutingREST; // back to default
   GlobalInterfaceTestMode := itmHttp;
   HTTPServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fClient.Server],'+',
-    {$ifdef MSWINDOWS}useHttpApiRegisteringURI{$else}useHttpSocket{$endif},16,secNone);
+    {$ifdef ONLYUSEHTTPSOCKET}useHttpSocket{$else}useHttpApiRegisteringURI{$endif},16,secNone);
   try
     fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
@@ -12249,11 +12252,12 @@ begin
 end;
 {$endif}
 
-{$ifdef MSWINDOWS}
+{$ifndef ONLYUSEHTTPSOCKET}
 procedure TTestMultiThreadProcess._TSQLHttpClientWinHTTP_HTTPAPI;
 begin
   Test(TSQLHttpClientWinHTTP,useHttpApi);
 end;
+{$endif}
 
 procedure TTestMultiThreadProcess._TSQLHttpClientWinSock_WinSock;
 begin
@@ -12266,7 +12270,6 @@ begin
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
 end;
-{$endif}
 
 procedure TTestMultiThreadProcess._TSQLRestClientDB;
 begin

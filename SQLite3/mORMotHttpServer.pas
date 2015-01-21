@@ -179,18 +179,8 @@ interface
   - will work only with our THttpServer pure Delphi code, of course
   - not defined by default - should be set globally to the project conditionals,
   to be defined in both mORMotHttpClient and mORMotHttpServer units }
-{$ifdef MSWINDOWS}
-{$define USETHREADPOOL}
-{$endif}
-// define this to use TSynThreadPool for faster multi-connection
-// shall match SynCrtSock.pas definition
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
-
-{$ifndef MSWINDOWS} // e.g. for FPC
-  {$define ONLYUSEHTTPSOCKET}
-  {$undef USETHREADPOOL}
-{$endif}
+{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
 
 
 uses
