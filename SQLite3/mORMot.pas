@@ -4187,6 +4187,9 @@ type
     /// process authentication
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
+    /// method called in case of authentication failure
+    // - this default implementation will just set OutStatus := HTML_FORBIDDEN
+    procedure AuthenticationFailed; virtual;
     /// direct launch of a method-based service
     // - URI() will ensure that MethodIndex>=0 before calling it
     procedure ExecuteSOAByMethod; virtual;
@@ -28331,6 +28334,13 @@ begin
   result := true;
 end;
 
+procedure TSQLRestServerURIContext.AuthenticationFailed;
+begin
+  // 401 Unauthorized response MUST include a WWW-Authenticate header,
+  // which is not what we used, so here we won't send 401 error code but 403
+  Call.OutStatus := HTML_FORBIDDEN;
+end;
+
 procedure TSQLRestServerURIContext.Execute(Command: TSQLRestServerURIContextCommand);
 procedure TimeOut;
 begin
@@ -29522,9 +29532,7 @@ begin
       if (not Ctxt.Authenticate) or
          ((Ctxt.Service<>nil) and
            not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
-        // 401 Unauthorized response MUST include a WWW-Authenticate header,
-        // which is not what we used, so we won't send 401 error code but 403
-        Call.OutStatus := HTML_FORBIDDEN else
+        Ctxt.AuthenticationFailed else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
