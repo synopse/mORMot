@@ -385,7 +385,7 @@
    // but under Linux, thread creation sounds much cheaper
    // see http://www.akkadia.org/drepper/nptl-design.pdf
    {$define USETHREADPOOL}
-   {$define ONLYUSEHTTPSOCKET} // for debugging
+   {.$define ONLYUSEHTTPSOCKET} // for debugging
 {$else}
    // http.sys server is Windows-specific
    {$define ONLYUSEHTTPSOCKET}
