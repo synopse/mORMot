@@ -13646,7 +13646,7 @@ type
     {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
     NumOps: Byte;
     //RecOps: array[0..0] of Pointer;
-    AllCount: Integer; // !!!! may need {$RTTI EXPLICIT FIELDS([vcPublic])}
+    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
     AllFields: array[0..0] of TEnhancedFieldInfo;
     {$endif ISDELPHI2010}
   end;
