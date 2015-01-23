@@ -91,11 +91,13 @@ uses
   termio,
   netdb,
   Sockets,
+  SynFPCLinux,
   {$else}
   {$ifdef KYLIX3}
   LibC,
   Types,
   KernelIoctl,
+  SynKylix,
   {$endif}
   {$endif}
   SyncObjs, SysUtils, Classes;
@@ -422,8 +424,8 @@ function SetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   optlen: Integer): Integer;
 function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   var optlen: Integer): Integer;
-function Send(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
-function Recv(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
+function Send(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
+function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 function RecvFrom(s: TSocket; Buf: pointer; len,flags: Integer; var from: TVarSin): Integer;
 function ntohs(netshort: word): word;
@@ -623,8 +625,10 @@ begin
 end;
 {$endif}
 
-function Send(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
+function Send(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
+var maxTicks: Int64;
 begin
+  maxTicks := GetTickCount64+timeout;
   repeat
     {$ifdef KYLIX3}
     result := LibC.Send(s,Buf^,len,flags);
@@ -633,12 +637,14 @@ begin
     {$endif}
     if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
-    sleep(0);
-  until false;
+    sleep(1);
+  until GetTickCount64>maxTicks;
 end;
 
-function Recv(s: TSocket; Buf: pointer; len,flags: Integer): Integer;
+function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
+var maxTicks: Int64;
 begin
+  maxTicks := GetTickCount64+timeout;
   repeat
     {$ifdef KYLIX3}
     result := LibC.Recv(s,Buf^,len,flags);
@@ -647,8 +653,8 @@ begin
     {$endif}
     if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
       break;
-    sleep(0);
-  until false;
+    sleep(1);
+  until GetTickCount64>maxTicks;
 end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;

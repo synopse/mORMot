@@ -2245,25 +2245,14 @@ begin
 end;
 
 function OutputSock(var F: TTextRec): integer;
-var Index, Size: integer;
-    Sock: TCRTSocket;
 begin
-  if F.BufPos<>0 then begin
-    result := -1; // on socket error -> raise ioresult error
-    Sock := TCrtSocket(F.Handle);
-    if (Sock=nil) or (Sock.Sock=-1) then
-      exit; // file closed
-    Index := 0;
-    repeat
-      Size := Send(Sock.Sock, @F.BufPtr[Index], F.BufPos, MSG_NOSIGNAL);
-      if Size<=0 then
-        exit;
-      inc(Sock.BytesOut, Size);
-      dec(F.BufPos,Size);
-      inc(Index,Size);
-    until F.BufPos=0;
-  end;
-  result := 0; // no error
+  if F.BufPos=0 then
+    result := 0 else
+    if TCrtSocket(F.Handle).TrySndLow(F.BufPtr,F.BufPos) then begin
+      F.BufPos := 0;
+      result := 0;
+    end else 
+      result := -1; // on socket error -> raise ioresult error
 end;
 
 function InputSock(var F: TTextRec): Integer;
@@ -2285,7 +2274,7 @@ begin
       Size := F.BufSize;
   end else
     Size := F.BufSize;
-  Size := Recv(Sock.Sock, F.BufPtr, Size, 0);
+  Size := Recv(Sock.Sock, F.BufPtr, Size, 0 {$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif});
   // Recv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
@@ -2462,10 +2451,10 @@ function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var SentLen: integer;
 begin
   result := false;
-  if (self=nil) or (Len<0) or (P=nil) then
+  if (self=nil) or (Sock=-1) or (Len<0) or (P=nil) then
     exit;
   repeat
-    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL);
+    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL {$ifdef FPC_OR_KYLIX},TimeOut{$endif});
     if SentLen<0 then
       exit;
     dec(Len,SentLen);
@@ -2584,7 +2573,7 @@ begin
     exit;
   if (Buffer<>nil) and (Length>0) then
     repeat
-      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL);
+      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL {$ifdef FPC_OR_KYLIX},TimeOut{$endif});
       if Size<=0 then
         exit;
       inc(BytesIn, Size);
@@ -2698,7 +2687,9 @@ begin
       end else
         break;
     SetLength(result,L+Size); // append to result
-    Read := recv(Sock,PAnsiChar(pointer(result))+L,Size,0);
+    Read := recv(Sock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL{$ifdef FPC_OR_KYLIX},TimeOut{$endif});
+    if Read<0 then
+      exit;
     inc(L,Read);
     if Read<Size then
       SetLength(result,L); // e.g. Read=0 may happen
