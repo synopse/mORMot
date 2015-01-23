@@ -290,11 +290,13 @@ type
   end;
 
 const
+  WSAEINTR = EINTR;
   WSATRY_AGAIN = EAGAIN;
   WSAEWOULDBLOCK = EWOULDBLOCK;
   WSAEPROTONOSUPPORT = EPROTONOSUPPORT;
   WSAHOST_NOT_FOUND = HOST_NOT_FOUND;
-  
+  WSAETIMEDOUT = ETIMEDOUT;
+
 {$endif FPC}
 
 
@@ -635,10 +637,14 @@ begin
     {$else}
     result := fpSend(s,pointer(Buf),len,flags);
     {$endif}
-    if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
+    if result>=0 then
+      exit; // success
+    if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
       break;
     sleep(1);
   until GetTickCount64>maxTicks;
+  writeln('errno Send()=',errno);
+  result := -1; // error
 end;
 
 function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
@@ -651,10 +657,14 @@ begin
     {$else}
     result := fpRecv(s,pointer(Buf),len,flags);
     {$endif}
-    if (result<>WSATRY_AGAIN) or (flags<>MSG_NOSIGNAL) then
+    if result>=0 then
+      exit; // success
+    if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
       break;
     sleep(1);
   until GetTickCount64>maxTicks;
+  writeln('errno Recv()=',errno);
+  result := -1; // error
 end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
