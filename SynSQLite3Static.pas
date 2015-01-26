@@ -303,8 +303,15 @@ extern int unixWrite(
     {$else}
     {$L sqlite3.obj}       // link SQlite3 database engine
     {$endif INCLUDE_FTS3}
-  {$else}           // Kylix
-  {$L fpc-linux32\sqlite3.o}
+  {$else}
+  {$ifdef KYLIX3}
+  {$L kylix/sqlite3/sqlite3.o}
+  {$L kylix/sqlite3/_divdi3.o}
+  {$L kylix/sqlite3/_moddi3.o}
+  {$L kylix/sqlite3/_udivdi3.o}
+  {$L kylix/sqlite3/_umoddi3.o}
+  {$L kylix/sqlite3/_cmpdi2.o}
+  {$endif KYLIX3}
   {$endif MSWINDOWS}
 {$endif}
 
@@ -371,6 +378,7 @@ begin
 end;
 
 {$ifndef FPC}
+{$ifdef MSWINDOWS}
 
 var __turbofloat: word; { not used, but must be present for linking }
 
@@ -433,6 +441,7 @@ asm
   jmp System.@_llushr
 end;
 
+{$endif MSWINDOWS}
 {$endif FPC}
 
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
@@ -662,6 +671,24 @@ begin
   result := fpfstat(fd,buf^);
 end;
 {$endif FPC}
+
+{$ifdef KYLIX3}
+
+function close(Handle: Integer): Integer; cdecl;
+  external libcmodulename;
+function read(Handle: Integer; var Buffer; Count: size_t): ssize_t; cdecl;
+  external libcmodulename;
+function write(Handle: Integer; const Buffer; Count: size_t): ssize_t; cdecl;
+  external libcmodulename;
+
+function __fixunsdfdi(a: double): Int64; cdecl;
+begin
+  if a<0 then
+    result := 0 else
+    result := round(a);
+end;
+
+{$endif}
 
 {$endif MSWINDOWS}
 

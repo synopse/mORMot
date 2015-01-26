@@ -27606,7 +27606,7 @@ begin
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
-  fSessions.Free;
+  FreeAndNil(fSessions);
   inherited Destroy; // calls fServices.Free which will update fStats
 end;
 

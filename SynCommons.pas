@@ -8510,6 +8510,11 @@ procedure SleepHiRes(ms: cardinal);
 function GetCurrentThreadID: LongWord; cdecl;
   external 'libpthread.so.0' name 'pthread_self';
 
+{$ifdef KYLIX3}
+/// overloaded function using open64() to allow 64 bit positions
+function FileOpen(const FileName: string; Mode: LongWord): Integer;
+{$endif}
+
 {$endif MSWINDOWS}
 
 type
@@ -16143,6 +16148,44 @@ begin
   OSVersion := Vers;
 end;
 {$endif MSWINDOWS}
+
+{$ifdef KYLIX3}
+function FileOpen(const FileName: string; Mode: LongWord): Integer;
+const
+  SHAREMODE: array[0..fmShareDenyNone shr 4] of Byte = (
+    0,        //No share mode specified
+    F_WRLCK,  //fmShareExclusive
+    F_RDLCK,  //fmShareDenyWrite
+    0);       //fmShareDenyNone
+var
+  FileHandle, Tvar: Integer;
+  LockVar: TFlock;
+  smode: Byte;
+begin
+  Result := -1;
+  if FileExists(FileName) and
+     ((Mode and 3)<=fmOpenReadWrite) and ((Mode and $F0)<=fmShareDenyNone) then begin
+    FileHandle := open64(pointer(FileName),(Mode and 3),FileAccessRights);
+    if FileHandle=-1 then
+      exit;
+    smode := Mode and $F0 shr 4;
+    if SHAREMODE[smode]<>0 then begin
+      with LockVar do begin
+        l_whence := SEEK_SET;
+        l_start := 0;
+        l_len := 0;
+        l_type := SHAREMODE[smode];
+      end;
+      Tvar :=  fcntl(FileHandle,F_SETLK,LockVar);
+      if Tvar = -1 then begin
+        __close(FileHandle);
+        exit;
+      end;
+    end;
+    Result := FileHandle;
+  end;
+end;
+{$endif}
 
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
