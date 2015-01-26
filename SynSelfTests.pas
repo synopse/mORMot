@@ -8898,9 +8898,6 @@ end;
 var Server: TSQLDBServerAbstract;
 const ADDR='localhost:'+HTTP_DEFAULTPORT;
 begin
-  {$ifdef KYLIX3}
-  exit; // in the meanwhile
-  {$endif}
   Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
   try
     DoTest(Props);
@@ -12010,8 +12007,10 @@ begin
   {$endif}
   Check(I.Subtract(10,20)=3,'Explicit result');
   {$WARN SYMBOL_PLATFORM OFF}
+  {$ifndef KYLIX3}
   {$ifndef FPC}
   if DebugHook<>0 then
+  {$endif}
   {$endif}
     exit; // avoid exceptions in IDE
   {$WARN SYMBOL_PLATFORM ON}
@@ -12098,11 +12097,11 @@ begin
       'Client'+IntToStr(GetCurrentThreadId),1000);
     TSQLRestClientURIMessage(result).DoNotProcessMessages := true;
   end else
-  if fTestClass=TSQLHttpClientWinSock then
-    result := TSQLHttpClientWinSock.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
   if fTestClass=TSQLHttpClientWinHTTP then
     result := TSQLHttpClientWinHTTP.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
   {$endif}
+  if fTestClass=TSQLHttpClientWinSock then
+    result := TSQLHttpClientWinSock.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
     raise Exception.Create('Invalid fTestClass');
 end;
 
@@ -12395,4 +12394,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+

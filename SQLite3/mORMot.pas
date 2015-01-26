@@ -10569,7 +10569,7 @@ type
 
 {$ifdef MSWINDOWS}
   {$define WITHSTATPROCESS}
-  // if defined, the server statistics will contain precise working time process
+  { if defined, the server statistics will contain precise working time process }
 {$endif}
 
   /// structure used to specify custom request paging parameters for TSQLRestServer
