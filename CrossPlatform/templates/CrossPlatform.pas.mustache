@@ -287,7 +287,8 @@ var res: TVariantDynArray;
 begin
   fClient.CallRemoteService(self,'{{methodName}}',{{ArgsOutputCount}}, // raise EServiceException on error
     [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}],res);
-{{#args}}{{#dirOutput}}  {{argName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}};
+{{#args}}{{#dirOutput}}{{#isObject}}  {{argName}}.Free; // avoid memory leak
+{{/isObject}}  {{argName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}};
 {{/dirOutput}}{{/args}}end;
 
 {{/methods}}
