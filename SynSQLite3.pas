@@ -175,7 +175,8 @@ unit SynSQLite3;
   - added sqlite3.config() experimental support
   - added TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager method (run by
     default in SynSQLite3Static), to let external SQlite3 library use the same
-    memory manager than Delphi, for better performance and stability 
+    memory manager than Delphi, for better performance and stability
+  - added sqlite3.extended_errcode() function, used for exception message
 
 }
 
@@ -1197,6 +1198,11 @@ type
     // However, the error string might be overwritten or deallocated by
     // subsequent calls to other SQLite interface functions.
     errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
+    /// returns the numeric result code or extended result code for the most
+    // recent failed sqlite3 API call associated with a database connection
+    extended_errcode: function(DB: TSQLite3DB): integer;
+      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     {/ add SQL functions or aggregates or to redefine the behavior of existing
        SQL functions or aggregates
@@ -4610,8 +4616,11 @@ constructor ESQLite3Exception.Create(aDB: TSQLite3DB; aErrorCode: integer);
 begin
   CreateFmt('Error %s (%d)',[sqlite3_resultToErrorText(aErrorCode),aErrorCode]);
   if aDB=0 then
-    Message := Message+' with an invalid SQLite3 database handle' else
+    Message := Message+' with aDB=nil' else begin
     Message := Format('%s - "%s"',[Message,sqlite3.errmsg(aDB)]);
+    if Assigned(sqlite3.extended_errcode) then
+      Message := Format('%s extended_errcode=%d',[Message,sqlite3.extended_errcode(aDB)]);
+  end;
   DB := aDB;
 end;
 
@@ -4967,9 +4976,9 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..85] of TFileName =
+  SQLITE3_ENTRIES: array[0..86] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
-   'libversion','errmsg','create_function','create_function_v2',
+   'libversion','errmsg','extended_errcode','create_function','create_function_v2',
    'create_collation','last_insert_rowid','busy_timeout','busy_handler',
    'prepare_v2','finalize','next_stmt','reset','stmt_readonly','step',
    'column_count','column_type','column_decltype','column_name','column_bytes',

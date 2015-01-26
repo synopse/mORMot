@@ -784,7 +784,6 @@ begin
   {$else}
   Int64(Size) := GetLargeFileSize(FileName);
   {$endif}
-
   if (Size.Lo<=1024) and (Size.Hi=0) then begin
     FileClose(F); // file is to small to be modified
     exit;
@@ -1112,6 +1111,7 @@ function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
   StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_libversion: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_errmsg(DB: TSQLite3DB): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_extended_errcode(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_last_insert_rowid(DB: TSQLite3DB): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_busy_timeout(DB: TSQLite3DB; Milliseconds: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_busy_handler(DB: TSQLite3DB;
@@ -1221,6 +1221,7 @@ begin
   close                := @sqlite3_closeInternal;
   libversion           := @sqlite3_libversion;
   errmsg               := @sqlite3_errmsg;
+  extended_errcode     := @sqlite3_extended_errcode;
   create_function      := @sqlite3_create_function;
   create_function_v2   := @sqlite3_create_function_v2;
   create_collation     := @sqlite3_create_collation;
