@@ -53,6 +53,7 @@ unit SynTests;
   - TSynTestCase.TestFailed now triggers a debugger breakpoint when run from IDE
   - added TSynTestCase.NotifyTestSpeed() method
   - extraction of TTestLowLevelCommon code into SynSelfTests.pas unit
+  - added TSynTests.RunAsConsole() class method to ease console test app writing
 
 *)
 
@@ -296,6 +297,19 @@ type
     CustomVersions: string;
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
+    /// you can call this class method to perform all the tests on the Console
+    // - it will create an instance of the corresponding class, with the
+    // optional identifier to be supplied to its constructor
+    // - if the executable was launched with a parameter, it will be used as
+    // file name for the output - otherwise, tests information will be written
+    // to the console 
+    // - it will optionally enable full logging during the process
+    // - a typical use will first assign the same log class for the whole
+    // framework, if the mORMot.pas unit is to be used - in such case, before
+    // calling RunAsConsole(), the caller should execute:
+    // ! TSynLogTestLog := TSQLLog;
+    class procedure RunAsConsole(const CustomIdent: string='';
+      withLogs: TSynLogInfos=[sllLastError,sllError,sllException,sllExceptionOS]); virtual;
     /// create the test instance
     // - if an identifier is not supplied, the class name is used, after
     // T[Syn][Test] left trim and un-camel-case
@@ -985,6 +999,38 @@ end;
 
 {$I+}
 
+class procedure TSynTests.RunAsConsole(const CustomIdent: string;
+  withLogs: TSynLogInfos);
+var tests: TSynTests;
+begin
+  {$ifdef MSWINDOWS}
+  AllocConsole;
+  {$endif}
+  with TSynLogTestLog.Family do begin
+    Level := withLogs;
+    //DestinationPath := ExtractFilePath(paramstr(0))+'logs'; folder should exist
+    PerThreadLog := ptIdentifiedInOnFile;
+    //HighResolutionTimeStamp := true;
+    //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
+  end;
+  // testing is performed by some dedicated classes defined in the caller units
+  tests := Create(CustomIdent);
+  try
+    if ParamCount<>0 then begin
+      tests.SaveToFile(paramstr(1)); // DestPath on command line -> export to file
+      Writeln(tests.Ident,#13#10#13#10' Running tests... please wait');
+    end;
+    tests.Run;
+  finally
+    tests.Free;
+  end;
+  {$ifndef LINUX}
+  if ParamCount=0 then begin // direct exit if an external file was generated
+    WriteLn(#13#10'Done - Press ENTER to Exit');
+    ReadLn;
+  end;
+  {$endif}
+end;
 
 { TSynTestsLogged }
 
@@ -1037,11 +1083,11 @@ end;
 
 destructor TSynTestsLogged.Destroy;
 begin
-  if (fLogFile.Writer<>nil) and (fConsoleDup<>nil) then begin
+  if (fLogFile<>nil) and (fLogFile.Writer<>nil) and (fConsoleDup<>nil) then begin
     fConsoleDup.Add('"','}');
     fLogFile.Log(sllCustom1,fConsoleDup.Text);
   end;
-  inherited;
+  inherited Destroy;
   fConsoleDup.Free;
 end;
 
