@@ -3992,6 +3992,9 @@ type
     // array (wasAdded=true), the entry is left VOID: you must set the field
     // content to expecting value - in short, Elem is used only for searching,
     // not for filling the newly created entry in the array
+    // - optional aHashCode parameter can be supplied with an already hashed
+    // value of the item, to be used e.g. after a call to HashFind() - default
+    // 0 will use HashOneFromTypeInfo(Elem)
     function FindHashedForAdding(const Elem; out wasAdded: boolean;
       aHashCode: cardinal=0): integer;
     /// ensure a given element name is unique, then add it to the array
