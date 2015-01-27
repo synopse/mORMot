@@ -514,6 +514,7 @@ begin
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
       SetLength(fDBServers,n);
+      result := true;
       break;
     end;
   {$ifdef WITHLOG}
