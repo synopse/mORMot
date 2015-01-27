@@ -4167,6 +4167,33 @@ type
     function JustAdded: boolean;
   end;
 
+  /// abstract parent class with threadsafe implementation of IInterface and
+  // a virtual constructor, ready to be overridden to initialize the instance
+  // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
+  // you need an interfaced object with a virtual constructor
+  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
+  public
+    /// this virtual constructor will be called at instance creation
+    constructor Create; virtual;
+    /// just a method used to call _Release within a Synchronize() call
+    procedure InternalRelease;
+  end;
+
+  /// abstract parent class with a virtual constructor, ready to be overridden
+  // to initialize the instance
+  // - you can specify such a class if you need an object including published
+  // properties (like TPersistent) with a virtual constructor (e.g. to
+  // initialize some nested class properties)
+  TPersistentWithCustomCreate = class(TPersistent)
+  public
+    /// this virtual constructor will be called at instance creation
+    constructor Create; virtual;
+  end;
+
+  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
+  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
+  
+
   /// store one Name/Value pair, as used by TSynNameValue class
   TSynNameValueItem = record
     /// the name of the Name/Value pair
@@ -32433,6 +32460,27 @@ begin
   end;
   result := true;
 end;
+
+
+{ TInterfacedObjectWithCustomCreate }
+
+constructor TInterfacedObjectWithCustomCreate.Create;
+begin // nothing to do by default - overridden constructor may add custom code
+end;
+
+procedure TInterfacedObjectWithCustomCreate.InternalRelease;
+begin
+  if self<>nil then
+    IInterface(self)._Release; // call the release interface
+end;
+
+
+{ TPersistentWithCustomCreate }
+
+constructor TPersistentWithCustomCreate.Create;
+begin // nothing to do by default - overridden constructor may add custom code
+end;
+
 
 
 { ****************** text buffer and JSON functions and classes ********* }

@@ -8860,33 +8860,6 @@ type
   // sicPerUser or sicPerGroup mode
   TServiceFactoryServerInstanceDynArray = array of TServiceFactoryServerInstance;
 
-  /// abstract parent class with threadsafe implementation of IInterface and
-  // a virtual constructor, ready to be overridden to initialize the instance
-  // - you can specify such a class to TSQLRestServer.ServiceRegister() if
-  // you need an interfaced object with a virtual constructor
-  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
-  protected
-    /// just a method used to call _Release within a Synchronize() call
-    procedure InternalRelease;
-  public
-    /// this virtual constructor will be called at instance creation
-    constructor Create; virtual;
-  end;
-
-  /// abstract parent class with a virtual constructor, ready to be overridden
-  // to initialize the instance
-  // - you can specify such a class if you need an object including published
-  // properties (like TPersistent) with a virtual constructor (e.g. to
-  // initialize some class properties)
-  TPersistentWithCustomCreate = class(TPersistent)
-  public
-    /// this virtual constructor will be called at instance creation
-    constructor Create; virtual;
-  end;
-
-  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
-  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
-
   /// a service provider implemented on the server side
   // - each registered interface has its own TServiceFactoryServer instance,
   // available as one TSQLServiceContainerServer item from TSQLRest.Services property
@@ -40016,26 +39989,6 @@ begin
     with TServiceFactoryServer(Index(i)) do
     if InstanceCreation=sicPerSession then
       InternalInstanceRetrieve(Inst,INTERNALINSTANCERETRIEVE_FREEINSTANCE);
-end;
-
-
-{ TInterfacedObjectWithCustomCreate }
-
-constructor TInterfacedObjectWithCustomCreate.Create;
-begin // nothing to do by default - overridden constructor may add custom code
-end;
-
-procedure TInterfacedObjectWithCustomCreate.InternalRelease;
-begin
-  if self<>nil then
-    IInterface(self)._Release; // call the release interface
-end;
-
-
-{ TPersistentWithCustomCreate }
-
-constructor TPersistentWithCustomCreate.Create;
-begin // nothing to do by default - overridden constructor may add custom code
 end;
 
 
