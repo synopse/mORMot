@@ -308,6 +308,7 @@ type
     // framework, if the mORMot.pas unit is to be used - in such case, before
     // calling RunAsConsole(), the caller should execute:
     // ! TSynLogTestLog := TSQLLog;
+    // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string='';
       withLogs: TSynLogInfos=[sllLastError,sllError,sllException,sllExceptionOS]); virtual;
     /// create the test instance
@@ -1003,6 +1004,8 @@ class procedure TSynTests.RunAsConsole(const CustomIdent: string;
   withLogs: TSynLogInfos);
 var tests: TSynTests;
 begin
+  if self=TSynTests then
+    raise ESynException.Create('You should inherit from TSynTests');
   {$ifdef MSWINDOWS}
   AllocConsole;
   {$endif}
