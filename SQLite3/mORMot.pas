@@ -867,8 +867,9 @@ unit mORMot;
       TJSONToObjectOptions optional parameter in JSONToObject() / ObjectToJSON()
       functions and WriteObject() method - including TDocVariant or TBSONVariant
     - fixed TPersistent process in TJSONWriter.WriteObject - thanks Jordi!
-    - introducing TPersistentAutoCreateFields class, with automatic initialization
-      and finalization of its nested published properties (ideal for value objects)
+    - introducing TPersistentAutoCreateFields and TCollectionItemAutoCreateFields
+      classes, with automatic initialization and finalization of their nested
+      published properties (ideal for DDD value objects)
     - JSONToObject() is now able to unserialize a nested record - see [5e49b3096a]
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
@@ -7948,9 +7949,30 @@ type
 
   /// the class of TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
+
+  /// abstract TCollectionItem class, which will instantiate all its nested
+  // TPersistent class published properties, then release them when freed
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects
+  // - note that non published properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance - a EModelException will be raised in such case
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TCollectionItemAutoCreateFields = class(TCollectionItem)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent class published properties
+    constructor Create(Collection: TCollection); override;
+    /// this overriden constructor will release all its nested
+    // TPersistent class published properties
+    destructor Destroy; override;
+  end;
+
   {$endif LVCL}
 
-  /// abstract parent class, which will instantiate all its nested TPersistent
+  /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them when freed
   // - could be used for gathering of TPersistent properties, e.g. for
   // Domain objects in DDD, especially for Aggregates
@@ -40731,25 +40753,13 @@ begin
   end;
 end;
 
-{$ifndef LVCL}
-
-{ TInterfacedCollection }
-
-constructor TInterfacedCollection.Create;
-begin
-  inherited Create(GetClass);
-end;
-
-{$endif LVCL}
-
 { TPersistentAutoCreateFields }
 
-constructor TPersistentAutoCreateFields.Create;
+procedure AutoCreateFields(self: TObject);
 var i,n: integer;
     CT: TClass;
     P: PPropInfo;
 begin
-  inherited Create;
   n := 0;
   CT := PPointer(self)^;
   repeat
@@ -40767,7 +40777,7 @@ begin
   until CT=nil;
 end;
 
-destructor TPersistentAutoCreateFields.Destroy;
+procedure AutoDestroyFields(self: TObject);
 var i: integer;
     CT: TClass;
     P: PPropInfo;
@@ -40781,8 +40791,44 @@ begin
     end;
     CT := CT.ClassParent;
   until CT=nil;
+end;
+
+constructor TPersistentAutoCreateFields.Create;
+begin
+  inherited Create;
+  AutoCreateFields(self);
+end;
+
+destructor TPersistentAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
   inherited Destroy;
 end;
+
+{$ifndef LVCL}
+
+{ TInterfacedCollection }
+
+constructor TInterfacedCollection.Create;
+begin
+  inherited Create(GetClass);
+end;
+
+{ TCollectionItemAutoCreateFields }
+
+constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
+begin
+  inherited;
+  AutoCreateFields(self);
+end;
+
+destructor TCollectionItemAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+{$endif LVCL}
 
 
 { TServiceMethod }
