@@ -6475,13 +6475,10 @@ begin
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
   T := TSQLRecordTest.Create;
   M := TSQLModel.Create([TSQLRecordTest]);
-  with InternalClassProp(TSQLRecordTest)^ do begin
-    P := @PropList;
-    for i := 0 to PropCount-1 do begin
-      Check(TSQLRecordTest.RecordProps.Fields.IndexByName(RawUTF8(P^.Name))=i);
-      Check(T.RecordProps.Fields.ByRawUTF8Name(RawUTF8(P^.Name))<>nil);
-      P := P^.Next;
-    end;
+  for i := 0 to InternalClassPropInfo(TSQLRecordTest,P)-1 do begin
+    Check(TSQLRecordTest.RecordProps.Fields.IndexByName(RawUTF8(P^.Name))=i);
+    Check(T.RecordProps.Fields.ByRawUTF8Name(RawUTF8(P^.Name))<>nil);
+    P := P^.Next;
   end;
   s := TSQLRecordTest.GetSQLCreate(M);
   Check(s='CREATE TABLE Test(ID INTEGER PRIMARY KEY AUTOINCREMENT, Int INTEGER, '+

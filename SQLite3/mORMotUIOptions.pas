@@ -256,10 +256,8 @@ begin
   aClassType := PPointer(Obj)^;
   while (aClassType<>nil) and
     (aClassType<>TComponent) and // TComponent have Name and Tag to be ignored
-    (aClassType<>TObject) do // TObject don't have any published properties
-  with InternalClassProp(aClassType)^ do begin
-    P := @PropList;
-    for i := 1 to PropCount do
+    (aClassType<>TObject) do begin // TObject don't have any published properties
+    for i := 1 to InternalClassPropInfo(aClassType,P) do
     if P^.Name[1]<>'_' then begin // ignore properties which name starts by _
       aCaption := CaptionName(OnCaptionName,@P^.Name);
       if not Assigned(OnComponentCreate) then

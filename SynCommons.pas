@@ -33213,7 +33213,6 @@ begin
   result := JSON;
 end;
 
-
 function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 var objEnd: AnsiChar;

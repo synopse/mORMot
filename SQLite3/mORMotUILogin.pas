@@ -869,10 +869,8 @@ begin
     if C.InheritsFrom(TControl) then
     if not TButton(C).ParentFont then begin // trick to access TControl.FParentFont
       CL := PPointer(C)^;
-      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do
-      with InternalClassProp(CL)^ do begin
-        P := @PropList;
-        for f := 1 to PropCount do begin
+      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do begin
+        for f := 1 to InternalClassPropInfo(CL,P) do begin
           with P^.PropType^^ do
           if (Kind=tkClass) and ClassType^.InheritsFrom(TFont) then begin
             Obj := pointer(P^.GetOrdValue(C));

@@ -1113,6 +1113,7 @@ unit mORMot;
       calling CurrentServiceContext.Factory.RestServer.SessionGetUser)
     - added TSQLRestClientURI.OnIdle property, to enable more responsive
       User Interface in case of slow network - feature request [68337ae98a]
+    - introducing InternalClassPropInfo() as wrapper around InternalClassProp()
     - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
       shared with SynDB and mORMotSQLite3 units (includes methods refactoring)
 
@@ -2318,7 +2319,7 @@ type
     procedure GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
     /// low-level setter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
-    procedure SetOrdValue(Instance: TObject; Value: Integer);
+    procedure SetOrdValue(Instance: TObject; Value: PtrInt);
     /// low-level setter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     procedure SetInt64Value(Instance: TObject; Value: Int64);
@@ -3312,9 +3313,6 @@ type
 {$endif}
   end;
 
-/// retreive a Field property index from a Property Name
-function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
-
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
 
@@ -3337,6 +3335,25 @@ function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
 /// retrieve the class property RTTI information for a specific class
 function InternalClassProp(ClassType: TClass): PClassProp;
   {$ifdef FPC}inline;{$endif}
+
+/// retrieve the class property RTTI information for a specific class
+// - will return the number of published properties
+// - and set the PropInfo variable to point to the first property
+// - typical use to enumerate all published properties could be:
+//  !  var i: integer;
+//  !      CT: TClass;
+//  !      P: PPropInfo;
+//  !  begin
+//  !    CT := ..;
+//  !    repeat
+//  !      for i := 1 to InternalClassPropInfo(CT,P) do begin
+//  !        // use P^ 
+//  !        P := P^.Next;
+//  !      end;
+//  !      CT := CT.ClassParent;
+//  !    until CT=nil;
+//  !  end;
+function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
 
 /// create an instance of the given class
 // - will handle the custom virtual constructors of TSQLRecord or
@@ -14367,6 +14384,19 @@ asm // this code is the fastest possible
 {$endif FPC}
 end;
 
+function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
+var CP: PClassProp;
+begin
+  if ClassType=nil then
+    CP := nil else
+    CP := InternalClassProp(ClassType);
+  if CP=nil then // no more RTTI information available
+    result := 0 else begin
+    PropInfo := AlignToPtr(@CP^.PropList);
+    result := CP^.PropCount;
+  end;
+end;
+
 function ClassFieldCountWithParents(ClassType: TClass): integer;
 var CP: PClassProp;
 begin
@@ -14380,23 +14410,6 @@ begin
   end;
 end;
 
-function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
-var P: PPropInfo;
-    CP: PClassProp;
-begin
-  if ClassType<>nil then begin
-    CP := InternalClassProp(ClassType);
-    if CP<>nil then begin
-      P := AlignToPtr(@CP^.PropList);
-      for result := 0 to CP^.PropCount-1 do
-        if IdemPropName(P^.Name,PropName) then
-          exit else
-          P := P^.Next;
-    end;
-  end;
-  result := -1;
-end;
-
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
 begin
   if ClassType<>nil then
@@ -14406,14 +14419,9 @@ end;
 
 function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
 var i: integer;
-    CP: PClassProp;
 begin
   while aClassType<>nil do begin
-    CP := InternalClassProp(aClassType);
-    if CP=nil then
-      break; // no RTTI information (e.g. reached TObject level)
-    result := AlignToPtr(@CP^.PropList);
-    for i := 1 to CP^.PropCount do
+    for i := 1 to InternalClassPropInfo(aClassType,result) do
       if IdemPropName(result^.Name,PropName) then
         exit else
         result := result^.Next;
@@ -14425,7 +14433,6 @@ end;
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
 {$ifndef FPC}
 var i, L: integer;
-    CP: PClassProp;
 {$endif}
 begin
   {$ifdef FPC}
@@ -14433,11 +14440,7 @@ begin
   {$else}
   L := StrLen(PropName);
   while (L<>0) and (aClassType<>nil) do begin
-    CP := InternalClassProp(aClassType);
-    if CP=nil then
-      break; // no RTTI information (e.g. reached TObject level)
-    result := @CP^.PropList;
-    for i := 1 to CP^.PropCount do
+    for i := 1 to InternalClassPropInfo(aClassType,result) do
       if IdemPropName(result^.Name,PropName,L) then
         exit else
         result := result^.Next;
@@ -14461,19 +14464,6 @@ begin
       result := pointer(P^.GetOrdProp(Obj)); {$else}
       result := pointer(P^.GetOrdValue(Obj));
 {$endif}
-end;
-
-function ClassFieldPropFromIndex(ClassType: TClass; PropIndex: integer): PPropInfo;
-var i: integer;
-begin
-  result := nil;
-  if ClassType<>nil then
-  with InternalClassProp(ClassType)^ do
-  if PropIndex<PropCount then begin
-    result := AlignToPtr(@PropList);
-    for i := 1 to PropIndex do
-      result := result^.Next;
-  end;
 end;
 
 function GetEnumCaption(aTypeInfo: PTypeInfo; const aIndex): string;
@@ -20151,7 +20141,6 @@ var P: PPropInfo;
     i, V: integer;
     VT: shortstring; // for str()
     Obj: TObject;
-    CP: PClassProp;
     WS: WideString;
     {$ifndef NOVARIANTS}
     VV: Variant;
@@ -20162,11 +20151,7 @@ begin
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
       Add(sWriteObject1,[PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^]);
-    CP := InternalClassProp(PPointer(Value)^);
-    if CP=nil then
-      exit;
-    P := AlignToPtr(@CP^.PropList);
-    for i := 1 to CP^.PropCount do begin
+    for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
       case P^.PropType^.Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}:
           Add(sWriteObject2,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
@@ -20418,8 +20403,7 @@ begin
 {$ifdef UNICODE}
       tkUString:
         result := GetUnicodeStrProp(Instance);
-{$endif}
-     else result := '';
+{$endif}else result := '';
      end;
 end;
 
@@ -20432,8 +20416,7 @@ begin
 {$ifdef UNICODE}
        tkUString:
          SetUnicodeStrProp(Instance,Value);
-{$endif}
-    end;
+{$endif}end;
 end;
 
 {$ifdef UNICODE}
@@ -20453,7 +20436,7 @@ begin
 end;
 {$endif}
 
-procedure TPropInfo.SetOrdValue(Instance: TObject; Value: Integer);
+procedure TPropInfo.SetOrdValue(Instance: TObject; Value: PtrInt);
 begin
   if (Instance<>nil) and (@self<>nil) and
      (PropType^.Kind in [
@@ -33699,7 +33682,6 @@ procedure CopyObject(aFrom, aTo: TObject);
 var P: PPropInfo;
     i: integer;
     C: TClass;
-    CP: PClassProp;
 label I64;
 begin
   if (aFrom=nil) or (aTo=nil) then
@@ -33717,11 +33699,7 @@ begin
   C := PPointer(aFrom)^;
   if aTo.InheritsFrom(C) then
   while C<>nil do begin
-    CP := InternalClassProp(C);
-    if CP=nil then
-      break; // no more RTTI information available
-    P := AlignToPtr(@CP^.PropList);
-    for i := 1 to CP^.PropCount do begin
+    for i := 1 to InternalClassPropInfo(C,P) do begin
       P^.CopyValue(aFrom,aTo); // shortstring not handled
       P := P^.Next;
     end;
@@ -33771,15 +33749,10 @@ var P: PPropInfo;
     VV: RawUTF8;
 {$endif}
     Obj: TObject;
-    CP: PClassProp;
 begin
   if Value=nil then
     exit;
-  CP := InternalClassProp(PPointer(Value)^);
-  if CP=nil then
-    exit; // no RTTI available
-  P := AlignToPtr(@CP^.PropList);
-  for i := 1 to CP^.PropCount do begin
+  for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
     case P^.PropType^.Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}:
         UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
@@ -34707,15 +34680,10 @@ var P: PPropInfo;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     {$endif}
-    CP: PClassProp;
 begin
   if Value=nil then // allow From=nil -> default values
     exit;
-  CP := InternalClassProp(PPointer(Value)^);
-  if CP=nil then
-    exit; // no RTTI available
-  P := AlignToPtr(@CP^.PropList);
-  for i := 1 to CP^.PropCount do begin
+  for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
     PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
     U := FindIniNameValue(From,UpperName);
     case P^.PropType^.Kind of
@@ -34789,15 +34757,9 @@ procedure SetDefaultValuesObject(Value: TObject);
 var P: PPropInfo;
     i: integer;
     Obj: TObject;
-    CP: PClassProp;
 begin
-  if Value=nil then
-    exit;
-  CP := InternalClassProp(PPointer(Value)^);
-  if CP=nil then
-    exit; // no RTTI available
-  P := AlignToPtr(@CP^.PropList);
-  for i := 1 to CP^.PropCount do begin
+  if Value<>nil then
+  for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
     case P^.PropType^.Kind of
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
       if P^.Default<>longint($80000000) then
@@ -35427,20 +35389,15 @@ const
 constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
 
   procedure AddParentsFirst(aClassType: TClass);
-  var CP: PClassProp;
-      P: PPropInfo;
+  var P: PPropInfo;
       i: Integer;
   begin
     if aClassType=nil then
       exit; // no RTTI information (e.g. reached TObject level)
     AddParentsFirst(aClassType.ClassParent);
-    CP := InternalClassProp(aClassType);
-    if CP<>nil then begin
-      P := AlignToPtr(@CP^.PropList);
-      for i := 1 to CP^.PropCount do begin
-        Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count));
-        P := P^.Next;
-      end;
+    for i := 1 to InternalClassPropInfo(aClassType,P) do begin
+      Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count));
+      P := P^.Next;
     end;
   end;
 
@@ -36075,7 +36032,6 @@ var P: PPropInfo;
     Str: TStrings absolute Value;
     Utf: TRawUTF8List absolute Value;
     aClassType: TClass;
-    CP: PClassProp;
     Kind: TTypeKind;
     PS: PShortString;
     UtfP: PPUtf8CharArray;
@@ -36177,11 +36133,7 @@ begin
     Add(',');
   end;
   repeat
-    CP := InternalClassProp(aClassType);
-    if CP=nil then
-      break; // no more RTTI information available
-    P := AlignToPtr(@CP^.PropList);
-    for i := 1 to CP^.PropCount do begin
+    for i := 1 to InternalClassPropInfo(aClassType,P) do begin
       if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
         if IsRowIDShort(P^.Name) then
           goto next;

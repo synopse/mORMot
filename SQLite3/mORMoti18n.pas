@@ -1624,10 +1624,8 @@ var Section: PUTF8Char; {$endif}
       {$endif}
     begin
       CL := PPointer(O)^;
-      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do
-      with InternalClassProp(CL)^ do begin
-        P := @PropList;
-        for k := 1 to PropCount do begin
+      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do begin
+        for k := 1 to InternalClassPropInfo(CL,P) do begin
           // standard properties
           if (P^.Name='Caption') or (P^.Name='Hint') or
              (P^.Name='Title') then
@@ -2396,6 +2394,7 @@ var F: Text;
     P: PPropInfo;
     s: WinAnsiString;
     ClassList: TList;
+    CT: TClass;
 
   procedure AddEnum(T: PEnumType);
   var index: integer;
@@ -2407,17 +2406,12 @@ var F: Text;
   procedure AddClass(C: TClass);
   var i: integer;
       P: PPropInfo;
-      CP: PClassProp;
-  begin 
+  begin
     if (C=nil) or (ClassList.IndexOf(C)>=0) then
       exit; // already done or no RTTI information (e.g. reached TObject level)
     ClassList.Add(C);
     AddClass(C.ClassParent); // add parent properties first
-    CP := InternalClassProp(C);
-    if CP=nil then
-      exit;
-    P := @CP^.PropList;
-    for i := 1 to CP^.PropCount do begin // add all field names
+    for i := 1 to InternalClassPropInfo(C,P) do begin // add all field names
       AddOnceDynArray(StringToWinAnsi(TSQLRecord.CaptionNameFromRTTI(@P^.Name)));
       // for Delphi 2009 and up/XE: CaptionName converted into a WinAnsiString
       with P^.PropType^^ do
@@ -2456,14 +2450,15 @@ begin
         for index := 0 to high(Tables) do
         with Tables[index] do begin // TSQLRecord.CaptionName() may be overridden 
           AddOnceDynArray(StringToWinAnsi(CaptionName(nil))); // add table name
-          // for Delphi 2009 and up, CaptionName(): string will be converted into a WinAnsiString
-          with InternalClassProp(Tables[index])^ do begin
-            P := @PropList;
-            for j := 1 to PropCount do begin // add all field names
+          CT := Tables[index];
+          repeat
+            for j := 1 to InternalClassPropInfo(CT,P) do begin
+               // for Delphi 2009 and up, CaptionName(): string for safety
               AddOnceDynArray(StringToWinAnsi(CaptionNameFromRTTI(@P^.Name)));
               P := P^.Next;
             end;
-          end;
+            CT := CT.ClassParent;
+          until CT=nil;
         end;
       end else
       // add standard captions for all TPersistent published fields 
