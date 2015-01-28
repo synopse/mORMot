@@ -34180,6 +34180,9 @@ begin
   result := JSONToObject(aValue,P,aValid);
 end;
 
+var
+  ObjArraySerializers: TObjectList;
+  
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
   aItem: TClass);
 var serializer: TObjArraySerializer;
@@ -34191,7 +34194,11 @@ begin
   serializer.ItemClass := aItem;
   serializer.ClassInstance := ClassToTClassInstanceCreate(aItem
     {$ifndef LVCL},serializer.CollectionItemClass{$endif});
-  GarbageCollector.Add(serializer);
+  if ObjArraySerializers=nil then begin
+    ObjArraySerializers := TObjectList.Create(true);
+    GarbageCollector.Add(ObjArraySerializers);
+  end;
+  ObjArraySerializers.Add(serializer);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
 end;
@@ -34656,7 +34663,7 @@ begin
     Kind := P^.PropType^.Kind;
     while From^ in [#1..' '] do inc(From);
     result := From;
-    if (PInteger(From)^=NULL_LOW) and (From[4] in [#0..' ',',',']','}']) then begin
+    if PInteger(From)^=NULL_LOW then begin
       {$ifndef NOVARIANTS}
       if Kind=tkVariant then 
         P^.SetVariantProp(Value,null) else
@@ -34672,6 +34679,10 @@ begin
         end;
       end;
       inc(From,4);
+      while From^ in [#1..' '] do inc(From);
+      EndOfObject := From^;
+      if From^ in EndOfJSONField then
+        inc(From);
     end else
     if From^ in ['[','{'] then begin
       // nested array or object
