@@ -10927,15 +10927,15 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimeStamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
-    procedure SaveTo(W: TFileBufferWriter);
-    procedure ComputeProtectedValues;
-    constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
-  public
+    procedure SaveTo(W: TFileBufferWriter); virtual;
+    procedure ComputeProtectedValues; virtual;
+    constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer); virtual;
+  public   
     /// initialize a session instance with the supplied TSQLAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
     // - raise an exception on any error
     // - on success, will also retrieve the aUser.Data BLOB field content
-    constructor Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
+    constructor Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser); virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
   public
@@ -10976,6 +10976,8 @@ type
   /// used to define overridden session instances
   // - since all sessions data remain in memory, ensure they are not taking too
   // much resource (memory or process time)
+  // - if you plan to use session persistence, ensure you override the
+  // TAuthSession.SaveTo/CreateFrom methods in the inherited class
   TAuthSessionClass = class of TAuthSession;
 
   TSQLRestServerAuthentication = class;
@@ -36980,9 +36982,9 @@ end;
 constructor TAuthSession.CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
 var PB: PByte absolute P;
 begin
-  if PB^<>TAUTHSESSION_MAGIC then
+  if PB^=TAUTHSESSION_MAGIC then
+    inc(PB) else
     raise ESynException.CreateUTF8('%.CreateFrom() with invalid format',[self]);
-  inc(PB);
   fIDCardinal := FromVarUInt32(PB);
   UInt32ToUtf8(fIDCardinal,fID);
   fUser := Server.SQLAuthUserClass.Create;
