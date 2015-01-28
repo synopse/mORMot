@@ -2134,6 +2134,14 @@ type
     /// get the dynamic array type information of the stored item 
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
+    /// recognize most used string types, returning their code page
+    // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
+    // - will return the exact code page since Delphi 2009, from RTTI
+    // - for non Unicode versions of Delphi, will recognize WinAnsiString as
+    // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
+    // AnsiString as 0, and any other type as RawUTF8
+    function AnsiStringCodePage: integer;
+      {$ifdef UNICODE}inline;{$endif}
   end;
 
 {$ifdef FPC}
@@ -20355,23 +20363,21 @@ end;
 
 function TPropInfo.GetLongStrValue(Instance: TObject): RawUTF8;
 var tmp: RawByteString;
+    cp: integer;
 begin
   result := '';
   if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then
-    if PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUTF8) then
-      GetLongStrProp(Instance,RawByteString(result)) else begin
-      GetLongStrProp(Instance,tmp);
-      if tmp<>'' then
-        if PropType{$ifndef FPC}^{$endif}=TypeInfo(WinAnsiString) then
-          result := WinAnsiToUTF8(WinAnsiString(tmp)) else
-        if PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUnicode) then
-          RawUnicodeToUTF8(pointer(tmp),length(tmp)shr 1,result) else
-        if PropType{$ifndef FPC}^{$endif}=TypeInfo(TSQLRawBlob) then
-          result := TSQLRawBlobToBlob(TSQLRawBlob(tmp)) else
-          // not a known LongStr type -> use generic AnsiString
-          result := CurrentAnsiConvert.AnsiToUTF8(tmp);
+     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then begin
+    GetLongStrProp(Instance,tmp);
+    if tmp<>'' then begin
+      cp := PropType^.AnsiStringCodePage;
+      case cp of
+        CP_UTF8:       result := tmp;
+        CP_SQLRAWBLOB: result := TSQLRawBlobToBlob(TSQLRawBlob(tmp));
+        else           result := TSynAnsiConvert.Engine(cp).AnsiToUTF8(tmp);
+      end;
     end;
+  end;
 end;
 
 procedure TPropInfo.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
@@ -20383,19 +20389,21 @@ begin
 end;
 
 procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
+var tmp: RawByteString;
+    cp: integer;
 begin
   if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then
-  if (Value='') or (PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUTF8)) then
-    SetLongStrProp(Instance,Value) else
-  if PropType{$ifndef FPC}^{$endif}=TypeInfo(WinAnsiString) then
-    SetLongStrProp(Instance,UTF8ToWinAnsi(Value)) else
-  if PropType{$ifndef FPC}^{$endif}=TypeInfo(RawUnicode) then
-    SetLongStrProp(Instance,Utf8DecodeToRawUnicode(Value)) else
-  if PropType{$ifndef FPC}^{$endif}=TypeInfo(TSQLRawBlob) then
-    SetLongStrProp(Instance,BlobToTSQLRawBlob(Value)) else
-    // not a known LongStr type -> use generic AnsiString
-    SetLongStrProp(Instance,AnsiString(UTF8ToString(Value)));
+     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then begin
+    if Value<>'' then begin
+      cp := PropType^.AnsiStringCodePage;
+      case cp of
+        CP_UTF8:       tmp := Value;
+        CP_SQLRAWBLOB: tmp := BlobToTSQLRawBlob(Value);
+        else           tmp := TSynAnsiConvert.Engine(cp).UTF8ToAnsi(Value);
+      end;
+    end;
+    SetLongStrProp(Instance,tmp);
+  end;
 end;
 
 function TPropInfo.GetGenericStringValue(Instance: TObject): string;
@@ -21418,6 +21426,29 @@ begin
   if @self=nil then
     result := nil else
     result := TypeInfoToRecordInfo(@self,aDataSize);
+end;
+
+function TTypeInfo.AnsiStringCodePage: integer;
+begin
+  {$ifdef UNICODE}
+  if @self=TypeInfo(TSQLRawBlob) then
+    result := CP_SQLRAWBLOB else
+    result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^;
+  {$else}
+  if @self=TypeInfo(RawUTF8) then
+    result := CP_UTF8 else
+  if @self=TypeInfo(WinAnsiString) then
+    result := CODEPAGE_US else
+  if @self=TypeInfo(RawUnicode) then
+    result := CP_UTF16 else
+  if @self=TypeInfo(TSQLRawBlob) then
+    result := CP_SQLRAWBLOB else
+  if @self=TypeInfo(RawByteString) then
+    result := CP_RAWBYTESTRING else
+  if @self=TypeInfo(AnsiString) then
+    result := 0 else
+    result := CP_UTF8;
+  {$endif}
 end;
 
 

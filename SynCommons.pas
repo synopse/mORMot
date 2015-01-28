@@ -719,6 +719,13 @@ const
   // - used e.g. for Delphi 2009+ UnicodeString=String type
   CP_UTF16 = 1200;
 
+  /// fake code page used to recognize TSQLRawBlob
+  // - as returned e.g. by TTypeInfo.AnsiStringCodePage
+  CP_SQLRAWBLOB = 65534;
+
+  /// internal Code Page for RawByteString undefined string
+  CP_RAWBYTESTRING = 65535;
+
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
   CODEPAGE_US = 1252;
 
@@ -11485,11 +11492,12 @@ begin
     result := CurrentAnsiConvert;
     exit;
   end;
-  for i := 0 to SynAnsiConvertList.Count-1 do begin
-    result := SynAnsiConvertList.List[i];
-    if result.CodePage=aCodePage then
-      exit;
-  end;
+  with SynAnsiConvertList do
+    for i := 0 to Count-1 do begin
+      result := List[i];
+      if result.CodePage=aCodePage then
+        exit;
+    end;
   if aCodePage=CP_UTF8 then
     result := TSynAnsiUTF8.Create(CP_UTF8) else
   if aCodePage=CP_UTF16 then
@@ -12188,7 +12196,7 @@ begin
     result := '' else begin
     {$ifdef UNICODE}
     CodePage := StringCodePage(s);
-    if CodePage=CP_UTF8 then
+    if (CodePage=CP_UTF8) or (CodePage=CP_RAWBYTESTRING) then
       result := s else
       result := TSynAnsiConvert.Engine(CodePage).
     {$else}
@@ -12202,7 +12210,7 @@ function AnyAnsiToUTF8(const s: RawByteString): RawUTF8;
 begin
   AnyAnsiToUTF8(s,result);
 end;
-  
+
 function WinAnsiBufferToUtf8(Dest: PUTF8Char; Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char;
 begin
   result := WinAnsiConvert.AnsiBufferToUTF8(Dest,Source,SourceChars);
