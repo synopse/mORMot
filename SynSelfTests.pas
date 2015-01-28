@@ -263,10 +263,12 @@ type
     procedure _TDynArrayHashed;
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     /// test TObjectDynArrayWrapper class
     procedure _TObjectDynArrayWrapper;
-{$endif}
+    {$endif}
+    /// test T*ObjArray types and the ObjArray*() wrappers
+    procedure _TObjArray;
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -3534,6 +3536,70 @@ begin
   end;
 end;
 
+type
+  TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
+  private
+    fText: RawUTF8;
+    fValue1: TComplexNumber;
+    fValue2: TComplexNumber;
+  public
+    constructor CreateFake;
+  published
+    property Text: RawUTF8 read fText write fText;
+    property Value1: TComplexNumber read fValue1 write fValue1;
+    property Value2: TComplexNumber read fValue2 write fValue2;
+  end;
+  TPersistentAutoCreateFieldsTestObjArray = array of TPersistentAutoCreateFieldsTest;
+
+constructor TPersistentAutoCreateFieldsTest.CreateFake;
+begin
+  inherited Create;
+  Text := 'text';
+  Value1.Real := 1.5;
+  Value1.Imaginary := 2.5;
+  Value2.Real := 1.7;
+  Value2.Imaginary := 2.7;
+end;
+
+procedure TTestLowLevelCommon._TObjArray;
+const MAX=200;
+var i: integer;
+    arr: TPersistentAutoCreateFieldsTestObjArray;
+    p: TPersistentAutoCreateFieldsTest;
+    tmp: RawUTF8;
+begin
+  TJSONSerializer.RegisterObjArrayForJSON(
+    TypeInfo(TPersistentAutoCreateFieldsTestObjArray),TPersistentAutoCreateFieldsTest);
+  try
+    tmp := DynArraySaveJSON(arr,TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    check(tmp='[]');
+    p := TPersistentAutoCreateFieldsTest.CreateFake;
+    ObjArrayAdd(arr,p);
+    tmp := DynArraySaveJSON(arr,TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    check(tmp='[{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},'+
+      '"Value2":{"Real":1.7,"Imaginary":2.7}}]');
+    for i := 1 to MAX do begin
+      p := TPersistentAutoCreateFieldsTest.CreateFake;
+      p.Value1.Real := p.Value1.Real+i*1.0;
+      Check(ObjArrayAdd(arr,p)=i);
+    end;
+    tmp := DynArraySaveJSON(arr,TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    ObjArrayClear(arr);
+    Check(length(arr)=0);
+    DynArrayLoadJSON(arr,pointer(tmp),TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    Check(length(arr)=MAX+1);
+    for i := 0 to MAX do begin
+      Check(arr[i].Text='text');
+      CheckSame(arr[i].Value1.Real,1.5+i);
+      CheckSame(arr[i].Value1.Imaginary,2.5);
+      CheckSame(arr[i].Value2.Real,1.7);
+      CheckSame(arr[i].Value2.Imaginary,2.7);
+    end;
+  finally
+    ObjArrayClear(arr);
+  end;
+end;
+
 
 {$ifndef DELPHI5OROLDER}
 
@@ -5879,16 +5945,6 @@ end;
 
 type
   TOrdTypeSet = set of TOrdType;
-  TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
-  private
-    fText: RawUTF8;
-    fValue1: TComplexNumber;
-    fValue2: TComplexNumber;
-  published
-    property Text: RawUTF8 read fText write fText;
-    property Value1: TComplexNumber read fValue1 write fValue1;
-    property Value2: TComplexNumber read fValue2 write fValue2;
-  end;
 
 procedure TTestLowLevelTypes.RTTI;
 var i: Integer;
@@ -5929,15 +5985,10 @@ begin
   Check(InternalMethodInfo(TSQLRestServer,'timestamp')<>nil);
   Check(InternalMethodInfo(TSQLRestServer,'timestamp')^.MethodAddr=
     TSQLRestServer.MethodAddress('TIMEstamp'));
-  auto := TPersistentAutoCreateFieldsTest.Create;
+  auto := TPersistentAutoCreateFieldsTest.CreateFake;
   try
     Check(auto.Value1<>nil);
     Check(auto.Value2<>nil);
-    auto.Text := 'text';
-    auto.Value1.Real := 1.5;
-    auto.Value1.Imaginary := 2.5;
-    auto.Value2.Real := 1.7;
-    auto.Value2.Imaginary := 2.7;
     tmp := ObjectToJSON(auto);
     Check(tmp='{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},'+
       '"Value2":{"Real":1.7,"Imaginary":2.7}}');

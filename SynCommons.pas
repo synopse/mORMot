@@ -411,6 +411,8 @@ unit SynCommons;
   - added TypeInfo, ElemSize, ElemType read-only properties to TDynArray
   - added DynArrayLoad() and DynArraySave() helper functions
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
+  - introducing T*ObjArray dynamic array storage via ObjArrayAdd/ObjArrayFind/
+    ObjArrayDelete/ObjArraySort and ObjArrayClear functions
   - introducing TSynAuthentication class for simple generic authentication
   - added TDynArrayHashed.HashElement property
   - new TDynArrayHashed.AddUniqueName() method
@@ -4270,6 +4272,63 @@ type
     property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
   end;
 
+  
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - could be used as such (note the T*ObjArray type naming convention):
+// ! TUserObjArray = array of TUser;
+// ! ...
+// ! var arr: TUserObjArray;
+// !     user: TUser;
+// ! ..
+// ! try
+// !   user := TUser.Create;
+// !   user.Name := 'Name';
+// !   index := ObjArrayAdd(arr,user);
+// ! ...
+// ! finally
+// !   ObjArrayClear(arr); // release all items
+// ! end;
+// - return the index of the item in the dynamic array
+function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
+
+/// wrapper to add once an item to a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - if the object is already in the array (searching by address/reference,
+// not by content), return its current index in the dynamic array
+// - if the object does not appear in the array, add it at the end, and
+// return the index of the item in the dynamic array
+function ObjArrayAddOnce(var aDynArray; aItem: TObject): integer;
+
+/// wrapper to search an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - returns -1 if the item is not found in the dynamic array
+function ObjArrayFind(var aDynArray; aItem: TObject): integer;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - do nothing if the index is out of range in the dynamic array
+procedure ObjArrayDelete(var aDynArray; aItemIndex: integer); overload;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function ObjArrayDelete(var aDynArray; aItem: TObject): integer; overload;
+
+/// wrapper to sort the items stored in a T*ObjArray dynamic array 
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+procedure ObjArraySort(var aDynArray; Compare: TDynArraySortCompare);
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aDynArray);
+
 
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
@@ -5585,7 +5644,7 @@ type
     // for BLOB stream
     // - typical content could be
     // ! '[1,2,3,4]' or '["\uFFF0base64encodedbinary"]'
-    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload;
+    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload; 
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - just a wrapper around the other overloaded method, creating a
     // temporary TDynArray wrapper on the stack
@@ -32359,6 +32418,73 @@ begin
     Quicksort.QuickSort(0,fCount-1);
   end;
 end;
+
+
+
+function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
+begin
+  result := length(TObjectDynArray(aDynArray));
+  SetLength(TObjectDynArray(aDynArray),result+1);
+  TObjectDynArray(aDynArray)[result] := aItem;
+end;
+
+function ObjArrayAddOnce(var aDynArray; aItem: TObject): integer;
+begin
+  result := ObjArrayFind(aDynArray,aItem);
+  if result<0 then
+    result := ObjArrayAdd(aDynArray,aItem);
+end;
+
+function ObjArrayFind(var aDynArray; aItem: TObject): integer;
+begin
+  for result := 0 to length(TObjectDynArray(aDynArray))-1 do
+    if TObjectDynArray(aDynArray)[result]=aItem then
+      exit;
+  result := -1;
+end;
+
+procedure ObjArrayDelete(var aDynArray; aItemIndex: integer); 
+var n: integer;
+    a: TObjectDynArray absolute aDynArray;
+begin
+  n := length(a);
+  if cardinal(aItemIndex)>=cardinal(n) then
+    exit; // out of range
+  a[aItemIndex].Free;
+  dec(n);
+  if n>aItemIndex then
+    Move(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(TObject));
+  SetLength(a,n);
+end;
+
+function ObjArrayDelete(var aDynArray; aItem: TObject): integer; 
+begin
+  result := ObjArrayFind(aDynArray,aItem);
+  if result>=0 then
+    ObjArrayDelete(aDynArray,result);
+end;
+
+procedure ObjArraySort(var aDynArray; Compare: TDynArraySortCompare);
+var QuickSort: TDynArrayQuickSort;
+    n: integer;
+begin
+  n := length(TObjectDynArray(aDynArray));
+  if (@Compare<>nil) and (n>0) then begin
+    Quicksort.Compare := @Compare;
+    Quicksort.Value := pointer(aDynArray);
+    Quicksort.ElemSize := sizeof(pointer);
+    Quicksort.QuickSort(0,n-1);
+  end;
+end;
+
+procedure ObjArrayClear(var aDynArray);
+var i: integer;
+begin
+  for i := 0 to length(TObjectDynArray(aDynArray))-1 do
+    TObjectDynArray(aDynArray)[i].Free;
+  SetLength(TObjectDynArray(aDynArray),0);
+end;
+
 
 
 { TObjectHash }

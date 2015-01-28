@@ -753,6 +753,8 @@ unit mORMot;
     - new TJSONSerializer.RegisterCollectionForJSON() method, to register a
       TCollection/TCollectionItem pair and allow JSON serialization of any
       "plain" collection - may be a good alternative to TInterfacedCollection
+    - new JSONSerializer.RegisterObjArrayForJSON() method for automatic JSON
+      serialization of T*ObjArray dynamic array storage 
     - sets including all enumerate values will be written in JSON as "*"
       with woHumanReadable option (and recognized as such e.g. by JSONToObject);
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
@@ -2135,6 +2137,9 @@ type
     /// get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
+    /// get the dynamic array size (in bytes) of the stored item
+    function DynArrayItemSize: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// recognize most used string types, returning their code page
     // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
     // - will return the exact code page since Delphi 2009, from RTTI
@@ -3275,6 +3280,7 @@ type
       Options: TTextWriterWriteObjectOptions);
     /// relase all used memory and handles
     destructor Destroy; override;
+    
     /// define a custom serialization for a given class
     // - by default, TSQLRecord, TPersistent, TStrings, TCollection classes
     // are processed: but you can specify here some callbacks to perform
@@ -3299,7 +3305,7 @@ type
     // - by default, all referenced TSQLRecord classes will be globally
     // registered when TSQLRecordProperties information is retrieved
     class procedure RegisterClassForJSON(const aItemClass: array of TClass); overload;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     /// let a given TCollection be recognized during JSON serialization
     // - due to how TCollection instances are created, you can not create a
     // server-side instance of TCollection directly
@@ -3310,9 +3316,21 @@ type
     // - note that both supplied classes will be registered for the internal
     // "ClassName":"..." RegisterClassForJSON() process
     class procedure RegisterCollectionForJSON(aCollection: TCollectionClass;
-      aItem: TCollectionItemClass); 
-{$endif}
+      aItem: TCollectionItemClass);
+    {$endif}
+    /// let a T*ObjArray dynamic array be used for storage of class instances
+    // - will allow JSON serialization and unserialization of the registered
+    // dynamic array property
+    // - could be used as such (note the T*ObjArray type naming convention):
+    // ! TUserObjArray = array of TUser;
+    // ! ...
+    // ! TJSONSerializer.RegisterObjArrayForJSON(TypeInfo(TUserObjArray),TUser);
+    // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
+    // the stored items, and never forget to call ObjArrayClear to release
+    // the memory
+    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass);
   end;
+
 
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -3368,6 +3386,25 @@ function ClassInstanceCreate(aClass: TClass): TObject; overload;
 // - will handle the custom virtual constructors of TSQLRecord or
 // TCollection classes as expected, so is to be preferred to aClass.Create
 function ClassInstanceCreate(const aClassName: RawUTF8): TObject; overload;
+
+type
+  /// the class kind as handled by ClassInstanceCreate() functions
+  TClassInstanceCreate = (
+    cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
+    cicTInterfacedCollection,cicTCollection,cicTObject);
+
+/// compute the class kind of a given class
+// - as handled by ClassInstanceCreate() functions
+function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
+  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate;
+
+/// create an instance of the given class, from its kind as previously
+// recognized by ClassToTClassInstanceCreate()
+// - will handle the custom virtual constructors of TSQLRecord or
+// TCollection classes as expected, so is to be preferred to aClass.Create
+function ClassInstanceCreate(aClass: TClass;
+  aClassInstanceCreate: TClassInstanceCreate{$ifndef LVCL};
+  aCollectionItemClass: TCollectionItemClass{$endif}): TObject; overload;
 
 /// retrieve a method RTTI information for a specific class
 function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString): PMethodInfo;
@@ -21465,12 +21502,19 @@ begin
     result := TypeInfoToRecordInfo(@self,aDataSize);
 end;
 
+function TTypeInfo.DynArrayItemSize: integer;
+begin
+  if @self=nil then
+    result := 0 else
+    TypeInfoToRecordInfo(@self,@result);
+end;
+
 function TTypeInfo.AnsiStringCodePage: integer;
 begin
   {$ifdef UNICODE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
-    result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^;
+    result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^; // from RTTI
   {$else}
   if @self=TypeInfo(RawUTF8) then
     result := CP_UTF8 else
@@ -29274,7 +29318,7 @@ begin
   h := high(Values);
   if h<0 then
     result := '{"result":null}' else
-    with TTextWriter.CreateOwnedStream do
+    with TJSONSerializer.CreateOwnedStream do
     try
       AddShort('{"result":');
       if h=0 then
@@ -29395,7 +29439,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
         if fInput<>nil then begin
           meth := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
           if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
-            WR := TTextWriter.CreateOwnedStream;
+            WR := TJSONSerializer.CreateOwnedStream;
             try // convert URI parameters into the expected ordered JSON array
               WR.Add('[');
               with Service.InterfaceFactory.fMethods[meth] do begin
@@ -34110,13 +34154,54 @@ begin
     RegisterClassForJSON(aItemClass[i]);
 end;
 
+type
+  TObjArraySerializer = class
+  public
+    ItemClass: TClass;
+    ClassInstance: TClassInstanceCreate;
+    {$ifndef LVCL}
+    CollectionItemClass: TCollectionItemClass;
+    {$endif}
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue);
+    function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+  end;
 
-function ClassInstanceCreate(aClass: TClass): TObject;
+procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
+begin
+  aWriter.WriteObject(TObject(aValue));
+end;
+
+function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
+  out aValid: Boolean): PUTF8Char;
+begin
+  FreeAndNil(TObject(aValue));
+  TObject(aValue) := ClassInstanceCreate(ItemClass,ClassInstance
+    {$ifndef LVCL},CollectionItemClass{$endif});
+  result := JSONToObject(aValue,P,aValid);
+end;
+
+class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
+  aItem: TClass);
+var serializer: TObjArraySerializer;
+begin
+  if (aItem=nil) or (aDynArray^.DynArrayItemSize<>sizeof(TObject)) then
+    raise EModelException.CreateUTF8(
+      'Invalid %.RegisterObjArrayForJSON(TypeInfo(%),%)',[self,aDynArray^.Name,aItem]);
+  serializer := TObjArraySerializer.Create;
+  serializer.ItemClass := aItem;
+  serializer.ClassInstance := ClassToTClassInstanceCreate(aItem
+    {$ifndef LVCL},serializer.CollectionItemClass{$endif});
+  GarbageCollector.Add(serializer);
+  TTextWriter.RegisterCustomJSONSerializer(
+    aDynArray,serializer.CustomReader,serializer.CustomWriter);
+end;
+
+function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
+  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate;
 var C: TClass;
-begin // guess constructor to be used (faster than multiple InheritsFrom calls)
+begin
   C := aClass;
-  result := nil;
-  if aClass<>nil then
+  if C<>nil then
   repeat
     if C<>TSQLRecord then
     if C<>TObjectList then
@@ -34133,25 +34218,75 @@ begin // guess constructor to be used (faster than multiple InheritsFrom calls)
       C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
   {$endif}
       if C<>nil then
-        continue else
-        result := aClass.Create;
+        continue else begin
+        result := cicTObject;
+        exit;
+      end;
+    end else begin
+      result := cicTObject;
+      exit;
     end else
-      result := aClass.Create else
-  {$ifndef LVCL}
-    begin // plain TCollection shall have been registered
-      C := JSONSerializerRegisteredCollection.Find(TCollectionClass(aClass));
-      if C<>nil then
-        result := TCollectionClass(aClass).Create(TCollectionItemClass(C)) else
+  {$ifndef LVCL} begin // plain TCollection shall have been registered
+      aCollectionItemClass := JSONSerializerRegisteredCollection.Find(TCollectionClass(aClass));
+      if aCollectionItemClass<>nil then begin
+        result := cicTCollection;
+        exit;
+      end else
         raise EParsingException.CreateUTF8('% shall inherit from TInterfacedCollection'+
          ' or call TJSONSerializer.RegisterCollectionForJSON()',[aClass]);
+    end else begin
+      result := cicTInterfacedCollection;
+      exit;
     end else
-      result := TInterfacedCollectionClass(aClass).Create else
-  {$endif}
-      result := TPersistentWithCustomCreateClass(aClass).Create else
-      result := TObjectList.Create else
-      result := TSQLRecordClass(aClass).Create;
-    break;
+  {$endif} begin
+      result := cicTPersistentWithCustomCreate;
+      exit;
+    end else begin
+      result := cicTObjectList;
+      exit;
+    end else begin
+      result := cicTSQLRecord;
+      exit;
+    end;
   until false;
+  result := cicUnknown;
+end;
+
+function ClassInstanceCreate(aClass: TClass;
+  aClassInstanceCreate: TClassInstanceCreate{$ifndef LVCL};
+  aCollectionItemClass: TCollectionItemClass{$endif}): TObject;
+begin
+  case aClassInstanceCreate of
+    cicTSQLRecord:
+      result := TSQLRecordClass(aClass).Create;
+    cicTObjectList:
+      result := TObjectList.Create;
+    cicTPersistentWithCustomCreate:
+      result := TPersistentWithCustomCreateClass(aClass).Create;
+    {$ifndef LVCL}
+    cicTInterfacedCollection:
+      result := TInterfacedCollectionClass(aClass).Create;
+    cicTCollection:
+      result := TCollectionClass(aClass).Create(aCollectionItemClass);
+    {$endif}
+    cicTObject:
+      result := aClass.Create;
+    else
+      result := nil;
+  end;
+end;
+
+function ClassInstanceCreate(aClass: TClass): TObject;
+{$ifdef LVCL}
+begin
+  result := ClassInstanceCreate(aClass,ClassToTClassInstanceCreate(aClass));
+{$else}
+var aCollectionItemClass: TCollectionItemClass;
+    aClassInstanceCreate: TClassInstanceCreate;
+begin
+  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass,aCollectionItemClass);
+  result := ClassInstanceCreate(aClass,aClassInstanceCreate,aCollectionItemClass);
+{$endif}
 end;
 
 function ClassInstanceCreate(const aClassName: RawUTF8): TObject;
@@ -36057,23 +36192,23 @@ end;
 procedure TJSONSerializer.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 var Added: boolean;
     CustomComment: RawUTF8;
-procedure HR(P: PPropInfo=nil);
-begin
-  if woHumanReadable in Options then begin
-    if CustomComment<>'' then begin
-      AddShort(' // ');
-      AddString(CustomComment);
-      CustomComment := '';
+  procedure HR(P: PPropInfo=nil);
+  begin
+    if woHumanReadable in Options then begin
+      if CustomComment<>'' then begin
+        AddShort(' // ');
+        AddString(CustomComment);
+        CustomComment := '';
+      end;
+      AddCRAndIndent;
     end;
-    AddCRAndIndent;
+    if P=nil then
+      exit;
+    AddPropName(P^.Name);
+    if woHumanReadable in Options then
+      Add(' ');
+    Added := true;
   end;
-  if P=nil then
-    exit;
-  AddPropName(P^.Name);
-  if woHumanReadable in Options then
-    Add(' ');
-  Added := true;
-end;
 var P: PPropInfo;
     i, j, V, c: integer;
     Obj: TObject;
@@ -38738,7 +38873,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
     assert(offs=0);
     {$endif}
   end;
-  WR := TTextWriter.CreateOwnedStream;
+  WR := TJSONSerializer.CreateOwnedStream;
   try
     // compute the default results JSON array for all methods
     for m := 0 to fMethodsCount-1 do
@@ -40795,7 +40930,7 @@ end;
 
 constructor TPersistentAutoCreateFields.Create;
 begin
-  inherited Create;
+  inherited;
   AutoCreateFields(self);
 end;
 
@@ -41520,9 +41655,8 @@ initialization
   ExeVersionRetrieve; // the sooner the better
   {$endif}
   SetCurrentThreadName('Main thread',[]);
-
-  assert(sizeof(TServiceMethod)and 3=0,'Adjust padding');
-
+  TTextWriter.SetDefaultJSONClass(TJSONSerializer);
+  assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
 end.
 
 
