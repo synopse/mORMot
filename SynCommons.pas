@@ -467,6 +467,7 @@ unit SynCommons;
   - added TTextWriter.UnRegisterCustomJSONSerializer() method
   - added TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType() method
   - added TTextWriter.AddTypedJSON() and AddCRAndIdent methods
+  - added TTextWriter.SetDefaultJSONClass to force TJSONSerializer use
   - added TJSONWriter.EndJSONObject() method, for writing an optional
     ',"rowCount":' field in non expanded mode - used for all JSON creation
   - added TTextWriter.EchoAdd() and EchoRemove() methods
@@ -3344,6 +3345,7 @@ function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integ
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 
+
 type
   /// used to store and retrieve Words in a sorted array
   // - is defined either as an object either as a record, due to a bug
@@ -4297,7 +4299,8 @@ function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// append a TGUID binary content as text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -5277,6 +5280,11 @@ type
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
+    /// you can use this method to override the default JSON serialization class
+    // - if only SynCommons.pas is used, it will be TTextWriter
+    // - but mORMot.pas will call it to use the TJSONSerializer instead, which
+    // is able to serialize any class as JSON
+    class procedure SetDefaultJSONClass(aClass: TTextWriterClass);
 
     /// retrieve the data as a string
     function Text: RawUTF8;
@@ -26599,9 +26607,12 @@ begin
   end;
 end;
 
+var
+  DefaultTextWriterJSONClass: TTextWriterClass = TTextWriter;
+  
 function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
 begin
-  with TTextWriter.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
     AddRecordJSON(Rec,TypeInfo);
     SetText(result);
@@ -28175,7 +28186,7 @@ end;
 procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8);
 begin // not very optimized, but fast enough in practice, and creates valid JSON
-  with TTextWriter.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
     AddVariantJSON(Value,Escape);
     SetText(result);
@@ -28189,7 +28200,7 @@ var Fake: TFakeWriterStream;
 begin // will avoid most memory allocations, except for one 2KB internal buffer
   Fake := TFakeWriterStream.Create;
   try
-    with TTextWriter.Create(Fake,2048) do
+    with DefaultTextWriterJSONClass.Create(Fake,2048) do
     try
       AddVariantJSON(Value,Escape);
       FlushShouldNotAutoResize := true;
@@ -29959,7 +29970,7 @@ end;
 
 function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8;
 begin
-  with TTextWriter.CreateOwnedStream(8192) do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
   try
     AddDynArrayJSON(TypeInfo,Value);
     SetText(result);
@@ -29977,7 +29988,7 @@ begin
   try
     if DynArray.LoadFrom(pointer(BlobValue))=nil then
       result := '' else begin
-      with TTextWriter.CreateOwnedStream(8192) do
+      with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
       try
         AddDynArrayJSON(TypeInfo,Value);
         SetText(result);
@@ -34404,6 +34415,11 @@ begin
   inherited;
 end;
 
+class procedure TTextWriter.SetDefaultJSONClass(aClass: TTextWriterClass);
+begin
+  DefaultTextWriterJSONClass := aClass;
+end;
+
 procedure TTextWriter.SetStream(aStream: TStream);
 begin
   if fStream<>nil then
@@ -34673,7 +34689,7 @@ function JSONEncode(const NameValuePairs: array of const): RawUTF8;
 begin
   if high(NameValuePairs)<1 then
     result := '{}' else // return void JSON object on error
-    with TTextWriter.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream do
     try
       AddJSONEscape(NameValuePairs);
       SetText(result);
@@ -34685,7 +34701,7 @@ end;
 {$ifndef NOVARIANTS}
 function JSONEncode(Format: PUTF8Char; const Args,Params: array of const): RawUTF8; overload;
 begin
-  with TTextWriter.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
     AddJSON(Format,Args,Params);
     SetText(result);
@@ -34698,7 +34714,7 @@ end;
 function JSONEncodeArray(const Values: array of double): RawUTF8;
 var W: TTextWriter;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
     W.AddCSV(Values);
@@ -34712,7 +34728,7 @@ end;
 function JSONEncodeArray(const Values: array of RawUTF8): RawUTF8;
 var W: TTextWriter;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
     W.AddCSV(Values);
@@ -34726,7 +34742,7 @@ end;
 function JSONEncodeArray(const Values: array of integer): RawUTF8;
 var W: TTextWriter;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
     W.AddCSV(Values);
@@ -34750,7 +34766,7 @@ begin
     if WithoutBraces then
       result := '' else
       result := '[]' else
-    with TTextWriter.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream do
     try
       if not WithoutBraces then
         Add('[');
