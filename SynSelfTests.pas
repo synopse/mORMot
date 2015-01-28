@@ -5877,11 +5877,23 @@ end;
 
 {$endif LVCL}
 
-type TOrdTypeSet = set of TOrdType;
+type
+  TOrdTypeSet = set of TOrdType;
+  TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
+  private
+    fText: RawUTF8;
+    fValue1: TComplexNumber;
+    fValue2: TComplexNumber;
+  published
+    property Text: RawUTF8 read fText write fText;
+    property Value1: TComplexNumber read fValue1 write fValue1;
+    property Value2: TComplexNumber read fValue2 write fValue2;
+  end;
 
 procedure TTestLowLevelTypes.RTTI;
 var i: Integer;
     tmp: RawUTF8;
+    auto: TPersistentAutoCreateFieldsTest;
 begin
   with PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType^ do
     for i := 0 to integer(high(TOrdType)) do begin
@@ -5917,7 +5929,23 @@ begin
   Check(InternalMethodInfo(TSQLRestServer,'timestamp')<>nil);
   Check(InternalMethodInfo(TSQLRestServer,'timestamp')^.MethodAddr=
     TSQLRestServer.MethodAddress('TIMEstamp'));
+  auto := TPersistentAutoCreateFieldsTest.Create;
+  try
+    Check(auto.Value1<>nil);
+    Check(auto.Value2<>nil);
+    auto.Text := 'text';
+    auto.Value1.Real := 1.5;
+    auto.Value1.Imaginary := 2.5;
+    auto.Value2.Real := 1.7;
+    auto.Value2.Imaginary := 2.7;
+    tmp := ObjectToJSON(auto);
+    Check(tmp='{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},'+
+      '"Value2":{"Real":1.7,"Imaginary":2.7}}');
+  finally
+    auto.Free;
+  end;
 end;
+
 {$endif DELPHI5OROLDER}
 
 procedure TTestLowLevelTypes.UrlEncoding;
@@ -12217,7 +12245,8 @@ begin
       {$endif}
         fRunningThreadCount := 10 else
       {$ifdef MSWINDOWS}
-      if fTestClass=TSQLRestClientURIMessage then break else
+      if fTestClass=TSQLRestClientURIMessage then
+        break else
       {$endif}
         fRunningThreadCount := fRunningThreadCount+20;
   until fRunningThreadCount>fMaxThreads;

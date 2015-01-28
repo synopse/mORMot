@@ -4186,6 +4186,7 @@ type
     procedure InternalRelease;
   end;
 
+  {$M+} { TPersistent has no RTTI for LVCL! }
   /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an object including published
@@ -4196,6 +4197,7 @@ type
     /// this virtual constructor will be called at instance creation
     constructor Create; virtual;
   end;
+  {$M-}
 
   TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
   TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
@@ -16191,16 +16193,15 @@ end;
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
 const
   SHAREMODE: array[0..fmShareDenyNone shr 4] of Byte = (
-    0,        //No share mode specified
-    F_WRLCK,  //fmShareExclusive
-    F_RDLCK,  //fmShareDenyWrite
-    0);       //fmShareDenyNone
-var
-  FileHandle, Tvar: Integer;
-  LockVar: TFlock;
-  smode: Byte;
+    0,        // No share mode specified
+    F_WRLCK,  // fmShareExclusive
+    F_RDLCK,  // fmShareDenyWrite
+    0);       // fmShareDenyNone
+var FileHandle, Tvar: Integer;
+    LockVar: TFlock;
+    smode: Byte;
 begin
-  Result := -1;
+  result := -1;
   if FileExists(FileName) and
      ((Mode and 3)<=fmOpenReadWrite) and ((Mode and $F0)<=fmShareDenyNone) then begin
     FileHandle := open64(pointer(FileName),(Mode and 3),FileAccessRights);
@@ -16214,13 +16215,13 @@ begin
         l_len := 0;
         l_type := SHAREMODE[smode];
       end;
-      Tvar :=  fcntl(FileHandle,F_SETLK,LockVar);
-      if Tvar = -1 then begin
+      Tvar := fcntl(FileHandle,F_SETLK,LockVar);
+      if Tvar=-1 then begin
         __close(FileHandle);
         exit;
       end;
     end;
-    Result := FileHandle;
+    result := FileHandle;
   end;
 end;
 {$endif}
@@ -16233,11 +16234,11 @@ begin
   old := 0;
   if Values<>nil then
   repeat
-{$ifdef USENORMTOUPPER}
+    {$ifdef USENORMTOUPPER}
     v := NormToUpperByte[ord(p^)]; // also handle 8 bit WinAnsi (1252 accents)
-{$else}
+    {$else}
     v := NormToUpperAnsi7Byte[ord(p^)]; // 7 bit char uppercase
-{$endif}
+    {$endif}
     if not (v in IsWord) then break;
     inc(p);
     dec(v,ord('B'));
@@ -16261,11 +16262,11 @@ Err:result := 0;
     exit;
   end;
   repeat
-{$ifdef USENORMTOUPPER}
+    {$ifdef USENORMTOUPPER}
     result := NormToUpperByte[ord(p^)]; // also handle 8 bit WinAnsi (CP 1252)
-{$else}
+    {$else}
     result := NormToUpperAnsi7Byte[ord(p^)]; // 7 bit char uppercase
-{$endif}
+    {$endif}
     if result=0 then
       goto Err; // end of input text, without a word
     inc(p);
@@ -16493,11 +16494,11 @@ begin
     SoundExComputeAnsi(A,result,SOUNDEXVALUES[Lang]);
   end;
   if next<>nil then begin
-{$ifdef USENORMTOUPPER}
+    {$ifdef USENORMTOUPPER}
     while NormToUpperByte[ord(A^)] in IsWord do inc(A); // go to end of word
-{$else}
+    {$else}
     while ord(A^) in IsWord do inc(A); // go to end of word
-{$endif}
+    {$endif}
     next^ := A;
   end;
 end;

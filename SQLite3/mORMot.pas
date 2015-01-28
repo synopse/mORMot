@@ -867,6 +867,8 @@ unit mORMot;
       TJSONToObjectOptions optional parameter in JSONToObject() / ObjectToJSON()
       functions and WriteObject() method - including TDocVariant or TBSONVariant
     - fixed TPersistent process in TJSONWriter.WriteObject - thanks Jordi!
+    - introducing TPersistentAutoCreateFields class, with automatic initialization
+      and finalization of its nested published properties (ideal for value objects)
     - JSONToObject() is now able to unserialize a nested record - see [5e49b3096a]
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
@@ -2102,8 +2104,7 @@ type
     Name: ShortString;
     /// get the class type information
     function ClassType: PClassType;
-      {$ifdef FPC}inline;{$endif}
-      {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// create an instance of the corresponding class
     // - will call TObject.Create, or TSQLRecord.Create virtual constructor
     // - will raise EParsingException if class cannot be constructed on the fly,
@@ -2126,13 +2127,11 @@ type
     function InheritsFrom(AClass: TClass): boolean;
     /// get the enumeration type information
     function EnumBaseType: PEnumType;
-      {$ifdef FPC}inline;{$endif}
-      {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the record type information
     function RecordType: PRecordType;
-      {$ifdef FPC}inline;{$endif}
-      {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-    /// get the dynamic array type information of the stored item 
+      {$ifdef HASINLINE}inline;{$endif}
+    /// get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// recognize most used string types, returning their code page
@@ -3348,7 +3347,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !    CT := ..;
 //  !    repeat
 //  !      for i := 1 to InternalClassPropInfo(CT,P) do begin
-//  !        // use P^ 
+//  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
 //  !      CT := CT.ClassParent;
@@ -7950,6 +7949,26 @@ type
   /// the class of TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
   {$endif LVCL}
+
+  /// abstract parent class, which will instantiate all its nested TPersistent
+  // class published properties, then release them when freed
+  // - could be used for gathering of TPersistent properties, e.g. for
+  // Domain objects in DDD, especially for Aggregates
+  // - note that non published properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance - a EModelException will be raised in such case
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent class published properties
+    constructor Create; override;
+    /// this overriden constructor will release all its nested
+    // TPersistent class published properties
+    destructor Destroy; override;
+  end;
 
   /// event used by TInterfaceFactory.CreateFakeInstance() to run a method
   // - aMethod will specify which method is to be executed
@@ -21179,7 +21198,7 @@ end;
 
 { TTypeInfo }
 
-{$ifdef FPC_OR_PUREPASCAL}
+{$ifdef HASINLINE}
 function TTypeInfo.ClassType: PClassType;
 begin
   result := AlignToPtr(@Name[ord(Name[0])+1]);
@@ -21197,18 +21216,16 @@ begin
   result := ClassInstanceCreate(ClassType^.ClassType);
 end;
 
-{$ifdef FPC_OR_PUREPASCAL}
 function TTypeInfo.RecordType: PRecordType;
+{$ifdef HASINLINE}
 begin
   result := AlignToPtr(@Name[ord(Name[0])+1]);
-end;
 {$else}
-function TTypeInfo.RecordType: PRecordType;
 asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
-end;
 {$endif}
+end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
@@ -21237,14 +21254,14 @@ begin
 end;
 
 function TTypeInfo.EnumBaseType: PEnumType;
-{$ifdef FPC}
+{$ifdef HASINLINE}
 begin
+{$ifdef FPC}
   result := pointer(GetFPCTypeData(@Self));
 {$else}
-{$ifdef PUREPASCAL}
-begin
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];
+{$endif}
 {$else}
 asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
@@ -21253,7 +21270,6 @@ asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
 {$endif}
-{$endif FPC}
 end;
 
 function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
@@ -40725,6 +40741,49 @@ begin
 end;
 
 {$endif LVCL}
+
+{ TPersistentAutoCreateFields }
+
+constructor TPersistentAutoCreateFields.Create;
+var i,n: integer;
+    CT: TClass;
+    P: PPropInfo;
+begin
+  inherited Create;
+  n := 0;
+  CT := PPointer(self)^;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      if P^.PropType^.Kind=tkClass then begin
+        P^.SetOrdProp(self,PtrInt(ClassInstanceCreate(P^.PropType^.ClassType^.ClassType)));
+        inc(n);
+        if n>1000 then
+          raise EModelException.CreateUTF8('Infinite recursive depth: '+
+            'please fix % nested properties definition',[self]);
+      end;
+      P := P^.Next;
+    end;
+    CT := CT.ClassParent;
+  until CT=nil;
+end;
+
+destructor TPersistentAutoCreateFields.Destroy;
+var i: integer;
+    CT: TClass;
+    P: PPropInfo;
+begin
+  CT := PPointer(self)^;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      if P^.PropType^.Kind=tkClass then
+        TObject(P^.GetOrdProp(self)).Free;
+      P := P^.Next;
+    end;
+    CT := CT.ClassParent;
+  until CT=nil;
+  inherited Destroy;
+end;
+
 
 { TServiceMethod }
 
