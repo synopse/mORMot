@@ -2274,7 +2274,8 @@ begin
       Size := F.BufSize;
   end else
     Size := F.BufSize;
-  Size := Recv(Sock.Sock, F.BufPtr, Size, 0 {$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif});
+  Size := Recv(Sock.Sock, F.BufPtr, Size, 0
+    {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif}{$endif});
   // Recv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
@@ -2454,7 +2455,8 @@ begin
   if (self=nil) or (Sock=-1) or (Len<0) or (P=nil) then
     exit;
   repeat
-    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL {$ifdef FPC_OR_KYLIX},TimeOut{$endif});
+    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL
+      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
     if SentLen<0 then
       exit;
     dec(Len,SentLen);
@@ -2573,7 +2575,8 @@ begin
     exit;
   if (Buffer<>nil) and (Length>0) then
     repeat
-      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL {$ifdef FPC_OR_KYLIX},TimeOut{$endif});
+      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL
+        {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
       if Size<=0 then
         exit;
       inc(BytesIn, Size);
@@ -2687,7 +2690,8 @@ begin
       end else
         break;
     SetLength(result,L+Size); // append to result
-    Read := recv(Sock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL{$ifdef FPC_OR_KYLIX},TimeOut{$endif});
+    Read := recv(Sock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL
+      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
     if Read<0 then
       exit;
     inc(L,Read);
@@ -6076,4 +6080,4 @@ finalization
   end;
   {$endif}
   DestroySocketInterface;
-end.
+end.
