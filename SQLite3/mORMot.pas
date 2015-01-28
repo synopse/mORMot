@@ -2288,7 +2288,8 @@ type
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - return -1 on any error
-    function GetOrdValue(Instance: TObject): Integer;
+    function GetOrdValue(Instance: TObject): PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - ordinal properties smaller than tkInt64 will return an Int64-converted
@@ -3353,6 +3354,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !      CT := CT.ClassParent;
 //  !    until CT=nil;
 //  !  end;
+// such a loop is much faster than using the RTL's TypeInfo or RTTI units
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
 
 /// create an instance of the given class
@@ -14385,16 +14387,28 @@ asm // this code is the fastest possible
 end;
 
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
+{$ifdef FPC}
 var CP: PClassProp;
+{$endif}
 begin
-  if ClassType=nil then
-    CP := nil else
+  if ClassType<>nil then begin
+    {$ifdef FPC}
     CP := InternalClassProp(ClassType);
-  if CP=nil then // no more RTTI information available
-    result := 0 else begin
-    PropInfo := AlignToPtr(@CP^.PropList);
-    result := CP^.PropCount;
+    if CP<>nil then begin // no more RTTI information available
+      PropInfo := AlignToPtr(@CP^.PropList);
+      result := CP^.PropCount;
+    {$else} // code is a bit abstract, but compiles very well for Delphi/Kylix
+    inc(PtrInt(ClassType),vmtTypeInfo);
+    if PPointer(ClassType)^<>nil then // avoid GPF if no RTTI available
+      with PTypeInfo(PPointer(ClassType)^)^, PClassType(@Name[ord(Name[0])+1])^,
+        PClassProp(@UnitName[ord(UnitName[0])+1])^ do begin
+      PropInfo := @PropList;
+      result := PropCount;
+    {$endif}
+      exit;
+    end;
   end;
+  result := 0;
 end;
 
 function ClassFieldCountWithParents(ClassType: TClass): integer;
@@ -20300,7 +20314,7 @@ begin
   result := JSONToObject(Field^,From,Valid,nil,Options);
 end;
 
-function TPropInfo.GetOrdValue(Instance: TObject): Integer;
+function TPropInfo.GetOrdValue(Instance: TObject): PtrInt;
 begin
   if (Instance<>nil) and (@self<>nil) and
      (PropType^.Kind in [
@@ -40719,13 +40733,6 @@ type
     Wrapper: TDynArray;
     Value: Pointer;
   end;
-
-{$ifndef LVCL}
-
-type
-  TCollectionClass = class of TInterfacedCollection;
-
-{$endif LVCL}
 
 function TServiceMethod.ArgResultIndex(ArgName: PUTF8Char; ArgNameLen: integer): integer;
 begin
