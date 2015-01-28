@@ -34248,8 +34248,7 @@ var P: PPropInfo;
     V: PtrInt;
     ndx,err: integer;
     E: extended;
-    V64: Int64 absolute E;
-    Obj: TObject absolute V;
+    V64: Int64;
     PropName: PUTF8Char;
     PropValue: PUTF8Char;
     EndOfObject: AnsiChar;
@@ -34495,16 +34494,22 @@ begin
     Kind := P^.PropType^.Kind;
     while From^ in [#1..' '] do inc(From);
     result := From;
-    if PInteger(result)^=NULL_LOW then begin
-      // nested null object
-      if (IsObj in [oSQLRecord,oSQLMany]) or (Kind<>tkClass) then
-        exit; // null expect a plain TObject
-      V := P^.GetOrdProp(Value);
-      if Obj<>nil then begin
-        // null -> FreeAndNil(Obj)
-        Obj.Free;
-        P^.SetOrdProp(Value,0);
+    if (PInteger(From)^=NULL_LOW) and (From[4] in [#0..' ',',',']','}']) then begin
+      {$ifndef NOVARIANTS}
+      if Kind=tkVariant then 
+        P^.SetVariantProp(Value,null) else
+      {$endif} begin
+        // nested null object
+        if (IsObj in [oSQLRecord,oSQLMany]) or (Kind<>tkClass) then
+          exit; // null expects a plain TPersistent
+        V := P^.GetOrdProp(Value);
+        if V<>0 then begin
+          // null -> FreeAndNil(Obj)
+          TObject(V).Free;
+          P^.SetOrdProp(Value,0);
+        end;
       end;
+      inc(From,4);
     end else
     if From^ in ['[','{'] then begin
       // nested array or object
@@ -34559,9 +34564,9 @@ begin
         inc(From);
     end else begin
       // normal property value
-      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject); // get value
+      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject); 
       if (PropValue=nil) or not (EndOfObject in ['}',',']) then
-        exit; // invalid JSON content
+        exit; // invalid JSON content (null has been handled above)
       case Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}:
         if wasString then
