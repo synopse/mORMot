@@ -110,20 +110,23 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
 const
   /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
+  /// the server model root name{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  SERVER_ROOT = '{{root}}';
 
 
 /// return the database Model corresponding to this server
-function GetModel: TSQLModel;
+function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
-// - it will use by default port {{port}}
+// - it will use by default port {{port}} over root '{{root}}'
 {{#authClass}}
 // - secure connection will be established via {{.}}
 // with the supplied credentials
 {{/authClass}}
 // - request will be asynchronous, and trigger onSuccess or onError event
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
+  onSuccess, onError: TSQLRestEvent;
+  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT);
 
 {{#withHelpers}}
 // publish some low-level helpers for variant conversion
@@ -274,15 +277,15 @@ end;
 {{/isInMormotPas}}
 {{/orm}}
 
-function GetModel: TSQLModel;
+function GetModel(const aRoot: string): TSQLModel;
 begin
-  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
+  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],aRoot);
 end;
 
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer);
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer; const aServerRoot: string);
 begin
-  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true);
+  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel(aServerRoot),true);
   client.Connect(
   lambda
     try

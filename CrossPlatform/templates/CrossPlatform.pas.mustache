@@ -120,20 +120,22 @@ type
 const
   /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
+  /// the server model root name{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  SERVER_ROOT = '{{root}}';
 
 
 /// return the database Model corresponding to this server
-function GetModel: TSQLModel;
+function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
-// - it will use by default port {{port}}
+// - it will use by default port {{port}} over root '{{root}}'
 {{#authClass}}
 // - secure connection will be established via {{.}}
 // with the supplied credentials - on connection or authentication error,
 // this function will raise a corresponding exception
 {{/authClass}}
 function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  aServerPort: integer=SERVER_PORT): TSQLRestClientHTTP;
+  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT): TSQLRestClientHTTP;
 
 {{#withHelpers}}
 // publish some low-level helpers for variant conversion
@@ -244,15 +246,15 @@ end;
 {{/arrays}}
 {{/withArrays}}
 
-function GetModel: TSQLModel;
+function GetModel(const aRoot: string): TSQLModel;
 begin
-  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
+  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],aRoot);
 end;
 
 function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  aServerPort: integer): TSQLRestClientHTTP;
+  aServerPort: integer; const aServerRoot: string): TSQLRestClientHTTP;
 begin
-  result := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true); // aOwnModel=true
+  result := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel(aServerRoot),true); // aOwnModel=true
   try
     if (not result.Connect) or (result.ServerTimeStamp=0) then
       raise ERestException.CreateFmt('Impossible to connect to %s:%d server',
