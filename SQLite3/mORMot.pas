@@ -2890,10 +2890,16 @@ type
   /// information about a dynamic array published property
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
+    fDynArrayIsObjArray: boolean;
     function GetDynArray(Instance: TObject): TDynArray;
       {$ifdef HASINLINE}inline;{$endif}
     function GetDynArrayElemType: PTypeInfo;
   public
+    /// initialize the internal fields
+    // - should not be called directly, but with dedicated class methods like
+    // class function CreateFrom()
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -2916,6 +2922,9 @@ type
     property DynArrayIndex: integer read fFieldWidth;
     /// read-only access to the low-level type information the array item type 
     property DynArrayElemType: PTypeInfo read GetDynArrayElemType;
+    /// equals TRUE if this dynamic array is in fact a storage of T*ObjArray
+    // - as previously registered via TJSONSerializer.RegisterObjArrayForJSON()
+    property DynArrayIsObjArray: boolean read fDynArrayIsObjArray;
   end;
 
 {$ifndef NOVARIANTS}
@@ -3824,6 +3833,8 @@ type
     JoinedFieldsTable: TSQLRecordClassDynArray;
     /// list of all sftBlobDynArray fields of this TSQLRecord
     DynArrayFields: array of TSQLPropInfoRTTIDynArray;
+    /// TRUE if any of the sftBlobDynArray fields of this TSQLRecord is a T*ObjArray
+    DynArrayFieldsHasObjArray: boolean;
     /// list of all sftBlobCustom fields of this TSQLRecord
     // - have been defined e.g. as TSQLPropInfoCustom custom definition 
     BlobCustomFields: TSQLPropInfoDynArray;
@@ -4938,9 +4949,11 @@ type
   // the table columns (see TPropInfo for SQL and Delphi type mapping/conversion)
   // - this published properties can be auto-filled from TSQLTable answer with
   // FillPrepare() and FillRow(), or FillFrom() with TSQLTable or JSON data
-  // - this published properties can be converted back into UTF-8 encoded SQL
+  // - these published properties can be converted back into UTF-8 encoded SQL
   // source with GetSQLValues or GetSQLSet or into JSON format with GetJSONValues
   // - BLOB fields are decoded to auto-freeing TSQLRawBlob properties
+  // - any published property defined as a T*ObjArray dynamic array storage
+  // of persistents (via TJSONSerializer.RegisterObjArrayForJSON) will be freed 
   TSQLRecord = class(TObject)
   { note that every TSQLRecord has an Instance size of 20 bytes for private and
     protected fields (such as fID or fProps e.g.) }
@@ -8011,6 +8024,8 @@ type
 
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them when freed
+  // - will also release any T*ObjArray dynamic array storage of persistents,
+  // previously registered via TJSONSerializer.RegisterObjArrayForJSON() 
   // - could be used for gathering of TPersistent properties, e.g. for
   // Domain objects in DDD, especially for Aggregates
   // - note that non published properties won't be instantiated
@@ -16246,8 +16261,64 @@ end;
 
 {$endif UNICODE}
 
+{ TObjArraySerializer}
+
+type
+  TObjArraySerializer = class
+  public
+    DynArray: PTypeInfo;
+    ItemClass: TClass;
+    ClassInstance: TClassInstanceCreate;
+    {$ifndef LVCL}
+    CollectionItemClass: TCollectionItemClass;
+    {$endif}
+    procedure CustomWriter(const aWriter: TTextWriter; const aValue);
+    function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+  end;
+  PTObjArraySerializer = ^TObjArraySerializer;
+
+  TObjArraySerializerList = class(TObjectList)
+    function IsObjArray(aDynArray: PTypeInfo): boolean;
+  end;
+
+procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
+begin
+  aWriter.WriteObject(TObject(aValue));
+end;
+
+function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
+  out aValid: Boolean): PUTF8Char;
+begin
+  FreeAndNil(TObject(aValue));
+  TObject(aValue) := ClassInstanceCreate(ItemClass,ClassInstance
+    {$ifndef LVCL},CollectionItemClass{$endif});
+  result := JSONToObject(aValue,P,aValid);
+end;
+
+var
+  ObjArraySerializers: TObjArraySerializerList;
+
+function TObjArraySerializerList.IsObjArray(aDynArray: PTypeInfo): boolean;
+var i: integer;
+begin
+  result := true;
+  if self<>nil then
+    for i := 0 to Count-1 do
+      if TObjArraySerializer(List[i]).DynArray=aDynArray then
+        exit;
+  result := false;
+end;
+
 
 { TSQLPropInfoRTTIDynArray }
+
+constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
+  aPropIndex: integer; aSQLFieldType: TSQLFieldType);
+begin
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  fDynArrayIsObjArray := ObjArraySerializers.IsObjArray(
+    aPropInfo^.PropType{$ifndef FPC}^{$endif})
+end;
 
 procedure TSQLPropInfoRTTIDynArray.CopyValue(Source, Dest: TObject);
 begin
@@ -16319,13 +16390,15 @@ end;
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
 var blob: RawByteString;
+    wrapper: TDynArray;
 begin
+  wrapper.Init(fPropType,GetFieldAddr(Instance)^);
   if Value=nil then
-    GetDynArray(Instance).Clear else
+    wrapper.Clear else
   if Base64MagicCheckAndDecode(Value,blob) then
-    GetDynArray(Instance).LoadFrom(pointer(blob)) else begin
+    wrapper.LoadFrom(pointer(blob)) else begin
     blob := Value; // private copy since LoadFromJSON() modifies buffer in-place
-    GetDynArray(Instance).LoadFromJSON(Pointer(blob));
+    wrapper.LoadFromJSON(Pointer(blob));
   end;
 end;
 
@@ -22875,6 +22948,11 @@ begin
   if pointer(props.ManyFields)<>nil then
     for i := 0 to high(props.ManyFields) do
       props.ManyFields[i].GetInstance(self).Free;
+  // free any registered T*ObjArray
+  if props.DynArrayFieldsHasObjArray then
+    for i := 0 to high(props.DynArrayFields) do
+      if props.DynArrayFields[i].DynArrayIsObjArray then
+        ObjArrayClear(props.DynArrayFields[i].fPropInfo^.GetFieldAddr(self)^);
   inherited;
 end;
 
@@ -34154,35 +34232,6 @@ begin
     RegisterClassForJSON(aItemClass[i]);
 end;
 
-type
-  TObjArraySerializer = class
-  public
-    ItemClass: TClass;
-    ClassInstance: TClassInstanceCreate;
-    {$ifndef LVCL}
-    CollectionItemClass: TCollectionItemClass;
-    {$endif}
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue);
-    function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
-  end;
-
-procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
-begin
-  aWriter.WriteObject(TObject(aValue));
-end;
-
-function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
-  out aValid: Boolean): PUTF8Char;
-begin
-  FreeAndNil(TObject(aValue));
-  TObject(aValue) := ClassInstanceCreate(ItemClass,ClassInstance
-    {$ifndef LVCL},CollectionItemClass{$endif});
-  result := JSONToObject(aValue,P,aValid);
-end;
-
-var
-  ObjArraySerializers: TObjectList;
-  
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
   aItem: TClass);
 var serializer: TObjArraySerializer;
@@ -34191,11 +34240,12 @@ begin
     raise EModelException.CreateUTF8(
       'Invalid %.RegisterObjArrayForJSON(TypeInfo(%),%)',[self,aDynArray^.Name,aItem]);
   serializer := TObjArraySerializer.Create;
+  serializer.DynArray := aDynArray;
   serializer.ItemClass := aItem;
   serializer.ClassInstance := ClassToTClassInstanceCreate(aItem
     {$ifndef LVCL},serializer.CollectionItemClass{$endif});
   if ObjArraySerializers=nil then begin
-    ObjArraySerializers := TObjectList.Create(true);
+    ObjArraySerializers := TObjArraySerializerList.Create(true);
     GarbageCollector.Add(ObjArraySerializers);
   end;
   ObjArraySerializers.Add(serializer);
@@ -35709,7 +35759,9 @@ begin
           if DynArrayFields[j].DynArrayIndex=DynArrayIndex then
             raise EModelException.CreateUTF8('dup index % for %.% and %.% properties',
               [DynArrayIndex,Table,Name,Table,DynArrayFields[j].Name]);
-        DynArrayFields[nDynArray] := F as TSQLPropInfoRTTIDynArray;
+        DynArrayFields[nDynArray] := TSQLPropInfoRTTIDynArray(F);
+        if TSQLPropInfoRTTIDynArray(F).DynArrayIsObjArray then
+          DynArrayFieldsHasObjArray := true;
         inc(nDynArray);
         goto Simple;
       end;
@@ -40931,8 +40983,13 @@ begin
   CT := PPointer(self)^;
   repeat
     for i := 1 to InternalClassPropInfo(CT,P) do begin
-      if P^.PropType^.Kind=tkClass then
+      case P^.PropType^.Kind of
+      tkClass:
         TObject(P^.GetOrdProp(self)).Free;
+      tkDynArray:
+        if ObjArraySerializers.IsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
+          ObjArrayClear(P^.GetFieldAddr(self)^);
+      end;
       P := P^.Next;
     end;
     CT := CT.ClassParent;

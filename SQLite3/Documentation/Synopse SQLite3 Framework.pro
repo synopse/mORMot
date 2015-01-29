@@ -6710,12 +6710,11 @@ $ netsh http show urlacl url=http://+:80/MyUrl
 $ netsh http show urlacl url=http://www.contoso.com:80/MyUrl
 Then you can delete any url registration with:
 $ netsh http delete urlacl http://host:port/[URI]
-for instance:
+The {\f1\fs20 [URI]} is the registered URL path or domain. For instance:
 $ netsh delete urlacl url=http://+:80/MyUri
 $ netsh delete urlacl url=http://www.contoso.com:80/MyUri
-The {\f1\fs20 [URI]} is when the URL have an URI.
 Note that all those commands should be run with administrator user rights.
-You can consult the corresponding documentation of {\f1\fs20 netsh http} commands for HTTP context available to query and configure HTTP.sys settings and parameters at @https://msdn.microsoft.com/en-us/library/windows/desktop/cc307236
+You can consult the corresponding documentation of {\f1\fs20 netsh http} commands for HTTP context available to query and configure {\f1\fs20 http.sys} settings and parameters at @https://msdn.microsoft.com/en-us/library/windows/desktop/cc307236
 :135  HTTP client(s)
 In fact, there are several implementation of a @**HTTP@/1.1 clients, according to this class hierarchy:
 \graph ClientRESTHttpClasses HTTP/1.1 Client RESTful classes

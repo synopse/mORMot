@@ -769,7 +769,7 @@ type
 {$endif}
 
 {$ifdef DELPHI5OROLDER}
-  // Delphi 5 doesn't have those base types defined :(
+  // Delphi 5 doesn't have those basic types defined :(
 const
   varShortInt = $0010;
   varInt64 = $0014; { vt_i8 }
@@ -3786,7 +3786,7 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
-    procedure Copy(Source: TDynArray);
+    procedure Copy(const Source: TDynArray);
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
     procedure CopyFrom(const Source; MaxElem: integer); 
@@ -31614,7 +31614,7 @@ begin
   end;
 end;
 
-procedure TDynArray.Copy(Source: TDynArray);
+procedure TDynArray.Copy(const Source: TDynArray);
 var n: Cardinal;
 begin
   if (fValue=nil) or (Source.fValue=nil) or (ArrayType<>Source.ArrayType) then
@@ -32420,12 +32420,12 @@ begin
 end;
 
 
-
 function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
+var a: TObjectDynArray absolute aDynArray;
 begin
-  result := length(TObjectDynArray(aDynArray));
-  SetLength(TObjectDynArray(aDynArray),result+1);
-  TObjectDynArray(aDynArray)[result] := aItem;
+  result := length(a);
+  SetLength(a,result+1);
+  a[result] := aItem;
 end;
 
 function ObjArrayAddOnce(var aDynArray; aItem: TObject): integer;
@@ -32479,10 +32479,11 @@ end;
 
 procedure ObjArrayClear(var aDynArray);
 var i: integer;
+    a: TObjectDynArray absolute aDynArray;
 begin
-  for i := 0 to length(TObjectDynArray(aDynArray))-1 do
-    TObjectDynArray(aDynArray)[i].Free;
-  SetLength(TObjectDynArray(aDynArray),0);
+  for i := 0 to length(a)-1 do
+    a[i].Free;
+  a := nil;
 end;
 
 
