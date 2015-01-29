@@ -6701,6 +6701,21 @@ The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKi
 All {\i mORMot} samples are compiled with this flag, as such:
 ! aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
 Note this does not follow default security policy of Windows. But it will make your application development easier.
+:    Manual URI authorization
+If you configured several {\f1\fs20 http.sys} servers on a given computer, you may have URI registration conflicts after some time.
+You can use the {\f1\fs20 netsh} tool to list all registered URL with:
+$ netsh http show urlacl
+You can optionally specify the fully qualified URL, for instance:
+$ netsh http show urlacl url=http://+:80/MyUrl
+$ netsh http show urlacl url=http://www.contoso.com:80/MyUrl
+Then you can delete any url registration with:
+$ netsh http delete urlacl http://host:port/[URI]
+for instance:
+$ netsh delete urlacl url=http://+:80/MyUri
+$ netsh delete urlacl url=http://www.contoso.com:80/MyUri
+The {\f1\fs20 [URI]} is when the URL have an URI.
+Note that all those commands should be run with administrator user rights.
+You can consult the corresponding documentation of {\f1\fs20 netsh http} commands for HTTP context available to query and configure HTTP.sys settings and parameters at @https://msdn.microsoft.com/en-us/library/windows/desktop/cc307236
 :135  HTTP client(s)
 In fact, there are several implementation of a @**HTTP@/1.1 clients, according to this class hierarchy:
 \graph ClientRESTHttpClasses HTTP/1.1 Client RESTful classes
@@ -6734,7 +6749,7 @@ Here are some PROs and CONs of those solutions:
 |%
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
-Note that even if {\i WinHTTP} does not share by default any proxy settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
+Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a global lock. See @25@.
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
@@ -6778,7 +6793,7 @@ To delete an SSL certificate from a port number previously registered, you can u
 $httpcfg delete ssl -i 0.0.0.0:8005 -h 0000000000003ed9cd0c315bbb6dc1c08da5e6
 $httpcfg delete ssl -i 0.0.0.0:8005
 (under XP)
-$Netsh http delete sslcert ipport=0.0.0.0:8005
+$netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
 :  AES encryption over HTTP
