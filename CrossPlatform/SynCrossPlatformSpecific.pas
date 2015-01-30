@@ -1052,4 +1052,13 @@ end;
 
 {$endif ISDWS}
 
+initialization
+{$ifdef USEINDY}
+  // see http://www.monien.net/delphi-xe5-ssl-https-on-different-platforms-with-tidhttp-and-trestclient
+  {$ifdef MACOS} // for OSX, iOS ARM and iOS x86
+  {$ifndef CPUARM}
+  IdOpenSSLSetLibPath('/usr/lib/');  // for OSX and iOS x86
+  {$endif}
+  {$endif}
+{$endif USEINDY}
 end.
