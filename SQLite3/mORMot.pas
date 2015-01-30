@@ -4132,6 +4132,10 @@ type
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: PSQLAccessRights;
+    /// opaque reference to the protocol context which made this request
+    // - may contain e.g. nil, a THttpServerRequest, a TSQLRestClientURI,
+    // a TFastCGIServer or a TSQLRestServerNamedPipeResponse 
+    LowLevelRequest: TObject;
   end;
 
   /// used to map set of parameters for a TSQLRestServer.URI() method
@@ -27017,9 +27021,8 @@ begin
       Int64(result) := HTML_UNAVAILABLE;
       exit; // if /TimeStamp is not available, server is down!
     end;
-  Call.RestAccessRights := nil;
-  Call.OutStatus := 0;
-  Call.OutInternalState := 0;
+  fillchar(Call,sizeof(Call),0);
+  Call.LowLevelRequest := self;
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -27428,6 +27431,7 @@ begin
     Int64(result) := HTML_NOTIMPLEMENTED; // 501 
     exit;
   end;
+  fillchar(call,SizeOf(call),0);
   call.Url := url;
   call.Method := method;
   call.InHead := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: 0001';
@@ -27539,6 +27543,7 @@ begin
   inc(P,4);
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
   Msg.Result := HTML_SUCCESS; // Send something back
+  fillchar(call,SizeOf(call),0);
   call.Url := GetNextItem(P,#1);
   call.Method := GetNextItem(P,#1);
   call.InHead := GetNextItem(P,#1);
@@ -31233,12 +31238,14 @@ begin
   SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
   Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe);
   fServer.BeginCurrentThread(self);
+  fillchar(call,sizeof(call),0);
+  call.LowLevelRequest := self;
   Ticks64 := 0;
   Sleeper64 := 0;
   ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min of inactivity
   try
     while not Terminated do
-    if // (WaitForSingleObject(fPipe,200)=WAIT_OBJECT_0) and  = don't wait
+    if // (WaitForSingleObject(fPipe,200)=WAIT_OBJECT_0)  = don't wait
        PeekNamedPipe(fPipe,nil,0,nil,@Available,nil) and (Available>=4) then begin
       FileRead(fPipe,Code,4);
       if (Code=integer(MAGIC_SYN)) // magic word for URI like request
