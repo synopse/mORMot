@@ -263,6 +263,7 @@ type
     fDBServers: array of record
       Server: TSQLRestServer;
       RestAccessRights: PSQLAccessRights;
+      Security: TSQLHttpServerSecurity;
     end;
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
@@ -457,7 +458,8 @@ begin
   fLog.Enter(self);
   try
     for i := 0 to high(fDBServers) do
-      if fDBServers[i].Server.Model.Root=aServer.Model.Root then
+      if (fDBServers[i].Server.Model.Root=aServer.Model.Root) and
+         (fDBServers[i].Security=aHttpServerSecurity) then
         exit; // register only once per URI Root address
     {$ifndef ONLYUSEHTTPSOCKET}
     if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
@@ -466,10 +468,13 @@ begin
     {$endif}
     n := length(fDBServers);
     SetLength(fDBServers,n+1);
-    fDBServers[n].Server := aServer;
-    if aRestAccessRights=nil then
-      aRestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
-    fDBServers[n].RestAccessRights := aRestAccessRights;
+    with fDBServers[n] do begin
+      Server := aServer;
+      Security := aHttpServerSecurity;
+      if aRestAccessRights=nil then
+        RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS else
+        RestAccessRights := aRestAccessRights;
+    end;
     result := true;
   finally
     fLog.Add.Log(sllDebug,'%.AddServer(%,Root=%,Port=%)=%',
@@ -490,15 +495,14 @@ begin
     if fDBServers[i].Server=aServer then begin
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
-        if THttpApiServer(fHttpServer).
-            RemoveUrl(aServer.Model.Root,fPort,false,fDomainName)<>NO_ERROR then
-         fLog.Add.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
+        if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPort,
+           fDBServers[i].Security=secSSL,fDomainName)<>NO_ERROR then
+          fLog.Add.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
       {$endif}
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
       SetLength(fDBServers,n);
-      result := true;
-      break;
+      result := true; // don't break here: may appear with another Security  
     end;
   finally
     fLog.Add.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
@@ -553,6 +557,7 @@ begin
   with fDBServers[i] do begin
     Server := aServers[i];
     RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
+    Security := aHttpServerSecurity;
   end;
   {$ifndef USETCPPREFIX}
   {$ifndef ONLYUSEHTTPSOCKET}
@@ -568,7 +573,8 @@ begin
         fHttpServerKind=useHttpApiRegisteringURI,true);
   except
     on E: Exception do begin
-      fLog.Add.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
+      fLog.Add.Log(sllError,'% for % at%  -> fallback to socket-based server',
+        [E,fHttpServer,ServersRoot],self);
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
   end;
@@ -616,7 +622,8 @@ end;
 
 destructor TSQLHttpServer.Destroy;
 begin
-  fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
+  fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',
+    [fHttpServer,length(fDBServers)],self);
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
@@ -743,6 +750,7 @@ begin
     result := HTML_NOTFOUND; // page not found by default (in case of wrong URL)
     for i := 0 to high(fDBServers) do
     with fDBServers[i] do
+      if Ctxt.UseSSL=(Security=secSSL) then // registered for http or https
       if Server.Model.URIMatch(call.Url) then begin
         call.Method := Ctxt.Method;
         call.InHead := Ctxt.InHeaders;
