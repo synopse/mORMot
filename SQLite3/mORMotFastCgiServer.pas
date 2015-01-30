@@ -70,9 +70,14 @@ fastcgi.server = ( "/test/" =>
   - can use either the standard client library (libfcgi.dll or libfcgi.so),
     either an embedded 100% pascal FastCGI client (for Windows only) - not
     fully tested yet on real production project
-	
+
   Version 1.18
   - renamed unit SQlite3FastCgiServer.pas to mORMotFastCgiServer.pas
+
+  ------------------------------------------------------------------------
+  TODO: to be changed so that it uses THttpServerRequest, and would be
+        directly defined as THttpFastCGIServer = class(THttpServerGeneric)
+  ------------------------------------------------------------------------
 
 }
 
@@ -201,7 +206,7 @@ function FCGX_PutStr(str: PAnsiChar; n: integer; stream: PFCGX_Stream): integer;
  - returns the value bound to name, NULL if name not present in the environment envp
  - caller must not mutate the result or retain it past the end of this request
  - see @http://hoohoo.ncsa.illinois.edu/cgi/env.html for a Environment Variables list }
-function FCGX_GetParam(const name: PAnsiChar; envp: FCGX_ParamArrayType): PAnsiChar;
+function FCGX_GetParam(name: PUTF8Char; envp: FCGX_ParamArrayType): PUTF8Char;
   cdecl; external dllname;
 
 
@@ -245,8 +250,9 @@ type
     // Used also to determine if the session is being multiplexed
     ID: word;
     /// FastCGI record length
+    // - will send up to 64 KB of data per block
     Len: word;
-    /// Pad length to complete the alignment boundery that is 8 bytes on FastCGI protocol
+    /// Pad length to complete 8 bytes alignment boundary in FastCGI protocol
     PadLen: byte;
     /// Pad field
     Filler: byte;
@@ -292,12 +298,13 @@ type
     fRequestHeaders: RawUTF8;
     fRequestMethod: RawUTF8;
     fRequestURL: RawUTF8;
+    fRequestBody: RawUTF8;
     // FastCGI role for the current request
     fRequestRole: TFCGIRole;
     // current FastCGI request ID
     fRequestID: word;
     fResponseHeaders: RawUTF8;
-    fResponseContent: RawUTF8;
+    fResponseContent: RawByteString;
     // global 64 KB buffer, used for chunking data to be sent
     fTempResponse: RawUTF8;
     fTempNamedPipe: RawUTF8;
@@ -337,9 +344,10 @@ type
     // which are not enabled with this class
     procedure LogOut; virtual;
     /// method triggered to calculate the response
-    // - expect fRequestHeaders, fRequestMethod and fRequestURL properties as input
+    // - expect fRequestHeaders, fRequestMethod, fRequestBody and fRequestURL
+    // properties as input
     // - update fResponseHeaders and fResponseContent properties as output
-    procedure ProcessRequest(const Request: RawUTF8);
+    procedure ProcessRequest; virtual;
   public
     /// create the object instance to run with the specified RESTful Server
     constructor Create(aServer: TSQLRestServer);
@@ -383,46 +391,67 @@ function RemoteIP: RawUTF8;
 begin
   result := FCGX_GetParam('REMOTE_ADDR',envp);
 end;}
-var call: TSQLRestServerURIParams;
-    ContentLength: integer;
+var call: TSQLRestURIParams;
+    ContentLength,len: integer;
+    param: PPUtf8CharArray;
+    name: string[200];
+    ID: cardinal;
+    P: PUTF8Char;
 begin
   if FCGX_IsCGI then
-    raise Exception.CreateFmt('%s not called as a FastCGI process',[paramstr(0)]);
+    raise ECommunicationException.Create('Server not called as a FastCGI process');
+  ID := 0;
+  fillchar(call,sizeof(call),0);
   if Server<>nil then
-  while FCGX_Accept(_in, _out, _err, envp)>=0 do begin
+  while FCGX_Accept(_in,_out,_err,envp)>=0 do begin
     // get headers
-    URL := RawUTF8(FCGX_GetParam('REQUEST_URI',envp))+'?'+
-           RawUTF8(FCGX_GetParam('QUERY_STRING',envp));
-    Method := FCGX_GetParam('REQUEST_METHOD',envp); // 'GET'
-    ContentLength := GetCardinal(pointer(FCGX_GetParam('CONTENT_LENGTH',envp)));
+    ContentLength := 0;
+    call.Url := '';
+    AppendBuffersToRawUTF8(call.Url,
+      [FCGX_GetParam('REQUEST_URI',envp),'?',FCGX_GetParam('QUERY_STRING',envp)]);
+    call.Method := '';
+    inc(ID);
+    call.InHead := 'ConnectionID: '+CardinalToHex(ID)+#13#10;
+    param := pointer(envp);
+    while param[0]<>nil do begin
+      len := StrLen(param[0]);
+      if len>200 then
+        continue; // invalid request
+      SetString(name,PAnsiChar(param[0]),len);
+      if name='CONTENT_LENGTH' then
+        ContentLength := GetCardinal(param[1]) else
+      if name='REQUEST_METHOD' then
+        call.Method := RawUTF8(param[1]) else
+      if name='REMOTE_ADDR' then
+        AppendBuffersToRawUTF8(call.InHead,['RemoteIP: ',param[1],#13#10]);
+      AppendBuffersToRawUTF8(call.InHead,[param[0],': ',param[1],#13#10]);
+      param := @param[2];
+    end;
     // get content
-    Content := '';
+    call.InBody := '';
     if ContentLength>0 then begin
-      SetLength(Content,ContentLength);
-      if FCGX_GetStr(pointer(ContentLength),ContentLength,_in)<>ContentLength then
+      SetLength(call.InBody,ContentLength);
+      if FCGX_GetStr(pointer(call.InBody),ContentLength,_in)<>ContentLength then
         continue; // invalid request
     end;
+    call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
     // process the request in the internal TSQLRestServer instance
-    with Server.URI(URL,Method,Content,Resp,Headers,SUPERVISOR_ACCESS_RIGHTS) do begin
-      ContentLength := length(Resp);
-      Headers := trim(Headers); // format headers
-      if Headers<>'' then
-        Headers := Headers+#13#10;
-      Headers := FormatUTF8(
-        'Status: %'#13#10'Server-InternalState: %'#13#10+
-        'X-Powered-By: mORMotFastCGIServer http://synopse.info'#13#10+
-        'Content-Type: '+JSON_CONTENT_TYPE+#13#10+
-        'Content-Length: %'#13#10+
-        '%'#13#10, // headers end with a void line
-        [Lo,Hi,ContentLength,Headers]);
-    end;
+    Server.URI(call);
+    ContentLength := length(call.OutBody);
+    call.OutHead := trim(call.OutHead);
+    if call.OutHead<>'' then
+      call.OutHead := call.OutHead+#13#10;
+    call.OutHead := FormatUTF8(
+      '%Status: %'#13#10'Server-InternalState: %'#13#10+
+      'X-Powered-By: mORMotFastCGIServer http://synopse.info'#13#10+
+      'Content-Length: %'#13#10,
+      [call.OutHead,call.OutStatus,call.OutInternalState,ContentLength]);
     // send the answer back to the HTTP server
-    if FCGX_PutStr(pointer(Headers),length(Headers),_out)=length(Headers) then
-      if Resp<>'' then
-        FCGX_PutStr(pointer(Resp),ContentLength,_out);
+    if FCGX_PutStr(pointer(call.OutHead),length(call.OutHead),_out)=length(call.OutHead) then
+      if call.OutBody<>'' then
+        FCGX_PutStr(pointer(call.OutBody),ContentLength,_out);
   end;
 end;
-
 
 {$else}
 
@@ -442,8 +471,7 @@ end;
 /// retrieve headers as encoded by the FastCGI server
 // - return the headers as Name:Value pairs by line, ready to be
 // searched with FindIniNameValue() function
-function ReadRequestHeader(Buffer: pointer; BufferLen: integer;
-  const SepChar: AnsiChar=':'): RawUTF8;
+function ReadRequestHeader(Buffer: pointer; BufferLen: integer): RawUTF8;
 var Len0,Len1: integer;
     PB: PByteArray absolute Buffer;
     PC: PAnsiChar absolute Buffer;
@@ -457,12 +485,14 @@ begin
   repeat
     Len0 := ReadRequestLen(PB,PB);
     Len1 := ReadRequestLen(PB,PB);
-    SetLength(result,length(result)+Len0+Len1+3); // 'Name:Value'#13#10
+    SetLength(result,length(result)+Len0+Len1+4); // 'Name: Value'#13#10
     PResult := pointer(result);
     move(PC^,PResult^,Len0);
     inc(PC,Len0);
     inc(PResult,Len0);
-    PResult^ := SepChar;
+    PResult^ := ':';
+    inc(PResult);
+    PResult^ := ' ';
     inc(PResult);
     move(PC^,PResult^,Len1);
     inc(PC,Len1);
@@ -503,9 +533,9 @@ begin
   Len[1] := length(Value);
   L := length(Result);
   if Len[0]>127 then
-    inc(L,4) else inc(L,1);
+    inc(L,4) else inc(L);
   if Len[1]>127 then
-    inc(L,4) else inc(L,1);
+    inc(L,4) else inc(L);
   SetLength(result,L+Len[0]+Len[1]);
   P := pointer(result);
   for i := 0 to 1 do
@@ -595,21 +625,26 @@ begin
   ; // do nothing by default
 end;
 
-procedure TFastCGIServer.ProcessRequest(const Request: RawUTF8);
+procedure TFastCGIServer.ProcessRequest;
 var call: TSQLRestURIParams;
 begin
-  if Server=nil then
-    ResetRequest else
+  if Server=nil then begin
+    ResetRequest;
+    exit;
+  end;
+  fillchar(call,sizeof(call),0);
   with call do begin
+    LowLevelRequest := self;
     Url := fRequestURL;
     Method := fRequestMethod;
     InHead := 'ConnectionID: '+CardinalToHex(fRequestID);
-    InBody := Request;
+    InBody := fRequestBody;
     RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
     Server.URI(call);
+    fResponseContent := OutBody;
     fResponseHeaders := FormatUTF8(
       'Status: %'#13#10'Server-InternalState: %'#13#10+
-      'X-Powered-By: TFastCGIServer http://synopse.info'#13#10+
+      'X-Powered-By: mORMot http://synopse.info'#13#10+
       JSON_CONTENT_TYPE_HEADER+#13#10+
       'Content-Length: %'#13#10+
       '%', // a void line will be appened in SendResponse() method
@@ -645,12 +680,13 @@ begin
   fRequestHeaders := '';
   fRequestMethod := '';
   fRequestURL := '';
+  fRequestBody := '';
   fResponseHeaders := '';
   fResponseContent := '';
 end;
 
 function TFastCGIServer.Run: boolean;
-var Packet, StreamRequest: RawUTF8;
+var Packet: RawUTF8;
     PC, PEnd: PUTF8Char;
     PHead: PFCGIHeader;
     ValuesResult: RawUTF8;
@@ -703,7 +739,6 @@ begin
               fRequestID := Header.ID;
               fRequestRole := Role;
               ResetRequest;
-              StreamRequest := '';
               fRequestHeaders := 'FCGI_ROLE:'+PTypeInfo(TypeInfo(TFCGIRole))^.
                 EnumBaseType^.GetEnumNameTrimed(Role)+#13#10;
             end else
@@ -728,7 +763,7 @@ begin
               if PHead^.RecType=rtParams then begin
                 // read Name-Value pair headers stream
                 fRequestHeaders := ReadRequestHeader(
-                  pointer(StreamRequest),length(StreamRequest));
+                  pointer(fRequestBody),length(fRequestBody));
                 fRequestURL :=
                   FindIniNameValue(pointer(fRequestHeaders),'REQUEST_URI:')+'?'+
                   FindIniNameValue(pointer(fRequestHeaders),'QUERY_STRING:');
@@ -736,17 +771,17 @@ begin
                   FindIniNameValue(pointer(fRequestHeaders),'REQUEST_METHOD:'); // 'GET'
               end else begin
                 // handle byte streams: stdin, data -> process in Server.URL
-                ProcessRequest(StreamRequest);
+                ProcessRequest;
                 if (fResponseContent<>'')  or
                    SameTextU(fRequestMethod,'GET') or
                    SameTextU(fRequestMethod,'HEAD') then
                   SendResponse(fResponseContent,rtStdOut);
                 SendEndRequest(psRequestComplete);
               end;
-              StreamRequest := '';
+              fRequestBody := '';
             end else
               // append stream records
-              AppendBufferToRawUTF8(StreamRequest,PC,PHead^.Len);
+              AppendBufferToRawUTF8(fRequestBody,PC,PHead^.Len);
         else begin
           // UNKNOWN_TYPE record
           SendResponse(RawUTF8(AnsiChar(PHead^.RecType)+#0#0#0#0#0#0#0), rtUnknown);
