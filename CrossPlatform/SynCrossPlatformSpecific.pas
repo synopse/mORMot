@@ -387,9 +387,11 @@ uses
 {$ifdef USEINDY}
 uses
   IdHTTP, IdCoderMIME,
-  {$ifdef IOS}
+  {$ifdef MACOS}
   {$ifdef CPUARM}
-  IdSSLOpenSSLHeaders_Static,
+  IdSSLOpenSSLHeaders_Static, // for iOS ARM
+  {$else}
+  IdSSLOpenSSLHeaders,        // for OSX and iOS x86
   {$endif}
   {$endif}
   IdSSLOpenSSL;
