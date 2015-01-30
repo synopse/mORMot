@@ -267,11 +267,9 @@ type
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
-    fRootRedirectToURI: RawUTF8;
+    fRootRedirectToURI: array[boolean] of RawUTF8;
     fHttpServerKind: TSQLHttpServerOptions;
-    {$ifdef WITHLOG}
     fLog: TSynLogClass;
-    {$endif}
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
@@ -281,6 +279,8 @@ type
     function GetDBServerCount: integer;
     function GetDBServer(Index: Integer): TSQLRestServer;
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
+    function HttpApiAddUri(const aRoot,aDomainName: RawUTF8;
+      aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
   public
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
     // - raise a EHttpServer exception if binding failed
@@ -379,7 +379,10 @@ type
     // is directly accessed from a browser, e.g. localhost:port will redirect to
     // localhost:port/RedirectedURI
     // - for http.sys server, would try to register '/' if aRegisterURI is TRUE
-    procedure RootRedirectToURI(const RedirectedURI: RawUTF8; aRegisterURI: boolean=true);
+    // - by default, will redirect http://localhost:port unless you set
+    // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
+    procedure RootRedirectToURI(const aRedirectedURI: RawUTF8;
+      aRegisterURI: boolean=true; aHttps: boolean=false);
     /// the associated running HTTP server instance
     // - either THttpApiServer, either THttpServer
     property HttpServer: THttpServerGeneric read fHttpServer;
@@ -446,31 +449,19 @@ implementation
 
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
-var i,n{$ifndef ONLYUSEHTTPSOCKET},err{$endif}: integer;
+var i,n: integer;
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
-{$ifdef WITHLOG}
-  aServer.LogClass.Enter(self);
+  fLog.Enter(self);
   try
-{$endif}
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
-    {$ifndef ONLYUSEHTTPSOCKET}
-    if fHttpServer.InheritsFrom(THttpApiServer) then begin
-      // try to register the URL to http.sys
-      err := THttpApiServer(fHttpServer).AddUrl(aServer.Model.Root,fPort,
-        (aHttpServerSecurity=secSSL),fDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
-      if err<>NO_ERROR then begin
-        {$ifdef WITHLOG}
-        aServer.LogFamily.SynLog.Log(sllLastError,'http.sys error %',[err]);
-        {$endif}
-        exit;
-      end;
-    end;
-    {$endif}
+    if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
+       fHttpServerKind=useHttpApiRegisteringURI,false)<>'' then
+      exit;
     n := length(fDBServers);
     SetLength(fDBServers,n+1);
     fDBServers[n].Server := aServer;
@@ -478,38 +469,28 @@ begin
       aRestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
     fDBServers[n].RestAccessRights := aRestAccessRights;
     result := true;
-{$ifdef WITHLOG}
   finally
-    aServer.LogFamily.SynLog.Log(sllDebug,'result=% for Root=% Port=%',
-      [JSON_BOOLEAN[Result],aServer.Model.Root,fPort]);
+    fLog.Add.Log(sllDebug,'%.AddServer(%,Root=%,Port=%)=%',
+      [self,aServer,aServer.Model.Root,fPort,JSON_BOOLEAN[Result]]);
   end;
-{$endif}
 end;
 
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
 var i,j,n: integer;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
-{$ifdef WITHLOG}
-  Log := aServer.LogClass.Enter(self);
+  fLog.Enter(self);
   try
-{$endif}
   n := high(fDBServers);
   for i := 0 to n do
     if fDBServers[i].Server=aServer then begin
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).
-            RemoveUrl(aServer.Model.Root,fPort,false,fDomainName)<>NO_ERROR then begin
-         {$ifdef WITHLOG}
-         Log.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
-         {$endif}
-        end;
+            RemoveUrl(aServer.Model.Root,fPort,false,fDomainName)<>NO_ERROR then
+         fLog.Add.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
       {$endif}
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
@@ -517,11 +498,9 @@ begin
       result := true;
       break;
     end;
-  {$ifdef WITHLOG}
   finally
-    Log.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
+    fLog.Add.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
   end;
-  {$endif}
 end;
 
 procedure TSQLHttpServer.DomainHostRedirect(const aDomain,aURI: RawUTF8);
@@ -536,26 +515,11 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
   aHttpServerKind: TSQLHttpServerOptions; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TSQLHttpServerSecurity; const aAdditionalURL: AnsiString;
   const aQueueName: SynUnicode);
-{$ifndef ONLYUSEHTTPSOCKET}
-procedure RegURL(const URI: RawByteString);
-var err: integer;
-    ErrMsg: RawUTF8;
-begin
-  err := THttpApiServer(fHttpServer).AddUrl(URI,aPort,
-    (aHttpServerSecurity=secSSL),aDomainName,(fHttpServerKind=useHttpApiRegisteringURI));
-  if err=NO_ERROR then
-    exit;
-  ErrMsg := 'Impossible to register URL';
-  if err=ERROR_ACCESS_DENIED then
-    ErrMsg := ErrMsg+' (administrator rights needed)';
-  raise ECommunicationException.CreateUTF8('%.Create: % for %',[self,ErrMsg,URI]);
-end;
-{$endif}
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: RawUTF8;
 begin
-  {$ifdef WITHLOG}
+  {$ifdef WITHLOG} // this is the only place where we check for WITHLOG
   if high(aServers)<0 then
     fLog := TSQLLog else
     fLog := aServers[0].LogClass;
@@ -595,14 +559,14 @@ begin
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false,aQueueName);
     for i := 0 to high(aServers) do
-      RegURL(aServers[i].Model.Root);
+      HttpApiAddUri(aServers[i].Model.Root,fDomainName,aHttpServerSecurity,
+        fHttpServerKind=useHttpApiRegisteringURI,true);
     if aAdditionalURL<>'' then
-      RegURL(aAdditionalURL);
+      HttpApiAddUri(aAdditionalURL,fDomainName,aHttpServerSecurity,
+        fHttpServerKind=useHttpApiRegisteringURI,true);
   except
     on E: Exception do begin
-      {$ifdef WITHLOG}
       fLog.Add.Log(sllError,'% for % at%',[E,fHttpServer,ServersRoot],self);
-      {$endif}
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
   end;
@@ -633,9 +597,7 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$endif}
-{$ifdef WITHLOG}
   fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
-{$endif}
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
@@ -652,9 +614,7 @@ end;
 
 destructor TSQLHttpServer.Destroy;
 begin
-{$ifdef WITHLOG}
   fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
-{$endif}
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
@@ -688,22 +648,49 @@ begin
     fDBServers[Index].RestAccessRights := Value;
 end;
 
-procedure TSQLHttpServer.RootRedirectToURI(const RedirectedURI: RawUTF8;
-  aRegisterURI: boolean);
+const
+  HTTPS_TEXT: array[boolean] of string[1] = ('','s');
+  HTTPS_SECURITY: array[boolean] of TSQLHttpServerSecurity = (secNone, secSSL);
+
+procedure TSQLHttpServer.RootRedirectToURI(const aRedirectedURI: RawUTF8;
+  aRegisterURI,aHttps: boolean);
 begin
-  if fRootRedirectToURI=RedirectedURI then
+  if fRootRedirectToURI[aHttps]=aRedirectedURI then
     exit;
-  {$ifdef WITHLOG}
-  fLog.Add.Log(sllDebug,'Redirect localhost:% to localhost:%/%',[Port,Port,RedirectedURI],self);
-  {$endif}
-  fRootRedirectToURI := RedirectedURI;
-  {$ifdef MSWINDOWS}
-  if (RedirectedURI<>'') and fHttpServer.InheritsFrom(THttpApiServer) then
-  try // not needed (nor available) for TCrtSocket
-   THttpApiServer(fHttpServer).AddUrl('/',Port,False,'+',aRegisterURI);
-  except
-    on E: Exception do ;
-  end;
+  fLog.Add.Log(sllDebug,'Redirect http%://localhost:% to http%://localhost:%/%',
+    [HTTPS_TEXT[aHttps],Port,HTTPS_TEXT[aHttps],Port,aRedirectedURI],self);
+  fRootRedirectToURI[aHttps] := aRedirectedURI;
+  if aRedirectedURI<>'' then
+    HttpApiAddUri('/','+',HTTPS_SECURITY[aHttps],aRegisterURI,true);
+end;
+
+function TSQLHttpServer.HttpApiAddUri(const aRoot,aDomainName: RawUTF8;
+  aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
+{$ifndef ONLYUSEHTTPSOCKET}
+var err: integer;
+    https: boolean;
+{$endif}
+begin
+  result := ''; // no error
+  {$ifndef ONLYUSEHTTPSOCKET}
+  if not fHttpServer.InheritsFrom(THttpApiServer) then
+    exit;
+  https := aSecurity=secSSL;
+  fLog.Add.Log(sllInfo,'http.sys registration of http%://%:%/%',
+    [HTTPS_TEXT[https],aDomainName,fPort,aRoot]);
+  // try to register the URL to http.sys
+  err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPort,https,aDomainName,aRegisterURI);
+  if err=NO_ERROR then
+    exit;
+  result := FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
+    [err,HTTPS_TEXT[https],aDomainName,fPort,aRoot]);
+  if err=ERROR_ACCESS_DENIED then
+    if aRegisterURI then
+      result := result+' (administrator rights needed)' else
+      result := result+' (you need to register the URI )';
+  fLog.Add.Log(sllLastError,result);
+  if aRaiseExceptionOnError then
+    raise ECommunicationException.CreateUTF8('%: %',[self,result]);
   {$endif}
 end;
 
@@ -714,9 +701,9 @@ var call: TSQLRestURIParams;
     host,redirect: RawUTF8;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
-    if fRootRedirectToURI<>'' then begin
+    if fRootRedirectToURI[Ctxt.UseSSL]<>'' then begin
+      Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI[Ctxt.UseSSL];
       result := HTML_TEMPORARYREDIRECT;
-      Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI;
     end else
       result := HTML_BADREQUEST else
   if (Ctxt.Method='') or (OnlyJSONRequests and
