@@ -1,9 +1,10 @@
 object MainForm: TMainForm
   Left = 265
   Top = 235
-  Width = 617
-  Height = 543
+  BorderStyle = bsDialog
   Caption = ' mORMot Source Code Repository Synch'
+  ClientHeight = 505
+  ClientWidth = 601
   Color = clBtnFace
   Constraints.MinHeight = 422
   Constraints.MinWidth = 617
