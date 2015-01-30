@@ -459,9 +459,11 @@ begin
     for i := 0 to high(fDBServers) do
       if fDBServers[i].Server.Model.Root=aServer.Model.Root then
         exit; // register only once per URI Root address
+    {$ifndef ONLYUSEHTTPSOCKET}
     if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
        fHttpServerKind=useHttpApiRegisteringURI,false)<>'' then
       exit;
+    {$endif}
     n := length(fDBServers);
     SetLength(fDBServers,n+1);
     fDBServers[n].Server := aServer;
