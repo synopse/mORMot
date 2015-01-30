@@ -8031,8 +8031,8 @@ type
   // - will also release any T*ObjArray dynamic array storage of persistents,
   // previously registered via TJSONSerializer.RegisterObjArrayForJSON() 
   // - could be used for gathering of TPersistent properties, e.g. for
-  // Domain objects in DDD, especially for Aggregates
-  // - note that non published properties won't be instantiated
+  // Domain objects in DDD, especially for Value Objects, Aggregates or Entities
+  // - note that non published (e.g. public) properties won't be instantiated
   // - please take care that you would not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance - a EModelException will be raised in such case
@@ -8044,7 +8044,7 @@ type
     // TPersistent class published properties
     constructor Create; override;
     /// this overriden constructor will release all its nested
-    // TPersistent class published properties
+    // TPersistent class and T*ObjArray published properties
     destructor Destroy; override;
   end;
 

@@ -4748,6 +4748,7 @@ const
   // - default is 64, but can be set to any value (64, 128, 192 and 256 optimized)
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
+  // - note that due to Delphi compiler restriction, 256 is the maximum value
   MAX_SQLFIELDS = 64;
 
   /// sometimes, the ID field is included in a bits set
@@ -37744,7 +37745,7 @@ begin
   {$else}
   if aCustomOffset<>0 then
     if aCustomOffset and (_SC_PAGE_SIZE-1)<>0 then
-      raise ESynException.CreateFmt('fpmmap(aCustomOffset=%d) with pagesize=%d',
+      raise ESynException.CreateUTF8('fpmmap(aCustomOffset=%) with pagesize=%',
         [aCustomOffset,_SC_PAGE_SIZE]) else
       aCustomOffset := aCustomOffset div _SC_PAGE_SIZE;
   fBuf := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(
@@ -40938,10 +40939,6 @@ end;
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
   GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
   FieldProp: TSynTableFieldProperties=nil);
-// TODO: should share code with TSQLRestStorageExternal.AdaptSQLForEngineList,
-// handle multiple AND/OR/NOT Field2=... clauses, and keep the fields order
-// in the result (i.e. define Fields: IntegerDynArray instead of TSQLFieldBits)
-// - see [94ff704bb]
 var Prop: RawUTF8;
     P, B: PUTF8Char;
     ndx,err,len,selectCount,whereCount: integer;
