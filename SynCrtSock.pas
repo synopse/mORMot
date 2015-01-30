@@ -136,6 +136,7 @@ unit SynCrtSock;
   - converted any AnsiString type into a more neutral RawByteString (this is
     correct for URIs or port numbers, and avoid any dependency to SynCommons)
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
+  - added THttpServerRequest.UseSSL property to check if connection is secured
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
   - added THttpApiServer.HTTPQueueLength property (for HTTP API 2.0 only)
@@ -747,7 +748,7 @@ type
     /// add an incoming HTTP request to the Thread Pool
     function Push(aClientSock: TSocket): Boolean;
   end;
-  
+
 {$endif USETHREADPOOL}
 
 {$M+} // to have existing RTTI for published properties
@@ -768,6 +769,7 @@ type
     fOutContent, fOutContentType, fOutCustomHeaders: RawByteString;
     fServer: THttpServerGeneric;
     fCallingThread: TNotifiedThread;
+    fUseSSL: boolean;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
@@ -796,7 +798,10 @@ type
     property Server: THttpServerGeneric read fServer;
     /// the thread instance which called this execution context
     property CallingThread: TNotifiedThread read fCallingThread;
-  end;
+    /// is TRUE if the caller is connected via HTTPS
+    // - only set for THttpApiServer class yet
+    property UseSSL: boolean read fUseSSL;
+  end; 
 
   /// event handler used by THttpServerGeneric.OnRequest property
   // - Ctxt defines both input and output parameters
@@ -2068,6 +2073,7 @@ begin
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';
+  fUseSSL := false;
 end;
 
 
@@ -4155,6 +4161,7 @@ type
     RawConnectionId: HTTP_RAW_CONNECTION_ID;
     // SSL connection information
     pSslInfo: PHTTP_SSL_INFO;
+    // beginning of HTTP_REQUEST_V2 structure
     xxxPadding: DWORD;
     RequestInfoCount: word;
     pRequestInfo: PHTTP_REQUEST_INFO;
@@ -5220,6 +5227,7 @@ begin
           SetString(InAcceptEncoding,pRawValue,RawValueLength);
         InCompressAccept := ComputeContentEncoding(fCompress,pointer(InAcceptEncoding));
         Context.fInHeaders := RetrieveHeaders(Req^);
+        Context.fUseSSL := Req^.pSslInfo<>nil;
         // retrieve body
         Context.fInContent := '';
         if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
