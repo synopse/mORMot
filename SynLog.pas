@@ -2895,6 +2895,8 @@ begin
     TSynMapFile.Log(fWriter,aCaller,false);
   finally
     LogTrailerUnLock(Level);
+    if LastError<>0 then
+      SetLastError(LastError);
   end;
 end;
 
@@ -3169,6 +3171,8 @@ begin
       AddErrorMessage(LastError);
   finally
     LogTrailerUnLock(Level);
+    if LastError<>0 then
+      SetLastError(LastError);
   end;
 end;
 {$endif}
@@ -3205,6 +3209,8 @@ begin
       AddErrorMessage(LastError);
   finally
     LogTrailerUnLock(Level);
+    if LastError<>0 then
+      SetLastError(LastError);
   end;
 end;
 

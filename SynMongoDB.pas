@@ -2285,7 +2285,7 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
       aConnection: TMongoConnection); reintroduce;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
@@ -2303,7 +2303,7 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aDatabase: TMongoDatabase); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
       aDatabase: TMongoDatabase); reintroduce;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
@@ -2326,7 +2326,7 @@ type
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
       aRequest: TMongoRequest=nil); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
       aConnection: TMongoConnection; aRequest: TMongoRequest); reintroduce;
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
@@ -2638,7 +2638,8 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
   if Kind=betMaxKey then
     W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
-    raise EBSONException.CreateFmt('Unexpected BSON element of type %d',[ord(Kind)]);
+    raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
+      [ord(Kind)]);
   end;
 end;
 
@@ -2810,12 +2811,14 @@ begin
     inc(BSON,NameLen+1);
     FromBSON(BSON);
     if ElementBytes<0 then
-      raise EBSONException.CreateFmt('Invalid %d element content',[ord(Kind)]);
+      raise EBSONException.CreateUTF8(
+        'TBSONElement.FromNext: unexpected size % for type %',[ElementBytes,ord(Kind)]);
     inc(BSON,ElementBytes);
     inc(Index);
     result := true;
   end;
-  else raise EBSONException.CreateFmt('Unexpected %d element type',[ord(Kind)]);
+  else raise EBSONException.CreateUTF8('TBSONElement.FromNext: unexpected type %',
+    [ord(Kind)]);
   end;
 end;
 
@@ -2928,7 +2931,7 @@ begin
     W.CancelLastComma;
     W.Add(']');
   end;
-  else raise EBSONException.CreateFmt('BSONToJSON(Kind=%d)',[ord(Kind)]);
+  else raise EBSONException.CreateUTF8('BSONListToJSON(Kind=%)',[ord(Kind)]);
   end;
 end;
 
@@ -3216,7 +3219,8 @@ begin
       VarRecToUTF8(value,tmp);
       BSONWrite(name,tmp);
     end;
-    else raise EBSONException.CreateFmt('Unhandled TVarRec.VType=%d',[value.VType]);
+    else raise EBSONException.CreateUtf8(
+      '%.BSONWrite(TVarRec.VType=%)',[self,value.VType]);
   end;
 end;
 
@@ -3265,7 +3269,7 @@ begin
       JSON := pointer(temp);
       BSONWriteFromJSON(name,JSON,nil);
       if JSON=nil then
-        raise EBSONException.CreateFmt('Unhandled variant type %d',[VType]);
+        raise EBSONException.CreateUTF8('%.BSONWriteVariant(VType=%)',[self,VType]);
     end;
     end;
   end;
@@ -3278,15 +3282,16 @@ begin
   BSONDocumentBegin;
   if TVarData(doc).VType>varNull then // null,empty will write {}
     if TVarData(doc).VType<>DocVariantType.VarType then
-      raise EBSONException.CreateFmt('doc.VType=%d',[TVarData(doc).VType]) else
+      raise EBSONException.CreateUTF8('%.BSONWriteDoc(VType=%)',
+        [self,TVarData(doc).VType]) else
     for i := 0 to doc.Count-1 do begin
       if doc.Names<>nil then
         Name := doc.Names[i] else
         UInt32ToUtf8(i,Name);
       BSONWriteVariant(Name,doc.Values[i]);
       if TotalWritten>BSON_MAXDOCUMENTSIZE then
-        raise EBSONException.CreateFmt('BSON document size = %d > maximum %d',
-          [TotalWritten,BSON_MAXDOCUMENTSIZE]);
+        raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=%>max %)',
+          [self,TotalWritten,BSON_MAXDOCUMENTSIZE]);
     end;
   BSONDocumentEnd;
 end;
@@ -3495,8 +3500,8 @@ begin
     end;
   end;
   if TotalWritten>BSON_MAXDOCUMENTSIZE then
-    raise EBSONException.CreateFmt('BSON document size = %d > maximum %d',
-      [TotalWritten,BSON_MAXDOCUMENTSIZE]);
+    raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=%>max %)',
+      [self,TotalWritten,BSON_MAXDOCUMENTSIZE]);
 end;
 
 function TBSONWriter.BSONWriteDocFromJSON(JSON: PUTF8Char; aEndOfObject: PUTF8Char;
@@ -4032,7 +4037,7 @@ var ID: TBSONObjectID;
 begin
   if ID.FromText(Hexa) then
     result := ID.ToVariant else
-    raise EBSONException.CreateFmt('Invalid ObjectID hexadecimal "%s"',[Hexa]);
+    raise EBSONException.CreateUTF8('Invalid ObjectID("%")',[Hexa]);
 end;
 
 function BSONObjectID(const aObjectID: variant): TBSONObjectID;
@@ -4534,7 +4539,7 @@ constructor TMongoRequestKillCursor.Create(const FullCollectionName: RawUTF8;
 var n: integer;
 begin
   if high(CursorIDs)<0 then
-    raise EMongoException.CreateUTF8('%.Create([]) call',[self]);
+    raise EMongoException.CreateUTF8('Invalid %.Create([]) call',[self]);
   inherited Create(FullCollectionName,opKillCursors,0,0);
   Write4(0); // reserved for future use
   n := length(CursorIDs);
@@ -4570,9 +4575,9 @@ begin
   with PMongoReplyHeader(ReplyMessage)^ do begin
     if (Len<sizeof(TMongoReplyHeader)) or (MessageLength<>Len) or
        (sizeof(TMongoReplyHeader)+NumberReturned*5>Len) then
-      raise EMongoException.CreateFmt('Invalid opReply length=%d',[len]);
+      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(len=%)',[len]);
     if OpCode<>WIRE_OPCODES[opReply] then
-      raise EMongoException.CreateFmt('Invalid opReply OpCode=%d',[OpCode]);
+      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(OpCode=%)',[OpCode]);
     fRequestID := RequestID;
     fResponseTo := ResponseTo;
     byte(fResponseFlags) := ResponseFlags;
@@ -4599,10 +4604,10 @@ begin
     fDocuments[i] := P;
     inc(P,PInteger(P)^); // fast "parsing" of all supplied documents
     if P-pointer(fReply)>Len then
-      raise EMongoException.CreateFmt('Invalid opReply Document[%d] content',[i]);
+      raise EMongoException.CreateUTF8('ComputeDocumentsList(Document[%])',[i]);
   end;
   if P-pointer(fReply)<>Len then
-    raise EMongoException.Create('Invalid opReply Documents');
+    raise EMongoException.Create('ComputeDocumentsList(Documents)');
 end;
 
 function TMongoReplyCursor.GetOneDocument(index: integer): variant;
@@ -4617,7 +4622,8 @@ end;
 procedure TMongoReplyCursor.GetDocument(index: integer; var result: variant);
 begin
   if cardinal(index)>=cardinal(length(fDocuments)) then
-    raise EMongoException.CreateFmt('Out of range index %d >= %d',[index,length(fDocuments)]);
+    raise EMongoException.CreateUTF8('TMongoReplyCursor.GetDocument(index %>=%)',
+      [index,length(fDocuments)]);
   if fDocuments=nil then
     ComputeDocumentsList;
   BSONToDoc(fDocuments[index],result,0,asDocVariantPerReference);
@@ -4993,8 +4999,8 @@ begin
           wcAcknowledged:        cmd := 'getLastError';
           wcJournaled:           cmd := BSONVariant(['getLastError',1,'j',true]);
           wcReplicaAcknowledged: cmd := BSONVariant(['getLastError',1,'w',2]);
-          else raise EMongoRequestException.CreateFmt(
-            'SendAndFree WriteConcern=%d',[ord(Client.WriteConcern)],self,Request);
+          else raise EMongoRequestException.CreateUTF8(
+            '%.SendAndFree WriteConcern=%',[self,ord(Client.WriteConcern)],self,Request);
         end;
         RunCommand(Request.DatabaseName,cmd,result);
         if not VarIsNull(result.err) then
@@ -5039,8 +5045,8 @@ begin
       if fSocket.TrySockRecv(@Header,sizeof(Header)) then begin
         if (Header.MessageLength<SizeOf(Header)) or
            (Header.MessageLength>MONGODB_MAXMESSAGESIZE) then
-          raise EMongoRequestException.CreateFmt('Reply Length=%d',
-            [Header.MessageLength],self,Request);
+          raise EMongoRequestException.CreateUTF8('%.GetReply: MessageLength=%',
+            [self,Header.MessageLength],self,Request);
         SetLength(result,Header.MessageLength);
         PMongoReplyHeader(result)^ := Header;
         DataLen := Header.MessageLength-sizeof(Header);
@@ -5052,9 +5058,9 @@ begin
               Client.Log.Log(sllWarning,'Msg from MongoDB: %',
                 [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)]);
           end else
-            raise EMongoRequestException.CreateFmt(
-              'ResponseTo=%d Expected:%d in current blocking mode',
-              [Header.ResponseTo,Request.MongoRequestID],self,Request);
+            raise EMongoRequestException.CreateUTF8(
+              '%.GetReply: ResponseTo=% Expected:% in current blocking mode',
+              [self,Header.ResponseTo,Request.MongoRequestID],self,Request);
       end else
         raise EMongoRequestException.Create('Server reset the connection: '+
           'probably due to a bad formatted BSON request',self,Request);
@@ -5116,10 +5122,10 @@ begin
   fConnection := aConnection;
 end;
 
-constructor EMongoConnectionException.CreateFmt(const aMsg: string; const Args: array of const;
+constructor EMongoConnectionException.CreateUTF8(Format: PUTF8Char; const Args: array of const;
   aConnection: TMongoConnection);
 begin
-  inherited CreateFmt(aMsg,Args);
+  inherited CreateUTF8(Format,Args);
   fConnection := aConnection;
 end;
 
@@ -5138,29 +5144,32 @@ end;
 
 { EMongoRequestException }
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   inherited Create(aMsg,aConnection);
   fRequest := aRequest;
 end;
 
-constructor EMongoRequestException.CreateFmt(const aMsg: string; const Args: array of const;
-  aConnection: TMongoConnection; aRequest: TMongoRequest);
+constructor EMongoRequestException.CreateUTF8(Format: PUTF8Char;
+  const Args: array of const; aConnection: TMongoConnection;
+  aRequest: TMongoRequest);
 begin
-  inherited CreateFmt(aMsg,Args,aConnection);
+  inherited CreateUTF8(Format,Args,aConnection);
   fRequest := aRequest;
-end;  
+end;
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest; const aError: TMongoReplyCursor);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest;
+  const aError: TMongoReplyCursor);
 begin
   Create(aMsg,aConnection,aRequest);
   fError := aError;
 end;
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest; const aErrorDoc: TDocVariantData);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest;
+  const aErrorDoc: TDocVariantData);
 begin
   Create(aMsg,aConnection,aRequest);
   fErrorDoc := variant(aErrorDoc);
@@ -5200,10 +5209,8 @@ end;
 constructor EMongoRequestOSException.Create(const aMsg: string;
   aConnection: TMongoConnection; aRequest: TMongoRequest=nil);
 begin
-  {$ifdef MSWINDOWS}
-  fSystemLastError := Windows.GetLastError;
-  {$endif}
-  CreateFmt('%s: %s (%d)',[aMsg,SysErrorMessage(fSystemLastError),fSystemLastError],
+  fSystemLastError := GetLastError;
+  CreateUTF8('%: % (%)',[aMsg,SysErrorMessage(fSystemLastError),fSystemLastError],
     aConnection,aRequest);
 end;
 
@@ -5217,10 +5224,10 @@ begin
   fDatabase := aDatabase;
 end;
 
-constructor EMongoDatabaseException.CreateFmt(const aMsg: string; const Args: array of const;
-  aDatabase: TMongoDatabase);
+constructor EMongoDatabaseException.CreateUTF8(Format: PUTF8Char;
+  const Args: array of const; aDatabase: TMongoDatabase);
 begin
-  inherited CreateFmt(aMsg,Args,aDatabase.Client.Connections[0]);
+  inherited CreateUTF8(Format,Args,aDatabase.Client.Connections[0]);
   fDatabase := aDatabase;
 end;
 
@@ -5339,7 +5346,7 @@ begin
     end;
   end;
   if result=nil then
-    raise EMongoException.CreateUTF8('%.Open: unknown database "%"',[self,DatabaseName]);
+    raise EMongoException.CreateUTF8('%.Open("%") unknown DB',[self,DatabaseName]);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName,
@@ -5414,9 +5421,9 @@ begin
       if full<>'' then begin
         split(full,'.',db,coll);
         if db<>aDatabaseName then
-          raise EMongoConnectionException.CreateFmt(
-            'Invalid "%s" collection name for DB "%s"',
-            [full,aDatabaseName],Client.Connections[0]);
+          raise EMongoConnectionException.CreateUTF8(
+            '%.Create: invalid "%" collection name for DB "%"',
+            [self,full,aDatabaseName],Client.Connections[0]);
         fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
       end;
     end;
@@ -5437,7 +5444,7 @@ function TMongoDatabase.GetCollection(const Name: RawUTF8): TMongoCollection;
 begin
   result := GetCollectionOrNil(Name);
   if result=nil then
-    raise EMongoDatabaseException.CreateFmt('Unknown collection "%s"',[Name],self);
+    raise EMongoDatabaseException.CreateUTF8('%.GetCollection("%")',[self,Name],self);
 end;
 
 function TMongoDatabase.GetCollectionOrCreate(const Name: RawUTF8): TMongoCollection;
@@ -5572,7 +5579,7 @@ begin
   if Database.Client.Log<>nil then
     Database.Client.Log.Enter(self);
   if DocVariantData(Keys)^.Kind<>dvObject then
-    raise EMongoException.CreateFmt('%s.EnsureIndex(Keys?)',[FullCollectionName]);
+    raise EMongoException.CreateUTF8('%[%].EnsureIndex(Keys?)',[self,FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber>=2060000;
   doc := _ObjFast(['key', Keys]);
   if not useCommand then
@@ -5591,14 +5598,14 @@ begin
       if order=-1 then
         indexName := indexName+'_' else
       if order<>1 then
-        raise EMongoException.CreateFmt('%s.EnsureIndex({%s: %s!!})',
-          [FullCollectionName,Names[i],Values[i]]);
+        raise EMongoException.CreateUTF8('%[%].EnsureIndex() on order {%:%}',
+          [self,FullCollectionName,Names[i],Values[i]]);
     end;
   end;
   if length(FullCollectionName)+length(indexName)>120 then
-    raise EMongoException.CreateFmt(
-      '%s.EnsureIndex() computed name > 128 chars: set as option',
-      [FullCollectionName]);
+    raise EMongoException.CreateUTF8(
+      '%[%].EnsureIndex() computed name > 128 chars: please set as option',
+      [self,FullCollectionName]);
   doc.name := indexName;
   if useCommand then
     fDatabase.RunCommand(BSONVariant(

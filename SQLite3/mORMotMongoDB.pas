@@ -421,7 +421,7 @@ begin
           '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
       doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
-      V := @Doc.Values[i];
+      V := @doc.Values[i];
       case V^.VType of
       varInteger: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
       case info.SQLFieldType of
