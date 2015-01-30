@@ -6753,10 +6753,12 @@ Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs2
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL encryption yet.
-In order to let the SSL layer work as expected, you need first to create and import a set of certificates. Here are the needed steps, as detailed in @http://www.codeproject.com/Articles/24027/SSL-with-Self-hosted-WCF-Service and @http://msdn.microsoft.com/en-us/library/ms733791.aspx
+In order to let the SSL layer work as expected, you need first to create and import a set of certificates.
 :   Certificates
-You need one {\i certificate} (cert) to act as your root authority, and one to act as the actual certificate to be used for the SSL, which needs to be signed by your root authority. If you don't set up the root authority your single certificate won't be trusted, and you will start to discover this through a series of extremely annoying exceptions, long after the fact.
-The following command (run in a Visual Studio command prompt) will create your root certificate:
+You need one {\i certificate} (cert) to act as your root authority, and one to act as the actual certificate to be used for the SSL, which needs to be signed by your root authority. If you don't set up the root authority your single certificate won't be trusted, and you will start to discover this through a series of extremely annoying exceptions, long after the fact. To get a free certificate, i.e. for testing purposes, you may use an online service like @http://www.startssl.com
+Depending on the {\i Windows} revision you are using, you can run the {\i Internet Information Services (IIS) Manager}: from the {\i Windows} Start menu, click {\f1\fs20 Administrative Tools > Internet Information Services (IIS) Manager}. See @http://support.microsoft.com/kb/299875
+You could also install the needed certificate by using some command lines - this may be handy for fast installation using a {\f1\fs20 .bat} file. Here are the needed steps, as detailed in @http://www.codeproject.com/Articles/24027/SSL-with-Self-hosted-WCF-Service and @http://msdn.microsoft.com/en-us/library/ms733791
+The following command (run in a {\i Visual Studio} command prompt) will create your root certificate:
 $makecert -sv SignRoot.pvk -cy authority -r signroot.cer -a
 $    sha1 -n "CN=Dev Certification Authority" -ss my -sr localmachine
 Take a look at the above links to see what each of these arguments mean, it isn't terribly important, but it's nice to know.
