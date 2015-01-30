@@ -279,7 +279,7 @@ type
     function GetDBServerCount: integer;
     function GetDBServer(Index: Integer): TSQLRestServer;
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
-    function HttpApiAddUri(const aRoot,aDomainName: RawUTF8;
+    function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
   public
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
@@ -666,7 +666,7 @@ begin
     HttpApiAddUri('/','+',HTTPS_SECURITY[aHttps],aRegisterURI,true);
 end;
 
-function TSQLHttpServer.HttpApiAddUri(const aRoot,aDomainName: RawUTF8;
+function TSQLHttpServer.HttpApiAddUri(const aRoot,aDomainName: RawByteString;
   aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
 {$ifndef ONLYUSEHTTPSOCKET}
 var err: integer;
