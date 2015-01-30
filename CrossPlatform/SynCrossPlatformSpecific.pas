@@ -30,7 +30,8 @@ unit SynCrossPlatformSpecific;
 
   Contributor(s):
   - danielkuettner
-  
+  - Stefan (itSDS)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -45,7 +46,7 @@ unit SynCrossPlatformSpecific;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - each operating system will have its own API calls in this single unit
@@ -323,6 +324,7 @@ function GetNextCSV(const str: string; var index: Integer; var res: string;
   Sep: char=','; resultTrim: boolean=false): boolean;
 
 {$ifdef ISDWS}
+// some definitions implemented in SynCrossPlatformJSON.pas for Delphi+FPC
 
 procedure DoubleQuoteStr(var text: string);
 function IdemPropName(const PropName1,PropName2: string): boolean;
@@ -362,7 +364,7 @@ type
 function VariantType(const Value: variant): TJSONVariantKind;
 
 /// faster than chr(c) when you are sure that c<=$ffff
-function DirectChr(c: Integer): String; external 'String.fromCharCode';
+function DirectChr(c: Integer): string; external 'String.fromCharCode';
 
 /// compute the JSON representation of a variant value
 // - match function signature as defined in SynCrossPlatformJSON
@@ -384,10 +386,17 @@ uses
 
 {$ifdef USEINDY}
 uses
-  IdHTTP, IdCoderMIME, IdSSLOpenSSL;
+  IdHTTP, IdCoderMIME,
+  {$ifdef IOS}
+  {$ifdef CPUARM}
+  IdSSLOpenSSLHeaders_Static,
+  {$endif}
+  {$endif}
+  IdSSLOpenSSL;
   // for SSL support with iOS and Android client, please follow instructions at
   // http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html and you may
   // download the *.a files from http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
+  // see also http://synopse.info/forum/viewtopic.php?id=2325
 {$endif}
 
 {$ifdef USESYNCRT}
@@ -556,6 +565,7 @@ type
   TIndyHttpConnectionClass = class(TAbstractHttpConnection)
   protected
     fConnection: TIdHTTP;
+    fIOHandler: TIdSSLIOHandlerSocketOpenSSL; // here due to NextGen ARC model
   public
     constructor Create(const aParameters: TSQLRestConnectionParams); override;
     procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
@@ -572,8 +582,10 @@ begin
   fConnection := TIdHTTP.Create(nil);
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
-  if fParameters.Https then
-    fConnection.IOHandler:= TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+  if fParameters.Https then begin
+    fIOHandler := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+    fConnection.IOHandler := fIOHandler;
+  end;
   if fParameters.ProxyName<>'' then
     fConnection.ProxyParams.ProxyServer := fParameters.ProxyName;
 end;
@@ -581,6 +593,7 @@ end;
 destructor TIndyHttpConnectionClass.Destroy;
 begin
   fConnection.Free;
+  fIOHandler.Free;
   inherited;
 end;
 
@@ -708,7 +721,7 @@ end;
 {$endif}
 
 
-{$ifdef ISDWS}
+{$ifdef ISDWS} // some definitions usually made in SynCrossPlatformJSON.pas
 
 procedure DoubleQuoteStr(var text: string);
 var i,j: integer;
