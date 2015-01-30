@@ -1984,6 +1984,10 @@ function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 // - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
 procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
 
+/// fast add some characters to a RawUTF8 string
+// - faster than Text := Text+RawUTF8(Buffers[0])+RawUTF8(Buffers[0])+...
+procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+
 /// fast add some characters from a RawUTF8 string into a given buffer
 // - warning: the Buffer should contain enough space to store the Text, otherwise
 // you may encounter buffer overflows and random memory errors
@@ -15078,6 +15082,29 @@ begin
     L := pInteger(L-sizeof(integer))^; // L := length(Text)
   SetLength(Text,L+BufferLen);
   move(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
+end;
+
+procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+var i,len,TextLen: integer;
+    lens: array[0..63] of integer;
+    P: PUTF8Char;
+begin
+  if high(Buffers)>high(lens) then
+    raise ESynException.Create('Too many params in AppendBuffersToRawUTF8()');
+  len := 0;
+  for i := 0 to high(Buffers) do begin
+    lens[i] := StrLen(Buffers[i]);
+    inc(len,lens[i]);
+  end;
+  TextLen := Length(Text);
+  SetLength(Text,TextLen+len);
+  P := pointer(Text);
+  inc(P,TextLen);
+  for i := 0 to high(Buffers) do
+  if Buffers[i]<>nil then begin
+    move(Buffers[i]^,P^,lens[i]);
+    inc(P,lens[i]);
+  end;
 end;
 
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
