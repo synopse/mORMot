@@ -410,23 +410,23 @@ var UserToken: THandle;
     NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
 begin
   aUserName := '';
-  if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
+  if QuerySecurityContextToken(@aSecContext.CtxHandle,UserToken) <> 0 then
     RaiseLastOSError;
   try
     Size := 0;
-    GetTokenInformation(UserToken, TokenUser, nil, 0, Size);
+    GetTokenInformation(UserToken,TokenUser,nil,0,Size);
     UserInfo := AllocMem(Size);
     try
-      if not GetTokenInformation(Cardinal(UserToken), Windows.TokenUser, UserInfo, Size, Size) then
+      if not GetTokenInformation(Cardinal(UserToken),Windows.TokenUser,UserInfo,Size,Size) then
         RaiseLastOSError;
-      FillChar(NameBuf[0], SizeOf(NameBuf), 0);
+      FillChar(NameBuf[0],SizeOf(NameBuf),0);
       NameLen := 256;
-      FillChar(DomainBuf[0], SizeOf(DomainBuf), 0);
+      FillChar(DomainBuf[0],SizeOf(DomainBuf),0);
       DomainLen := 256;
-      if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
+      if not LookupAccountSid(nil,UserInfo^.Sid,NameBuf,NameLen,DomainBuf,DomainLen,NameType) then
         RaiseLastOSError;
       if NameType = SidTypeUser then
-        aUserName := FormatUTF8('%\%', [DomainBuf, NameBuf]);
+        aUserName := FormatUTF8('%\%',[DomainBuf,NameBuf]);
     finally
       FreeMem(UserInfo);
     end;

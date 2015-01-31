@@ -31001,20 +31001,19 @@ var TokenUserSize: DWORD;
     TokenUserP: PSIDAndAttributes;
 begin
   result := false;
-  if not OpenThreadToken(GetCurrentThread, TOKEN_QUERY, True, Token) then
+  if not OpenThreadToken(GetCurrentThread,TOKEN_QUERY,True,Token) then
     if (GetLastError <> ERROR_NO_TOKEN) or
-       not OpenProcessToken(GetCurrentProcess, TOKEN_QUERY, Token) then
-      Exit;
+       not OpenProcessToken(GetCurrentProcess,TOKEN_QUERY,Token) then
+      exit;
   TokenUserP := nil;
   TokenUserSize := 0;
   try
-    if not GetTokenInformation(Token, TokenUser, nil, 0, TokenUserSize) and
+    if not GetTokenInformation(Token,TokenUser,nil,0,TokenUserSize) and
        (GetLastError <> ERROR_INSUFFICIENT_BUFFER) then
-      Exit;
+      exit;
     TokenUserP := AllocMem(TokenUserSize);
-    if not GetTokenInformation(Token, TokenUser, TokenUserP,
-       TokenUserSize, TokenUserSize) then
-      Exit;
+    if not GetTokenInformation(Token,TokenUser,TokenUserP,TokenUserSize,TokenUserSize) then
+      exit;
     SID := TokenUserP^.Sid;
     result := true;
   finally

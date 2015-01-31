@@ -31,6 +31,7 @@ unit SynCrtSock;
   Contributor(s):
   - Alfred Glaenzer (alf)
   - EMartin
+  - Eric Grange
   - EvaF
   - Pavel (mpv)
   
@@ -143,6 +144,8 @@ unit SynCrtSock;
   - added THttpApiServer.MaxBandwidth and THttpApiServer.MaxConnections
     properties (for HTTP API 2.0 only) - thanks mpv for the proposal!
   - added THttpApiServer.LogStart/LogStop for HTTP API 2.0 integrated logging
+  - introducing new THttpApiServer.SetAuthenticationSchemes() method, and
+    THttpServerRequest.AuthenticationStatus and AuthenticatedUser properties
   - added THttpApiServer.ServerSessionID and UrlGroupID read-only properties
   - let HTTP_RESPONSE.AddCustomHeader() recognize all known headers
   - THttpApiServer won't try to send an error message when connection is broken
@@ -758,6 +761,13 @@ type
   THttpServerGeneric = class;
 {$M-}
 
+  /// the server-side available authentication schemes
+  // - as used by THttpServerRequest.AuthenticationStatus
+  // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
+  // defined in HTTP 2.0 API and
+  THttpServerRequestAuthentication = (
+    hraNone, hraFailed, hraBasic, hraDigest, hraNtlm, hraNegotiate, hraKerberos);
+
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -773,6 +783,8 @@ type
     fServer: THttpServerGeneric;
     fCallingThread: TNotifiedThread;
     fUseSSL: boolean;
+    fAuthenticationStatus: THttpServerRequestAuthentication;
+    fAuthenticatedUser: string;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
@@ -804,6 +816,14 @@ type
     /// is TRUE if the caller is connected via HTTPS
     // - only set for THttpApiServer class yet
     property UseSSL: boolean read fUseSSL;
+    /// contains the THttpServer-side authentication status
+    // - e.g. when using http.sys authentication with HTTP API 2.0
+    property AuthenticationStatus: THttpServerRequestAuthentication
+      read fAuthenticationStatus;
+    /// contains the THttpServer-side authenticated user name
+    // - e.g. when using http.sys authentication with HTTP API 2.0, the
+    // domain user name is retrieved from the supplied AccessToken 
+    property AuthenticatedUser: string read fAuthenticatedUser;
   end; 
 
   /// event handler used by THttpServerGeneric.OnRequest property
@@ -928,6 +948,12 @@ type
     hlfBytesSent, hlfBytesRecv, hlfTimeTaken, hlfServerPort, hlfUserAgent,
     hlfCookie, hlfReferer, hlfVersion, hlfHost, hlfSubStatus);
 
+  /// http.sys API 2.0 fields used for server-side authentication
+  // - as used by 
+  // - will match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
+  THttpApiRequestAuthentications = set of (
+    haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
+
   /// HTTP server using fast http.sys kernel-mode server
   // - The HTTP Server API enables applications to communicate over HTTP without
   // using Microsoft Internet Information Server (IIS). Applications can register
@@ -956,6 +982,7 @@ type
     fLogDataStorage: array of byte;
     fLoggingServiceName: RawByteString;
     fLoggingUserName: RawByteString;
+    fAuthenticationSchemes: THttpApiRequestAuthentications;
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal;
@@ -969,7 +996,6 @@ type
     function GetLogging: boolean;
     procedure SetServerName(const aName: RawByteString); override;
     procedure SetLoggingServiceName(const aName: RawByteString);
-    procedure SetLoggingUserName(const aName: RawByteString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -1035,12 +1061,16 @@ type
     // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer=1024); override;
+    /// access to the internal THttpApiServer list cloned by this main instance
+    // - as created by Clone() method
+    property Clones: TObjectList read fClones;
+  public { HTTP API 2.0 methods and properties }
     /// enable HTTP API 2.0 logging
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
     // - you can select the output folder and the expected logging layout
-    // - aSoftwareName will set the optional W3C-only software name string  
+    // - aSoftwareName will set the optional W3C-only software name string
     // - aRolloverSize will be used only when aRolloverType is hlrSize
     procedure LogStart(const aLogFolder: TFileName;
       aType: THttpApiLoggingType=hltW3C;
@@ -1053,6 +1083,24 @@ type
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
     procedure LogStop;
+    /// enable HTTP API 2.0 server-side authentication
+    // - once enabled, the client sends an unauthenticated request: it is up to
+    // the server application to generate the initial 401 challenge with proper
+    // WWW-Authenticate headers; any further authentication steps will be
+    // perform in kernel mode, until the authentication handshake is finalized;
+    //  later on, the application can check the AuthenticationStatus property
+    // of THttpServerRequest and its associated AuthenticatedUser value
+    // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
+    // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
+    // - this method will work on the current group, for all instances
+    // - see HTTPAPI_AUTH_ENABLE_ALL constant to set all available schemes
+    // - optional Realm parameters can be used when haBasic scheme is defined
+    // - optional DomainName and Realm parameters can be used for haDigest
+    procedure SetAuthenticationSchemes(schemes: THttpApiRequestAuthentications;
+      const DomainName: SynUnicode=''; const Realm: SynUnicode='');
+    /// read-only access to HTTP API 2.0 server-side enabled authentication schemes
+    property AuthenticationSchemes: THttpApiRequestAuthentications
+      read fAuthenticationSchemes;
     /// read-only access to check if the HTTP API 2.0 logging is enabled
     // - use LogStart/LogStop methods to change this property value
     property Logging: boolean read GetLogging;
@@ -1063,17 +1111,16 @@ type
     property LoggingServiceName: RawByteString
       read fLoggingServiceName write SetLoggingServiceName;
     /// the current HTTP API 2.0 logging User name
+    // - could be set by the Request process method, after proper authentication
+    // - will be set in case of successfull HTTP API 2.0 authentication 
     // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUTF8Conversion])
     // - this value is dedicated to one instance, so the main instance won't
     // propagate the change to all cloned instances
     property LoggingUserName: RawByteString
-      read fLoggingUserName write SetLoggingUserName;
-    /// access to the internal THttpApiServer list cloned by this main instance
-    // - as created by Clone() method
-    property Clones: TObjectList read fClones;
-    /// read-only access to the low-level Session ID of this server instance
+      read fLoggingUserName write fLoggingUserName;
+    /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
-    /// read-only access to the low-level URI Group ID of this server instance
+    /// read-only access to the low-level HTTP API 2.0 URI Group ID 
     property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
   published
     /// TRUE if this instance is in fact a cloned instance for the thread pool
@@ -1454,6 +1501,12 @@ const
   STATUS_NOTFOUND = 404;
   /// HTML Status Code for "Internal Server Error"
   STATUS_SERVERERROR = 500;
+
+  {$ifdef MSWINDOWS}
+  /// can be used with THttpApiServer.AuthenticationSchemes to enable all schemes
+  HTTPAPI_AUTH_ENABLE_ALL = [hraBasic..hraKerberos];
+  {$endif}
+
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
@@ -4173,6 +4226,9 @@ type
     HttpRequestInfoTypeAuth
     );
 
+  // about Authentication in HTTP Version 2.0
+  // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
+
   HTTP_AUTH_STATUS = (
     HttpAuthStatusSuccess,
     HttpAuthStatusNotAuthenticated,
@@ -4210,7 +4266,8 @@ type
     InfoLength: ULONG;
     pInfo: pointer;
   end;
-  PHTTP_REQUEST_INFO = ^HTTP_REQUEST_INFO;
+  HTTP_REQUEST_INFOS = array[0..1000] of HTTP_REQUEST_INFO;
+  PHTTP_REQUEST_INFOS = ^HTTP_REQUEST_INFOS;
 
   /// structure used to handle data associated with a specific request
   HTTP_REQUEST = record
@@ -4253,7 +4310,7 @@ type
     // beginning of HTTP_REQUEST_V2 structure
     xxxPadding: DWORD;
     RequestInfoCount: word;
-    pRequestInfo: PHTTP_REQUEST_INFO;
+    pRequestInfo: PHTTP_REQUEST_INFOS;
   end;
   PHTTP_REQUEST = ^HTTP_REQUEST;
 
@@ -5242,15 +5299,38 @@ begin
   end;
 end;
 
-type
-  TVERB_TEXT = array[hvOPTIONS..hvSEARCH] of RawByteString;
-const
-  VERB_TEXT: TVERB_TEXT = (
-    'OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'TRACE',
-    'CONNECT', 'TRACK', 'MOVE', 'COPY', 'PROPFIND', 'PROPPATCH',
-    'MKCOL', 'LOCK', 'UNLOCK', 'SEARCH');
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawByteString);
+var Buffer: array[0..511] of byte;
+    BufferSize, UserSize, DomainSize: DWORD;
+    UserInfo: PSIDAndAttributes;
+    NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+    tmp: SynUnicode;
+    P: PWideChar;
+begin
+   if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
+     exit;
+   UserInfo := @Buffer;
+   UserSize := 0;
+   DomainSize := 0;
+   LookupAccountSidW(nil,UserInfo^.Sid,nil,UserSize,nil,DomainSize,NameUse);
+   if (UserSize=0) or (DomainSize=0) then
+     exit;
+   SetLength(tmp,UserSize+DomainSize-1);
+   P := pointer(tmp);
+   if not LookupAccountSidW(nil,UserInfo^.Sid,P+DomainSize,UserSize,P,DomainSize,NameUse) then
+     exit;
+   P[DomainSize] := '\';
+   result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
+end;
+
 
 procedure THttpApiServer.Execute;
+type
+  TVerbText = array[hvOPTIONS..hvSEARCH] of RawByteString;
+const
+  VERB_TEXT: TVerbText = (
+    'OPTIONS','GET','HEAD','POST','PUT','DELETE','TRACE','CONNECT','TRACK',
+    'MOVE','COPY','PROPFIND','PROPPATCH','MKCOL','LOCK','UNLOCK','SEARCH');
 var Req: PHTTP_REQUEST;
     ReqID: HTTP_REQUEST_ID;
     ReqBuf, RespBuf, RemoteIP: RawByteString;
@@ -5270,7 +5350,7 @@ var Req: PHTTP_REQUEST;
     DataChunkInMemory: HTTP_DATA_CHUNK_INMEMORY;
     DataChunkFile: HTTP_DATA_CHUNK_FILEHANDLE;
     CurrentLog: PHTTP_LOG_FIELDS_DATA;
-    Verbs: TVERB_TEXT; // to avoid memory allocation
+    Verbs: TVerbText; // to avoid memory allocation
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception=nil);
   var Msg: string;
@@ -5332,6 +5412,22 @@ begin
         InCompressAccept := ComputeContentEncoding(fCompress,pointer(InAcceptEncoding));
         Context.fUseSSL := Req^.pSslInfo<>nil;
         Context.fInHeaders := RetrieveHeaders(Req^,RemoteIP);
+        // retrieve any SetAuthenticationSchemes() information
+        fLoggingUserName := '';
+        if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
+          for i := 0 to Req^.RequestInfoCount-1 do
+          if Req^.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
+            with PHTTP_REQUEST_AUTH_INFO(Req^.pRequestInfo^[i].pInfo)^ do
+            case AuthStatus of
+            HttpAuthStatusSuccess:
+            if AuthType>HttpRequestAuthTypeNone then begin
+              byte(Context.fAuthenticationStatus) := ord(AuthType)+1;
+              if AccessToken<>0 then
+                GetDomainUserNameFromToken(AccessToken,fLoggingUserName);
+            end;
+            HttpAuthStatusFailure:
+              Context.fAuthenticationStatus := hraFailed;
+            end;
         // retrieve body
         Context.fInContent := '';
         if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
@@ -5402,10 +5498,12 @@ begin
                 Referrer := pRawValue;
               end;
               ProtocolStatus := Resp^.StatusCode;
-              ClientIpLength := length(RemoteIP);
               ClientIp := pointer(RemoteIP);
+              ClientIpLength := length(RemoteIP);
               Method := pointer(Context.fMethod);
               MethodLength := length(Context.fMethod);
+              UserName := pointer(fLoggingUserName);
+              UserNameLength := Length(fLoggingUserName);
             end;
           // send response
           Resp^.Version := Req^.Version;
@@ -5686,7 +5784,7 @@ begin
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
       @logInfo, SizeOf(logInfo)));
-  // on success, update the acutal 
+  // on success, update the acutal
   fLogData := pointer(fLogDataStorage); 
 end;
 
@@ -5720,13 +5818,34 @@ begin
   PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.ServiceName := pointer(fLoggingServiceName);
 end;
 
-procedure THttpApiServer.SetLoggingUserName(const aName: RawByteString);
+procedure THttpApiServer.SetAuthenticationSchemes(schemes: THttpApiRequestAuthentications;
+  const DomainName, Realm: SynUnicode);
+var authInfo: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
-  if self=nil then
+  if (self=nil) or (fOwner<>nil) then
     exit;
-  fLoggingUserName := aName;
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.UserNameLength := Length(fLoggingUserName);
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.UserName := pointer(fLoggingUserName);
+  if Http.Version.MajorVersion<2 then
+    raise EHttpApiServer.Create(hSetUrlGroupProperty,ERROR_OLD_WIN_VERSION);
+  fAuthenticationSchemes := schemes;
+  FillChar(authInfo,SizeOf(authInfo),0);
+  authInfo.Flags := 1;
+  authInfo.AuthSchemes := byte(schemes);
+  authInfo.ReceiveMutualAuth := true;
+  if haBasic in schemes then
+    with authInfo.BasicParams do begin
+      RealmLength := Length(Realm);
+      Realm := pointer(Realm);
+    end;
+  if haDigest in schemes then
+    with authInfo.DigestParams do begin
+      DomainNameLength := Length(DomainName);
+      DomainName := pointer(DomainName);
+      RealmLength := Length(Realm);
+      Realm := pointer(Realm);
+    end;
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerAuthenticationProperty,
+      @authInfo, SizeOf(authInfo)));
 end;
 
 
