@@ -625,7 +625,7 @@ type
   /// OleDB connection properties to Microsoft SQL Server 2008-2012, via
   // SQL Server Native Client 10.0 (SQL Server 2008)
   // - this will use the native OleDB provider supplied by Microsoft
-  // see http://msdn.microsoft.com/en-us/library/ms677227(v=VS.85).aspx
+  // see http://msdn.microsoft.com/en-us/library/ms677227
   // - is aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
   // - will use the SQLNCLI10 provider, which will work on Windows XP;
@@ -668,17 +668,21 @@ type
   // - just maps default TOleDBMSSQLConnectionProperties type
   TOleDBMSSQL2008ConnectionProperties = TOleDBMSSQLConnectionProperties;
 
-  /// OleDB connection properties to Microsoft SQL Server 2012, via
-  // SQL Server Native Client 11.0 (SQL Server 2012)
+  /// OleDB connection properties to Microsoft SQL Server 2008/2012, via
+  // SQL Server Native Client 11.0 (Microsoft SQL Server 2012 Native Client)
+  // - from http://www.microsoft.com/en-us/download/details.aspx?id=29065 get
+  // the sqlncli.msi package corresponding to your Operating System: note that
+  // the "X64 Package" will also install the 32-bit version of the client
   // - this overridden version will use newer SQLNCLI11 provider, but won't work
-  // under Windows XP - in this case, will fall back to SQLNCLI10 - see
-  // http://msdn.microsoft.com/en-us/library/ms131291.aspx
+  // under Windows XP - in this case, it will fall back to SQLNCLI10 - see
+  // http://msdn.microsoft.com/en-us/library/ms131291
   // - if aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
   // - for SQL Express LocalDB edition, just use aServerName='(localdb)\v11.0'
   TOleDBMSSQL2012ConnectionProperties = class(TOleDBMSSQLConnectionProperties)
   protected
     /// will set the appropriate provider name, i.e. 'SQLNCLI11'
+    // - will leave older 'SQLNCLI10' on Windows XP
     procedure SetInternalProperties; override;
   end;
 
