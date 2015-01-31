@@ -735,14 +735,15 @@ type
           AF_INET: (sin_port: u_short;
                     sin_addr: TInAddr;
                     sin_zero: array[0..7] of AnsiChar);
-          AF_INET6: (sin6_port:     u_short;
-                		sin6_flowinfo: u_long;
-      	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: u_long);
+          AF_INET6: (sin6_port:    u_short;
+                     sin6_flowinfo: u_long;
+                     sin6_addr:     TInAddr6;
+                     sin6_scope_id: u_long);
           );
   end;
 
 function SizeOfVarSin(const sin: TVarSin): integer;
+ {$ifdef UNICODE}inline;{$endif}
 
 function GetSockName(s: TSocket; var name: TVarSin): Integer;
 function GetPeerName(s: TSocket; var name: TVarSin): Integer;

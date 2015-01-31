@@ -8005,9 +8005,7 @@ begin
   FreeAndNil(Model);
 end;
 
-{$ifdef MSWINDOWS}
 {$define WTIME}
-{$endif}
 
 const
   CLIENTTEST_WHERECLAUSE = 'FirstName Like "Sergei1%"';
