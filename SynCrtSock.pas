@@ -144,8 +144,10 @@ unit SynCrtSock;
   - added THttpApiServer.MaxBandwidth and THttpApiServer.MaxConnections
     properties (for HTTP API 2.0 only) - thanks mpv for the proposal!
   - added THttpApiServer.LogStart/LogStop for HTTP API 2.0 integrated logging
-  - introducing new THttpApiServer.SetAuthenticationSchemes() method, and
-    THttpServerRequest.AuthenticationStatus and AuthenticatedUser properties
+  - introducing new THttpApiServer.SetAuthenticationSchemes() method for HTTP
+    API 2.0, and the corresponding THttpServerRequest.AuthenticationStatus and
+    AuthenticatedUser properties
+  - added THttpApiServer.SetTimeOutLimits() method for HTTP API 2.0
   - added THttpApiServer.ServerSessionID and UrlGroupID read-only properties
   - let HTTP_RESPONSE.AddCustomHeader() recognize all known headers
   - THttpApiServer won't try to send an error message when connection is broken
@@ -810,6 +812,7 @@ type
     /// output parameter to be sent back as the response message header
     property OutCustomHeaders: RawByteString read fOutCustomHeaders write fOutCustomHeaders;
     /// the associated server instance
+    // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
     /// the thread instance which called this execution context
     property CallingThread: TNotifiedThread read fCallingThread;
@@ -1065,6 +1068,28 @@ type
     // - as created by Clone() method
     property Clones: TObjectList read fClones;
   public { HTTP API 2.0 methods and properties }
+    /// can be used to check if the HTTP API 2.0 is available
+    function HasAPI2: boolean;
+    /// enable HTTP API 2.0 advanced timeout settings
+    // - all those settings are set for the current URL group
+    // - aEntityBody is the time, in seconds, allowed for the request entity
+    // body to arrive - default value is 2 minutes
+    // - aDrainEntityBody is the time, in seconds, allowed for the HTTP Server
+    // API to drain the entity body on a Keep-Alive connection - default value
+    // is 2 minutes
+    // - aRequestQueue is the time, in seconds, allowed for the request to
+    // remain in the request queue before the application picks it up - default
+    // value is 2 minutes
+    // - aIdleConnection is the time, in seconds, allowed for an idle connection;
+    // is similar to THttpServer.ServerKeepAliveTimeOut - default value is
+    // 2 minutes
+    // - aHeaderWait is the time, in seconds, allowed for the HTTP Server API
+    // to parse the request header - default value is 2 minutes
+    // - aMinSendRate is the minimum send rate, in bytes-per-second, for the
+    // response - default value is 150 bytes-per-second
+    // - any value set to 0 will set the HTTP Server API default value
+    procedure SetTimeOutLimits(aEntityBody, aDrainEntityBody,
+      aRequestQueue, aIdleConnection, aHeaderWait, aMinSendRate: cardinal);
     /// enable HTTP API 2.0 logging
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
     // - this method won't do anything on the cloned instances, but the main
@@ -1177,6 +1202,9 @@ type
     fThreadPoolContentionAbortCount: cardinal;
     {$endif}
     fInternalHttpServerRespList: TList;
+    fServerConnectionCount: cardinal;
+    fServerKeepAliveTimeOut: cardinal;
+    fTCPPrefix: RawByteString;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -1196,21 +1224,6 @@ type
     // - THttpServerSocket are created on the fly for every request, then
     // a THttpServerResp thread is created for handling this THttpServerSocket
     Sock: TCrtSocket;
-    /// will contain the total number of connection to the server
-    // - it's the global count since the server started
-    ServerConnectionCount: cardinal;
-    /// time, in milliseconds, for the HTTP.1/1 connections to be kept alive;
-    // default is 3000 ms
-    ServerKeepAliveTimeOut: cardinal;
-    /// TCP/IP prefix to mask HTTP protocol
-    // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
-    // - in order to make the TCP/IP stream not HTTP compliant, you can specify
-    // a prefix which will be put before the first header line: in this case,
-    // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
-    // most AntiVirus programs, and increase security - but you won't be able
-    // to use an Internet Browser nor AJAX application for remote access any more
-    TCPPrefix: RawByteString;
-
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
     // - you can specify a number of threads to be initialized to handle
@@ -1221,6 +1234,23 @@ type
     /// release all memory and handlers
     destructor Destroy; override;
   published
+    /// will contain the total number of connection to the server
+    // - it's the global count since the server started
+    property ServerConnectionCount: cardinal
+      read fServerConnectionCount write fServerConnectionCount;
+    /// time, in milliseconds, for the HTTP.1/1 connections to be kept alive;
+    // default is 3000 ms
+    // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter  
+    property ServerKeepAliveTimeOut: cardinal
+      read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
+    /// TCP/IP prefix to mask HTTP protocol
+    // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
+    // - in order to make the TCP/IP stream not HTTP compliant, you can specify
+    // a prefix which will be put before the first header line: in this case,
+    // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
+    // most AntiVirus programs, and increase security - but you won't be able
+    // to use an Internet Browser nor AJAX application for remote access any more
+    property TCPPrefix: RawByteString read fTCPPrefix write fTCPPrefix;
     {$ifdef USETHREADPOOL}
     /// number of times there was no availibility in the internal thread pool
     // to handle an incoming request
@@ -3252,7 +3282,7 @@ end;
 
 procedure THttpServer.OnConnect;
 begin
-  inc(ServerConnectionCount);
+  inc(fServerConnectionCount);
 end;
 
 procedure THttpServer.OnDisconnect;
@@ -5743,6 +5773,11 @@ begin
   end;
 end;
 
+function THttpApiServer.HasAPI2: boolean;
+begin
+  result := Http.Version.MajorVersion>=0;
+end;
+
 function THttpApiServer.GetLogging: boolean;
 begin
   result := (fLogData<>nil);
@@ -5846,6 +5881,27 @@ begin
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerAuthenticationProperty,
       @authInfo, SizeOf(authInfo)));
+end;
+
+procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
+  aRequestQueue, aIdleConnection, aHeaderWait, aMinSendRate: cardinal);
+var timeoutInfo: HTTP_TIMEOUT_LIMIT_INFO;
+begin
+  if (self=nil) or (fOwner<>nil) then
+    exit;
+  if Http.Version.MajorVersion<2 then
+    raise EHttpApiServer.Create(hSetUrlGroupProperty,ERROR_OLD_WIN_VERSION);
+  FillChar(timeOutInfo,SizeOf(timeOutInfo),0);
+  timeoutInfo.Flags := 1;
+  timeoutInfo.EntityBody := aEntityBody;
+  timeoutInfo.DrainEntityBody := aDrainEntityBody;
+  timeoutInfo.RequestQueue := aRequestQueue;
+  timeoutInfo.IdleConnection := aIdleConnection;
+  timeoutInfo.HeaderWait := aHeaderWait;
+  timeoutInfo.MinSendRate := aMinSendRate;
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerTimeoutsProperty,
+      @timeoutInfo, SizeOf(timeoutInfo)));
 end;
 
 
