@@ -98,6 +98,9 @@ procedure SetEndOfFile(hFile: cInt); inline;
 /// compatibility function, wrapping Win32 API last error code
 function GetLastError: longint; inline;
 
+/// compatibility function, wrapping Win32 API last error code
+procedure SetLastError(error: longint); inline;
+
 /// compatibility function, wrapping Win32 API text comparison
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint; inline;
@@ -267,7 +270,12 @@ end;
 
 function GetLastError: longint;
 begin
-  result := GetLastOSError;
+  result := fpgeterrno;
+end;
+
+procedure SetLastError(error: longint);
+begin
+  fpseterrno(error);
 end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
@@ -308,4 +316,4 @@ end;
 
 {$endif}
 
-end.
+end.
