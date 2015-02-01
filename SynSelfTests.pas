@@ -9336,6 +9336,7 @@ begin
           end;
         end;
         Updated := aExternalClient.ServerTimeStamp;
+        Check(Updated>=Start);
         for i := 1 to BatchID[high(BatchID)] do
           if i mod 100=0 then begin
             RExt.fLastChange := 0;

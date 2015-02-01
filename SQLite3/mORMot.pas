@@ -9643,7 +9643,7 @@ type
       var IDs: TIDDynArray): boolean; 
     /// retrieve the server time stamp
     // - default implementation will use fServerTimeStampOffset to compute
-    // the value from PC time (i.e. Now+fServerTimeStampOffset as TTimeLog)
+    // the value from PC time (i.e. NowUTC+fServerTimeStampOffset as TTimeLog)
     // - inherited classes may override this method, or set the appropriate
     // value in fServerTimeStampOffset protected field
     function GetServerTimeStamp: TTimeLog; virtual;
@@ -25994,7 +25994,7 @@ procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
 begin
   fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-NowUTC;
   if fServerTimeStampOffset=0 then
-    fServerTimeStampOffset := 0.0001; // retrieve server date/time only once
+    fServerTimeStampOffset := 0.000001; // retrieve server date/time only once
 end;
 
 function TSQLRest.GetCache: TSQLRestCache;

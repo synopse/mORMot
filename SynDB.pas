@@ -172,6 +172,8 @@ unit SynDB;
     similar JOINed clauses) will create up to 9 cache slots - see [736295149a9]
   - added TSQLDBConnection.LastErrorMessage and LastErrorException properties,
     to retrieve the error when NewStatementPrepared() returned nil
+  - new TSQLDBConnection.ServerDateTime property, which will return the
+    external database Server current date and time as TDateTime value
   - added TSQLDBConnectionProperties.ConnectionTimeOutMinutes property to
     allow automatic recreation of all connections after an idle period of
     time, to avoid potential broken connection issues - see [f024266c08]
@@ -1551,7 +1553,8 @@ type
     fLastAccessTicks: Int64;
     function IsOutdated: boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
-    function GetServerTimeStamp: TTimeLog; virtual;
+    function GetServerTimeStamp: TTimeLog;
+    function GetServerDateTime: TDateTime; virtual;
     function GetLastErrorWasAboutConnection: boolean; 
     /// raise an exception
     procedure CheckConnection;
@@ -1631,10 +1634,16 @@ type
     // - check if TransactionCount>0
     property InTransaction: boolean read GetInTransaction;
     /// the current Date and Time, as retrieved from the server
+    // - note that this value is the DB_SERVERTIME[] constant SQL value, so
+    // will most likely return a local time, not an UTC time
     // - this property will return the timestamp in TTimeLog / TTimeLogBits /
-    // Int64 value after correction from the Server returned time-stamp (if any)
-    // - default implementation will return the executable time, i.e. TimeLogNow
+    // Int64 value 
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
+    /// the current Date and Time, as retrieved from the server
+    // - note that this value is the DB_SERVERTIME[] constant SQL value, so
+    // will most likely return a local time, not an UTC time
+    // - this property will return the value as regular TDateTime
+    property ServerDateTime: TDateTime read GetServerDateTime;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor
     // - by default, will follow TSQLDBConnectionProperties.OnProcess property
@@ -2543,7 +2552,7 @@ type
   protected
     fConnected: boolean;
     fProxy: TSQLDBProxyConnectionPropertiesAbstract;
-    function GetServerTimeStamp: TTimeLog; override;
+    function GetServerDateTime: TDateTime; override;
   public
     /// connect to a specified database engine
     constructor Create(aProperties: TSQLDBConnectionProperties); override;
@@ -3900,11 +3909,14 @@ begin
 end;
 
 function TSQLDBConnection.GetServerTimeStamp: TTimeLog;
-// - since TTimeLog type is bit-oriented, you can't just use add or substract
-// two TTimeLog values when doing such date/time computation: use temp TDateTime
+begin
+  PTimeLogBits(@result)^.From(GetServerDateTime);
+end;
+
+function TSQLDBConnection.GetServerDateTime: TDateTime;
 var Current: TDateTime;
 begin
-  Current := Now;
+  Current := NowUTC; // so won't conflict with any potential time zone change
   if (fServerTimeStampOffset=0) and
      (fProperties.fSQLGetServerTimeStamp<>'') then begin
     with fProperties do
@@ -3912,9 +3924,9 @@ begin
         if Step then
         fServerTimeStampOffset := ColumnDateTime(0)-Current;
     if fServerTimeStampOffset=0 then
-      fServerTimeStampOffset := 0.0001; // request server only once
+      fServerTimeStampOffset := 0.000001; // request server only once
   end;
-  PTimeLogBits(@result)^.From(Current+fServerTimeStampOffset);
+  result := Current+fServerTimeStampOffset;
 end;
 
 function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
@@ -7518,9 +7530,11 @@ begin
   fConnected := false;
 end;
 
-function TSQLDBProxyConnection.GetServerTimeStamp: TTimeLog;
+function TSQLDBProxyConnection.GetServerDateTime: TDateTime;
+var TimeStamp: TTimeLogBits;
 begin
-  fProxy.Process(cServerTimeStamp,self,result);
+  fProxy.Process(cServerTimeStamp,self,TimeStamp);
+  result := TimeStamp.ToDateTime; 
 end;
 
 function TSQLDBProxyConnection.IsConnected: boolean;
