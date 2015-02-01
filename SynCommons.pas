@@ -4183,15 +4183,15 @@ type
   end;
 
   /// abstract parent class with threadsafe implementation of IInterface and
-  // a virtual constructor, ready to be overridden to initialize the instance
+  // a virtual constructor
   // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
-  // you need an interfaced object with a virtual constructor
+  // you need an interfaced object with a virtual constructor, ready to be
+  // overridden to initialize the instance
   TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
   public
     /// this virtual constructor will be called at instance creation
+    // - this actual implementation won't do anything
     constructor Create; virtual;
-    /// just a method used to call _Release within a Synchronize() call
-    procedure InternalRelease;
   end;
 
   {$M+} { TPersistent has no RTTI for LVCL! }
@@ -32641,12 +32641,6 @@ end;
 
 constructor TInterfacedObjectWithCustomCreate.Create;
 begin // nothing to do by default - overridden constructor may add custom code
-end;
-
-procedure TInterfacedObjectWithCustomCreate.InternalRelease;
-begin
-  if self<>nil then
-    IInterface(self)._Release; // call the release interface
 end;
 
 

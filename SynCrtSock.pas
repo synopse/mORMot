@@ -650,7 +650,7 @@ type
     function Delete(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
 
     /// low-level HTTP/1.1 request
-    // - call by all REST methods above
+    // - called by all REST methods above
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
     function Request(const url, method: RawByteString; KeepAlive: cardinal;
@@ -2963,14 +2963,13 @@ begin
       SockSend(TCPPrefix);
     if (url='') or (url[1]<>'/') then
       aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
-      aURL := url;
+      aURL := url;            
 {$ifdef DEBUGAPI}  writeln('? ',method,' ',aurl); {$endif}
+    SockSend([method,' ',aURL,' HTTP/1.1'#13#10'Host: ',Server]);
     if Port='80' then
-      SockSend([method, ' ', aURL, ' HTTP/1.1'#13#10+
-        'Host: ', Server, #13#10'Accept: */*']) else
-      SockSend([method, ' ', aURL, ' HTTP/1.1'#13#10+
-        'Host: ', Server, ':', Port, #13#10'Accept: */*']);
-    SockSend(['User-Agent: ',UserAgent]);
+      SockSend(['Host: ',Server]) else
+      SockSend(['Host: ',Server,':',Port]);
+    SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
     aData := Data; // need var for Data to be eventually compressed
     CompressDataAndWriteHeaders(DataType,aData);
     if KeepAlive>0 then

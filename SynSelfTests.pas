@@ -10643,7 +10643,7 @@ end;
 { TServiceCalculator }
 
 type
-  TServiceCalculator = class(TInterfacedObject, ICalculator)
+  TServiceCalculator = class(TInjectableObject, ICalculator)
   public
     function Add(n1,n2: integer): integer;
     function Subtract(n1,n2: double): double;
@@ -10725,7 +10725,10 @@ end;
 function TServiceCalculator.SpecialCall(Txt: RawUTF8; var Int: integer;
   var Card: cardinal; field, fields: TSynTableFieldTypes;
   var options: TSynTableFieldOptions): TSynTableFieldTypes;
+var dummy: IComplexNumber;
 begin
+  if Assigned(fResolve) then
+    Resolve(TypeInfo(IComplexNumber),dummy);
   inc(Int,length(Txt));
   inc(Card);
   result := fields+field;

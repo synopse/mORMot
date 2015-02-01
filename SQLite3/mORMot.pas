@@ -760,6 +760,7 @@ unit mORMot;
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
     - introducing TInterfaceFactoryGenerated so that interface methods can be
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
+    - introducing TInjectableObject to easily implement the IoC SOLID pattern
     - interface-based services are now able to work with TObjectList parameters
     - interface-based services will now avoid to transmit the "id":... value
       when ID equals 0
@@ -8038,7 +8039,7 @@ type
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them when freed
   // - will also release any T*ObjArray dynamic array storage of persistents,
-  // previously registered via TJSONSerializer.RegisterObjArrayForJSON() 
+  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
   // - could be used for gathering of TPersistent properties, e.g. for
   // Domain objects in DDD, especially for Value Objects, Aggregates or Entities
   // - note that non published (e.g. public) properties won't be instantiated
@@ -8056,6 +8057,28 @@ type
     // TPersistent class and T*ObjArray published properties
     destructor Destroy; override;
   end;
+
+  /// generic method prototype to resolve a dependency
+  // - will retrieve an instance of a given interface, following the IoC pattern
+  // as required by SOLID principles
+  // - returns TRUE and set Obj on success, FALSE if the interface is unknown
+  // - see e.g. TServiceContainer.Resolve() method which maps this callback
+  TOnDependencyResolve = function(aInterface: PTypeInfo; out Obj): boolean of object;
+
+  /// any service implementation class could inherit from this class to
+  // allow dependency injection aka SOLID IoC by the framework
+  // - once created, the framework will initialize its fResolve member, so
+  // that its Resolve() method could be used to inject any needed dependency
+  TInjectableObject = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fResolve: TOnDependencyResolve;
+    /// this method will call fResolve() and raise a EServiceException if
+    // the expected interface could not have been resolved
+    procedure Resolve(aInterface: PTypeInfo; out Obj);
+  public
+  end;
+
+  TInjectableObjectClass = class of TInjectableObject; 
 
   /// event used by TInterfaceFactory.CreateFakeInstance() to run a method
   // - aMethod will specify which method is to be executed
@@ -8180,7 +8203,7 @@ type
 
   {$endif HASINTERFACERTTI}
 
-  /// abstract class handling a generic interface implementation class 
+  /// abstract class handling a generic interface implementation class
   TInterfacedObjectFromFactory = class(TInterfacedObject)
   protected
     fFactory: TInterfaceFactory;
@@ -9008,7 +9031,7 @@ type
     fInstanceTimeOut: cardinal;
     fInstanceLock: TRTLCriticalSection;
     fImplementationClass: TInterfacedClass;
-    fImplementationClassWithCustomCreate: Boolean;
+    fImplementationClassKind: (ickBlank, ickWithCustomCreate, ickInjectable);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
@@ -9053,9 +9076,9 @@ type
     function CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
   public
     /// initialize the service provider on the server side
-    // - expect an direct server-side implementation class (inheriting from
-    // TInterfacedClass or from TInterfacedObjectWithCustomCreate if you need
-    // an overridden constructor)
+    // - expect an direct server-side implementation class, which may inherit
+    // from plain TInterfacedClass, TInterfacedObjectWithCustomCreate if you
+    // need an overridden constructor, or TInjectableObject to support IoC
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes,
     // a time out (in seconds) can be defined - if the time out is 0, interface
     // will be forced in sicSingle mode
@@ -9367,6 +9390,16 @@ type
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
+    /// this method could be used to resolve any dependency
+    // - returns TRUE and affect the  
+    // - can be used as such to resolve an I: ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if Catalog.ResolveDependency(TypeInfo(ICalculator),I) then
+    // !   ... use calc methods
+    // - match IInjectableObject.SetDependencyResolverEvent() signature,
+    // i.e. the TOnDependencyResolve callback expectations
+    function Resolve(aInterface: PTypeInfo; out Obj): boolean; virtual;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -28286,6 +28319,11 @@ end;
 { Low-level background execution functions }
 
 type
+  TInterfacedObjectHooked = class(TInterfacedObject)
+  public
+    procedure InternalRelease;
+  end;
+
   TBackgroundLauncherAction = (
     doCallMethod, doInstanceRelease, doThreadMethod);
 
@@ -28296,10 +28334,16 @@ type
     doCallMethod:
       (CallMethodArgs: pointer); // PCallMethodArgs
     doInstanceRelease:
-      (Instance: TInterfacedObjectWithCustomCreate);
+      (Instance: TInterfacedObjectHooked);
     doThreadMethod:
       (ThreadMethod: TThreadMethod)
   end;
+
+procedure TInterfacedObjectHooked.InternalRelease;
+begin
+  if self<>nil then
+    IInterface(self)._Release; // call the release interface
+end;
 
 procedure BackgroundExecuteProc(Call: pointer); forward;
 
@@ -28355,7 +28399,9 @@ procedure BackgroundExecuteInstanceRelease(instance: TObject;
 var synch: TBackgroundLauncher;
 begin
   synch.Action := doInstanceRelease;
-  synch.Instance := TInterfacedObjectWithCustomCreate(instance);
+  if not instance.InheritsFrom(TInterfacedObject) then
+    raise EServiceException.CreateUTF8('BackgroundExecuteInstanceRelease(%)',[instance]);
+  synch.Instance := TInterfacedObjectHooked(instance);
   BackGroundExecute(synch,backgroundThread);
 end;
 
@@ -38198,6 +38244,15 @@ begin
   result := nil;
 end;
 
+function TServiceContainer.Resolve(aInterface: PTypeInfo; out Obj): boolean;
+var factory: TServiceFactory;
+begin
+  factory := Info(aInterface);
+  if factory<>nil then
+    result := factory.Get(Obj) else
+    result := false;
+end;
+
 function TServiceContainer.Index(aIndex: integer): TServiceFactory;
 begin
   if Self=nil then
@@ -40109,6 +40164,19 @@ begin
 end;
 
 
+{ TInjectableObject }
+
+procedure TInjectableObject.Resolve(aInterface: PTypeInfo; out Obj);
+begin
+  if (self=nil) or not Assigned(fResolve) then
+    raise EServiceException.CreateUTF8('%.Resolve() with no prior registration',[self]);
+  if aInterface=nil then
+    raise EServiceException.CreateUTF8('%.Resolve(nil)',[self]);
+  if not fResolve(aInterface,Obj) then
+    raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,aInterface^.Name]);
+end;
+
+
 { TServiceFactory }
 
 function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
@@ -40381,8 +40449,10 @@ begin
     raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
       [self,InterfaceURI,fRest]) else
   fImplementationClass := aImplementationClass;
+  if fImplementationClass.InheritsFrom(TInjectableObject) then
+    fImplementationClassKind := ickInjectable else
   if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
-    fImplementationClassWithCustomCreate := true;
+    fImplementationClassKind := ickWithCustomCreate;
   fImplementationClassInterfaceEntry :=
     fImplementationClass.GetInterfaceEntry(fInterface.fInterfaceIID);
   if fImplementationClassInterfaceEntry=nil then
@@ -40595,9 +40665,19 @@ end;
 
 function TServiceFactoryServer.CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
 begin
-  if fImplementationClassWithCustomCreate then
-    result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create else
+  case fImplementationClassKind of
+  ickWithCustomCreate:
+    result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
+  ickInjectable: begin
+    result := TInjectableObjectClass(fImplementationClass).Create;
+    if Rest.fServices=nil then
+      raise EServiceException.CreateUTF8('%.CreateInstance(%) with no ServiceRegister',
+        [self,fImplementationClass]);
+    TInjectableObject(result).fResolve := Rest.fServices.Resolve;
+  end;
+  else 
     result := fImplementationClass.Create;
+  end;
   if AndIncreaseRefCount then
     IInterface(result)._AddRef; // allow passing self to sub-methods
 end;
