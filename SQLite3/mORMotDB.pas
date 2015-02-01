@@ -94,7 +94,7 @@ unit mORMotDB;
   - now TSQLRestStorageExternal will call TSQLRestServer.OnUpdateEvent and
     OnBlobUpdateEvent callbacks, if defined (even in BATCH mode)
   - BatchDelete() will now split its batch statement executed following
-    TSQLDBConnectionProperties.BatchMaxSentAtOnce property expectations 
+    TSQLDBConnectionProperties.BatchMaxSentAtOnce property expectations
   - now TSQLRestStorageExternal won't create any columns for external
     tables with unsupported published property types (sftUnknown or sftMany),
     just like TSQLRecord.GetSQLCreate() method
@@ -104,18 +104,20 @@ unit mORMotDB;
   - fixed issue in TSQLRestStorageExternal.EngineDeleteWhere() when
     calling commands like MyDB.Delete(TSQLMyClass, 'PLU < ?', [20000])
   - TSQLRestStorageExternal.EngineDeleteWhere() will handle more border cases,
-    and will split DELETE FROM table WHERE ID IN (....) in several intervals 
+    and will split DELETE FROM table WHERE ID IN (....) in several intervals
   - fixed errors when executing JOINed queries (e.g. via FillPrepareMany)
   - fixed ticket [3c41462594] in TSQLRestStorageExternal.ExecuteFromJSON()
   - fixed ticket [9a821d26ee] in TSQLRestStorageExternal.Create() not
     creating any missing field
+  - fixed unexpected TSQLRestServer time synchronization to the DB local time in  
+    TSQLRestStorageExternal.Create - now the reference clock is the ORM server
   - fixed ticket [b109c22750] about SQLite3 cache not flushed after CRUD updates
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
   - ensure DESC INDEX is created for Firebird ID column, as expected for
     faster MAX(ID) execution - see http://www.firebirdfaq.org/faq205
   - fix TSQLRestStorageExternal.CreateSQLMultiIndex() to set ColumnIndexed=TRUE,
     and fixed ticket [929cb6fc3047c5f78b95] by ignoring BLOB fields
-  - ensure duplicated indexs are not created on ID primary key column 
+  - ensure duplicated indexs are not created on ID primary key column
   - fixed TSQLRestStorageExternal.UpdateBlobFields() to return true
     if no BLOB field is defined, and to proper handle multi-field update
   - fixed ticket [21c2d5ae96] when inserting/updating blob-only table content
@@ -128,7 +130,7 @@ unit mORMotDB;
     methods, updating/retrieving all BLOB fields at once in the same SQL statement
   - added VirtualTableExternalMap() function for easier mapping definition
   - handle TSQLModelRecordPropertiesExternal.MapAutoKeywordFields for automatic
-    maping of field which name conflicts with a SQL keyword - see [7fbbd53966] 
+    maping of field which name conflicts with a SQL keyword - see [7fbbd53966]
   - this unit will now set SynDBLog := TSQLLog during its initialization
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
     shared with SynDB and mORMot units (includes methods refactoring)
@@ -671,13 +673,6 @@ begin
   if fProperties=nil then
     raise EBusinessLayerException.CreateUTF8(
       '%.Create: No external DB defined for %',[self,StoredClass]);
-  // try to connect to the remote DB, and synchronize local Rest time
-  if Owner<>nil then
-    try
-      Owner.ServerTimeStamp := fProperties.ThreadSafeConnection.ServerTimeStamp;
-    except
-      on E: Exception do ; // ignore any error here
-    end;
   // ensure external field names are compatible with the external DB keywords
   for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
     nfo := StoredClassRecordProps.Fields.List[f];
