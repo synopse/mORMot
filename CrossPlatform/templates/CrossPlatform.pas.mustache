@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SynCrossPlatform* units
 {{#uri}}
-// - retrieved from http://{{host}}/{{uri}}
+// - retrieved from {{protocol}}://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
 {{/uri}}
 {{^uri}}
@@ -106,7 +106,7 @@ type
 {{/methods}}
   end;
 
-  /// implements I{{interfaceURI}} {{#uri}}from http://{{host}}/{{root}}/{{uri}}{{/uri}}
+  /// implements I{{interfaceURI}} {{#uri}}from {{protocol}}://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   TService{{interfaceURI}} = class(TServiceClientAbstract{{#isClientDriven}}ClientDriven{{/isClientDriven}},I{{interfaceURI}})
   public
@@ -118,9 +118,9 @@ type
 
 {{/soa.services}}
 const
-  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  /// the server port{{#uri}}, corresponding to {{protocol}}://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
-  /// the server model root name{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  /// the server model root name{{#uri}}, corresponding to {{protocol}}://{{host}}{{/uri}}
   SERVER_ROOT = '{{root}}';
 
 
@@ -128,14 +128,16 @@ const
 function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
-// - it will use by default port {{port}} over root '{{root}}'
+// - it will use by default port {{port}} over root '{{root}}'{{#host}}, corresponding
+// to {{protocol}}://{{host}}/{{root}}{{/host}}
 {{#authClass}}
 // - secure connection will be established via {{.}}
 // with the supplied credentials - on connection or authentication error,
 // this function will raise a corresponding exception
 {{/authClass}}
 function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT): TSQLRestClientHTTP;
+  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT;
+  aHttps: boolean={{#https}}true{{/https}}{{^https}}false{{/https}}): TSQLRestClientHTTP;
 
 {{#withHelpers}}
 // publish some low-level helpers for variant conversion
@@ -252,9 +254,10 @@ begin
 end;
 
 function GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  aServerPort: integer; const aServerRoot: string): TSQLRestClientHTTP;
+  aServerPort: integer; const aServerRoot: string; aHttps: boolean): TSQLRestClientHTTP;
 begin
-  result := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel(aServerRoot),true); // aOwnModel=true
+  result := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,
+    GetModel(aServerRoot),true,aHttps); // aOwnModel=true
   try
     if (not result.Connect) or (result.ServerTimeStamp=0) then
       raise ERestException.CreateFmt('Impossible to connect to %s:%d server',

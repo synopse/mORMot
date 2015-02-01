@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 {{#uri}}
-// - retrieved from http://{{host}}/{{uri}}
+// - retrieved from {{protocol}}://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
 {{/uri}}
 {{^uri}}
@@ -86,7 +86,7 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
 {{/isInMormotPas}}
 {{/orm}}
 {{#soa.services}}
-  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
+  /// service accessible {{#uri}}via {{protocol}}://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   // - synchronous and asynchronous methods are available, depending on use case
   // - synchronous _*() methods will block the browser execution, so won't be
@@ -108,9 +108,9 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
 {{/soa.services}}
 
 const
-  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  /// the server port{{#uri}}, corresponding to {{protocol}}://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
-  /// the server model root name{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  /// the server model root name{{#uri}}, corresponding to {{protocol}}://{{host}}/{{root}}{{/uri}}
   SERVER_ROOT = '{{root}}';
 
 
@@ -118,7 +118,8 @@ const
 function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
-// - it will use by default port {{port}} over root '{{root}}'
+// - it will use by default port {{port}} over root '{{root}}'{{#host}}, corresponding
+// to {{protocol}}://{{host}}/{{root}}{{/host}}
 {{#authClass}}
 // - secure connection will be established via {{.}}
 // with the supplied credentials
@@ -126,7 +127,8 @@ function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 // - request will be asynchronous, and trigger onSuccess or onError event
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
   onSuccess, onError: TSQLRestEvent;
-  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT);
+  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT;
+  aHttps: boolean={{#https}}true{{/https}}{{^https}}false{{/https}});
 
 {{#withHelpers}}
 // publish some low-level helpers for variant conversion
@@ -283,9 +285,11 @@ begin
 end;
 
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer; const aServerRoot: string);
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer; const aServerRoot: string;
+  aHttps: boolean);
 begin
-  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel(aServerRoot),true);
+  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,
+    GetModel(aServerRoot),true,aHttps); // aOwnModel=true
   client.Connect(
   lambda
     try

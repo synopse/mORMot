@@ -4093,6 +4093,13 @@ type
   TServiceFactoryServer = class;
   PSQLAccessRights = ^TSQLAccessRights;
 
+  /// flags which may be set by the caller to notify low-level context
+  // - llfSSL will indicates that the communication was made over HTTPS
+  TSQLRestURIParamsLowLevelFlag = (llfSSL);
+
+  /// some flags set by the caller to notify low-level context
+  TSQLRestURIParamsLowLevelFlags = set of TSQLRestURIParamsLowLevelFlag;
+
   /// store all parameters for a TSQLRestServer.URI() method call
   // - see TSQLRestClient to check how data is expected in our RESTful format
   TSQLRestURIParams = packed record
@@ -4136,6 +4143,8 @@ type
     // - may contain e.g. nil, a THttpServerRequest, a TSQLRestClientURI,
     // a TFastCGIServer or a TSQLRestServerNamedPipeResponse 
     LowLevelRequest: TObject;
+    /// low-level properties of the current protocol context
+    LowLevelFlags: TSQLRestURIParamsLowLevelFlags;
   end;
 
   /// used to map set of parameters for a TSQLRestServer.URI() method

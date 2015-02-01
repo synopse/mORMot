@@ -729,6 +729,8 @@ begin
     // compute URI, handling any virtual host domain
     fillchar(call,sizeof(call),0);
     call.LowLevelRequest := Ctxt;
+    if Ctxt.UseSSL then
+      include(call.LowLevelFlags,llfSSL);
     if fHosts.Count>0 then begin
       host := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
       i := PosEx(':',host);
