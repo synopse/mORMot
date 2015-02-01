@@ -11,6 +11,8 @@ interface
 {$ifdef ISDELPHI2010}
   // download from https://code.google.com/p/x-superobject
   {.$define USEXSUPEROBJECT}
+  // download from http://sourceforge.net/projects/qdac3
+  {.$define USEQDAC}
 {$endif}
 
 {$ifdef USEXSUPEROBJECT}
@@ -59,6 +61,9 @@ uses
   {$else}
   DBXJSON,
   {$endif}
+  {$endif}
+  {$ifdef USEQDAC}
+  qjson,
   {$endif}
   SynCrtSock,
   SynZip,
@@ -148,6 +153,15 @@ type
   end;
   {$endif}
 
+  {$ifdef USEQDAC}
+  TTestQDAC = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+
   {$ifdef USEDBXJSON}
   TTestDBXJSON = class(TSynTestCase)
   published
@@ -184,6 +198,9 @@ type
     {$ifdef USEDBXJSON}
     procedure DBXJSONRead;
     {$endif}
+    {$ifdef USEQDACFIXED} // QDAC is not able to parse "" as key :(
+    procedure QDACRead;
+    {$endif}
   end;
 
   TTestTableContent = class(TTestBigContentRead)
@@ -213,6 +230,9 @@ type
     {$ifdef USEDBXJSON}
     procedure DBXJSON;
     {$endif}
+    {$ifdef USEQDAC}
+    procedure QDAC;
+    {$endif}
   end;
 
   TTestHugeContent = class(TTestBigContentRead)
@@ -235,7 +255,10 @@ type
     procedure dwsJSONRead;
     {$endif}
     {$ifdef USEDBXJSON}
-    procedure DBXJSONRead; 
+    procedure DBXJSONRead;
+    {$endif}
+    {$ifdef USEQDAC}
+    procedure QDACRead;
     {$endif}
   end;
 
@@ -266,6 +289,9 @@ begin
   {$endif}
   {$ifdef USEDBXJSON},
     TTestDBXJSON
+  {$endif}
+  {$ifdef USEQDAC},
+    TTestQDAC
   {$endif}
   ]);
 end;
@@ -729,6 +755,52 @@ end;
 
 {$endif USEDWSJSON}
 
+{$ifdef USEQDAC}
+
+{ TTestQDAC }
+
+procedure TTestQDAC.Read;
+var obj: TQJson;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := TQJson.Create;
+    obj.Parse(SAMPLE_JSON_1);
+    check(obj.ItemByPath('glossary.title').AsString='example glossary');
+    obj.Free;
+  end;
+end;
+
+procedure TTestQDAC.Access;
+var obj: TQJson;
+    i: integer;
+begin
+  obj := TQJson.Create;
+  obj.Parse(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(obj.ItemByPath('glossary.title').AsString='example glossary');
+    check(obj.ItemByPath('glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso')[0].AsString='GML');
+  end;
+  obj.Free;
+end;
+
+procedure TTestQDAC.Write;
+var obj: TQJson;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := TQJson.Create;
+  obj.Parse(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(obj.Encode(False),json); // (false)=no format
+    check(Hash32(json)=$293BAAA1);
+  end;
+  obj.Free;
+end;
+
+{$endif USEQDAC}
 
 
 {$ifdef USEDBXJSON}
@@ -1114,6 +1186,20 @@ begin
 end;
 {$endif}
 
+{$ifdef USEQDAC}
+procedure TTestHugeContent.QDACRead;
+var obj: TQJson;
+begin
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  check(obj.ItemByName('type').AsString='FeatureCollection');
+  fRunConsoleOccurenceNumber := obj.ItemByName('features').Count;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
 {$ifdef USEDBXJSON}
 procedure TTestHugeContent.DBXJSONRead;
 var json: UTF8String;
@@ -1209,6 +1295,20 @@ var obj: TdwsJSONValue;
 begin
   obj := TdwsJSONValue.ParseFile(fFileName);
   check(obj['a']['obj']['key'].AsString='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEQDACFIXED}
+procedure TTestDepthContent.QDACRead;
+var obj: TQJson;
+begin
+  fRunConsole := fRunConsole+'QDAC is not able to parse "" as key';
+  exit;
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  check(obj.ItemByPath('a.obj.key').AsString='wrong value');
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
   obj.Free;
 end;
@@ -1611,6 +1711,28 @@ begin
       Check(Values['YearOfBirth'].AsInteger<10000);
       Check((Values['YearOfDeath'].AsInteger>1400)and(Values['YearOfDeath'].AsInteger<2000));
       Check((Values['RowID'].AsInteger>11011) or (Values['Data'].AsString<>''));
+    end;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEQDAC}
+procedure TTestTableContent.QDAC;
+var obj: TQJson;
+    i: integer;
+begin
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  fRunConsoleOccurenceNumber := obj.Count;
+  for i := 0 to fRunConsoleOccurenceNumber-1 do
+    with obj.Items[i] do begin
+      Check(ItemByName('FirstName').AsString<>'');
+      Check(ItemByName('LastName').AsString<>'');
+      Check(ItemByName('YearOfBirth').AsInteger<10000);
+      Check((ItemByName('YearOfDeath').AsInteger>1400)and(ItemByName('YearOfDeath').AsInteger<2000));
+      Check((ItemByName('RowID').AsInteger>11011) or (ItemByName('Data').AsString<>''));
     end;
   check(fRunConsoleOccurenceNumber>8000);
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
