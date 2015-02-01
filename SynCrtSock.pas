@@ -1072,6 +1072,10 @@ type
     function HasAPI2: boolean;
     /// enable HTTP API 2.0 advanced timeout settings
     // - all those settings are set for the current URL group
+    // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
+    // so you should better test the availability of the method first:
+    // ! if aServer.HasAPI2 then
+    // !   SetTimeOutLimits(....);
     // - aEntityBody is the time, in seconds, allowed for the request entity
     // body to arrive - default value is 2 minutes
     // - aDrainEntityBody is the time, in seconds, allowed for the HTTP Server
@@ -1092,6 +1096,9 @@ type
       aRequestQueue, aIdleConnection, aHeaderWait, aMinSendRate: cardinal);
     /// enable HTTP API 2.0 logging
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
+    // so you should better test the availability of the method first:
+    // ! if aServer.HasAPI2 then
+    // !   LogStart(....);
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
     // - you can select the output folder and the expected logging layout
@@ -1117,6 +1124,9 @@ type
     // of THttpServerRequest and its associated AuthenticatedUser value
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
+    // so you should better test the availability of the method first:
+    // ! if aServer.HasAPI2 then
+    // !   SetAuthenticationSchemes(....);
     // - this method will work on the current group, for all instances
     // - see HTTPAPI_AUTH_ENABLE_ALL constant to set all available schemes
     // - optional Realm parameters can be used when haBasic scheme is defined
@@ -5775,7 +5785,7 @@ end;
 
 function THttpApiServer.HasAPI2: boolean;
 begin
-  result := Http.Version.MajorVersion>=0;
+  result := Http.Version.MajorVersion>=2;
 end;
 
 function THttpApiServer.GetLogging: boolean;
