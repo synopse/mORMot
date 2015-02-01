@@ -220,6 +220,7 @@ type
   protected
     fParameters: TSQLRestConnectionParams;
     fURL: string;
+    fOpaqueConnection: TObject; 
   public
     /// this is the main entry point for all HTTP clients
     // - connect to http://aServer:aPort or https://aServer:aPort
@@ -238,8 +239,11 @@ type
     property Server: string read fURL;
     /// the connection parameters
     property Parameters: TSQLRestConnectionParams read fParameters;
+    /// opaque access to the effective connection class instance
+    // - which may be a TFPHttpClient, a TIdHTTP or a TWinHttpAPI
+    property ActualConnection: TObject read fOpaqueConnection;
   end;
-
+   
   /// define the inherited class for HTTP client connection
   TAbstractHttpConnectionClass = class of TAbstractHttpConnection;
 
@@ -526,6 +530,7 @@ constructor TFclHttpConnectionClass.Create(
 begin
   inherited Create(aParameters);
   fConnection := TFPHttpClient.Create(nil);
+  fOpaqueConnection := fConnection;
 end;
 
 procedure TFclHttpConnectionClass.URI(var Call: TSQLRestURIParams;
@@ -582,6 +587,7 @@ constructor TIndyHttpConnectionClass.Create(
 begin
   inherited;
   fConnection := TIdHTTP.Create(nil);
+  fOpaqueConnection := fConnection;
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
   if fParameters.Https then begin
@@ -686,6 +692,8 @@ begin
     RawByteString(IntToStr(fParameters.Port)),fParameters.Https,
     RawByteString(fParameters.ProxyName),RawByteString(fParameters.ProxyByPass),
     fParameters.ConnectionTimeOut,fParameters.SendTimeout,fParameters.ReceiveTimeout);
+  fOpaqueConnection := fConnection;
+  fConnection.IgnoreSSLCertificateErrors := true; // do not be paranoid here
 end;
 
 destructor TWinHttpConnectionClass.Destroy;
