@@ -9968,6 +9968,7 @@ end;
 procedure Direct(const URI: RawUTF8; Hash: cardinal);
 var call: TSQLRestURIParams;
 begin
+  fillchar(call,sizeof(call),0);
   call.Method :='GET';
   call.url := URI;
   TSQLRestServerAuthenticationDefault.ClientSessionSign(Client,call);

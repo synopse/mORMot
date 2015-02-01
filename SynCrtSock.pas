@@ -786,7 +786,7 @@ type
     fCallingThread: TNotifiedThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
-    fAuthenticatedUser: string;
+    fAuthenticatedUser: RawByteString;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
@@ -823,11 +823,13 @@ type
     // - e.g. when using http.sys authentication with HTTP API 2.0
     property AuthenticationStatus: THttpServerRequestAuthentication
       read fAuthenticationStatus;
-    /// contains the THttpServer-side authenticated user name
+    /// contains the THttpServer-side authenticated user name, UTF-8 encoded
     // - e.g. when using http.sys authentication with HTTP API 2.0, the
-    // domain user name is retrieved from the supplied AccessToken 
-    property AuthenticatedUser: string read fAuthenticatedUser;
-  end; 
+    // domain user name is retrieved from the supplied AccessToken
+    // - could also be set by the THttpServerGeneric.Request() method, after
+    // proper authentication, so that it would be logged as expected
+    property AuthenticatedUser: RawByteString read fAuthenticatedUser;
+  end;
 
   /// event handler used by THttpServerGeneric.OnRequest property
   // - Ctxt defines both input and output parameters
@@ -984,7 +986,6 @@ type
     fLogData: pointer;
     fLogDataStorage: array of byte;
     fLoggingServiceName: RawByteString;
-    fLoggingUserName: RawByteString;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
@@ -1145,14 +1146,6 @@ type
     // propagate the change to all cloned instances
     property LoggingServiceName: RawByteString
       read fLoggingServiceName write SetLoggingServiceName;
-    /// the current HTTP API 2.0 logging User name
-    // - could be set by the Request process method, after proper authentication
-    // - will be set in case of successfull HTTP API 2.0 authentication 
-    // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUTF8Conversion])
-    // - this value is dedicated to one instance, so the main instance won't
-    // propagate the change to all cloned instances
-    property LoggingUserName: RawByteString
-      read fLoggingUserName write fLoggingUserName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
     /// read-only access to the low-level HTTP API 2.0 URI Group ID 
@@ -5453,7 +5446,6 @@ begin
         Context.fUseSSL := Req^.pSslInfo<>nil;
         Context.fInHeaders := RetrieveHeaders(Req^,RemoteIP);
         // retrieve any SetAuthenticationSchemes() information
-        fLoggingUserName := '';
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
           for i := 0 to Req^.RequestInfoCount-1 do
           if Req^.pRequestInfo^[i].InfoType=HttpRequestInfoTypeAuth then
@@ -5463,7 +5455,7 @@ begin
             if AuthType>HttpRequestAuthTypeNone then begin
               byte(Context.fAuthenticationStatus) := ord(AuthType)+1;
               if AccessToken<>0 then
-                GetDomainUserNameFromToken(AccessToken,fLoggingUserName);
+                GetDomainUserNameFromToken(AccessToken,Context.fAuthenticatedUser);
             end;
             HttpAuthStatusFailure:
               Context.fAuthenticationStatus := hraFailed;
@@ -5542,8 +5534,8 @@ begin
               ClientIpLength := length(RemoteIP);
               Method := pointer(Context.fMethod);
               MethodLength := length(Context.fMethod);
-              UserName := pointer(fLoggingUserName);
-              UserNameLength := Length(fLoggingUserName);
+              UserName := pointer(Context.fAuthenticatedUser);
+              UserNameLength := Length(Context.fAuthenticatedUser);
             end;
           // send response
           Resp^.Version := Req^.Version;
