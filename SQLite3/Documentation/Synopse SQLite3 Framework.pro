@@ -6716,6 +6716,16 @@ $ netsh delete urlacl url=http://+:80/MyUri
 $ netsh delete urlacl url=http://www.contoso.com:80/MyUri
 Note that all those commands should be run with administrator user rights.
 You can consult the corresponding documentation of {\f1\fs20 netsh http} commands for HTTP context available to query and configure {\f1\fs20 http.sys} settings and parameters at @https://msdn.microsoft.com/en-us/library/windows/desktop/cc307236
+:   HTTP API 2.0 Features
+Some {\f1\fs20 THttpApiServer} methods are available with the HTTP Server 2.0 API, provided since Windows Vista and Windows Server 2008:
+|%40%60
+|\b Method|Description\b0
+|{\f1\fs20 HasAPI2}|check if the HTTP API 2.0 is available
+|{\f1\fs20 SetTimeOutLimits()}|advanced timeout settings
+|{\f1\fs20 LogStart()} and {\f1\fs20 LogStop}|HTTP level standard logging
+|{\f1\fs20 SetAuthenticationSchemes()}|kernel-mode authentication
+|%
+Please see the corresponding documentation of {\f1\fs20 SynCrtSock.pas} for further details, and @https://msdn.microsoft.com/en-us/library/windows/desktop/aa364703 as low-level reference of these features. Note that our implementation of {\f1\fs20 http.sys} is more complete than the one currently included in the official .Net WCF framework. Not bad for a third-party library, isn't it?
 :135  HTTP client(s)
 In fact, there are several implementation of a @**HTTP@/1.1 clients, according to this class hierarchy:
 \graph ClientRESTHttpClasses HTTP/1.1 Client RESTful classes
