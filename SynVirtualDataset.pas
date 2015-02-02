@@ -58,7 +58,7 @@ unit SynVirtualDataSet;
 interface
 
 uses
-  {$ifdef ISDELPHIXE2}System.SysUtils,VCL.Forms,{$else}SysUtils,Forms,{$endif}
+  SysUtils,
   Classes,
   Contnrs,
   {$ifndef DELPHI5OROLDER}
@@ -437,7 +437,9 @@ end;
 
 procedure TSynVirtualDataSet.InternalHandleException;
 begin
-  Application.HandleException(Self);
+  if Assigned(Classes.ApplicationHandleException) then
+    Classes.ApplicationHandleException(ExceptObject) else
+    SysUtils.ShowException(ExceptObject,ExceptAddr);
 end;
 
 procedure TSynVirtualDataSet.InternalInitRecord(Buffer: TRecordBuffer);
