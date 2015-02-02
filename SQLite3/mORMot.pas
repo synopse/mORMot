@@ -8065,6 +8065,8 @@ type
   // - see e.g. TServiceContainer.Resolve() method which maps this callback
   TOnDependencyResolve = function(aInterface: PTypeInfo; out Obj): boolean of object;
 
+  TInterfaceStub = class;
+
   {$M+}
   /// any service implementation class could inherit from this class to
   // allow dependency injection aka SOLID IoC by the framework
@@ -8076,11 +8078,28 @@ type
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolve: TOnDependencyResolve;
+    fAutoResolvedAddress: TList;
+    fCreateMocked: TObjectList;
     /// this method will call fResolve() and raise a EServiceException if
     // the expected interface could not have been resolved
     procedure Resolve(aInterface: PTypeInfo; out Obj);
     /// this method will resolve all interface published properties
     procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
+  public
+    /// initialize an instance, using Mocks and Stubs to resolve dependencies
+    // - could be used as such:
+    // ! var Test: IServiceToBeTested;
+    // ! begin
+    // !   Test := TServiceToBeTested.CreateMocked([
+    // !     TInterfaceStub.Create(TypeInfo(ICalculator)),
+    // !     TInterfaceMock.Create(TypeInfo(IPersistence),self).
+    // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
+    // !   ...
+    constructor CreateMocked(const aStubs: array of TInterfaceStub;
+      aRaiseEServiceExceptionIfNotFound: boolean=true);
+    /// release all used instances
+    // - including all TInterfaceStub instances as specified to CreateMocked()
+    destructor Destroy; override;
   end;
   {$M-}
 
@@ -8249,8 +8268,6 @@ type
     // section, so that the needed type information would be available
     class procedure RegisterInterface(aInterface: PTypeInfo); virtual;
   end;
-
-  TInterfaceStub = class;
 
   /// abstract parameters used by TInterfaceStub.Executes() events callbacks
   TOnInterfaceStubExecuteParamsAbstract = class
@@ -8547,9 +8564,11 @@ type
     fLog: TDynArray;
     fLogCount: integer;
     fInterfaceExpectedTraceHash: cardinal;
-    procedure InternalCreate(out aStubbedInterface); virtual;
-    function InternalCheck(aValid: boolean; const aErrorMessage: RawUTF8;
-      aExpectationFailed: boolean): boolean; virtual;
+    fResolveNext: TInterfaceStub;
+    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean;
+    procedure InternalGetInstance(out aStubbedInterface); virtual;
+    function InternalCheck(aValid,aExpectationFailed: boolean;
+      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
@@ -8564,9 +8583,12 @@ type
       aScope: TInterfaceStubLogLayouts): RawUTF8;
     function GetLogAsText: RawUTF8;
     function GetLogHash: cardinal;
+    /// low-level internal constructor
+    constructor Create(aFactory: TInterfaceFactory;
+      const aInterfaceName: RawUTF8); reintroduce; overload; virtual;
   public
     /// initialize an interface stub from TypeInfo(IMyInterface)
-    // - assign the fake class instance to the SubbedInterface variable:
+    // - assign the fake class instance to a stubbed interface variable:
     // !var I: ICalculator;
     // !  TInterfaceStub.Create(TypeInfo(ICalculator),I);
     // !  Check(I.Add(10,20)=0,'Default result');
@@ -8581,6 +8603,15 @@ type
     // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
     // - if the supplied name has not been previously registered, raise an Exception
     constructor Create(const aInterfaceName: RawUTF8; out aStubbedInterface); reintroduce; overload;
+    /// prepare an interface stub from TypeInfo(IMyInterface) for later injection
+    // - create several TInterfaceStub instances for a given TInjectableObject
+    // ! var Test: IServiceToBeTested;
+    // ! begin
+    // !   Test := TServiceToBeTested.CreateMocked([
+    // !     TInterfaceStub.Create(TypeInfo(ICalculator)),
+    // !     TInterfaceMock.Create(TypeInfo(IPersistence)).
+    // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
+    constructor Create(aInterface: PTypeInfo); reintroduce; overload;
 
     /// add an execution rule for a given method, with JSON marshalling
     // - optional aEventParams parameter will be transmitted to aEvent handler
@@ -8801,8 +8832,8 @@ type
   TInterfaceMock = class(TInterfaceStub)
   protected
     fTestCase: TSynTestCase;
-    function InternalCheck(aValid: boolean; const aErrorMessage: RawUTF8;
-      aExpectationFailed: boolean): boolean; override;
+    function InternalCheck(aValid,aExpectationFailed: boolean;
+      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; override;
   public
     /// initialize an interface mock from TypeInfo(IMyInterface)
     // - aTestCase.Check() will be called in case of mocking failure
@@ -8822,6 +8853,9 @@ type
     // - if the supplied name has not been previously registered, raise an Exception
     constructor Create(const aInterfaceName: RawUTF8; out aMockedInterface;
       aTestCase: TSynTestCase); reintroduce; overload;
+    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
+    // - aTestCase.Check() will be called in case of mocking failure
+    constructor Create(aInterface: PTypeInfo; aTestCase: TSynTestCase); reintroduce; overload;
     /// the associated test case
     property TestCase: TSynTestCase read fTestCase;
   end;
@@ -8836,9 +8870,10 @@ type
   // and can afterwards been check via Verify() calls
   TInterfaceMockSpy = class(TInterfaceMock)
   protected
-    /// this will set and force imoLogMethodCallsAndResults option as needed
-    procedure InternalCreate(out aStubbedInterface); override;
     procedure IntSetOptions(Options: TInterfaceStubOptions); override;
+    /// this will set and force imoLogMethodCallsAndResults option as needed
+    constructor Create(aFactory: TInterfaceFactory;
+      const aInterfaceName: RawUTF8); override;
   public
     /// check that a method has been called a specify number of times
     procedure Verify(const aMethodName: RawUTF8;
@@ -29864,12 +29899,12 @@ begin
 end;
 
 function Nonce(Previous: boolean): RawUTF8;
-var Tix64: cardinal;
+var Ticks: cardinal;
 begin
-  Tix64 := GetTickCount64 div (1000*60*5); // valid for 5*60*1000 ms = 5 minutes
+  Ticks := GetTickCount64 div (1000*60*5); // valid for 5*60*1000 ms = 5 minutes
   if Previous then
-    dec(Tix64);
-  result := SHA256(@Tix64,sizeof(Tix64));
+    dec(Ticks);
+  result := SHA256(@Ticks,sizeof(Ticks));
 end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
@@ -38838,6 +38873,9 @@ var m,a,reg: integer;
 {$endif}
 label error;
 begin
+  if aInterface^.Kind<>tkInterface then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.Create(%): % is not an interface',[self,aInterface^.Name,aInterface^.Name]);
   {$ifndef NOVARIANTS}
   fDocVariantOptions := JSON_OPTIONS[true];
   {$endif}
@@ -39600,51 +39638,59 @@ end;
 
 {$endif}
 
-procedure TInterfaceStub.InternalCreate(out aStubbedInterface);
+constructor TInterfaceStub.Create(aFactory: TInterfaceFactory;
+  const aInterfaceName: RawUTF8);
 var i: integer;
 begin
+  if aFactory=nil then
+    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
+      [self,aInterfaceName]);
+  fInterface := aFactory;
   SetLength(fRules,fInterface.MethodsCount);
   for i := 0 to fInterface.MethodsCount-1 do
     fRules[i].DefaultRule := -1;
   fLog.Init(TypeInfo(TInterfaceStubLogDynArray),fLogs,@fLogCount);
+end;
+
+procedure TInterfaceStub.InternalGetInstance(out aStubbedInterface);
+begin
   with TInterfacedObjectFake.Create(fInterface,Invoke,InstanceDestroyed) do begin
     pointer(aStubbedInterface) := @fVTable;
     _AddRef;
   end;
 end;
 
-function TInterfaceStub.InternalCheck(aValid: boolean; const aErrorMessage: RawUTF8;
-  aExpectationFailed: boolean): boolean;
+function TInterfaceStub.InternalCheck(aValid,aExpectationFailed: boolean;
+  aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean;
 begin
   result := aValid;
   if aExpectationFailed and not aValid then
     raise EInterfaceStub.CreateUTF8('%.InternalCheck(%) failed: %',
-      [self,fInterface.fInterfaceTypeInfo^.Name,aErrorMessage]);
+      [self,fInterface.fInterfaceTypeInfo^.Name,FormatUTF8(aErrorMsgFmt,aErrorMsgArgs)]);
 end;
 
 constructor TInterfaceStub.Create(const aInterfaceName: RawUTF8; out aStubbedInterface);
 begin
-  fInterface := TInterfaceFactory.Get(aInterfaceName);
-  if fInterface=nil then
-    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
-      [self,aInterfaceName]);
-  InternalCreate(aStubbedInterface);
+  Create(TInterfaceFactory.Get(aInterfaceName),aInterfaceName);
+  InternalGetInstance(aStubbedInterface);
 end;
 
 constructor TInterfaceStub.Create(const aGUID: TGUID; out aStubbedInterface);
 begin
-  fInterface := TInterfaceFactory.Get(aGUID);
-  if fInterface=nil then
-    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
-      [self,GUIDToRawUTF8(aGUID)]);
-  InternalCreate(aStubbedInterface);
+  Create(TInterfaceFactory.Get(aGUID),GUIDToRawUTF8(aGUID));
+  InternalGetInstance(aStubbedInterface);
 end;
 
 constructor TInterfaceStub.Create(aInterface: PTypeInfo; out aStubbedInterface);
 begin
-  fInterface := TInterfaceFactory.Get(aInterface);
-  InternalCreate(aStubbedInterface);
+  Create(aInterface);
+  InternalGetInstance(aStubbedInterface);
 end;
+
+constructor TInterfaceStub.Create(aInterface: PTypeInfo);
+begin
+  Create(TInterfaceFactory.Get(aInterface),RawUTF8(aInterface^.Name));
+end; 
 
 procedure TInterfaceStub.IntSetOptions(Options: TInterfaceStubOptions);
 begin
@@ -39672,10 +39718,9 @@ begin
   end;
 end;
 begin
-  InternalCheck(SQLQueryCompare(aOperator,aComputed,aCount),
-    FormatUTF8('% pass count % % % failed',
-      [fInterface.Methods[aMethodIndex].URI,
-       aComputed,OPERATORS[aOperator],aCount]),True);
+  InternalCheck(SQLQueryCompare(aOperator,aComputed,aCount),True,
+   'ExpectsCount(''%'',%,%) failed: count=%',[fInterface.Methods[aMethodIndex].URI,
+    GetEnumName(TypeInfo(TSQLQueryOperator),ord(aOperator))^,aCount,aComputed]);
 end;
 
 procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
@@ -39696,7 +39741,8 @@ begin
             IntCheckCount(m,num,ExpectedPassCountOperator,ExpectedPassCount);
           end;
     if fInterfaceExpectedTraceHash<>0 then
-      InternalCheck(LogHash=fInterfaceExpectedTraceHash,'* interface expected execution',True);
+      InternalCheck(LogHash=fInterfaceExpectedTraceHash,True,
+        'ExpectsTrace(%) returned %',[fInterfaceExpectedTraceHash,LogHash]);
     if eTrace in fHasExpects then
       for m := 0 to fInterface.MethodsCount-1 do
       with fRules[m] do begin
@@ -39704,9 +39750,9 @@ begin
         for r := 0 to high(Rules) do
         with Rules[r] do
         if ExpectedTraceHash<>0 then
-          InternalCheck(ExpectedTraceHash=
-            Hash32(IntGetLogAsText(asmndx,Params,[wName,wParams,wResults])),
-            fInterface.Methods[m].URI+' method expected execution',True);
+          InternalCheck(ExpectedTraceHash=Hash32(IntGetLogAsText(
+             asmndx,Params,[wName,wParams,wResults])),True,
+            'ExpectsTrace(''%'') failed',[fInterface.Methods[m].URI]);
       end;
   finally
     if not (imoFakeInstanceWontReleaseTInterfaceStub in Options) then
@@ -39981,7 +40027,7 @@ begin
           Log.CustomResults := Values;
         end;
         isFails: begin
-          result := InternalCheck(false,Values,false);
+          result := InternalCheck(false,false,'%',[Values]);
           if not result then
             Log.CustomResults := Values;
         end;
@@ -40049,6 +40095,17 @@ begin
   result := Hash32(GetLogAsText);
 end;
 
+function TInterfaceStub.InternalResolve(aInterface: PTypeInfo; out Obj): boolean;
+begin
+  if aInterface=fInterface.fInterfaceTypeInfo then begin
+    InternalGetInstance(Obj);
+    result := true;
+  end else
+    if fResolveNext<>nil then
+      result := fResolveNext.InternalResolve(aInterface,Obj) else
+      result := false;
+end;
+
 
 { TInterfaceMock }
 
@@ -40073,13 +40130,20 @@ begin
   fTestCase := aTestCase;
 end;
 
-function TInterfaceMock.InternalCheck(aValid: boolean; const aErrorMessage: RawUTF8;
-  aExpectationFailed: boolean): boolean;
+constructor TInterfaceMock.Create(aInterface: PTypeInfo; aTestCase: TSynTestCase);
+begin
+  inherited Create(aInterface);
+  fTestCase := aTestCase;
+end;
+
+function TInterfaceMock.InternalCheck(aValid,aExpectationFailed: boolean;
+      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; 
 begin
   if fTestCase=nil then
-    result := inherited InternalCheck(aValid,aErrorMessage,aExpectationFailed) else begin
-    fTestCase.Check(aValid xor (imoMockFailsWillPassTestCase in Options),
-      UTF8ToString(aErrorMessage));
+    result := inherited InternalCheck(aValid,aExpectationFailed,aErrorMsgFmt,aErrorMsgArgs) else begin
+    if aValid xor (imoMockFailsWillPassTestCase in Options) then
+      fTestCase.Check(true) else
+      fTestCase.Check(false,UTF8ToString(FormatUTF8(aErrorMsgFmt,aErrorMsgArgs)));
     result := true; // do not raise any exception at this stage for TInterfaceMock
   end;
 end;
@@ -40087,9 +40151,10 @@ end;
 
 { TInterfaceMockSpy }
 
-procedure TInterfaceMockSpy.InternalCreate(out aStubbedInterface);
+constructor TInterfaceMockSpy.Create(aFactory: TInterfaceFactory;
+  const aInterfaceName: RawUTF8);
 begin
-  inherited;
+  inherited Create(aFactory,aInterfaceName);
   include(fOptions,imoLogMethodCallsAndResults);
 end;
 
@@ -40137,6 +40202,10 @@ begin
   IntCheckCount(asmndx-RESERVED_VTABLE_SLOTS,c,aOperator,aCount);
 end;
 
+function IMSC2Text(V: TInterfaceMockSpyCheck): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck),ord(V));
+end;
 
 procedure TInterfaceMockSpy.Verify(const aTrace: RawUTF8;
   aScope: TInterfaceMockSpyCheck);
@@ -40144,7 +40213,8 @@ const
   VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
     [wName], [wName, wParams], [wName, wParams, wResults]);
 begin
-  InternalCheck(IntGetLogAsText(0,'',VERIFY_SCOPE[aScope])=aTrace,'Verify() failed',true);
+  InternalCheck(IntGetLogAsText(0,'',VERIFY_SCOPE[aScope])=aTrace,true,
+    'Verify(''%'',%) failed',[aTrace,IMSC2Text(aScope)^]);
 end;
 
 procedure TInterfaceMockSpy.Verify(const aMethodName, aParams, aTrace: RawUTF8);
@@ -40152,8 +40222,8 @@ var m: integer;
 begin
   m := fInterface.CheckMethodIndex(aMethodName);
   InternalCheck(
-    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,aParams,[wResults])=aTrace,
-    fInterface.Methods[m].URI+' Verify() failed',true);
+    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,aParams,[wResults])=aTrace,True,
+    'Verify(''%'',''%'',''%'') failed',[aMethodName,aParams,aTrace]);
 end;
 
 procedure TInterfaceMockSpy.Verify(const aMethodName, aTrace: RawUTF8;
@@ -40167,8 +40237,8 @@ begin
   if aScope=chkName then
     raise EInterfaceStub.Create(self,fInterface.Methods[m],'Invalid scope for Verify()');
   InternalCheck(
-    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,'',VERIFY_SCOPE[aScope])=aTrace,
-    fInterface.Methods[m].URI+' Verify() failed',true);
+    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,'',VERIFY_SCOPE[aScope])=aTrace,True,
+    'Verify(''%'',''%'',%) failed',[aMethodName,aTrace,IMSC2Text(aScope)^]);
 end;
 
 
@@ -40188,6 +40258,7 @@ procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boole
 var i: integer;
     CT: TClass;
     P: PPropInfo;
+    addr: pointer;
 begin
   if (self=nil) or not Assigned(fResolve) then
     raise EServiceException.CreateUTF8('%.AutoResolve with no prior registration',[self]);
@@ -40199,15 +40270,58 @@ begin
         if not P^.GetterIsField then
           raise EServiceException.CreateUTF8(
             '%.AutoResolve: %: % property should directly read the field',
-            [self,P^.Name,P^.PropType^.Name]) else
-          if not fResolve(P^.PropType^,P^.GetterAddr(self)^) then
-            if aRaiseEServiceExceptionIfNotFound then
-              raise EServiceException.CreateUTF8(
-                '%.AutoResolve: no service for %: %',[self,P^.Name,P^.PropType^.Name]);
+            [self,P^.Name,P^.PropType^.Name]) else begin
+            addr := P^.GetterAddr(self);
+            if fResolve(P^.PropType{$ifndef FPC}^{$endif},addr^) then begin
+              if fCreateMocked<>nil then begin
+                if fAutoResolvedAddress=nil then
+                  fAutoResolvedAddress := TList.Create;
+                fAutoResolvedAddress.Add(addr);
+              end;
+            end else
+              if aRaiseEServiceExceptionIfNotFound then
+                raise EServiceException.CreateUTF8(
+                  '%.AutoResolve: no service for %: %',[self,P^.Name,P^.PropType^.Name]);
+          end;
       P := P^.Next;
     end;
     CT := CT.ClassParent;
   until CT=TInjectableObject;
+end;
+
+constructor TInjectableObject.CreateMocked(const aStubs: array of TInterfaceStub;
+  aRaiseEServiceExceptionIfNotFound: boolean);
+var i: integer;
+begin
+  inherited Create;
+  if high(aStubs)<0 then
+    raise EInterfaceFactoryException.CreateUTF8('%.CreateMocked(nil)',[self]);
+  fResolve := aStubs[0].InternalResolve;
+  for i := 1 to high(aStubs) do
+    aStubs[i-1].fResolveNext := aStubs[i];
+  fCreateMocked := TObjectList.Create(true);
+  for i := 0 to high(aStubs) do begin 
+    include(aStubs[i].fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
+    fCreateMocked.Add(aStubs[i]);
+  end;
+  AutoResolve(aRaiseEServiceExceptionIfNotFound);
+end;
+
+destructor TInjectableObject.Destroy;
+var i: integer;
+begin
+  try
+    if fCreateMocked<>nil then begin
+      if fAutoResolvedAddress<>nil then begin
+        for i := 0 to fAutoResolvedAddress.Count-1 do
+          PUnknown(fAutoResolvedAddress[i])^ := nil; // creature before creator
+        fAutoResolvedAddress.Free;
+      end;
+      fCreateMocked.Free;
+    end;
+  finally
+    inherited Destroy;
+  end;
 end;
 
 
@@ -41859,4 +41973,4 @@ end.
 
 
 
-
+
