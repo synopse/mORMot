@@ -2965,7 +2965,7 @@ begin
       aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
       aURL := url;            
 {$ifdef DEBUGAPI}  writeln('? ',method,' ',aurl); {$endif}
-    SockSend([method,' ',aURL,' HTTP/1.1'#13#10'Host: ',Server]);
+    SockSend([method,' ',aURL,' HTTP/1.1']);
     if Port='80' then
       SockSend(['Host: ',Server]) else
       SockSend(['Host: ',Server,':',Port]);
