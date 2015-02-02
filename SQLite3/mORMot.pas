@@ -8065,20 +8065,26 @@ type
   // - see e.g. TServiceContainer.Resolve() method which maps this callback
   TOnDependencyResolve = function(aInterface: PTypeInfo; out Obj): boolean of object;
 
+  {$M+}
   /// any service implementation class could inherit from this class to
   // allow dependency injection aka SOLID IoC by the framework
   // - once created, the framework will initialize its fResolve member, so
   // that its Resolve() method could be used to inject any needed dependency
+  // for lazy dependency resolution (e.g. within a public property getter)
+  // - any interface published property could be automatically injected; see
+  // e.g. how TServiceFactoryServer.CreateInstance() initialize them
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolve: TOnDependencyResolve;
     /// this method will call fResolve() and raise a EServiceException if
     // the expected interface could not have been resolved
     procedure Resolve(aInterface: PTypeInfo; out Obj);
-  public
+    /// this method will resolve all interface published properties
+    procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
   end;
+  {$M-}
 
-  TInjectableObjectClass = class of TInjectableObject; 
+  TInjectableObjectClass = class of TInjectableObject;
 
   /// event used by TInterfaceFactory.CreateFakeInstance() to run a method
   // - aMethod will specify which method is to be executed
@@ -9073,6 +9079,8 @@ type
     /// this method will create an implementation instance
     // - reference count will be set to one, in order to allow safe passing
     // of the instance into an interface, if AndIncreaseRefCount is TRUE
+    // - will handle TInterfacedObjectWithCustomCreate and TInjectableObject
+    // as expected, if necessary
     function CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
   public
     /// initialize the service provider on the server side
@@ -40176,6 +40184,32 @@ begin
     raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,aInterface^.Name]);
 end;
 
+procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
+var i: integer;
+    CT: TClass;
+    P: PPropInfo;
+begin
+  if (self=nil) or not Assigned(fResolve) then
+    raise EServiceException.CreateUTF8('%.AutoResolve with no prior registration',[self]);
+  CT := PPointer(self)^;
+  if CT<>TInjectableObject then
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      if P^.PropType^.Kind=tkInterface then
+        if not P^.GetterIsField then
+          raise EServiceException.CreateUTF8(
+            '%.AutoResolve: %: % property should directly read the field',
+            [self,P^.Name,P^.PropType^.Name]) else
+          if not fResolve(P^.PropType^,P^.GetterAddr(self)^) then
+            if aRaiseEServiceExceptionIfNotFound then
+              raise EServiceException.CreateUTF8(
+                '%.AutoResolve: no service for %: %',[self,P^.Name,P^.PropType^.Name]);
+      P := P^.Next;
+    end;
+    CT := CT.ClassParent;
+  until CT=TInjectableObject;
+end;
+
 
 { TServiceFactory }
 
@@ -40674,6 +40708,7 @@ begin
       raise EServiceException.CreateUTF8('%.CreateInstance(%) with no ServiceRegister',
         [self,fImplementationClass]);
     TInjectableObject(result).fResolve := Rest.fServices.Resolve;
+    TInjectableObject(result).AutoResolve(true);
   end;
   else 
     result := fImplementationClass.Create;
@@ -41048,7 +41083,7 @@ end;
 
 { TPersistentAutoCreateFields }
 
-procedure AutoCreateFields(self: TObject);
+procedure AutoCreateFields(self: TPersistent);
 var i,n: integer;
     CT: TClass;
     P: PPropInfo;
@@ -41067,10 +41102,10 @@ begin
       P := P^.Next;
     end;
     CT := CT.ClassParent;
-  until CT=nil;
+  until CT=TPersistent;
 end;
 
-procedure AutoDestroyFields(self: TObject);
+procedure AutoDestroyFields(self: TPersistent);
 var i: integer;
     CT: TClass;
     P: PPropInfo;
@@ -41088,7 +41123,7 @@ begin
       P := P^.Next;
     end;
     CT := CT.ClassParent;
-  until CT=nil;
+  until CT=TPersistent;
 end;
 
 constructor TPersistentAutoCreateFields.Create;
