@@ -544,7 +544,7 @@ type
     property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
-    // - default value is 20, maximum is 255
+    // - default value is 30, maximum is 255
     // - if stOnlyAPI is defined as StackTraceUse under Windows XP, maximum 
     // value may be around 60, due to RtlCaptureStackBackTrace() API limitations
     property StackTraceLevel: byte read fStackTraceLevel write fStackTraceLevel;
@@ -765,7 +765,8 @@ type
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
     // - will force a manual breakpoint if tests are run from the IDE
-    class procedure DebuggerNotify(const Args: array of const; Format: PWinAnsiChar=nil);
+    class procedure DebuggerNotify(Level: TSynLogInfo;
+      const Args: array of const; Format: PWinAnsiChar=nil);
     /// call this method to add some information to the log at the specified level
     // - % = #37 indicates a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
@@ -2195,7 +2196,7 @@ begin
   fArchiveAfterDays := 7;
   fRotateFileAtHour := -1;
   fBufferSize := 4096;
-  fStackTraceLevel := 20;
+  fStackTraceLevel := 30;
   {$ifndef FPC}
   if DebugHook<>0 then // never let stManualAndAPI trigger AV within the IDE
     fStackTraceUse := stOnlyAPI;
@@ -2901,12 +2902,13 @@ begin
 end;
 
 {$ifndef DELPHI5OROLDER}
-class procedure TSynLog.DebuggerNotify(const Args: array of const; Format: PWinAnsiChar=nil);
+class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
+  const Args: array of const; Format: PWinAnsiChar=nil);
 var Msg: RawUTF8;
 begin
   if Format<>nil then begin
     Msg := FormatUTF8(PUTF8Char(Format),Args);
-    Add.LogInternal(sllWarning,Msg,nil,maxInt);
+    Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
     OutputDebugStringA(pointer(Msg));
     {$endif}

@@ -1835,7 +1835,7 @@ begin
       sqlite3.result_blob(Context,Res.VBlob,Res.VBlobLen,SQLITE_TRANSIENT_VIRTUALTABLE);
     else begin
       {$ifdef WITHLOG}
-      SynSQLite3Log.DebuggerNotify([ord(Res.VType)],'SQLVarToSQlite3Context(%)');
+      SynSQLite3Log.DebuggerNotify(sllWarning,[ord(Res.VType)],'SQLVarToSQlite3Context(%)');
       {$endif}
       result := false; // not handled type
       exit;
@@ -1870,7 +1870,7 @@ begin
   end;
   else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([ValueType],'SQlite3ValueToSQLVar(%)');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[ValueType],'SQlite3ValueToSQLVar(%)');
     {$endif}
     Res.VType := ftUnknown;
   end;
@@ -1902,7 +1902,7 @@ begin
   if (Module=nil) or (Module.DB.DB<>DB) or
      (StrIComp(pointer(ModuleName),argv[0])<>0) then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([argv[0],ModuleName],'vt_Create(%<>%)');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[argv[0],ModuleName],'vt_Create(%<>%)');
     {$endif}
     result := SQLITE_ERROR;
     exit;
@@ -1927,7 +1927,7 @@ begin
   result := sqlite3.declare_vtab(DB,pointer(Structure));
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([ModuleName,Structure],'vt_Create(%) declare_vtab(%)');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[ModuleName,Structure],'vt_Create(%) declare_vtab(%)');
     {$endif}
     Table.Free;
     sqlite3.free_(ppVTab);
@@ -1948,7 +1948,7 @@ begin
   if TSQLVirtualTable(pvTab^.pInstance).Drop then
     result := SQLITE_OK else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([],'vt_Destroy');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[],'vt_Destroy');
     {$endif}
     result := SQLITE_ERROR;
   end;
@@ -1966,7 +1966,7 @@ begin
   if (cardinal(pInfo.nOrderBy)>MAX_SQLFIELDS) or
      (cardinal(pInfo.nConstraint)>MAX_SQLFIELDS) then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([pInfo.nOrderBy,pInfo.nConstraint],'nOrderBy=% nConstraint=%');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[pInfo.nOrderBy,pInfo.nConstraint],'nOrderBy=% nConstraint=%');
     {$endif}
     exit; // avoid buffer overflow
   end;
@@ -2034,7 +2034,7 @@ begin
   if TSQLVirtualTableCursor(pVtabCursor.pInstance).Search(Prepared^) then
     result := SQLITE_OK else
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([],'vt_Filter');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[],'vt_Filter');
     {$endif}
 end;
 
@@ -2050,7 +2050,7 @@ begin
   Table := TSQLVirtualTable(pvTab.pInstance);
   if (Table=nil) or (Table.Module=nil) or (Table.Module.CursorClass=nil) then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([],'vt_Open');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[],'vt_Open');
     {$endif}
     sqlite3.free_(ppCursor);
     result := SQLITE_ERROR;
@@ -2091,7 +2091,7 @@ begin
      SQLVarToSQlite3Context(Res,sContext) then
     result := SQLITE_OK else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([N,ord(Res.VType)],'vt_Column(%) Res=%');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[N,ord(Res.VType)],'vt_Column(%) Res=%');
     {$endif}
     result := SQLITE_ERROR;
   end;
@@ -2111,7 +2111,7 @@ begin
     ftUTF8:     pRowID := GetInt64(Res.VText);
     else begin
       {$ifdef WITHLOG}
-      SynSQLite3Log.DebuggerNotify([ord(Res.VType)],'vt_Rowid Res=%');
+      SynSQLite3Log.DebuggerNotify(sllWarning,[ord(Res.VType)],'vt_Rowid Res=%');
       {$endif}
       exit;
     end;
@@ -2119,7 +2119,7 @@ begin
     result := SQLITE_OK;
   end else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([],'vt_Rowid Column');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[],'vt_Rowid Column');
     {$endif}
   end;
 end;
@@ -2159,7 +2159,7 @@ begin // call Delete/Insert/Update methods according to supplied parameters
   if OK then
     result := SQLITE_OK else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([pRowID],'vt_Update(%)');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[pRowID],'vt_Update(%)');
     {$endif}
   end;
 end;
@@ -2170,7 +2170,7 @@ begin
   if TSQLVirtualTable(pvTab.pInstance).Transaction(aState,aSavePoint) then
     result := SQLITE_OK else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([GetEnumName(TypeInfo(TSQLVirtualTableTransaction),
+    SynSQLite3Log.DebuggerNotify(sllWarning,[GetEnumName(TypeInfo(TSQLVirtualTableTransaction),
       ord(aState))^,aSavePoint],'Transaction(%,%)');
     {$endif}
     result := SQLITE_ERROR;
@@ -2218,7 +2218,7 @@ begin
   if TSQLVirtualTable(pvTab.pInstance).Rename(RawUTF8(zNew)) then
     result := SQLITE_OK else begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.DebuggerNotify([zNew],'vt_Rename(%)');
+    SynSQLite3Log.DebuggerNotify(sllWarning,[zNew],'vt_Rename(%)');
     {$endif}
     result := SQLITE_ERROR;
   end;

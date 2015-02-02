@@ -18680,15 +18680,17 @@ end;
 
 {$ifdef FPC}
 function Trim(const S: RawUTF8): RawUTF8; inline;
-var I, L: Integer;
+var I,L: Integer;
 begin
   L := Length(S);
   I := 1;
-  while (I <= L) and (S[I] <= ' ') do Inc(I);
-  if I > L then
-    Result := '' else begin
-    while S[L] <= ' ' do Dec(L);
-    Result := Copy(S, I, L-I+1);
+  while (I<=L) and (S[I]<=' ') do inc(I);
+  if I>L then
+    result := '' else
+  if (I=1) and (S[L]>' ') then
+    result := S else begin
+    while S[L]<=' ' do dec(L);
+    result := Copy(S,I,L-I+1);
   end;
 end;
 {$endif}
@@ -18696,17 +18698,17 @@ end;
 {$IFDEF PUREPASCAL}
 {$IFDEF UNICODE}
 function Trim(const S: RawUTF8): RawUTF8;
-var I, L: Integer;
+var I,L: Integer;
 begin
   L := Length(S);
   I := 1;
-  while (I<=L) and (S[I]<=' ') do Inc(I);
+  while (I<=L) and (S[I]<=' ') do inc(I);
   if I>L then
-    Result := '' else
+    result := '' else
   if (I=1) and (S[L]>' ') then
-    Result := S else begin
-    while S[L]<=' ' do Dec(L);
-    Result := Copy(S, I, L-I+1);
+    result := S else begin
+    while S[L]<=' ' do dec(L);
+    result := Copy(S,I,L-I+1);
   end;
 end;
 
