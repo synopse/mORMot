@@ -1,4 +1,4 @@
-/// DDD tollbox types for mORMot
+/// Domain-Driven-Design toolbox for mORMot
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMotDDD;
@@ -432,4 +432,8 @@ begin
   result := MD5(RawUTF8(ClassName)+aValue);
 end;
 
+
+initialization
+  TInterfaceFactory.RegisterInterfaces(
+    [TypeInfo(IAuthQuery),TypeInfo(IAuthCommand)]);
 end.

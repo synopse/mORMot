@@ -4380,6 +4380,15 @@ function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString(const guid: TGUID): string;
 
+type
+  TGUIDShortString = string[38];
+
+/// convert a TGUID into text
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - using a shortstring will allow fast allocation on the stack, so is
+// preferred e.g. when providing a GUID to a ESynException.CreateUTF8() 
+function GUIDToShort(const guid: TGUID): TGUIDShortString;
+
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - return  if the supplied text buffer is not a valid TGUID
@@ -23087,7 +23096,7 @@ begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   inc(PByte(guid),2);
   inc(P,6);
   for i := 0 to 5 do begin
-    P[i*2] := HexChars[PtrUInt(guid[i]) shr 4 and $F];
+    P[i*2]   := HexChars[PtrUInt(guid[i]) shr 4 and $F];
     P[i*2+1] := HexChars[PtrUInt(guid[i]) and $F];
   end;
   result := P+12;
@@ -23143,6 +23152,14 @@ begin
   P := pointer(result);
   P^ := '{';
   GUIDToText(P+1,@guid)^ := '}';
+end;
+
+function GUIDToShort(const guid: TGUID): TGUIDShortString;
+begin
+  result[0] := #38;
+  result[1] := '{';
+  result[38] := '}';
+  GUIDToText(@result[2],@guid);
 end;
 
 function GUIDToString(const guid: TGUID): string;

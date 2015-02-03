@@ -11268,7 +11268,11 @@ begin
   Inst.ExpectedGroupID := fClient.SessionUser.GroupRights.ID;
   Test(Inst);
   Inst.I := nil;
-  if CheckFailed(fClient.Services.GUID(IID_ICalculator).Get(Inst.I)) then
+  if CheckFailed(fClient.Services.Info(ICalculator).Get(Inst.I)) then
+    exit;
+  Test(Inst);
+  Inst.I := nil;
+  if CheckFailed(fClient.Services.Resolve(ICalculator,Inst.I)) then
     exit;
   Test(Inst);
   Finalize(Inst);
@@ -11321,6 +11325,7 @@ begin
      CheckFailed(fClient.Server.Services.Count=7) or
      CheckFailed(fClient.Server.Services.Index(0).Get(Inst.I)) or
      CheckFailed(Assigned(Inst.I)) or
+     CheckFailed(fClient.Server.Services.Info(TypeInfo(ICalculator)).Get(Inst.I)) or
      CheckFailed(fClient.Server.Services.Info(TypeInfo(IComplexCalculator)).Get(Inst.CC)) or
      CheckFailed(fClient.Server.Services.Info(TypeInfo(IComplexNumber)).Get(Inst.CN)) or
      CheckFailed(fClient.Server.Services.Info(TypeInfo(ITestUser)).Get(Inst.CU)) or

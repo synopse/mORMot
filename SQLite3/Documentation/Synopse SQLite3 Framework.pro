@@ -8347,16 +8347,36 @@ That is, we run the actual implementation method, which will call our fake metho
 Let's put all this together.
 \page
 : Stubs and Mocks in mORMot
-:  Features and motivations
 Our {\i mORMot} framework is therefore able to @*stub@ or @*mock@ any {\i Delphi} {\f1\fs20 interface}.
-As usual, the best way to explain what a library does is to look at the code using it. Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario, we remembered to call the {\f1\fs20 Save()} method properly:
+We will now detail how it is expected to work.
+:141  Direct use of interface types without TypeInfo()
+First of all, it is a good practice to always register your service interfaces in the unit which define their type, as such:
+!unit MyServiceInterfaces;
+!...
+!type
+!  ISmsSender = interface(IInvokable)
+!  ...
+!  IUserRepository = interface(IInvokable)
+!  ...
+!
+!initialization
+!  TInterfaceFactory.RegisterInterfaces(
+!    [TypeInfo(ISmsSender),TypeInfo(IUserRepository)]);
+!end.
+Then creating a stub or a mock could be done directly from the interface name, which will be transmitted as its {\f1\fs20 TGUID}, without the need of using the {\f1\fs20 TypeInfo()} pseudo-function:
+!  TInterfaceStub.Create(ISmsSender,SmsSender);
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self);
+In the code below, we will assume that the {\f1\fs20 interface} type information has been registered, so that we may be able to use directly {\f1\fs20 I*} without the {\f1\fs20 TypeInfo(I*)} syntax
+:  Sample with manual dependency injection
+As usual, the best way to explain what a library does is to look at the code using it.
+Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario as implemented by the {\f1\fs20 TLoginController} class, we actually called the {\f1\fs20 Save()} method:
 !procedure TMyTest.ForgotMyPassword;
 !var SmsSender: ISmsSender;
 !    UserRepository: IUserRepository;
 !begin
-!  TInterfaceStub.Create(TypeInfo(ISmsSender),SmsSender).
+!  TInterfaceStub.Create(ISmsSender,SmsSender).
 !    Returns('Send',[true]);
-!  TInterfaceMock.Create(TypeInfo(IUserRepository),UserRepository,self).
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self).
 !    ExpectsCount('Save',qoEqualTo,1);
 !  with TLoginController.Create(UserRepository,SmsSender) do
 !  try
@@ -8372,9 +8392,9 @@ If you want to follow the "test spy" pattern (i.e. no expectation defined {\i a 
 !    UserRepository: IUserRepository;
 !    Spy: TInterfaceMockSpy;
 !begin
-!  TInterfaceStub.Create(TypeInfo(ISmsSender),SmsSender).
+!  TInterfaceStub.Create(ISmsSender,SmsSender).
 !    Returns('Send',[true]);
-!  Spy := TInterfaceMockSpy.Create(TypeInfo(IUserRepository),UserRepository,self);
+!  Spy := TInterfaceMockSpy.Create(IUserRepository,UserRepository,self);
 !  with TLoginController.Create(UserRepository,SmsSender) do
 !  try
 !    ForgotMyPassword('toto');
@@ -8385,13 +8405,13 @@ If you want to follow the "test spy" pattern (i.e. no expectation defined {\i a 
 !end;
 This is something unique with our library: you can decide if you want to use the classic "expect-run-verify" pattern, or the somewhat more direct "run-verify" / "test spy" pattern. With {\i mORMot}, you pick up your mocking class (either {\f1\fs20 TInterfaceMock} or {\f1\fs20 TInterfaceMockSpy}), then use it as intended. You can even mix the two aspects in the same instance! It is just a matter of taste and opportunity for you to use the right pattern.
 For another easier pattern, like the one in the {\i Mockito} home page:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),ICalc,self).
+!  TInterfaceMock.Create(ICalculator,ICalc,self).
 !    ExpectsCount('Multiply',qoEqualTo,1).
 !    ExpectsCount('Add',[10,20],qoEqualTo,1);
 !  ICalc.Add(10,20);
 !  ICalc.Multiply(10,30)
 If you want to follow the "test spy" pattern, you can use:
-!  Mock := TInterfaceMockSpy.Create(TypeInfo(ICalculator),ICalc,self);
+!  Mock := TInterfaceMockSpy.Create(ICalculator,ICalc,self);
 !  ICalc.Add(10,20);
 !  ICalc.Multiply(10,30)
 !  Mock.Verify('Add');
@@ -8429,7 +8449,7 @@ Here is how we may enhance our stub, to ensure it will return a {\f1\fs20 TUser}
 !    U: TUser;
 !  (...)
 !!  U.Name := 'toto';
-!  TInterfaceMock.Create(TypeInfo(IUserRepository),UserRepository,self).
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self).
 !!    Returns('GetUserByName','"toto"',RecordSaveJSON(U,TypeInfo(TUser))).
 !    ExpectsCount('Save',qoEqualTo,1);
 The only trick in the above code is that we use {\f1\fs20 RecordSaveJSON()} function to compute the internal JSON representation of the record, as expected by {\i mORMot}'s data marshaling.
@@ -8446,7 +8466,7 @@ Let's emulate the following behavior:
 !end;
 :   Delegate with named variant parameters
 You can stub a method using a the {\f1\fs20 Named[] variant} arrays as such:
-!  TInterfaceStub.Create(TypeInfo(ICalculator),ICalc).
+!  TInterfaceStub.Create(ICalculator,ICalc).
 !!    Executes('Subtract',IntSubtractVariant);
 !  (...)
 !  Check(ICalc.Substract(10.5,1.5)=9);
@@ -8485,7 +8505,7 @@ In case of additional {\f1\fs20 var} or {\f1\fs20 out} parameters, those should 
 If the method is defined as a {\f1\fs20 procedure} and not as a {\f1\fs20 function}, of course there is no last {\f1\fs20 Output[]} item, but only {\f1\fs20 var} or {\f1\fs20 out} parameters.
 :   Delegate with JSON parameters
 You can stub a method using a JSON array as such:
-!  TInterfaceStub.Create(TypeInfo(ICalculator),ICalc).
+!  TInterfaceStub.Create(ICalculator,ICalc).
 !!    Executes('Subtract',IntSubtractJSON);
 !  (...)
 !  Check(ICalc.Substract(10.5,1.5)=9);
@@ -8510,7 +8530,7 @@ This method could have been written as such, if you prefer to return directly th
 This may sound somewhat convenient here in case of double values, but it would be error prone if types are more complex. In all cases, using {\f1\fs20 Ctxt.Returns([])} is the preferred method.
 :   Accessing the test case when mocking
 In case of mocking, you may add additional verifications within the implementation callback, as such:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),ICalc,self).
+!  TInterfaceMock.Create(ICalculator,ICalc,self).
 !    Executes('Subtract',IntSubtractVariant,'toto');
 ! (...)
 !procedure TTestServiceOrientedArchitecture.IntSubtractVariant(
@@ -8522,13 +8542,13 @@ In case of mocking, you may add additional verifications within the implementati
 Here, an additional callback-private parameter containing {\f1\fs20 'toto'} has been specified at {\f1\fs20 TInterfaceMock} definition. Then its content is checked on the associated test case via {\f1\fs20 Ctxt.Sender} instance. If the caller is not a {\f1\fs20 TInterfaceMock}, it will raise an exception when accessing the {\f1\fs20 Ctxt.TestCase} property.
 :  Calls tracing
 As stated above, {\i mORMot} is able to log all interface calls into its internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
-!  Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
+!  Stub := TInterfaceStub.Create(ICalculator,I).
 !!    SetOptions([imoLogMethodCallsAndResults]);
 !  Check(I.Add(10,20)=0,'Default result');
 !!  Check(Stub.LogAsText='Add(10,20)=[0]');
 Here above, we retrieved the whole call stack, including input parameters and returned results, as an easy-to-read JSON content. We found out that JSON is a very convenient way of tracing the method calls, both efficient for the computer and the human being hardly testing the code.
 A more complex trace verification could be defined for instance, in the context of an interface {\i mock}:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),I,self).
+!  TInterfaceMock.Create(ICalculator,I,self).
 !    Returns('Add','30').
 !    Returns('Multiply',[60]).
 !    Returns('Multiply',[2,35],[70]).
@@ -8789,6 +8809,8 @@ Here the class inherits from {\f1\fs20 TInterfacedObject}, but you could use any
 :  Set up the Server factory
 In order to have a working service, you'll need to initialize a server-side @*factory@, as such:
 ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+You may prefer @141@, if the type has previously been registered:
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 The {\f1\fs20 Server} instance can be any {\f1\fs20 TSQLRestServer} inherited class, implementing any of the supported protocol of {\i mORMot}'s @35@, embedding a full {\i @*SQLite3@} engine (i.e. a {\f1\fs20 @*TSQLRestServerDB@} class) or a lighter in-memory engine (i.e. a {\f1\fs20 @*TSQLRestServerFullMemory@} class - which is enough for @*hosting@ services with authentication).
 The code line above will register the {\f1\fs20 TServiceCalculator} class to implement the {\f1\fs20 ICalculator} service, with a single shared instance life time (specified via the {\f1\fs20 sicShared} parameter). An optional time out value can be specified, in order to automatically release a deprecated instance after some inactivity.
 Whenever a service is executed, an implementation class is to be available. The life time of this implementation class is defined on both client and server side, by specifying a {\f1\fs20 TServiceInstanceImplementation} value. This setting must be the same on both client and server sides (it will be checked by the framework).
@@ -8796,7 +8818,7 @@ Whenever a service is executed, an implementation class is to be available. The 
 The available instance management options are the following:
 |%24%76
 |\b Lifetime|Description\b0
-|{\f1\fs20 sicSingle}|One class instance is created per call:\line - This is the most expensive way of implementing the service, but is safe for simple workflows (like a one-type call);\line - This is the default setting for {\f1\fs20 TSQLRestServer.ServiceRegister} method.
+|{\f1\fs20 sicSingle}|One class instance is created per call:\line - This is the most expensive way of implementing the service, but is safe for simple workflows (like a one-type call);\line - This is the default setting for {\f1\fs20 TSQLRestServer.ServiceRegister}/{\f1\fs20 ServiceDefine} methods.
 |{\f1\fs20 sicShared}|One object instance is used for all incoming calls and is not recycled subsequent to the calls
 |{\f1\fs20 sicClientDriven}|One object instance will be created in synchronization with the client-side lifetime of the corresponding interface: when the interface will be released on client (either when it comes out of scope or set to {\f1\fs20 nil}), it will be released on the server side - a numerical identifier will be transmitted with all JSON requests
 |{\f1\fs20 sicPerSession}|One object instance will be maintained during the whole running @*session@
@@ -8886,7 +8908,7 @@ This interface is implemented on the server side by the following class:
 !  fReal := Value;
 !end;
 This interface is registered on the server side as such:
-! Server.ServiceRegister(TServiceComplexNumber,[TypeInfo(IComplexNumber)],sicClientDriven);
+! Server.ServiceDefine(TServiceComplexNumber,[IComplexNumber],sicClientDriven);
 Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven @*garbage collector@ will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
 :107  Accessing low-level execution context
 When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
@@ -8925,7 +8947,7 @@ That is, you may code:
 or, for a more complex service:
 !var CN: IComplexNumber;
 !begin
-!  if not Server.Services.Info(TypeInfo(IComplexNumber)).Get(CN) then
+!  if not Server.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -8950,10 +8972,12 @@ In fact, a hidden "fake" {\f1\fs20 TInterfaceObject} class will be created by th
 :  Set up the Client factory
 On the client side, you have to register the corresponding interface to initialize its associated @*factory@, as such:
 ! Client.ServiceRegister([TypeInfo(ICalculator)],sicShared);
+You may prefer @141@, if the type has previously been registered:
+! Client.ServiceDefine([ICalculator],sicShared);
 It is very close to the Server-side registration, despite the fact that we do not provide any implementation class here. Implementation will remain on the server side.
 Note that the implementation mode (here {\f1\fs20 sicShared}) shall match the one used on the server side. An error will occur if this setting is not coherent.
 The other interface we talked about, i.e. {\f1\fs20 IComplexNumber}, is registered as such for the client:
-! Client.ServiceRegister([TypeInfo(IComplexNumber)],sicClientDriven);
+! Client.ServiceDefine([IComplexNumber],sicClientDriven);
 This will create the corresponding {\f1\fs20 TServiceFactoryClient} instance, ready to serve fake implementation classes to the client process.
 To be more precise, this registration step is indeed not mandatory on the client side. If you use the {\f1\fs20 TServiceContainerClient.Info()} method, the client-side implementation will auto-register the supplied interface, in {\f1\fs20 sicClientDriven} implementation mode.
 :  Using services on the Client side
@@ -8975,7 +8999,7 @@ For {\i Delphi} 2010 and up, you can use a generic-based method, which enables c
 For a more complex service, initialized as {\f1\fs20 sicClientDriven}:
 !var CN: IComplexNumber;
 !begin
-!  if not Client.Services.Info(TypeInfo(IComplexNumber)).Get(CN) then
+!  if not Client.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -8985,7 +9009,7 @@ For a more complex service, initialized as {\f1\fs20 sicClientDriven}:
 !end; // here CN will be released on both client AND SERVER sides
 The code is just the same as on the server. The only functional change is that the execution will take place on the server side (using the registered {\f1\fs20 TServiceComplexNumber} implementation class), and the corresponding class instance will remain active until the {\f1\fs20 CN} local interface will be released on the client.
 You can of course cache your {\f1\fs20 TServiceFactory} instance within a local field, if you wish. On the client side, even if the service has been defined as {\f1\fs20 sicPerThread}, you can safely cache and reuse the same instance, since the {\i per-thread} process will take place on the server side only.
-As we stated in the previous paragraph, since the {\f1\fs20 IComplexNumber} is to be executed as {\f1\fs20 sicClientDriven}, it is not mandatory to call the {\f1\fs20 Client.ServiceRegister} method for this interface. In fact, during {\f1\fs20 Client.Services.Info(TypeInfo(IComplexNumber))} method execution, the registration will take place, if it has not been done explicitly before. For code readability, it may be a good idea to explicitly register the interface on the client side also, just to emphasize that this interface is about to be used, and in which mode.
+As we stated in the previous paragraph, since the {\f1\fs20 IComplexNumber} is to be executed as {\f1\fs20 sicClientDriven}, it is not mandatory to call the {\f1\fs20 Client.ServiceRegister} or {\f1\fs20 ServiceDefine} method for this interface. In fact, during {\f1\fs20 Client.Services.Info(TypeInfo(IComplexNumber))} method execution, the registration will take place, if it has not been done explicitly before. For code readability, it may be a good idea to explicitly register the interface on the client side also, just to emphasize that this interface is about to be used, and in which mode.
 \page
 :89 Sample code
 You can find in the "{\f1\fs20 SQLite3/Samples/14 - Interface based services}" folder of the supplied source code distribution, a dedicated sample about this feature.
@@ -9009,8 +9033,13 @@ First, you'll find a common unit, shared by both client and server applications:
 !
 !implementation
 !
+!uses mORMot;
+!
+!initialization
+!  TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator)]);
 !end.
 Unique purpose of this unit is to define the service {\f1\fs20 interface}, and the {\f1\fs20 ROOT_NAME} used for the ORM Model (and therefore RESTful URI scheme), and the {\f1\fs20 APPLICATION_NAME} used for named-pipe communication.
+This {\f1\fs20 ICalculator} type is also registered for the internal {\f1\fs20 interface} factory system, so that you could use the framework methods directly with {\f1\fs20 ICalculator} instead of {\f1\fs20 TypeInfo(ICalculator)}.
 :  The server sample application
 The server is implemented as such:
 !program Project14Server;
@@ -9042,7 +9071,7 @@ The server is implemented as such:
 !    with TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'),true) do
 !    try
 !      CreateMissingTables; // we need AuthGroup and AuthUser tables
-!!      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!!      ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      if ExportServerNamedPipe(APPLICATION_NAME) then
 !        writeln('Background server is running.'#10) else
 !        writeln('Error launching the server'#10);
@@ -9056,13 +9085,13 @@ The server is implemented as such:
 !  end;
 !end.
 It will instantiate a {\f1\fs20 @*TSQLRestServerDB@} class, containing a {\i @*SQLite3@} database engine. In fact, since we need authentication, both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables are expected to be available.
-Then a call to {\f1\fs20 ServiceRegister()} will define the {\f1\fs20 ICalculator} contract, and the {\f1\fs20 TServiceCalculator} class to be used as its implementation. The {\f1\fs20 sicShared} mode is used, since the same implementation class can be shared during all calls (there is no shared nor private data to take care).
+Then a call to {\f1\fs20 ServiceDefine()} will define the {\f1\fs20 ICalculator} contract, and the {\f1\fs20 TServiceCalculator} class to be used as its implementation. The {\f1\fs20 sicShared} mode is used, since the same implementation class can be shared during all calls (there is no shared nor private data to take care).
 Note that since the database expectations of this server are basic (only CRUD commands are needed to handle authentication tables), we may use a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}. This is what is the purpose of the {\f1\fs20 Project14ServerInMemory.dpr} sample:
 !program Project14ServerInMemory;
 !  (...)
 !!    with TSQLRestServerFullMemory.Create(aModel,'test.json',false,true) do
 !    try
-!!      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!!      ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      if ExportServerNamedPipe(APPLICATION_NAME) then
 !  (...)
 Using this class will include the {\f1\fs20 CreateMissingTables} call to create both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables needed for authentication. But the resulting executable will be lighter: only 200 KB when compiled with {\i Delphi} 7 and our LVCL classes, for a full service provider.
@@ -9088,7 +9117,7 @@ The client is just a simple form with two {\f1\fs20 TEdit} fields ({\f1\fs20 edt
 !!      Model := TSQLModel.Create([],ROOT_NAME);
 !!    Client := TSQLRestClientURINamedPipe.Create(Model,APPLICATION_NAME);
 !!    Client.SetUser('User','synopse');
-!!    Client.ServiceRegister([TypeInfo(ICalculator)],sicShared);
+!!    Client.ServiceDefine([ICalculator],sicShared);
 !  end;
 !!  if Client.Services['Calculator'].Get(I) then
 !!    lblResult.Caption := IntToStr(I.Add(a,b));
@@ -9318,8 +9347,8 @@ In this code, the {\f1\fs20 GroupID} value was retrieved as such:
 !  GroupID := fClient.MainFieldID(TSQLAuthGroup,'User');
 And the current authenticated user on the client side has been defined to be a member of the {\f1\fs20 'User'} group:
 !  fClient.SetUser('User','synopse'); // default user for Security tests
-Since {\f1\fs20 TSQLRestServer.ServiceRegister} method returns the first created {\f1\fs20 TServiceFactoryServer} instance, and since all {\f1\fs20 Allow* / AllowAll* / Deny* / DenyAll*} methods return also a {\f1\fs20 TServiceFactoryServer} instance, you can use some kind of "fluent interface" in your code to set the security policy, as such:
-!  Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+Since {\f1\fs20 TSQLRestServer.ServiceRegister} and {\f1\fs20 TSQLRestServer.ServiceDefine} methods return the first created {\f1\fs20 TServiceFactoryServer} instance, and since all {\f1\fs20 Allow* / AllowAll* / Deny* / DenyAll*} methods return also a {\f1\fs20 TServiceFactoryServer} instance, you can use some kind of "fluent interface" in your code to set the security policy, as such:
+!  Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !    DenyAll.AllowAllByName(['Supervisor']);
 This will allow access to the {\f1\fs20 ICalculator} methods only for the {\i Supervisor} group of users.
 :  Implementation class types
@@ -9347,10 +9376,10 @@ Setting {\f1\fs20 optExecLockedPerInterface} option will {\i lock} the specified
 Setting {\f1\fs20 optExecInMainThread} option will force the specified method(s) to be called within a {\f1\fs20 RunningThread.Synchronize()} call - it can be used e.g. if your implementation rely heavily on COM objects, or if you want to ensure that your code will work correctly, without the need to worry about thread safety, which can be quite difficult to deal with. The {\f1\fs20 optFreeInMainThread} option will also ensure that the service class instance will be released in the main thread (i.e. its {\f1\fs20 Free} method called via {\f1\fs20 Synchronize}). Since the main thread will be used by all interfaces, it could result into an execution bottleneck.
 Setting {\f1\fs20 optExecInPerInterfaceThread} option will force the specified method(s) to be called within a thread (to be more precise, a {\f1\fs20 TSynBackgroundThreadSQLRestServerProcedure} class, which will notify the {\f1\fs20 TSQLSQLRestServer} for the thread context) dedicated to the interface. An associated {\f1\fs20 optFreeInPerInterfaceThread} option will also ensure that the service class instance will be released in the same thread: it is pretty convenient to use this threading model, for instance if you want to maintain a dedicated {\f1\fs20 SynDB.pas}-based database connection, or initialize some COM objects.
 For instance, if you want all the methods of your {\f1\fs20 TServiceCalculator} class to be executed in the main thread, you can define:
-! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !  SetOptions([],[optExecInMainThread]);
 Or if only the {\f1\fs20 TServiceCalculator.Add} method has to be protected, you can write:
-! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !  SetOptions(['Add'],[optExecInMainThread]);
 In fact, the {\f1\fs20 SetOptions()} method follows a call signature similar to the one used for defining the service security.
 For best performance, you may define your service methods be called without any locking, but rely on some convenient classes defined in {\f1\fs20 SynCommons.pas} - as the {\f1\fs20 @*TAutoLocker@} class or the {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process.\line A similar thread safety concern also applies to @*MVVM@ methods - see @111@.
@@ -9751,7 +9780,7 @@ If you need to communicate with an external service provider, you can easily cre
 - Import the WSDL (Web Service Definition Language) definition of a web service and turn it into a {\i Delphi} import unit;
 - Publish the interface as a {\i mORMot} server-side implementation class.
 Since SOAP features a lot of requirements, and expects some plumping according to its format (especially when services are provided from C# or Java), we choose to not re-invent the wheel this time, and rely on existing {\i Delphi} libraries (available within the {\i Delphi} IDE) for this purpose. If you need a cross-platform SOAP 1.1 compatible solution, or if you version of {\i Delphi} does not include SOAP process, you may take a look at @http://wiki.freepascal.org/Web_Service_Toolkit which is a web services package for FPC, Lazarus and {\i Delphi}.
-But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
+But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} or {\f1\fs20 ServiceDefine()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
 Optionally, {\i mORMot}'s interface based services allow to publish their result as XML, and encode the incoming parameters at URI level. It makes it a good alternative to SOAP, in the XML world.
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
@@ -9983,7 +10012,7 @@ We will start from the interface-based service @89@ as defined in the\line "{\f1
 !!      AddToServerWrapperMethod(aServer,
 !!        ['..\..\..\CrossPlatform\templates','..\..\..\..\CrossPlatform\templates']);
 !      // register our ICalculator service on the server side
-!      aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!      aServer.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      // launch the HTTP server
 !      aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
 !      try

@@ -1,4 +1,4 @@
-/// some common definitions shared by both client and server side 
+/// some common definitions shared by both client and server side
 unit Project14Interface;
 
 interface
@@ -16,4 +16,10 @@ const
 
 implementation
 
+uses
+  mORMot;
+
+initialization
+  // so that we could use directly ICalculator instead of TypeInfo(ICalculator)
+  TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator)]);
 end.

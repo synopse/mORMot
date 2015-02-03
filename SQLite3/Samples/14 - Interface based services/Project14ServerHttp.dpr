@@ -40,7 +40,7 @@ begin
     aServer := TSQLRestServerFullMemory.Create(aModel,'test.json',false,true);
     try
       // register our ICalculator service on the server side
-      aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+      aServer.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
       // launch the HTTP server
       aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
       try

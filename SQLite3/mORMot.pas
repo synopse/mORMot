@@ -760,7 +760,11 @@ unit mORMot;
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
     - introducing TInterfaceFactoryGenerated so that interface methods can be
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
-    - introducing TInjectableObject to easily implement the IoC SOLID pattern
+    - introducing TInjectableObject to easily implement the IoC SOLID pattern,
+      for both TSQLRest services and stubing/mocking
+    - adding TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
+      methods to specify interface from it name, without the need to use the
+      TypeInfo(IMyInterface) syntax in end-user code
     - interface-based services are now able to work with TObjectList parameters
     - interface-based services will now avoid to transmit the "id":... value
       when ID equals 0
@@ -1895,6 +1899,7 @@ type
   {$else}
   PPTypeInfo = ^PTypeInfo;
   {$endif}
+  PTypeInfoDynArray = array of PTypeInfo;
 
 {$ifdef FPC}
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -8082,21 +8087,26 @@ type
     fCreateMocked: TObjectList;
     /// this method will call fResolve() and raise a EServiceException if
     // the expected interface could not have been resolved
-    procedure Resolve(aInterface: PTypeInfo; out Obj);
+    procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
+    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// this method will resolve all interface published properties
     procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
   public
     /// initialize an instance, using Mocks and Stubs to resolve dependencies
-    // - could be used as such:
+    // - simple TInterfaceStub could be created directly from their TGUID,
+    // then TInterfaceStub/TInterfaceMock custom instances could be supplied:
+    // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
-    // !   Test := TServiceToBeTested.CreateMocked([
-    // !     TInterfaceStub.Create(TypeInfo(ICalculator)),
-    // !     TInterfaceMock.Create(TypeInfo(IPersistence),self).
+    // !   Test := TServiceToBeTested.CreateMocked(
+    // !     [ICalculator],
+    // !     [TInterfaceMock.Create(IPersistence,self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
     // !   ...
-    constructor CreateMocked(const aStubs: array of TInterfaceStub;
-      aRaiseEServiceExceptionIfNotFound: boolean=true);
+    constructor CreateMocked(const aStubsByGUID: array of TGUID;
+      const aStubsByInstance: array of TInterfaceStub;
+      aRaiseEServiceExceptionIfNotFound: boolean=true); 
     /// release all used instances
     // - including all TInterfaceStub instances as specified to CreateMocked()
     destructor Destroy; override;
@@ -8167,6 +8177,10 @@ type
     /// register one or several interfaces to the global interface factory cache
     // - so that you can use TInterfaceFactory.Get(aGUID) or Get(aName)
     class procedure RegisterInterfaces(const aInterfaces: array of PTypeInfo);
+    /// could be used to retrieve an array of TypeInfo() from their GUID
+    class function GUID2TypeInfo(const aGUIDs: array of TGUID): PTypeInfoDynArray; overload;
+    /// could be used to retrieve an array of TypeInfo() from their GUID
+    class function GUID2TypeInfo(const aGUID: TGUID): PTypeInfo; overload;
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
     class function GetUsedInterfaces: TObjectList;
@@ -8595,23 +8609,40 @@ type
     constructor Create(aInterface: PTypeInfo; out aStubbedInterface); reintroduce; overload;
     /// initialize an interface stub from an interface GUID
     // - you shall have registered the interface by a previous call to
-    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...])
+    // - once registered, create and use the fake class instance as such:
+    // !var I: ICalculator;
+    // !  TInterfaceStub.Create(ICalculator,I);
+    // !  Check(I.Add(10,20)=0,'Default result');
     // - if the supplied TGUID has not been previously registered, raise an Exception
     constructor Create(const aGUID: TGUID; out aStubbedInterface); reintroduce; overload;
     /// initialize an interface stub from an interface name (e.g. 'IMyInterface')
     // - you shall have registered the interface by a previous call to
-    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
+    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces([])
     // - if the supplied name has not been previously registered, raise an Exception
     constructor Create(const aInterfaceName: RawUTF8; out aStubbedInterface); reintroduce; overload;
     /// prepare an interface stub from TypeInfo(IMyInterface) for later injection
     // - create several TInterfaceStub instances for a given TInjectableObject
+    // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
-    // !   Test := TServiceToBeTested.CreateMocked([
+    // !   Test := TServiceToBeTested.CreateMocked([],
     // !     TInterfaceStub.Create(TypeInfo(ICalculator)),
-    // !     TInterfaceMock.Create(TypeInfo(IPersistence)).
+    // !     TInterfaceMock.Create(TypeInfo(IPersistence),self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
     constructor Create(aInterface: PTypeInfo); reintroduce; overload;
+    /// prepare an interface stub from a given TGUID for later injection
+    // - you shall have registered the interface by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...])
+    // - then create TInterfaceStub instances for a given TInjectableObject:
+    // ! procedure TMyTestCase.OneTestCaseMethod;
+    // ! var Test: IServiceToBeTested;
+    // ! begin
+    // !   Test := TServiceToBeTested.CreateMocked(
+    // !     [IMyInterface],
+    // !     TInterfaceMock.Create(IPersistence,self).
+    // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
+    constructor Create(const aGUID: TGUID); reintroduce; overload;
 
     /// add an execution rule for a given method, with JSON marshalling
     // - optional aEventParams parameter will be transmitted to aEvent handler
@@ -8837,12 +8868,23 @@ type
   public
     /// initialize an interface mock from TypeInfo(IMyInterface)
     // - aTestCase.Check() will be called in case of mocking failure
+    // ! procedure TMyTestCase.OneTestCaseMethod;
+    // ! var Persist: IPersistence;
+    // ! ...
+    // !   TInterfaceMock.Create(TypeInfo(IPersistence),Persist,self).
+    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
     constructor Create(aInterface: PTypeInfo; out aMockedInterface;
       aTestCase: TSynTestCase); reintroduce; overload;
-    /// initialize an interface mock from an interface GUID
-    // - aTestCase.Check() will be called in case of mocking failure
+    /// initialize an interface mock from an interface TGUID
+    // - aTestCase.Check() will be called during validation of all Expects*()
     // - you shall have registered the interface by a previous call to
-    // TInterfaceFactory.Get(TypeInfo(IMyInterface)) or RegisterInterfaces()
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IPersistence),...])
+    // - once registered, create and use the fake class instance as such:
+    // !procedure TMyTestCase.OneTestCaseMethod;
+    // !var Persist: IPersistence;
+    // ! ...
+    // !   TInterfaceMock.Create(IPersistence,Persist,self).
+    // !     ExpectsCount('SaveItem',qoEqualTo,1)]);
     // - if the supplied TGUID has not been previously registered, raise an Exception
     constructor Create(const aGUID: TGUID; out aMockedInterface;
       aTestCase: TSynTestCase); reintroduce; overload;
@@ -8856,6 +8898,9 @@ type
     /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
     // - aTestCase.Check() will be called in case of mocking failure
     constructor Create(aInterface: PTypeInfo; aTestCase: TSynTestCase); reintroduce; overload;
+    /// initialize an interface mock from TypeInfo(IMyInterface) for later injection
+    // - aTestCase.Check() will be called in case of mocking failure
+    constructor Create(const aGUID: TGUID; aTestCase: TSynTestCase); reintroduce; overload;
     /// the associated test case
     property TestCase: TSynTestCase read fTestCase;
   end;
@@ -8926,7 +8971,12 @@ type
   // only: the client only needs the ICalculator interface
   // - then TSQLRestServer and TSQLRestClientURI will both have access to the
   // service, via their Services property, e.g. as:
-  // ! if Services.GUID(IID_ICalculator).Get(I) then
+  // !var I: ICalculator;
+  // !...
+  // ! if Services.Info(ICalculator).Get(I) then
+  // !   result := I.Add(10,20);
+  // which is in practice to be used with the faster wrapper method:
+  // ! if Services.Resolve(ICalculator,I) then
   // !   result := I.Add(10,20);
   TServiceFactory = class
   protected
@@ -9419,13 +9469,15 @@ type
     // - returns nil if out of range index
     function Index(aIndex: integer): TServiceFactory; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve a service provider from its GUID
+    /// retrieve a service provider from its GUID / Interface type
+    // - you shall have registered the interface by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...])
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the GUID does not match any registered interface
     // - can be used as such to resolve an I: ICalculator interface
-    // ! if fClient.Services.GUID(IID_ICalculator).Get(I) then
+    // ! if fClient.Services.Info(ICalculator).Get(I) then
     // !   ... use I
-    function GUID(const aGUID: TGUID): TServiceFactory; overload;
+    function Info(const aGUID: TGUID): TServiceFactory; overload;
     /// retrieve a service provider from its type information
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the type information does not match any registered interface
@@ -9434,15 +9486,25 @@ type
     // !   ... use I
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
     /// this method could be used to resolve any dependency
-    // - returns TRUE and affect the  
+    // - returns TRUE and set the Obj variable with a matching instance 
     // - can be used as such to resolve an I: ICalculator interface:
     // ! var calc: ICalculator;
     // ! begin
-    // !   if Catalog.ResolveDependency(TypeInfo(ICalculator),I) then
+    // !   if Catalog.Resolve(TypeInfo(ICalculator),I) then
     // !   ... use calc methods
-    // - match IInjectableObject.SetDependencyResolverEvent() signature,
-    // i.e. the TOnDependencyResolve callback expectations
-    function Resolve(aInterface: PTypeInfo; out Obj): boolean; virtual;
+    // - match TOnDependencyResolve callback expectations, so will be used
+    // for service dependency injection into any TInjectableObject instance 
+    function Resolve(aInterface: PTypeInfo; out Obj): boolean; overload; virtual;
+    /// this method could be used to resolve any dependency from its interface
+    // - you shall have registered the interface by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - can be used as such to resolve an I: ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if ServiceContainer.Resolve(ICalculator,I) then
+    // !   ... use calc methods
+    function Resolve(const aGUID: TGUID; out Obj): boolean; overload;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -12204,6 +12266,23 @@ type
     function ServiceRegister(aClient: TSQLRest; const aInterfaces: array of PTypeInfo;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
       const aContractExpected: RawUTF8=''): boolean; overload; virtual;
+    /// register a Service class on the server side
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefine(aImplementationClass: TInterfacedClass;
+      const aInterfaces: array of TGUID;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle): TServiceFactoryServer; overload;
+    /// register a Service instance on the server side
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefine(aSharedImplementation: TInterfacedObject;
+      const aInterfaces: array of TGUID): TServiceFactoryServer; overload;
+    /// register a remote Service via its interface
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefine(aClient: TSQLRest; const aInterfaces: array of TGUID;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle;
+      const aContractExpected: RawUTF8=''): boolean; overload; 
 
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
@@ -13446,7 +13525,24 @@ type
     // corresponding interface instance
     // - will return FALSE on error
     function ServiceRegisterClientDriven(aInterface: PTypeInfo; out Obj;
-      const aContractExpected: RawUTF8=''): boolean; 
+      const aContractExpected: RawUTF8=''): boolean; overload;
+    /// register one or several Services on the client side via their interfaces
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefine(const aInterfaces: array of TGUID;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle;
+      const aContractExpected: RawUTF8=''): boolean; overload;
+    /// register a Service on the client side via its interface
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefine(const aInterface: TGUID;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle;
+      const aContractExpected: RawUTF8=''): TServiceFactory; overload;
+    /// register and retrieve the sicClientDriven Service instance
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefineClientDriven(const aInterface: TGUID; out Obj;
+      const aContractExpected: RawUTF8=''): boolean; overload;
 
     /// low-level error code, as returned by server
     // - check this value about HTML_* constants
@@ -27214,8 +27310,8 @@ begin
 end;
 
 function TSQLRestClientURI.ServiceRegister(const aInterfaces: array of PTypeInfo;
-  aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-  const aContractExpected: RawUTF8=''): boolean;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): boolean;
 begin
   result := False;
   if (self=nil) or (high(aInterfaces)<0) then
@@ -27227,8 +27323,8 @@ begin
 end;
 
 function TSQLRestClientURI.ServiceRegister(aInterface: PTypeInfo;
-  aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-  const aContractExpected: RawUTF8=''): TServiceFactory;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): TServiceFactory;
 begin
   result := nil;
   if (self=nil) or (aInterface=nil) then begin
@@ -27247,7 +27343,7 @@ begin
 end;
 
 function TSQLRestClientURI.ServiceRegisterClientDriven(aInterface: PTypeInfo;
-  out Obj; const aContractExpected: RawUTF8=''): boolean;
+  out Obj; const aContractExpected: RawUTF8): boolean;
 var Factory: TServiceFactory;
 begin
   Factory := ServiceRegister(aInterface,sicClientDriven,aContractExpected);
@@ -27256,6 +27352,29 @@ begin
     Factory.Get(Obj);
   end else
     result := false;
+end;
+
+function TSQLRestClientURI.ServiceDefine(const aInterfaces: array of TGUID;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): boolean;
+begin
+  result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterfaces),
+    aInstanceCreation,aContractExpected);
+end;
+
+function TSQLRestClientURI.ServiceDefine(const aInterface: TGUID;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): TServiceFactory;
+begin
+  result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterface),
+    aInstanceCreation,aContractExpected);
+end;
+
+function TSQLRestClientURI.ServiceDefineClientDriven(const aInterface: TGUID;
+  out Obj; const aContractExpected: RawUTF8): boolean;
+begin
+  result := ServiceRegisterClientDriven(
+    TInterfaceFactory.GUID2TypeInfo(aInterface),Obj,aContractExpected);
 end;
 
 function TSQLRestClientURI.EngineAdd(TableModelIndex: integer;
@@ -29723,7 +29842,6 @@ begin
     sent := sent+'],"id":'+clientDrivenID+'}';
 end;
 
-
 function TSQLRestServer.ServiceRegister(
   aImplementationClass: TInterfacedClass; const aInterfaces: array of PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation): TServiceFactoryServer;
@@ -29750,9 +29868,10 @@ begin
       aInterfaces,sicShared,aSharedImplementation);
 end;
 
-function TSQLRestServer.ServiceRegister(aClient: TSQLRest; const aInterfaces: array of PTypeInfo;
-  aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-  const aContractExpected: RawUTF8=''): boolean;
+function TSQLRestServer.ServiceRegister(aClient: TSQLRest;
+  const aInterfaces: array of PTypeInfo;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): boolean;
 begin
   result := False;
   if (self=nil) or (high(aInterfaces)<0) or (aClient=nil) then
@@ -29761,6 +29880,31 @@ begin
     fServices := TServiceContainerServer.Create(self);
   result := (fServices as TServiceContainerServer).AddInterface(
     aInterfaces,aInstanceCreation,aContractExpected);
+end;
+
+function TSQLRestServer.ServiceDefine(aImplementationClass: TInterfacedClass;
+  const aInterfaces: array of TGUID;
+  aInstanceCreation: TServiceInstanceImplementation): TServiceFactoryServer;
+begin
+  result := ServiceRegister(aImplementationClass,
+    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aInstanceCreation);
+end;
+
+function TSQLRestServer.ServiceDefine(aSharedImplementation: TInterfacedObject;
+  const aInterfaces: array of TGUID): TServiceFactoryServer;
+begin
+  result := ServiceRegister(aSharedImplementation,
+    TInterfaceFactory.GUID2TypeInfo(aInterfaces));
+end;
+
+function TSQLRestServer.ServiceDefine(aClient: TSQLRest;
+  const aInterfaces: array of TGUID;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): boolean;
+begin
+  result := ServiceRegister(aClient,
+    TInterfaceFactory.GUID2TypeInfo(aInterfaces),
+    aInstanceCreation,aContractExpected);
 end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);
@@ -38238,7 +38382,7 @@ begin
       raise EServiceException.CreateUTF8('%: % is not an interface',[self,Name]) else
     if not (ifHasGuid in IntfFlags) then
       raise EServiceException.CreateUTF8('%: % interface has no GUID',[self,Name]) else
-    if Guid(IntfGuid)<>nil then
+    if Info(IntfGuid)<>nil then
       raise EServiceException.CreateUTF8('%: % GUID already registered',[self,Name]);
 end;
 
@@ -38296,6 +38440,15 @@ begin
     result := false;
 end;
 
+function TServiceContainer.Resolve(const aGUID: TGUID; out Obj): boolean;
+var factory: TServiceFactory;
+begin
+  factory := Info(aGUID);
+  if factory<>nil then
+    result := factory.Get(Obj) else
+    result := false;
+end;
+
 function TServiceContainer.Index(aIndex: integer): TServiceFactory;
 begin
   if Self=nil then
@@ -38303,7 +38456,7 @@ begin
     result := TServiceFactory(fList.Objects[aIndex]);
 end;
 
-function TServiceContainer.GUID(const aGUID: TGUID): TServiceFactory;
+function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
 var i: Integer;
     Obj: PPointerArray;
 begin
@@ -38311,7 +38464,7 @@ begin
     Obj := fList.ObjectPtr;
     for i := 0 to fList.Count-1 do begin
       result := Obj[i];
-      if IsEqualGUID(result.InterfaceIID,aGUID) then
+      if IsEqualGUID(result.fInterface.fInterfaceIID,aGUID) then
         exit;
     end;
   end;
@@ -38832,15 +38985,47 @@ begin
 end;
 
 class function TInterfaceFactory.Get(const aGUID: TGUID): TInterfaceFactory;
+type TGUID32 = packed record a,b,c,d: integer; end; // brute force optimization
+     PGUID32 = ^TGUID32;
+var i,ga: integer;
+    F: ^TInterfaceFactory;
+    GUID32: TGUID32 absolute aGUID;
+begin
+  if InterfaceFactoryCache<>nil then begin
+    InterfaceFactoryCache.Lock;
+    F := @InterfaceFactoryCache.List[0];
+    ga := GUID32.a;
+    for i := 0 to InterfaceFactoryCache.Count-1 do
+    with PGUID32(@F^.fInterfaceIID)^ do
+    if (a=ga) and (b=GUID32.b) and (c=GUID32.c) and (d=GUID32.d) then begin
+      result := F^;
+      InterfaceFactoryCache.UnLock;
+      exit;
+    end else
+      inc(F);
+    InterfaceFactoryCache.UnLock;
+  end;
+  result := nil;
+end;
+
+class function TInterfaceFactory.GUID2TypeInfo(
+  const aGUIDs: array of TGUID): PTypeInfoDynArray;
 var i: integer;
 begin
-  if InterfaceFactoryCache<>nil then
-    for i := 0 to InterfaceFactoryCache.Count-1 do begin
-      result := InterfaceFactoryCache.List[i];
-      if IsEqualGUID(result.fInterfaceIID,aGUID) then
-        exit; // retrieved from cache
-    end;
-  result := nil;
+  SetLength(result,length(aGUIDs));
+  for i := 0 to high(aGUIDs) do
+    result[i] := GUID2TypeInfo(aGUIDs[i]);
+end;
+
+class function TInterfaceFactory.GUID2TypeInfo(const aGUID: TGUID): PTypeInfo;
+var fact: TInterfaceFactory;
+begin
+  fact := Get(aGUID);
+  if fact=nil then
+    raise EServiceException.CreateUTF8(
+    '%.GUID2TypeInfo(%): Interface not registered - you could use '+
+    '%.RegisterInterfaces()',[self,GUIDToShort(aGUID),self]);
+  result := fact.fInterfaceTypeInfo;
 end;
 
 class function TInterfaceFactory.Get(const aInterfaceName: RawUTF8): TInterfaceFactory;
@@ -39643,8 +39828,9 @@ constructor TInterfaceStub.Create(aFactory: TInterfaceFactory;
 var i: integer;
 begin
   if aFactory=nil then
-    raise EInterfaceStub.CreateUTF8('%.Create(%): Interface not registered',
-      [self,aInterfaceName]);
+    raise EInterfaceStub.CreateUTF8(
+      '%.Create(%): Interface not registered - you could use '+
+      'TInterfaceFactory.RegisterInterfaces()',[self,aInterfaceName]);
   fInterface := aFactory;
   SetLength(fRules,fInterface.MethodsCount);
   for i := 0 to fInterface.MethodsCount-1 do
@@ -39690,7 +39876,12 @@ end;
 constructor TInterfaceStub.Create(aInterface: PTypeInfo);
 begin
   Create(TInterfaceFactory.Get(aInterface),RawUTF8(aInterface^.Name));
-end; 
+end;
+
+constructor TInterfaceStub.Create(const aGUID: TGUID);
+begin
+  Create(TInterfaceFactory.Get(aGUID),GUIDToRawUTF8(aGUID));
+end;
 
 procedure TInterfaceStub.IntSetOptions(Options: TInterfaceStubOptions);
 begin
@@ -40136,6 +40327,12 @@ begin
   fTestCase := aTestCase;
 end;
 
+constructor TInterfaceMock.Create(const aGUID: TGUID; aTestCase: TSynTestCase);
+begin
+  inherited Create(aGUID);
+  fTestCase := aTestCase;
+end;
+
 function TInterfaceMock.InternalCheck(aValid,aExpectationFailed: boolean;
       aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; 
 begin
@@ -40254,6 +40451,35 @@ begin
     raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,aInterface^.Name]);
 end;
 
+procedure TInjectableObject.ResolveByPair(const aInterfaceObjPairs: array of pointer);
+var n,i: integer;
+begin
+  n := length(aInterfaceObjPairs);
+  if (n=0) or (n and 1=1) then
+    raise EServiceException.CreateUTF8('%.Resolve([odd])',[self]) else
+    for i := 0 to (n shr 1)-1 do
+      Resolve(aInterfaceObjPairs[i*2],aInterfaceObjPairs[i*2+1]^);
+end;
+
+procedure TInjectableObject.Resolve(const aInterfaces: array of TGUID;
+  const aObjs: array of pointer);
+var n,i: integer;
+    known: TInterfaceFactory;
+begin
+  n := length(aInterfaces);
+  if (n=0) or (n<>length(aObjs)) then
+    raise EServiceException.CreateUTF8('%.Resolve([?,?])',[self]) else
+    for i := 0 to n-1 do begin
+      known := TInterfaceFactory.Get(aInterfaces[i]);
+      if known=nil then
+        raise EServiceException.CreateUTF8(
+          '%.Resolve([%]): Interface not registered - you could use '+
+          'TInterfaceFactory.RegisterInterfaces()',
+          [self,GUIDToShort(aInterfaces[i])]) else
+        Resolve(known.fInterfaceTypeInfo,aObjs[i]^);
+    end;
+end;
+
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
 var i: integer;
     CT: TClass;
@@ -40289,20 +40515,28 @@ begin
   until CT=TInjectableObject;
 end;
 
-constructor TInjectableObject.CreateMocked(const aStubs: array of TInterfaceStub;
-  aRaiseEServiceExceptionIfNotFound: boolean);
+constructor TInjectableObject.CreateMocked(const aStubsByGUID: array of TGUID;
+  const aStubsByInstance: array of TInterfaceStub;
+  aRaiseEServiceExceptionIfNotFound: boolean); 
 var i: integer;
+    stub,prev: TInterfaceStub;
 begin
   inherited Create;
-  if high(aStubs)<0 then
-    raise EInterfaceFactoryException.CreateUTF8('%.CreateMocked(nil)',[self]);
-  fResolve := aStubs[0].InternalResolve;
-  for i := 1 to high(aStubs) do
-    aStubs[i-1].fResolveNext := aStubs[i];
   fCreateMocked := TObjectList.Create(true);
-  for i := 0 to high(aStubs) do begin 
-    include(aStubs[i].fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
-    fCreateMocked.Add(aStubs[i]);
+  for i := 0 to high(aStubsByGUID) do
+    fCreateMocked.Add(TInterfaceStub.Create(aStubsByGUID[i]));
+  for i := 0 to high(aStubsByInstance) do
+    fCreateMocked.Add(aStubsByInstance[i]);
+  if fCreateMocked.Count=0 then
+    raise EInterfaceFactoryException.CreateUTF8('%.CreateMocked(nil)',[self]);
+  prev := nil;
+  for i := 0 to fCreateMocked.Count-1 do begin
+    stub := fCreateMocked.List[i];
+    include(stub.fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
+    if prev=nil then
+      fResolve := stub.InternalResolve else
+      prev.fResolveNext := stub;
+    prev := stub;
   end;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
@@ -40817,10 +41051,11 @@ begin
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
   ickInjectable: begin
-    result := TInjectableObjectClass(fImplementationClass).Create;
     if Rest.fServices=nil then
-      raise EServiceException.CreateUTF8('%.CreateInstance(%) with no ServiceRegister',
-        [self,fImplementationClass]);
+      raise EServiceException.CreateUTF8(
+        '%.CreateInstance(%) with no previous %.ServiceRegister/ServiceDefine',
+        [self,fImplementationClass,Rest]);
+    result := TInjectableObjectClass(fImplementationClass).Create;
     TInjectableObject(result).fResolve := Rest.fServices.Resolve;
     TInjectableObject(result).AutoResolve(true);
   end;

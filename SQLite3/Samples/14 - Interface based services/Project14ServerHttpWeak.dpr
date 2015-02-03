@@ -43,7 +43,7 @@ begin
     try
       aServer.AuthenticationRegister(TSQLRestServerAuthenticationNone);
       // register our ICalculator service on the server side
-      aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+      aServer.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
       // launch the HTTP server
       aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
       try

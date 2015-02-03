@@ -41,7 +41,7 @@ begin
       with TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME,true) do
       try
         CreateMissingTables; // we need AuthGroup and AuthUser tables
-        ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+        ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
         if ExportServerNamedPipe(APPLICATION_NAME) then
           writeln('Background server is running.'#10) else
           writeln('Error launching the server'#10);

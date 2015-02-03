@@ -30,7 +30,7 @@ begin
   try
     with TSQLRestServerFullMemory.Create(aModel,'test.json',false,true) do
     try
-      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+      ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
       if ExportServerNamedPipe(APPLICATION_NAME) then
         writeln('Background server is running.'#10) else
         writeln('Error launching the server'#10);
