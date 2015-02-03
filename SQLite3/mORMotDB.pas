@@ -129,7 +129,7 @@ unit mORMotDB;
   - optimized TSQLRestStorageExternal.UpdateBlobFields()/RetrieveBlobFields()
     methods, updating/retrieving all BLOB fields at once in the same SQL statement
   - added VirtualTableExternalMap() function for easier mapping definition
-  - handle TSQLModelRecordPropertiesExternal.MapAutoKeywordFields for automatic
+  - handle TSQLRecordPropertiesMapping.MapAutoKeywordFields for automatic
     maping of field which name conflicts with a SQL keyword - see [7fbbd53966]
   - this unit will now set SynDBLog := TSQLLog during its initialization
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
@@ -474,7 +474,7 @@ function VirtualTableExternalRegister(aModel: TSQLModel;
 // definitions, in a fluent interface:
 function VirtualTableExternalMap(aModel: TSQLModel;
   aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
-  const aExternalTableName: RawUTF8=''): PSQLModelRecordPropertiesExternal;
+  const aExternalTableName: RawUTF8=''): PSQLRecordPropertiesMapping;
 
 /// register all tables of the model to be external
 // - by default, all tables are handled by the SQLite3 engine, unless they
@@ -578,7 +578,7 @@ end;
 
 function VirtualTableExternalMap(aModel: TSQLModel;
   aClass: TSQLRecordClass; aExternalDB: TSQLDBConnectionProperties;
-  const aExternalTableName: RawUTF8=''): PSQLModelRecordPropertiesExternal;
+  const aExternalTableName: RawUTF8=''): PSQLRecordPropertiesMapping;
 begin
   if VirtualTableExternalRegister(aModel,aClass,aExternalDB,aExternalTableName) then
     result := @aModel.Props[aClass].ExternalDB else

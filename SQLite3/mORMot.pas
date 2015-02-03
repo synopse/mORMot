@@ -6767,15 +6767,18 @@ type
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
-  PSQLModelRecordPropertiesExternal = ^TSQLModelRecordPropertiesExternal;
+  PSQLRecordPropertiesMapping = ^TSQLRecordPropertiesMapping;
 
-  /// external database properties for ORM operations for a given
-  // TSQLModelRecordProperties instance
-  TSQLModelRecordPropertiesExternal = {$ifdef UNICODE}
+  /// allow custom field mapping of a TSQLRecord
+  // - used e.g. for external database process, including SQL generation
+  // - in end user code, mostly MapField/MapFields/MapAutoKeywordFields methods
+  // should be used, if needed as a fluent chained interface - other lower
+  // level methods will be used by the framework internals
+  TSQLRecordPropertiesMapping = {$ifdef UNICODE}
     record private {$else}
     object protected {$endif}
     /// storage of main read-only properties
-    fProps: TSQLModelRecordProperties;
+    fProps: TSQLRecordProperties;
     fConnectionProperties: TObject;
     fTableName: RawUTF8;
     fRowIDFieldName: RawUTF8;
@@ -6783,6 +6786,7 @@ type
     fSQL: TSQLModelRecordPropertiesSQL;
     fFieldNamesMatchInternal: TSQLFieldBits;
     fMapAutoKeywordFields: boolean;
+    fAutoComputeSQL: boolean;
     /// fill fRowIDFieldName/fSQL with the current information
     procedure ComputeSQL;
   public
@@ -6791,9 +6795,9 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('IntField','ExtField');
-    // - since it returns a PSQLModelRecordPropertiesExternal instance, you can
+    // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
-    function MapField(const InternalName, ExternalName: RawUTF8): PSQLModelRecordPropertiesExternal;
+    function MapField(const InternalName, ExternalName: RawUTF8): PSQLRecordPropertiesMapping;
     /// call this method to ensure that all fields won't conflict with a SQL
     // keyword for the given database
     // - by default, no check is performed: you can use this method to ensure
@@ -6803,22 +6807,26 @@ type
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
     // !   MapField('IntField','ExtField').
     // !   MapAutoKeywordFields;
-    // - since it returns a PSQLModelRecordPropertiesExternal instance, you can
+    // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
-    function MapAutoKeywordFields: PSQLModelRecordPropertiesExternal;
+    function MapAutoKeywordFields: PSQLRecordPropertiesMapping;
     /// add several custom field mappings
+    // - can be used e.g. as
+    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // !   MapFields(['IntField1','ExtField1', 'IntField2','ExtField2']);
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - is slightly faster than several chained MapField() calls, since SQL
     // will be computed only once
-    procedure MapFields(const InternalExternalPairs: array of RawUTF8);
+    function MapFields(const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
   public
-    /// fill external DB properties for a given TSQLRecord / TSQLModel pair
-    // - will compute all needed SQL from the corresponding information
+    /// initialize the field mapping for a given TSQLRecord 
+    // - if AutoComputeSQL is true, will pre-compute all needed SQL from the
+    // supplied information
     // - will left void fSortedFieldsName[] and fSortedFieldsIndex[], to disable
     // custom field mapping
-    procedure Init(Props: TSQLModelRecordProperties; const ExternalTableName: RawUTF8;
-      ExternalDataBase: TObject);
+    procedure Init(Table: TSQLRecordClass; const MappedTableName: RawUTF8;
+      MappedConnection: TObject; AutoComputeSQL: boolean); overload;
     /// map a field name from its internal name to its external name
     // - raise an EORMException if the supplied field name is not defined in
     // the TSQLRecord as ID or a published property
@@ -6869,7 +6877,7 @@ type
     // !   // here we now that this is not an external table 
     property ConnectionProperties: TObject read fConnectionProperties;
     /// the associated TSQLModelRecordProperties
-    property Properties: TSQLModelRecordProperties read fProps;
+    property Properties: TSQLRecordProperties read fProps;
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
@@ -6922,7 +6930,7 @@ type
     // tables with mapped table or fields names
     SQL: TSQLModelRecordPropertiesSQL;
     /// allow SQL process for one external TSQLRecord in this model
-    ExternalDB: TSQLModelRecordPropertiesExternal;
+    ExternalDB: TSQLRecordPropertiesMapping;
 
     /// initialize the ORM properties from the TSQLRecord RTTI and the supplied
     // TSQLModel
@@ -23861,35 +23869,38 @@ begin
 end;
 
 
-{ TSQLModelRecordPropertiesExternal }
+{ TSQLRecordPropertiesMapping }
 
-procedure TSQLModelRecordPropertiesExternal.Init(Props: TSQLModelRecordProperties;
-  const ExternalTableName: RawUTF8; ExternalDataBase: TObject);
+procedure TSQLRecordPropertiesMapping.Init(Table: TSQLRecordClass;
+  const MappedTableName: RawUTF8; MappedConnection: TObject;
+  AutoComputeSQL: boolean);
 begin
-  if ExternalTableName='' then
-    fTableName := Props.Props.SQLTableName else
-    fTableName := ExternalTableName;
-  fConnectionProperties := ExternalDataBase;
-  fProps := Props;
+  fProps := Table.RecordProps;
+  if MappedTableName='' then
+    fTableName := fProps.SQLTableName else
+    fTableName := MappedTableName;
+  fConnectionProperties := MappedConnection;
   fRowIDFieldName := 'ID';
-  Props.Props.Fields.NamesToRawUTF8DynArray(fFieldNames);
+  fProps.Fields.NamesToRawUTF8DynArray(fFieldNames);
   FillChar(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
-  ComputeSQL;
+  fAutoComputeSQL := AutoComputeSQL;
+  if fAutoComputeSQL then
+    ComputeSQL;
 end;
 
-function TSQLModelRecordPropertiesExternal.MapField(
-  const InternalName, ExternalName: RawUTF8): PSQLModelRecordPropertiesExternal;
+function TSQLRecordPropertiesMapping.MapField(
+  const InternalName, ExternalName: RawUTF8): PSQLRecordPropertiesMapping;
 begin
   MapFields([InternalName,ExternalName]);
   result := @self;
 end;
 
-procedure TSQLModelRecordPropertiesExternal.MapFields(
-  const InternalExternalPairs: array of RawUTF8);
+function TSQLRecordPropertiesMapping.MapFields(
+  const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
 var i,int: Integer;
 begin
   for i := 0 to (length(InternalExternalPairs) shr 1)-1 do begin
-    int := fProps.Props.Fields.IndexByNameOrExcept(InternalExternalPairs[i*2]);
+    int := fProps.Fields.IndexByNameOrExcept(InternalExternalPairs[i*2]);
     if int<0 then begin
       fRowIDFieldName := InternalExternalPairs[i*2+1];
       if IdemPropNameU(fRowIDFieldName,'ID') then
@@ -23897,23 +23908,25 @@ begin
         exclude(fFieldNamesMatchInternal,0);
     end else begin
       fFieldNames[int] := InternalExternalPairs[i*2+1];
-      if IdemPropNameU(fFieldNames[int],fProps.Props.Fields.List[int].Name) then
+      if IdemPropNameU(fFieldNames[int],fProps.Fields.List[int].Name) then
         include(fFieldNamesMatchInternal,int+1) else // [0]=ID
         exclude(fFieldNamesMatchInternal,int+1);
     end;
   end;
-  ComputeSQL;
+  if fAutoComputeSQL then
+    ComputeSQL;
+  result := @self;
 end;
 
-function TSQLModelRecordPropertiesExternal.MapAutoKeywordFields:
-  PSQLModelRecordPropertiesExternal;
+function TSQLRecordPropertiesMapping.MapAutoKeywordFields:
+  PSQLRecordPropertiesMapping;
 begin
   if @self<>nil then
     fMapAutoKeywordFields := True;
   result := @self;
 end;
 
-procedure TSQLModelRecordPropertiesExternal.ComputeSQL;
+procedure TSQLRecordPropertiesMapping.ComputeSQL;
   type // similar to TSQLModelRecordProperties.Create()/SetKind()
     TContent = (TableSimpleFields, UpdateSimple, UpdateSetAll, InsertAll);
   procedure SetSQL(W: TTextWriter;
@@ -23930,7 +23943,7 @@ procedure TSQLModelRecordPropertiesExternal.ComputeSQL;
         W.Add(',') else
         W.AddShort(' as ID,');
     end;
-    with fProps.Props do
+    with fProps do
     for f := 0 to Fields.Count-1 do
     with Fields.List[f] do
     if SQLFieldType in COPIABLE_FIELDS then // sftMany fields do not exist
@@ -23975,16 +23988,16 @@ begin
   end;
 end;
 
-function TSQLModelRecordPropertiesExternal.InternalToExternal(const FieldName: RawUTF8): RawUTF8;
+function TSQLRecordPropertiesMapping.InternalToExternal(const FieldName: RawUTF8): RawUTF8;
 var int: integer;
 begin
-  int := fProps.Props.Fields.IndexByNameOrExcept(FieldName);
+  int := fProps.Fields.IndexByNameOrExcept(FieldName);
   if int<0 then
     result := RowIDFieldName else 
     result := fFieldNames[int];
 end;
 
-function TSQLModelRecordPropertiesExternal.InternalCSVToExternalCSV(
+function TSQLRecordPropertiesMapping.InternalCSVToExternalCSV(
   const CSVFieldNames, Sep, SepEnd: RawUTF8): RawUTF8;
 var IntFields,ExtFields: TRawUTF8DynArray;
 begin
@@ -23993,7 +24006,7 @@ begin
   result := RawUTF8ArrayToCSV(ExtFields,Sep)+SepEnd;
 end;
 
-procedure TSQLModelRecordPropertiesExternal.InternalToExternalDynArray(
+procedure TSQLRecordPropertiesMapping.InternalToExternalDynArray(
   const IntFieldNames: array of RawUTF8; out result: TRawUTF8DynArray;
   IntFieldIndex: PIntegerDynArray);
 var i,n,ndx: integer;
@@ -24003,7 +24016,7 @@ begin
   if IntFieldIndex<>nil then 
     SetLength(IntFieldIndex^,n);
   for i := 0 to n-1 do begin
-    ndx := fProps.Props.Fields.IndexByNameOrExcept(IntFieldNames[i]);
+    ndx := fProps.Fields.IndexByNameOrExcept(IntFieldNames[i]);
     if IntFieldIndex<>nil then
       IntFieldIndex^[i] := ndx;
     if ndx<0 then
@@ -24012,7 +24025,7 @@ begin
   end;
 end;
 
-function TSQLModelRecordPropertiesExternal.ExternalToInternalIndex(
+function TSQLRecordPropertiesMapping.ExternalToInternalIndex(
   const ExtFieldName: RawUTF8): integer;
 begin
   if IdemPropNameU(ExtFieldName,RowIDFieldName) then
@@ -24025,7 +24038,7 @@ begin
   end;
 end;
 
-function TSQLModelRecordPropertiesExternal.ExternalToInternalOrNull(
+function TSQLRecordPropertiesMapping.ExternalToInternalOrNull(
   const ExtFieldName: RawUTF8): RawUTF8;
 var i: integer;
 begin
@@ -24033,11 +24046,11 @@ begin
   if i=-1 then
     result := 'ID' else
   if i>=0 then
-    result := fProps.Props.Fields.List[i].Name else
+    result := fProps.Fields.List[i].Name else
     result := ''; // indicates not found
 end;
 
-function TSQLModelRecordPropertiesExternal.AppendFieldName(
+function TSQLRecordPropertiesMapping.AppendFieldName(
   FieldIndex: Integer; var Text: RawUTF8): boolean;
 begin
   result := false; // success
@@ -24048,7 +24061,7 @@ begin
     Text := Text+FieldNames[FieldIndex];
 end;
 
-function TSQLModelRecordPropertiesExternal.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
+function TSQLRecordPropertiesMapping.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
 begin
   if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName else
@@ -24057,12 +24070,13 @@ begin
     result := FieldNames[FieldIndex];
 end;
 
+
 { TSQLModelRecordProperties }
 
 constructor TSQLModelRecordProperties.Create(aModel: TSQLModel;
   aTable: TSQLRecordClass; aKind: TSQLRecordVirtualKind);
 var f: integer;
-begin // similar to TSQLModelRecordPropertiesExternal.ComputeSQL
+begin // similar to TSQLRecordPropertiesMapping.ComputeSQL
   fModel := aModel;
   fTableIndex := fModel.GetTableIndexExisting(aTable);
   fProps := aTable.RecordProps;
@@ -24767,7 +24781,7 @@ begin
         SetKind(rCustomAutoID) else // SetKind() recompute all SQL
         raise EModelException.CreateUTF8('Invalid %.VirtualTableRegister(%) call: '+
           'impossible to set class as virtual',[self,aClass]);
-    ExternalDB.Init(TableProps[i],aExternalTableName,aExternalDataBase);
+    ExternalDB.Init(aClass,aExternalTableName,aExternalDataBase,true);
   end;
   if high(fVirtualTableModule)<>fTablesMax then
     SetLength(fVirtualTableModule,fTablesMax+1);

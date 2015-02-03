@@ -227,8 +227,8 @@ begin
     exit; // if aClass is not part of the model
   if aMongoCollectionName='' then
     aMongoCollectionName := Props.Props.SQLTableName;
-  Props.ExternalDB.Init(Props,aMongoCollectionName,
-    aMongoDatabase.CollectionOrCreate[aMongoCollectionName]);
+  Props.ExternalDB.Init(aClass,aMongoCollectionName,
+    aMongoDatabase.CollectionOrCreate[aMongoCollectionName],true);
   Props.ExternalDB.MapField('ID','_id');
   result := TSQLRestStorageMongoDB.Create(aClass,aServer);
   aServer.StaticDataAdd(result);
