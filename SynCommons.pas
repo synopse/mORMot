@@ -15561,7 +15561,7 @@ end;
 
 {$endif}
 
-function UInt32ToUTF8(Value : Cardinal): RawUTF8; // faster than SysUtils.IntToStr
+function UInt32ToUTF8(Value: Cardinal): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin

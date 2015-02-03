@@ -34,7 +34,7 @@ unit SynPdf;
    CoMPi
    Damien (ddemars)
    David Mead (MDW)
-   HaraldSimon
+   Harald Simon
    Ondrej (reddwarf)
    Sinisa (sinisav)
    Pierre le Riche
@@ -254,7 +254,7 @@ unit SynPdf;
   - added PdfCoord() function
   - increased allowed number of EMR_SAVEDC/EMR_RESTOREDC pairs during rendering
   - handle SetTextAlign(TA_UPDATECP) command for feature request [a8d7393af1]
-  - fix vertical text alignment and line drawing (patch from ddemars - thanks!) 
+  - fix vertical text alignment and line drawing (patch from ddemars - thanks!)
   - introducing TPdfDocumentGDI.UseMetaFileTextPositioning instead of former
     UseSetTextJustification property: now you can force exact font kerning
     positioning for each character, via tpExactTextCharacterPositining; this
@@ -265,7 +265,9 @@ unit SynPdf;
     optional parameter to TPdfCanvas.RenderMetaFile()
   - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
     thanks MChaos for the proposal!
-  - added HaraldSimon's patch for EMR_BITBLT/EMR_STRETCHBLT
+  - added Harald Simon's patch for EMR_BITBLT/EMR_STRETCHBLT
+  - added PDF Group Content methods for creating layered content - thanks
+    Harald for the patch! see SynPdfLayers.dpr in sample 05 
 
 }
 
@@ -968,7 +970,7 @@ type
     function GetItemCount: integer; {$ifdef HASINLINE}inline;{$endif}
   protected
     procedure InternalWriteTo(W: TPdfWrite); override;
-    function SpaceNotNeeded: boolean; override; 
+    function SpaceNotNeeded: boolean; override;
   public
     /// create an array of PDF objects
     constructor Create(AObjectMgr: TPdfObjectMgr); reintroduce; overload;
@@ -989,6 +991,9 @@ type
     /// Add a PDF object to the array
     // - if AItem already exists, do nothing
     function AddItem(AItem: TPdfObject): integer;
+    /// insert a PDF object to the array
+    // - if AItem already exists, do nothing
+    procedure InsertItem(Index: Integer; AItem: TPdfObject);
     /// retrieve a TPDFName object stored in the array
     function FindName(const AName: PDFString): TPdfName;
     /// remove a specified TPDFName object stored in the array
@@ -1033,7 +1038,7 @@ type
     function GetItemCount: integer; {$ifdef HASINLINE}inline;{$endif}
   protected
     function getTypeOf: PDFString;
-    function SpaceNotNeeded: boolean; override; 
+    function SpaceNotNeeded: boolean; override;
     procedure DirectWriteto(W: TPdfWrite; Secondary: TPdfDictionary);
     procedure InternalWriteTo(W: TPdfWrite); override;
   public
@@ -1232,6 +1237,8 @@ type
   /// generic PDF Outlines entries, stored as a PDF dictionary
   TPdfOutlines = class(TPdfDictionary);
 
+  /// generic PDF Optional Content entry
+  TPdfOptionalContentGroup = class(TPdfDictionary);
 
   TPdfInfo = class;
   TPdfCatalog = class;
@@ -1266,6 +1273,7 @@ type
     FDefaultPaperSize: TPDFPaperSize;
     FCompressionMethod: TPdfCompressionMethod;
     FUseOutlines: boolean;
+    FUseOptionalContent: boolean;
     FCharSet: integer;
     FCodePage: cardinal;
     FTrueTypeFonts: TRawUTF8DynArray;
@@ -1311,12 +1319,12 @@ type
     procedure SetDefaultPaperSize(const Value: TPDFPaperSize);
     procedure SetDefaultPageHeight(const Value: cardinal);
     procedure SetDefaultPageWidth(const Value: cardinal);
+    procedure SetUseOptionalContent(const Value: boolean);
     procedure SetPDFA1(const Value: boolean);
     function GetDefaultPageLandscape: boolean;
     procedure SetDefaultPageLandscape(const Value: boolean);
     procedure SetFontFallBackName(const Value: string);
     function GetFontFallBackName: string;
-    
   protected
     /// can be useful in descendant objects in other units
     fTPdfPageClass: TPdfPageClass;
@@ -1428,7 +1436,7 @@ type
     /// create an Outline entry at a specified position of the current page
     // - the outline tree is created from the specified numerical level (0=root),
     // just after the item added via the previous CreateOutline call
-    // - the title is a generic VCL string, to handle fully Unicode support 
+    // - the title is a generic VCL string, to handle fully Unicode support
     function CreateOutline(const Title: string; Level: integer; TopPosition: Single): TPdfOutlineEntry;
     /// create a Destination
     // - the current PDF Canvas page is associated with this destination object
@@ -1447,6 +1455,18 @@ type
     // - if ForceCompression property is set, the picture will be stored as a JPEG
     // - you can specify a clipping rectangle region as ClipRc parameter
     function CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox=nil; ClipRc: PPdfBox=nil): PDFString;
+    // create a new optional content group (layer)
+    // - returns a TPdfOptionalContentGroup needed for TPDFCanvas.BeginMarkedContent
+    // - if ParentContentGroup is not nil, the new content group is a subgroup to ParentContentGroup
+    // - Title is the string shown in the PDF Viewer
+    // - Visible controls the initial state of the content group
+    function CreateOptionalContentGroup(ParentContentGroup: TPdfOptionalContentGroup; 
+      const Title: string; Visible: Boolean=true): TPdfOptionalContentGroup;
+    // create a Radio Optional ContentGroup
+    // - ContentGroups is a array of TPdfOptionalContentGroups which should behave like
+    // radiobuttons, i.e. only one active at a time
+    // - visibility must be set with CreateOptionalContentGroup, only one group should be visible
+    procedure CreateOptionalContentRadioGroup(const ContentGroups: array of TPdfOptionalContentGroup);
     /// retrieve the current PDF Canvas, associated to the current page
     property Canvas: TPdfCanvas read fCanvas;
     /// retrieve the PDF information, associated to the PDF document
@@ -1487,6 +1507,13 @@ type
     /// used to define if the PDF document will use outlines
     // - must be set to TRUE before any use of the OutlineRoot property
     property UseOutlines: boolean read FUseoutlines write FUseoutlines;
+    // used to define if the PDF document will use optional content (layers)
+    // - will also force PDF 1.5 as minimal file format
+    // - must be set to TRUE before calling NewDoc
+    // - warning: setting a value to this propery after creation will call the
+    // NewDoc method, therefore will erase all previous content and pages
+    // (including Info properties)
+    property UseOptionalContent: boolean read FUseOptionalContent write SetUseOptionalContent;
     /// the current Code Page encoding used for this PDF Document
     property CodePage: cardinal read FCodePage;
     /// the current CharSet used for this PDF Document
@@ -1511,7 +1538,7 @@ type
     // saving, e.g. before SaveToFile() or SaveToStream() methods calls)
     // - the PDF engine don't handle Font Fallback yet: the font you use
     // must contain ALL glyphs necessary for the supplied unicode text - squares
-    // or blanks will be drawn for any missing glyph/character 
+    // or blanks will be drawn for any missing glyph/character
     property UseUniscribe: boolean read fUseUniscribe write fUseUniscribe;
 {$endif}
     /// used to define if the PDF document will handle "font fallback" for
@@ -1559,11 +1586,11 @@ type
     // NewDoc method, therefore will erase all previous content and pages
     // (including Info properties)
     property PDFA1: boolean read fPDFA1 write SetPDFA1;
-    /// set to TRUE to force PDF 1.5 format, which may produce smaller files 
+    /// set to TRUE to force PDF 1.5 format, which may produce smaller files
     property GeneratePDF15File: boolean read GetGeneratePDF15File write SetGeneratePDF15File;
   end;
 
-  /// a PDF page          
+  /// a PDF page
   TPdfPage = class(TPdfDictionary)
   private
     function GetPageLandscape: Boolean;
@@ -2047,6 +2074,13 @@ type
       TextPositioning: TPdfCanvasRenderMetaFileTextPositioning=tpSetTextJustification;
       KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0;
       DisableTextClipping: boolean=false);
+    // starts optional content (layer)
+    // - Group must be registered with TPdfDocument.CreateOptionalContentGroup
+    // - each BeginMarkedContent must have a corresponding EndMarkedContent
+    // - nested BeginMarkedContent/EndMarkedContent are possible
+    procedure BeginMarkedContent(Group: TPdfOptionalContentGroup);
+    // ends optional content (layer)
+    procedure EndMarkedContent;
   public
     /// retrieve the current Canvas content stream, i.e. where the PDF
     // commands are to be written to
@@ -2067,7 +2101,7 @@ type
     FData: TPdfDictionary;
     function GetHasData: boolean;
   protected
-    procedure SetData(AData: TPdfDictionary); 
+    procedure SetData(AData: TPdfDictionary);
   public
     /// the associated dictionary, containing all data
     property Data: TPdfDictionary read FData write SetData;
@@ -2651,6 +2685,9 @@ function _HasMultiByteString(Value: PAnsiChar): boolean;
 
 /// convert a specified UTF-8 content into a PDFString value
 function RawUTF8ToPDFString(const Value: RawUTF8): PDFString;
+
+/// convert an unsigned integer into a PDFString text
+function UInt32ToPDFString(Value: Cardinal): PDFString;
 
 /// convert a date, into PDF string format, i.e. as 'D:20100414113241'
 function _DateTimeToPdfDate(ADate: TDateTime): TPdfDate;
@@ -3551,6 +3588,15 @@ begin
     result := FArray.Add(TPdfVirtualObject.Create(AItem.ObjectNumber))
 end;
 
+procedure TPdfArray.InsertItem(Index: Integer; AItem: TPdfObject);
+begin
+  if FArray.IndexOf(AItem)>=0 then
+    exit; // if AItem already exists, do nothing
+  if AItem.ObjectType=otDirectObject then
+    FArray.Insert(Index, AItem) else
+    FArray.Insert(Index, TPdfVirtualObject.Create(AItem.ObjectNumber))
+end;
+
 function TPdfArray.FindName(const AName: PDFString): TPdfName;
 var i: integer;
 begin
@@ -3971,6 +4017,14 @@ end;
 function RawUTF8ToPDFString(const Value: RawUTF8): PDFString;
 begin
   result := CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Value),length(Value));
+end;
+
+function UInt32ToPDFString(Value : Cardinal): PDFString;
+var tmp: array[0..15] of AnsiChar;
+    P: PAnsiChar;
+begin
+  P := StrUInt32(@tmp[15],Value);
+  SetString(result,P,@tmp[15]-P);
 end;
 
 function PdfRect(Left, Top, Right, Bottom: Single): TPdfRect;
@@ -5320,7 +5374,7 @@ end;
 
 const
   PDF_PRODUCER = 'Synopse PDF engine '+SYNOPSE_FRAMEWORK_VERSION;
-  
+
 procedure TPdfDocument.CreateInfo;
 var FInfoDictionary: TPdfDictionary;
 begin
@@ -5469,6 +5523,7 @@ end;
 procedure TPdfDocument.NewDoc;
 var CatalogDictionary: TPdfDictionary;
     Dico: TPdfDictionary;
+    DicoD: TPdfDictionary;
     RGB: TPdfStream;
     ID: TPdfArray;
     IDs: PDFString;
@@ -5519,6 +5574,20 @@ begin
   FCurrentPages := CreatePages(nil); // nil -> create root Pages XObject
   FRoot.SetPages(FCurrentPages);
   NeedFileID := false;
+  if FUseOptionalContent then begin
+    if fFileFormat<pdf15 then
+      fFileFormat := pdf15;
+    Dico := TPdfDictionary.Create(FXRef);
+    DicoD := TPdfDictionary.Create(FXRef);
+    DicoD.AddItem('BaseState','ON');  // must be ON in default configuration
+    DicoD.AddItem('OFF',TPDFArray.Create(FXRef));
+    DicoD.AddItem('Order',TPDFArray.Create(FXRef));
+    DicoD.AddItem('ListMode','AllPages');  // default value but some viewers cause trouble when missing
+    DicoD.AddItem('RBGroups',TPDFArray.Create(FXRef));
+    Dico.AddItem('D',DicoD);
+    Dico.AddItem('OCGs',TPdfArray.Create(FXRef));
+    FRoot.Data.AddItem('OCProperties',Dico);
+  end;
   {$ifdef USE_PDFSECURITY}
   if fEncryption<>nil then
     NeedFileID := true;
@@ -5572,7 +5641,7 @@ begin
     FTrailer.Attributes.AddItem('ID',ID);
   end;
   {$ifdef USE_PDFSECURITY}
-  if fEncryption<>nil then 
+  if fEncryption<>nil then
     fEncryption.AttachDocument(self);
   {$endif}
 end;
@@ -6054,23 +6123,110 @@ begin
       end;
     end;
     Img.fHash := Hash;
-    result := 'SynImg'+PDFString(IntToStr(FXObjectList.ItemCount));
+    result := 'SynImg'+UInt32ToPDFString(FXObjectList.ItemCount);
     if ForceJPEGCompression=0 then
-      AddXObject(result,Img)
-    else
+      AddXObject(result,Img) else
       RegisterXObject(Img, result);
   end;
   // draw bitmap as XObject
-  if DrawAt<>nil then
-  begin
+  if DrawAt<>nil then begin
     if ClipRc<>nil then
       with DrawAt^ do
         Canvas.DrawXObjectEx(Left,Top,Width,Height,
-          ClipRc^.Left,ClipRc^.Top,ClipRc^.Width,ClipRc^.Height, result)
-    else
+          ClipRc^.Left,ClipRc^.Top,ClipRc^.Width,ClipRc^.Height, result) else
       with DrawAt^ do
         Canvas.DrawXObject(Left,Top,Width,Height, result);
   end;
+end;
+
+function TPdfDocument.CreateOptionalContentGroup(
+  ParentContentGroup: TPdfOptionalContentGroup;
+  const Title: string; Visible: Boolean): TPdfOptionalContentGroup;
+var Dico, DicoD: TPdfDictionary;
+    Arr: TPDFArray;
+
+  function FindParentContentGroupArray(Current: TPDFArray): TPDFArray;
+  var i: Integer;
+  begin
+    result := nil;
+    if Current=nil then
+      exit;
+    for i := 0 to Current.ItemCount-1 do
+      if Current.Items[i]=ParentContentGroup then begin
+        if (i<Current.ItemCount-1) and Current.Items[i+1].InheritsFrom(TPDFArray) then
+          result := TPDFArray(Current.Items[i+1]) else begin
+          result := TPDFArray.Create(FXRef);
+          Current.InsertItem(i+1, result);
+        end;
+        exit;
+      end;
+    for i := 0 to Current.ItemCount-1 do
+      if Current.Items[i].InheritsFrom(TPDFArray) then begin
+        result := FindParentContentGroupArray(TPDFArray(Current.Items[i]));
+        if result<>nil then
+          exit;
+      end;
+  end;
+
+begin
+  if FUseOptionalContent then begin
+    result := TPdfOptionalContentGroup.Create(FXRef);
+    FXref.AddObject(result);
+    result.AddItem('Type','OCG');
+    result.AddItemTextString('Name',Title);
+    Dico := FRoot.Data.PdfDictionaryByName('OCProperties');
+    if Dico<>nil then begin
+      DicoD := Dico.PdfDictionaryByName('D');
+      if DicoD<>nil then begin
+        Arr := DicoD.PdfArrayByName('Order');
+        if ParentContentGroup<>nil then
+          Arr := FindParentContentGroupArray(Arr);
+        if Arr<>nil then
+          Arr.AddItem(result);
+        if not Visible then begin
+          Arr := DicoD.PdfArrayByName('OFF');
+          if Arr<>nil then
+            Arr.AddItem(result);
+        end;
+      end;
+      Arr := Dico.PdfArrayByName('OCGs');
+      if Arr<>nil then
+        Arr.AddItem(result);
+    end;
+  end else
+    result := nil;
+end;
+
+procedure TPdfDocument.CreateOptionalContentRadioGroup(
+  const ContentGroups: array of TPdfOptionalContentGroup);
+var i: Integer;
+    Dico, DicoD: TPdfDictionary;
+    Arr, RadioArr: TPDFArray;
+begin
+  if FUseOptionalContent and (Length(ContentGroups)>0) then begin
+    Dico := FRoot.Data.PdfDictionaryByName('OCProperties');
+    if Dico<>nil then begin
+      DicoD := Dico.PdfDictionaryByName('D');
+      if DicoD<>nil then begin
+        Arr := DicoD.PdfArrayByName('RBGroups');
+        if Arr<>nil then begin
+          RadioArr := TPDFArray.Create(FXref);
+          for i  :=  Low(ContentGroups) to High(ContentGroups) do
+            if ContentGroups[i]<>nil then
+              RadioArr.AddItem(ContentGroups[i]);
+          if RadioArr.ItemCount>0 then
+            Arr.AddItem(RadioArr) else
+            FreeAndNil(RadioArr);
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TPdfDocument.SetUseOptionalContent(const Value: boolean);
+begin
+  FUseOptionalContent := Value;
+  NewDoc;
 end;
 
 procedure TPdfDocument.SetPDFA1(const Value: boolean);
@@ -7041,6 +7197,35 @@ begin
     NormalizeRect(result);
 end;
 
+procedure TPdfCanvas.BeginMarkedContent(Group : TPdfOptionalContentGroup);
+var Resources, Properties: TPdfDictionary;
+    ID: PDFString;
+begin
+  if (FContents=nil) or not FDoc.UseOptionalContent then
+    exit;
+  if Group<>nil  then begin
+    ID := 'oc'+UInt32ToPDFString(Group.ObjectNumber);
+    // register Group in page resources properties
+    Resources := FPage.PdfDictionaryByName('Resources');
+    if Resources<>nil then begin
+      Properties := Resources.PdfDictionaryByName('Properties');
+      if Properties = nil then begin
+        Properties := TPdfDictionary.Create(FDoc.FXRef);
+        Resources.AddItem('Properties', Properties);
+      end;
+      if Properties<>nil then
+        Properties.AddItem(ID,Group);
+    end;
+    FContents.Writer.Add('/OC /').Add(ID).Add(' BDC'#10);
+  end else
+    FContents.Writer.Add('/OC BMC'#10);
+end;
+
+procedure TPdfCanvas.EndMarkedContent;
+begin
+  if (FContents<>nil) and FDoc.UseOptionalContent then
+    FContents.Writer.Add('EMC'#10);
+end;
 
 { TPdfDictionaryWrapper }
 
@@ -9290,7 +9475,7 @@ begin
     Canvas.Rectangle(Left,Top,Width,Height);
   Canvas.Fill;
   if ResetNewPath then
-    Canvas.FNewPath := false; 
+    Canvas.FNewPath := false;
 end;
 
 procedure TPdfEnum.FlushPenBrush;
