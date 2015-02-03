@@ -762,7 +762,7 @@ unit mORMot;
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
     - introducing TInjectableObject to easily implement the IoC SOLID pattern,
       for both TSQLRest services and stubing/mocking
-    - adding TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
+    - added TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
       methods to specify interface from it name, without the need to use the
       TypeInfo(IMyInterface) syntax in end-user code
     - interface-based services are now able to work with TObjectList parameters

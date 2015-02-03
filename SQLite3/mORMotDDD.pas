@@ -58,6 +58,7 @@ uses
   SysUtils,
   Classes,
   Contnrs,
+  Variants,
   SynCommons,
   SynCrypto,
   mORMot;
@@ -129,43 +130,49 @@ type
      cqrsInvalidContent, cqrsAlreadyExists, cqrsNoPriorQuery);
 
   /// generic interface, to be used for CQRS I*Query types definition
+  // - TCQRSQueryObject class will allow to easily implement LastError* members 
   ICQRSQuery = interface(IInvokable)
     ['{923614C8-A639-45AD-A3A3-4548337923C9}']
     /// should return the last error as an enumerate
     function LastError: TCQRSResult;
-    /// should return an error message corresponding to the last enumerate
-    function LastErrorMessage: RawUTF8;
+    /// should return addition information for the last error
+    // - may be a plain string, or a JSON document stored as TDocVariant
+    function LastErrorInfo: variant;
   end;
             
-  /// to be inherited to implement CQRS I*Query services extended error message
+  /// to be inherited to implement CQRS I*Query services extended error process
   // - you should never assign directly a cqrs* value to a method result, but
-  // rather use the Reset/SetResult() methods provided by this class:
+  // rather use the Reset/SetResult/SetResultMsg methods provided by this class:
   // ! function TMyService.MyMethod: TCQRSResult;
   // ! begin
   // !   Reset(result); // reset the error information to cqrsUnspecifiedError
   // !   ... // do some work
   // !   if error then
-  // !     SetResult(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
+  // !     SetResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
   // !     SetResult(cqrsSuccess); // instead of result := cqrsSuccess
   // !   end;
   TCQRSQueryObject = class(TInjectableObject, ICQRSQuery)
   protected
     fResultAddress: ^TCQRSResult;
     fLastError: TCQRSResult;
-    fLastErrorMessage: RawUTF8;
+    fLastErrorInfo: variant;
     /// overloaded protected methods to be used for LastError process
     procedure Reset(var result: TCQRSResult; Error: TCQRSResult=cqrsUnspecifiedError);
-    procedure SetResult(Error: TCQRSResult); overload;
-    procedure SetResult(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
-    procedure SetResult(Error: TCQRSResult;
+    procedure SetResult(Error: TCQRSResult);
+    procedure SetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
+    procedure SetResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
+    procedure SetResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
+    procedure SetResultJSON(Error: TCQRSResult;
+      JSONFmt: PUTF8Char; const Args,Params: array of const); 
   public
     /// returns the last error as an enumerate
     function LastError: TCQRSResult; virtual;
-    /// returns a textual error message corresponding to the last error enumerate 
-    // - if no specific message has been defined, a generic English text will be
-    // computed by this method 
-    function LastErrorMessage: RawUTF8; virtual;
+    /// returns addition information for the last error
+    // - may be some text, or a JSON document stored as TDocVariant   
+    // - if no specific information has been defined, a generic English text
+    // will be computed by this method
+    function LastErrorInfo: variant; virtual;
   end;
 
 
@@ -302,11 +309,11 @@ begin
   result := fLastError;
 end;
 
-function TCQRSQueryObject.LastErrorMessage: RawUTF8;
+function TCQRSQueryObject.LastErrorInfo: Variant;
 begin
-  if fLastErrorMessage='' then
-    result := GetEnumNameTrimed(TypeInfo(TCQRSResult),fLastError) else
-    result := fLastErrorMessage;
+  if TVarData(fLastErrorInfo).VType=varEmpty then
+    RawUTF8ToVariant(GetEnumNameTrimed(TypeInfo(TCQRSResult),fLastError),result) else
+    result := fLastErrorInfo;
 end;
 
 procedure TCQRSQueryObject.Reset(var result: TCQRSResult; Error: TCQRSResult);
@@ -314,7 +321,7 @@ begin
   fResultAddress := @result;
   result := Error;
   fLastError := Error;
-  fLastErrorMessage := '';
+  VarClear(fLastErrorInfo);
 end;
 
 procedure TCQRSQueryObject.SetResult(Error: TCQRSResult);
@@ -326,18 +333,32 @@ begin
   fLastError := Error;
 end;
 
-procedure TCQRSQueryObject.SetResult(Error: TCQRSResult;
-  const ErrorMessage: RawUTF8);
+procedure TCQRSQueryObject.SetResultDoc(Error: TCQRSResult;
+  const ErrorInfo: variant);
 begin                 
   SetResult(Error);
-  fLastErrorMessage := ErrorMessage;
+  fLastErrorInfo := ErrorInfo;
 end;
 
-procedure TCQRSQueryObject.SetResult(Error: TCQRSResult;
+procedure TCQRSQueryObject.SetResultJSON(Error: TCQRSResult;
+  JSONFmt: PUTF8Char; const Args,Params: array of const);
+begin
+  SetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
+end;
+
+procedure TCQRSQueryObject.SetResultMsg(Error: TCQRSResult;
+  const ErrorMessage: RawUTF8);
+begin
+  SetResult(Error);
+  RawUTF8ToVariant(ErrorMessage,fLastErrorInfo);
+end;
+
+procedure TCQRSQueryObject.SetResultMsg(Error: TCQRSResult;
   ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
 begin
-  SetResult(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
+  SetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
 end;
+
 
 
 { TDDDAuthenticationAbstract }
@@ -358,7 +379,7 @@ begin
     if DoHash(fCurrentLogonName+':'+fCurrentNonce+':'+
        GetHashedPasswordFromRepository(fCurrentLogonName))=aChallengedPassword then
       SetResult(cqrsSuccess) else
-      SetResult(cqrsBadRequest,'Wrong Password');
+      SetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fCurrentLogonName]);
 end;
 
 class function TDDDAuthenticationAbstract.ComputeHashPassword(
