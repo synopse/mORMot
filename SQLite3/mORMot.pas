@@ -16631,6 +16631,7 @@ var tmp: RawByteString; // LoadFromJSON() may change the input buffer
 begin
   with GetDynArray(Instance) do
   if fIsObjArray then begin
+    ObjArrayClear(Value^);
     tmp := FromVarString(PByte(P));
     LoadFromJSON(pointer(tmp));
     result := P;
@@ -16645,9 +16646,8 @@ var blob: RawByteString;
 begin
   wrapper.Init(fPropType,GetFieldAddr(Instance)^);
   if fIsObjArray then begin
-    if Value=nil then
-      ObjArrayClear(wrapper.Value^) else
-      wrapper.LoadFromJSON(Value);
+    ObjArrayClear(wrapper.Value^);
+    wrapper.LoadFromJSON(Value);
     exit;
   end;
   if Value=nil then
