@@ -8062,28 +8062,41 @@ type
     destructor Destroy; override;
   end;
 
-  /// generic method prototype to resolve a dependency
-  // - will retrieve an instance of a given interface, following the IoC pattern
-  // as required by SOLID principles
+  /// generic method prototype to resolve a dependency as expected by IoC
   // - returns TRUE and set Obj on success, FALSE if the interface is unknown
-  // - see e.g. TServiceContainer.Resolve() method which maps this callback
+  // - you should not use this event, but rather use TInjectableObject.AddResolver()
   TOnDependencyResolve = function(aInterface: PTypeInfo; out Obj): boolean of object;
+
+  /// abstract factory class allowing to call interface resolution in cascade
+  // - you can inherit from this class to chain the InternalResolve() calls so
+  // that several kind of implementations may be asked by a TInjectableObject,
+  // e.g. TInterfaceStub, TServiceContainer or TDDDRepositoryRestObjectMapping
+  // - this will implement factory pattern, as a safe and thread-safe IoC 
+  TInterfaceResolver = class
+  protected
+    fResolveNext: TInterfaceResolver;
+    /// this method could be assigned to a TOnDependencyResolve event
+    function ResolveChain(aInterface: PTypeInfo; out Obj): boolean;
+    /// override this method to check if this instance implements aInterface
+    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean; virtual; abstract;
+  end;
 
   TInterfaceStub = class;
 
   {$M+}
   /// any service implementation class could inherit from this class to
   // allow dependency injection aka SOLID IoC by the framework
-  // - once created, the framework will initialize its fResolve member, so
+  // - once created, the framework will call AddResolver() member, so
   // that its Resolve() method could be used to inject any needed dependency
   // for lazy dependency resolution (e.g. within a public property getter)
   // - any interface published property could be automatically injected; see
   // e.g. how TServiceFactoryServer.CreateInstance() initialize them
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
-    fResolve: TOnDependencyResolve;
     fAutoResolvedAddress: TList;
     fCreateMocked: TObjectList;
+    /// allow injection
+    fResolve: TOnDependencyResolve;
     /// this method will call fResolve() and raise a EServiceException if
     // the expected interface could not have been resolved
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
@@ -8105,7 +8118,10 @@ type
     // !   ...
     constructor CreateMocked(const aStubsByGUID: array of TGUID;
       const aStubsByInstance: array of TInterfaceStub;
-      aRaiseEServiceExceptionIfNotFound: boolean=true); 
+      aRaiseEServiceExceptionIfNotFound: boolean=true);
+    /// register an additional dependency resolver to this instance list
+    // - the resolver may be a TServiceContainer or a TInterfaceStub
+    procedure AddResolver(aResolver: TInterfaceResolver);
     /// release all used instances
     // - including all TInterfaceStub instances as specified to CreateMocked()
     destructor Destroy; override;
@@ -8567,7 +8583,8 @@ type
   // stubed/mocked interface is freed, its associated TInterfaceStub will be
   // freed - so you do not need to protect TInterfaceStub.Create with a
   // try..finally clause, since it will be released when no more needed
-  TInterfaceStub = class
+  // - inherits from TInterfaceResolver so match TInjectableObject expectations
+  TInterfaceStub = class(TInterfaceResolver)
   protected
     fInterface: TInterfaceFactory;
     fRules: array of TInterfaceStubRules;
@@ -8577,8 +8594,7 @@ type
     fLog: TDynArray;
     fLogCount: integer;
     fInterfaceExpectedTraceHash: cardinal;
-    fResolveNext: TInterfaceStub;
-    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean;
+    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     procedure InternalGetInstance(out aStubbedInterface); virtual;
     function InternalCheck(aValid,aExpectationFailed: boolean;
       aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; virtual;
@@ -9422,7 +9438,8 @@ type
 
   /// a global services provider class
   // - used to maintain a list of interfaces implementation
-  TServiceContainer = class
+  // - inherits from TInterfaceResolver so match TInjectableObject expectations
+  TServiceContainer = class(TInterfaceResolver)
   protected
     fRest: TSQLRest;
     // list of service names ['Calculator',...]
@@ -9435,6 +9452,7 @@ type
     procedure SetExpectMangledURI(aValue: Boolean);
     procedure CheckInterface(const aInterfaces: array of PTypeInfo);
     function AddServiceInternal(aService: TServiceFactory): integer;
+    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     /// retrieve a service provider from its URI
     function GetService(const aURI: RawUTF8): TServiceFactory;
   public
@@ -14858,7 +14876,7 @@ function TSQLPropInfo.GetSQLFieldTypeName: PShortString;
 begin
   if self=nil then
     result := @NULL_SHORTSTRING else
-    result := PTypeInfo(TypeInfo(TSQLFieldType))^.EnumBaseType^.GetEnumNameOrd(ord(SQLFieldType));
+    result := GetEnumName(TypeInfo(TSQLFieldType),ord(SQLFieldType));
 end;
 
 function TSQLPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
@@ -38419,12 +38437,32 @@ begin
 end;
 
 function TServiceContainer.Resolve(aInterface: PTypeInfo; out Obj): boolean;
+begin
+  result := InternalResolve(aInterface,Obj);
+end;
+
+function TServiceContainer.InternalResolve(aInterface: PTypeInfo; out Obj): boolean;
 var factory: TServiceFactory;
 begin
   factory := Info(aInterface);
   if factory<>nil then
     result := factory.Get(Obj) else
     result := false;
+end;
+
+function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
+var i: Integer;
+    Obj: PPointerArray;
+begin
+  if self<>nil then begin
+    Obj := fList.ObjectPtr;
+    for i := 0 to fList.Count-1 do begin
+      result := Obj[i];
+      if IsEqualGUID(result.fInterface.fInterfaceIID,aGUID) then
+        exit;
+    end;
+  end;
+  result := nil;
 end;
 
 function TServiceContainer.Resolve(const aGUID: TGUID; out Obj): boolean;
@@ -38441,21 +38479,6 @@ begin
   if Self=nil then
     result := nil else
     result := TServiceFactory(fList.Objects[aIndex]);
-end;
-
-function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
-var i: Integer;
-    Obj: PPointerArray;
-begin
-  if self<>nil then begin
-    Obj := fList.ObjectPtr;
-    for i := 0 to fList.Count-1 do begin
-      result := Obj[i];
-      if IsEqualGUID(result.fInterface.fInterfaceIID,aGUID) then
-        exit;
-    end;
-  end;
-  result := nil;
 end;
 
 const
@@ -40279,9 +40302,7 @@ begin
     InternalGetInstance(Obj);
     result := true;
   end else
-    if fResolveNext<>nil then
-      result := fResolveNext.InternalResolve(aInterface,Obj) else
-      result := false;
+    result := false;
 end;
 
 
@@ -40506,7 +40527,7 @@ constructor TInjectableObject.CreateMocked(const aStubsByGUID: array of TGUID;
   const aStubsByInstance: array of TInterfaceStub;
   aRaiseEServiceExceptionIfNotFound: boolean); 
 var i: integer;
-    stub,prev: TInterfaceStub;
+    stub: TInterfaceStub;
 begin
   inherited Create;
   fCreateMocked := TObjectList.Create(true);
@@ -40516,16 +40537,35 @@ begin
     fCreateMocked.Add(aStubsByInstance[i]);
   if fCreateMocked.Count=0 then
     raise EInterfaceFactoryException.CreateUTF8('%.CreateMocked(nil)',[self]);
-  prev := nil;
   for i := 0 to fCreateMocked.Count-1 do begin
     stub := fCreateMocked.List[i];
     include(stub.fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
-    if prev=nil then
-      fResolve := stub.InternalResolve else
-      prev.fResolveNext := stub;
-    prev := stub;
+    AddResolver(stub);
   end;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
+end;
+
+procedure TInjectableObject.AddResolver(aResolver: TInterfaceResolver);
+var actual: TInterfaceResolver;
+begin
+  if aResolver=nil then
+    exit;
+  if Assigned(fResolve) then begin
+    actual := TMethod(fResolve).Data;
+    if actual.InheritsFrom(TInterfaceResolver) then begin
+      if actual=aResolver then
+        exit;
+      while actual.fResolveNext<>nil do
+        if actual=aResolver then
+          exit else
+          actual := actual.fResolveNext;
+      actual.fResolveNext := aResolver;
+    end else
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.AddResolver(%) with former fResolve=% not an TInterfaceResolver',
+      [self,aResolver,actual]); 
+  end else
+    fResolve := aResolver.ResolveChain;
 end;
 
 destructor TInjectableObject.Destroy;
@@ -40543,6 +40583,21 @@ begin
   finally
     inherited Destroy;
   end;
+end;
+
+
+{ TInterfaceResolver}
+
+function TInterfaceResolver.ResolveChain(aInterface: PTypeInfo; out Obj): boolean;
+begin
+  repeat
+    if InternalResolve(aInterface,Obj) then begin
+      result := true;
+      exit;
+    end;
+    self := fResolveNext;
+  until self=nil;
+  result := false;
 end;
 
 
@@ -41043,7 +41098,7 @@ begin
         '%.CreateInstance(%) with no previous %.ServiceRegister/ServiceDefine',
         [self,fImplementationClass,Rest]);
     result := TInjectableObjectClass(fImplementationClass).Create;
-    TInjectableObject(result).fResolve := Rest.fServices.Resolve;
+    TInjectableObject(result).AddResolver(Rest.Services);
     TInjectableObject(result).AutoResolve(true);
   end;
   else 
