@@ -1740,7 +1740,7 @@ procedure CopyCollection(Source, Dest: TCollection);
 // properties values for an object
 // - reset only the published properties of the current class level (do NOT
 // reset the properties content published in the parent classes)
-procedure SetDefaultValuesObject(Value: TObject);
+procedure SetDefaultValuesObject(Value: TPersistent);
 
 /// will serialize any TObject into its UTF-8 JSON representation
 /// - serialize as JSON the published integer, Int64, floating point values,
@@ -3259,9 +3259,6 @@ type
   // - resulting JSON content will be UTF-8 encoded
   // - use an internal buffer, faster than string+string
   TJSONSerializer = class(TJSONWriter)
-  protected
-    /// used by WriteObjectAsString method
-    fInternalJSONWriter: TJSONWriter;
   public
     /// serialize as JSON the published integer, Int64, floating point values,
     // TDateTime (stored as ISO 8601 text), string and enumerate (e.g. boolean)
@@ -3282,10 +3279,6 @@ type
     // - function ObjectToJSON() is just a wrapper over this method
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); override;
-    /// same as WriteObject(), but will double all internal " and bound with "
-    // - this implementation will avoid most memory allocations
-    procedure WriteObjectAsString(Value: TObject;
-      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// override method, able to write sets using RTTI
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue); overload; override;
     /// overloaded method, able to write sets using RTTI in human readable mode
@@ -3293,8 +3286,6 @@ type
     // be stored as JSON string
     procedure AddTypedJSONWithOptions(aTypeInfo: pointer; var aValue;
       Options: TTextWriterWriteObjectOptions);
-    /// relase all used memory and handles
-    destructor Destroy; override;
     
     /// define a custom serialization for a given class
     // - by default, TSQLRecord, TPersistent, TStrings, TCollection classes
@@ -19815,7 +19806,7 @@ var EndOfObject: AnsiChar;
           if c=JSON_BASE64_MAGIC then begin
             FieldTypeApproximation[ndx] := ftaBlob;
             case Params of
-            pInlined: //untouched -> recognized as BLOB in SQLParamContent()
+            pInlined: // untouched -> recognized as BLOB in SQLParamContent()
               FieldValues[ndx] := QuotedStr(res,'''');
 {            pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
               // if not inlined, it can be used directly in INSERT/UPDATE statements
@@ -35263,10 +35254,10 @@ begin
     ReadObject(Value,source,SubCompName);
 end;
 
-procedure SetDefaultValuesObject(Value: TObject);
+procedure SetDefaultValuesObject(Value: TPersistent);
 var P: PPropInfo;
     i: integer;
-    Obj: TObject;
+    Obj: TPersistent;
 begin
   if Value<>nil then
   for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
@@ -36508,12 +36499,6 @@ end;
 
 { TJSONSerializer }
 
-destructor TJSONSerializer.Destroy;
-begin
-  fInternalJSONWriter.Free;
-  inherited;
-end;
-
 procedure TJSONSerializer.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 var Added: boolean;
     CustomComment: RawUTF8;
@@ -36787,18 +36772,6 @@ next: P := P^.Next;
   Add('}');
   if woFullExpand in Options then
     Add('}');
-end;
-
-procedure TJSONSerializer.WriteObjectAsString(Value: TObject;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  Add('"');
-  if fInternalJSONWriter=nil then
-    fInternalJSONWriter := TJSONSerializer.CreateOwnedStream else
-    fInternalJSONWriter.CancelAll;
-  fInternalJSONWriter.WriteObject(Value,Options);
-  AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
-  Add('"');
 end;
 
 procedure TJSONSerializer.AddTypedJSON(aTypeInfo: pointer; const aValue);
@@ -42222,4 +42195,4 @@ end.
 
 
 
-
+
