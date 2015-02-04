@@ -2985,7 +2985,12 @@ procedure TTestLowLevelCommon._IdemPropName;
 const abcde: PUTF8Char = 'ABcdE';
       abcdf: PUTF8Char = 'ABcdF';
 var WinAnsi: WinAnsiString;
+    i: integer;
 begin
+  Check(IdemPropName('a','A'));
+  Check(not IdemPropName('a','z'));
+  Check(IdemPropName('ab','AB'));
+  Check(IdemPropName('abc','ABc'));
   Check(IdemPropName('abcD','ABcd'));
   Check(not IdemPropName('abcD','ABcF'));
   Check(not IdemPropName('abcD','ABcFG'));
@@ -2997,6 +3002,10 @@ begin
   Check(not IdemPropName('abcD',''));
   Check(not IdemPropName('','ABcFG'));
   Check(IdemPropName('',''));
+  Check(IdemPropNameU('a','A'));
+  Check(not IdemPropNameU('a','z'));
+  Check(IdemPropNameU('ab','AB'));
+  Check(IdemPropNameU('abc','ABc'));
   Check(IdemPropNameU('abcD','ABcd'));
   Check(not IdemPropNameU('abcD','ABcF'));
   Check(not IdemPropNameU('abcD','ABcFG'));
@@ -3007,12 +3016,9 @@ begin
   Check(IdemPropNameU('ABCDEF','ABCDEF'));
   Check(not IdemPropNameU('abcD',''));
   Check(not IdemPropNameU('','ABcFG'));
-  Check(IdemPropNameU('',''));
+  for i := 0 to 100 do
+    Check(IdemPropNameU(RawUTF8(StringOfChar('a',i)),RawUTF8(StringOfChar('A',i))));
   Check(UpperCaseU('abcd')='ABCD');
-  WinAnsi := 'aecD';
-  WinAnsi[2] := #$E9;
-  WinAnsi[3] := #$E7;
-  Check(UpperCaseU(WinAnsiToUTF8(WinAnsi))='AECD');
   Check(IdemPropNameU('abcDe',abcde,5));
   Check(not IdemPropNameU('abcD',abcde,5));
   Check(not IdemPropNameU('abcDF',abcde,5));
@@ -3021,6 +3027,10 @@ begin
   Check(not IdemPropName(abcde,abcde,4,5));
   Check(not IdemPropName(abcde,abcdf,5,5));
   {$endif DELPHI5OROLDER}
+  WinAnsi := 'aecD';
+  WinAnsi[2] := #$E9;
+  WinAnsi[3] := #$E7;
+  Check(UpperCaseU(WinAnsiToUTF8(WinAnsi))='AECD');
 end;
 
 procedure TTestLowLevelCommon._TSynTable;
