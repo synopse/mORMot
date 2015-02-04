@@ -15341,7 +15341,8 @@ begin
     fPropInfo.SetOrdProp(Instance,Value);
 end;
 
-procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   SetInt(Instance,GetInteger(Value));
 end;
@@ -15429,7 +15430,8 @@ begin
     Int32ToUtf8(i,Value);
 end;
 
-procedure TSQLPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var i,err: integer;
 begin
   if Value=nil then
@@ -15474,7 +15476,8 @@ procedure TSQLPropInfoRTTIChar.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be UTF-8 encoded
 end;
 
-procedure TSQLPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var i: integer;
 begin
   if (Value=nil) or (PInteger(Value)^=NULL_LOW) then
@@ -15551,7 +15554,8 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIInt64.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIInt64.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   fPropInfo.SetInt64Prop(Instance,GetInt64(Value));
 end;
@@ -15600,7 +15604,8 @@ begin
     ExtendedToStr(VFloat,DOUBLE_PRECISION,Value);
 end;
 
-procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var V: double;
     err: integer;
 begin
@@ -15694,7 +15699,8 @@ begin
   Value := Curr64ToStr(StrToCurr64(pointer(Value)));
 end;
 
-procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   if fPropInfo.SetterIsField then
     PInt64(fPropInfo.SetterAddr(Instance))^ := StrToCurr64(Value) else
@@ -15770,7 +15776,8 @@ begin
   DateTimeToIso8601TextVar(Iso8601ToDateTime(Value),'T',Value);
 end;
 
-procedure TSQLPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var V: TDateTime;
 begin
   Iso8601ToDateTimePUTF8CharVar(Value,0,V);
@@ -15795,7 +15802,8 @@ begin
   result := '';
 end;
 
-procedure TSQLPropInfoRTTIMany.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIMany.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
 end;
 
@@ -15866,7 +15874,8 @@ end;
 
 { TSQLPropInfoRTTIID }
 
-procedure TSQLPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   if TSQLRecord(Instance).fFill.JoinedFields then
     raise EORMException.CreateUTF8('%(%).SetValue after Create*Joined',[self,Name]);
@@ -15908,7 +15917,8 @@ begin
   end;
 end;                 
 
-procedure TSQLPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var valid: boolean;
     ValueLocalCopy: RawUTF8;
 begin
@@ -16020,7 +16030,8 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIAnsi.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   if Value=nil then
     fPropInfo.SetLongStrProp(Instance,'') else
@@ -16123,7 +16134,8 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,RawUTF8(Value));
 end;
@@ -16169,7 +16181,8 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIWinAnsi.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIWinAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   if Value=nil then
     fPropInfo.SetLongStrProp(Instance,'') else
@@ -16218,7 +16231,8 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawUnicode.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIRawUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   if Value=nil then
     fPropInfo.SetLongStrProp(Instance,'') else
@@ -16285,7 +16299,8 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,BlobToTSQLRawBlob(Value));
 end;
@@ -16381,7 +16396,8 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIWide.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIWide.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var Wide: WideString;
 begin
   UTF8ToWideString(Value,StrLen(Value),Wide);
@@ -16445,7 +16461,8 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 begin
   fPropInfo.SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(Value,StrLen(Value)));
 end;
@@ -16627,6 +16644,12 @@ var blob: RawByteString;
     wrapper: TDynArray;
 begin
   wrapper.Init(fPropType,GetFieldAddr(Instance)^);
+  if fIsObjArray then begin
+    if Value=nil then
+      ObjArrayClear(wrapper.Value^) else
+      wrapper.LoadFromJSON(Value);
+    exit;
+  end;
   if Value=nil then
     wrapper.Clear else
   if Base64MagicCheckAndDecode(Value,blob) then
@@ -16939,7 +16962,8 @@ begin
   result := RecordLoad(GetFieldAddr(Instance)^,P,fTypeInfo);
 end;
 
-procedure TSQLPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var data: RawByteString;
 begin
   TextToBinary(Value,data);
@@ -17066,7 +17090,8 @@ begin
   result := P+fRecordSize;
 end;
 
-procedure TSQLPropInfoRecordFixedSize.SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean);
+procedure TSQLPropInfoRecordFixedSize.SetValue(Instance: TObject; Value: PUTF8Char;
+  wasString: boolean);
 var data: RawByteString;
 begin
   TextToBinary(Value,data);
