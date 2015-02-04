@@ -2653,7 +2653,8 @@ type
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
     // - it will raise an EORMException in case of an unhandled type
-    class function CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer): TSQLPropInfo;
+    class function CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
+      aRaiseEORMExceptionIfNotHandled: boolean): TSQLPropInfo;
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
@@ -2896,10 +2897,12 @@ type
   /// information about a dynamic array published property
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
-    fDynArrayIsObjArray: boolean;
+    fIsObjArray: boolean;
     function GetDynArray(Instance: TObject): TDynArray;
       {$ifdef HASINLINE}inline;{$endif}
     function GetDynArrayElemType: PTypeInfo;
+    /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
+    procedure Serialize(Instance: TObject; var data: RawByteString); virtual;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
@@ -2930,7 +2933,8 @@ type
     property DynArrayElemType: PTypeInfo read GetDynArrayElemType;
     /// equals TRUE if this dynamic array is in fact a storage of T*ObjArray
     // - as previously registered via TJSONSerializer.RegisterObjArrayForJSON()
-    property DynArrayIsObjArray: boolean read fDynArrayIsObjArray;
+    // - if the field is a T*ObjArray, the column will be stored as text
+    property DynArrayIsObjArray: boolean read fIsObjArray;
   end;
 
 {$ifndef NOVARIANTS}
@@ -6778,6 +6782,7 @@ type
     fFieldNamesMatchInternal: TSQLFieldBits;
     fMapAutoKeywordFields: boolean;
     fAutoComputeSQL: boolean;
+    fMappingVersion: cardinal;
     /// fill fRowIDFieldName/fSQL with the current information
     procedure ComputeSQL;
   public
@@ -6893,6 +6898,9 @@ type
     property FieldNamesMatchInternal: TSQLFieldBits read fFieldNamesMatchInternal;
     /// equals TRUE if MapAutoKeywordFields has been defined
     property AutoMapKeywordFields: boolean read fMapAutoKeywordFields;
+    /// each time MapField/MapFields is called, this number will increase
+    // - can be used to track mapping changes in real time
+    property MappingVersion: cardinal read fMappingVersion;
   end;
 
   /// dynamic array of TSQLModelRecordProperties
@@ -15146,7 +15154,9 @@ end;
 
 { TSQLPropInfoRTTI }
 
-class function TSQLPropInfoRTTI.CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer): TSQLPropInfo;
+class function TSQLPropInfoRTTI.CreateFrom(
+  aPropInfo: PPropInfo; aPropIndex: integer;
+  aRaiseEORMExceptionIfNotHandled: boolean): TSQLPropInfo;
 var aSQLFieldType: TSQLFieldType;
     aType: PTypeInfo;
     C: TSQLPropInfoRTTIClass;
@@ -15221,10 +15231,12 @@ begin
     end;
   end;
   if C=nil then
-    raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
-      [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType)){$ifndef FPC}^{$endif},
-       GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind)){$ifndef FPC}^{$endif},aPropInfo^.Name]);
-  result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+    if aRaiseEORMExceptionIfNotHandled then
+      raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
+        [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType)){$ifndef FPC}^{$endif},
+         GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind)){$ifndef FPC}^{$endif},aPropInfo^.Name]) else
+      result := nil else
+    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
 end;
 
 function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
@@ -16518,20 +16530,8 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
   aPropIndex: integer; aSQLFieldType: TSQLFieldType);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  fDynArrayIsObjArray := ObjArraySerializers.IsObjArray(
+  fIsObjArray := ObjArraySerializers.IsObjArray(
     aPropInfo^.PropType{$ifndef FPC}^{$endif})
-end;
-
-procedure TSQLPropInfoRTTIDynArray.CopyValue(Source, Dest: TObject);
-begin
-  GetDynArray(Dest).Copy(GetDynArray(Source));
-end;
-
-procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TFileBufferWriter);
-var Value: RawByteString;
-begin
-  Value := GetDynArray(Instance).SaveTo;
-  W.Write(pointer(Value),length(Value));
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
@@ -16539,18 +16539,43 @@ begin
   result.Init(fPropType,GetFieldAddr(Instance)^);
 end;
 
+procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
+  var data: RawByteString);
+begin
+  if fIsObjArray then
+    data := DynArraySaveJSON(GetFieldAddr(Instance)^,fPropType) else
+    data := GetDynArray(Instance).SaveTo;
+end;
+
+procedure TSQLPropInfoRTTIDynArray.CopyValue(Source, Dest: TObject);
+begin
+  if fIsObjArray then
+    raise EORMException.CreateUTF8('%.CopyValue() not handled for T*ObjArray',[self]);
+  GetDynArray(Dest).Copy(GetDynArray(Source));
+end;
+
+procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TFileBufferWriter);
+var Value: RawByteString;
+begin
+  Serialize(Instance,Value);
+  if fIsObjArray then
+    W.Write(Value) else
+    W.WriteBinary(Value);
+end;
+
 function TSQLPropInfoRTTIDynArray.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var tmp: RawByteString;
 begin
-  tmp := GetDynArray(Instance).SaveTo;
+  Serialize(Instance,tmp);
   result := crc32c(0,pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  result := GetDynArray(Instance).SaveTo;
-  BinaryToText(result,ToSQL,wasSQLString);
+  Serialize(Instance,RawByteString(result));
+  if not fIsObjArray then
+    BinaryToText(result,ToSQL,wasSQLString);
 end;
 
 {$ifndef NOVARIANTS}
@@ -16585,8 +16610,15 @@ begin
 end;
 
 function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+var tmp: RawByteString; // LoadFromJSON() may change the input buffer
 begin
-  result := GetDynArray(Instance).LoadFrom(P);
+  with GetDynArray(Instance) do
+  if fIsObjArray then begin
+    tmp := FromVarString(PByte(P));
+    LoadFromJSON(pointer(tmp));
+    result := P;
+  end else
+    result := LoadFrom(P);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
@@ -16604,27 +16636,37 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
+function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
+  const aValue: TSQLVar): boolean;
 begin
   if aValue.VType=ftBlob then
     result := GetDynArray(Instance).LoadFrom(aValue.VBlob)<>nil else
     result := inherited SetFieldSQLVar(Instance,aValue);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TSQLPropInfoRTTIDynArray.GetJSONValues(Instance: TObject;
+  W: TJSONSerializer);
 var tmp: RawByteString;
 begin
-  tmp := GetDynArray(Instance).SaveTo;
-  W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
+  if fIsObjArray then
+    W.AddDynArrayJSONAsString(fPropType,GetFieldAddr(Instance)^) else begin
+    Serialize(Instance,tmp);
+    W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
+  end;
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
-  var temp: RawByteString);
+procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
+  var aValue: TSQLVar; var temp: RawByteString);
 begin
-  temp := GetDynArray(Instance).SaveTo;
-  aValue.VType := ftBlob;
-  aValue.VBlob := pointer(temp);
-  aValue.VBlobLen := length(temp);
+  Serialize(Instance,temp);
+  if fIsObjArray then begin
+    aValue.VType := ftUTF8;
+    aValue.VText := pointer(temp);
+  end else begin
+    aValue.VType := ftBlob;
+    aValue.VBlob := pointer(temp);
+    aValue.VBlobLen := length(temp);
+  end;
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: PTypeInfo;
@@ -23153,7 +23195,7 @@ begin
   // free any registered T*ObjArray
   if props.DynArrayFieldsHasObjArray then
     for i := 0 to high(props.DynArrayFields) do
-      if props.DynArrayFields[i].DynArrayIsObjArray then
+      if props.DynArrayFields[i].fIsObjArray then
         ObjArrayClear(props.DynArrayFields[i].fPropInfo^.GetFieldAddr(self)^);
   inherited;
 end;
@@ -23893,6 +23935,7 @@ begin
   fProps.Fields.NamesToRawUTF8DynArray(fFieldNames);
   FillChar(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
   fAutoComputeSQL := AutoComputeSQL;
+  fMappingVersion := 0;
   if fAutoComputeSQL then
     ComputeSQL;
 end;
@@ -23922,6 +23965,7 @@ begin
         exclude(fFieldNamesMatchInternal,int+1);
     end;
   end;
+  inc(fMappingVersion);
   if fAutoComputeSQL then
     ComputeSQL;
   result := @self;
@@ -35915,7 +35959,7 @@ constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
       exit; // no RTTI information (e.g. reached TObject level)
     AddParentsFirst(aClassType.ClassParent);
     for i := 1 to InternalClassPropInfo(aClassType,P) do begin
-      Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count));
+      Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count,true));
       P := P^.Next;
     end;
   end;
@@ -36031,7 +36075,7 @@ begin
             raise EModelException.CreateUTF8('dup index % for %.% and %.% properties',
               [DynArrayIndex,Table,Name,Table,DynArrayFields[j].Name]);
         DynArrayFields[nDynArray] := TSQLPropInfoRTTIDynArray(F);
-        if TSQLPropInfoRTTIDynArray(F).DynArrayIsObjArray then
+        if TSQLPropInfoRTTIDynArray(F).fIsObjArray then
           DynArrayFieldsHasObjArray := true;
         inc(nDynArray);
         goto Simple;
@@ -42250,4 +42294,4 @@ end.
 
 
 
-
+
