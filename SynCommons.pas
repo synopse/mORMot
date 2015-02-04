@@ -466,6 +466,8 @@ unit SynCommons;
     DynArrayLoadJSON() and DynArraySaveJSON() to be used e.g. for custom
     record JSON serialization, using TDynArrayJSONCustomReader/Writer
     callbacks and/or RegisterCustomJSONSerializerFromText(), or enhanced RTTI
+  - added TTextWriter.AddDynArrayJSONAsString method, and moved
+    TTextWriter.WriteObjectAsString from TJSONSerializer
   - added TTextWriter.UnRegisterCustomJSONSerializer() method
   - added TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType() method
   - added TTextWriter.AddTypedJSON() and AddCRAndIdent methods
@@ -5333,6 +5335,8 @@ type
     fEchoBuf: RawUTF8;
     fEchoStart: integer;
     fEchos: array of TOnTextWriterEcho;
+    /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
+    fInternalJSONWriter: TTextWriter;
     function GetLength: cardinal;
     procedure SetStream(aStream: TStream);
     function EchoFlush: integer;
@@ -5665,6 +5669,9 @@ type
     // - to be used e.g. for custom record JSON serialization, within a
     // TDynArrayJSONCustomWriter callback
     procedure AddDynArrayJSON(aTypeInfo: pointer; var aValue); overload;
+    /// same as AddDynArrayJSON(), but will double all internal " and bound with "
+    // - this implementation will avoid most memory allocations
+    procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
     // a custom serialization, in case of a previous registration via
@@ -5686,6 +5693,18 @@ type
     // - will handle tkClass,tkEnumeration,tkRecord,tkDynArray,tkVariant types
     // - write null for other types
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue); virtual;
+    /// serialize as JSON the given object
+    // - this default implementation will write null, or only write the
+    // class name and pointer if FullExpand is true - use TJSONSerializer.
+    // WriteObject method for full RTTI handling
+    // - default implementation will write TList/TCollection/TStrings/TRawUTF8List
+    // as appropriate array of class name/pointer (if woFullExpand is set)
+    procedure WriteObject(Value: TObject;
+      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); virtual;
+    /// same as WriteObject(), but will double all internal " and bound with "
+    // - this implementation will avoid most memory allocations
+    procedure WriteObjectAsString(Value: TObject;
+      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// append a JSON value, array or document as simple XML content
     // - you can use JSONBufferToXML() and JSONToXML() functions as wrappers
     // - this method is called recursively to handle all kind of JSON values
@@ -5806,14 +5825,7 @@ type
     /// append some wide chars to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLineW(P: PWord; Len: PtrInt);
-    /// serialize as JSON the given object
-    // - this default implementation will write null, or only write the
-    // class name and pointer if FullExpand is true - use TJSONSerializer.
-    // WriteObject method for full RTTI handling
-    // - default implementation will write TList/TCollection/TStrings/TRawUTF8List
-    // as appropriate array of class name/pointer (if woFullExpand is set)
-    procedure WriteObject(Value: TObject;
-      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); virtual;
+
     /// return the last char appended
     function LastChar: AnsiChar;
     /// how many bytes are currently in the internal buffer and not on disk
@@ -6506,7 +6518,8 @@ type
     /// append 8 bytes of data at the current position
     procedure Write8(const Data8Bytes); {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded text at the current position
-    // - will write the string length, then the string content
+    // - will write the string length, then the string content, as expected
+    // by the FromVarString() function
     procedure Write(const Text: RawByteString); overload;
     /// append some UTF-8 encoded text at the current position
     // - will write the string length, then the string content
@@ -33108,6 +33121,18 @@ begin
   Add(']','}');
 end;
 
+procedure TTextWriter.WriteObjectAsString(Value: TObject;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  Add('"');
+  if fInternalJSONWriter=nil then
+    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
+    fInternalJSONWriter.CancelAll;
+  fInternalJSONWriter.WriteObject(Value,Options);
+  AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
+  Add('"');
+end;
+
 class procedure TTextWriter.RegisterCustomJSONSerializer(aTypeInfo: pointer;
   aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 begin
@@ -33268,6 +33293,17 @@ var DynArray: TDynArray;
 begin
   DynArray.Init(aTypeInfo,aValue);
   AddDynArrayJSON(DynArray);
+end;
+
+procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
+begin
+  Add('"');
+  if fInternalJSONWriter=nil then
+    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
+    fInternalJSONWriter.CancelAll;
+  fInternalJSONWriter.AddDynArrayJSON(aTypeInfo,aValue);
+  AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
+  Add('"');
 end;
 
 procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
@@ -34580,6 +34616,7 @@ begin
   if fStreamIsOwned then
     fStream.Free;
   FreeMem(fTempBuf);
+  fInternalJSONWriter.Free; 
   inherited;
 end;
 
