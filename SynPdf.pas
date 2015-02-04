@@ -267,7 +267,8 @@ unit SynPdf;
     thanks MChaos for the proposal!
   - added Harald Simon's patch for EMR_BITBLT/EMR_STRETCHBLT
   - added PDF Group Content methods for creating layered content - thanks
-    Harald for the patch! see SynPdfLayers.dpr in sample 05 
+    Harald for the patch! see SynPdfLayers.dpr in sample 05
+  - added TPdfFormWithCanvas class - thanks Harald! see SynPdfFormCanvas.dpr
 
 }
 
@@ -2653,6 +2654,25 @@ type
   public
     /// create a form XObject from a supplied TMetaFile
     constructor Create(aDoc: TPdfDocumentGDI; aMetaFile: TMetafile); reintroduce;
+  end;
+
+  /// a form XObject with a Canvas for drawing
+  // - once created, you can create this XObject, then draw it anywhere on
+  // any page - see sample
+  TPdfFormWithCanvas = class(TPdfXObject)
+  private
+    FFontList: TPdfDictionary;
+    FPage: TPdfPage;
+    FCanvas: TPdfCanvas;
+  public
+    /// create a form XObject with TPDFCanvas
+    constructor Create(aDoc: TPdfDocument; W, H: Integer); reintroduce;
+    /// release used memory
+    destructor Destroy; override;
+    /// close the internal canvas
+    procedure CloseCanvas;
+    /// access to the private canvas associated with the PDF form XObject
+    property Canvas: TPdfCanvas read FCanvas;
   end;
 
   /// used to handle compressed object stream (in PDF 1.5 format)
@@ -10318,6 +10338,40 @@ begin
   end;
 end;
 
+{ TPdfFormWithCanvas }
+
+constructor TPdfFormWithCanvas.Create(aDoc: TPdfDocument; W, H: Integer);
+var FResources: TPdfDictionary;
+begin
+  inherited Create(aDoc,true);
+  FResources := TPdfDictionary.Create(aDoc.FXref);
+  FFontList := TPdfDictionary.Create(nil);
+  FResources.AddItem('Font',FFontList);
+  FResources.AddItem('ProcSet',TPdfArray.CreateNames(nil,['PDF','Text','ImageC']));
+  FPage := TPdfPage.Create(nil);
+  FCanvas := TPdfCanvas.Create(aDoc);
+  FCanvas.FPage:=FPage;
+  FCanvas.FPageFontList := FFontList;
+  FCanvas.FContents := self;
+  FCanvas.FFactor := 1;
+  FAttributes.AddItem('Type','XObject');
+  FAttributes.AddItem('Subtype','Form');
+  FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,H,W]));
+  FAttributes.AddItem('Matrix',TPdfRawText.Create('[1 0 0 1 0 0]'));
+  FAttributes.AddItem('Resources',FResources);
+end;
+
+destructor TPdfFormWithCanvas.Destroy;
+begin
+  CloseCanvas;
+  inherited;
+end;
+
+procedure TPdfFormWithCanvas.CloseCanvas;
+begin
+  FreeAndNil(FCanvas);
+  FreeAndNil(FPage);
+end;
 
 {$ifdef USE_PDFSECURITY}
 
