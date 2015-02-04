@@ -117,8 +117,8 @@ unit mORMotHttpClient;
        easy remote logging to our LogView tool, running as server process
      - added TSQLHttpClientWinGeneric.IgnoreSSLCertificateErrors property
        to set the corresponding parameter for the underlying connection
-        
-
+     - added AuthScheme and AuthUserName/AuthPassword properties, for
+       authentication - only implemented at TSQLHttpClientWinHTTP level yet
 }
 
 interface
@@ -253,7 +253,7 @@ type
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout: DWORD;
     fHttps: boolean;
-    fIgnoreSSLCertificateErrors: boolean;
+    fExtendedOptions: THttpRequestExtendedOptions;
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -287,7 +287,17 @@ type
     /// allows to ignore untrusted SSL certificates
     // - similar to adding a security exception for a domain in the browser
     property IgnoreSSLCertificateErrors: boolean
-      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+      read fExtendedOptions.IgnoreSSLCertificateErrors
+      write fExtendedOptions.IgnoreSSLCertificateErrors;
+    /// optional Authentication Scheme
+    property AuthScheme: THttpRequestAuthentication
+      read fExtendedOptions.AuthScheme write fExtendedOptions.AuthScheme;
+    /// optional User Name for Authentication
+    property AuthUserName: SynUnicode
+      read fExtendedOptions.AuthUserName write fExtendedOptions.AuthUserName;
+    /// optional Password for Authentication
+    property AuthPassword: SynUnicode
+      read fExtendedOptions.AuthPassword write fExtendedOptions.AuthPassword;
   end;
 
   /// HTTP/1.1 RESTFUL JSON mORMot Client class using WinINet API
@@ -517,7 +527,7 @@ begin
         raise ECommunicationException.CreateUTF8('fWinAPIClass=nil for %',[self]);
       fWinAPI := fWinAPIClass.Create(fServer,fPort,fHttps,fProxyName,fProxyByPass,
         fSendTimeout,fReceiveTimeout);
-      fWinAPI.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+      fWinAPI.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
         // global SHA-256 / AES-256-CTR encryption + SynLZ compression

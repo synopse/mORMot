@@ -172,7 +172,9 @@ unit SynCrtSock;
     resource retrieval using either WinHTTP or WinINet APIs
   - added TURI structure, ready to parse a supplied HTTP URI
   - added 'ConnectionID: 1234578' to the HTTP headers - request [0636eeec54]
-  - added TWinHTTP.IgnoreSSLCertificateErrors property (proposal by EMartin)
+  - added TWinHttpAPI.IgnoreSSLCertificateErrors property (proposal by EMartin)
+  - added TWinHttpAPI AuthScheme and AuthUserName/AuthPassword properties, for
+    authentication - only implemented at TWinHttp level (thanks Eric Grange)
   - fixed TCrtSocket.BytesIn and TCrtSocket.BytesOut properties
   - fixed ticket [82df275784] TWinHttpAPI with responses without Content-Length
   - fixed ticket [f0749956af] TWinINet does not work with HTTPS servers
@@ -1287,10 +1289,26 @@ type
     function URI: RawByteString;
   end;
 
+  /// the supported authentication schemes which may be used by HTTP clients
+  // - supported only by TWinHTTP class yet
+  THttpRequestAuthentication = (wraNone,wraBasic,wraDigest,wraNegotiate);
+
+  /// a record to set some extended options for HTTP clients
+  // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
+  // the actual SynCrtSock TWinHttpApi implementation class
+  // - AuthScheme and AuthUserName/AuthPassword properties are handled
+  // by the TWinHttp class only by now
+  THttpRequestExtendedOptions = record
+    IgnoreSSLCertificateErrors: Boolean;
+    AuthUserName: SynUnicode;
+    AuthPassword: SynUnicode;
+    AuthScheme: THttpRequestAuthentication;
+  end;
+
 {$ifdef USEWININET}
-  {/ a class to handle HTTP/1.1 request using either WinINet, either WinHTTP API
-    - has a common behavior as THttpClientSocket()
-    - this abstract class will be implemented e.g. with TWinINet or TWinHttp }
+  /// a class to handle HTTP/1.1 request using either WinINet, either WinHTTP API
+  // - has a common behavior as THttpClientSocket()
+  // - this abstract class will be implemented e.g. with TWinINet or TWinHttp
   TWinHttpAPI = class
   protected
     fServer: RawByteString;
@@ -1299,6 +1317,7 @@ type
     fPort: cardinal;
     fHttps: boolean;
     fKeepAlive: cardinal;
+    fExtendedOptions: THttpRequestExtendedOptions;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -1307,8 +1326,6 @@ type
     fCompressHeader: THttpSocketCompressSet;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
-    /// ignore SSL certifcate errors
-    fIgnoreSSLCertificateErrors: Boolean;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
     procedure InternalRequest(const method, aURL: RawByteString); virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
@@ -1318,7 +1335,7 @@ type
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
     function InternalReadData(var Data: RawByteString; Read: integer): cardinal; virtual; abstract;
     class function InternalREST(const url,method,data,header: RawByteString; 
-      aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
+      aIgnoreSSLCertificateErrors: boolean): RawByteString;
   public
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
@@ -1349,7 +1366,7 @@ type
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Get() but either TWinHTTP.Get() or TWinINet.Get() methods
     class function Get(const aURI: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1359,7 +1376,7 @@ type
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Post() but either TWinHTTP.Post() or TWinINet.Post() methods
     class function Post(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1369,7 +1386,7 @@ type
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Put() but either TWinHTTP.Put() or TWinINet.Put() methods
     class function Put(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1377,7 +1394,7 @@ type
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Delete() but either TWinHTTP.Delete() or TWinINet.Delete()
     class function Delete(const aURI: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=False): RawByteString;
+      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -1400,10 +1417,24 @@ type
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
     property ProxyByPass: RawByteString read fProxyByPass;
+    /// internal structure used to store extended options
+    // - will be replicated by IgnoreSSLCertificateErrors and Auth* properties
+    property ExtendedOptions: THttpRequestExtendedOptions
+      read fExtendedOptions write fExtendedOptions;
     /// allows to ignore untrusted SSL certificates
     // - similar to adding a security exception for a domain in the browser
     property IgnoreSSLCertificateErrors: boolean
-      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+      read fExtendedOptions.IgnoreSSLCertificateErrors
+      write fExtendedOptions.IgnoreSSLCertificateErrors;
+    /// optional Authentication Scheme
+    property AuthScheme: THttpRequestAuthentication
+      read fExtendedOptions.AuthScheme write fExtendedOptions.AuthScheme;
+    /// optional User Name for Authentication
+    property AuthUserName: SynUnicode
+      read fExtendedOptions.AuthUserName write fExtendedOptions.AuthUserName;
+    /// optional Password for Authentication
+    property AuthPassword: SynUnicode
+      read fExtendedOptions.AuthPassword write fExtendedOptions.AuthPassword;
   end;
 
   {/ a class to handle HTTP/1.1 request using the WinINet API
@@ -1441,21 +1472,21 @@ type
     property ErrorCode: DWORD read fCode;
   end;
 
-  {/ a class to handle HTTP/1.1 request using the WinHTTP API
-   - has a common behavior as THttpClientSocket() but seems to be faster
-     over a network and is able to retrieve the current proxy settings
-     (if available) and handle secure https connection - so it seems to be the
-     class to use in your client programs
-   - WinHTTP does not share any proxy settings with Internet Explorer.
-     The WinHTTP proxy configuration is set by either
-     proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
-     netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
-     you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
-     the current user's proxy settings for Internet Explorer (under 64 bit
-     Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-     call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
-   - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
-     back-end server applications that require access to an HTTP client stack }
+  /// a class to handle HTTP/1.1 request using the WinHTTP API
+  // - has a common behavior as THttpClientSocket() but seems to be faster
+  // over a network and is able to retrieve the current proxy settings
+  // (if available) and handle secure https connection - so it seems to be the
+  // class to use in your client programs
+  // - WinHTTP does not share any proxy settings with Internet Explorer.
+  // The WinHTTP proxy configuration is set by either
+  // proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
+  // netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
+  // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
+  // the current user's proxy settings for Internet Explorer (under 64 bit
+  // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
+  // back-end server applications that require access to an HTTP client stack 
   TWinHTTP = class(TWinHttpAPI)
   protected
     // those internal methods will raise an EOSError exception on error
@@ -6116,7 +6147,7 @@ begin
   try
     with self.Create(Server,Port,Https) do
     try
-      fIgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+      IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
       Request(Address,method,0,header,data,'',outHeaders,result);
     finally
       Free;
@@ -6307,6 +6338,8 @@ function WinHttpSetTimeouts(hInternet: HINTERNET; dwResolveTimeout: DWORD;
   dwConnectTimeout: DWORD; dwSendTimeout: DWORD; dwReceiveTimeout: DWORD): BOOL; stdcall; external winhttpdll;
 function WinHttpSetOption(hInternet: HINTERNET; dwOption: DWORD;
   lpBuffer: Pointer; dwBufferLength: DWORD): BOOL; stdcall; external winhttpdll;
+function WinHttpSetCredentials(hRequest: HINTERNET; AuthTargets: DWORD; AuthScheme: DWORD;
+  pwszUserName: PWideChar; pwszPassword: PWideChar; pAuthParams: Pointer) : BOOL; stdcall; external winhttpdll;
 
 destructor TWinHTTP.Destroy;
 begin
@@ -6414,9 +6447,30 @@ const
     SECURITY_FLAG_IGNORE_CERT_CN_INVALID or
     SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
 
+  WINHTTP_AUTH_TARGET_SERVER = 0;
+  WINHTTP_AUTH_TARGET_PROXY = 1;
+  WINHTTP_AUTH_SCHEME_BASIC = $00000001;
+  WINHTTP_AUTH_SCHEME_NTLM = $00000002;
+  WINHTTP_AUTH_SCHEME_PASSPORT = $00000004;
+  WINHTTP_AUTH_SCHEME_DIGEST = $00000008;
+  WINHTTP_AUTH_SCHEME_NEGOTIATE = $00000010;
+
 procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
 var L: integer;
+    winAuth: DWORD;
 begin
+  with fExtendedOptions do
+  if AuthScheme<>wraNone then begin
+    case AuthScheme of
+    wraBasic: winAuth := WINHTTP_AUTH_SCHEME_BASIC;
+    wraDigest: winAuth := WINHTTP_AUTH_SCHEME_DIGEST;
+    wraNegotiate: winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
+    else raise EWinHTTP.CreateFmt('Unsupported AuthScheme=%d',[ord(AuthScheme)]);
+    end;
+    if not WinHttpSetCredentials(fRequest,WINHTTP_AUTH_TARGET_SERVER,
+       winAuth,pointer(AuthUserName),pointer(AuthPassword),nil) then
+      RaiseLastOSError;
+  end;
   if fHTTPS and IgnoreSSLCertificateErrors then 
     if not WinHttpSetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
