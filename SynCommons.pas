@@ -983,6 +983,8 @@ type
   PByteDynArray = ^TByteDynArray;
   TObjectDynArray = array of TObject;
   PObjectDynArray = ^TObjectDynArray;
+  TPersistentDynArray = array of TPersistent;
+  PPersistentDynArray = ^TPersistentDynArray;
   TPointerDynArray = array of pointer;
   PPointerDynArray = ^TPointerDynArray;
   TMethodDynArray = array of TMethod;
@@ -4278,7 +4280,6 @@ type
     property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
   end;
 
-  
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - could be used as such (note the T*ObjArray type naming convention):

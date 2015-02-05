@@ -120,6 +120,7 @@ type
   // - cqrsBadRequest would indicate that the method was not called in the
   // expected workflow sequence
   // - cqrsNotFound appear after a I*Query SelectBy*() method with no match
+  // - cqrsNoMoreData indicates a GetNext*() method has no more matching data
   // - cqrsDataLayerError indicates a low-level error at database level
   // - cqrsInvalidContent for any I*Command method with invalid aggregate input
   // value (e.g. a missing field)
@@ -130,7 +131,7 @@ type
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
-     cqrsNotFound, cqrsDataLayerError,
+     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand);
 
@@ -322,6 +323,7 @@ type
     fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
     fAggregate: TPersistentClass;
+    fAggregateHasCustomCreate: boolean;
     fTable: TSQLRecordClass;
     fPropsMapping: TSQLRecordPropertiesMapping;
     fPropsMappingVersion: cardinal;
@@ -345,11 +347,16 @@ type
     destructor Destroy; override;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
+    /// create a new DDD Aggregate instance
+    function AggregateCreate: TPersistent;
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
-    // TSQLRecord fields
+    // TSQLRecord fields, so that it would be compatible with ORM's JSON
     procedure AggregateToJSON(aAggregate: TPersistent; W: TJSONSerializer;
-      ORMMappedFields: boolean; aID: TID);
+      ORMMappedFields: boolean; aID: TID); overload;
+    /// serialize a DDD Aggregate as JSON RawUTF8
+    function AggregateToJSON(aAggregate: TPersistent; ORMMappedFields: boolean;
+      aID: TID): RawUTF8; overload;
     /// convert a DDD Aggregate into an ORM TSQLRecord instance
     procedure AggregateToTable(aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
@@ -378,9 +385,15 @@ type
     fORM: TSQLRecord;
     function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; override;
-    function ORMSelectOne(WhereClauseFmt: PUTF8Char;
+    // one-by-one retrieval in local ORM: TSQLRecord
+    function ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
     function ORMGetAggregate(aAggregate: TPersistent): TCQRSResult;
+    // list retrieval - using cursor-like access via ORM.FillOne
+    function ORMSelectAll(ORMWhereClauseFmt: PUTF8Char;
+      const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
+    function ORMGetNextAggregate(aAggregate: TPersistent; aRewind: boolean=false): TCQRSResult;
+    function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
   public
     /// you should not have to use this constructor, since the instances would
     // be injected by TDDDRepositoryRestObjectMapping.InternalResolve
@@ -611,6 +624,7 @@ begin
   fImplementation := aImplementation;
   fRest := aRest;
   fAggregate := aAggregate;
+  fAggregateHasCustomCreate := fAggregate.InheritsFrom(TPersistentWithCustomCreate);
   fTable := aTable;
   fInterface := TInterfaceFactory.Get(aInterface);
   if fInterface=nil then
@@ -635,91 +649,12 @@ begin
   inherited;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.AggregateClear(
-  aAggregate: TPersistent);
-var i: integer;
-begin
-  if aAggregate<>nil then
-    for i := 0 to fProps.Count-1 do
-      fProps.List[i].SetValue(aAggregate,nil,false);
-end;
-
-procedure TDDDRepositoryRestObjectMapping.AggregateToJSON(
-  aAggregate: TPersistent; W: TJSONSerializer; ORMMappedFields: boolean;
-  aID: TID);
-var i: integer;
-begin
-  ComputeMapping;
-  if aAggregate=nil then begin
-    W.AddShort('null');
-    exit;
-  end;
-  W.Add('{');
-  if aID<>0 then begin
-    W.AddShort('"RowID":');
-    W.Add(aID);
-    W.Add(',');
-  end;
-  for i := 0 to fProps.Count-1 do begin
-    if ORMMappedFields then
-      if fAggregateToTable[i]=nil then
-        continue else
-        W.AddFieldName(fAggregateToTable[i].Name) else
-      W.AddFieldName(fProps.List[i].Name);
-    fProps.List[i].GetJSONValues(aAggregate,W);
-    W.Add(',');
-  end;
-  W.CancelLastComma;
-  W.Add('}');
-end;
-
-procedure TDDDRepositoryRestObjectMapping.AggregateToTable(
-  aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
-var i: integer;
-    Value: RawUTF8;
-    wasString: boolean;
-begin
-  ComputeMapping;
-  if aDest=nil then
-    raise EDDDRepository.CreateUTF8(self,'%.AggregateToTable(%,%,%=nil)',
-      [self,aAggregate,aID,fTable]);
-  aDest.ClearProperties;
-  aDest.ID := aID;
-  if aAggregate<>nil then
-    for i := 0 to fProps.Count-1 do
-      if fAggregateToTable[i]<>nil then begin
-        fProps.List[i].GetValueVar(aAggregate,false,Value,@wasString);
-        fAggregateToTable[i].SetValue(aDest,pointer(Value),wasString);
-      end;
-end;
-
-procedure TDDDRepositoryRestObjectMapping.AggregateFromTable(
-  aSource: TSQLRecord; aAggregate: TPersistent);
-var i: integer;
-    Value: RawUTF8;
-    wasString: boolean;
-begin
-  ComputeMapping;
-  if aAggregate=nil then
-    raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
-  if aSource=nil then begin
-    AggregateClear(aAggregate);
-    exit;
-  end;
-  for i := 0 to fProps.Count-1 do begin
-    if fAggregateToTable[i]<>nil then
-      fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString) else
-      Value := '';
-    fProps.List[i].SetValue(aAggregate,pointer(Value),wasString);
-  end;
-end;
-
 procedure TDDDRepositoryRestObjectMapping.ComputeMapping;
 procedure EnsureCompatible(agg,rec: TSQLPropInfo);
 begin
   if agg.SQLDBFieldType<>rec.SQLDBFieldType then
     raise EDDDRepository.CreateUTF8(self,
-      '% mapping types do not match at DB level: %.%:%=% and %.%:%=%',[self,
+      '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
       fAggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName,
       fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName]);
 end;
@@ -753,6 +688,109 @@ begin
     result := false else begin
     IInterface(Obj) := fImplementation.Create(self);
     result := true;
+  end;
+end;
+
+procedure TDDDRepositoryRestObjectMapping.AggregateClear(
+  aAggregate: TPersistent);
+var i: integer;
+begin
+  if aAggregate<>nil then
+    for i := 0 to fProps.Count-1 do
+      fProps.List[i].SetValue(aAggregate,nil,false);
+end;
+
+function TDDDRepositoryRestObjectMapping.AggregateCreate: TPersistent;
+begin
+  if fAggregateHasCustomCreate then
+    result := TPersistentWithCustomCreateClass(fAggregate).Create else
+    result := fAggregate.Create;
+end;
+
+procedure TDDDRepositoryRestObjectMapping.AggregateToJSON(
+  aAggregate: TPersistent; W: TJSONSerializer; ORMMappedFields: boolean;
+  aID: TID);
+var i: integer;
+begin
+  ComputeMapping;
+  if aAggregate=nil then begin
+    W.AddShort('null');
+    exit;
+  end;
+  W.Add('{');
+  if aID<>0 then begin
+    W.AddShort('"RowID":');
+    W.Add(aID);
+    W.Add(',');
+  end;
+  for i := 0 to fProps.Count-1 do begin
+    if ORMMappedFields then
+      if fAggregateToTable[i]=nil then
+        continue else
+        W.AddFieldName(fAggregateToTable[i].Name) else
+      W.AddFieldName(fProps.List[i].Name);
+    fProps.List[i].GetJSONValues(aAggregate,W);
+    W.Add(',');
+  end;
+  W.CancelLastComma;
+  W.Add('}');
+end;
+
+function TDDDRepositoryRestObjectMapping.AggregateToJSON(
+  aAggregate: TPersistent; ORMMappedFields: boolean; aID: TID): RawUTF8;
+var W: TJSONSerializer;
+begin
+  if aAggregate=nil then begin
+    result := 'null';
+    exit;
+  end;
+  W := TJSONSerializer.CreateOwnedStream;
+  try
+    AggregateToJSON(aAggregate,W,ORMMappedFields,aID);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TDDDRepositoryRestObjectMapping.AggregateToTable(
+  aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
+var i: integer;
+    Value: RawUTF8;
+    wasString: boolean;
+begin
+  ComputeMapping;
+  if aDest=nil then
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateToTable(%,%,%=nil)',
+      [self,aAggregate,aID,fTable]);
+  aDest.ClearProperties;
+  aDest.ID := aID;
+  if aAggregate<>nil then
+    for i := 0 to fProps.Count-1 do
+    if fAggregateToTable[i]<>nil then begin
+      fProps.List[i].GetValueVar(aAggregate,false,Value,@wasString);
+      fAggregateToTable[i].SetValueVar(aDest,Value,wasString);
+    end;
+end;
+
+procedure TDDDRepositoryRestObjectMapping.AggregateFromTable(
+  aSource: TSQLRecord; aAggregate: TPersistent);
+var i: integer;
+    Value: RawUTF8;
+    wasString: boolean;
+begin
+  ComputeMapping;
+  if aAggregate=nil then
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
+  if aSource=nil then begin
+    AggregateClear(aAggregate);
+    exit;
+  end;
+  for i := 0 to fProps.Count-1 do begin
+    if fAggregateToTable[i]<>nil then
+      fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString) else
+      Value := '';
+    fProps.List[i].SetValueVar(aAggregate,Value,wasString);
   end;
 end;
 
@@ -822,13 +860,25 @@ begin
     ORM.ClearProperties;
 end;
 
-function TDDDRepositoryRestQuery.ORMSelectOne(WhereClauseFmt: PUTF8Char;
+function TDDDRepositoryRestQuery.ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
    const Bounds: array of const; ForcedBadRequest: boolean): TCQRSResult;
 begin
   ORMBegin(qaSelect,result);
   if ForcedBadRequest then
     ORMResult(cqrsBadRequest) else
-    if Mapping.Rest.Retrieve(WhereClauseFmt,[],Bounds,ORM) then
+    if Mapping.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM) then
+      ORMResult(cqrsSuccess) else
+      ORMResult(cqrsNotFound);
+end;
+
+function TDDDRepositoryRestQuery.ORMSelectAll(
+  ORMWhereClauseFmt: PUTF8Char; const Bounds: array of const;
+  ForcedBadRequest: boolean): TCQRSResult;
+begin
+  ORMBegin(qaSelect,result);
+  if ForcedBadRequest then
+    ORMResult(cqrsBadRequest) else
+    if ORM.FillPrepare(Mapping.Rest,ORMWhereClauseFmt,[],Bounds) then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsNotFound);
 end;
@@ -839,6 +889,40 @@ begin
   if ORMBegin(qaGet,result) then begin
     Mapping.AggregateFromTable(ORM,aAggregate);
     ORMResult(cqrsSuccess);
+  end;
+end;
+
+function TDDDRepositoryRestQuery.ORMGetNextAggregate(
+  aAggregate: TPersistent; aRewind: boolean): TCQRSResult;
+begin
+  if ORMBegin(qaGet,result) then
+    if (aRewind and ORM.FillRewind) or
+       ((not aRewind) and ORM.FillOne) then begin
+      Mapping.AggregateFromTable(ORM,aAggregate);
+      ORMResult(cqrsSuccess);
+    end else
+      ORMResult(cqrsNoMoreData);
+end;
+
+function TDDDRepositoryRestQuery.ORMGetAllAggregates(
+  var aAggregateObjArray): TCQRSResult;
+var res: TPersistentDynArray absolute aAggregateObjArray;
+    i: integer;
+begin
+  if ORMBegin(qaGet,result) then begin
+    SetLength(res,ORM.FillTable.RowCount);
+    i := 0;
+    if ORM.FillRewind then
+    repeat
+      res[i] := Mapping.AggregateCreate;
+      Mapping.AggregateFromTable(ORM,res[i]);
+      inc(i);
+    until not ORM.FillOne;
+    if i=length(res) then
+      ORMResult(cqrsSuccess) else begin
+      ObjArrayClear(res);
+      ORMResult(cqrsNoMoreData);
+    end;
   end;
 end;
 
@@ -925,7 +1009,7 @@ end;
 function TDDDAuthenticationAbstract.ChallengeSelectFirst(
   const aLogonName: RawUTF8): TAuthQueryNonce;
 begin
-  fChallengeLogonName := aLogonName;
+  fChallengeLogonName := Trim(aLogonName);
   fChallengeNonce := DoHash(aLogonName+NowToString);
 end;
 
