@@ -32484,6 +32484,8 @@ begin
 end;
 
 
+{ wrapper functions to T*ObjArr types }
+
 function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
 var a: TObjectDynArray absolute aDynArray;
 begin
@@ -32551,7 +32553,6 @@ begin
     a := nil;
   end;
 end;
-
 
 
 { TObjectHash }

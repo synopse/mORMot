@@ -259,66 +259,57 @@ type
   end;
 
 
-{ *********** Application Layer Implementation }
-
-type
-  /// abstract class for implementing an Application Layer service
-  TDDDApplication = class(TInjectableObject)
-  protected
-  end;
-
-
 { *********** Cross-Cutting Layer Implementation}
 
 { ----- Persistence / Repository Implementation using mORMot's ORM }
 
 type
-  TDDDRepositoryRestObjectMapping = class;
+  TDDDRepositoryRestFactory = class;
   TDDDRepositoryRestQuery = class;
   TDDDRepositoryRestClass = class of TDDDRepositoryRestQuery;
 
   /// abstract ancestor for all persistence/repository related Exceptions
   EDDDRepository = class(ESynException)
   public
-    /// constructor like FormatUTF8() which will also serialize the caller info 
-    constructor CreateUTF8(Caller: TDDDRepositoryRestObjectMapping;
+    /// constructor like FormatUTF8() which will also serialize the caller info
+    constructor CreateUTF8(Caller: TDDDRepositoryRestFactory;
       Format: PUTF8Char; const Args: array of const);
   end;
 
-  /// store reference of several mapping definitions
-  TDDDRepositoryRestObjectMappingObjArray = array of TDDDRepositoryRestObjectMapping;
+  /// store reference of several factories, each with one mapping definition
+  TDDDRepositoryRestFactoryObjArray = array of TDDDRepositoryRestFactory;
 
-  /// home repository of several TPersistent classes via one or several REST
+  /// home repository of several TPersistent factories using REST storage
   // - this shared class will be used to manage a service-wide Repository,
   // i.e. will handle all actual I*Query/I*Command implementation classes
   // - would e.g. handle BATCH proccess, or transactional process
-  TDDDRepositoryRestMapper = class
+  TDDDRepositoryRestCatalog = class
   protected
-    fMap: TDDDRepositoryRestObjectMappingObjArray;
+    fFactory: TDDDRepositoryRestFactoryObjArray;
   public
-    /// finalize all mapping information
+    /// finalize all factories
     destructor Destroy; override;
     /// register DDD's TPersistent repository over an ORM's TSQLRecord
     // - will raise an exception if the aggregate has already been defined
-    function AddMap(
+    function AddFactory(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
       aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
-      const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestObjectMapping;
-    /// retrieve the registered mapping definition of a given TPersistent in Map[]
+      const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestFactory;
+    /// retrieve the registered definition of a given TPersistent in Factory[]
     // - returns -1 if the TPersistence class is unknown
-    function GetMapIndex(const aInterface: TGUID): integer;
-    /// retrieve the registered mapping definition of a given TPersistent
+    function GetFactoryIndex(const aInterface: TGUID): integer;
+    /// retrieve the registered Factory definition of a given TPersistent
     // - raise an EDDDRepository exception if the TPersistence class is unknown
-    function GetMap(const aInterface: TGUID): TDDDRepositoryRestObjectMapping;
-    /// read-only access to all mapping definitions
-    property Map: TDDDRepositoryRestObjectMappingObjArray read fMap;
+    function GetFactory(const aInterface: TGUID): TDDDRepositoryRestFactory;
+    /// read-only access to all defined persistent factories
+    property Factory: TDDDRepositoryRestFactoryObjArray read fFactory;
   end;
 
-  /// handle field mapping between a DDD's TPersistent and an ORM's TSQLRecord
-  // - it will centralize some helper classes, used by actual TDDDRepositoryRest
-  TDDDRepositoryRestObjectMapping = class(TInterfaceResolver)
+  /// implement DDD's TPersistent factory over one ORM's TSQLRecord
+  // - it will centralize some helper classes and optimized class mapping
+  TDDDRepositoryRestFactory = class(TInterfaceResolver)
   protected
-    fMapper: TDDDRepositoryRestMapper;
+    fOwner: TDDDRepositoryRestCatalog;
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
@@ -335,15 +326,15 @@ type
     procedure ComputeMapping;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
-    /// initialize the mapping between a DDD Aggregate and a mORMot ORM class
+    /// initialize the DDD Aggregate factory using a mORMot ORM class
     // - by default, field names should match on both sides - but you can
     // specify a custom field mapping as TSQLRecord,Aggregate pairs
     // - any missing or unexpected field on any side will just be ignored
-    constructor Create(aMapper: TDDDRepositoryRestMapper;
+    constructor Create(aOwner: TDDDRepositoryRestCatalog;
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
       aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8); reintroduce; overload;
-    /// finalize all mapping information 
+    /// finalize the factory
     destructor Destroy; override;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
@@ -361,8 +352,8 @@ type
     procedure AggregateToTable(aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
     procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TPersistent);
-    /// the home repository owning this mapping definition
-    property Mapper: TDDDRepositoryRestMapper read fMapper;
+    /// the home repository owning this factory
+    property Owner: TDDDRepositoryRestCatalog read fOwner;
     /// the mapped DDD's TPersistent published properties RTTI 
     property Props: TSQLPropInfoList read fProps;
     /// access to the Aggregate / ORM field mapping
@@ -372,16 +363,16 @@ type
     property Repository: TInterfaceFactory read fInterface;
     /// the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
-    /// the mapped DDD's TPersistent
+    /// the DDD's TPersistent handled by this factory
     property Aggregate: TPersistentClass read fAggregate;
     /// the ORM's TSQLRecord used for actual storage
     property Table: TSQLRecordClass read fTable;
   end;
 
-  /// abstract class to implement I*Query interface using ORM's TSQLRecord
+  /// abstract repository class to implement I*Query interface using RESTful ORM
   TDDDRepositoryRestQuery = class(TCQRSQueryObject)
   protected
-    fMapping: TDDDRepositoryRestObjectMapping;
+    fFactory: TDDDRepositoryRestFactory;
     fORM: TSQLRecord;
     function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; override;
@@ -396,13 +387,13 @@ type
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
   public
     /// you should not have to use this constructor, since the instances would
-    // be injected by TDDDRepositoryRestObjectMapping.InternalResolve
-    constructor Create(aMapping: TDDDRepositoryRestObjectMapping); reintroduce; virtual;
+    // be injected by TDDDRepositoryRestFactory.TryResolve()
+    constructor Create(aFactory: TDDDRepositoryRestFactory); reintroduce; virtual;
     /// finalize the used memory
     destructor Destroy; override;
   published
-    /// access to the associated mapping
-    property Mapping: TDDDRepositoryRestObjectMapping read fMapping;
+    /// access to the associated rfactory
+    property Factory: TDDDRepositoryRestFactory read fFactory;
     /// access to the current state of the underlying mapped TSQLRecord
     // - is nil if no query was run yet
     // - contains the queried object after a successful Select*() method
@@ -415,7 +406,7 @@ type
     fCommand: TSQLOccasion;
     procedure ORMResult(Error: TCQRSResult); override;
     // - this default implementation will check the status vs command, and
-    // call fORM.FilterAndValidate 
+    // call fORM.FilterAndValidate
     // - you should override it, if you need a specific behavior
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion); virtual;
     /// this default implementation will perform Add/Update/Delete on fORM
@@ -487,6 +478,10 @@ type
       const aChallengeFromServer: TAuthQueryNonce): TAuthQueryNonce; virtual;
   end;
 
+  /// allows to specify which actual hashing algorithm would be used
+  // - i.e. either TDDDAuthenticationSHA256 or TDDDAuthenticationMD5
+  TDDDAuthenticationClass = class of TDDDAuthenticationAbstract;
+
   /// implements authentication using SHA-256 hashing
   // - more secure than TDDDAuthenticationMD5
   TDDDAuthenticationSHA256 = class(TDDDAuthenticationAbstract)
@@ -501,6 +496,36 @@ type
   protected
     /// will use MD5 algorithm for hashing, and the class name as salt
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; override;
+  end;
+
+  /// factory of IAuthCommand repository instances using a RESTful ORM access
+  // and SHA-256 hashing algorithm
+  TDDDAuthenticationRestFactorySHA256 = class(TDDDRepositoryRestFactory)
+  protected
+  public
+    /// initialize a factory with the supplied implementation algorithm
+    constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestCatalog=nil); reintroduce;
+  end;
+
+  /// factory of IAuthCommand repository instances using a RESTful ORM access
+  // and SHA-256 hashing algorithm
+  TDDDAuthenticationRestFactoryMD5 = class(TDDDRepositoryRestFactory)
+  protected
+  public
+    /// initialize a factory with the supplied implementation algorithm
+    constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestCatalog=nil); reintroduce;
+  end;
+
+
+
+
+{ *********** Application Layer Implementation }
+
+type
+  /// abstract class for implementing an Application Layer service
+  TDDDApplication = class(TInjectableObject)
+  protected
+
   end;
 
 
@@ -602,7 +627,7 @@ end;
 { EDDDRepository }
 
 constructor EDDDRepository.CreateUTF8(
-  Caller: TDDDRepositoryRestObjectMapping; Format: PUTF8Char;
+  Caller: TDDDRepositoryRestFactory; Format: PUTF8Char;
   const Args: array of const);
 begin
   if Caller=nil then
@@ -611,16 +636,15 @@ begin
 end;
 
 
-{ TDDDRepositoryRestObjectMapping }
+{ TDDDRepositoryRestFactory }
 
-constructor TDDDRepositoryRestObjectMapping.Create(
-  aMapper: TDDDRepositoryRestMapper;
+constructor TDDDRepositoryRestFactory.Create(aOwner: TDDDRepositoryRestCatalog;
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8);
 begin
   inherited Create;
-  fMapper := aMapper;
+  fOwner := aOwner;
   fImplementation := aImplementation;
   fRest := aRest;
   fAggregate := aAggregate;
@@ -643,13 +667,13 @@ begin
   ComputeMapping;
 end;
 
-destructor TDDDRepositoryRestObjectMapping.Destroy;
+destructor TDDDRepositoryRestFactory.Destroy;
 begin
   fProps.Free;
   inherited;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.ComputeMapping;
+procedure TDDDRepositoryRestFactory.ComputeMapping;
 procedure EnsureCompatible(agg,rec: TSQLPropInfo);
 begin
   if agg.SQLDBFieldType<>rec.SQLDBFieldType then
@@ -681,7 +705,7 @@ begin
   fPropsMappingVersion := fPropsMapping.MappingVersion;
 end;
 
-function TDDDRepositoryRestObjectMapping.TryResolve(
+function TDDDRepositoryRestFactory.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
 begin
   if fInterface.InterfaceTypeInfo<>aInterface then
@@ -691,7 +715,7 @@ begin
   end;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.AggregateClear(
+procedure TDDDRepositoryRestFactory.AggregateClear(
   aAggregate: TPersistent);
 var i: integer;
 begin
@@ -700,14 +724,14 @@ begin
       fProps.List[i].SetValue(aAggregate,nil,false);
 end;
 
-function TDDDRepositoryRestObjectMapping.AggregateCreate: TPersistent;
+function TDDDRepositoryRestFactory.AggregateCreate: TPersistent;
 begin
   if fAggregateHasCustomCreate then
     result := TPersistentWithCustomCreateClass(fAggregate).Create else
     result := fAggregate.Create;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.AggregateToJSON(
+procedure TDDDRepositoryRestFactory.AggregateToJSON(
   aAggregate: TPersistent; W: TJSONSerializer; ORMMappedFields: boolean;
   aID: TID);
 var i: integer;
@@ -736,7 +760,7 @@ begin
   W.Add('}');
 end;
 
-function TDDDRepositoryRestObjectMapping.AggregateToJSON(
+function TDDDRepositoryRestFactory.AggregateToJSON(
   aAggregate: TPersistent; ORMMappedFields: boolean; aID: TID): RawUTF8;
 var W: TJSONSerializer;
 begin
@@ -753,7 +777,7 @@ begin
   end;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.AggregateToTable(
+procedure TDDDRepositoryRestFactory.AggregateToTable(
   aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
 var i: integer;
     Value: RawUTF8;
@@ -773,7 +797,7 @@ begin
     end;
 end;
 
-procedure TDDDRepositoryRestObjectMapping.AggregateFromTable(
+procedure TDDDRepositoryRestFactory.AggregateFromTable(
   aSource: TSQLRecord; aAggregate: TPersistent);
 var i: integer;
     Value: RawUTF8;
@@ -795,43 +819,43 @@ begin
 end;
 
 
-{ TDDDRepositoryRestMapper }
+{ TDDDRepositoryRestCatalog }
 
-function TDDDRepositoryRestMapper.AddMap(
+function TDDDRepositoryRestCatalog.AddFactory(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
-  const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestObjectMapping;
+  const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestFactory;
 begin
-  if GetMapIndex(aInterface)>=0 then
-    raise EDDDRepository.CreateUTF8(nil,'Duplicated GUID for %.AddMap(%,%,%)',
+  if GetFactoryIndex(aInterface)>=0 then
+    raise EDDDRepository.CreateUTF8(nil,'Duplicated GUID for %.AddFactory(%,%,%)',
       [self,GUIDToShort(aInterface),aImplementation,aAggregate]);
-  result := TDDDRepositoryRestObjectMapping.Create(self,
+  result := TDDDRepositoryRestFactory.Create(self,
     aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs);
-  ObjArrayAdd(fMap,result);
+  ObjArrayAdd(fFactory,result);
 end;
 
-destructor TDDDRepositoryRestMapper.Destroy;
+destructor TDDDRepositoryRestCatalog.Destroy;
 begin
-  ObjArrayClear(fMap);
+  ObjArrayClear(fFactory);
   inherited;
 end;
 
-function TDDDRepositoryRestMapper.GetMap(
-  const aInterface: TGUID): TDDDRepositoryRestObjectMapping;
+function TDDDRepositoryRestCatalog.GetFactory(
+  const aInterface: TGUID): TDDDRepositoryRestFactory;
 var i: integer;
 begin
-  i := GetMapIndex(aInterface);
+  i := GetFactoryIndex(aInterface);
   if i<0 then
-    raise EDDDRepository.CreateUTF8(nil,'%.GetMap(%)=nil',
+    raise EDDDRepository.CreateUTF8(nil,'%.GetFactory(%)=nil',
       [self,GUIDToShort(aInterface)]);
-  result := fMap[i];
+  result := fFactory[i];
 end;
 
-function TDDDRepositoryRestMapper.GetMapIndex(
+function TDDDRepositoryRestCatalog.GetFactoryIndex(
   const aInterface: TGUID): integer;
 begin
-  for result := 0 to length(fMap)-1 do
-    if IsEqualGUID(fMap[result].fInterface.InterfaceIID,aInterface) then
+  for result := 0 to length(fFactory)-1 do
+    if IsEqualGUID(fFactory[result].fInterface.InterfaceIID,aInterface) then
       exit;
   result := -1;
 end;
@@ -840,10 +864,10 @@ end;
 { TDDDRepositoryRestQuery }
 
 constructor TDDDRepositoryRestQuery.Create(
-  aMapping: TDDDRepositoryRestObjectMapping);
+  aFactory: TDDDRepositoryRestFactory);
 begin
-  fMapping := aMapping;
-  fORM := fMapping.fTable.Create;
+  fFactory := aFactory;
+  fORM := fFactory.fTable.Create;
 end;
 
 destructor TDDDRepositoryRestQuery.Destroy;
@@ -866,7 +890,7 @@ begin
   ORMBegin(qaSelect,result);
   if ForcedBadRequest then
     ORMResult(cqrsBadRequest) else
-    if Mapping.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM) then
+    if Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM) then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsNotFound);
 end;
@@ -878,7 +902,7 @@ begin
   ORMBegin(qaSelect,result);
   if ForcedBadRequest then
     ORMResult(cqrsBadRequest) else
-    if ORM.FillPrepare(Mapping.Rest,ORMWhereClauseFmt,[],Bounds) then
+    if ORM.FillPrepare(Factory.Rest,ORMWhereClauseFmt,[],Bounds) then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsNotFound);
 end;
@@ -887,7 +911,7 @@ function TDDDRepositoryRestQuery.ORMGetAggregate(
   aAggregate: TPersistent): TCQRSResult;
 begin
   if ORMBegin(qaGet,result) then begin
-    Mapping.AggregateFromTable(ORM,aAggregate);
+    Factory.AggregateFromTable(ORM,aAggregate);
     ORMResult(cqrsSuccess);
   end;
 end;
@@ -898,7 +922,7 @@ begin
   if ORMBegin(qaGet,result) then
     if (aRewind and ORM.FillRewind) or
        ((not aRewind) and ORM.FillOne) then begin
-      Mapping.AggregateFromTable(ORM,aAggregate);
+      Factory.AggregateFromTable(ORM,aAggregate);
       ORMResult(cqrsSuccess);
     end else
       ORMResult(cqrsNoMoreData);
@@ -914,8 +938,8 @@ begin
     i := 0;
     if ORM.FillRewind then
     repeat
-      res[i] := Mapping.AggregateCreate;
-      Mapping.AggregateFromTable(ORM,res[i]);
+      res[i] := Factory.AggregateCreate;
+      Factory.AggregateFromTable(ORM,res[i]);
       inc(i);
     until not ORM.FillOne;
     if i=length(res) then
@@ -964,7 +988,7 @@ begin
       exit;
     end;
   end;
-  msg := ORM.FilterAndValidate(Mapping.Rest);
+  msg := ORM.FilterAndValidate(Factory.Rest);
   if msg<>'' then
     ORMResultMsg(cqrsDataLayerError,msg) else
     ORMResult(cqrsSuccess);
@@ -976,15 +1000,15 @@ begin
   soSelect:
     ORMResult(cqrsBadRequest);
   soInsert:
-    if Mapping.Rest.Add(ORM,true)<>0 then
+    if Factory.Rest.Add(ORM,true)<>0 then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsDataLayerError);
   soUpdate:
-    if Mapping.Rest.Update(ORM) then
+    if Factory.Rest.Update(ORM) then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsDataLayerError);
   soDelete:
-    if Mapping.Rest.Delete(ORM.RecordClass,ORM.ID) then
+    if Factory.Rest.Delete(ORM.RecordClass,ORM.ID) then
       ORMResult(cqrsSuccess) else
       ORMResult(cqrsDataLayerError);
   end;
@@ -1093,6 +1117,24 @@ begin
   result := MD5(RawUTF8(ClassName)+aValue);
 end;
 
+
+{ TDDDAuthenticationRestFactorySHA256 }
+
+constructor TDDDAuthenticationRestFactorySHA256.Create(aRest: TSQLRest;
+  aOwner: TDDDRepositoryRestCatalog);
+begin
+  inherited Create(aOwner,
+    IAuthCommand,TDDDAuthenticationSHA256,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
+end;
+
+{ TDDDAuthenticationRestFactoryMD5 }
+
+constructor TDDDAuthenticationRestFactoryMD5.Create(aRest: TSQLRest;
+  aOwner: TDDDRepositoryRestCatalog);
+begin
+  inherited Create(aOwner,
+    IAuthCommand,TDDDAuthenticationMD5,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
+end;
 
 
 initialization
