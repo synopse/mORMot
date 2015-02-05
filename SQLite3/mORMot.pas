@@ -7871,7 +7871,9 @@ type
     // encoded within the JSON content, and also smvVariant/smvRawJSON)
     // - vPassedByReference is included if the parameter is passed as reference
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
-    ValueKindAsm: set of (vIsString, vPassedByReference);
+    // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
+    // cleared with ObjArrClear() and not TDynArray.Clear
+    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray);
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -38957,6 +38959,8 @@ begin
             RaiseError('returned RawJSON',[]);
         end;
         smvDynArray: begin
+          if vIsObjArray in ValueKindAsm then
+            ObjArrayClear(V^);
           R := DynArrays[IndexVar].LoadFromJSON(R);
           if R=nil then
             RaiseError('returned array',[]);
@@ -39364,6 +39368,8 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       include(ArgsUsed,ValueType);
       if ValueType in [smvRawUTF8..smvWideString] then
         Include(ValueKindAsm,vIsString);
+      if (ValueType=smvDynArray) and ObjArraySerializers.IsObjArray(TypeInfo) then
+        Include(ValueKindAsm,vIsObjArray);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
           {$ifdef FPC},smvDynArray{$endif}]) or
          (ValueDirection in [smdVar,smdOut]) or
@@ -41731,8 +41737,9 @@ end;
 
 type
   TDynArrayFake = record
-    Wrapper: TDynArray;
     Value: Pointer;
+    Wrapper: TDynArray;
+    IsObjArray: boolean;
   end;
 
 function TServiceMethod.ArgResultIndex(ArgName: PUTF8Char; ArgNameLen: integer): integer;
@@ -41837,8 +41844,10 @@ begin
       smvObject:
         Objects[IndexVar] := TypeInfo^.ClassCreate;
       smvDynArray:
-        with DynArrays[IndexVar] do
+        with DynArrays[IndexVar] do begin
           Wrapper.Init(TypeInfo,Value);
+          IsObjArray := vIsObjArray in ValueKindAsm;
+        end;
       smvRecord:
         SetLength(Records[IndexVar],TypeInfo^.RecordType^.Size);
       {$ifndef NOVARIANTS}
@@ -41992,7 +42001,10 @@ begin
       for i := 0 to ArgsUsedCount[smvvObject]-1 do
         Objects[i].Free;
       for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
-        DynArrays[i].Wrapper.Clear;
+        with DynArrays[i] do
+          if IsObjArray then
+            ObjArrayClear(Value^) else
+            Wrapper.Clear;
       if Records<>nil then begin
         i := 0;
         for a := ArgsManagedFirst to ArgsManagedLast do

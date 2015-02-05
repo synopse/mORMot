@@ -32545,9 +32545,11 @@ procedure ObjArrayClear(var aDynArray);
 var i: integer;
     a: TObjectDynArray absolute aDynArray;
 begin
-  for i := 0 to length(a)-1 do
-    a[i].Free;
-  a := nil;
+  if a<>nil then begin
+    for i := 0 to length(a)-1 do
+      a[i].Free;
+    a := nil;
+  end;
 end;
 
 
