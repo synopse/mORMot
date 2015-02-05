@@ -6103,7 +6103,7 @@ type
     procedure SetCapacity(const Value: PtrInt);
     function GetCapacity: PtrInt;
     procedure Put(Index: PtrInt; const Value: RawUTF8);
-    function GetCount: PtrInt;
+    function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure PutObject(Index: PtrInt; const Value: TObject);
     function GetName(Index: PtrInt): RawUTF8;
     function GetValue(const Name: RawUTF8): RawUTF8;
@@ -6112,7 +6112,7 @@ type
     procedure SetTextCRLF(const Value: RawUTF8);
     procedure SetTextPtr(P: PUTF8Char; const Delimiter: RawUTF8);
     function GetListPtr: PPUtf8CharArray;
-    function GetObjectPtr: PPointerArray;
+    function GetObjectPtr: PPointerArray; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
   public
     /// initialize the class instance
@@ -26046,7 +26046,7 @@ asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         pmovmskb edx,xmm1            // get one bit for each byte result
         bsf      edx,edx             // find first 1-bit
         // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors,  but we are assuming that most
+        // for long strings on old processors, but we are assuming that most
         // strings are short, and newer processors have higher priority)
         jz       @L1                 // loop if not found
 @L2:    // Zero-byte found. Compute string length
@@ -26358,7 +26358,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         pmovmskb edx,xmm1            // get one bit for each byte result
         bsf      edx,edx             // find first 1-bit
         // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors,  but we are assuming that most
+        // for long strings on old processors, but we are assuming that most
         // strings are short, and newer processors have higher priority)
         jz       @A100               // loop if not found
 @A200:  // Zero-byte found. Compute string length

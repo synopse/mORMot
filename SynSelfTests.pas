@@ -10737,8 +10737,7 @@ function TServiceCalculator.SpecialCall(Txt: RawUTF8; var Int: integer;
   var options: TSynTableFieldOptions): TSynTableFieldTypes;
 var dummy: IComplexNumber;
 begin
-  if Assigned(fResolve) then
-    Resolve(TypeInfo(IComplexNumber),dummy);
+  TryResolve(TypeInfo(IComplexNumber),dummy);
   inc(Int,length(Txt));
   inc(Card);
   result := fields+field;
