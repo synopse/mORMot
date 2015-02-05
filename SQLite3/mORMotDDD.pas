@@ -97,9 +97,6 @@ uses
     released without any prior call to Commit (e.g. rollback the transaction
     or free any pending TSQLRestBatch instance)
 
-  TODO:
-   - manage Authentication expiration
-
 }
 
 { *********** Some Domain-Driven-Design Common Definitions }
@@ -194,69 +191,17 @@ type
     procedure ORMResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
     procedure ORMResultJSON(Error: TCQRSResult;
       JSONFmt: PUTF8Char; const Args,Params: array of const);
-    function GetLastError: TCQRSResult; 
+    function GetLastError: TCQRSResult;
     function GetLastErrorInfo: variant; virtual;
   published
     /// the last error, as an enumerate
     property LastError: TCQRSResult read GetLastError;
     /// the action currently processing
     property Action: TCQRSQueryAction read fAction;
-    /// current step of the TCQRSQueryObject state machine 
+    /// current step of the TCQRSQueryObject state machine
     property State: TCQRSQueryState read fState;
   end;
 
-
-{ *********** Other Cross-Cutting Interfaces }
-
-type
-  /// the data type which will be returned during a password challenge
-  // - in practice, will be e.g. Base-64 encoded SHA-256 binary hash
-  TAuthQueryNonce = RawUTF8;
-
-  TAuthInfoName = RawUTF8;
-
-  /// DDD object used to store authentication information
-  TAuthInfo = class(TPersistent)
-  protected
-    fLogonName: TAuthInfoName;
-  published
-    /// the textual identifier by which the user would recognize himself
-    property LogonName: TAuthInfoName read fLogonName write fLogonName;
-  end;
-
-  /// service to authenticate credentials via a dual pass challenge
-  IAuthQuery = interface(ICQRSQuery)
-    ['{5FB1E4A6-B432-413F-8958-1FA1857D1195}']
-    /// initiate the first phase of a dual pass challenge authentication
-    function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
-    /// validate the first phase of a dual pass challenge authentication
-    function ChallengeSelectFinal(const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
-    /// set the credential for Get() or further IAuthCommand.Update/Delete
-    // - this method execution will be disabled for most clients
-    function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
-    /// retrieve some information about the current selected credential
-    function Get(out aAggregate: TAuthInfo): TCQRSResult;
-  end;
-
-  /// service to update or register new authentication credentials
-  IAuthCommand = interface(IAuthQuery)
-    ['{8252727B-336B-4105-80FD-C8DFDBD4801E}']
-    /// register a new credential, from its LogonName/HashedPassword values
-    // - aHashedPassword should match the algorithm expected by the actual
-    // implementation class
-    // - on success, the newly created credential will be the currently selected
-    function Add(const aLogonName: RawUTF8; aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// update the current selected credential password
-    // - aHashedPassword should match the algorithm expected by the actual
-    // implementation class
-    // - will be allowed only for the current challenged user
-    function UpdatePassword(const aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// delete the current selected credential
-    // - this method execution will be disabled for most clients
-    function Delete: TCQRSResult;
-    /// write all pending changes prepared by Add/UpdatePassword/Delete methods
-    function Commit: TCQRSResult;
-  end;
 
 
 { *********** Cross-Cutting Layer Implementation}
@@ -280,10 +225,11 @@ type
   TDDDRepositoryRestFactoryObjArray = array of TDDDRepositoryRestFactory;
 
   /// home repository of several TPersistent factories using REST storage
-  // - this shared class will be used to manage a service-wide Repository,
+  // - this shared class will be can to manage a service-wide repositories,
   // i.e. will handle all actual I*Query/I*Command implementation classes
-  // - would e.g. handle BATCH proccess, or transactional process
-  TDDDRepositoryRestCatalog = class
+  // accross a set of TSQLRest instances
+  // - is designed to optimize BATCH or transactional process
+  TDDDRepositoryRestManager = class
   protected
     fFactory: TDDDRepositoryRestFactoryObjArray;
   public
@@ -309,7 +255,7 @@ type
   // - it will centralize some helper classes and optimized class mapping
   TDDDRepositoryRestFactory = class(TInterfaceResolver)
   protected
-    fOwner: TDDDRepositoryRestCatalog;
+    fOwner: TDDDRepositoryRestManager;
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
@@ -330,7 +276,7 @@ type
     // - by default, field names should match on both sides - but you can
     // specify a custom field mapping as TSQLRecord,Aggregate pairs
     // - any missing or unexpected field on any side will just be ignored
-    constructor Create(aOwner: TDDDRepositoryRestCatalog;
+    constructor Create(aOwner: TDDDRepositoryRestManager;
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
       aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8); reintroduce; overload;
@@ -353,7 +299,7 @@ type
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
     procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TPersistent);
     /// the home repository owning this factory
-    property Owner: TDDDRepositoryRestCatalog read fOwner;
+    property Owner: TDDDRepositoryRestManager read fOwner;
     /// the mapped DDD's TPersistent published properties RTTI 
     property Props: TSQLPropInfoList read fProps;
     /// access to the Aggregate / ORM field mapping
@@ -429,93 +375,6 @@ type
     /// access to the current process state
     property Command: TSQLOccasion read fCommand;
   end;
-
-
-{ ----- Authentication Implementation using SHA-256 dual step challenge }
-
-type
-  /// ORM object to persist authentication information
-  TSQLRecordAuthInfo = class(TSQLRecord)
-  private
-    fLogonName: RawUTF8;
-    fHashedPassword: RawUTF8;
-  published
-    property LogonName: RawUTF8 read fLogonName write fLogonName;
-    property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
-  end;
-
-  /// generic class for implementing authentication
-  // - do not instantiate this abstract class, but e.g. TDDDAuthenticationSHA256
-  // or TDDDAuthenticationMD5
-  TDDDAuthenticationAbstract = class(TDDDRepositoryRestCommand,IAuthCommand)
-  protected
-    fChallengeLogonName: RawUTF8;
-    fChallengeNonce: TAuthQueryNonce;
-    class function ComputeHashPassword(const aLogonName,aPassword: RawUTF8): TAuthQueryNonce;
-    /// overriden classes should override this method with the proper algorithm
-    class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; virtual; abstract;
-  public
-    /// initiate the first phase of a dual pass challenge authentication
-    function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
-    /// validate the first phase of a dual pass challenge authentication
-    function ChallengeSelectFinal(const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
-    /// set the credential for Get() or further IAuthCommand.Update/Delete
-    // - this method execution will be disabled for most clients
-    function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
-    /// retrieve some information about the current selected credential
-    function Get(out aAggregate: TAuthInfo): TCQRSResult;
-    /// register a new credential, from its LogonName/HashedPassword values
-    // - on success, the newly created credential will be the currently selected
-    function Add(const aLogonName: RawUTF8; aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// update the current selected credential password
-    function UpdatePassword(const aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// class method to be used on the client side to compute the password
-    // - is basically
-    // !   result := DoHash(aLogonName+':'+aChallengeFromServer+':'+
-    // !   ComputeHashPassword(aLogonName,aPlainPassword));
-    class function ClientComputeChallengedPassword(
-      const aLogonName,aPlainPassword: RawUTF8;
-      const aChallengeFromServer: TAuthQueryNonce): TAuthQueryNonce; virtual;
-  end;
-
-  /// allows to specify which actual hashing algorithm would be used
-  // - i.e. either TDDDAuthenticationSHA256 or TDDDAuthenticationMD5
-  TDDDAuthenticationClass = class of TDDDAuthenticationAbstract;
-
-  /// implements authentication using SHA-256 hashing
-  // - more secure than TDDDAuthenticationMD5
-  TDDDAuthenticationSHA256 = class(TDDDAuthenticationAbstract)
-  protected
-    /// will use SHA-256 algorithm for hashing, and the class name as salt
-    class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; override;
-  end;
-
-  /// implements authentication using MD5 hashing
-  // - less secure than TDDDAuthenticationSHA256
-  TDDDAuthenticationMD5 = class(TDDDAuthenticationAbstract)
-  protected
-    /// will use MD5 algorithm for hashing, and the class name as salt
-    class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; override;
-  end;
-
-  /// factory of IAuthCommand repository instances using a RESTful ORM access
-  // and SHA-256 hashing algorithm
-  TDDDAuthenticationRestFactorySHA256 = class(TDDDRepositoryRestFactory)
-  protected
-  public
-    /// initialize a factory with the supplied implementation algorithm
-    constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestCatalog=nil); reintroduce;
-  end;
-
-  /// factory of IAuthCommand repository instances using a RESTful ORM access
-  // and SHA-256 hashing algorithm
-  TDDDAuthenticationRestFactoryMD5 = class(TDDDRepositoryRestFactory)
-  protected
-  public
-    /// initialize a factory with the supplied implementation algorithm
-    constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestCatalog=nil); reintroduce;
-  end;
-
 
 
 
@@ -638,7 +497,7 @@ end;
 
 { TDDDRepositoryRestFactory }
 
-constructor TDDDRepositoryRestFactory.Create(aOwner: TDDDRepositoryRestCatalog;
+constructor TDDDRepositoryRestFactory.Create(aOwner: TDDDRepositoryRestManager;
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8);
@@ -819,9 +678,9 @@ begin
 end;
 
 
-{ TDDDRepositoryRestCatalog }
+{ TDDDRepositoryRestManager }
 
-function TDDDRepositoryRestCatalog.AddFactory(
+function TDDDRepositoryRestManager.AddFactory(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestFactory;
@@ -834,13 +693,13 @@ begin
   ObjArrayAdd(fFactory,result);
 end;
 
-destructor TDDDRepositoryRestCatalog.Destroy;
+destructor TDDDRepositoryRestManager.Destroy;
 begin
   ObjArrayClear(fFactory);
   inherited;
 end;
 
-function TDDDRepositoryRestCatalog.GetFactory(
+function TDDDRepositoryRestManager.GetFactory(
   const aInterface: TGUID): TDDDRepositoryRestFactory;
 var i: integer;
 begin
@@ -851,7 +710,7 @@ begin
   result := fFactory[i];
 end;
 
-function TDDDRepositoryRestCatalog.GetFactoryIndex(
+function TDDDRepositoryRestManager.GetFactoryIndex(
   const aInterface: TGUID): integer;
 begin
   for result := 0 to length(fFactory)-1 do
@@ -1025,119 +884,4 @@ begin
 end;
 
 
-
-{ ----- Authentication Implementation using SHA-256 dual step challenge }
-
-{ TDDDAuthenticationAbstract }
-
-function TDDDAuthenticationAbstract.ChallengeSelectFirst(
-  const aLogonName: RawUTF8): TAuthQueryNonce;
-begin
-  fChallengeLogonName := Trim(aLogonName);
-  fChallengeNonce := DoHash(aLogonName+NowToString);
-end;
-
-function TDDDAuthenticationAbstract.ChallengeSelectFinal(
-  const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
-begin
-  if (fChallengeLogonName='') or (fChallengeNonce='') then
-    result := ORMError(cqrsBadRequest) else
-    result := SelectByName(fChallengeLogonName);
-  if result<>cqrsSuccess then
-    exit;
-  ORMBegin(qaSelect,result);
-  if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
-     (ORM as TSQLRecordAuthInfo).HashedPassword)=aChallengedPassword then
-    ORMResult(cqrsSuccess) else
-    ORMResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
-  fChallengeNonce := '';
-  fChallengeLogonName := '';
-end;
-
-class function TDDDAuthenticationAbstract.ComputeHashPassword(
-  const aLogonName, aPassword: RawUTF8): TAuthQueryNonce;
-begin
-  result := DoHash(aLogonName+':'+aPassword);
-end;
-
-class function TDDDAuthenticationAbstract.ClientComputeChallengedPassword(
-  const aLogonName,aPlainPassword: RawUTF8; const aChallengeFromServer: TAuthQueryNonce): TAuthQueryNonce;
-begin // see TDDDAuthenticationAbstract.ChallengeSelectFinal
-  result := DoHash(aLogonName+':'+aChallengeFromServer+':'+
-    ComputeHashPassword(aLogonName,aPlainPassword));
-end;
-
-function TDDDAuthenticationAbstract.SelectByName(
-  const aLogonName: RawUTF8): TCQRSResult;
-begin
-  result := ORMSelectOne('LogonName=?',[aLogonName],(aLogonName=''));
-end;
-
-function TDDDAuthenticationAbstract.Get(
-  out aAggregate: TAuthInfo): TCQRSResult;
-begin
-  result := ORMGetAggregate(aAggregate);
-end;
-
-function TDDDAuthenticationAbstract.Add(const aLogonName: RawUTF8;
-  aHashedPassword: TAuthQueryNonce): TCQRSResult;
-begin
-  if not ORMBegin(qaCommandDirect,result) then
-    exit;
-  with ORM as TSQLRecordAuthInfo do begin
-    LogonName := aLogonName;
-    HashedPassword := aHashedPassword;
-  end;
-  ORMPrepareForCommit(soInsert);
-end;
-
-function TDDDAuthenticationAbstract.UpdatePassword(
-  const aHashedPassword: TAuthQueryNonce): TCQRSResult;
-begin
-  if not ORMBegin(qaCommandOnSelect,result) then
-    exit;
-  (ORM as TSQLRecordAuthInfo).HashedPassword := aHashedPassword;
-  ORMPrepareForCommit(soUpdate);
-end;
-
-
-{ TDDDAuthenticationSHA256 }
-
-class function TDDDAuthenticationSHA256.DoHash(
-  const aValue: TAuthQueryNonce): TAuthQueryNonce;
-begin
-  result := SHA256(RawUTF8(ClassName)+aValue);
-end;
-
-{ TDDDAuthenticationMD5 }
-
-class function TDDDAuthenticationMD5.DoHash(
-  const aValue: TAuthQueryNonce): TAuthQueryNonce;
-begin
-  result := MD5(RawUTF8(ClassName)+aValue);
-end;
-
-
-{ TDDDAuthenticationRestFactorySHA256 }
-
-constructor TDDDAuthenticationRestFactorySHA256.Create(aRest: TSQLRest;
-  aOwner: TDDDRepositoryRestCatalog);
-begin
-  inherited Create(aOwner,
-    IAuthCommand,TDDDAuthenticationSHA256,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
-end;
-
-{ TDDDAuthenticationRestFactoryMD5 }
-
-constructor TDDDAuthenticationRestFactoryMD5.Create(aRest: TSQLRest;
-  aOwner: TDDDRepositoryRestCatalog);
-begin
-  inherited Create(aOwner,
-    IAuthCommand,TDDDAuthenticationMD5,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
-end;
-
-
-initialization
-  TInterfaceFactory.RegisterInterfaces(
-    [TypeInfo(IAuthQuery),TypeInfo(IAuthCommand)]);
 end.
