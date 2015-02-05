@@ -891,7 +891,8 @@ unit mORMot;
     - added GetInterfaceFromEntry() function to speed up interface execution,
       e.g. for TServiceFactoryServer (avoid the RTTI lookup of GetInterface)
     - added TPropInfo.ClassFromJSON() to properly unserialize TObject properties
-    - added TSQLPropInfo.SQLFieldTypeName property
+    - added TSQLPropInfo.SQLFieldTypeName and SQLDBFieldTypeName properties
+    - introducing TSQLPropInfo.SetValueVar() method to avoid a call to StrLen()
     - fixed [f96cf0fc5d] and [221ee9c767] about TSQLRecordMany JSON serialization
     - fixed issue when retrieving a TSQLRecord containing TSQLRecordMany
       properties with external tables (like 'no such column DestList' error)
@@ -2572,6 +2573,10 @@ type
     // - note that the supplied Value buffer won't be modified by this method:
     // overriden implementation should create their own temporary copy
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); virtual; abstract;
+    /// convert UTF-8 encoded text into the property value
+    // - just a wrapper around SetValue(...,pointer(Value),...) which may be
+    // optimized for overriden methods
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); virtual;
     /// convert the property value into an UTF-8 encoded text
     // - if ToSQL is true, result is on SQL form (false->'0' e.g.)
     // - if ToSQL is false, result is on JSON form (false->'false' e.g.)
@@ -2808,6 +2813,7 @@ type
   TSQLPropInfoRTTIAnsi = class(TSQLPropInfoRTTI)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
@@ -2825,6 +2831,7 @@ type
   TSQLPropInfoRTTIRawUTF8 = class(TSQLPropInfoRTTIAnsi)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
@@ -2839,6 +2846,7 @@ type
   TSQLPropInfoRTTIWinAnsi = class(TSQLPropInfoRTTIAnsi)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -2849,6 +2857,7 @@ type
   TSQLPropInfoRTTIRawUnicode = class(TSQLPropInfoRTTIAnsi)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -2859,6 +2868,7 @@ type
   TSQLPropInfoRTTIRawBlob = class(TSQLPropInfoRTTIAnsi)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
@@ -2890,6 +2900,7 @@ type
   TSQLPropInfoRTTIUnicode = class(TSQLPropInfoRTTI)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
@@ -15011,6 +15022,11 @@ begin
   GetValueVar(Instance,ToSQL,Result,wasSQLString);
 end;
 
+procedure TSQLPropInfo.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  SetValue(Instance,pointer(Value),wasString);
+end;
+
 const
   SQLFieldTypeToDB: array[TSQLFieldType] of TSQLDBFieldType =
     (ftUnknown,   // sftUnknown
@@ -15080,15 +15096,15 @@ function TSQLPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): 
 begin
   case aValue.VType of
     ftInt64:
-      SetValue(Instance,pointer(Int64ToUtf8(aValue.VInt64)),false);
+      SetValueVar(Instance,Int64ToUtf8(aValue.VInt64),false);
     ftDouble:
-      SetValue(Instance,pointer(DoubleToStr(aValue.VDouble)),false);
+      SetValueVar(Instance,DoubleToStr(aValue.VDouble),false);
     ftCurrency:
-      SetValue(Instance,pointer(Curr64ToStr(aValue.VInt64)),false);
+      SetValueVar(Instance,Curr64ToStr(aValue.VInt64),false);
     ftDate:
-      SetValue(Instance,pointer(DateTimeToIso8601Text(aValue.VDateTime)),true);
+      SetValueVar(Instance,DateTimeToIso8601Text(aValue.VDateTime),true);
     ftBlob:
-      SetValue(Instance,pointer(TSQLRawBlobToBlob(aValue.VBlob,aValue.VBlobLen)),true);
+      SetValueVar(Instance,TSQLRawBlobToBlob(aValue.VBlob,aValue.VBlobLen),true);
     ftUTF8:
       SetValue(Instance,aValue.VText,true);
     else
@@ -15182,8 +15198,7 @@ end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
 begin
-  SetValue(Instance,pointer(VariantToUTF8(Source)),
-    not (TVarData(Source).VType in VTYPE_STATIC));
+  SetValueVar(Instance,VariantToUTF8(Source),not(TVarData(Source).VType in VTYPE_STATIC));
 end;
 
 {$endif NOVARIANTS}
@@ -16094,6 +16109,11 @@ begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Value,StrLen(Value)));
 end;
 
+procedure TSQLPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  fPropInfo.SetLongStrProp(Instance,CurrentAnsiConvert.UTF8ToAnsi(Value));
+end;
+
 function TSQLPropInfoRTTIAnsi.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 var tmp: RawByteString;
 begin
@@ -16199,6 +16219,11 @@ begin
   fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
+procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  fPropInfo.SetLongStrProp(Instance,Value);
+end;
+
 
 { TSQLPropInfoRTTIWinAnsi }
 
@@ -16249,6 +16274,11 @@ begin
       WinAnsiConvert.UTF8BufferToAnsi(Value,StrLen(Value)));
 end;
 
+procedure TSQLPropInfoRTTIWinAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  fPropInfo.SetLongStrProp(Instance,WinAnsiConvert.UTF8ToAnsi(Value));
+end;
+
 
 { TSQLPropInfoRTTIRawUnicode }
 
@@ -16296,6 +16326,11 @@ begin
   if Value=nil then
     fPropInfo.SetLongStrProp(Instance,'') else
     fPropInfo.SetLongStrProp(Instance,Utf8DecodeToRawUnicode(Value,StrLen(Value)));
+end;
+
+procedure TSQLPropInfoRTTIRawUnicode.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  fPropInfo.SetLongStrProp(Instance,Utf8DecodeToRawUnicode(Value));
 end;
 
 
@@ -16360,6 +16395,11 @@ end;
 
 procedure TSQLPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
+begin
+  fPropInfo.SetLongStrProp(Instance,BlobToTSQLRawBlob(Value));
+end;
+
+procedure TSQLPropInfoRTTIRawBlob.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,BlobToTSQLRawBlob(Value));
 end;
@@ -16524,6 +16564,11 @@ procedure TSQLPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
   fPropInfo.SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(Value,StrLen(Value)));
+end;
+
+procedure TSQLPropInfoRTTIUnicode.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+begin
+  fPropInfo.SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(Value));
 end;
 
 function TSQLPropInfoRTTIUnicode.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -22601,7 +22646,7 @@ begin
       if S.CopiableFields[i].ClassType=D.Fields.List[f].ClassType then
         S.CopiableFields[f].CopyValue(aRecord,self) else begin
         S.CopiableFields[i].GetValueVar(aRecord,False,tmp,@wasString);
-        D.Fields.List[f].SetValue(Self,Pointer(tmp),wasString);
+        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
       end;
     end;
 end;
@@ -23316,7 +23361,7 @@ begin
       result := false else begin
       for i := 0 to high(aSimpleFields) do begin
         VarRecToUTF8(aSimpleFields[i],tmp); // will work for every handled type
-        SimpleFields[i].SetValue(self,pointer(tmp),false);
+        SimpleFields[i].SetValueVar(self,tmp,false);
       end;
       result := True;
     end;
@@ -23846,7 +23891,7 @@ begin
           TSynFilter(List[i]).Process(f,Value);
           if Old<>Value then
             // value was changed -> store modified
-            Fields.List[f].SetValue(self,pointer(Value),false);
+            Fields.List[f].SetValueVar(self,Value,false);
         end;
   end;
 end;
@@ -32322,7 +32367,7 @@ begin
       if FoundOffset>0 then // omit first FoundOffset rows, for ID unique field
         exit else
       with Hash do begin
-        Field.SetValue(fSearchRec,pointer(WhereValue),false);
+        Field.SetValueVar(fSearchRec,WhereValue,false);
         ndx := Find(fSearchRec);
         if ndx>=0 then begin
           OnFind(Dest,fValue.List[ndx],ndx);
@@ -32382,7 +32427,7 @@ begin
       exit;
     end;
     // generic search of any value, using fast CompareValue() overridden method
-    P.SetValue(fSearchRec,pointer(WhereValue),false);
+    P.SetValueVar(fSearchRec,WhereValue,false);
     for i := 0 to fValue.Count-1 do  // ..,true)=SYSTEMNOCASE
       if P.CompareValue(fValue.List[i],fSearchRec,true)=0 then begin
         if FoundOffset>0 then begin
@@ -33121,7 +33166,7 @@ begin
         if Field=SetField then
           if Where.Count>1 then // unique field can't allow multiple sets
             exit else begin
-            SetField.SetValue(fSearchRec,pointer(SetValueString),false);
+            SetField.SetValueVar(fSearchRec,SetValueString,false);
             ndx := Find(fSearchRec);
             if (ndx>=0) and (ndx<>PtrInt(Where.List[0])) then
               exit; // duplicated entry error
@@ -33129,7 +33174,7 @@ begin
     // update field value
     for i := 0 to Where.Count-1 do begin
       Rec := fValue.List[PtrInt(Where.List[i])];
-      SetField.SetValue(Rec,pointer(SetValueString),SetValueWasString);
+      SetField.SetValueVar(Rec,SetValueString,SetValueWasString);
       fModified := true;
       if Owner<>nil then begin
         if SetValueJson='' then
