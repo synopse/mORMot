@@ -126,63 +126,82 @@ type
   // - cqrsAlreadyExists for a I*Command.Add method with a primay key conflict
   // - cqrsNoPriorQuery for a I*Command.Update/Delete method with no prior
   // call to SelectBy*()
+  // - cqrsNoPriorCommand for a I*Command.Commit with no prior Add/Update/Delete
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
      cqrsNotFound, cqrsDataLayerError,
-     cqrsInvalidContent, cqrsAlreadyExists, cqrsNoPriorQuery);
+     cqrsInvalidContent, cqrsAlreadyExists,
+     cqrsNoPriorQuery, cqrsNoPriorCommand);
 
   /// generic interface, to be used for CQRS I*Query types definition
   // - TCQRSQueryObject class will allow to easily implement LastError* members 
   ICQRSQuery = interface(IInvokable)
     ['{923614C8-A639-45AD-A3A3-4548337923C9}']
     /// should return the last error as an enumerate
-    function LastError: TCQRSResult;
+    function GetLastError: TCQRSResult;
     /// should return addition information for the last error
     // - may be a plain string, or a JSON document stored as TDocVariant
-    function LastErrorInfo: variant;
+    function GetLastErrorInfo: variant;
   end;
-            
+
+  /// which kind of process is about to take place after an ORMBegin()
+  TCQRSQueryAction = (
+    qaNone, qaSelect, qaGet, qaCommandDirect, qaCommandOnSelect, qaCommit);
+
+  /// define one or several process to take place after an ORMBegin()
+  TCQRSQueryActions = set of TCQRSQueryAction;
+
+  /// the current step of a TCQRSQuery state machine
+  // - basic state diagram is defined by the methods execution:
+  // - qsNone refers to the default state, with no currently selected values,
+  // nor any pending write request
+  // - qsQuery corresponds to a successful I*Query.Select*(), expecting
+  // either a I*Query.Get*(), or a I*Command.Add/Update/Delete
+  // - qsCommand corresponds to a successful I*Command.Add/Update/Delete,
+  // expected a I*Command.Commit
+  TCQRSQueryState = (qsNone, qsQuery, qsCommand);
+
   /// to be inherited to implement CQRS I*Query services extended error process
   // - you should never assign directly a cqrs* value to a method result, but
-  // rather use the Reset/SetResult/SetResultMsg methods provided by this class:
+  // rather use the ORMBegin/ORMResult/ORMResultMsg methods provided by this class:
   // ! function TMyService.MyMethod: TCQRSResult;
   // ! begin
-  // !   Reset(result); // reset the error information to cqrsUnspecifiedError
+  // !   ORMBegin(qsNone,result); // reset the error information to cqrsUnspecifiedError
   // !   ... // do some work
   // !   if error then
-  // !     SetResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
-  // !     SetResult(cqrsSuccess); // instead of result := cqrsSuccess
+  // !     ORMResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
+  // !     ORMResult(cqrsSuccess); // instead of result := cqrsSuccess
   // !   end;
+  // - the methods are implemented as a simple state machine
   TCQRSQueryObject = class(TInjectableObject, ICQRSQuery)
   protected
     fLastErrorAddress: ^TCQRSResult;
-    fLastErrorAddressIsQuery: boolean;
     fLastError: TCQRSResult;
-    fLastErrorInfo: variant;
-    fLastQueryError: TCQRSResult;
-    /// overloaded protected methods to be used for LastError process
-    procedure Reset(var result: TCQRSResult;
-      Error: TCQRSResult=cqrsUnspecifiedError); virtual;
-    procedure ORMBeforeQuery(var result: TCQRSResult;
-      Error: TCQRSResult=cqrsUnspecifiedError); virtual;
-    function ORMAfterQuery(var aResult: TCQRSResult;
+    fLastErrorContext: variant;
+    fAction: TCQRSQueryAction;
+    fState: TCQRSQueryState;
+    // method to be called at first for LastError process
+    function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
-    procedure SetResult(Error: TCQRSResult); virtual;
-    procedure SetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
-    procedure SetResultMsg(Error: TCQRSResult;
+    function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
+    // methods to be used to set the process end status
+    procedure ORMResult(Error: TCQRSResult); virtual;
+    procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
+    procedure ORMResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
-    procedure SetResultDoc(Error: TCQRSResult; const ErrorInfo: variant); 
-    procedure SetResultJSON(Error: TCQRSResult;
-      JSONFmt: PUTF8Char; const Args,Params: array of const); 
-  public
-    /// returns the last error as an enumerate
-    function LastError: TCQRSResult; virtual;
-    /// returns addition information for the last error
-    // - may be some text, or a JSON document stored as TDocVariant   
-    // - if no specific information has been defined, a generic English text
-    // will be computed by this method
-    function LastErrorInfo: variant; virtual;
+    procedure ORMResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
+    procedure ORMResultJSON(Error: TCQRSResult;
+      JSONFmt: PUTF8Char; const Args,Params: array of const);
+    function GetLastError: TCQRSResult; 
+    function GetLastErrorInfo: variant; virtual;
+  published
+    /// the last error, as an enumerate
+    property LastError: TCQRSResult read GetLastError;
+    /// the action currently processing
+    property Action: TCQRSQueryAction read fAction;
+    /// current step of the TCQRSQueryObject state machine 
+    property State: TCQRSQueryState read fState;
   end;
 
 
@@ -193,13 +212,15 @@ type
   // - in practice, will be e.g. Base-64 encoded SHA-256 binary hash
   TAuthQueryNonce = RawUTF8;
 
-  /// used to store authentication information
+  TAuthInfoName = RawUTF8;
+
+  /// DDD object used to store authentication information
   TAuthInfo = class(TPersistent)
   protected
-    fLogonName: RawUTF8;
+    fLogonName: TAuthInfoName;
   published
     /// the textual identifier by which the user would recognize himself
-    property LogonName: RawUTF8 read fLogonName write fLogonName;
+    property LogonName: TAuthInfoName read fLogonName write fLogonName;
   end;
 
   /// service to authenticate credentials via a dual pass challenge
@@ -251,12 +272,17 @@ type
 { ----- Persistence / Repository Implementation using mORMot's ORM }
 
 type
-  /// abstract ancestor for all persistence/repository related Exceptions
-  EDDDRepository = class(ESynException);
-
   TDDDRepositoryRestObjectMapping = class;
   TDDDRepositoryRestQuery = class;
   TDDDRepositoryRestClass = class of TDDDRepositoryRestQuery;
+
+  /// abstract ancestor for all persistence/repository related Exceptions
+  EDDDRepository = class(ESynException)
+  public
+    /// constructor like FormatUTF8() which will also serialize the caller info 
+    constructor CreateUTF8(Caller: TDDDRepositoryRestObjectMapping;
+      Format: PUTF8Char; const Args: array of const);
+  end;
 
   /// store reference of several mapping definitions
   TDDDRepositoryRestObjectMappingObjArray = array of TDDDRepositoryRestObjectMapping;
@@ -273,16 +299,16 @@ type
     destructor Destroy; override;
     /// register DDD's TPersistent repository over an ORM's TSQLRecord
     // - will raise an exception if the aggregate has already been defined
-    function AddMap(aAggregate: TPersistentClass;
+    function AddMap(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-      aRest: TSQLRest; aTable: TSQLRecordClass;
+      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestObjectMapping;
     /// retrieve the registered mapping definition of a given TPersistent in Map[]
     // - returns -1 if the TPersistence class is unknown
-    function GetMapIndex(aAggregate: TPersistentClass): integer;
+    function GetMapIndex(const aInterface: TGUID): integer;
     /// retrieve the registered mapping definition of a given TPersistent
     // - raise an EDDDRepository exception if the TPersistence class is unknown
-    function GetMap(aAggregate: TPersistentClass): TDDDRepositoryRestObjectMapping;
+    function GetMap(const aInterface: TGUID): TDDDRepositoryRestObjectMapping;
     /// read-only access to all mapping definitions
     property Map: TDDDRepositoryRestObjectMappingObjArray read fMap;
   end;
@@ -297,50 +323,52 @@ type
     fRest: TSQLRest;
     fAggregate: TPersistentClass;
     fTable: TSQLRecordClass;
-    fMapping: TSQLRecordPropertiesMapping;
-    fMappingVersion: cardinal;
+    fPropsMapping: TSQLRecordPropertiesMapping;
+    fPropsMappingVersion: cardinal;
     fProps: TSQLPropInfoList;
     fORMProps: TSQLPropInfoList;
     // TSQLPropInfoList correspondance, as filled by ComputeMapping:
     fAggregateToTable: TSQLPropInfoDynArray;
     fTableToAggregate: TSQLPropInfoDynArray;
     procedure ComputeMapping;
-    function InternalResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
     /// initialize the mapping between a DDD Aggregate and a mORMot ORM class
     // - by default, field names should match on both sides - but you can
     // specify a custom field mapping as TSQLRecord,Aggregate pairs
     // - any missing or unexpected field on any side will just be ignored
     constructor Create(aMapper: TDDDRepositoryRestMapper;
-      aAggregate: TPersistentClass;
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-      aRest: TSQLRest; aTable: TSQLRecordClass;
+      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8); reintroduce; overload;
+    /// finalize all mapping information 
+    destructor Destroy; override;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
     // TSQLRecord fields
     procedure AggregateToJSON(aAggregate: TPersistent; W: TJSONSerializer;
-      ORMMappedFields: boolean; aID: TID); 
+      ORMMappedFields: boolean; aID: TID);
     /// convert a DDD Aggregate into an ORM TSQLRecord instance
     procedure AggregateToTable(aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
     procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TPersistent);
-    /// finalize all mapping information 
-    destructor Destroy; override;
     /// the home repository owning this mapping definition
     property Mapper: TDDDRepositoryRestMapper read fMapper;
+    /// the mapped DDD's TPersistent published properties RTTI 
+    property Props: TSQLPropInfoList read fProps;
+    /// access to the Aggregate / ORM field mapping
+    property FieldMapping: TSQLRecordPropertiesMapping read fPropsMapping;
+  published
+    /// the associated I*Query / I*Command repository interface
+    property Repository: TInterfaceFactory read fInterface;
     /// the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
     /// the mapped DDD's TPersistent
     property Aggregate: TPersistentClass read fAggregate;
-    /// the mapped DDD's TPersistent published properties RTTI 
-    property Props: TSQLPropInfoList read fProps;
     /// the ORM's TSQLRecord used for actual storage
     property Table: TSQLRecordClass read fTable;
-    /// access to the Aggregate / ORM field mapping
-    property Mapping: TSQLRecordPropertiesMapping read fMapping;
   end;
 
   /// abstract class to implement I*Query interface using ORM's TSQLRecord
@@ -348,24 +376,40 @@ type
   protected
     fMapping: TDDDRepositoryRestObjectMapping;
     fORM: TSQLRecord;
-    function ORMGetOneAndSetResult(WhereClauseFmt: PUTF8Char;
-      const Bounds: array of const): TCQRSResult;
-    function ORMToAggregateAndSetResult(aAggregate: TPersistent): TCQRSResult;
-    // SetResult(cqrsDataLayerError) will add some additional information
-    procedure SetResult(Error: TCQRSResult); override;
+    function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
+      aError: TCQRSResult=cqrsUnspecifiedError): boolean; override;
+    function ORMSelectOne(WhereClauseFmt: PUTF8Char;
+      const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
+    function ORMGetAggregate(aAggregate: TPersistent): TCQRSResult;
   public
     /// you should not have to use this constructor, since the instances would
     // be injected by TDDDRepositoryRestObjectMapping.InternalResolve
     constructor Create(aMapping: TDDDRepositoryRestObjectMapping); reintroduce; virtual;
     /// finalize the used memory
     destructor Destroy; override;
+  published
+    /// access to the associated mapping
+    property Mapping: TDDDRepositoryRestObjectMapping read fMapping;
     /// access to the current state of the underlying mapped TSQLRecord
+    // - is nil if no query was run yet
+    // - contains the queried object after a successful Select*() method
     property ORM: TSQLRecord read fORM;
   end;
 
   /// abstract class to implement I*Command interface using ORM's TSQLRecord
   TDDDRepositoryRestCommand = class(TDDDRepositoryRestQuery)
   protected
+    fCommand: TSQLOccasion;
+    procedure ORMResult(Error: TCQRSResult); override;
+    // - this default implementation will check the status vs command, and
+    // call fORM.FilterAndValidate 
+    // - you should override it, if you need a specific behavior
+    procedure ORMPrepareForCommit(aCommand: TSQLOccasion); virtual;
+    /// this default implementation will perform Add/Update/Delete on fORM
+    // - you should override it, if you need a specific behavior
+    procedure InternalCommit; virtual;
+    /// do-nothing abstract rollback method
+    procedure InternalRollback; virtual;
   public
     /// finalize the Unit Of Work context
     // - any uncommited change will be lost
@@ -374,12 +418,28 @@ type
     // - this is a generic operation which would work for any class
     // - if you do not need this method, just do not declare it in I*Command
     function Delete: TCQRSResult; virtual;
+    /// write all pending changes prepared by Add/UpdatePassword/Delete methods
+    // - will process the current fORM using the fCommand
+    function Commit: TCQRSResult; virtual;
+  protected
+    /// access to the current process state
+    property Command: TSQLOccasion read fCommand;
   end;
 
 
 { ----- Authentication Implementation using SHA-256 dual step challenge }
 
 type
+  /// ORM object to persist authentication information
+  TSQLRecordAuthInfo = class(TSQLRecord)
+  private
+    fLogonName: RawUTF8;
+    fHashedPassword: RawUTF8;
+  published
+    property LogonName: RawUTF8 read fLogonName write fLogonName;
+    property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
+  end;
+
   /// generic class for implementing authentication
   // - do not instantiate this abstract class, but e.g. TDDDAuthenticationSHA256
   // or TDDDAuthenticationMD5
@@ -390,8 +450,6 @@ type
     class function ComputeHashPassword(const aLogonName,aPassword: RawUTF8): TAuthQueryNonce;
     /// overriden classes should override this method with the proper algorithm
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; virtual; abstract;
-    // temporary abstract method - TODO: use the ORM as real repository
-    function GetHashedPasswordFromRepository(const aLogonName: RawUTF8): TAuthQueryNonce; virtual; abstract;
   public
     /// initiate the first phase of a dual pass challenge authentication
     function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
@@ -407,8 +465,6 @@ type
     function Add(const aLogonName: RawUTF8; aHashedPassword: TAuthQueryNonce): TCQRSResult;
     /// update the current selected credential password
     function UpdatePassword(const aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// write all pending changes prepared by Add/UpdatePassword/Delete methods
-    function Commit: TCQRSResult;
     /// class method to be used on the client side to compute the password
     // - is basically
     // !   result := DoHash(aLogonName+':'+aChallengeFromServer+':'+
@@ -443,123 +499,133 @@ implementation
 
 { TCQRSQueryObject }
 
-function TCQRSQueryObject.LastError: TCQRSResult;
+function TCQRSQueryObject.GetLastError: TCQRSResult;
 begin
   result := fLastError;
 end;
 
-function TCQRSQueryObject.LastErrorInfo: Variant;
+function TCQRSQueryObject.GetLastErrorInfo: Variant;
 begin
-  if TVarData(fLastErrorInfo).VType=varEmpty then
-    RawUTF8ToVariant(GetEnumNameTrimed(TypeInfo(TCQRSResult),fLastError),result) else
-    result := fLastErrorInfo;
+  result := fLastErrorContext;
 end;
 
-procedure TCQRSQueryObject.Reset(var result: TCQRSResult; Error: TCQRSResult);
+const
+  NEEDS_QUERY   = [qaGet, qaCommandOnSelect];
+  NEEDS_COMMAND = [qaCommit];
+  ACTION_TO_STATE: array[TCQRSQueryAction] of TCQRSQueryState = (
+    // qsNone = no state change after this action
+    qsNone, qsQuery, qsNone, qsCommand, qsCommand, qsNone);
+
+function TCQRSQueryObject.ORMBegin(aAction: TCQRSQueryAction;
+  var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
-  fLastErrorAddress := @result;
-  fLastErrorAddressIsQuery := false;
-  result := Error;
-  fLastError := Error;
-  VarClear(fLastErrorInfo);
+  fLastErrorAddress := @aResult;
+  fLastErrorAddress^ := aError;
+  VarClear(fLastErrorContext);
+  if (aAction in NEEDS_QUERY) and (fState<qsQuery) then begin
+    ORMResult(cqrsNoPriorQuery);
+    result := false;
+    exit;
+  end;
+  if (aAction in NEEDS_COMMAND) and (fState<qsCommand) then begin
+    ORMResult(cqrsNoPriorCommand);
+    result := false;
+    exit;
+  end;
+  fAction := aAction;
+  result := true;
 end;
 
-procedure TCQRSQueryObject.ORMBeforeQuery(var result: TCQRSResult;
-  Error: TCQRSResult);
+function TCQRSQueryObject.ORMError(aError: TCQRSResult): TCQRSResult;
 begin
-  Reset(result,Error);
-  fLastErrorAddressIsQuery := true;
+  ORMBegin(qaNone,result);
+  ORMResult(aError);
 end;
 
-function TCQRSQueryObject.ORMAfterQuery(var aResult: TCQRSResult;
-  aError: TCQRSResult): boolean;
-begin
-  result := fLastQueryError=cqrsSuccess;
-  if not result then
-    aError := cqrsNoPriorQuery;
-  Reset(aResult,aError);
-end;
-
-procedure TCQRSQueryObject.SetResult(Error: TCQRSResult);
+procedure TCQRSQueryObject.ORMResult(Error: TCQRSResult);
 begin
   if fLastErrorAddress=nil then
-    raise ECQRSException.CreateUTF8('%.SetResult(%) with no prior Start',
+    raise ECQRSException.CreateUTF8('%.ORMResult(%) with no prior ORMBegin',
       [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
   fLastErrorAddress^ := Error;
-  if fLastErrorAddressIsQuery then
-    fLastQueryError := Error;
   fLastError := Error;
+  fLastErrorContext := _JsonFast(ObjectToJSONDebug(self));
+  TDocVariantData(fLastErrorContext).AddValue('LocalTime',NowToString);
+  if Error=cqrsSuccess then
+    if ACTION_TO_STATE[fAction]<>qsNone then
+      fState := ACTION_TO_STATE[fAction];
+  fAction := qaNone;
 end;
 
-procedure TCQRSQueryObject.SetResultDoc(Error: TCQRSResult;
+procedure TCQRSQueryObject.ORMResultDoc(Error: TCQRSResult;
   const ErrorInfo: variant);
 begin
-  SetResult(Error);
-  fLastErrorInfo := ErrorInfo;
+  ORMResult(Error);
+  TDocVariantData(fLastErrorContext).AddValue('Info',ErrorInfo);
 end;
 
-procedure TCQRSQueryObject.SetResultJSON(Error: TCQRSResult;
+procedure TCQRSQueryObject.ORMResultJSON(Error: TCQRSResult;
   JSONFmt: PUTF8Char; const Args,Params: array of const);
 begin
-  SetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
+  ORMResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
 end;
 
-procedure TCQRSQueryObject.SetResultMsg(Error: TCQRSResult;
+procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
   const ErrorMessage: RawUTF8);
 begin
-  SetResult(Error);
-  RawUTF8ToVariant(ErrorMessage,fLastErrorInfo);
+  ORMResult(Error);
+  TDocVariantData(fLastErrorContext).AddValue('Msg',ErrorMessage);
 end;
 
-procedure TCQRSQueryObject.SetResultMsg(Error: TCQRSResult;
+procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
   ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
 begin
-  SetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
+  ORMResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
 end;
 
 
 { ----- Persistence / Repository Implementation using mORMot's ORM }
 
+{ EDDDRepository }
+
+constructor EDDDRepository.CreateUTF8(
+  Caller: TDDDRepositoryRestObjectMapping; Format: PUTF8Char;
+  const Args: array of const);
+begin
+  if Caller=nil then
+    inherited CreateUTF8(Format,Args) else
+    inherited CreateUTF8('% - %',[FormatUTF8(Format,Args),ObjectToJSONDebug(Caller)]);
+end;
+
+
 { TDDDRepositoryRestObjectMapping }
 
 constructor TDDDRepositoryRestObjectMapping.Create(
-  aMapper: TDDDRepositoryRestMapper; aAggregate: TPersistentClass;
+  aMapper: TDDDRepositoryRestMapper;
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-  aRest: TSQLRest; aTable: TSQLRecordClass; const TableAggregatePairs: array of RawUTF8);
-  procedure AddParentsFirst(aClassType: TClass);
-  var P: PPropInfo;
-      nfo: TSQLPropInfo;
-      i: Integer;
-  begin
-    if aClassType=nil then
-      exit; // no RTTI information (e.g. reached TObject level)
-    AddParentsFirst(aClassType.ClassParent);
-    for i := 1 to InternalClassPropInfo(aClassType,P) do begin
-      nfo := TSQLPropInfoRTTI.CreateFrom(P,fProps.Count,false);
-      if nfo<>nil then
-        fProps.Add(aTable,nfo);
-      P := P^.Next;
-    end;
-  end;
+  aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+  const TableAggregatePairs: array of RawUTF8);
 begin
   inherited Create;
   fMapper := aMapper;
-  fInterface := TInterfaceFactory.Get(aInterface);
-  if fInterface=nil then
-    raise EServiceException.CreateUTF8(
-    '%.Create(%,%,%,%): Interface not registered - you could use TInterfaceFactory.'+
-    'RegisterInterfaces()',[self,aAggregate,GUIDToShort(aInterface),aRest,aTable]);
   fImplementation := aImplementation;
   fRest := aRest;
   fAggregate := aAggregate;
   fTable := aTable;
+  fInterface := TInterfaceFactory.Get(aInterface);
+  if fInterface=nil then
+    raise EDDDRepository.CreateUTF8(self,
+     '%.Create(%): Interface not registered - you could use TInterfaceFactory.'+
+     'RegisterInterfaces()',[self,GUIDToShort(aInterface)]);
+  if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
+    raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
   fORMProps := fTable.RecordProps.Fields;
-  fMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
-  fMapping.MapFields(TableAggregatePairs);
-  fProps := TSQLPropInfoList.Create;
-  AddParentsFirst(fAggregate);
+  fPropsMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
+  fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
+  fPropsMapping.MapFields(TableAggregatePairs);
+  fProps := TSQLPropInfoList.Create(fAggregate,[pilAllowIDFields]);
   SetLength(fAggregateToTable,fProps.Count);
-  SetLength(fTableToAggregate,fProps.Count);
+  SetLength(fTableToAggregate,fORMProps.Count);
   ComputeMapping;
 end;
 
@@ -583,6 +649,7 @@ procedure TDDDRepositoryRestObjectMapping.AggregateToJSON(
   aID: TID);
 var i: integer;
 begin
+  ComputeMapping;
   if aAggregate=nil then begin
     W.AddShort('null');
     exit;
@@ -612,20 +679,18 @@ var i: integer;
     Value: RawUTF8;
     wasString: boolean;
 begin
+  ComputeMapping;
   if aDest=nil then
-    raise EDDDRepository.CreateUTF8('%.AggregateToTable(%,%,aDest: %=nil)',
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateToTable(%,%,%=nil)',
       [self,aAggregate,aID,fTable]);
-  if aAggregate=nil then begin
-    aDest.ClearProperties;
-    exit;
-  end;
-  for i := 0 to fProps.Count-1 do begin
-    if fAggregateToTable[i]<>nil then
-      fProps.List[i].GetValueVar(aAggregate,false,Value,@wasString) else
-      Value := '';
-    fAggregateToTable[i].SetValue(aDest,pointer(Value),wasString);
-  end;
+  aDest.ClearProperties;
   aDest.ID := aID;
+  if aAggregate<>nil then
+    for i := 0 to fProps.Count-1 do
+      if fAggregateToTable[i]<>nil then begin
+        fProps.List[i].GetValueVar(aAggregate,false,Value,@wasString);
+        fAggregateToTable[i].SetValue(aDest,pointer(Value),wasString);
+      end;
 end;
 
 procedure TDDDRepositoryRestObjectMapping.AggregateFromTable(
@@ -634,54 +699,76 @@ var i: integer;
     Value: RawUTF8;
     wasString: boolean;
 begin
+  ComputeMapping;
   if aAggregate=nil then
-    raise EDDDRepository.CreateUTF8('%.AggregateFromTable(%,aAggregate: %=nil)',
-      [self,aSource,fAggregate]);
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
   if aSource=nil then begin
     AggregateClear(aAggregate);
     exit;
   end;
   for i := 0 to fProps.Count-1 do begin
-    if fAggregateToTable[i]=nil then
-      Value := '' else
-      fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString);
+    if fAggregateToTable[i]<>nil then
+      fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString) else
+      Value := '';
     fProps.List[i].SetValue(aAggregate,pointer(Value),wasString);
   end;
 end;
 
 procedure TDDDRepositoryRestObjectMapping.ComputeMapping;
-var i: integer;
+procedure EnsureCompatible(agg,rec: TSQLPropInfo);
 begin
+  if agg.SQLDBFieldType<>rec.SQLDBFieldType then
+    raise EDDDRepository.CreateUTF8(self,
+      '% mapping types do not match at DB level: %.%:%=% and %.%:%=%',[self,
+      fAggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName,
+      fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName]);
+end;
+var i,ndx: integer;
+begin
+  if fPropsMapping.MappingVersion=fPropsMappingVersion then
+    exit;
   for i := 0 to fProps.Count-1 do begin
-    fAggregateToTable[i] := nil;
-    fTableToAggregate[i] := nil;
+    ndx := fPropsMapping.ExternalToInternalIndex(fProps.List[i].Name);
+    if ndx<0 then // ID/RowID or TPersistent property not defined in TSQLRecord
+      fAggregateToTable[i] := nil else begin
+      fAggregateToTable[i] := fORMProps.List[ndx];
+      EnsureCompatible(fProps.List[i],fAggregateToTable[i]);
+    end;
   end;
-
+  for i := 0 to fORMProps.Count-1 do begin
+    ndx := fProps.IndexByName(fORMProps.List[i].Name);
+    if ndx<0 then // TSQLRecord property not defined in the TPersistent
+      fTableToAggregate[i] := nil else begin
+      fTableToAggregate[i] := fProps.List[ndx];
+      EnsureCompatible(fTableToAggregate[i],fORMProps.List[i]);
+    end;
+  end;
+  fPropsMappingVersion := fPropsMapping.MappingVersion;
 end;
 
-function TDDDRepositoryRestObjectMapping.InternalResolve(
+function TDDDRepositoryRestObjectMapping.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
 begin
-  if fInterface.InterfaceTypeInfo=aInterface then begin
+  if fInterface.InterfaceTypeInfo<>aInterface then
+    result := false else begin
     IInterface(Obj) := fImplementation.Create(self);
     result := true;
-  end else
-    result := false;
+  end;
 end;
-
 
 
 { TDDDRepositoryRestMapper }
 
-function TDDDRepositoryRestMapper.AddMap(aAggregate: TPersistentClass;
+function TDDDRepositoryRestMapper.AddMap(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-  aRest: TSQLRest; aTable: TSQLRecordClass;
+  aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestObjectMapping;
 begin
-  if GetMapIndex(aAggregate)>=0 then
-    raise EDDDRepository.CreateUTF8('Duplicated %.AddMap(%)',[self,aAggregate]);
+  if GetMapIndex(aInterface)>=0 then
+    raise EDDDRepository.CreateUTF8(nil,'Duplicated GUID for %.AddMap(%,%,%)',
+      [self,GUIDToShort(aInterface),aImplementation,aAggregate]);
   result := TDDDRepositoryRestObjectMapping.Create(self,
-    aAggregate,aInterface,aImplementation,aRest,aTable,TableAggregatePairs);
+    aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs);
   ObjArrayAdd(fMap,result);
 end;
 
@@ -692,20 +779,21 @@ begin
 end;
 
 function TDDDRepositoryRestMapper.GetMap(
-  aAggregate: TPersistentClass): TDDDRepositoryRestObjectMapping;
+  const aInterface: TGUID): TDDDRepositoryRestObjectMapping;
 var i: integer;
 begin
-  i := GetMapIndex(aAggregate);
+  i := GetMapIndex(aInterface);
   if i<0 then
-    raise EDDDRepository.CreateUTF8('%.GetMap(%)=nil',[self,aAggregate]);
+    raise EDDDRepository.CreateUTF8(nil,'%.GetMap(%)=nil',
+      [self,GUIDToShort(aInterface)]);
   result := fMap[i];
 end;
 
 function TDDDRepositoryRestMapper.GetMapIndex(
-  aAggregate: TPersistentClass): integer;
+  const aInterface: TGUID): integer;
 begin
   for result := 0 to length(fMap)-1 do
-    if fMap[result].Aggregate=aAggregate then
+    if IsEqualGUID(fMap[result].fInterface.InterfaceIID,aInterface) then
       exit;
   result := -1;
 end;
@@ -726,32 +814,31 @@ begin
   inherited;
 end;
 
-procedure TDDDRepositoryRestQuery.SetResult(Error: TCQRSResult);
+function TDDDRepositoryRestQuery.ORMBegin(aAction: TCQRSQueryAction;
+  var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
-  if Error=cqrsDataLayerError then
-    inherited SetResultJSON(Error,
-      '{LocalTime:?,Repository:?,Aggregate:?,ORM:?,ID:?,Rest:?,SQLSet:?}',[],
-      [NowToString,fMapping.fInterface.InterfaceTypeInfo^.Name,fMapping.Aggregate,
-       fMapping.Table,fORM.ID,fMapping.Rest,fORM.GetSQLSet]) else
-    inherited SetResult(Error);
+  result := inherited ORMBegin(aAction,aResult,aError);
+  if aAction=qaSelect then
+    ORM.ClearProperties;
 end;
 
-function TDDDRepositoryRestQuery.ORMGetOneAndSetResult(WhereClauseFmt: PUTF8Char;
-   const Bounds: array of const): TCQRSResult;
+function TDDDRepositoryRestQuery.ORMSelectOne(WhereClauseFmt: PUTF8Char;
+   const Bounds: array of const; ForcedBadRequest: boolean): TCQRSResult;
 begin
-  ORMBeforeQuery(result);
-  fORM.ClearProperties;
-  if fMapping.Rest.Retrieve(WhereClauseFmt,[],Bounds,fORM) then
-    SetResult(cqrsSuccess) else
-    SetResult(cqrsNotFound);
+  ORMBegin(qaSelect,result);
+  if ForcedBadRequest then
+    ORMResult(cqrsBadRequest) else
+    if Mapping.Rest.Retrieve(WhereClauseFmt,[],Bounds,ORM) then
+      ORMResult(cqrsSuccess) else
+      ORMResult(cqrsNotFound);
 end;
 
-function TDDDRepositoryRestQuery.ORMToAggregateAndSetResult(
+function TDDDRepositoryRestQuery.ORMGetAggregate(
   aAggregate: TPersistent): TCQRSResult;
 begin
-  if ORMAfterQuery(result) then begin
-    fMapping.AggregateFromTable(fORM,aAggregate);
-    SetResult(cqrsSuccess);
+  if ORMBegin(qaGet,result) then begin
+    Mapping.AggregateFromTable(ORM,aAggregate);
+    ORMResult(cqrsSuccess);
   end;
 end;
 
@@ -760,17 +847,75 @@ end;
 
 destructor TDDDRepositoryRestCommand.Destroy;
 begin
-
+  InternalRollback;
   inherited Destroy;
+end;
+
+procedure TDDDRepositoryRestCommand.ORMResult(Error: TCQRSResult);
+begin
+  inherited ORMResult(Error);
+  if Error<>cqrsSuccess then
+    fCommand := soSelect;
 end;
 
 function TDDDRepositoryRestCommand.Delete: TCQRSResult;
 begin
-  if ORMAfterQuery(result) then 
-    if fMapping.Rest.Delete(fMapping.Table,fORM.ID) then
-      SetResult(cqrsSuccess) else
-      SetResult(cqrsDataLayerError);
+  if ORMBegin(qaCommandOnSelect,result) then
+    ORMPrepareForCommit(soDelete);
 end;
+
+procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
+  aCommand: TSQLOccasion);
+var msg: RawUTF8;
+begin
+  fCommand := aCommand; // overriden ORMResult() will reset to soSelect on error
+  case aCommand of
+  soSelect: begin
+    ORMResult(cqrsBadRequest);
+    exit;
+  end;
+  soUpdate,soDelete:
+    if (fState<qsQuery) or (ORM.ID=0) then begin
+      ORMResult(cqrsNoPriorQuery);
+      exit;
+    end;
+  end;
+  msg := ORM.FilterAndValidate(Mapping.Rest);
+  if msg<>'' then
+    ORMResultMsg(cqrsDataLayerError,msg) else
+    ORMResult(cqrsSuccess);
+end;
+
+procedure TDDDRepositoryRestCommand.InternalCommit;
+begin
+  case fCommand of
+  soSelect:
+    ORMResult(cqrsBadRequest);
+  soInsert:
+    if Mapping.Rest.Add(ORM,true)<>0 then
+      ORMResult(cqrsSuccess) else
+      ORMResult(cqrsDataLayerError);
+  soUpdate:
+    if Mapping.Rest.Update(ORM) then
+      ORMResult(cqrsSuccess) else
+      ORMResult(cqrsDataLayerError);
+  soDelete:
+    if Mapping.Rest.Delete(ORM.RecordClass,ORM.ID) then
+      ORMResult(cqrsSuccess) else
+      ORMResult(cqrsDataLayerError);
+  end;
+end;
+
+procedure TDDDRepositoryRestCommand.InternalRollback;
+begin // overriden methods may do something 
+end;
+
+function TDDDRepositoryRestCommand.Commit: TCQRSResult;
+begin
+  if ORMBegin(qaCommit,result) then
+    InternalCommit;
+end;
+
 
 
 { ----- Authentication Implementation using SHA-256 dual step challenge }
@@ -787,13 +932,18 @@ end;
 function TDDDAuthenticationAbstract.ChallengeSelectFinal(
   const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
 begin
-  Reset(result);
   if (fChallengeLogonName='') or (fChallengeNonce='') then
-    SetResult(cqrsBadRequest) else
-    if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
-       GetHashedPasswordFromRepository(fChallengeLogonName))=aChallengedPassword then
-      SetResult(cqrsSuccess) else
-      SetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
+    result := ORMError(cqrsBadRequest) else
+    result := SelectByName(fChallengeLogonName);
+  if result<>cqrsSuccess then
+    exit;
+  ORMBegin(qaSelect,result);
+  if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
+     (ORM as TSQLRecordAuthInfo).HashedPassword)=aChallengedPassword then
+    ORMResult(cqrsSuccess) else
+    ORMResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
+  fChallengeNonce := '';
+  fChallengeLogonName := '';
 end;
 
 class function TDDDAuthenticationAbstract.ComputeHashPassword(
@@ -812,35 +962,34 @@ end;
 function TDDDAuthenticationAbstract.SelectByName(
   const aLogonName: RawUTF8): TCQRSResult;
 begin
-  result := ORMGetOneAndSetResult('LogonName=?',[aLogonName]);
+  result := ORMSelectOne('LogonName=?',[aLogonName],(aLogonName=''));
 end;
 
 function TDDDAuthenticationAbstract.Get(
   out aAggregate: TAuthInfo): TCQRSResult;
 begin
-  result := ORMToAggregateAndSetResult(aAggregate);
+  result := ORMGetAggregate(aAggregate);
 end;
 
 function TDDDAuthenticationAbstract.Add(const aLogonName: RawUTF8;
   aHashedPassword: TAuthQueryNonce): TCQRSResult;
 begin
-  if not ORMAfterQuery(result) then
+  if not ORMBegin(qaCommandDirect,result) then
     exit;
-
+  with ORM as TSQLRecordAuthInfo do begin
+    LogonName := aLogonName;
+    HashedPassword := aHashedPassword;
+  end;
+  ORMPrepareForCommit(soInsert);
 end;
 
 function TDDDAuthenticationAbstract.UpdatePassword(
   const aHashedPassword: TAuthQueryNonce): TCQRSResult;
 begin
-  if not ORMAfterQuery(result) then
+  if not ORMBegin(qaCommandOnSelect,result) then
     exit;
-
-end;
-
-function TDDDAuthenticationAbstract.Commit: TCQRSResult;
-begin
-  Reset(result);
-
+  (ORM as TSQLRecordAuthInfo).HashedPassword := aHashedPassword;
+  ORMPrepareForCommit(soUpdate);
 end;
 
 
@@ -859,6 +1008,7 @@ class function TDDDAuthenticationMD5.DoHash(
 begin
   result := MD5(RawUTF8(ClassName)+aValue);
 end;
+
 
 
 initialization

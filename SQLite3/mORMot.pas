@@ -2591,6 +2591,9 @@ type
     // - this virtual method is the one to be overridden by the implementing classes
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); virtual; abstract;
+    /// normalize the content of Value, so that GetValue(Object,true) should return the
+    // same content (true for ToSQL format)
+    procedure NormalizeValue(var Value: RawUTF8); virtual; abstract;
     /// retrieve a field value into a TSQLVar value
     // - the temp RawByteString is used as a temporary storage for TEXT or BLOB
     // and should be available during all access to the TSQLVar fields
@@ -2635,9 +2638,6 @@ type
     // - note that this method can return a hash value of 0
     // - this default implementation will call GetValueVar() for slow computation
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; virtual;
-    /// normalize the content of Value, so that GetValue(Object,true) should return the
-    // same content (true for ToSQL format)
-    procedure NormalizeValue(var Value: RawUTF8); virtual; abstract;
     /// add the JSON content corresponding to the given property
     // - this default implementation will call safe but slow GetValueVar() method
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); virtual;
@@ -2645,6 +2645,8 @@ type
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
     /// the corresponding column type, as managed for abstract database access
     function SQLDBFieldType: TSQLDBFieldType;
+    /// the corresponding column type name, as managed for abstract database access
+    function SQLDBFieldTypeName: PShortString;
   end;
 
   /// type of a TSQLPropInfo class
@@ -6793,9 +6795,12 @@ type
   // - in end user code, mostly MapField/MapFields/MapAutoKeywordFields methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
-  TSQLRecordPropertiesMapping = {$ifdef UNICODE}
-    record private {$else}
-    object protected {$endif}
+  {$ifdef UNICODE}
+  TSQLRecordPropertiesMapping = record
+  {$else}
+  TSQLRecordPropertiesMapping = object
+  {$endif}
+  private
     /// storage of main read-only properties
     fProps: TSQLRecordProperties;
     fConnectionProperties: TObject;
@@ -6886,17 +6891,18 @@ type
     // - otherwise, will return the external field name 
     function FieldNameByIndex(FieldIndex: Integer): RawUTF8;
 
-    /// opaque structure used on the Server side to specify e.g. the DB connection
-    // - will define such a generic TObject, to avoid any unecessary dependency
-    // to the SynDB unit in mORMot.pas
+    /// opaque object used on the Server side to specify e.g. the DB connection
+    // - will define such a generic TObject, to avoid any unecessary type
+    // dependency to other units, e.g. the SynDB unit in mORMot.pas
     // - in practice, will be assigned by VirtualTableExternalRegister() to
     // a TSQLDBConnectionProperties instance in mORMotDB.pas, or by
-    // StaticMongoDBRegister() to a TMongoCollection instance
-    // - equals nil if the table is internal to SQLite3:
+    // StaticMongoDBRegister() to a TMongoCollection instance, or by 
+    // TDDDRepositoryRestObjectMapping.Create to its associated TSQLRest
+    // - in ORM context, equals nil if the table is internal to SQLite3:
     // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties=nil then
-    // !   // here we now that this is not an external table 
+    // !   // this is not an external table, since Init() was not called
     property ConnectionProperties: TObject read fConnectionProperties;
-    /// the associated TSQLModelRecordProperties
+    /// the associated TSQLRecordProperties
     property Properties: TSQLRecordProperties read fProps;
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
@@ -6906,6 +6912,7 @@ type
     property TableName: RawUTF8 read fTableName;
     /// pre-computed SQL statements for this external TSQLRecord in this model
     // - you can use those SQL statements directly with the external engine
+    // - filled if AutoComputeSQL was set to true in Init() method
     property SQL: TSQLModelRecordPropertiesSQL read fSQL;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
@@ -15038,6 +15045,11 @@ begin
   result := SQLFieldTypeToDB[fSQLFieldType];
 end;
 
+function TSQLPropInfo.SQLDBFieldTypeName: PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(SQLDBFieldType));
+end;
+
 procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
@@ -15272,13 +15284,14 @@ begin
         C := TSQLPropInfoRTTIWide;
     end;
   end;
-  if C=nil then
-    if aRaiseEORMExceptionIfNotHandled then
-      raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
-        [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType)){$ifndef FPC}^{$endif},
-         GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind)){$ifndef FPC}^{$endif},aPropInfo^.Name]) else
+  if C<>nil then
+    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType) else
+    if not aRaiseEORMExceptionIfNotHandled then
       result := nil else
-    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+      raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
+        [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
+         GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,
+         aPropInfo^.Name]);
 end;
 
 function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
@@ -16159,7 +16172,8 @@ begin
   aValue.VText := Pointer(temp);
 end;
 
-function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
+function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
+  CaseInsensitive: boolean): PtrInt;
 var tmp1,tmp2: RawByteString;
 begin
   if Item1=Item2 then
@@ -16178,8 +16192,11 @@ end;
 
 procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
+var tmp: RawUTF8;
 begin
-  fPropInfo.SetLongStrProp(Instance,RawUTF8(Value));
+  if Value<>nil then
+    SetString(tmp,PAnsiChar(Value),StrLen(Value));
+  fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
 
@@ -24031,7 +24048,7 @@ begin
   fProps.Fields.NamesToRawUTF8DynArray(fFieldNames);
   FillChar(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
   fAutoComputeSQL := AutoComputeSQL;
-  fMappingVersion := 0;
+  fMappingVersion := 1;
   if fAutoComputeSQL then
     ComputeSQL;
 end;
@@ -28894,7 +28911,7 @@ procedure TimeOut;
 begin
   {$ifdef WITHLOG}
   Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,
-    GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command)){$ifndef FPC}^{$endif},
+    GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))^,
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
   if Call<>nil then
@@ -28979,8 +28996,7 @@ begin
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
         Thread := Server.CreateBackgroundThread('% "%" %',[self,Server.Model.Root,
-          GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))
-          {$ifndef FPC}^{$endif}]);
+          GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))^]);
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
     end;
@@ -42361,4 +42377,4 @@ end.
 
 
 
-
+
