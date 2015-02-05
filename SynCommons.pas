@@ -5281,8 +5281,9 @@ type
   // - woDontStoreDefault (which is set by default for WriteObject method) will
   // avoid serializing properties including a default value (JSONToObject function
   // will set the default values, so it may help saving some bandwidth or storage)
-  // - woFullExpand will generate a log-friendly layout, including instance class
-  // name and reference pointer (it is used in TSynLog)
+  // - woFullExpand will generate a debugger-friendly layout, including instance
+  // class name, sets/enumerates as text, and reference pointer - as used by
+  // TSynLog and ObjectToJSONFull()
   // - woStoreClassName will add a "ClassName":"TMyClass", field
   // - woHumanReadableFullSetsAsStar will store an human-readable set with
   // all its enumerates items set to be stored as ["*"]
@@ -29195,8 +29196,10 @@ end;
 
 procedure TDocVariantData.Clear;
 begin
-  DocVariantType.Clear(TVarData(self));
-end;
+  if VType=DocVariantType.VarType then
+    DocVariantType.Clear(TVarData(self)) else
+    VarClear(variant(self));
+end;                       
 
 procedure TDocVariantData.Reset;
 var opt: TDocVariantOptions;

@@ -1737,7 +1737,7 @@ procedure CopyCollection(Source, Dest: TCollection);
 {$endif}
 
 /// set any default integer or enumerates (including boolean) published
-// properties values for an object
+// properties values for a TPersistent
 // - reset only the published properties of the current class level (do NOT
 // reset the properties content published in the parent classes)
 procedure SetDefaultValuesObject(Value: TPersistent);
@@ -1756,6 +1756,13 @@ procedure SetDefaultValuesObject(Value: TPersistent);
 // - call internaly TJSONSerializer.WriteObject() method
 function ObjectToJSON(Value: TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+
+/// will serialize any TObject into its expanded UTF-8 JSON representation
+// - includes debugger-friendly information, similar to TSynLog, i.e.
+// class name and sets/enumerates as text
+// - could be used to create a TDocVariant object with full information
+// - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
+function ObjectToJSONDebug(Value: TObject): RawUTF8;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -3175,19 +3182,30 @@ type
   /// dynamic array of ORM fields information for published properties
   TSQLPropInfoDynArray = array of TSQLPropInfo;
 
-  /// handle a read-only list of ORM fields information for published properties
+  /// how TSQLPropInfoList.Create() would handle the incoming RTTI
+  TSQLPropInfoListOptions = set of (
+    pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields);
+
+  /// handle a read-only list of fields information for published properties
+  // - is mainly used by our ORM for TSQLRecord RTTI, but may be used for
+  // any TPersistent
   TSQLPropInfoList = class
   protected
     fList: TSQLPropInfoDynArray;
     fCount: integer;
+    fTable: TClass;
+    fOptions: TSQLPropInfoListOptions;
     fOrderedByName: TIntegerDynArray;
     function GetItem(aIndex: integer): TSQLPropInfo;
     procedure QuickSortByName(L,R: PtrInt);
+    procedure InternalAddParentsFirst(aClassType: TClass);
   public
+    /// initialize the list from a given class RTTI
+    constructor Create(aTable: TClass; aOptions: TSQLPropInfoListOptions);
     /// release internal list items
     destructor Destroy; override;
     /// add a TSQLPropInfo to the list
-    function Add(aTable: TClass; aItem: TSQLPropInfo): integer;
+    function Add(aItem: TSQLPropInfo): integer;
     /// find an item in the list
     // - returns nil if not found
     function ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo; overload;
@@ -5129,11 +5147,17 @@ type
       aInvalidFieldIndex: PInteger=nil): string; overload;
     /// filter then validate the specified fields values of the current TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
-    // and display the field name at the beginning of the error message
+    // and display the faulty field name at the beginning of the error message
     // - returns true if all field names were correct and processed, or false
     // and an explicit error message (translated in the current language) on error
     function FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
-      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload; 
+      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload;
+    /// filter then validate the specified fields values of the current TSQLRecord
+    // - this version will call the overloaded Filter() and Validate() methods
+    // and return '' on validation success, or an error message with the faulty 
+    // field names at the beginning
+    function FilterAndValidate(aRest: TSQLRest;
+      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): RawUTF8; overload;
     /// should modify the record content before writing to the Server
     // - this default implementation will update any sftModTime / TModTime and
     // sftCreateTime / TCreateTime properties content with the exact server time stamp
@@ -8075,11 +8099,12 @@ type
   // - you should not use this event, but rather use TInjectableObject.AddResolver()
   TOnDependencyResolve = function(aInterface: PTypeInfo; out Obj): boolean of object;
 
+  {$M+}
   /// abstract factory class allowing to call interface resolution in cascade
   // - you can inherit from this class to chain the InternalResolve() calls so
   // that several kind of implementations may be asked by a TInjectableObject,
   // e.g. TInterfaceStub, TServiceContainer or TDDDRepositoryRestObjectMapping
-  // - this will implement factory pattern, as a safe and thread-safe IoC 
+  // - this will implement factory pattern, as a safe and thread-safe IoC
   TInterfaceResolver = class
   protected
     fResolveNext: TInterfaceResolver;
@@ -8088,6 +8113,7 @@ type
     /// override this method to check if this instance implements aInterface
     function InternalResolve(aInterface: PTypeInfo; out Obj): boolean; virtual; abstract;
   end;
+  {$M-}
 
   TInterfaceStub = class;
 
@@ -8157,6 +8183,7 @@ type
   // than the client life time just finished)
   TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
 
+  {$M+}
   /// class handling interface RTTI and fake implementation class
   // - a thread-safe global list of such class instances is implemented to cache
   // information for better speed: use class function TInterfaceFactory.Get()
@@ -8178,6 +8205,7 @@ type
     {$endif}
     fFakeVTable: array of pointer;
     fFakeStub: PByteArray;
+    function GetInterfaceName: RawUTF8;
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
@@ -8251,7 +8279,12 @@ type
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
     {$endif}
+  published
+    /// will return the interface name, e.g. 'ICalculator'
+    // - this published property is expected to 
+    property InterfaceName: RawUTF8 read GetInterfaceName;
   end;
+  {$M-}
 
   {$ifdef HASINTERFACERTTI}
 
@@ -8856,19 +8889,20 @@ type
     // - same as the Options property, but in a fluent-style interface
     function SetOptions(Options: TInterfaceStubOptions): TInterfaceStub;
 
+    /// the stubbed method execution trace items
+    property Log: TInterfaceStubLogDynArray read fLogs;
+    /// the stubbed method execution trace converted as text
+    // - typical output is a list of calls separated by commas:
+    // $ Add(10,20)=[30],Divide(20,0) error "divide by zero"
+    property LogAsText: RawUTF8 read GetLogAsText;
+  published
     /// access to the registered Interface RTTI information
     property InterfaceFactory: TInterfaceFactory read fInterface;
     /// optional stubing/mocking options
     // - you can use the SetOptions() method in a fluent-style interface
     property Options: TInterfaceStubOptions read fOptions write IntSetOptions;
-    /// the stubbed method execution trace items
-    property Log: TInterfaceStubLogDynArray read fLogs;
     /// the stubbed method execution trace number of items
     property LogCount: Integer read fLogCount;
-    /// the stubbed method execution trace converted as text
-    // - typical output is a list of calls separated by commas:
-    // $ Add(10,20)=[30],Divide(20,0) error "divide by zero"
-    property LogAsText: RawUTF8 read GetLogAsText;
     /// the stubbed method execution trace converted as one numerical hash
     // - returns Hash32(LogAsText)
     property LogHash: cardinal read GetLogHash;
@@ -17245,6 +17279,13 @@ end;
 
 { TSQLPropInfoList }
 
+constructor TSQLPropInfoList.Create(aTable: TClass; aOptions: TSQLPropInfoListOptions);
+begin
+  fTable := aTable;
+  fOptions := aOptions;
+  InternalAddParentsFirst(aTable);
+end;
+
 destructor TSQLPropInfoList.Destroy;
 var i: integer;
 begin
@@ -17253,18 +17294,32 @@ begin
   inherited;
 end;
 
-function TSQLPropInfoList.Add(aTable: TClass; aItem: TSQLPropInfo): integer;
+procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass);
+var P: PPropInfo;
+    i: Integer;
+begin
+  if aClassType=nil then
+    exit; // no RTTI information (e.g. reached TObject level)
+  InternalAddParentsFirst(aClassType.ClassParent);
+  for i := 1 to InternalClassPropInfo(aClassType,P) do begin
+    Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
+      pilRaiseEORMExceptionIfNotHandled in fOptions));
+    P := P^.Next;
+  end;
+end;
+
+function TSQLPropInfoList.Add(aItem: TSQLPropInfo): integer;
 var f: integer;
 begin
   // check that this property is not an ID/RowID (handled separately)
-  if IsRowID(pointer(aItem.Name)) then
-    raise EModelException.CreateUTF8('%.Add: % should not include a % published property',
-      [self,aTable,aItem.Name]);
+  if IsRowID(pointer(aItem.Name)) and not (pilAllowIDFields in fOptions) then
+    raise EModelException.CreateUTF8(
+      '%.Add: % should not include a "%" published property',[self,fTable,aItem.Name]);
   // check that this property name is not already defined
   for f := 0 to fCount-1 do
     if IdemPropNameU(fList[f].Name,aItem.Name) then
-      raise EModelException.CreateUTF8('%.Add: % has duplicated name %',
-        [self,aTable,aItem.Name]);
+      raise EModelException.CreateUTF8('%.Add: % has duplicated name "%"',
+        [self,fTable,aItem.Name]);
   // add to the internal list
   result := fCount;
   if result>=length(fList) then
@@ -23893,6 +23948,14 @@ begin
         [RecordProps.Fields.List[invalidField].GetNameDisplay,aErrorMessage]);
     result := false;
   end;
+end;
+
+function TSQLRecord.FilterAndValidate(aRest: TSQLRest; const aFields: TSQLFieldBits): RawUTF8;
+var msg: string;
+begin
+  if FilterAndValidate(aRest,msg,aFields) then
+    result := '' else
+    result := StringToUTF8(msg);
 end;
 
 function TSQLRecord.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
@@ -34322,6 +34385,11 @@ begin
   end;
 end;
 
+function ObjectToJSONDebug(Value: TObject): RawUTF8;
+begin
+  result := ObjectToJSON(Value,[woDontStoreDefault,woFullExpand]);
+end;
+
 function UrlEncode(const NameValuePairs: array of const): RawUTF8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var A, n: PtrInt;
@@ -35975,20 +36043,6 @@ const
   ' offset or pragma raise replace row select statement temp trigger vacuum where ';
 
 constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
-
-  procedure AddParentsFirst(aClassType: TClass);
-  var P: PPropInfo;
-      i: Integer;
-  begin
-    if aClassType=nil then
-      exit; // no RTTI information (e.g. reached TObject level)
-    AddParentsFirst(aClassType.ClassParent);
-    for i := 1 to InternalClassPropInfo(aClassType,P) do begin
-      Fields.Add(aTable,TSQLPropInfoRTTI.CreateFrom(P,Fields.Count,true));
-      P := P^.Next;
-    end;
-  end;
-
 var i,j, nProps: integer;
     nMany, nSQLRecord, nSimple, nDynArray, nBlob, nBlobCustom,
     nCopiableFields: integer;
@@ -36015,8 +36069,7 @@ begin
   if nProps>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8('% has too many fields: %>=%',
       [Table,nProps,MAX_SQLFIELDS]);
-  Fields := TSQLPropInfoList.Create;
-  AddParentsFirst(aTable);
+  Fields := TSQLPropInfoList.Create(aTable,[pilRaiseEORMExceptionIfNotHandled]);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8(
@@ -36529,7 +36582,7 @@ procedure TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty(
   aFieldWidth: integer; aData2Text: TOnSQLPropInfoRecord2Text;
   aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  Fields.Add(aTable,TSQLPropInfoRecordFixedSize.Create(aRecordSize,aName,Fields.Count,
+  Fields.Add(TSQLPropInfoRecordFixedSize.Create(aRecordSize,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth,aData2Text,aText2Data));
 end;
 
@@ -36539,7 +36592,7 @@ procedure TSQLRecordProperties.RegisterCustomRTTIRecordProperty(aTable: TClass;
   aData2Text: TOnSQLPropInfoRecord2Text=nil;
   aText2Data: TOnSQLPropInfoRecord2Data=nil);
 begin
-  Fields.Add(aTable,TSQLPropInfoRecordRTTI.Create(aRecordInfo,aName,Fields.Count,
+  Fields.Add(TSQLPropInfoRecordRTTI.Create(aRecordInfo,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth,aData2Text,aText2Data));
 end;
 
@@ -36547,7 +36600,7 @@ procedure TSQLRecordProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
   aTypeInfo: PTypeInfo; const aName: RawUTF8; aPropertyPointer: pointer;
   aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
 begin
-  Fields.Add(aTable,TSQLPropInfoCustomJSON.Create(aTypeInfo,aName,Fields.Count,
+  Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeInfo,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth));
 end;
 
@@ -36555,7 +36608,7 @@ procedure TSQLRecordProperties.RegisterCustomPropertyFromTypeName(aTable: TClass
   const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
   aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
 begin
-  Fields.Add(aTable,TSQLPropInfoCustomJSON.Create(aTypeName,aName,Fields.Count,
+  Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeName,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth));
 end;
 
@@ -39372,6 +39425,13 @@ end;
 function TInterfaceFactory.CheckMethodIndex(aMethodName: PUTF8Char): integer;
 begin
   result := CheckMethodIndex(RawUTF8(aMethodName));
+end;
+
+function TInterfaceFactory.GetInterfaceName: RawUTF8;
+begin
+  if (self=nil) or (fInterfaceTypeInfo=nil) then
+    result := '' else
+    result := ShortStringToUTF8(fInterfaceTypeInfo^.Name);
 end;
 
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
