@@ -185,6 +185,8 @@ type
     function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
     procedure ORMResult(Error: TCQRSResult); virtual;
+    procedure ORMSuccessIf(SuccessCondition: boolean;
+      ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
     procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
     procedure ORMResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
@@ -347,20 +349,25 @@ type
   end;
 
   /// abstract class to implement I*Command interface using ORM's TSQLRecord
+  // - it will use an internal TSQLRestBatch for commit
   TDDDRepositoryRestCommand = class(TDDDRepositoryRestQuery)
   protected
-    fCommand: TSQLOccasion;
-    procedure ORMResult(Error: TCQRSResult); override;
-    // - this default implementation will check the status vs command, and
-    // call fORM.FilterAndValidate
+    fBatch: TSQLRestBatch;
+    fBatchAutomaticTransactionPerRow: cardinal;
+    fBatchOptions: TSQLRestBatchOptions;
+    fBatchResults: TIDDynArray;
+    // - this default implementation will check the status vs command,
+    // call fORM.FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion); virtual;
-    /// this default implementation will perform Add/Update/Delete on fORM
+    /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit; virtual;
-    /// do-nothing abstract rollback method
+    /// on rollback, delete the internal BATCH
     procedure InternalRollback; virtual;
   public
+    /// this constructor will set default fBatch options
+    constructor Create(aFactory: TDDDRepositoryRestFactory); override;
     /// finalize the Unit Of Work context
     // - any uncommited change will be lost
     destructor Destroy; override;
@@ -371,9 +378,6 @@ type
     /// write all pending changes prepared by Add/UpdatePassword/Delete methods
     // - will process the current fORM using the fCommand
     function Commit: TCQRSResult; virtual;
-  protected
-    /// access to the current process state
-    property Command: TSQLOccasion read fCommand;
   end;
 
 
@@ -452,6 +456,14 @@ begin
     if ACTION_TO_STATE[fAction]<>qsNone then
       fState := ACTION_TO_STATE[fAction];
   fAction := qaNone;
+end;
+
+procedure TCQRSQueryObject.ORMSuccessIf(SuccessCondition: boolean;
+  ErrorIfFalse: TCQRSResult);
+begin
+  if SuccessCondition then
+    ORMResult(cqrsSuccess) else
+    ORMResult(ErrorIfFalse);
 end;
 
 procedure TCQRSQueryObject.ORMResultDoc(Error: TCQRSResult;
@@ -749,9 +761,7 @@ begin
   ORMBegin(qaSelect,result);
   if ForcedBadRequest then
     ORMResult(cqrsBadRequest) else
-    if Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM) then
-      ORMResult(cqrsSuccess) else
-      ORMResult(cqrsNotFound);
+    ORMSuccessIf(Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM),cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectAll(
@@ -761,9 +771,7 @@ begin
   ORMBegin(qaSelect,result);
   if ForcedBadRequest then
     ORMResult(cqrsBadRequest) else
-    if ORM.FillPrepare(Factory.Rest,ORMWhereClauseFmt,[],Bounds) then
-      ORMResult(cqrsSuccess) else
-      ORMResult(cqrsNotFound);
+    ORMSuccessIf(ORM.FillPrepare(Factory.Rest,ORMWhereClauseFmt,[],Bounds),cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMGetAggregate(
@@ -812,17 +820,17 @@ end;
 
 { TDDDRepositoryRestCommand }
 
+constructor TDDDRepositoryRestCommand.Create(
+  aFactory: TDDDRepositoryRestFactory);
+begin
+  inherited Create(aFactory);
+  fBatchAutomaticTransactionPerRow := 1000; // for better performance
+end;
+
 destructor TDDDRepositoryRestCommand.Destroy;
 begin
   InternalRollback;
   inherited Destroy;
-end;
-
-procedure TDDDRepositoryRestCommand.ORMResult(Error: TCQRSResult);
-begin
-  inherited ORMResult(Error);
-  if Error<>cqrsSuccess then
-    fCommand := soSelect;
 end;
 
 function TDDDRepositoryRestCommand.Delete: TCQRSResult;
@@ -834,8 +842,8 @@ end;
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
   aCommand: TSQLOccasion);
 var msg: RawUTF8;
+    ndx: integer;
 begin
-  fCommand := aCommand; // overriden ORMResult() will reset to soSelect on error
   case aCommand of
   soSelect: begin
     ORMResult(cqrsBadRequest);
@@ -848,33 +856,35 @@ begin
     end;
   end;
   msg := ORM.FilterAndValidate(Factory.Rest);
-  if msg<>'' then
-    ORMResultMsg(cqrsDataLayerError,msg) else
-    ORMResult(cqrsSuccess);
+  if msg<>'' then begin
+    ORMResultMsg(cqrsDataLayerError,msg);
+    exit;
+  end;
+  if fBatch=nil then
+    fBatch := TSQLRestBatch.Create(Factory.Rest,Factory.Table,
+      fBatchAutomaticTransactionPerRow,fBatchOptions);
+  ndx := -1;
+  case aCommand of
+  soInsert: ndx := fBatch.Add(ORM,true);
+  soUpdate: ndx := fBatch.Update(ORM);
+  soDelete: ndx := fBatch.Delete(ORM.ID);
+  end;
+  ORMSuccessIf(ndx>=0);
 end;
 
 procedure TDDDRepositoryRestCommand.InternalCommit;
 begin
-  case fCommand of
-  soSelect:
-    ORMResult(cqrsBadRequest);
-  soInsert:
-    if Factory.Rest.Add(ORM,true)<>0 then
-      ORMResult(cqrsSuccess) else
-      ORMResult(cqrsDataLayerError);
-  soUpdate:
-    if Factory.Rest.Update(ORM) then
-      ORMResult(cqrsSuccess) else
-      ORMResult(cqrsDataLayerError);
-  soDelete:
-    if Factory.Rest.Delete(ORM.RecordClass,ORM.ID) then
-      ORMResult(cqrsSuccess) else
-      ORMResult(cqrsDataLayerError);
+  if fBatch.Count=0 then
+    ORMResult(cqrsBadRequest) else begin
+    ORMSuccessIf(Factory.Rest.BatchSend(fBatch,fBatchResults)=HTML_SUCCESS);
+    FreeAndNil(fBatch);
   end;
 end;
 
 procedure TDDDRepositoryRestCommand.InternalRollback;
-begin // overriden methods may do something 
+begin
+  FreeAndNil(fBatch);
+  fBatchResults := nil;
 end;
 
 function TDDDRepositoryRestCommand.Commit: TCQRSResult;
