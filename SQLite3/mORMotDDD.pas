@@ -260,6 +260,7 @@ type
     fOwner: TDDDRepositoryRestManager;
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
+    fImplementationEntry: PInterfaceEntry;
     fRest: TSQLRest;
     fAggregate: TPersistentClass;
     fAggregateHasCustomCreate: boolean;
@@ -520,6 +521,7 @@ begin
   inherited Create;
   fOwner := aOwner;
   fImplementation := aImplementation;
+  fImplementationEntry := aImplementation.GetInterfaceEntry(aInterface);
   fRest := aRest;
   fAggregate := aAggregate;
   fAggregateHasCustomCreate := fAggregate.InheritsFrom(TPersistentWithCustomCreate);
@@ -529,6 +531,9 @@ begin
     raise EDDDRepository.CreateUTF8(self,
      '%.Create(%): Interface not registered - you could use TInterfaceFactory.'+
      'RegisterInterfaces()',[self,GUIDToShort(aInterface)]);
+  if fImplementationEntry=nil then
+    raise EDDDRepository.CreateUTF8(self,'%.Create: % does not implement %',
+      [self,aImplementation,fInterface.InterfaceTypeInfo^.Name]);
   if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
   fORMProps := fTable.RecordProps.Fields;
@@ -594,15 +599,13 @@ function TDDDRepositoryRestFactory.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
 begin
   if fInterface.InterfaceTypeInfo<>aInterface then
-    result := false else begin
-    Get(Obj);
-    result := true;
-  end;
+    result := false else
+    result := GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj);
 end;
 
 procedure TDDDRepositoryRestFactory.Get(out Obj);
 begin
-  if not fImplementation.Create(self).GetInterface(fInterface.InterfaceIID,Obj) then
+  if not GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj) then
     raise ECQRSException.CreateUTF8('%.Get(%)',[self,fInterface.InterfaceTypeInfo^.Name]);
 end;
 
