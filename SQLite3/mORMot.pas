@@ -2281,7 +2281,7 @@ type
     // - index is reset to 0 at every inherited class level
     NameIndex: SmallInt;
 {$ifdef FPC}
-    /// contains the type of the Get/Set/Storedproc, see also ptxxx
+    /// contains the type of the GetProc/SetProc/StoredProc, see also ptxxx
     // bit 0..1 GetProc     e.g. PropProcs and 3=ptField
     //     2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
     //     4..5 StoredProc
@@ -2382,6 +2382,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the the property has no setter but direct field write
     function SetterIsField: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the the property has a write setter or direct field
+    function WriteIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
     function GetterAddr(Instance: pointer): pointer;
@@ -3365,7 +3368,7 @@ type
     {$endif}
     /// let a T*ObjArray dynamic array be used for storage of class instances
     // - will allow JSON serialization and unserialization of the registered
-    // dynamic array property
+    // dynamic array property defined in any TPersistent or TSQLRecord
     // - could be used as such (note the T*ObjArray type naming convention):
     // ! TUserObjArray = array of TUser;
     // ! ...
@@ -3373,7 +3376,14 @@ type
     // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
     // the stored items, and never forget to call ObjArrayClear to release
     // the memory
-    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass);
+    class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass); overload;
+    /// let T*ObjArray dynamic arrays be used for storage of class instances
+    // - will allow JSON serialization and unserialization of the registered
+    // dynamic array property defined in any TPersistent or TSQLRecord
+    // - will call the overloaded RegisterObjArrayForJSON() class method by pair:
+    // ! TJSONSerializer.RegisterObjArrayForJSON([
+    // !     TypeInfo(TAddressObjArray),TAddress, TypeInfo(TUserObjArray),TUser]);
+    class procedure RegisterObjArrayForJSON(const aDynArrayClassPairs: array of const); overload;
   end;
 
 
@@ -8078,7 +8088,7 @@ type
   // - note that non published properties won't be instantiated
   // - please take care that you would not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
-  // class instance - a EModelException will be raised in such case
+  // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
   // never store a reference of any of those nested instances outside
   TCollectionItemAutoCreateFields = class(TCollectionItem)
@@ -8102,7 +8112,7 @@ type
   // - note that non published (e.g. public) properties won't be instantiated
   // - please take care that you would not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
-  // class instance - a EModelException will be raised in such case
+  // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
   // never store a reference of any of those nested instances outside
   TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
@@ -12658,8 +12668,7 @@ type
     // "stored AS_UNIQUE" published property)
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
-    constructor Create(aValues: TList; aFieldIndex: integer;
-      aField: TSQLPropInfo; aCaseInsensitive: boolean);
+    constructor Create(aValues: TList; aField: TSQLPropInfo; aCaseInsensitive: boolean);
     /// the corresponding field index in the TSQLRecord
     property FieldIndex: integer read fField;
     /// the corresponding field RTTI
@@ -14598,7 +14607,7 @@ implementation
 
 uses
   {$ifdef FPC}
-  {$ifndef MSWINDOWS},
+  {$ifndef MSWINDOWS}
   SynFPCLinux,
   BaseUnix,
   Unix,
@@ -21171,6 +21180,11 @@ begin
   {$endif}
 end;
 
+function TPropInfo.WriteIsDefined: boolean;
+begin
+  result := SetProc<>0;
+end;
+
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
 begin
   result := Pointer(PtrInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
@@ -21210,7 +21224,10 @@ end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
 begin
-  TypInfo.SetOrdProp(Instance,@self,Value);
+  if (PropType^.Kind=tkClass) and (SetProc=0) and GetterIsField then
+    // allow setting a class instance even if there is no "write ..." attribute 
+    PPtrInt(GetterAddr(Instance))^ := Value else
+    TypInfo.SetOrdProp(Instance,@self,Value);
 end;
 
 function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
@@ -23937,7 +23954,7 @@ begin
   if n=0 then
     exit;
   for i := 0 to n-1 do
-    varClassPairs[i*2+1] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
+    varClassPairs[i*2] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
   result := TAutoFree.Create(varClassPairs);
 end;
 
@@ -32112,7 +32129,7 @@ begin
     for F := 0 to Fields.Count-1 do
       if F in fIsUnique then
         // CaseInsensitive=true just like
-        fUniqueFields.Add(TListFieldHash.Create(fValue,F,Fields.List[F],true));
+        fUniqueFields.Add(TListFieldHash.Create(fValue,Fields.List[F],true));
   end;
   ReloadFromFile;
 end;
@@ -33398,11 +33415,11 @@ begin
   result := fValues.Count;
 end;
 
-constructor TListFieldHash.Create(aValues: TList; aFieldIndex: integer;
-  aField: TSQLPropInfo; aCaseInsensitive: boolean);
+constructor TListFieldHash.Create(aValues: TList; aField: TSQLPropInfo;
+  aCaseInsensitive: boolean);
 begin
   fValues := aValues;
-  fField := aFieldIndex;
+  fField := aField.PropertyIndex;
   fProp := aField;
   fCaseInsensitive := aCaseInsensitive;
 end;
@@ -34743,6 +34760,24 @@ begin
   ObjArraySerializers.Add(serializer);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
+end;
+
+class procedure TJSONSerializer.RegisterObjArrayForJSON(
+  const aDynArrayClassPairs: array of const);
+var n,i: integer;
+begin
+  n := length(aDynArrayClassPairs);
+  if (n=0) or (n and 1=1) then
+    exit;
+  n := n shr 1;
+  if n=0 then
+    exit;
+  for i := 0 to n-1 do
+    if (aDynArrayClassPairs[i*2].VType<>vtPointer) or
+       (aDynArrayClassPairs[i*2+1].VType<>vtClass) then
+      raise EParsingException.Create('RegisterObjArrayForJSON[?]') else
+      RegisterObjArrayForJSON(
+        aDynArrayClassPairs[i*2].VPointer,aDynArrayClassPairs[i*2+1].VClass);
 end;
 
 function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
@@ -41664,21 +41699,19 @@ end;
 { TPersistentAutoCreateFields }
 
 procedure AutoCreateFields(self: TPersistent);
-var i,n: integer;
+var i: integer;
     CT: TClass;
     P: PPropInfo;
 begin
-  n := 0;
   CT := PPointer(self)^;
   repeat
     for i := 1 to InternalClassPropInfo(CT,P) do begin
-      if P^.PropType^.Kind=tkClass then begin
-        P^.SetOrdProp(self,PtrInt(ClassInstanceCreate(P^.PropType^.ClassType^.ClassType)));
-        inc(n);
-        if n>1000 then
-          raise EModelException.CreateUTF8('Infinite recursive depth: '+
-            'please fix % nested properties definition',[self]);
-      end;
+      if P^.PropType^.Kind=tkClass then
+        if (P^.SetProc<>0) or not P^.GetterIsField then
+          raise EModelException.CreateUTF8('%.% is an auto-created instance '+
+            'so should not have any "write" defined',[self,P^.Name]) else
+          PObject(P^.GetterAddr(self))^ :=
+            ClassInstanceCreate(P^.PropType^.ClassType^.ClassType);
       P := P^.Next;
     end;
     CT := CT.ClassParent;

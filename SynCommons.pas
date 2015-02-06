@@ -1038,8 +1038,9 @@ type
   {$endif}
 
   TStreamClass = class of TStream;
+  PObject = ^TObject;
 
-
+  
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines }
 
 type
@@ -8663,12 +8664,6 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 
 {$endif MSWINDOWS}
 
-type
-  /// small memory buffer used to backup a RedirectCode() redirection hook
-  TPatchCode = array[0..4] of byte;
-  /// pointer to a small memory buffer used to backup a RedirectCode() hook
-  PPatchCode = ^TPatchCode;
-
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
@@ -8679,6 +8674,13 @@ procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
   LeaveUnprotected: boolean=false);
 
+{$ifndef CPUARM}
+type
+  /// small memory buffer used to backup a RedirectCode() redirection hook
+  TPatchCode = array[0..4] of byte;
+  /// pointer to a small memory buffer used to backup a RedirectCode() hook
+  PPatchCode = ^TPatchCode;
+
 /// self-modifying code - add an asm JUMP to a redirected function
 // - if Backup is not nil, it should point to a TPatchCode buffer, ready
 // to contain the overridden code buffer, for further hook disabling
@@ -8686,6 +8688,7 @@ procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 
 /// self-modifying code - restore a code from its RedirectCode() backup
 procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
+{$endif CPUARM}
 
 /// allow to fix TEvent.WaitFor() method for Kylix
 // - under Windows or with FPC, will call original TEvent.WaitFor() method
@@ -8700,14 +8703,18 @@ type
 {$ifdef LVCL} // LVCL already use Delphi heap instead of GlobalAlloc()
   THeapMemoryStream = TMemoryStream;
 {$else}
+  {$ifdef FPC} // FPC already use Delphi heap instead of GlobalAlloc()
+  THeapMemoryStream = TMemoryStream;
+  {$else}
+  {$ifdef MSWINDOWS}
   THeapMemoryStream = class(TMemoryStream)
   protected
-    {$ifdef FPC}
-    function Realloc(var NewCapacity: PtrInt): Pointer; override;
-    {$else}
     function Realloc(var NewCapacity: longint): Pointer; override;
-    {$endif}
   end;
+  {$else}
+  THeapMemoryStream = TMemoryStream;
+  {$endif}
+  {$endif}
 {$endif}
 
 var
@@ -24296,22 +24303,20 @@ begin
   PatchCode(Code,@Value,SizeOf(Code^),nil,LeaveUnprotected);
 end;
 
+{$ifndef CPUARM}
+
 procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 var NewJump: packed record
     Code: byte;        // $e9 = jmp {relative}
     Distance: integer; // relative jump is 32 bit even on CPU64
   end;
 begin
-  {$ifdef CPUARM}
-  {$warning 'This code (procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);) will never work on ARM.'}
-  {$else}
   assert(sizeof(TPatchCode)=sizeof(NewJump));
   NewJump.Code := $e9;
   NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
   PatchCode(Func,@NewJump,sizeof(NewJump),Backup);
   {$ifndef LVCL}
   assert(pByte(Func)^=$e9);
-  {$endif}
   {$endif}
 end;
 
@@ -24320,8 +24325,12 @@ begin
   PatchCode(Func,@Backup,sizeof(TPatchCode));
 end;
 
+{$endif CPUARM}
+
 
 {$ifndef LVCL}
+{$ifndef FPC}
+{$ifdef MSWINDOWS}
 
 { THeapMemoryStream = faster TMemoryStream using FastMM4/SynScaleMM heap,
   not windows.GlobalAlloc() }
@@ -24329,11 +24338,7 @@ end;
 const
   MemoryDelta = $8000; // 32 KB granularity (must be a power of 2)
 
-{$ifdef FPC}
-function THeapMemoryStream.Realloc(var NewCapacity: PtrInt): Pointer;
-{$else}
 function THeapMemoryStream.Realloc(var NewCapacity: longint): Pointer;
-{$endif}
 // allocates memory from Delphi heap (FastMM4/SynScaleMM) and not windows.Global*()
 // and uses bigger growing size -> a lot faster
 var i: PtrInt;
@@ -24365,6 +24370,8 @@ begin
   end;
 end;
 
+{$endif MSWINDOWS}
+{$endif FPC}
 {$endif LVCL}
 
 
@@ -42770,7 +42777,6 @@ var
   GarbageCollectorFreeAndNilList: TList;
   
 procedure GarbageCollectorFree;
-type PObject = ^TObject;
 var i: integer;
 begin
   GarbageCollectorFreeing := true;
