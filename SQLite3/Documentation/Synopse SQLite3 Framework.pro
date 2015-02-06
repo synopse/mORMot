@@ -5982,11 +5982,11 @@ In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
 - {\f1\fs20 record} can contain any other {\f1\fs20 record} or {\i dynamic array}, so are very convenient to work with (no need to define sub-classes or lists);
 - {\f1\fs20 record} variables can be allocated on stack, so won't solicited the global heap;
 - {\f1\fs20 record} instances automatically freed by the compiler when they come out of scope, so you won't need to write any {\f1\fs20 try..finally Free; end} block.
-Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}.
+Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}. In practice, the {\f1\fs20 record} types should be defined as {\f1\fs20 packed record}, so that low-level access would be easier to manage by the serializers.
 :   Automatic serialization via Enhanced RTTI
 Since {\i Delphi} 2010, the compiler generates additional RTTI at compilation, so that all {\f1\fs20 record} fields are described, and available at runtime.\line By the way, this @**enhanced RTTI@ is one of the reasons why executables did grow so much in newer versions of the compiler.
 Our {\f1\fs20 SynCommons.pas} unit is able to use this enhanced information, and let any {\f1\fs20 record} be serialized via {\f1\fs20 RecordLoad()} and {\f1\fs20 RecordSave()} functions, and all internal JSON marshalling process.
-In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with {\i Delphi} 2010 and up, they will be serialized as valid JSON objects.
+In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with {\i Delphi} 2010 and up, they will be serialized as valid JSON objects. The only restriction is that the records should be defined as {\f1\fs20 packed record}.
 :   Serialization for older Delphi versions
 Sadly, the information needed to serialize a {\f1\fs20 record} is available only since {\i Delphi} 2010.
 If your application is developped on any older revision (e.g. {\i Delphi} 7, {\i Delphi} 2007 or {\i Delphi} 2009), you won't be able to automatically serialize {\f1\fs20 records} as plain JSON objects directly.
@@ -6048,7 +6048,7 @@ On the other side, the corresponding reader callback would be like:
 !end;
 :    Text-based definition
 Writing those callbacks by hand could be error-prone, especially for the {\f1\fs20 Reader} event.
-You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format.
+You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the {\f1\fs20 record} layout in a convenient text-based format. Once more, those types need to be defined as {\f1\fs20 packed record}, so that the text layout definition would not depend on compiler-specific field alignment.
 The very same {\f1\fs20 TSQLRestCacheEntryValue} can be defined as with a typical {\i pascal} {\f1\fs20 record}:
 ! const
 !  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp: cardinal; JSON: RawUTF8';

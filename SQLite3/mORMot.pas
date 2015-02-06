@@ -1572,6 +1572,11 @@ type
     function SameFieldNames(const Fields: TRawUTF8DynArray): boolean;
   end;
 
+/// set the TID (=64 bits integer) value from the numerical text stored in P^
+// - just a redirection to SynCommons.SetInt64()
+procedure SetID(P: PUTF8Char; var result: TID);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that it is an unique string
@@ -1652,7 +1657,6 @@ function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; o
 /// convert a Base64-encoded content into binary hexadecimal ready for SQL
 // - returns e.g. X'53514C697465'
 procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
-
 
 /// return true if the TEXT is encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function isBlobHex(P: PUTF8Char): boolean;
@@ -14596,19 +14600,33 @@ var
 implementation
 
 uses
-  SynCrypto // for TSQLRecordSigned
   {$ifdef FPC}
   {$ifndef MSWINDOWS},
   SynFPCLinux,
   BaseUnix,
   Unix,
-  dynlibs
+  dynlibs,
   {$endif}
   {$endif}
-  ;
+  SynCrypto; // for TSQLRecordSigned and authentication
 
 
 // ************ some RTTI and SQL mapping routines
+
+procedure SetID(P: PUTF8Char; var result: TID);
+{$ifdef HASINLINE}
+{$ifdef CPU64}
+begin // PtrInt is already int64 -> call PtrInt version
+  result := GetInteger(P);
+{$else}
+begin
+  SetInt64(P,Int64(result));
+{$endif}
+{$else}
+asm
+  jmp SynCommons.SetInt64
+{$endif}
+end;
 
 {$ifndef FPC}
 
@@ -17642,9 +17660,9 @@ begin
   if (self=nil) or (fResults=nil) or (Row<=0) or (Row>RowCount) then
     result := 0 else
     if Assigned(fIDColumn) then // get hidden ID column UTF-8 content
-      SetInt64(fIDColumn[Row],Int64(result)) else
+      SetID(fIDColumn[Row],result) else
       if fFieldIndexID>=0 then // get ID column field index
-        SetInt64(fResults[Row*FieldCount+fFieldIndexID],Int64(result)) else
+        SetID(fResults[Row*FieldCount+fFieldIndexID],result) else
         result := 0;
 end;
 
@@ -20108,7 +20126,7 @@ begin
       FieldNames[FieldCount] := FieldName;
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
-        SetInt64(pointer(FieldValues[FieldCount]),Int64(DecodedRowID));
+        SetID(pointer(FieldValues[FieldCount]),DecodedRowID);
       inc(FieldCount);
       if FieldCount=MAX_SQLFIELDS then
         raise EParsingException.Create('Too many inlines in TJSONObjectDecoder');
@@ -22456,7 +22474,7 @@ begin
     for f := 0 to fTableMapCount-1 do
       with fTableMap[f] do
         if DestField=nil then
-          SetInt64(aTableRow[TableIndex],PInt64(@Dest.fID)^) else
+          SetID(aTableRow[TableIndex],Dest.fID) else
           DestField.SetValue(Dest,aTableRow[TableIndex],false);
 end;
 
@@ -22467,7 +22485,7 @@ begin
   for f := 0 to fTableMapCount-1 do
     with fTableMap[f] do
       if DestField=nil then
-        SetInt64(aTableRow[TableIndex],PInt64(@aDest.fID)^) else
+        SetID(aTableRow[TableIndex],aDest.fID) else
         DestField.SetValue(aDest,aTableRow[TableIndex],false);
 end;
 
@@ -22839,7 +22857,7 @@ var field: TSQLPropInfo;
 begin
   if self<>nil then
     if IsRowID(pointer(PropName)) then
-      SetInt64(Value,PInt64(@fID)^) else begin
+      SetID(Value,fID) else begin
       field := RecordProps.Fields.ByName(PropName);
       if field<>nil then
         field.SetValue(self,Value,wasString);
@@ -26324,8 +26342,8 @@ begin
   with Table.RecordProps do begin
     aMainField := MainField[false];
     if aMainField>=0 then
-      SetInt64(pointer(OneFieldValue(Table,'RowID',
-        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')),Int64(result));
+      SetID(pointer(OneFieldValue(Table,'RowID',
+        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')),result);
   end;
 end;
 
@@ -32669,12 +32687,12 @@ end;
 procedure TSQLRestStorageInMemory.LoadFromJSON(JSONBuffer: PUTF8Char; JSONBufferLen: integer);
   function IsSorted(U: PPUTF8Char; RowCount, FieldCount: integer): boolean;
   var i: integer;
-      aID, lastID: Int64;
+      aID, lastID: TID;
   begin
     result := false;
     lastID := 0;
     for i := 1 to RowCount do begin
-      SetInt64(U^,aID);
+      SetID(U^,aID);
       if aID<=lastID then
         exit else
         lastID := aID;
@@ -36077,8 +36095,8 @@ end;
 function TSQLRecordMany.InternalIDFromSourceDest(aClient: TSQLRest;
   aSourceID, aDestID: TID): TID;
 begin
-  SetInt64(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
-    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))),Int64(result));
+  SetID(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
+    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))),result);
 end;
 
 
@@ -36689,7 +36707,7 @@ end;
 
 function TSynValidateUniqueField.Process(aFieldIndex: integer; const Value: RawUTF8;
   var ErrorMsg: string): boolean;
-var aID: Int64;
+var aID: TID;
 begin
   result := false;
   if Value='' then
@@ -36699,7 +36717,7 @@ begin
   with fProcessRec.RecordProps do
     if cardinal(aFieldIndex)>=cardinal(Fields.Count) then
       result := true else begin
-      SetInt64(pointer(fProcessRest.OneFieldValue(Table,'RowID',
+      SetID(pointer(fProcessRest.OneFieldValue(Table,'RowID',
         Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):')),aID);
       if (aID>0) and (aID<>fProcessRec.fID) then
         ErrorMsg := sValidationFieldDuplicate else
@@ -42412,7 +42430,6 @@ begin
   SetWeakZero(self,aObjectInterfaceField,aValue);
 end;
 {$endif}
-
 
 initialization
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;

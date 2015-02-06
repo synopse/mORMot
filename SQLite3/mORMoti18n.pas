@@ -1971,7 +1971,7 @@ begin
         TSQLRecordClass((Prop as TSQLPropInfoRTTIID).ObjectClass),
         GetInt64(pointer(Value)),true));
     sftRecord: if Client<>nil then begin
-      SetInt64(pointer(Value),Int64(ref.Value));
+      SetID(pointer(Value),ref.Value);
       result := UTF8ToString(Client.MainFieldValue(ref.Table(Client.Model),ref.ID,true));
       if result='' then
         result := Instance.CaptionName else
