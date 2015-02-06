@@ -1,4 +1,4 @@
-/// mORMot shared DDD Domain: Authentication types and interfaces
+/// mORMot shared DDD Domains: Authentication objects and interfaces
 unit dddDomAuthInterfaces;
 
 {
@@ -76,7 +76,7 @@ type
   end;
 
   /// repository service to authenticate credentials via a dual pass challenge
-  IAuthQuery = interface(ICQRSQuery)
+  IDomAuthQuery = interface(ICQRSQuery)
     ['{5FB1E4A6-B432-413F-8958-1FA1857D1195}']
     /// initiate the first phase of a dual pass challenge authentication
     function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
@@ -90,7 +90,7 @@ type
   end;
 
   /// repository service to update or register new authentication credentials
-  IAuthCommand = interface(IAuthQuery)
+  IDomAuthCommand = interface(IDomAuthQuery)
     ['{8252727B-336B-4105-80FD-C8DFDBD4801E}']
     /// register a new credential, from its LogonName/HashedPassword values
     // - aHashedPassword should match the algorithm expected by the actual
@@ -114,5 +114,5 @@ implementation
 
 initialization
   TInterfaceFactory.RegisterInterfaces(
-    [TypeInfo(IAuthQuery),TypeInfo(IAuthCommand)]);
+    [TypeInfo(IDomAuthQuery),TypeInfo(IDomAuthCommand)]);
 end.

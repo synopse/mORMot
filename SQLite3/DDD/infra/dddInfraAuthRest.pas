@@ -82,7 +82,7 @@ type
   /// generic class for implementing authentication
   // - do not instantiate this abstract class, but e.g. TDDDAuthenticationSHA256
   // or TDDDAuthenticationMD5
-  TDDDAuthenticationAbstract = class(TDDDRepositoryRestCommand,IAuthCommand)
+  TDDDAuthenticationAbstract = class(TDDDRepositoryRestCommand,IDomAuthCommand)
   protected
     fChallengeLogonName: RawUTF8;
     fChallengeNonce: TAuthQueryNonce;
@@ -94,7 +94,7 @@ type
     function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
     /// validate the first phase of a dual pass challenge authentication
     function ChallengeSelectFinal(const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
-    /// set the credential for Get() or further IAuthCommand.Update/Delete
+    /// set the credential for Get() or further IDomAuthCommand.Update/Delete
     // - this method execution will be disabled for most clients
     function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
     /// retrieve some information about the current selected credential
@@ -133,7 +133,7 @@ type
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; override;
   end;
 
-  /// abstract factory of IAuthCommand repository instances using REST
+  /// abstract factory of IDomAuthCommand repository instances using REST
   TDDDAuthenticationRestFactoryAbstract = class(TDDDRepositoryRestFactory)
   protected
   public
@@ -142,7 +142,7 @@ type
       aOwner: TDDDRepositoryRestManager); reintroduce;
   end;
   
-  /// factory of IAuthCommand repository instances using a RESTful ORM access
+  /// factory of IDomAuthCommand repository instances using a RESTful ORM access
   // and SHA-256 hashing algorithm
   TDDDAuthenticationRestFactorySHA256 = class(TDDDAuthenticationRestFactoryAbstract)
   protected
@@ -151,7 +151,7 @@ type
     constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestManager=nil); reintroduce;
   end;
 
-  /// factory of IAuthCommand repository instances using a RESTful ORM access
+  /// factory of IDomAuthCommand repository instances using a RESTful ORM access
   // and SHA-256 hashing algorithm
   TDDDAuthenticationRestFactoryMD5 = class(TDDDAuthenticationRestFactoryAbstract)
   protected
@@ -261,7 +261,7 @@ constructor TDDDAuthenticationRestFactoryAbstract.Create(aRest: TSQLRest;
   aOwner: TDDDRepositoryRestManager);
 begin
   inherited Create(aOwner,
-    IAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordAuthInfo,
+    IDomAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordAuthInfo,
     ['Logon','LogonName']);
 end;
 
