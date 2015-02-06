@@ -70,11 +70,12 @@ uses
 type
   /// ORM object to persist authentication information
   TSQLRecordAuthInfo = class(TSQLRecord)
-  private
-    fLogonName: RawUTF8;
+  protected
+    fLogon: RawUTF8;
     fHashedPassword: RawUTF8;
+    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
   published
-    property LogonName: RawUTF8 read fLogonName write fLogonName;
+    property Logon: RawUTF8 read fLogon write fLogon stored AS_UNIQUE;
     property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
   end;
 
@@ -132,21 +133,30 @@ type
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; override;
   end;
 
-  /// factory of IAuthCommand repository instances using a RESTful ORM access
-  // and SHA-256 hashing algorithm
-  TDDDAuthenticationRestFactorySHA256 = class(TDDDRepositoryRestFactory)
+  /// abstract factory of IAuthCommand repository instances using REST
+  TDDDAuthenticationRestFactoryAbstract = class(TDDDRepositoryRestFactory)
   protected
   public
     /// initialize a factory with the supplied implementation algorithm
+    constructor Create(aRest: TSQLRest; aImplementationClass: TDDDAuthenticationClass;
+      aOwner: TDDDRepositoryRestManager); reintroduce;
+  end;
+  
+  /// factory of IAuthCommand repository instances using a RESTful ORM access
+  // and SHA-256 hashing algorithm
+  TDDDAuthenticationRestFactorySHA256 = class(TDDDAuthenticationRestFactoryAbstract)
+  protected
+  public
+    /// initialize a factory with the SHA-256 implementation algorithm
     constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestManager=nil); reintroduce;
   end;
 
   /// factory of IAuthCommand repository instances using a RESTful ORM access
   // and SHA-256 hashing algorithm
-  TDDDAuthenticationRestFactoryMD5 = class(TDDDRepositoryRestFactory)
+  TDDDAuthenticationRestFactoryMD5 = class(TDDDAuthenticationRestFactoryAbstract)
   protected
   public
-    /// initialize a factory with the supplied implementation algorithm
+    /// initialize a factory with the SHA-256 implementation algorithm
     constructor Create(aRest: TSQLRest; aOwner: TDDDRepositoryRestManager=nil); reintroduce;
   end;
 
@@ -196,7 +206,7 @@ end;
 function TDDDAuthenticationAbstract.SelectByName(
   const aLogonName: RawUTF8): TCQRSResult;
 begin
-  result := ORMSelectOne('LogonName=?',[aLogonName],(aLogonName=''));
+  result := ORMSelectOne('Logon=?',[aLogonName],(aLogonName=''));
 end;
 
 function TDDDAuthenticationAbstract.Get(
@@ -211,7 +221,7 @@ begin
   if not ORMBegin(qaCommandDirect,result) then
     exit;
   with ORM as TSQLRecordAuthInfo do begin
-    LogonName := aLogonName;
+    Logon := aLogonName;
     HashedPassword := aHashedPassword;
   end;
   ORMPrepareForCommit(soInsert);
@@ -244,13 +254,23 @@ begin
 end;
 
 
+{ TDDDAuthenticationRestFactoryAbstract }
+
+constructor TDDDAuthenticationRestFactoryAbstract.Create(aRest: TSQLRest;
+  aImplementationClass: TDDDAuthenticationClass;
+  aOwner: TDDDRepositoryRestManager);
+begin
+  inherited Create(aOwner,
+    IAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordAuthInfo,
+    ['Logon','LogonName']);
+end;
+
 { TDDDAuthenticationRestFactorySHA256 }
 
 constructor TDDDAuthenticationRestFactorySHA256.Create(aRest: TSQLRest;
   aOwner: TDDDRepositoryRestManager);
 begin
-  inherited Create(aOwner,
-    IAuthCommand,TDDDAuthenticationSHA256,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
+  inherited Create(aRest,TDDDAuthenticationSHA256,aOwner);
 end;
 
 { TDDDAuthenticationRestFactoryMD5 }
@@ -258,9 +278,16 @@ end;
 constructor TDDDAuthenticationRestFactoryMD5.Create(aRest: TSQLRest;
   aOwner: TDDDRepositoryRestManager);
 begin
-  inherited Create(aOwner,
-    IAuthCommand,TDDDAuthenticationMD5,TAuthInfo,aRest,TSQLRecordAuthInfo,[]);
+  inherited Create(aRest,TDDDAuthenticationMD5,aOwner);
 end;
 
+
+{ TSQLRecordAuthInfo }
+
+class procedure TSQLRecordAuthInfo.InternalRegisterCustomProperties(
+  Props: TSQLRecordProperties);
+begin
+  AddFilterNotVoidText(['HashedPassword']);
+end;
 
 end.
