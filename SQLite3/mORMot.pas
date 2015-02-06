@@ -5025,14 +5025,24 @@ type
   protected
     fInternalState: cardinal;
     fID: TID;
-    /// virtual method to be overridden to register some custom properties
+    /// virtual class method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
     // properties, by adding some TSQLPropInfo instances to Props.Fields list,
     // or calling Props.RegisterCustomFixedSizeRecordProperty() or
     // Props.RegisterCustomRTTIRecordProperty() methods
     // - can also be used to specify a custom text collation, by calling
     // Props.SetCustomCollationForAllRawUTF8() or SetCustomCollation() methods
+    // - do not call RecordProps from here (e.g. by calling AddFilter*): it
+    // woult trigger a stack overflow, since at this state Props is not stored -
+    // but rather use InternalDefineModel class method
     class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); virtual;
+    /// virtual class method to be overridden to define some record-level modeling
+    // - do nothing by default, but allow inherited classes to define some
+    // process which would take place after TSQLRecordProperties initialization
+    // - this may be the place e.g. to call AddFilter*() methods, if you do not
+    // want those to be written "in stone", and not manually when creating the
+    // TSQLModel instance 
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); virtual;
   {$ifdef MSWINDOWS}{$ifdef HASINLINE}
   public
   {$endif}{$endif}
@@ -23748,8 +23758,11 @@ begin
 end;
 
 class procedure TSQLRecord.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
-begin
-  // do nothing by default
+begin // do nothing by default
+end;
+
+class procedure TSQLRecord.InternalDefineModel(Props: TSQLRecordProperties);
+begin // do nothing by default
 end;
 
 function TSQLRecord.GetHasBlob: boolean;
@@ -23860,7 +23873,7 @@ begin // private sub function makes the code faster in most case
     PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
     if PPointer(PVMT)^<>nil then
       raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
-    PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true 
+    PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
     // register to the internal garbage collection (avoid memory leak)
     // ALF //
     // Does not work under ARM ... I do not know why !!
@@ -23869,6 +23882,8 @@ begin // private sub function makes the code faster in most case
     {$else}
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
     {$endif}
+    // overriden method may use RecordProps -> do it after the VMT is set
+    aTable.InternalDefineModel(result);
   end;
 end;
 

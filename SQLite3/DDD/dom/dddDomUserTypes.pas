@@ -106,7 +106,7 @@ type
     procedure SetIsoAlpha3(const Value: TCountryIsoAlpha3);
     function GetEnglish: RawUTF8;
   public
-    /// built-in simple unit tets
+    /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);
     /// internal enumerate corresponding to this country
     property Identifier: TCountryIdentifier read GetIdentifier write SetIdentifier;
@@ -209,7 +209,7 @@ type
     fPhone2: TPhoneNumber;
     fEmail: TEmailAddress;
   public
-    /// built-in simple unit tets
+    /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);
   published
     property Address: TAddress read fAddress;

@@ -60,6 +60,7 @@ uses
   Classes,
   SynCommons,
   SynCrypto,
+  SynTests,
   mORMot,
   mORMotDDD,
   dddDomAuthInterfaces;
@@ -73,7 +74,7 @@ type
   protected
     fLogon: RawUTF8;
     fHashedPassword: RawUTF8;
-    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); override;
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   published
     property Logon: RawUTF8 read fLogon write fLogon stored AS_UNIQUE;
     property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
@@ -86,8 +87,7 @@ type
   protected
     fChallengeLogonName: RawUTF8;
     fChallengeNonce: TAuthQueryNonce;
-    class function ComputeHashPassword(const aLogonName,aPassword: RawUTF8): TAuthQueryNonce;
-    /// overriden classes should override this method with the proper algorithm
+    // inherited classes should override this method with the proper algorithm
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; virtual; abstract;
   public
     /// initiate the first phase of a dual pass challenge authentication
@@ -104,13 +104,17 @@ type
     function Add(const aLogonName: RawUTF8; aHashedPassword: TAuthQueryNonce): TCQRSResult;
     /// update the current selected credential password
     function UpdatePassword(const aHashedPassword: TAuthQueryNonce): TCQRSResult;
-    /// class method to be used on the client side to compute the password
+    /// class method to be used to compute a password hash from its plain value
+    class function ComputeHashPassword(const aLogonName,aPassword: RawUTF8): TAuthQueryNonce;
+    /// class method to be used on the client side to resolve the challenge
     // - is basically
     // !   result := DoHash(aLogonName+':'+aChallengeFromServer+':'+
-    // !   ComputeHashPassword(aLogonName,aPlainPassword));
+    // !     ComputeHashPassword(aLogonName,aPlainPassword));
     class function ClientComputeChallengedPassword(
       const aLogonName,aPlainPassword: RawUTF8;
       const aChallengeFromServer: TAuthQueryNonce): TAuthQueryNonce; virtual;
+    /// built-in simple unit tests
+    class procedure RegressionTests(test: TSynTestCase);
   end;
 
   /// allows to specify which actual hashing algorithm would be used
@@ -171,6 +175,7 @@ function TDDDAuthenticationAbstract.ChallengeSelectFirst(
 begin
   fChallengeLogonName := Trim(aLogonName);
   fChallengeNonce := DoHash(aLogonName+NowToString);
+  result := fChallengeNonce;
 end;
 
 function TDDDAuthenticationAbstract.ChallengeSelectFinal(
@@ -181,7 +186,6 @@ begin
     result := SelectByName(fChallengeLogonName);
   if result<>cqrsSuccess then
     exit;
-  ORMBegin(qaSelect,result);
   if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
      (ORM as TSQLRecordAuthInfo).HashedPassword)=aChallengedPassword then
     ORMResult(cqrsSuccess) else
@@ -236,6 +240,59 @@ begin
   ORMPrepareForCommit(soUpdate);
 end;
 
+class procedure TDDDAuthenticationAbstract.RegressionTests(
+  test: TSynTestCase);
+var Factory: TDDDAuthenticationRestFactoryAbstract;
+procedure TestOne;
+const MAX=2000;
+var auth: IDomAuthCommand;
+    nonce: TAuthQueryNonce;
+    log,pass: RawUTF8;
+    info: TAuthInfo;
+    i: integer;
+begin
+  Factory.Get(auth);
+  for i := 1 to MAX do begin
+    UInt32ToUtf8(i,log);
+    UInt32ToUtf8(i*7,pass);
+    test.Check(auth.Add(log,ComputeHashPassword(log,pass))=cqrsSuccess);
+  end;
+  test.Check(auth.Commit=cqrsSuccess);
+  Factory.Get(auth);
+  info := TAuthInfo.Create;
+  try
+    for i := 1 to MAX do begin
+      UInt32ToUtf8(i,log);
+      UInt32ToUtf8(i*7,pass);
+      nonce := auth.ChallengeSelectFirst(log);
+      test.Check(nonce<>'');
+      test.Check(auth.ChallengeSelectFinal(
+        ClientComputeChallengedPassword(log,pass,nonce))=cqrsSuccess);
+      test.Check(auth.Get(info)=cqrsSuccess);
+      test.Check(info.LogonName=log);
+    end;
+  finally
+    info.Free;
+  end;
+end;
+var Rest: TSQLRestServerFullMemory;
+    Model: TSQLModel;
+begin
+  Model := TSQLModel.Create([TSQLRecordAuthInfo]);
+  Rest := TSQLRestServerFullMemory.Create(Model);
+  try
+    Model.Owner := Rest;
+    Factory := TDDDAuthenticationRestFactoryAbstract.Create(Rest,self,nil);
+    try
+      TestOne; // sub function to ensure that all I*Command are released
+    finally
+      Factory.Free;
+    end;
+  finally
+    Rest.Free;
+  end;
+end;
+
 
 { TDDDAuthenticationSHA256 }
 
@@ -284,7 +341,7 @@ end;
 
 { TSQLRecordAuthInfo }
 
-class procedure TSQLRecordAuthInfo.InternalRegisterCustomProperties(
+class procedure TSQLRecordAuthInfo.InternalDefineModel(
   Props: TSQLRecordProperties);
 begin
   AddFilterNotVoidText(['HashedPassword']);

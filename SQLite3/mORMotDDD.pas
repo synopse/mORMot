@@ -284,6 +284,8 @@ type
       const TableAggregatePairs: array of RawUTF8); reintroduce; overload;
     /// finalize the factory
     destructor Destroy; override;
+    /// set a local I*Query or I*Command instance corresponding to this factory
+    procedure Get(out Obj); virtual;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
     /// create a new DDD Aggregate instance
@@ -450,9 +452,10 @@ begin
       [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
   fLastErrorAddress^ := Error;
   fLastError := Error;
-  fLastErrorContext := _JsonFast(ObjectToJSONDebug(self));
-  TDocVariantData(fLastErrorContext).AddValue('LocalTime',NowToString);
-  if Error=cqrsSuccess then
+  if Error<>cqrsSuccess then begin
+    fLastErrorContext := _JsonFast(ObjectToJSONDebug(self));
+    TDocVariantData(fLastErrorContext).AddValue('LocalTime',NowToString);
+  end else
     if ACTION_TO_STATE[fAction]<>qsNone then
       fState := ACTION_TO_STATE[fAction];
   fAction := qaNone;
@@ -545,6 +548,17 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
+{ TODO:
+  Complex types flatening for aggregates (allowing 1 sub level at first?):
+  * User.Email -> TSQLUser.EMail
+  * User.Name.First -> TSQLUser.Name_First
+  * User.Address.Street1 -> TSQLUser.Address_Street1
+  * User.Address.Country.Iso  -> TSQLUser.Address_Country (Iso is single prop)
+  * User.BirthDate.Value -> TSQLUser.BirthDate (Value is single prop)
+  T*ObjArray properties: Order.Line[] TOrderLineObjArray -> which one?
+  -> TSQLOrder.Line as variant (JSON) ?
+  -> TSQLOrder.Line as JSON dynarray (new feature request) ?
+}
 procedure EnsureCompatible(agg,rec: TSQLPropInfo);
 begin
   if agg.SQLDBFieldType<>rec.SQLDBFieldType then
@@ -566,7 +580,7 @@ begin
     end;
   end;
   for i := 0 to fORMProps.Count-1 do begin
-    ndx := fProps.IndexByName(fORMProps.List[i].Name);
+    ndx := fProps.IndexByName(fPropsMapping.FieldNames[i]);
     if ndx<0 then // TSQLRecord property not defined in the TPersistent
       fTableToAggregate[i] := nil else begin
       fTableToAggregate[i] := fProps.List[ndx];
@@ -581,9 +595,15 @@ function TDDDRepositoryRestFactory.TryResolve(
 begin
   if fInterface.InterfaceTypeInfo<>aInterface then
     result := false else begin
-    IInterface(Obj) := fImplementation.Create(self);
+    Get(Obj);
     result := true;
   end;
+end;
+
+procedure TDDDRepositoryRestFactory.Get(out Obj);
+begin
+  if not fImplementation.Create(self).GetInterface(fInterface.InterfaceIID,Obj) then
+    raise ECQRSException.CreateUTF8('%.Get(%)',[self,fInterface.InterfaceTypeInfo^.Name]);
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateClear(
