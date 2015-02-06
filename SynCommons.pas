@@ -7048,6 +7048,11 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): 
 
 
 type
+  TSynFilterOrValidate = class;
+
+  TSynFilterOrValidateObjArray = array of TSynFilterOrValidate;
+
+
   /// will define a filter or a validation process to be applied to
   // a database Record content (typicaly a TSQLRecord)
   // - the optional associated parameters are to be supplied JSON-encoded
@@ -7059,6 +7064,12 @@ type
     // - the RawUTF8 param is not set as const, since it will probably be
     // decoded via JSONDecode(), so a local copy is needed
     procedure SetParameters(Value: RawUTF8); virtual;
+  public
+    /// add the filter or validation process to a list, checking if not present
+    // - if an instance with the same class type and parameters is already
+    // registered, will call aInstance.Free and return the exising instance
+    // - if there is no similar instance, will add it to the list and return it
+    function AddOnce(var aObjArray: TSynFilterOrValidateObjArray): TSynFilterOrValidate;
   public
     /// initialize the filter or validation instance
     constructor Create(const aParameters: RawUTF8='');
@@ -36051,6 +36062,23 @@ end;
 procedure TSynFilterOrValidate.SetParameters(Value: RawUTF8);
 begin
   fParameters := Value;
+end;
+
+function TSynFilterOrValidate.AddOnce(
+  var aObjArray: TSynFilterOrValidateObjArray): TSynFilterOrValidate;
+var i: integer;
+begin
+  if self<>nil then begin
+    for i := 0 to length(aObjArray)-1 do
+      if (PPointer(aObjArray[i])^=PPointer(self)^) and
+         (aObjArray[i].fParameters=fParameters) then begin
+        Free;
+        result := aObjArray[i];
+        exit;
+      end;
+    ObjArrayAdd(aObjArray,self);
+  end;
+  result := self;
 end;
 
 

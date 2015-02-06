@@ -3921,9 +3921,9 @@ type
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
     // part of the framework (like UI edition), both filters and validation
-    // rules are grouped in the same TObjectList - for TSynTableFieldProperties
-    // there are separated Filters[] and Validates[] array, for better performance
-    Filters: array of TObjectList;
+    // rules are grouped in the same list - for TSynTableFieldProperties there
+    // are separated Filters[] and Validates[] arrays, for better performance
+    Filters: array of TSynFilterOrValidateObjArray;
     /// for a TSQLRecordMany class, points to the Source property RTTI
     property RecordManySourceProp: TSQLPropInfoRTTIInstance read fRecordManySourceProp;
     /// for a TSQLRecordMany class, points to the Dest property RTTI
@@ -4040,17 +4040,15 @@ type
     // field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
-    // - will return the specified associated TSynFilterOrValidate instance
-    // - will return nil in case of an invalid field index
+    // - will return FALSE in case of an invalid field index
     function AddFilterOrValidate(aFieldIndex: integer;
-      aFilter: TSynFilterOrValidate): TSynFilterOrValidate; overload;
+      aFilter: TSynFilterOrValidate): boolean; overload;
     /// register a custom filter or Validate to the class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
-    // - will return the specified associated TSynFilterOrValidate instance
-    function AddFilterOrValidate(const aFieldName: RawUTF8;
-      aFilter: TSynFilterOrValidate): TSynFilterOrValidate; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    // - will raise an EModelException if the field name does not exist
+    procedure AddFilterOrValidate(const aFieldName: RawUTF8;
+      aFilter: TSynFilterOrValidate); overload;
 
     /// add a custom unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
@@ -5054,11 +5052,10 @@ type
     /// register a custom filter or Validate to the class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
-    // - will return the specified associated TSynFilterOrValidate instance
+    // - will raise an EModelException on failure
     // - this function is just a wrapper around RecordProps.AddFilterOrValidate
-    class function AddFilterOrValidate(const aFieldName: RawUTF8;
-      aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
-        {$ifdef HASINLINE}inline;{$endif}
+    class procedure AddFilterOrValidate(const aFieldName: RawUTF8;
+      aFilter: TSynFilterOrValidate);
     /// register a TSynFilterTrim and a TSynValidateText filters so that
     // the specified fields, after space trimming, won't be void
     class procedure AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
@@ -23901,14 +23898,12 @@ begin
     // no filter set yet -> process OK
     result := true else begin
     for f := 0 to Fields.Count-1 do
-      if (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) and
-         (Filters[f]<>nil) then
-        with Filters[f] do
-        for i := 0 to Count-1 do
-        if TSynFilterOrValidate(List[i]).InheritsFrom(TSynFilter) then begin
+      if (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) then
+        for i := 0 to length(Filters[f])-1 do
+        if Filters[f,i].InheritsFrom(TSynFilter) then begin
           Fields.List[f].GetValueVar(self,false,Value,nil);
           Old := Value;
-          TSynFilter(List[i]).Process(f,Value);
+          TSynFilter(Filters[f,i]).Process(f,Value);
           if Old<>Value then
             // value was changed -> store modified
             Fields.List[f].SetValueVar(self,Value,false);
@@ -23956,10 +23951,10 @@ begin
   result := TAutoFree.Create(localVariable,Create(Rest,ID));
 end;
 
-class function TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
-  aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
+class procedure TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
+  aFilter: TSynFilterOrValidate);
 begin
-  result := RecordProps.AddFilterOrValidate(aFieldName,aFilter);
+  RecordProps.AddFilterOrValidate(aFieldName,aFilter);
 end;
 
 class procedure TSQLRecord.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
@@ -23967,7 +23962,7 @@ var i,f: Integer;
 begin
   with RecordProps do begin
     for i := 0 to high(aFieldNames) do begin
-      f := Fields.IndexByName(aFieldNames[i]);
+      f := Fields.IndexByNameOrExcept(aFieldNames[i]);
       AddFilterOrValidate(f,TSynFilterTrim.Create);
       AddFilterOrValidate(f,TSynValidateText.Create);
     end;
@@ -23988,9 +23983,9 @@ begin
   with RecordProps do
   for f := 0 to Fields.Count-1 do
   if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then begin
-    if (Filters<>nil) and (Filters[f]<>nil) then
-      for i := 0 to Filters[f].Count-1 do begin
-        Validate := TSynValidate(Filters[f].List[i]);
+    if Filters<>nil then
+      for i := 0 to length(Filters[f])-1 do begin
+        Validate := TSynValidate(Filters[f,i]);
         if Validate.InheritsFrom(TSynValidate) then begin
           if Value='' then
             Fields.List[f].GetValueVar(self,false,Value,nil);
@@ -36486,31 +36481,29 @@ begin
 end;
 
 function TSQLRecordProperties.AddFilterOrValidate(aFieldIndex: integer;
-  aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
+  aFilter: TSynFilterOrValidate): boolean;
 begin
   if (self=nil) or (cardinal(aFieldIndex)>=cardinal(Fields.Count)) or
     (aFilter=nil) then
-    result := nil else begin
+    result := false else begin
     if Filters=nil then
       SetLength(Filters,Fields.Count);
-    if Filters[aFieldIndex]=nil then
-      Filters[aFieldIndex] := TObjectList.Create;
-    Filters[aFieldIndex].Add(aFilter);
-    result := aFilter;
+    aFilter.AddOnce(Filters[aFieldIndex]);
+    result := true;
   end;
 end;
 
-function TSQLRecordProperties.AddFilterOrValidate(const aFieldName: RawUTF8;
-  aFilter: TSynFilterOrValidate): TSynFilterOrValidate;
+procedure TSQLRecordProperties.AddFilterOrValidate(const aFieldName: RawUTF8;
+  aFilter: TSynFilterOrValidate);
 begin
-  result := AddFilterOrValidate(Fields.IndexByName(aFieldName),aFilter);
+  AddFilterOrValidate(Fields.IndexByNameOrExcept(aFieldName),aFilter);
 end;
 
 destructor TSQLRecordProperties.Destroy;
 var f: integer;
 begin
   for f := 0 to high(Filters) do
-    Filters[f].Free; // will free any created TSynFilter instances
+    ObjArrayClear(Filters[f]); // will free any created TSynFilter instances
   inherited;
   DeleteCriticalSection(fLock);
   Fields.Free;
