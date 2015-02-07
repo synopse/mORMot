@@ -2133,6 +2133,7 @@ type
     // e.g. for a plain TCollectionItem class
     function ClassCreate: TObject;
     /// get the SQL type of this Delphi class type
+    // - returns either sftObject, sftID, sftMany or sftUnknown
     function ClassSQLFieldType: TSQLFieldType;
        {$ifdef HASINLINE}inline;{$endif}
     /// for ordinal types, get the storage size and sign
@@ -2819,13 +2820,17 @@ type
 
   /// information about a AnsiString published property
   TSQLPropInfoRTTIAnsi = class(TSQLPropInfoRTTI)
+  protected
+    fEngine: TSynAnsiConvert;
   public
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
@@ -2848,17 +2853,6 @@ type
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
-  end;
-
-  /// information about a WinAnsiString published property
-  TSQLPropInfoRTTIWinAnsi = class(TSQLPropInfoRTTIAnsi)
-  public
-    procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
-    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
-    procedure GetValueVar(Instance: TObject; ToSQL: boolean;
-      var result: RawUTF8; wasSQLString: PBoolean); override;
-    function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
   /// information about a RawUnicode published property
@@ -2913,6 +2907,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
@@ -15343,14 +15338,11 @@ begin
           C := TSQLPropInfoRTTIDouble;
       {$ifdef FPC}tkAString,{$endif}
       tkLString:
-        if aType=TypeInfo(RawUTF8) then
-          C := TSQLPropInfoRTTIRawUTF8 else
-        if aType=TypeInfo(RawUnicode) then
-          C := TSQLPropInfoRTTIRawUnicode else
-        if aType=TypeInfo(WinAnsiString) then
-          C := TSQLPropInfoRTTIWinAnsi else
-        if aType=TypeInfo(AnsiString) then
-          C := TSQLPropInfoRTTIAnsi;
+        case aType^.AnsiStringCodePage of // optimized classes
+          CP_UTF8:  C := TSQLPropInfoRTTIRawUTF8;
+          CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
+          else C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
+        end;
       {$ifdef UNICODE}
       tkUString:
         C := TSQLPropInfoRTTIUnicode;
@@ -16099,6 +16091,13 @@ end;
 
 { TSQLPropInfoRTTIAnsi }
 
+constructor TSQLPropInfoRTTIAnsi.Create(aPropInfo: PPropInfo; aPropIndex: integer;
+  aSQLFieldType: TSQLFieldType);
+begin
+  inherited;
+  fEngine := TSynAnsiConvert.Engine(aPropInfo^.PropType^.AnsiStringCodePage);
+end;
+
 procedure TSQLPropInfoRTTIAnsi.CopyValue(Source, Dest: TObject);
 var Value: RawByteString;
 begin
@@ -16119,10 +16118,12 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   fPropInfo.GetLongStrProp(Instance,Value);
   if CaseInsensitive then
-    result := crc32c(0,Up,UpperCopy255(Up,Value)-Up) else
+    if fEngine.CodePage=CODEPAGE_US then
+      result := crc32c(0,Up,UpperCopyWin255(Up,Value)-Up) else
+      result := crc32c(0,Up,UpperCopy255(Up,Value)-Up) else
     result := crc32c(0,pointer(Value),length(Value));
 end;
-
+  
 procedure TSQLPropInfoRTTIAnsi.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 var tmp: RawByteString;
@@ -16130,7 +16131,7 @@ begin
   if wasSQLString<>nil then
     wasSQLString^ := true;
   fPropInfo.GetLongStrProp(Instance,tmp);
-  result := CurrentAnsiConvert.AnsiToUTF8(tmp);
+  result := fEngine.AnsiBufferToRawUTF8(pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfoRTTIAnsi.NormalizeValue(var Value: RawUTF8);
@@ -16149,7 +16150,9 @@ begin
     fPropInfo.GetLongStrProp(Item1,tmp1);
     fPropInfo.GetLongStrProp(Item2,tmp2);
     if CaseInsensitive then
-      result := StrIComp(pointer(tmp1),pointer(tmp2)) else
+      if fEngine.CodePage=CODEPAGE_US then
+        result := AnsiIComp(pointer(tmp1),pointer(tmp2)) else
+        result := StrIComp(pointer(tmp1),pointer(tmp2)) else
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
 end;
@@ -16165,13 +16168,22 @@ procedure TSQLPropInfoRTTIAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
 begin
   if Value=nil then
     fPropInfo.SetLongStrProp(Instance,'') else
-    fPropInfo.SetLongStrProp(Instance,
-      CurrentAnsiConvert.UTF8BufferToAnsi(Value,StrLen(Value)));
+    fPropInfo.SetLongStrProp(Instance,fEngine.UTF8BufferToAnsi(Value,StrLen(Value)));
 end;
 
 procedure TSQLPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance,CurrentAnsiConvert.UTF8ToAnsi(Value));
+  fPropInfo.SetLongStrProp(Instance,fEngine.UTF8ToAnsi(Value));
+end;
+
+procedure TSQLPropInfoRTTIAnsi.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+var tmp: RawByteString;
+begin
+  W.Add('"');
+  fPropInfo.GetLongStrProp(Instance,tmp);
+  if PtrUInt(tmp)<>0 then
+    W.AddAnyAnsiString(tmp,twJSONEscape,fEngine.CodePage);
+  W.Add('"');
 end;
 
 function TSQLPropInfoRTTIAnsi.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -16179,7 +16191,7 @@ var tmp: RawByteString;
 begin
   case aValue.VType of
   ftNull: ; // leave tmp=''
-  ftUTF8: CurrentAnsiConvert.UTF8BufferToAnsi(aValue.VText,StrLen(aValue.VText),tmp);
+  ftUTF8: fEngine.UTF8BufferToAnsi(aValue.VText,StrLen(aValue.VText),tmp);
   else begin
     result := inherited SetFieldSQLVar(Instance,aValue);
     exit;
@@ -16193,7 +16205,7 @@ procedure TSQLPropInfoRTTIAnsi.GetFieldSQLVar(Instance: TObject; var aValue: TSQ
   var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance,temp);
-  temp := CurrentAnsiConvert.AnsiToUTF8(temp);
+  temp := fEngine.AnsiToUTF8(temp);
   aValue.VType := ftUTF8;
   aValue.VText := Pointer(temp);
 end;
@@ -16282,61 +16294,6 @@ end;
 procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,Value);
-end;
-
-
-{ TSQLPropInfoRTTIWinAnsi }
-
-function TSQLPropInfoRTTIWinAnsi.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
-var Up: array[byte] of AnsiChar; // avoid slow heap allocation
-    Value: RawByteString;
-begin
-  fPropInfo.GetLongStrProp(Instance,Value);
-  if CaseInsensitive then
-    result := crc32c(0,Up,UpperCopyWin255(Up,Value)-Up) else
-    result := crc32c(0,pointer(Value),length(Value));
-end;
-
-procedure TSQLPropInfoRTTIWinAnsi.GetValueVar(Instance: TObject;
-  ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
-var tmp: RawByteString;
-begin
-  if wasSQLString<>nil then
-    wasSQLString^ := true;
-  fPropInfo.GetLongStrProp(Instance,tmp);
-  result := WinAnsiConvert.AnsiBufferToRawUTF8(pointer(tmp),length(tmp));
-end;
-
-function TSQLPropInfoRTTIWinAnsi.CompareValue(Item1, Item2: TObject;
-  CaseInsensitive: boolean): PtrInt;
-var tmp1,tmp2: RawByteString;
-begin
-  if Item1=Item2 then
-    result := 0 else
-  if Item1=nil then
-    result := -1 else
-  if Item2=nil then
-    result := 1 else begin
-    fPropInfo.GetLongStrProp(Item1,tmp1);
-    fPropInfo.GetLongStrProp(Item2,tmp2);
-    if CaseInsensitive then
-      result := AnsiIComp(pointer(tmp1),pointer(tmp2)) else
-      result := StrComp(pointer(tmp1),pointer(tmp2));
-  end;
-end;
-
-procedure TSQLPropInfoRTTIWinAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
-  wasString: boolean);
-begin
-  if Value=nil then
-    fPropInfo.SetLongStrProp(Instance,'') else
-    fPropInfo.SetLongStrProp(Instance,
-      WinAnsiConvert.UTF8BufferToAnsi(Value,StrLen(Value)));
-end;
-
-procedure TSQLPropInfoRTTIWinAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
-begin
-  fPropInfo.SetLongStrProp(Instance,WinAnsiConvert.UTF8ToAnsi(Value));
 end;
 
 
@@ -16594,6 +16551,16 @@ begin
   result := UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance));
   if wasSQLString<>nil then
     wasSQLString^ := true;
+end;
+
+procedure TSQLPropInfoRTTIUnicode.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+var tmp: UnicodeString;
+begin
+  W.Add('"');
+  tmp := fPropInfo.GetUnicodeStrProp(Instance);
+  if PtrUInt(tmp)<>0 then
+    W.AddJSONEscapeW(pointer(tmp),0);
+  W.Add('"');
 end;
 
 function TSQLPropInfoRTTIUnicode.CompareValue(Item1, Item2: TObject;
@@ -42566,4 +42533,4 @@ end.
 
 
 
-
+

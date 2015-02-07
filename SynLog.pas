@@ -252,7 +252,7 @@ type
       Instance: TObject=nil; TextTruncateAtLength: integer=maxInt); overload;
     {$ifdef UNICODE}
     /// call this method to add some VCL string to the log at a specified level
-    // - this overloaded version will avoid a call to StringToRawUTF8()
+    // - this overloaded version will avoid a call to StringToUTF8()
     procedure Log(Level: TSynLogInfo; const Text: string; Instance: TObject=nil); overload;
     {$endif}
     /// call this method to add the content of an object to the log at a
@@ -808,7 +808,7 @@ type
       aInstance: TObject=nil; TextTruncateAtLength: integer=maxInt); overload;
     {$ifdef UNICODE}
     /// call this method to add some VCL string to the log at a specified level
-    // - this overloaded version will avoid a call to StringToRawUTF8()
+    // - this overloaded version will avoid a call to StringToUTF8()
     procedure Log(Level: TSynLogInfo; const Text: string; aInstance: TObject=nil); overload;
     {$endif}
     /// call this method to add the content of an object to the log at a
