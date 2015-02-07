@@ -4552,6 +4552,7 @@ function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): Ra
 // - this low-level function is used e.g. by mORMotWrappers unit
 function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
 
+
 /// compare two "array of byte" elements
 function SortDynArrayByte(const A,B): integer;
 
@@ -4603,6 +4604,7 @@ function SortDynArrayVariant(const A,B): integer;
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A,B): integer;
 {$endif}
+
 
 /// hash one AnsiString content with the suppplied Hasher() function
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;

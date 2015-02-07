@@ -177,6 +177,7 @@ begin
   AddCase(TTestServiceOrientedArchitecture);
   AddCase(TTestExternalDatabase);
   AddCase(TTestMultiThreadProcess);
+  AddCase(TTestDDDSharedUnits);
   //exit; // *)
 end;
 {$endif DELPHI5OROLDER}

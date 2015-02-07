@@ -99,6 +99,7 @@ unit SynSelfTests;
   - included testing of new REGEXP function for SQLite3
   - included testing of TSQLRestServerAuthenticationNone
   - added TTestMultiThreadProcess test cases over all communication protocols
+  - introducing TTestDDDSharedUnits test cases
   - added PDF-1.5 and page orientation testing
   - now default HTTP port would be 8888 under Linux (888 needs root rights)
 
@@ -164,6 +165,9 @@ uses
   {$ifndef NOVARIANTS}
   mORMotMVC,
   {$endif}
+  mORMotDDD,
+  dddDomUserTypes,
+  dddInfraAuthRest,
 {$endif DELPHI5OROLDER}
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
@@ -787,6 +791,16 @@ type
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amMainThread
     procedure MainThread;
     {$endif}
+  end;
+
+  /// a test case for all shared DDD types and services
+  TTestDDDSharedUnits = class(TSynTestCase)
+  protected
+  published
+    /// test the User modelization types, including e.g. Address
+    procedure UserModel;
+    /// test the Authentication modelization types, and implementation
+    procedure AuthenticationModel;
   end;
 
 
@@ -12521,7 +12535,23 @@ begin
   Sleep(0); // is expected for proper process
 end;
 
+
+{ TTestDDDSharedUnits }
+
+procedure TTestDDDSharedUnits.AuthenticationModel;
+begin
+  TDDDAuthenticationSHA256.RegressionTests(self);
+  TDDDAuthenticationMD5.RegressionTests(self);
+end;
+
+procedure TTestDDDSharedUnits.UserModel;
+begin
+  TCountry.RegressionTests(self);
+  TPersonContactable.RegressionTests(self);
+end;
+
 {$endif DELPHI5OROLDER}
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
