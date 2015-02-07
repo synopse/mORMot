@@ -1031,6 +1031,7 @@ unit mORMot;
     - added TSQLRest.RetrieveList method to retrieve a TObjectList of TSQLRecord
     - added TSQLRest.RetrieveList<T> generic method to retrieve a TObjectList<T>
     - added TSQLRest.RetrieveListJSON method to get a TSQLRecord list as JSON
+    - added TSQLRest.RetrieveListObjArray and TSQLTable.ToObjArray methods
     - added TSQLRest.UpdateField() overloaded methods to update a single field
     - "rowCount": is added in TSQLRestStorageInMemory.GetJSONValues,
       TSQLTable.GetJSONValues and in TSQLTableJSON.ParseAndConvert, at the end
@@ -6379,6 +6380,12 @@ type
     // - always returns an instance, even if the TSQLTable is nil or void
     function ToObjectList<T: TSQLRecord>: TObjectList<T>; overload;
     {$endif}
+    /// fill an existing T*ObjArray variable with TSQLRecord instances
+    // corresponding to this TSQLTable result set
+    // - use the specified TSQLRecord class or create instances
+    // of the first associated record class (from internal QueryTables[])
+    // - returns TRUE on success, false on error
+    function ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): boolean;
 
     {/ After a TSQLTable has been initialized, this method can be called
       one or more times to iterate through all data rows
@@ -10376,7 +10383,24 @@ type
       FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant; 
     {$endif NOVARIANTS}
-
+    /// get a list of members from a SQL statement as T*ObjArray
+    // - implements REST GET collection
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - set the T*ObjArray variable with all items on success - so that it can
+    // be used with SOA methods
+    // - it is up to the caller to ensure that ObjClear(ObjArray) is called
+    // when the T*ObjArray list is not needed any more 
+    // - returns true on success, false on error
+    function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): boolean;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -19348,6 +19372,39 @@ begin
   end;
 end;
 
+function TSQLTable.ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): boolean;
+var R: TSQLRecord;
+    Row: PPUtf8Char;
+    i: integer;
+    arr: array of TSQLRecord absolute ObjArray;
+begin
+  result := false;
+  ObjArrayClear(ObjArray);
+  if self=nil then
+    exit;
+  if RecordType=nil then begin
+    RecordType := QueryRecordType;
+    if RecordType=nil then
+      exit;
+  end;
+  result := true;
+  if RowCount=0 then
+    exit;
+  R := RecordType.Create;
+  try
+    R.FillPrepare(self);
+    SetLength(arr,RowCount);        // faster than manual Add()
+    Row := @fResults[FieldCount];   // Row^ points to first row of data
+    for i := 0 to RowCount-1 do begin
+      arr[i] := RecordType.Create;
+      R.fFill.Fill(pointer(Row),arr[i]);
+      Inc(Row,FieldCount); // next data row
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
 function TSQLTable.ToObjectList(RecordType: TSQLRecordClass=nil): TObjectList;
 begin
   result := TObjectList.Create;
@@ -25711,6 +25768,23 @@ begin
   if sql='' then
     result := '' else
     result := EngineList(sql);
+end;
+
+function TSQLRest.RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8): boolean;
+var T: TSQLTable;
+begin
+  result := false;
+  if (self=nil) or (Table=nil) then
+    exit;
+  T := MultiFieldValues(Table,aCustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
+  if T<>nil then
+  try
+    result := T.ToObjArray(result,Table);
+  finally
+    T.Free;
+  end;
 end;
 
 {$ifndef NOVARIANTS}

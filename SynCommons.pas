@@ -4298,7 +4298,8 @@ type
 // !   ObjArrayClear(arr); // release all items
 // ! end;
 // - return the index of the item in the dynamic array
-function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
+function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -4306,28 +4307,34 @@ function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end, and
 // return the index of the item in the dynamic array
-function ObjArrayAddOnce(var aDynArray; aItem: TObject): integer;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): integer;
+
+/// wrapper to set the length of a T*ObjArray dynamic array storage
+// - could be used as an alternative to SetLength() when you do not
+// know the exact T*ObjArray type
+procedure ObjArraySetLength(var aObjArray; aLength: integer);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to search an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
-function ObjArrayFind(var aDynArray; aItem: TObject): integer;
+function ObjArrayFind(var aObjArray; aItem: TObject): integer;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - do nothing if the index is out of range in the dynamic array
-procedure ObjArrayDelete(var aDynArray; aItemIndex: integer); overload;
+procedure ObjArrayDelete(var aObjArray; aItemIndex: integer); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
-function ObjArrayDelete(var aDynArray; aItem: TObject): integer; overload;
+function ObjArrayDelete(var aObjArray; aItem: TObject): integer; overload;
 
 /// wrapper to sort the items stored in a T*ObjArray dynamic array 
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
-procedure ObjArraySort(var aDynArray; Compare: TDynArraySortCompare);
+procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -4335,7 +4342,7 @@ procedure ObjArraySort(var aDynArray; Compare: TDynArraySortCompare);
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
-procedure ObjArrayClear(var aDynArray);
+procedure ObjArrayClear(var aObjArray);
 
 
 /// helper to retrieve the text of an enumerate item
@@ -32504,32 +32511,37 @@ end;
 
 { wrapper functions to T*ObjArr types }
 
-function ObjArrayAdd(var aDynArray; aItem: TObject): integer;
-var a: TObjectDynArray absolute aDynArray;
+function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
+var a: TObjectDynArray absolute aObjArray;
 begin
   result := length(a);
   SetLength(a,result+1);
   a[result] := aItem;
 end;
 
-function ObjArrayAddOnce(var aDynArray; aItem: TObject): integer;
+function ObjArrayAddOnce(var aObjArray; aItem: TObject): integer;
 begin
-  result := ObjArrayFind(aDynArray,aItem);
+  result := ObjArrayFind(aObjArray,aItem);
   if result<0 then
-    result := ObjArrayAdd(aDynArray,aItem);
+    result := ObjArrayAdd(aObjArray,aItem);
 end;
 
-function ObjArrayFind(var aDynArray; aItem: TObject): integer;
+procedure ObjArraySetLength(var aObjArray; aLength: integer);
 begin
-  for result := 0 to length(TObjectDynArray(aDynArray))-1 do
-    if TObjectDynArray(aDynArray)[result]=aItem then
+  SetLength(TObjectDynArray(aObjArray),aLength);
+end;
+
+function ObjArrayFind(var aObjArray; aItem: TObject): integer;
+begin
+  for result := 0 to length(TObjectDynArray(aObjArray))-1 do
+    if TObjectDynArray(aObjArray)[result]=aItem then
       exit;
   result := -1;
 end;
 
-procedure ObjArrayDelete(var aDynArray; aItemIndex: integer); 
+procedure ObjArrayDelete(var aObjArray; aItemIndex: integer); 
 var n: integer;
-    a: TObjectDynArray absolute aDynArray;
+    a: TObjectDynArray absolute aObjArray;
 begin
   n := length(a);
   if cardinal(aItemIndex)>=cardinal(n) then
@@ -32541,29 +32553,29 @@ begin
   SetLength(a,n);
 end;
 
-function ObjArrayDelete(var aDynArray; aItem: TObject): integer; 
+function ObjArrayDelete(var aObjArray; aItem: TObject): integer; 
 begin
-  result := ObjArrayFind(aDynArray,aItem);
+  result := ObjArrayFind(aObjArray,aItem);
   if result>=0 then
-    ObjArrayDelete(aDynArray,result);
+    ObjArrayDelete(aObjArray,result);
 end;
 
-procedure ObjArraySort(var aDynArray; Compare: TDynArraySortCompare);
+procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 var QuickSort: TDynArrayQuickSort;
     n: integer;
 begin
-  n := length(TObjectDynArray(aDynArray));
+  n := length(TObjectDynArray(aObjArray));
   if (@Compare<>nil) and (n>0) then begin
     Quicksort.Compare := @Compare;
-    Quicksort.Value := pointer(aDynArray);
+    Quicksort.Value := pointer(aObjArray);
     Quicksort.ElemSize := sizeof(pointer);
     Quicksort.QuickSort(0,n-1);
   end;
 end;
 
-procedure ObjArrayClear(var aDynArray);
+procedure ObjArrayClear(var aObjArray);
 var i: integer;
-    a: TObjectDynArray absolute aDynArray;
+    a: TObjectDynArray absolute aObjArray;
 begin
   if a<>nil then begin
     for i := 0 to length(a)-1 do
