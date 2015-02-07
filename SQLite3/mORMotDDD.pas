@@ -270,11 +270,10 @@ type
     fTable: TSQLRecordClass;
     fPropsMapping: TSQLRecordPropertiesMapping;
     fPropsMappingVersion: cardinal;
-    fProps: TSQLPropInfoList;
-    fORMProps: TSQLPropInfoList;
+    fAggregateRTTI: TSQLPropInfoList;
     // TSQLPropInfoList correspondance, as filled by ComputeMapping:
-    fAggregateToTable: TSQLPropInfoDynArray;
-    fTableToAggregate: TSQLPropInfoDynArray;
+    fAggregateToTable: TSQLPropInfoObjArray;
+    fAggregateProp: TSQLPropInfoRTTIObjArray;
     procedure ComputeMapping;
     function GetImplementationName: string;
     function GetAggregateName: string;
@@ -316,7 +315,7 @@ type
     /// the ORM's TSQLRecord used for actual storage
     property Table: TSQLRecordClass read fTable;
     /// the mapped DDD's TPersistent published properties RTTI
-    property Props: TSQLPropInfoList read fProps;
+    property Props: TSQLPropInfoList read fAggregateRTTI;
     /// access to the Aggregate / ORM field mapping
     property FieldMapping: TSQLRecordPropertiesMapping read fPropsMapping;
   published
@@ -565,13 +564,12 @@ begin
       [self,aImplementation,fInterface.InterfaceTypeInfo^.Name]);
   if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
-  fORMProps := fTable.RecordProps.Fields;
   fPropsMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
-  fProps := TSQLPropInfoList.Create(fAggregate,[pilAllowIDFields]);
-  SetLength(fAggregateToTable,fProps.Count);
-  SetLength(fTableToAggregate,fORMProps.Count);
+  fAggregateRTTI := TSQLPropInfoList.Create(fAggregate,[pilAllowIDFields,pilSubClassesFlattening]);
+  SetLength(fAggregateToTable,fAggregateRTTI.Count);
+  SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
   Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self]);
 end;
@@ -579,13 +577,13 @@ end;
 destructor TDDDRepositoryRestFactory.Destroy;
 begin
   Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self]);
-  fProps.Free;
+  fAggregateRTTI.Free;
   inherited;
 end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 { TODO:
-  Complex types flatening for aggregates (allowing 1 sub level at first?):
+  Complex types flattening for aggregates (allowing any sub level):
   * User.Email -> TSQLUser.EMail
   * User.Name.First -> TSQLUser.Name_First
   * User.Address.Street1 -> TSQLUser.Address_Street1
@@ -604,23 +602,18 @@ begin
       fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName]);
 end;
 var i,ndx: integer;
+    ORMProps: TSQLPropInfoObjArray;
 begin
+  ORMProps := fTable.RecordProps.Fields.List;
   if fPropsMapping.MappingVersion=fPropsMappingVersion then
     exit;
-  for i := 0 to fProps.Count-1 do begin
-    ndx := fPropsMapping.ExternalToInternalIndex(fProps.List[i].Name);
+  for i := 0 to fAggregateRTTI.Count-1 do begin
+    fAggregateProp[i] := fAggregateRTTI.List[i] as TSQLPropInfoRTTI;
+    ndx := fPropsMapping.ExternalToInternalIndex(fAggregateProp[i].Name);
     if ndx<0 then // ID/RowID or TPersistent property not defined in TSQLRecord
       fAggregateToTable[i] := nil else begin
-      fAggregateToTable[i] := fORMProps.List[ndx];
-      EnsureCompatible(fProps.List[i],fAggregateToTable[i]);
-    end;
-  end;
-  for i := 0 to fORMProps.Count-1 do begin
-    ndx := fProps.IndexByName(fPropsMapping.FieldNames[i]);
-    if ndx<0 then // TSQLRecord property not defined in the TPersistent
-      fTableToAggregate[i] := nil else begin
-      fTableToAggregate[i] := fProps.List[ndx];
-      EnsureCompatible(fTableToAggregate[i],fORMProps.List[i]);
+      fAggregateToTable[i] := ORMProps[ndx];
+      EnsureCompatible(fAggregateProp[i],fAggregateToTable[i]);
     end;
   end;
   fPropsMappingVersion := fPropsMapping.MappingVersion;
@@ -645,8 +638,9 @@ procedure TDDDRepositoryRestFactory.AggregateClear(
 var i: integer;
 begin
   if aAggregate<>nil then
-    for i := 0 to fProps.Count-1 do
-      fProps.List[i].SetValue(aAggregate,nil,false);
+    for i := 0 to high(fAggregateProp) do
+      with fAggregateProp[i] do
+        SetValue(Flattened(aAggregate),nil,false);
 end;
 
 function TDDDRepositoryRestFactory.AggregateCreate: TPersistent;
@@ -656,9 +650,8 @@ begin
     result := fAggregate.Create;
 end;
 
-procedure TDDDRepositoryRestFactory.AggregateToJSON(
-  aAggregate: TPersistent; W: TJSONSerializer; ORMMappedFields: boolean;
-  aID: TID);
+procedure TDDDRepositoryRestFactory.AggregateToJSON(aAggregate: TPersistent;
+  W: TJSONSerializer; ORMMappedFields: boolean; aID: TID);
 var i: integer;
 begin
   ComputeMapping;
@@ -672,13 +665,14 @@ begin
     W.Add(aID);
     W.Add(',');
   end;
-  for i := 0 to fProps.Count-1 do begin
+  for i := 0 to high(fAggregateProp) do begin
     if ORMMappedFields then
       if fAggregateToTable[i]=nil then
         continue else
         W.AddFieldName(fAggregateToTable[i].Name) else
-      W.AddFieldName(fProps.List[i].Name);
-    fProps.List[i].GetJSONValues(aAggregate,W);
+        W.AddFieldName(fAggregateProp[i].Name);
+    with fAggregateProp[i] do
+      GetJSONValues(Flattened(aAggregate),W);
     W.Add(',');
   end;
   W.CancelLastComma;
@@ -715,11 +709,12 @@ begin
   aDest.ClearProperties;
   aDest.ID := aID;
   if aAggregate<>nil then
-    for i := 0 to fProps.Count-1 do
-    if fAggregateToTable[i]<>nil then begin
-      fProps.List[i].GetValueVar(aAggregate,false,Value,@wasString);
-      fAggregateToTable[i].SetValueVar(aDest,Value,wasString);
-    end;
+    for i := 0 to high(fAggregateProp) do
+      if fAggregateToTable[i]<>nil then
+      with fAggregateProp[i] do begin
+        GetValueVar(Flattened(aAggregate),false,Value,@wasString);
+        fAggregateToTable[i].SetValueVar(aDest,Value,wasString);
+      end;
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateFromTable(
@@ -735,11 +730,12 @@ begin
     AggregateClear(aAggregate);
     exit;
   end;
-  for i := 0 to fProps.Count-1 do begin
+  for i := 0 to high(fAggregateProp) do begin
     if fAggregateToTable[i]<>nil then
       fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString) else
       Value := '';
-    fProps.List[i].SetValueVar(aAggregate,Value,wasString);
+    with fAggregateProp[i] do
+      SetValueVar(Flattened(aAggregate),Value,wasString);
   end;
 end;
 

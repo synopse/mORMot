@@ -2703,9 +2703,10 @@ type
     {$endif}
     /// generic way of implementing it
     function GetFieldAddr(Instance: TObject): pointer; override;
-    /// for pilSubClassesFlattening properties, the actual instance containing
-    // the property value
-    function GetFlattenedInstance(Instance: TObject): TObject;
+    /// for pilSubClassesFlattening properties, compute the actual instance
+    // containing the property value
+    // - if the property was not flattened, return the instance
+    function Flattened(Instance: TObject): TObject;
     /// corresponding RTTI information
     property PropInfo: PPropInfo read fPropInfo;
     /// for pilSubClassesFlattening properties, the parents RTTI
@@ -2716,6 +2717,8 @@ type
 
   /// type of a TSQLPropInfoRTTI class
   TSQLPropInfoRTTIClass = class of TSQLPropInfoRTTI;
+
+  TSQLPropInfoRTTIObjArray = array of TSQLPropInfoRTTI;
 
   /// information about an ordinal Int32 published property
   TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
@@ -3212,7 +3215,7 @@ type
   end;
 
   /// dynamic array of ORM fields information for published properties
-  TSQLPropInfoDynArray = array of TSQLPropInfo;
+  TSQLPropInfoObjArray = array of TSQLPropInfo;
 
   /// how TSQLPropInfoList.Create() would handle the incoming RTTI
   TSQLPropInfoListOptions = set of (
@@ -3224,7 +3227,7 @@ type
   // any TPersistent
   TSQLPropInfoList = class
   protected
-    fList: TSQLPropInfoDynArray;
+    fList: TSQLPropInfoObjArray;
     fCount: integer;
     fTable: TClass;
     fOptions: TSQLPropInfoListOptions;
@@ -3267,7 +3270,7 @@ type
     property Count: integer read fCount;
     /// quick access to the TSQLPropInfo list
     // - note that length(List) may not equal Count, since is its capacity
-    property List: TSQLPropInfoDynArray read fList;
+    property List: TSQLPropInfoObjArray read fList;
     /// read-only retrieval of a TSQLPropInfo item
     // - will raise an exception if out of range
     property Items[aIndex: integer]: TSQLPropInfo read GetItem; //default;
@@ -3876,10 +3879,10 @@ type
     // - dynamic arrays belong to simple fields: they are sent with other
     // properties content
     // - match inverted NOT_SIMPLE_FIELDS mask
-    SimpleFields: TSQLPropInfoDynArray;
+    SimpleFields: TSQLPropInfoObjArray;
     /// list all fields which can be copied from one TSQLRecord instance to another
     // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
-    CopiableFields: TSQLPropInfoDynArray;
+    CopiableFields: TSQLPropInfoObjArray;
     /// list all TSQLRecordMany fields of this TSQLRecord
     ManyFields: array of TSQLPropInfoRTTIMany;
     /// list all TSQLRecord fields of this TSQLRecord
@@ -3898,11 +3901,11 @@ type
     DynArrayFieldsHasObjArray: boolean;
     /// list of all sftBlobCustom fields of this TSQLRecord
     // - have been defined e.g. as TSQLPropInfoCustom custom definition 
-    BlobCustomFields: TSQLPropInfoDynArray;
+    BlobCustomFields: TSQLPropInfoObjArray;
     /// list all BLOB fields of this TSQLRecord
     // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
     // sftBlobRecord)
-    BlobFields: array of TSQLPropInfoRTTI;
+    BlobFields: TSQLPropInfoRTTIObjArray;
     /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
     FieldBits: array[TSQLFieldType] of TSQLFieldBits;
     /// bit set to 1 for indicating TModTime and TCreateTime fields
@@ -15403,12 +15406,13 @@ begin
     result := fPropInfo^.GetFieldAddr(Instance);
 end;
 
-function TSQLPropInfoRTTI.GetFlattenedInstance(Instance: TObject): TObject;
+function TSQLPropInfoRTTI.Flattened(Instance: TObject): TObject;
 var i: integer;
 begin
   result := Instance;
-  for i := 0 to length(fFlattenedProps)-1 do
-    result := fFlattenedProps[i].GetObjProp(result);
+  if fFlattenedProps<>nil then
+    for i := 0 to length(fFlattenedProps)-1 do
+      result := fFlattenedProps[i].GetObjProp(result);
 end;
 
 {$ifndef NOVARIANTS}
@@ -25957,8 +25961,10 @@ end;
 
 function TSQLRest.Retrieve(WhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
   Value: TSQLRecord): boolean;
+var where: RawUTF8;
 begin
-  result := Retrieve(FormatUTF8(WhereClauseFmt,Args,Bounds),Value);
+  where := FormatUTF8(WhereClauseFmt,Args,Bounds);
+  result := Retrieve(where,Value);
 end;
 
 function TSQLRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;

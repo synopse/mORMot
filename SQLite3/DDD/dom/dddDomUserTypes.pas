@@ -130,7 +130,7 @@ type
   TStreet = type RawUTF8;
   TCityArea = type RawUTF8;
   TCity = type RawUTF8;
-  TCounty = type RawUTF8;
+  TRegion = type RawUTF8;
   TPostalCode = type RawUTF8;
 
   /// Address object
@@ -142,7 +142,7 @@ type
     fStreet2: TStreet;
     fCityArea: TCityArea;
     fCity: TCity;
-    fCounty: TCounty;
+    fRegion: TRegion;
     fCode: TPostalCode;
     fCountry: TCountry;
   public
@@ -151,7 +151,7 @@ type
     property Street2: TStreet read fStreet2 write fStreet2;
     property CityArea: TCityArea read fCityArea write fCityArea;
     property City: TCity read fCity write fCity;
-    property County: TCounty read fCounty write fCounty;
+    property Region: TRegion read fRegion write fRegion;
     property Code: TPostalCode read fCode write fCode;
     property Country: TCountry read fCountry;
   end;
@@ -219,6 +219,55 @@ type
     property Phone2: TPhoneNumber read fPhone2 write fPhone2;
     property Email: TEmailAddress read fEmail write fEmail;
   end;
+
+
+{ *********** Person / User / Customer Persistence ORM classes }
+
+type
+  /// ORM class able to store a TPerson object
+  // - the TPerson.Name property has been flattened to Name_* columns as
+  // expected by TDDDRepositoryRestFactory.ComputeMapping
+  TSQLRecordPerson = class(TSQLRecord)
+  protected
+    fFirst: RawUTF8;
+    fMiddle: RawUTF8;
+    fLast: RawUTF8;
+    fBirthDate: TDateTime;
+  published
+    property Name_First: RawUTF8 read fFirst write fFirst;
+    property Name_Middle: RawUTF8 read fMiddle write fMiddle;
+    property Name_Last: RawUTF8 read fLast write fLast;
+    property Birth: TDateTime read fBirthDate;
+  end;
+
+  /// ORM class able to store a TPersonContactable object
+  // - the TPersonContactable.Address property has been flattened to Address_*
+  // columns as expected by TDDDRepositoryRestFactory.ComputeMapping
+  TSQLRecordPersonContactable = class(TSQLRecordPerson)
+  protected
+    fStreet1: RawUTF8;
+    fStreet2: RawUTF8;
+    fCityArea: RawUTF8;
+    fCity: RawUTF8;
+    fRegion: RawUTF8;
+    fCode: RawUTF8;
+    fCountry: integer;
+    fEmail: RawUTF8;
+    fPhone1: RawUTF8;
+    fPhone2: RawUTF8;
+  published
+    property Address_Street1: RawUTF8 read fStreet1 write fStreet1;
+    property Address_Street2: RawUTF8 read fStreet2 write fStreet2;
+    property Address_CityArea: RawUTF8 read fCityArea write fCityArea;
+    property Address_City: RawUTF8 read fCity write fCity;
+    property Address_Region: RawUTF8 read fRegion write fRegion;
+    property Address_Code: RawUTF8 read fCode write fCode;
+    property Address_Country: integer read fCountry;
+    property Phone1: RawUTF8 read fPhone1 write fPhone1;
+    property Phone2: RawUTF8 read fPhone2 write fPhone2;
+    property Email: RawUTF8 read fEmail write fEmail;
+  end;
+
 
 
 implementation
