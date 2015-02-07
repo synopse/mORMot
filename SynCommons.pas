@@ -4283,6 +4283,10 @@ type
     property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
   end;
 
+/// wrapper to add an item to a array of pointer dynamic array storage
+function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - could be used as such (note the T*ObjArray type naming convention):
@@ -32516,6 +32520,14 @@ begin
     Quicksort.ElemSize := sizeof(pointer);
     Quicksort.QuickSort(0,fCount-1);
   end;
+end;
+
+function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
+var a: TPointerDynArray absolute aPtrArray;
+begin
+  result := length(a);
+  SetLength(a,result+1);
+  a[result] := aItem;
 end;
 
 

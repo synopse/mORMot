@@ -1927,6 +1927,10 @@ type
   PPropInfo = ^TPropInfo;
   PMethodInfo = ^TMethodInfo;
 
+  /// used to store a chain of properties RTTI
+  // - could be used e.g. by TSQLPropInfo to handled flattened properties
+  PPropInfoDynArray = array of PPropInfo;
+
   /// pointer to TClassProp
   PClassProp = ^TClassProp;
   /// a wrapper to published properties of a class
@@ -2136,6 +2140,8 @@ type
     // - returns either sftObject, sftID, sftMany or sftUnknown
     function ClassSQLFieldType: TSQLFieldType;
        {$ifdef HASINLINE}inline;{$endif}
+    /// get the number of published properties in this class
+    function ClassFieldCount: integer;
     /// for ordinal types, get the storage size and sign
     function OrdType: TOrdType;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2217,6 +2223,8 @@ type
   {$endif}
     function GetOrdProp(Instance: TObject): PtrInt;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    function GetObjProp(Instance: TObject): TObject;
+     {$ifdef HASINLINE}inline;{$endif}
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     function GetInt64Prop(Instance: TObject): Int64;
@@ -2671,13 +2679,15 @@ type
   protected
     fPropInfo: PPropInfo;
     fPropType: PTypeInfo;
+    fFlattenedProps: PPropInfoDynArray;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
     // - it will raise an EORMException in case of an unhandled type
     class function CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
-      aRaiseEORMExceptionIfNotHandled: boolean): TSQLPropInfo;
+      aRaiseEORMExceptionIfNotHandled: boolean;
+      const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
@@ -2693,8 +2703,13 @@ type
     {$endif}
     /// generic way of implementing it
     function GetFieldAddr(Instance: TObject): pointer; override;
+    /// for pilSubClassesFlattening properties, the actual instance containing
+    // the property value
+    function GetFlattenedInstance(Instance: TObject): TObject;
     /// corresponding RTTI information
     property PropInfo: PPropInfo read fPropInfo;
+    /// for pilSubClassesFlattening properties, the parents RTTI
+    property FlattenedPropInfo: PPropInfoDynArray read fFlattenedProps;
     /// corresponding type information, as retrieved from PropInfo RTTI
     property PropType: PTypeInfo read fPropType;
   end;
@@ -2892,6 +2907,7 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
+    procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
@@ -3200,7 +3216,8 @@ type
 
   /// how TSQLPropInfoList.Create() would handle the incoming RTTI
   TSQLPropInfoListOptions = set of (
-    pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields);
+    pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
+    pilSubClassesFlattening);
 
   /// handle a read-only list of fields information for published properties
   // - is mainly used by our ORM for TSQLRecord RTTI, but may be used for
@@ -3214,7 +3231,9 @@ type
     fOrderedByName: TIntegerDynArray;
     function GetItem(aIndex: integer): TSQLPropInfo;
     procedure QuickSortByName(L,R: PtrInt);
-    procedure InternalAddParentsFirst(aClassType: TClass);
+    procedure InternalAddParentsFirst(aClassType: TClass); overload;
+    procedure InternalAddParentsFirst(aClassType: TClass;
+      aFlattenedProps: PPropInfoDynArray); overload;
   public
     /// initialize the list from a given class RTTI
     constructor Create(aTable: TClass; aOptions: TSQLPropInfoListOptions);
@@ -14892,12 +14911,9 @@ begin
   P := ClassFieldPropWithParents(PPointer(Obj)^,ComponentName);
   if (P<>nil) and (P^.PropType^.Kind=tkClass) then
     if P^.PropType^.ClassType^.ClassType.InheritsFrom(ComponentClass) then
-{$ifdef CPU64}
-      result := pointer(P^.GetOrdProp(Obj)); {$else}
-      result := pointer(P^.GetOrdValue(Obj));
-{$endif}
+      result := P^.GetObjProp(Obj);
 end;
-
+                    
 function GetEnumCaption(aTypeInfo: PTypeInfo; const aIndex): string;
 begin
   if (aTypeInfo=nil) or (aTypeInfo^.Kind<>tkEnumeration) then
@@ -15278,12 +15294,24 @@ end;
 
 { TSQLPropInfoRTTI }
 
-class function TSQLPropInfoRTTI.CreateFrom(
-  aPropInfo: PPropInfo; aPropIndex: integer;
-  aRaiseEORMExceptionIfNotHandled: boolean): TSQLPropInfo;
+class function TSQLPropInfoRTTI.CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
+  aRaiseEORMExceptionIfNotHandled: boolean; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
 var aSQLFieldType: TSQLFieldType;
     aType: PTypeInfo;
     C: TSQLPropInfoRTTIClass;
+procedure FlattenedPropNameSet;
+var i,max: Integer;
+begin // Address.Street1 -> Address_Street1
+  (result as TSQLPropInfoRTTI).fFlattenedProps := aFlattenedProps;
+  max := high(aFlattenedProps);
+  if (max>=0) and (aFlattenedProps[max]^.PropType^.ClassFieldCount=1) then begin
+    // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
+    result.fName := ShortStringToAnsi7String(aFlattenedProps[max]^.Name);
+    dec(max);
+  end;
+  for i := max downto 0 do 
+    result.fName := ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'_'+result.fName;
+end;
 begin
   if aPropInfo=nil then
     raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call',[self]);
@@ -15331,14 +15359,13 @@ begin
         C := TSQLPropInfoRTTISet;
       tkChar, tkWChar:
         C := TSQLPropInfoRTTIChar;
-      tkInt64{$ifdef FPC}, tkQWord{$endif}:
+      tkInt64 {$ifdef FPC}, tkQWord{$endif}:
         C := TSQLPropInfoRTTIInt64;
       tkFloat:
         if aType^.FloatType=ftDoub then
           C := TSQLPropInfoRTTIDouble;
-      {$ifdef FPC}tkAString,{$endif}
-      tkLString:
-        case aType^.AnsiStringCodePage of // optimized classes
+      tkLString {$ifdef FPC},tkAString{$endif}:
+        case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
           CP_UTF8:  C := TSQLPropInfoRTTIRawUTF8;
           CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
           else C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
@@ -15351,8 +15378,11 @@ begin
         C := TSQLPropInfoRTTIWide;
     end;
   end;
-  if C<>nil then
-    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType) else
+  if C<>nil then begin
+    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+    if aFlattenedProps<>nil then
+      FlattenedPropNameSet;
+  end else
     if not aRaiseEORMExceptionIfNotHandled then
       result := nil else
       raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
@@ -15371,6 +15401,14 @@ begin
   if Instance=nil then
     result := nil else
     result := fPropInfo^.GetFieldAddr(Instance);
+end;
+
+function TSQLPropInfoRTTI.GetFlattenedInstance(Instance: TObject): TObject;
+var i: integer;
+begin
+  result := Instance;
+  for i := 0 to length(fFlattenedProps)-1 do
+    result := fFlattenedProps[i].GetObjProp(result);
 end;
 
 {$ifndef NOVARIANTS}
@@ -15952,7 +15990,7 @@ end;
 
 function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
 begin
-  result := pointer(fPropInfo.GetOrdProp(Instance));
+  result := fPropInfo.GetObjProp(Instance);
 end;
 
 procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
@@ -16207,7 +16245,7 @@ begin
   fPropInfo.GetLongStrProp(Instance,temp);
   temp := fEngine.AnsiToUTF8(temp);
   aValue.VType := ftUTF8;
-  aValue.VText := Pointer(temp);
+  aValue.VText := pointer(temp);
 end;
 
 
@@ -16432,10 +16470,9 @@ begin
   end;
   ftNull: begin
     fPropInfo.SetLongStrProp(Instance,'');
-    result := True;
+    result := true;
   end;
-  else
-    result := inherited SetFieldSQLVar(Instance,aValue);
+  else result := inherited SetFieldSQLVar(Instance,aValue);
   end;
 end;
 
@@ -16476,6 +16513,16 @@ begin
   if CaseInsensitive then
     result := crc32c(0,Up,UpperCopy255W(Up,pointer(Value),length(Value))-Up) else
     result := crc32c(0,pointer(Value),length(Value)*2);
+end;
+
+procedure TSQLPropInfoRTTIWide.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+var Value: WideString;
+begin
+  W.Add('"');
+  fPropInfo.GetWideStrProp(Instance,Value);
+  if pointer(Value)<>nil then
+    W.AddJSONEscapeW(pointer(Value),0);
+  W.Add('"');
 end;
 
 procedure TSQLPropInfoRTTIWide.GetValueVar(Instance: TObject;
@@ -16622,6 +16669,7 @@ begin
 end;
 
 {$endif UNICODE}
+
 
 { TObjArraySerializer}
 
@@ -16995,7 +17043,7 @@ constructor TSQLPropInfoCustom.Create(const aName: RawUTF8;
   aFieldWidth, aPropIndex: integer; aProperty: pointer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  inherited Create(aNAme,aSQLFieldType,aAttributes,aFieldWidth,aPropIndex);
+  inherited Create(aName,aSQLFieldType,aAttributes,aFieldWidth,aPropIndex);
   fOffset := PtrUInt(aProperty);
   if (Assigned(aData2Text) and not Assigned(aText2Data)) or
      (Assigned(aText2Data) and not Assigned(aData2Text)) then
@@ -17380,7 +17428,9 @@ constructor TSQLPropInfoList.Create(aTable: TClass; aOptions: TSQLPropInfoListOp
 begin
   fTable := aTable;
   fOptions := aOptions;
-  InternalAddParentsFirst(aTable);
+  if pilSubClassesFlattening in fOptions then
+    InternalAddParentsFirst(aTable,nil) else
+    InternalAddParentsFirst(aTable);
 end;
 
 destructor TSQLPropInfoList.Destroy;
@@ -17389,6 +17439,27 @@ begin
   for i := 0 to fCount-1 do
     fList[i].Free;
   inherited;
+end;
+
+procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass;
+  aFlattenedProps: PPropInfoDynArray);
+var P: PPropInfo;
+    i,prev: Integer;
+begin
+  if aClassType=nil then
+    exit; // no RTTI information (e.g. reached TObject level)
+  InternalAddParentsFirst(aClassType.ClassParent,aFlattenedProps);
+  for i := 1 to InternalClassPropInfo(aClassType,P) do begin
+    if (P^.PropType^.Kind=tkClass) and
+       (P^.PropType^.ClassSQLFieldType in [sftObject,sftUnknown]) then begin
+      prev := PtrArrayAdd(aFlattenedProps,P);
+      InternalAddParentsFirst(P^.PropType^.ClassType^.ClassType,aFlattenedProps);
+      SetLength(aFlattenedProps,prev);
+    end else
+      Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
+        pilRaiseEORMExceptionIfNotHandled in fOptions,aFlattenedProps));
+    P := P^.Next;
+  end;
 end;
 
 procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass);
@@ -17400,7 +17471,7 @@ begin
   InternalAddParentsFirst(aClassType.ClassParent);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
-      pilRaiseEORMExceptionIfNotHandled in fOptions));
+      pilRaiseEORMExceptionIfNotHandled in fOptions,nil));
     P := P^.Next;
   end;
 end;
@@ -17408,6 +17479,10 @@ end;
 function TSQLPropInfoList.Add(aItem: TSQLPropInfo): integer;
 var f: integer;
 begin
+  if aItem=nil then begin
+    result := -1;
+    exit;
+  end;
   // check that this property is not an ID/RowID (handled separately)
   if IsRowID(pointer(aItem.Name)) and not (pilAllowIDFields in fOptions) then
     raise EModelException.CreateUTF8(
@@ -20805,7 +20880,7 @@ begin
             RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
         {$endif}
         tkClass: begin
-          Obj := pointer(P^.GetOrdProp(Value)); // works also for CPU64
+          Obj := P^.GetObjProp(Value); 
           if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
              WriteObject(Obj,SubCompName+RawUTF8(P^.Name)+'.',false);
         end;
@@ -21100,8 +21175,8 @@ int:  SetOrdProp(Dest,GetOrdProp(Source));
           goto int;
       sftMany, sftObject: begin
         // generic case: copy also class content (create instances)
-obj:    S := pointer(GetOrdProp(Source));
-        D := pointer(GetOrdProp(Dest));
+obj:    S := GetObjProp(Source);
+        D := GetObjProp(Dest);
         // note: Get/SetOrdProp() works also for CPU64 (returns an PtrInt)
 {$ifndef LVCL}
         if S.InheritsFrom(TCollection) then
@@ -21254,6 +21329,13 @@ end;
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
 begin
   result := TypInfo.GetOrdProp(Instance,@self);
+end;
+
+function TPropInfo.GetObjProp(Instance: TObject): TObject;
+begin
+  if GetterIsField then
+    result := PObject(GetterAddr(Instance))^ else
+    result := pointer(TypInfo.GetOrdProp(Instance,@self));
 end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
@@ -21423,6 +21505,13 @@ begin
     otSWord,otUWord: PWord(P)^ := Value;
     otSLong,otULong: PInteger(P)^ := Value;
     end;
+end;
+
+function TPropInfo.GetObjProp(Instance: TObject): TObject;
+begin
+  if GetterIsField then
+    result := PObject(GetterAddr(Instance))^ else
+    result := pointer(GetOrdProp(Instance));
 end;
 
 function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
@@ -21819,6 +21908,11 @@ asm // very fast code
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
 {$endif}
+end;
+
+function TTypeInfo.ClassFieldCount: integer;
+begin
+  result := ClassFieldCountWithParents(ClassType^.ClassType);
 end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
@@ -34508,7 +34602,7 @@ begin
       {$endif}
       tkClass:
       if Section='' then begin // recursive call works only as plain object
-        Obj := pointer(P^.GetOrdProp(Value));  // GetOrdProp() is OK for CPU64
+        Obj := P^.GetObjProp(Value);
         if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
           WriteObject(Value,IniContent,Section,SubCompName+RawUTF8(P^.Name)+'.');
       end;
@@ -35554,7 +35648,7 @@ begin
         RecordLoadJSON(P^.GetFieldAddr(Value)^,pointer(U),P^.PropType^);
 {$endif PUBLISHRECORD}
       tkClass: begin
-        Obj := pointer(P^.GetOrdProp(Value)); // GetOrdProp() is OK for CPU64
+        Obj := P^.GetObjProp(Value);
         if {$ifdef MSWINDOWS}(PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and{$endif}
            Obj.InheritsFrom(TPersistent) then
           ReadObject(Obj,From,SubCompName+RawUTF8(P^.Name)+'.');
@@ -35596,7 +35690,7 @@ begin
       if P^.Default<>longint($80000000) then
         P^.SetOrdProp(Value,P^.Default); // pointer() to call typinfo
       tkClass: begin
-        Obj := pointer(P^.GetOrdProp(Value)); // GetOrdProp() is OK for CPU64
+        Obj := TPersistent(P^.GetObjProp(Value));
         if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
           SetDefaultValuesObject(Obj);
       end;
@@ -37053,7 +37147,7 @@ begin
         end;
         {$endif}
         tkClass: begin
-          Obj := pointer(P^.GetOrdProp(Value));
+          Obj := P^.GetObjProp(Value);
           case IsObj of
           oSQLRecord,oSQLMany: // TSQLRecord or inherited
             if PropIsIDTypeCastedField(P,IsObj,Value) then begin
@@ -41784,7 +41878,7 @@ begin
     for i := 1 to InternalClassPropInfo(CT,P) do begin
       case P^.PropType^.Kind of
       tkClass:
-        TObject(P^.GetOrdProp(self)).Free;
+        P^.GetObjProp(self).Free;
       tkDynArray:
         if ObjArraySerializers.IsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
           ObjArrayClear(P^.GetFieldAddr(self)^);
@@ -42533,4 +42627,4 @@ end.
 
 
 
-
+
