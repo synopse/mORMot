@@ -25915,10 +25915,10 @@ function TSQLRest.BatchSend(Batch: TSQLRestBatch;
 var Data: RawUTF8;
 begin
   result := HTML_BADREQUEST;
-  if (self=nil) or (Batch.Count=0) then // no opened BATCH sequence
+  if (self=nil) or (Batch=nil) then // no opened BATCH sequence
     exit;
   if Batch.PrepareForSending(Data) then
-    if Data='' then
+    if Data='' then // i.e. Batch.Count=0
       result := HTML_SUCCESS else
       try
         result := EngineBatchSend(Batch.Table,Data,Results,Batch.Count);

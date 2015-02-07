@@ -3556,8 +3556,8 @@ type
     constructor CreateFake;
   published
     property Text: RawUTF8 read fText write fText;
-    property Value1: TComplexNumber read fValue1 write fValue1;
-    property Value2: TComplexNumber read fValue2 write fValue2;
+    property Value1: TComplexNumber read fValue1;
+    property Value2: TComplexNumber read fValue2;
   end;
   TPersistentAutoCreateFieldsTestObjArray = array of TPersistentAutoCreateFieldsTest;
   TComplexNumberObjArray = array of TComplexNumber;

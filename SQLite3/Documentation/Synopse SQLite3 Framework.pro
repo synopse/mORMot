@@ -2141,7 +2141,7 @@ You could also create a {\f1\fs20 TObjectList}, or - even better for newer versi
 !var aList: TObjectList<TSQLBaby>;
 !    aMale: TSQLBaby;
 !...
-!!aList := Client.RetrieveObjectList<TSQLBaby>(
+!!aList := Client.RetrieveList<TSQLBaby>(
 !!  'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !try
 !!  for aMale in aList do
