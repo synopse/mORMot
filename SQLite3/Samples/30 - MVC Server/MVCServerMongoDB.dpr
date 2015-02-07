@@ -31,8 +31,9 @@ begin
       aMongoClient := TMongoClient.Create('localhost');
       try
         StaticMongoDBRegisterAll(aServer,aMongoClient.Open('blog'));
-        aApplication := TBlogApplication.Create(aServer);
+        aApplication := TBlogApplication.Create;
         try
+          aApplication.Start(aServer);
           aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
           try
             aHTTPServer.RootRedirectToURI('blog/default'); // redirect localhost:8092

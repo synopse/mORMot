@@ -67,7 +67,7 @@ type
     procedure MonthToText(const Value: variant; out result: variant);
     procedure TagToText(const Value: variant; out result: variant);
   public
-    constructor Create(aServer: TSQLRestServer); reintroduce;
+    procedure Start(aServer: TSQLRestServer); reintroduce;
   public
     procedure Default(var Scope: variant);
     procedure ArticleView(ID: TID;
@@ -97,10 +97,10 @@ resourcestring
 
 { TBlogApplication }
 
-constructor TBlogApplication.Create(aServer: TSQLRestServer);
+procedure TBlogApplication.Start(aServer: TSQLRestServer);
 begin
   fDefaultData := TLockedDocVariant.Create;
-  inherited Create(aServer,TypeInfo(IBlogApplication));
+  inherited Start(aServer,TypeInfo(IBlogApplication));
   fHasFTS := aServer.StaticVirtualTable[TSQLArticle]=nil;
   fTagsLookup.Init(RestModel);
   // publish IBlogApplication using Mustache Views (TMVCRunOnRestServer default)

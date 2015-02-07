@@ -10957,8 +10957,9 @@ The ORM is defined to run over a {\i SQLite3} database in the main {\f1\fs20 MVC
 !      aServer.DB.Synchronous := smNormal;
 !      aServer.DB.LockingMode := lmExclusive;
 !      aServer.CreateMissingTables;
-!!      aApplication := TBlogApplication.Create(aServer);
+!!      aApplication := TBlogApplication.Create;
 !      try
+!!        aApplication.Start(aServer);
 !        aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
 !        try
 !!          aHTTPServer.RootRedirectToURI('blog/default'); // redirect server:8092
@@ -10986,7 +10987,7 @@ This method would serve some static HTML content as the main front end page of t
 !end;
 This single method will search for any matching file in the local {\f1\fs20 c:\\www} folder and its sub-directories, returning the default {\f1\fs20 index.html} content if no file is specified at URI level. See the optional parameters to the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method for proper tuning, e.g. to change the default file name or disable the HTTP 304 answers. In all cases, the file content will be served by the @88@ directly from the kernel mode, so would be very fast.
 In order to have the BLOG content hosted in {\f1\fs20 root/blog} URI, you should specify the expected sub-URI when initializing your {\f1\fs20 TMVCApplication}:
-!constructor TBlogApplication.Create(aServer: TSQLRestServer);
+!procedure TBlogApplication.Start(aServer: TSQLRestServer);
 !begin
 ! ...
 ! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog').
@@ -11074,7 +11075,7 @@ To build the application {\i Controller}, we would need to implement our {\f1\fs
 !  TBlogApplication = class(TMVCApplication,IBlogApplication)
 !  ...
 !  public
-!    constructor Create(aServer: TSQLRestServer); reintroduce;
+!    procedure Start(aServer: TSQLRestServer); reintroduce;
 !    procedure Default(var Scope: variant);
 !    procedure ArticleView(ID: integer; var WithComments: boolean;
 !      Direction: integer;
@@ -11170,6 +11171,11 @@ $      },
 $      ...
 ... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
 I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
+:  Using Services in the Controller
+Any controller method could retrieve and execute any dependency from its {\f1\fs20 interface}, following the {\i IoC} pattern - see @62@.\line You have two ways of performing the dependency resolution:
+- From the associated {\f1\fs20 TSQLRest.Services} container;
+- From its own protected {\f1\fs20 Resolve()} method, since {\f1\fs20 TMVCApplication} inherits from {\f1\fs20 TInjectableObject}.
+In fact, you can set up your {\f1\fs20 TMVCApplication} instance to use any external dependencies, including stubs and mocks, or high-level DDD services (e.g. respository or modelization process), using its {\f1\fs20 CreateInjected()} constructor instead of plain {\f1\fs20 Create}.
 :111  Controller Thread Safety
 When run from a {\f1\fs20 TSQLRestServer} instance, our {\i MVC} application commands will be executed by default without any thread protection. When hosted within a {\f1\fs20 TSQLHttpServer} instance - see @88@ - several threads may execute the same {\i Controller} methods at the same time. It is therefore up to your application code to ensure that your {\f1\fs20 TMVCApplication} process is thread safe.
 Note that by design, all {\f1\fs20 TMVCApplication.RestModel} ORM methods are thread-safe.\line If your {\i Controller} business code only uses ORM methods, sending back the information to the {\i Views}, without storing any data locally, it will be perfectly thread safe.\line See for instance the {\f1\fs20 TBlogApplication.AuthorView} method we described above.
@@ -11204,7 +11210,7 @@ A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant
 !  protected
 !    fDefaultData: ILockedDocVariant;
 !   ...
-!constructor TBlogApplication.Create(aServer: TSQLRestServer);
+!procedure TBlogApplication.Start(aServer: TSQLRestServer);
 !begin
 !  fDefaultData := TLockedDocVariant.Create;
 !  ...

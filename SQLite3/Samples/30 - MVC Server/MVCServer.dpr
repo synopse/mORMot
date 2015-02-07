@@ -29,8 +29,9 @@ begin
       aServer.DB.Synchronous := smNormal;
       aServer.DB.LockingMode := lmExclusive;
       aServer.CreateMissingTables;
-      aApplication := TBlogApplication.Create(aServer);
+      aApplication := TBlogApplication.Create;
       try
+        aApplication.Start(aServer);
         aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
         try
           aHTTPServer.RootRedirectToURI('blog/default'); // redirect / to blog/default

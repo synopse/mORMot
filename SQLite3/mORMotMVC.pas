@@ -582,10 +582,12 @@ type
     class procedure GotoDefault(var Action: TMVCAction;
       Status: cardinal=HTML_TEMPORARYREDIRECT);
   public
-    /// create an instance of the MVC/MVVM application
+    /// initialize the instance of the MVC/MVVM application
     // - define the associated REST instance, and the interface definition for
     // application commands
-    constructor Create(aRestModel: TSQLRest; aInterface: PTypeInfo); reintroduce; virtual;
+    // - is not defined as constructor, since this TInjectableObject may
+    // expect injection using the CreateInjected() constructor
+    procedure Start(aRestModel: TSQLRest; aInterface: PTypeInfo); virtual;
     /// finalize the application
     // - and release any associated CurrentSession, Views, and fMainRunner
     destructor Destroy; override;
@@ -1230,11 +1232,10 @@ end;
 
 { TMVCApplication }
 
-constructor TMVCApplication.Create(aRestModel: TSQLRest; aInterface: PTypeInfo);
+procedure TMVCApplication.Start(aRestModel: TSQLRest; aInterface: PTypeInfo);
 var m: integer;
     entry: PInterfaceEntry;
 begin
-  inherited Create;
   fLocker := TAutoLocker.Create;
   fRestModel := aRestModel;
   fFactory := TInterfaceFactory.Get(aInterface);
@@ -1244,16 +1245,16 @@ begin
       '% does not implement the IMVCApplication.Error() method',[aInterface.Name]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry=nil then
-    raise EMVCException.CreateUTF8('%.Create: this class should implement %',
-      [self,fFactory.InterfaceTypeInfo^.Name]);
+    raise EMVCException.CreateUTF8('%.Start(%): this class should implement %',
+      [self,aRestModel,fFactory.InterfaceTypeInfo^.Name]);
   fFactoryEntry := PAnsiChar(self)+entry^.IOffset;
   for m := 0 to fFactory.MethodsCount-1 do
     if not MethodHasView(fFactory.Methods[m]) then
     with fFactory.Methods[m] do
       if ArgsOutFirst<>ArgsResultIndex then
         raise EMVCException.CreateUTF8(
-          '%.Create: %.% var/out parameters not allowed with TMVCAction result',
-          [self,fFactory.InterfaceTypeInfo^.Name,URI]) else
+          '%.Start(%): %.% var/out parameters not allowed with TMVCAction result',
+          [self,aRestModel,fFactory.InterfaceTypeInfo^.Name,URI]) else
         // TServiceCustomAnswer maps TMVCAction in TMVCApplication.RunOnRestServer
         ArgsResultIsServiceCustomAnswer := true;
 end;
