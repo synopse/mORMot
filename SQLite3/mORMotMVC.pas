@@ -546,7 +546,9 @@ type
   // - here the Model would be a TSQLRest instance, Views will be defined by
   // TMVCViewsAbtract (e.g. TMVCViewsMustache), and the ViewModel/Controller
   // will be implemented with IMVCApplication methods of the inherited class
-  TMVCApplication = class(TInterfacedObject)
+  // - inherits from TInjectableObject, so that you could resolve dependencies
+  // via services or stubs, following the IoC pattern  
+  TMVCApplication = class(TInjectableObject)
   protected
     fFactory: TInterfaceFactory;
     fFactoryEntry: pointer;
