@@ -400,6 +400,8 @@ unit SynCommons;
   - FormatUTF8() and VarRecToUTF8() will append the class name of any TObject
   - added JSONFormat optional parameter to FormatUTF8() to produce valid JSON
     content from a given set of values identified by ? - used e.g. by _JsonFmt()
+  - added ESynException.CreateUTF8() constructor, more powerful than the
+    default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
   - added QuotedStrJSON() function
   - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be

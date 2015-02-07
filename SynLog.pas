@@ -53,13 +53,13 @@ unit SynLog;
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
     variable, and ESynException.CustomLog() method to customize how raised
     exception are logged when intercepted - feature request [495720e0b9]
-  - added ESynException.CreateUTF8() constructor, more powerful than the
-    default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
+  - added new sllDDDError, sllDDDInfo log levels
   - added TSynLogFamily.EndOfLineCRLF properties
   - added TSynLogFamily's NoFile and EchoCustom properties - see [91a114d2f6]
   - TSynLog will now append only the execution time when leaving a method,
     without the class/method name (smaller log file, and less resource use)
   - TSynLog header now contains system environment variables
+  - added overloaded ISynLog.Log(string) method for Unicode Delphi
   - added TSynLog.DebuggerNotify() and TSynLog.CloseLogFile / Release methods
   - protected the global TSynLog instances list against potential race condition
   - introducing TSynLogFamily.StackTraceUse: TSynLogStackTraceUse property
@@ -250,6 +250,11 @@ type
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject=nil; TextTruncateAtLength: integer=maxInt); overload;
+    {$ifdef UNICODE}
+    /// call this method to add some VCL string to the log at a specified level
+    // - this overloaded version will avoid a call to StringToRawUTF8()
+    procedure Log(Level: TSynLogInfo; const Text: string; Instance: TObject=nil); overload;
+    {$endif}
     /// call this method to add the content of an object to the log at a
     // specified level
     // - TSynLog will write the class and hexa address - TSQLLog will write the
@@ -801,6 +806,11 @@ type
     // Log(Level,Instance), i.e. write the Instance as JSON content
     procedure Log(Level: TSynLogInfo; const Text: RawUTF8;
       aInstance: TObject=nil; TextTruncateAtLength: integer=maxInt); overload;
+    {$ifdef UNICODE}
+    /// call this method to add some VCL string to the log at a specified level
+    // - this overloaded version will avoid a call to StringToRawUTF8()
+    procedure Log(Level: TSynLogInfo; const Text: string; aInstance: TObject=nil); overload;
+    {$endif}
     /// call this method to add the content of an object to the log at a
     // specified level
     // - this default implementation will just write the class name and its hexa
@@ -2835,6 +2845,14 @@ begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,Text,aInstance,TextTruncateAtLength);
 end;
+
+{$ifdef UNICODE}
+procedure TSynLog.Log(Level: TSynLogInfo; const Text: string; aInstance: TObject);
+begin
+  if (self<>nil) and (Level in fFamily.fLevel) then
+    LogInternal(Level,'%',[Text],aInstance);
+end;
+{$endif}
 
 procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject;
   const IgnoreWhenStartWith: PAnsiChar);
