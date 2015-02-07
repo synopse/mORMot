@@ -8174,7 +8174,7 @@ type
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolvers: TInterfaceResolverObjArray;
-    // used by CreateMocked()
+    // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
     fCreatedInterfaceStub: TInterfaceStubObjArray;
     // IoC resolution protected methods
@@ -8193,20 +8193,20 @@ type
     // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
-    // !   Test := TServiceToBeTested.CreateMocked(
+    // !   Test := TServiceToBeTested.CreateInjected(
     // !     [ICalculator],
     // !     [TInterfaceMock.Create(IPersistence,self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1),
     // !      RestInstance.Services]);
     // !   ...
-    constructor CreateMocked(const aStubsByGUID: array of TGUID;
+    constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
     /// register a dependency resolver class to this instance list
     // - the resolver may be a TServiceContainer or a TInterfaceStub
     procedure AddResolver(aResolver: TInterfaceResolver);
     /// release all used instances
-    // - including all TInterfaceStub instances as specified to CreateMocked()
+    // - including all TInterfaceStub instances as specified to CreateInjected()
     destructor Destroy; override;
   end;
   {$M-}
@@ -8731,7 +8731,7 @@ type
     // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
-    // !   Test := TServiceToBeTested.CreateMocked([],
+    // !   Test := TServiceToBeTested.CreateInjected([],
     // !     TInterfaceStub.Create(TypeInfo(ICalculator)),
     // !     TInterfaceMock.Create(TypeInfo(IPersistence),self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
@@ -8743,7 +8743,7 @@ type
     // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
-    // !   Test := TServiceToBeTested.CreateMocked(
+    // !   Test := TServiceToBeTested.CreateInjected(
     // !     [IMyInterface],
     // !     TInterfaceMock.Create(IPersistence,self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1)]);
@@ -40872,7 +40872,7 @@ begin
   until CT=TInjectableObject;
 end;
 
-constructor TInjectableObject.CreateMocked(const aStubsByGUID: array of TGUID;
+constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
   const aOtherResolvers: array of TInterfaceResolver;
   aRaiseEServiceExceptionIfNotFound: boolean);
 var i: integer;
@@ -40905,7 +40905,7 @@ begin
     try
       if fAutoResolvedInterfaceAddress<>nil then begin
         for i := 0 to fAutoResolvedInterfaceAddress.Count-1 do
-          // ensure release creatures before creator
+          // ensure creatures are released before their creator
           PUnknown(fAutoResolvedInterfaceAddress[i])^ := nil;
         fAutoResolvedInterfaceAddress.Free;
       end;
