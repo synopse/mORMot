@@ -5265,13 +5265,16 @@ type
   // - sllUserAuth to trace user authentication (e.g. for individual requests)
   // - sllCustom* items can be used for any purpose
   // - sllNewRun will be written when a process opens a rotated log
+  // - sllDDDError will log any DDD-related low-level error information
+  // - sllDDDInfo will log any DDD-related low-level debugging information
   TSynLogInfo = (
     sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
     sllEnter, sllLeave,
     sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
     sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
     sllServiceCall, sllServiceReturn, sllUserAuth,
-    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
+    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
+    sllDDDError, sllDDDInfo);
 
   /// used to define a set of logging level abilities
   // - i.e. a combination of none or several logging event

@@ -128,7 +128,7 @@ implementation
 type
   TLogFilter = (
     lfNone,lfAll,lfErrors,lfExceptions,lfProfile,lfDatabase,lfClientServer,
-    lfDebug,lfCustom);
+    lfDebug,lfCustom,lfDDD);
 
 resourcestring
   sEnterAddress = 'Enter an hexadecimal address:';
@@ -150,7 +150,7 @@ const
     [sllError,sllLastError,sllException,sllExceptionOS],
     [sllException,sllExceptionOS], [sllEnter,sllLeave],
     [sllSQL,sllCache,sllDB], [sllClient,sllServer,sllServiceCall, sllServiceReturn],
-    [sllDebug,sllTrace,sllEnter], [sllCustom1..sllCustom4]);
+    [sllDebug,sllTrace,sllEnter], [sllCustom1..sllCustom4],[sllDDDError,sllDDDInfo]);
   LOG_COLORS: array[Boolean,TSynLogInfo] of TColor = (
     (clWhite,$DCC0C0,$DCDCDC,clSilver,$8080C0,$8080FF,$C0DCC0,$DCDCC0,
 //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
@@ -160,13 +160,13 @@ const
 //  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
      $DCDC80, $DC80DC, $DCDCDC,
 //  sllServiceCall, sllServiceReturn, sllUserAuth,
-     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0),
-//  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun
+     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD),
+//  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo
     (clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack,
      clWhite,clWhite,clWhite,clBlack,clBlack,
      clWhite,clWhite,clBlack,clWhite,clBlack,clBlack,clBlack,clBlack,
      clBlack,clBlack,clBlack,
-     clBlack,clBlack,clBlack,clBlack,clBlack));
+     clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack));
 
      
 { TMainLogView }

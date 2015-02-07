@@ -1034,7 +1034,7 @@ const
     ' OSERR ', ' EXC   ', ' EXCOS ', ' mem   ', ' stack ', ' fail  ',
     ' SQL   ', ' cache ', ' res   ', ' DB    ', ' http  ', ' clnt  ', ' srvr  ',
     ' call  ', ' ret   ', ' auth  ',
-    ' cust1 ', ' cust2 ', ' cust3 ', ' cust4 ', ' rotat ');
+    ' cust1 ', ' cust2 ', ' cust3 ', ' cust4 ', ' rotat ', ' dddER ', ' dddIN ');
 
   /// the "magic" number used to identify .log.synlz compressed files, as
   // created by TSynLogFamily.EventArchiveSynLZ
@@ -2782,8 +2782,10 @@ const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
   ccLightRed, ccBrown, ccBlue, ccLightCyan, ccMagenta, ccCyan, ccLightCyan, ccLightCyan,
 //    sllServiceCall, sllServiceReturn, sllUserAuth,
   ccLightMagenta, ccLightMagenta, ccMagenta,
-//    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun
-  ccLightGray, ccLightGray,ccLightGray,ccLightGray,ccLightMagenta);
+//    sllCustom1, sllCustom2, sllCustom3, sllCustom4,
+  ccLightGray, ccLightGray,ccLightGray,ccLightGray,
+//    sllNewRun, sllDDDError, sllDDDInfo
+  ccLightMagenta, ccLightRed, ccWhite);
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then

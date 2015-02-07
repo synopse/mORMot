@@ -60,6 +60,7 @@ uses
   Contnrs,
   Variants,
   SynCommons,
+  SynLog,
   SynCrypto,
   mORMot;
 
@@ -184,7 +185,7 @@ type
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
     function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
-    procedure ORMResult(Error: TCQRSResult); virtual;
+    procedure ORMResult(Error: TCQRSResult); 
     procedure ORMSuccessIf(SuccessCondition: boolean;
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
     procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
@@ -195,6 +196,8 @@ type
       JSONFmt: PUTF8Char; const Args,Params: array of const);
     function GetLastError: TCQRSResult;
     function GetLastErrorInfo: variant; virtual;
+    procedure InternalORMResult(Error: TCQRSResult); virtual;
+    procedure AfterInternalORMResult; virtual;
   published
     /// the last error, as an enumerate
     property LastError: TCQRSResult read GetLastError;
@@ -273,6 +276,9 @@ type
     fAggregateToTable: TSQLPropInfoDynArray;
     fTableToAggregate: TSQLPropInfoDynArray;
     procedure ComputeMapping;
+    function GetImplementationName: string;
+    function GetAggregateName: string;
+    function GetTableName: string;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
     /// initialize the DDD Aggregate factory using a mORMot ORM class
@@ -305,7 +311,11 @@ type
     procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TPersistent);
     /// the home repository owning this factory
     property Owner: TDDDRepositoryRestManager read fOwner;
-    /// the mapped DDD's TPersistent published properties RTTI 
+    /// the DDD's TPersistent handled by this factory
+    property Aggregate: TPersistentClass read fAggregate;
+    /// the ORM's TSQLRecord used for actual storage
+    property Table: TSQLRecordClass read fTable;
+    /// the mapped DDD's TPersistent published properties RTTI
     property Props: TSQLPropInfoList read fProps;
     /// access to the Aggregate / ORM field mapping
     property FieldMapping: TSQLRecordPropertiesMapping read fPropsMapping;
@@ -314,10 +324,12 @@ type
     property Repository: TInterfaceFactory read fInterface;
     /// the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
-    /// the DDD's TPersistent handled by this factory
-    property Aggregate: TPersistentClass read fAggregate;
-    /// the ORM's TSQLRecord used for actual storage
-    property Table: TSQLRecordClass read fTable;
+    /// the class name which will implement each repository instance 
+    property ImplementationClass: string read GetImplementationName;
+    /// the DDD's TPersistent class name handled by this factory
+    property AggregateClass: string read GetAggregateName;
+    /// the ORM's TSQLRecord class name used for actual storage
+    property TableClass: string read GetTableName;
   end;
 
   /// abstract repository class to implement I*Query interface using RESTful ORM
@@ -336,6 +348,8 @@ type
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
     function ORMGetNextAggregate(aAggregate: TPersistent; aRewind: boolean=false): TCQRSResult;
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
+    // will log any error on the owner Rest server
+    procedure AfterInternalORMResult; override;
   public
     /// you should not have to use this constructor, since the instances would
     // be injected by TDDDRepositoryRestFactory.TryResolve()
@@ -359,10 +373,13 @@ type
     fBatchAutomaticTransactionPerRow: cardinal;
     fBatchOptions: TSQLRestBatchOptions;
     fBatchResults: TIDDynArray;
-    // - this default implementation will check the status vs command,
+    // this default implementation will check the status vs command,
     // call fORM.FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion); virtual;
+    /// minimal implementation using AggregateToTable() conversion
+    function ORMAdd(aAggregate: TPersistent): TCQRSResult; virtual;
+    function ORMUpdate(aAggregate: TPersistent): TCQRSResult; virtual;
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit; virtual;
@@ -448,6 +465,12 @@ end;
 
 procedure TCQRSQueryObject.ORMResult(Error: TCQRSResult);
 begin
+  InternalORMResult(Error);
+  AfterInternalORMResult;
+end;
+
+procedure TCQRSQueryObject.InternalORMResult(Error: TCQRSResult);
+begin
   if fLastErrorAddress=nil then
     raise ECQRSException.CreateUTF8('%.ORMResult(%) with no prior ORMBegin',
       [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
@@ -462,6 +485,10 @@ begin
   fAction := qaNone;
 end;
 
+procedure TCQRSQueryObject.AfterInternalORMResult;
+begin
+end;
+
 procedure TCQRSQueryObject.ORMSuccessIf(SuccessCondition: boolean;
   ErrorIfFalse: TCQRSResult);
 begin
@@ -473,8 +500,9 @@ end;
 procedure TCQRSQueryObject.ORMResultDoc(Error: TCQRSResult;
   const ErrorInfo: variant);
 begin
-  ORMResult(Error);
+  InternalORMResult(Error);
   TDocVariantData(fLastErrorContext).AddValue('Info',ErrorInfo);
+  AfterInternalORMResult;
 end;
 
 procedure TCQRSQueryObject.ORMResultJSON(Error: TCQRSResult;
@@ -486,8 +514,9 @@ end;
 procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
   const ErrorMessage: RawUTF8);
 begin
-  ORMResult(Error);
+  InternalORMResult(Error);
   TDocVariantData(fLastErrorContext).AddValue('Msg',ErrorMessage);
+  AfterInternalORMResult;
 end;
 
 procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
@@ -544,10 +573,12 @@ begin
   SetLength(fAggregateToTable,fProps.Count);
   SetLength(fTableToAggregate,fORMProps.Count);
   ComputeMapping;
+  Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self]);
 end;
 
 destructor TDDDRepositoryRestFactory.Destroy;
 begin
+  Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self]);
   fProps.Free;
   inherited;
 end;
@@ -712,6 +743,27 @@ begin
   end;
 end;
 
+function TDDDRepositoryRestFactory.GetImplementationName: string;
+begin
+  if self=nil then
+    result := '' else
+    result := fImplementation.ClassName;
+end;
+
+function TDDDRepositoryRestFactory.GetAggregateName: string;
+begin
+  if self=nil then
+    result := '' else
+    result := fAggregate.ClassName;
+end;
+
+function TDDDRepositoryRestFactory.GetTableName: string;
+begin
+  if self=nil then
+    result := '' else
+    result := fTable.ClassName;
+end;
+
 
 { TDDDRepositoryRestManager }
 
@@ -726,6 +778,7 @@ begin
   result := TDDDRepositoryRestFactory.Create(self,
     aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs);
   ObjArrayAdd(fFactory,result);
+  aRest.LogClass.Add.Log(sllDDDInfo,'Added factory % to %',[result,self]);
 end;
 
 destructor TDDDRepositoryRestManager.Destroy;
@@ -768,6 +821,14 @@ destructor TDDDRepositoryRestQuery.Destroy;
 begin
   fORM.Free;
   inherited;
+end;
+
+procedure TDDDRepositoryRestQuery.AfterInternalORMResult;
+begin
+  inherited AfterInternalORMResult;
+  if (fLastError<>cqrsSuccess) and
+     (sllDDDError in Factory.Rest.LogFamily.Level) then
+    Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext]);
 end;
 
 function TDDDRepositoryRestQuery.ORMBegin(aAction: TCQRSQueryAction;
@@ -860,6 +921,22 @@ function TDDDRepositoryRestCommand.Delete: TCQRSResult;
 begin
   if ORMBegin(qaCommandOnSelect,result) then
     ORMPrepareForCommit(soDelete);
+end;
+
+function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TPersistent): TCQRSResult;
+begin
+  if ORMBegin(qaCommandDirect,result) then begin
+    Factory.AggregateToTable(aAggregate,0,ORM);
+    ORMPrepareForCommit(soInsert);
+  end;
+end;
+
+function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TPersistent): TCQRSResult;
+begin
+  if ORMBegin(qaCommandOnSelect,result) then begin
+    Factory.AggregateToTable(aAggregate,ORM.ID,ORM);
+    ORMPrepareForCommit(soUpdate);
+  end;
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
