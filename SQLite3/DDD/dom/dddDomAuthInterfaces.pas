@@ -1,4 +1,6 @@
-/// mORMot shared DDD Domains: Authentication objects and interfaces
+/// shared DDD Domains: Authentication objects and interfaces
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit dddDomAuthInterfaces;
 
 {

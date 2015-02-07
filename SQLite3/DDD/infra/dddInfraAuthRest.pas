@@ -1,4 +1,6 @@
-/// mORMot shared DDD Infrastructure: Authentication implementation
+/// shared DDD Infrastructure: Authentication implementation
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit dddInfraAuthRest;
 
 {

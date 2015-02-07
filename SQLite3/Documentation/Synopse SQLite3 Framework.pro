@@ -1256,7 +1256,7 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 
 [SAD-Main]
 SourcePath=Lib\SQLite3
-IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
+IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Lib\SQLite3\DDD\dom;Lib\SQLite3\DDD\infra;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
 SourceFile=TestSQL3.dpr;SynLog.pas;SynTests.pas;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
