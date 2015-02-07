@@ -5543,11 +5543,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - use the current system code page for AnsiString parameter
-    procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
+    procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
     /// append some UTF-8 encoded chars to the buffer, from the any AnsiString type
-    // - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
-    // - newer UNICODE versions of Delphi will retrieve the code page from string
-    procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind);
+    // - if CodePage is left to its default value of -1, it will assume
+    // CurrentAnsiConvert.CodePage prior to Delphi 2009, but newer UNICODE
+    // versions of Delphi will retrieve the code page from string
+    // - if CodePage is defined to a >= 0 value, the encoding will take place
+    procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
+      CodePage: Integer=-1);
     /// append some chars to the buffer
     // - if Len is 0, Len is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
@@ -34168,33 +34171,25 @@ begin
 end;
 
 procedure TTextWriter.AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
-var L: PtrInt;
-    tmpU8: array[0..256*3] of AnsiChar;
-    U8: PUTF8Char;
 begin
-  L := length(s);
-  if L=0 then
-    exit;
-  if L>=SizeOf(tmpU8)div 3 then
-    Getmem(U8,L*3+1) else
-    U8 := @tmpU8;
-  L := CurrentAnsiConvert.AnsiBufferToUTF8(U8,pointer(s),L)-U8;
-  Add(pointer(U8),L,Escape);
-  if U8<>@tmpU8 then
-    Freemem(U8);
+  AddAnyAnsiString(s,Escape,0);
 end;
 
-procedure TTextWriter.AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind);
-{$ifdef UNICODE}
+procedure TTextWriter.AddAnyAnsiString(const s: RawByteString;
+  Escape: TTextWriterKind; CodePage: Integer);
 var L: PtrInt;
     tmpU8: array[0..256*3] of AnsiChar;
     U8: PUTF8Char;
-    CodePage: cardinal;
 begin
   L := length(s);
   if L=0 then
     exit;
-  CodePage := StringCodePage(s);
+  if CodePage<0 then
+    {$ifdef UNICODE}
+    CodePage := StringCodePage(s);
+    {$else}
+    CodePage := 0;
+    {$endif}
   case CodePage of
   CP_UTF8:
     Add(pointer(s),0,Escape);  // direct write of RawUTF8 content
@@ -34211,11 +34206,6 @@ begin
   end;
   end;
 end;
-{$else}
-begin
-  AddAnsiString(s,Escape);
-end;
-{$endif}
 
 procedure TTextWriter.AddOnSameLine(P: PUTF8Char);
 begin
