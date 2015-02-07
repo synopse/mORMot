@@ -3612,8 +3612,6 @@ const
   
 type
   TSQLModel = class;
-  TSQLRest = class;
-  TSQLRestClient = class;
   TSQLModelRecordProperties = class;
   TSQLTable = class;
 
@@ -3623,6 +3621,8 @@ type
   TSQLRecord = class;      // published properties = ORM fields/columns
   TSQLRecordMany = class;
   TSQLAuthUser = class;
+  TSQLRest = class;
+  TSQLRestClient = class;
   {.$METHODINFO ON} // this would include public methods as RESTful callbacks :(
   TSQLRestServer = class;
   {.$METHODINFO OFF}
@@ -37088,16 +37088,16 @@ begin
         tkClass: begin
           Obj := pointer(P^.GetOrdProp(Value));
           case IsObj of
-          oPersistent: 
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
           oSQLRecord,oSQLMany: // TSQLRecord or inherited
             if PropIsIDTypeCastedField(P,IsObj,Value) then begin
               HR(P);
               Add(PtrInt(Obj)); // not true instances, but ID
             end else
+            if Obj<>nil then begin
+              HR(P);
+              WriteObject(Obj,Options);
+            end;
+          else // TPersistent or any class defined with $M+
             if Obj<>nil then begin
               HR(P);
               WriteObject(Obj,Options);
