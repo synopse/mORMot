@@ -24025,8 +24025,8 @@ begin
   n := n shr 1;
   if n=0 then
     exit;
-  for i := 0 to n-1 do
-    varClassPairs[i*2] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
+  for i := 0 to n-1 do // convert TSQLRecordClass into TSQLRecord instances
+    varClassPairs[i*2+1] := TSQLRecordClass(varClassPairs[i*2+1]).Create;
   result := TAutoFree.Create(varClassPairs);
 end;
 
