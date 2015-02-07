@@ -1014,8 +1014,9 @@ type
     // - you should not call it, but directly TServiceClient* methods
     procedure CallRemoteServiceAsynch(aCaller: TServiceClientAbstract;
       const aMethodName: string; aExpectedOutputParamsCount: integer;
-      const aInputParams: array of variant;
-      onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
+      const aInputParams: array of variant; 
+      onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent;
+      aReturnsCustomAnswer: boolean=false);
     /// synchronous execution a specified interface-based service method on the server
     // - under SMS, this synchronous method would block the browser, e.g. if
     // the network is offline, or the server is late to answer
@@ -1023,14 +1024,15 @@ type
     // - you should not call it, but directly TServiceClient* methods
     function CallRemoteServiceSynch(aCaller: TServiceClientAbstract;
       const aMethodName: string; aExpectedOutputParamsCount: integer;
-      const aInputParams: array of variant): TVariantDynArray;
+      const aInputParams: array of variant; aReturnsCustomAnswer: boolean=false): TVariantDynArray;
     {$else}
     /// execute a specified interface-based service method on the server
     // - this blocking method would raise an EServiceException on error
     // - you should not call it, but directly TServiceClient* methods
     procedure CallRemoteService(aCaller: TServiceClientAbstract;
       const aMethodName: string; aExpectedOutputParamsCount: integer;
-      const aInputParams: array of variant; out res: TVariantDynArray);
+      const aInputParams: array of variant; out res: TVariantDynArray;
+      aReturnsCustomAnswer: boolean=false);
     {$endif ISSMS}
     /// set this property to TRUE if the server expects only APPLICATION/JSON
     // - applies only for AJAX clients (i.e. SmartMobileStudio platform)
@@ -1226,6 +1228,16 @@ function VariantToGUID(const value: variant): TGUID;
 
 /// convert a TGUID instance into a string value
 function GUIDToVariant(const GUID: TGUID): variant;
+
+/// convert a variant value into a THttpBody binary
+// - will use a variant of type string as mean of proprietary raw binary storage:
+// format is limited to HttpBodyToVariant() conversion
+function VariantToHttpBody(const value: variant): THttpBody;
+
+/// convert a THttpBody binary content into a variant value
+// - will use a variant of type string as mean of proprietary raw binary storage:
+// you need to use VariantToHttpBody() to get the value back from the variant
+function HttpBodyToVariant(const HttpBody: THttpBody): variant;
 
 /// convert a text or integer enumeration representation into its ordinal value
 function VariantToEnum(const Value: variant; const TextValues: array of string): integer;
@@ -2814,7 +2826,8 @@ begin
   if not Assigned(onSuccess) then
     raise ERestException.Create('SetAsynch expects onSuccess');
   inc(fAsynchCount);
-  Call.OnSuccess := lambda
+  Call.OnSuccess :=
+  lambda
     if Call.XHR.readyState=rrsDone then begin
       InternalStateUpdate(Call);
       if not assigned(onBeforeSuccess) then
@@ -2829,7 +2842,8 @@ begin
         CallAsynchText; // send any pending asynchronous task
     end;
   end;
-  Call.OnError := lambda
+  Call.OnError :=
+  lambda
     if Assigned(onError) then
       onError(Self);
     if fAsynchCount>0 then
@@ -2861,7 +2875,8 @@ end;
 procedure TSQLRestClientURI.Connect(onSuccess, onError: TSQLRestEvent);
 var Call: TSQLRestURIParams;
 begin
-  SetAsynch(Call,onSuccess,onError,lambda
+  SetAsynch(Call,onSuccess,onError,
+  lambda
     result := (Call.OutStatus=HTML_SUCCESS) and SetServerTimeStamp(Call.OutBody);
   end);
   CallBackGet('TimeStamp',[],Call); // asynchronous call
@@ -2870,13 +2885,25 @@ end;
 procedure TSQLRestClientURI.CallRemoteServiceASynch(aCaller: TServiceClientAbstract;
   const aMethodName: string; aExpectedOutputParamsCount: integer;
   const aInputParams: array of variant;
-  onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent);
+  onSuccess: procedure(res: array of Variant); onError: TSQLRestEvent;
+  aReturnsCustomAnswer: boolean);
 var Call: TSQLRestURIParams;
 begin
-  // TServiceCustomAnswer and ForceServiceResultAsJSONObject not implemented yet
-  SetAsynch(Call,lambda
+  // ForceServiceResultAsJSONObject not implemented yet
+  SetAsynch(Call,
+    lambda
       if not assigned(onSuccess) then
         exit; // no result to handle
+      if aReturnsCustomAnswer then begin
+        if Call.OutStatus=HTML_SUCCESS then begin
+          var result: TVariantDynArray;
+          result.Add(Call.OutBody);
+          onSuccess(result);
+        end else
+          if Assigned(onError) then
+            onError(self);
+        exit;
+      end;
       var outID: integer;
       var result := CallGetResult(Call,outID); // from {result:...,id:...}
       if VarIsValidRef(result) then begin
@@ -2903,18 +2930,28 @@ end;
 
 function TSQLRestClientURI.CallRemoteServiceSynch(aCaller: TServiceClientAbstract;
   const aMethodName: string; aExpectedOutputParamsCount: integer;
-  const aInputParams: array of variant): TVariantDynArray;
+  const aInputParams: array of variant; aReturnsCustomAnswer: boolean): TVariantDynArray;
 var Call: TSQLRestURIParams;
     outResult: variant;
     outID: integer;
+procedure RaiseError;
 begin
-  // TServiceCustomAnswer and ForceServiceResultAsJSONObject not implemented yet
+  raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
+    [aCaller.fServiceName,aMethodName,Call.OutStatus]);
+end;
+begin
+  // ForceServiceResultAsJSONObject not implemented yet
   CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
+  if aReturnsCustomAnswer then begin
+    if Call.OutStatus<>HTML_SUCCESS then
+      RaiseError;
+    result.Add(Call.OutBody);
+    exit;
+  end;
   outResult := CallGetResult(Call,outID); // from {result:...,id:...}
   if not VarIsValidRef(outResult) then
-    raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
-      [aCaller.fServiceName,aMethodName,Call.OutStatus]);
-   if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
+    RaiseError;
+  if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
      (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
   if aExpectedOutputParamsCount=0 then
     exit; // returns default []
@@ -2941,7 +2978,8 @@ end;
 
 procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
    const aMethodName: string; aExpectedOutputParamsCount: integer;
-   const aInputParams: array of variant; out res: TVariantDynArray);
+   const aInputParams: array of variant; out res: TVariantDynArray;
+   aReturnsCustomAnswer: boolean);
 var Call: TSQLRestURIParams;
     params: TJSONVariantData;
     result: variant;
@@ -2955,6 +2993,11 @@ begin
   if Call.OutStatus<>HTML_SUCCESS then
     raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
       [aCaller.fServiceName,aMethodName,Call.OutStatus]);
+  if aReturnsCustomAnswer then begin
+    SetLength(res,1);
+    res[0] := HttpBodyToVariant(Call.OutBody);
+    exit;
+  end;
   result := CallGetResult(Call,outID);
   if (aCaller.fInstanceImplementation=sicClientDriven) and (outID<>0) then
     (aCaller as TServiceClientAbstractClientDriven).fClientID := IntToStr(outID);
@@ -3352,6 +3395,16 @@ begin
   result := GUID; // no-op since TGUID=string
 end;
 
+function VariantToHttpBody(const value: variant): THttpBody;
+begin
+  result := value; // no-op since THttpBody=string
+end;
+
+function HttpBodyToVariant(const HttpBody: THttpBody): variant;
+begin
+  result := HttpBody; // no-op since THttpBody=string
+end;
+
 {$else}
 
 {$ifdef FPC} // original VarIsStr() does not handle varByRef as expected :(
@@ -3396,6 +3449,54 @@ begin
     result := Copy(SysUtils.GUIDToString(GUID),2,36);
   except
     result := ''; // should not happen
+  end;
+end;
+
+const
+  varHttpBody = {$ifdef UNICODE}varUString{$else}varString{$endif};
+
+function VariantToHttpBody(const value: variant): THttpBody;
+var P: PCardinal;
+    Len: cardinal;
+begin
+  result := nil;
+  with TVarData(value) do begin
+    if (VType<>varHttpBody) or (VAny=nil) then
+      exit;
+    P := VAny;
+    {$ifdef UNICODE}
+    Len := P^;
+    if Len>=cardinal(length(UnicodeString(VAny))*2) then
+      exit; // input does not come from HttpBodyToVariant() -> avoid GPF
+    inc(P);
+    {$else}
+    Len := length(RawByteString(VAny));
+    {$endif}
+    SetLength(result,Len);
+    move(P^,pointer(result)^,len);
+  end;
+end;
+
+function HttpBodyToVariant(const HttpBody: THttpBody): variant;
+var P: PCardinal;
+    Len: cardinal;
+begin
+  VarClear(result);
+  Len := length(HttpBody);
+  if Len>0 then
+  with TVarData(result) do begin
+    VType := varHttpBody;
+    VAny := nil;
+    {$ifdef UNICODE}
+    SetLength(UnicodeString(VAny),Len shr 1+2);
+    P := VAny;
+    P^ := Len;
+    inc(P);
+    {$else}
+    SetLength(RawByteString(VAny),Len);
+    P := VAny;
+    {$endif}
+    move(pointer(HttpBody)^,P^,Len);
   end;
 end;
 

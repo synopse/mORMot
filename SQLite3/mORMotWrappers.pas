@@ -162,7 +162,7 @@ type
     wInt64, wID, wReference, wTimeLog, wModTime, wCreateTime,
     wCurrency, wSingle, wDouble, wDateTime,
     wRawUTF8, wString, wRawJSON, wBlob,
-    wGUID, wRecord, wArray, wVariant,
+    wGUID, wCustomAnswer, wRecord, wArray, wVariant,
     wObject, wSQLRecord);
   /// supported languages typesets
   TWrapperLanguage = (
@@ -189,24 +189,24 @@ const
    // lngDelphi
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
-    'Currency', 'Single', 'Double', 'TDateTime',
-    'RawUTF8','String', 'RawJSON', 'TSQLRawBlob', 'TGUID', '', '', 'Variant', '', ''),
+    'Currency', 'Single', 'Double', 'TDateTime', 'RawUTF8','String', 'RawJSON',
+    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', ''),
    // lngPascal
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
-    'Currency', 'Single', 'Double', 'TDateTime',
-    'String', 'String', 'Variant', 'TSQLRawBlob', 'TGUID', '', '', 'Variant', '', ''),
+    'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
+    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', ''),
    // lngCS
    ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
     'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
-    'decimal', 'single', 'double', 'double',
-    'string', 'string', 'dynamic', 'byte[]', 'Guid', '', '', 'dynamic', '', ''),
+    'decimal', 'single', 'double', 'double', 'string', 'string', 'dynamic',
+    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', ''),
    // lngJava
-   ('', 'boolean', '', '', 'byte', 'int', 'int', 'long',
-    'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
-    'BigDecimal', 'single', 'double', 'double',
-    'String', 'String', 'Object', 'byte[]', 'String', '', '', 'Object', '', ''));
-
+   ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
+    'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
+    'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
+    'String', 'byte[]', '', '', 'Object', '', ''));
+                       
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,   // sftUnknown
      wString,    // sftAnsiText
@@ -442,12 +442,13 @@ begin
     result := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
-      'argsOutputCount',ArgsOutputValuesCount,
-      'resultIsServiceCustomAnswer',ArgsResultIsServiceCustomAnswer]);
+      'argsOutputCount',ArgsOutputValuesCount]);
     if ArgsInFirst>=0 then
       result.hasInParams := true;
     if ArgsOutFirst>=0 then
       result.hasOutParams := true;
+    if ArgsResultIsServiceCustomAnswer then
+      result.resultIsServiceCustomAnswer := true;
   end;
 end;
 
@@ -568,6 +569,8 @@ begin
   end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then
     typ := wGUID else
+  if (typ=wRecord) and IdemPropNameU(typName,'TServiceCustomAnswer') then
+    typ := wCustomAnswer else
     if typName='' then begin
       typName := TYPES_LANG[lngDelphi,typ];
       if (typName='') and (typInfo<>nil) then
@@ -616,6 +619,8 @@ begin
   end;
   wGUID:
     _ObjAddProps(['toVariant','GUIDToVariant','fromVariant','VariantToGUID'],result);
+  wCustomAnswer:
+    _ObjAddProps(['toVariant','HttpBodyToVariant','fromVariant','VariantToHttpBody'],result);
   wRecord: begin
      _ObjAddProps(['isRecord',true],result);
      if typInfo<>nil then begin

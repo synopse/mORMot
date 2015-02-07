@@ -336,13 +336,13 @@ begin
     [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}],
     lambda (res: array of Variant)
       onSuccess({{#args}}{{#dirOutput}}{{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}}{{#commaOutResult}},{{/commaOutResult}}{{/dirOutput}}{{/args}});
-    end, onError); 
+    end, onError{{#resultIsServiceCustomAnswer}}, true{{/resultIsServiceCustomAnswer}}); 
 end;
 
 {{verb}} TService{{interfaceURI}}.{{>methodSynch}}
 begin
   var res := fClient.CallRemoteServiceSynch(self,'{{methodName}}',{{ArgsOutputCount}},
-    [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}]);
+    [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}]{{#resultIsServiceCustomAnswer}},true{{/resultIsServiceCustomAnswer}});
 {{#args}}{{#dirOutput}}  {{argName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}};
 {{/dirOutput}}{{/args}}end;
 
