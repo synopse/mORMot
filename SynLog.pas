@@ -1033,7 +1033,8 @@ const
 
   /// contains the logging levels for which stack trace should be dumped
   // - which are mainly exceptions or application errors
-  LOG_STACKTRACE: TSynLogInfos = [sllLastError,sllError,sllException,sllExceptionOS];
+  LOG_STACKTRACE: TSynLogInfos = [
+    sllLastError,sllError,sllException,sllExceptionOS,sllDDDError];
 
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
@@ -2213,7 +2214,7 @@ begin
   {$endif}
   fExceptionIgnore := TList.Create;
   fLevelStackTrace :=
-    [sllError,sllException,sllExceptionOS,sllFail,sllLastError,sllStackTrace];
+    [sllError,sllException,sllExceptionOS,sllFail,sllLastError,sllStackTrace,sllDDDError];
 end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
