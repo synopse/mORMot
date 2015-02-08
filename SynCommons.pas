@@ -1600,7 +1600,11 @@ function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString; ove
 
 /// convert a Win-Ansi encoded buffer into a Delphi 2009+ Unicode string
 // - this function is faster than default RTL, since use no Win32 API call
-function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: integer): UnicodeString;
+function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: integer): UnicodeString; overload;
+
+/// convert a Win-Ansi string into a Delphi 2009+ Unicode string
+// - this function is faster than default RTL, since use no Win32 API call
+function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; inline; overload;
 {$endif}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
@@ -3771,6 +3775,9 @@ type
     function SaveToLength: integer;
     /// save the dynamic array content into a RawByteString
     function SaveTo: RawByteString; overload;
+    /// serialize the dynamic array content as JSON
+    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    function SaveToJSON: RawUTF8;
     /// load the dynamic array content from a memory buffer
     // - return nil if the Source buffer is incorrect (invalid type or internal
     // checksum e.g.)
@@ -5686,7 +5693,7 @@ type
     // for BLOB stream
     // - typical content could be
     // ! '[1,2,3,4]' or '["\uFFF0base64encodedbinary"]'
-    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload; 
+    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload;
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - just a wrapper around the other overloaded method, creating a
     // temporary TDynArray wrapper on the stack
@@ -12980,6 +12987,12 @@ begin
   SetString(result,nil,WinAnsiLen);
   WinAnsiConvert.AnsiBufferToUnicode(pointer(result),WinAnsi,WinAnsiLen);
 end;
+
+function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; 
+begin
+  result := WinAnsiToUnicodeString(pointer(WinAnsi),length(WinAnsi));
+end;
+
 {$endif}
 
 {$ifdef UNICODE}
@@ -30646,6 +30659,17 @@ begin
   if Len<>0 then
     if SaveTo(pointer(result))-pointer(result)<>Len then
       raise ESynException.Create('TDynArray.SaveTo len concern');
+end;
+
+function TDynArray.SaveToJSON: RawUTF8;
+begin
+  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+  try
+    AddDynArrayJSON(self);
+    SetText(result);
+  finally
+    Free;
+  end;
 end;
 
 function JSONArrayCount(P: PUTF8Char): integer;
