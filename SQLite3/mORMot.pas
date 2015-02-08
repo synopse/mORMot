@@ -893,6 +893,9 @@ unit mORMot;
     - added TPropInfo.ClassFromJSON() to properly unserialize TObject properties
     - added TSQLPropInfo.SQLFieldTypeName and SQLDBFieldTypeName properties
     - introducing TSQLPropInfo.SetValueVar() method to avoid a call to StrLen()
+    - TSQLPropInfo is now able to "flatten" nested properties, e.g. DDD's
+      TUser.Address.Country.Iso will be mapped to ORM's TSQLRecord.Address_Country
+    - introducing TSQLPropInfo.CopyProp() method which supports flattened classes
     - fixed [f96cf0fc5d] and [221ee9c767] about TSQLRecordMany JSON serialization
     - fixed issue when retrieving a TSQLRecord containing TSQLRecordMany
       properties with external tables (like 'no such column DestList' error)
@@ -2247,8 +2250,12 @@ type
     {$endif}
     function GetCurrencyProp(Instance: TObject): currency;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    procedure SetCurrencyProp(Instance: TObject; Value: Currency);
+     {$ifdef HASINLINE}inline;{$endif}
     function GetDoubleProp(Instance: TObject): double;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    procedure SetDoubleProp(Instance: TObject; Value: Double);
+     {$ifdef HASINLINE}inline;{$endif}
     function GetFloatProp(Instance: TObject): double;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetFloatProp(Instance: TObject; Value: Extended);
@@ -2539,6 +2546,7 @@ type
     fAttributes: TSQLPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
+    fFromRTTI: boolean;
     function GetNameDisplay: string; virtual;
     /// those two protected methods allow custom storage of binary content
     // as text
@@ -2547,6 +2555,9 @@ type
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
     function GetSQLFieldTypeName: PShortString;
     function GetSQLFieldRTTITypeName: RawUTF8; virtual;
+    // overriden method shall use direct copy of the low-level binary content,
+    // to be faster than a DestInfo.SetValue(Dest,GetValue(Source)) call
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); virtual;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
@@ -2630,16 +2641,20 @@ type
     // content supplied e.g.
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; virtual; abstract;
     /// copy a property value from one instance to another
-    // - this method use direct copy of the low-level binary content, and is
-    // therefore faster than a SetValue(Dest,GetValue(Source)) call
-    procedure CopyValue(Source, Dest: TObject); virtual; abstract;
+    // - both objects should have the same exact property
+    procedure CopyValue(Source, Dest: TObject);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// copy a value from one instance to another property instance
+    // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
+    // Source/Dest instance will be used for the copy
+    procedure CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); 
     {$ifndef NOVARIANTS}
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // SQLFieldType type
     // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
-    procedure GetVariant(Instance: TObject; var Dest: Variant); virtual;  
+    procedure GetVariant(Instance: TObject; var Dest: Variant); virtual;
     /// set the property value from a Variant value
     // - dynamic array field must be set from a variant array
     // - will set the Variant type to the best matching kind according to the
@@ -2723,7 +2738,8 @@ type
   /// information about an ordinal Int32 published property
   TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
   protected
-    procedure SetInt(Instance: TObject; Value: PtrInt);
+    procedure SetInt32(Instance: TObject; Value: integer);
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -2733,7 +2749,6 @@ type
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -2776,6 +2791,8 @@ type
 
   /// information about an ordinal Int64 published property
   TSQLPropInfoRTTIInt64 = class(TSQLPropInfoRTTI)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -2785,7 +2802,6 @@ type
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -2797,7 +2813,9 @@ type
   TSQLPropInfoRTTITimeLog = class(TSQLPropInfoRTTIInt64);
 
   /// information about a floating-point Double published property
-  TSQLPropInfoRTTIDouble = class(TSQLPropInfoRTTIInt64)
+  TSQLPropInfoRTTIDouble = class(TSQLPropInfoRTTI)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -2805,6 +2823,8 @@ type
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
+    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -2812,12 +2832,17 @@ type
 
   /// information about a fixed-decimal Currency published property
   TSQLPropInfoRTTICurrency = class(TSQLPropInfoRTTIDouble)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
+    function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -2840,6 +2865,7 @@ type
   TSQLPropInfoRTTIAnsi = class(TSQLPropInfoRTTI)
   protected
     fEngine: TSynAnsiConvert;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -2852,7 +2878,6 @@ type
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -2860,6 +2885,8 @@ type
 
   /// information about a RawUTF8 published property
   TSQLPropInfoRTTIRawUTF8 = class(TSQLPropInfoRTTIAnsi)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
@@ -2875,6 +2902,8 @@ type
 
   /// information about a RawUnicode published property
   TSQLPropInfoRTTIRawUnicode = class(TSQLPropInfoRTTIAnsi)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
@@ -2886,6 +2915,8 @@ type
 
   /// information about a TSQLRawBlob published property
   TSQLPropInfoRTTIRawBlob = class(TSQLPropInfoRTTIAnsi)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
@@ -2904,6 +2935,8 @@ type
 
   /// information about a WideString published property
   TSQLPropInfoRTTIWide = class(TSQLPropInfoRTTI)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -2911,7 +2944,6 @@ type
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -2919,6 +2951,8 @@ type
 {$ifdef UNICODE}
   /// information about a UnicodeString published property
   TSQLPropInfoRTTIUnicode = class(TSQLPropInfoRTTI)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
@@ -2930,7 +2964,6 @@ type
     procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
       var temp: RawByteString); override;
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -2945,6 +2978,7 @@ type
     function GetDynArrayElemType: PTypeInfo;
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
     procedure Serialize(Instance: TObject; var data: RawByteString); virtual;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
@@ -2959,7 +2993,6 @@ type
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -2984,6 +3017,7 @@ type
   TSQLPropInfoRTTIVariant = class(TSQLPropInfoRTTI)
   protected
     fDocVariantOptions: TDocVariantOptions;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     /// initialize the internal fields
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
@@ -2993,7 +3027,6 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3061,6 +3094,7 @@ type
   TSQLPropInfoRecordRTTI = class(TSQLPropInfoRecordTyped)
   protected
     function GetSQLFieldRTTITypeName: RawUTF8; override;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     /// define a record property from its RTTI definition
     // - handle any kind of record with available generated TypeInfo() 
@@ -3092,7 +3126,6 @@ type
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3105,13 +3138,14 @@ type
   /// information about a fixed-size record property defined directly in code
   // - Delphi does not publish RTTI for published record properties
   // - you can use this class to register a record property with no RTTI (i.e.
-  // a record with no reference-counted types within) 
+  // a record with no reference-counted types within)
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
   TSQLPropInfoRecordFixedSize = class(TSQLPropInfoRecordTyped)
   protected
     fRecordSize: integer;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     /// define an unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
@@ -3131,7 +3165,6 @@ type
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -3210,7 +3243,6 @@ type
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     procedure NormalizeValue(var Value: RawUTF8); override;
   end;
 
@@ -3775,13 +3807,14 @@ type
   // - binary serialization will store textual JSON serialization of the
   // object, including custom serialization
   TSQLPropInfoRTTIObject = class(TSQLPropInfoRTTIInstance)
+  protected
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
-    procedure CopyValue(Source, Dest: TObject); override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -15294,6 +15327,45 @@ begin
   end;
 end;
 
+procedure TSQLPropInfo.CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject);
+procedure GenericCopy;
+var tmp: RawUTF8;
+    wasString: boolean;
+begin
+  GetValueVar(Source,false,tmp,@wasString);
+  DestInfo.SetValueVar(Dest,tmp,wasString);
+end;
+var i: integer;
+begin
+  if (Source=nil) or (DestInfo=nil) or (Dest=nil) then
+    exit; // avoid GPF
+  with TSQLPropInfoRTTI(self) do
+    if fFromRTTI and (fFlattenedProps<>nil) then
+    for i := 0 to length(fFlattenedProps)-1 do
+      Source := fFlattenedProps[i].GetObjProp(Source);
+  with TSQLPropInfoRTTI(DestInfo) do
+    if fFromRTTI and (fFlattenedProps<>nil) then
+    for i := 0 to length(fFlattenedProps)-1 do
+      Dest := fFlattenedProps[i].GetObjProp(Dest);
+  if PPointer(DestInfo)^=PPointer(self)^ then
+    CopySameClassProp(Source,DestInfo,Dest) else
+    GenericCopy;
+end;
+
+procedure TSQLPropInfo.CopyValue(Source, Dest: TObject);
+begin
+  CopySameClassProp(Source,self,Dest);
+end;
+
+procedure TSQLPropInfo.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+  Dest: TObject);
+var tmp: RawUTF8;
+    wasString: boolean;
+begin
+  GetValueVar(Source,false,tmp,@wasString);
+  DestInfo.SetValueVar(Dest,tmp,wasString);
+end;
+
 
 { TSQLPropInfoRTTI }
 
@@ -15312,7 +15384,7 @@ begin // Address.Street1 -> Address_Street1
     result.fName := ShortStringToAnsi7String(aFlattenedProps[max]^.Name);
     dec(max);
   end;
-  for i := max downto 0 do 
+  for i := max downto 0 do
     result.fName := ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'_'+result.fName;
 end;
 begin
@@ -15410,9 +15482,8 @@ function TSQLPropInfoRTTI.Flattened(Instance: TObject): TObject;
 var i: integer;
 begin
   result := Instance;
-  if fFlattenedProps<>nil then
-    for i := 0 to length(fFlattenedProps)-1 do
-      result := fFlattenedProps[i].GetObjProp(result);
+  for i := 0 to length(fFlattenedProps)-1 do
+    result := fFlattenedProps[i].GetObjProp(result);
 end;
 
 {$ifndef NOVARIANTS}
@@ -15434,14 +15505,16 @@ begin
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
+  fFromRTTI := true;
 end;
 
 
 { TSQLPropInfoRTTIInt32 }
 
-procedure TSQLPropInfoRTTIInt32.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIInt32.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+  Dest: TObject);
 begin
-  SetInt(Dest,fPropInfo.GetOrdProp(Source));
+  TSQLPropInfoRTTIInt32(DestInfo).SetInt32(Dest,fPropInfo.GetOrdProp(Source));
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -15490,11 +15563,11 @@ end;
 function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 begin
   if P<>nil then
-    SetInt(Instance,integer(FromVarUInt32(PByte(P))));
+    SetInt32(Instance,integer(FromVarUInt32(PByte(P))));
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIInt32.SetInt(Instance: TObject; Value: PtrInt);
+procedure TSQLPropInfoRTTIInt32.SetInt32(Instance: TObject; Value: integer);
 begin
   {$ifdef USETYPEINFO}
   if fPropInfo.SetterIsField then
@@ -15508,13 +15581,13 @@ end;
 procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  SetInt(Instance,GetInteger(Value));
+  SetInt32(Instance,GetInteger(Value));
 end;
 
 function TSQLPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 begin
   if aValue.VType=ftInt64 then begin
-    SetInt(Instance,aValue.VInt64);
+    SetInt32(Instance,aValue.VInt64);
     result := true;
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
@@ -15653,9 +15726,11 @@ end;
 
 { TSQLPropInfoRTTIInt64 }
 
-procedure TSQLPropInfoRTTIInt64.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIInt64.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+  Dest: TObject);
 begin
-  fPropInfo.SetInt64Prop(Dest,fPropInfo.GetInt64Prop(Source));
+  TSQLPropInfoRTTIInt64(DestInfo).fPropInfo.SetInt64Prop(Dest,
+    fPropInfo.GetInt64Prop(Source));
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetBinary(Instance: TObject;
@@ -15743,11 +15818,16 @@ end;
 
 { TSQLPropInfoRTTIDouble }
 
+procedure TSQLPropInfoRTTIDouble.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+  Dest: TObject);
+begin
+  TSQLPropInfoRTTIDouble(DestInfo).fPropInfo.SetDoubleProp(Dest,
+    fPropInfo.GetDoubleProp(Source));
+end;
+
 procedure TSQLPropInfoRTTIDouble.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  if fPropInfo.GetterIsField then
-    W.Add(PDouble(fPropInfo.GetterAddr(Instance))^) else
-    W.Add(fPropInfo.GetDoubleProp(Instance));
+  W.Add(fPropInfo.GetDoubleProp(Instance));
 end;
 
 procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject;
@@ -15779,9 +15859,7 @@ begin
     if err<>0 then
       V := 0;
   end;
-  if fPropInfo.SetterIsField then
-    PDouble(fPropInfo.SetterAddr(Instance))^ := V else
-    fPropInfo.SetFloatProp(Instance,V);
+  fPropInfo.SetDoubleProp(Instance,V);
 end;
 
 function TSQLPropInfoRTTIDouble.CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt;
@@ -15793,13 +15871,8 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    if fPropInfo.GetterIsField then begin
-      V1 := PDouble(fPropInfo.GetterAddr(Item1))^;
-      V2 := PDouble(fPropInfo.GetterAddr(Item2))^;
-    end else begin
-      V1 := fPropInfo.GetFloatProp(Item1);
-      V2 := fPropInfo.GetFloatProp(Item2);
-    end;
+    V1 := fPropInfo.GetDoubleProp(Item1);
+    V2 := fPropInfo.GetDoubleProp(Item2);
     if SynCommons.SameValue(V1,V2) then
       result := 0 else
     if V1>V2 then
@@ -15808,24 +15881,36 @@ begin
   end;
 end;
 
+procedure TSQLPropInfoRTTIDouble.GetBinary(Instance: TObject;
+  W: TFileBufferWriter);
+var V: double;
+begin
+  V := fPropInfo.GetDoubleProp(Instance);
+  W.Write(@V,SizeOf(V));
+end;
+
+function TSQLPropInfoRTTIDouble.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+begin
+  if P=nil then
+    result := nil else begin
+    fPropInfo.SetDoubleProp(Instance,PDouble(P)^);
+    result := P+sizeof(double);
+  end;
+end;
+
 function TSQLPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
-var V: Extended;
+var V: double;
 begin
   case aValue.VType of
-  ftDouble, ftDate:
-    V := aValue.VDouble;
-  ftInt64:
-    V := aValue.VInt64;
-  ftCurrency:
-    V := aValue.VCurrency;
+  ftDouble, ftDate: V := aValue.VDouble;
+  ftInt64:          V := aValue.VInt64;
+  ftCurrency:       V := aValue.VCurrency;
   else begin
     result := inherited SetFieldSQLVar(Instance,aValue);
     exit;
   end;
   end;
-  if fPropInfo.SetterIsField then
-    PDouble(fPropInfo.SetterAddr(Instance))^ := V else
-    fPropInfo.SetFloatProp(Instance,V);
+  fPropInfo.SetDoubleProp(Instance,V);
   result := true;
 end;
 
@@ -15833,19 +15918,22 @@ procedure TSQLPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject; var aValue: T
   var temp: RawByteString);
 begin
   aValue.VType := ftDouble;
-  if fPropInfo.GetterIsField then
-    aValue.VDouble := PDouble(fPropInfo.GetterAddr(Instance))^ else
-    aValue.VDouble := fPropInfo.GetFloatProp(Instance);
+  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
 end;
 
 
 { TSQLPropInfoRTTICurrency }
 
+procedure TSQLPropInfoRTTICurrency.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+  Dest: TObject);
+begin
+  TSQLPropInfoRTTICurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest,
+    fPropInfo.GetCurrencyProp(Source));
+end;
+
 procedure TSQLPropInfoRTTICurrency.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  if fPropInfo.GetterIsField then
-    W.AddCurr64(PInt64(fPropInfo.GetterAddr(Instance))^) else
-    W.AddCurr64(fPropInfo.GetCurrencyProp(Instance));
+  W.AddCurr64(fPropInfo.GetCurrencyProp(Instance));
 end;
 
 procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject;
@@ -15853,9 +15941,7 @@ procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject;
 begin
   if wasSQLString<>nil then
     wasSQLString^ := false;
-  if fPropInfo.GetterIsField then
-    result := Curr64ToStr(PInt64(fPropInfo.GetterAddr(Instance))^) else
-    result := CurrencyToStr(fPropInfo.GetCurrencyProp(Instance));
+  result := CurrencyToStr(fPropInfo.GetCurrencyProp(Instance));
 end;
 
 procedure TSQLPropInfoRTTICurrency.NormalizeValue(var Value: RawUTF8);
@@ -15866,9 +15952,7 @@ end;
 procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  if fPropInfo.SetterIsField then
-    PInt64(fPropInfo.SetterAddr(Instance))^ := StrToCurr64(Value) else
-    inherited SetValue(Instance,Value,wasString);
+  fPropInfo.SetCurrencyProp(Instance,StrToCurrency(Value));
 end;
 
 function TSQLPropInfoRTTICurrency.CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt;
@@ -15880,13 +15964,8 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    if fPropInfo.GetterIsField then begin
-      V1 := PCurrency(fPropInfo.GetterAddr(Item1))^;
-      V2 := PCurrency(fPropInfo.GetterAddr(Item2))^;
-    end else begin
-      V1 := fPropInfo.GetCurrencyProp(Item1);
-      V2 := fPropInfo.GetCurrencyProp(Item2);
-    end;
+    V1 := fPropInfo.GetCurrencyProp(Item1);
+    V2 := fPropInfo.GetCurrencyProp(Item2);
     Result := PInt64(@V1)^-PInt64(@V2)^;
   end;
 end;
@@ -15895,9 +15974,40 @@ procedure TSQLPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject; var aValue:
   var temp: RawByteString);
 begin
   aValue.VType := ftCurrency;
-  if fPropInfo.GetterIsField then
-    aValue.VInt64 := PInt64(fPropInfo.GetterAddr(Instance))^ else
-    aValue.VCurrency := fPropInfo.GetCurrencyProp(Instance);
+  aValue.VCurrency := fPropInfo.GetCurrencyProp(Instance);
+end;
+
+function TSQLPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
+var V: Currency;
+begin
+  case aValue.VType of
+  ftDouble, ftDate: V := aValue.VDouble;
+  ftInt64:          V := aValue.VInt64;
+  ftCurrency:       V := aValue.VCurrency;
+  else begin
+    result := inherited SetFieldSQLVar(Instance,aValue);
+    exit;
+  end;
+  end;
+  fPropInfo.SetCurrencyProp(Instance,V);
+  result := true;
+end;
+
+procedure TSQLPropInfoRTTICurrency.GetBinary(Instance: TObject;
+  W: TFileBufferWriter);
+var V: Currency;
+begin
+  V := fPropInfo.GetCurrencyProp(Instance);
+  W.Write(@V,SizeOf(V));
+end;
+
+function TSQLPropInfoRTTICurrency.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+begin
+  if P=nil then
+    result := nil else begin
+    fPropInfo.SetCurrencyProp(Instance,PCurrency(P)^);
+    result := P+sizeof(Currency);
+  end;
 end;
 
 
@@ -15906,15 +16016,13 @@ end;
 procedure TSQLPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.Add('"');
-  if fPropInfo.GetterIsField then
-    W.AddDateTime(PDouble(fPropInfo.GetterAddr(Instance))^) else
-    W.AddDateTime(fPropInfo.GetDoubleProp(Instance));
+  W.AddDateTime(fPropInfo.GetDoubleProp(Instance));
   W.Add('"');
 end;
 
 function TSQLPropInfoRTTIDateTime.CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt;
 var Date1,Date2: TTimeLogBits;
-begin
+begin // force second resolution, as in our JSON content
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
@@ -15945,14 +16053,14 @@ procedure TSQLPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
 var V: TDateTime;
 begin
   Iso8601ToDateTimePUTF8CharVar(Value,0,V);
-  fPropInfo.SetFloatProp(Instance,V);
+  fPropInfo.SetDoubleProp(Instance,V);
 end;
 
 procedure TSQLPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
   aValue.VType := ftDate;
-  aValue.VCurrency := fPropInfo.GetDoubleProp(Instance);
+  aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
 end;
 
 
@@ -15999,13 +16107,7 @@ end;
 
 procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
 begin
-  {$ifdef USETYPEINFO}
-  if fPropInfo.SetterIsField then
-    PPointer(fPropInfo.SetterAddr(Instance))^ := Value else
-  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
-    PPointer(fPropInfo.GetterAddr(Instance))^ := Value else
-  {$endif}
-    fPropInfo.SetOrdProp(Instance,PtrInt(Value));
+  fPropInfo.SetOrdProp(Instance,PtrInt(Value));
 end;
 
 
@@ -16058,13 +16160,13 @@ end;
 
 { TSQLPropInfoRTTIIObject }
 
-procedure TSQLPropInfoRTTIObject.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIObject.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 var S,D: TObject;
 begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
-  D := GetInstance(Dest);
-  // note: Get/SetOrdProp() works also for CPU64 (returns an PtrInt)
+  D := TSQLPropInfoRTTIObject(DestInfo).GetInstance(Dest);
 {$ifndef LVCL}
   if S.InheritsFrom(TCollection) then
     CopyCollection(TCollection(S),TCollection(D)) else
@@ -16073,13 +16175,16 @@ begin
     CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous child
     if S=nil then
-      D := nil else begin
-      D := ClassInstanceCreate(S.ClassType); // create new child instance
-      CopyObject(S,D); // copy child content
-    end;
+      D := nil else
+      try
+        D := ClassInstanceCreate(S.ClassType); // create new child instance
+        CopyObject(S,D); // copy child content
+      except
+        FreeAndNil(D); // avoid memory leak if error during new instance copy
+      end;
     SetInstance(Dest,D);
   end;
-end;                 
+end;
 
 procedure TSQLPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
@@ -16116,7 +16221,7 @@ end;
 
 function TSQLPropInfoRTTIObject.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var tmp: RawUTF8;
-begin
+begin // JSON is case-sensitive by design -> ignore CaseInsensitive parameter
   tmp := ObjectToJSON(GetInstance(Instance));
   result := crc32c(0,pointer(tmp),length(tmp));
 end;
@@ -16140,11 +16245,17 @@ begin
   fEngine := TSynAnsiConvert.Engine(aPropInfo^.PropType^.AnsiStringCodePage);
 end;
 
-procedure TSQLPropInfoRTTIAnsi.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIAnsi.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 var Value: RawByteString;
 begin
-  fPropInfo.GetLongStrProp(Source,Value);
-  fPropInfo.SetLongStrProp(Dest,Value);
+  if (TSQLPropInfoRTTIAnsi(DestInfo).fEngine=fEngine) then begin
+    fPropInfo.GetLongStrProp(Source,Value);
+    TSQLPropInfoRTTIAnsi(DestInfo).fPropInfo.SetLongStrProp(Dest,Value);
+  end else begin
+    GetValueVar(Source,false,RawUTF8(Value),nil);
+    DestInfo.SetValueVar(Dest,Value,true);
+  end;
 end;
 
 procedure TSQLPropInfoRTTIAnsi.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -16255,6 +16366,14 @@ end;
 
 { TSQLPropInfoRTTIRawUTF8 }
 
+procedure TSQLPropInfoRTTIRawUTF8.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
+var Value: RawByteString;
+begin
+  fPropInfo.GetLongStrProp(Source,Value);
+  TSQLPropInfoRTTIRawUTF8(DestInfo).fPropInfo.SetLongStrProp(Dest,Value);
+end;
+
 function TSQLPropInfoRTTIRawUTF8.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var Up: array[byte] of AnsiChar; // avoid slow heap allocation
     Value: RawByteString;
@@ -16341,6 +16460,14 @@ end;
 
 { TSQLPropInfoRTTIRawUnicode }
 
+procedure TSQLPropInfoRTTIRawUnicode.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
+var Value: RawByteString;
+begin
+  fPropInfo.GetLongStrProp(Source,Value);
+  TSQLPropInfoRTTIRawUnicode(DestInfo).fPropInfo.SetLongStrProp(Dest,Value);
+end;
+
 function TSQLPropInfoRTTIRawUnicode.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var Up: array[byte] of AnsiChar; // avoid slow heap allocation
     Value: RawByteString;
@@ -16394,6 +16521,14 @@ end;
 
 
 { TSQLPropInfoRTTIRawBlob }
+
+procedure TSQLPropInfoRTTIRawBlob.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
+var Value: RawByteString;
+begin
+  fPropInfo.GetLongStrProp(Source,Value);
+  TSQLPropInfoRTTIRawBlob(DestInfo).fPropInfo.SetLongStrProp(Dest,Value);
+end;
 
 function TSQLPropInfoRTTIRawBlob.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var Value: RawByteString;
@@ -16495,11 +16630,12 @@ end;
 
 { TSQLPropInfoRTTIWide }
 
-procedure TSQLPropInfoRTTIWide.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIWide.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 var Value: WideString;
 begin
   fPropInfo.GetWideStrProp(Source,Value);
-  fPropInfo.SetWideStrProp(Dest,Value);
+  TSQLPropInfoRTTIWide(DestInfo).fPropInfo.SetWideStrProp(Dest,Value);
 end;
 
 procedure TSQLPropInfoRTTIWide.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -16576,9 +16712,11 @@ end;
 
 { TSQLPropInfoRTTIUnicode }
 
-procedure TSQLPropInfoRTTIUnicode.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIUnicode.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 begin
-  fPropInfo.SetUnicodeStrProp(Dest,fPropInfo.GetUnicodeStrProp(Source));
+  TSQLPropInfoRTTIUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest,
+    fPropInfo.GetUnicodeStrProp(Source));
 end;
 
 procedure TSQLPropInfoRTTIUnicode.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -16742,16 +16880,26 @@ end;
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
   var data: RawByteString);
 begin
-  if fIsObjArray then
-    data := DynArraySaveJSON(GetFieldAddr(Instance)^,fPropType) else
-    data := GetDynArray(Instance).SaveTo;
+  with GetDynArray(Instance) do
+    if fIsObjArray then
+      data := SaveToJSON else
+      data := SaveTo;
 end;
 
-procedure TSQLPropInfoRTTIDynArray.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
+var SourceArray,DestArray: TDynArray;
 begin
-  if fIsObjArray then
-    raise EORMException.CreateUTF8('%.CopyValue() not handled for T*ObjArray',[self]);
-  GetDynArray(Dest).Copy(GetDynArray(Source));
+  SourceArray.Init(fPropType,GetFieldAddr(Source)^);
+  with TSQLPropInfoRTTIDynArray(DestInfo) do
+    DestArray.Init(fPropType,GetFieldAddr(Dest)^);
+  if fIsObjArray or TSQLPropInfoRTTIDynArray(DestInfo).fIsObjArray or
+     (SourceArray.ArrayType<>DestArray.ArrayType) then begin
+    if TSQLPropInfoRTTIDynArray(DestInfo).fIsObjArray then
+      ObjArrayClear(DestArray.Value^);
+    DestArray.LoadFromJSON(pointer(SourceArray.SaveToJSON));
+  end else
+    DestArray.Copy(SourceArray);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -16892,11 +17040,12 @@ begin
   fDocVariantOptions := JSON_OPTIONS[true];
 end;
 
-procedure TSQLPropInfoRTTIVariant.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 var value: Variant;
 begin
   fPropInfo.GetVariantProp(Source,value);
-  fPropInfo.SetVariantProp(Dest,value);
+  TSQLPropInfoRTTIVariant(DestInfo).fPropInfo.SetVariantProp(Dest,value);
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetBinary(Instance: TObject;
@@ -17075,9 +17224,13 @@ end;
 
 { TSQLPropInfoRecordRTTI }
 
-procedure TSQLPropInfoRecordRTTI.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRecordRTTI.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 begin
-  RecordCopy(GetFieldAddr(Dest)^,GetFieldAddr(Source)^,fTypeInfo);
+  if TSQLPropInfoRecordRTTI(DestInfo).fTypeInfo=fTypeInfo then
+    RecordCopy(TSQLPropInfoRecordRTTI(DestInfo).GetFieldAddr(Dest)^,
+      GetFieldAddr(Source)^,fTypeInfo) else
+    inherited CopySameClassProp(Source,DestInfo,Dest);
 end;
 
 function TSQLPropInfoRecordRTTI.GetSQLFieldRTTITypeName: RawUTF8;
@@ -17179,9 +17332,13 @@ end;
 
 { TSQLPropInfoRecordFixedSize }
 
-procedure TSQLPropInfoRecordFixedSize.CopyValue(Source, Dest: TObject);
+procedure TSQLPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 begin
-  move(GetFieldAddr(Source)^,GetFieldAddr(Dest)^,fRecordSize);
+  if TSQLPropInfoRecordFixedSize(DestInfo).fTypeInfo=fTypeInfo then
+    move(GetFieldAddr(Source)^,
+      TSQLPropInfoRecordFixedSize(DestInfo).GetFieldAddr(Dest)^,fRecordSize) else
+    inherited CopySameClassProp(Source,DestInfo,Dest);
 end;
 
 function TSQLPropInfoRecordFixedSize.GetSQLFieldRTTITypeName: RawUTF8;
@@ -17355,13 +17512,6 @@ destructor TSQLPropInfoCustomJSON.Destroy;
 begin
   inherited;
   fCustomParser.Free;
-end;
-
-procedure TSQLPropInfoCustomJSON.CopyValue(Source, Dest: TObject);
-var JSON: RawUTF8;
-begin
-  GetValueVar(Source,false,JSON,nil);
-  SetValue(Dest,pointer(JSON),false);
 end;
 
 procedure TSQLPropInfoCustomJSON.GetBinary(Instance: TObject;
@@ -21345,7 +21495,7 @@ end;
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
 begin
   if (PropType^.Kind=tkClass) and (SetProc=0) and GetterIsField then
-    // allow setting a class instance even if there is no "write ..." attribute 
+    // allow setting a class instance even if there is no "write ..." attribute
     PPtrInt(GetterAddr(Instance))^ := Value else
     TypInfo.SetOrdProp(Instance,@self,Value);
 end;
@@ -21408,12 +21558,34 @@ end;
 
 function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
 begin
-  result := TypInfo.GetFloatProp(Instance,@self);
+  if GetterIsField then
+    result := PCurrency(GetterAddr(Instance))^ else
+    result := TypInfo.GetFloatProp(Instance,@self);
+end;
+
+procedure TPropInfo.SetCurrencyProp(Instance: TObject; Value: Currency);
+begin
+  if SetterIsField then
+    PCurrency(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PCurrency(GetterAddr(Instance))^ := Value else
+    TypInfo.SetFloatProp(Instance,@self,value);
 end;
 
 function TPropInfo.GetDoubleProp(Instance: TObject): double;
 begin
-  result := TypInfo.GetFloatProp(Instance,@self);
+  if GetterIsField then
+    result := PDouble(GetterAddr(Instance))^ else
+    result := TypInfo.GetFloatProp(Instance,@self);
+end;
+
+procedure TPropInfo.SetDoubleProp(Instance: TObject; Value: Double);
+begin
+  if SetterIsField then
+    PDouble(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PDouble(GetterAddr(Instance))^ := Value else
+    TypInfo.SetFloatProp(Instance,@self,value);
 end;
 
 function TPropInfo.GetFloatProp(Instance: TObject): double;
@@ -21434,7 +21606,9 @@ end;
 
 procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
 begin
-  TypInfo.SetVariantProp(Instance,@self,Value);
+  if (SetProc=0) and GetterIsField then
+    PVariant(GetterAddr(Instance))^ := Value else
+    TypInfo.SetVariantProp(Instance,@self,Value);
 end;
 {$endif}
 
@@ -21467,8 +21641,8 @@ begin
     end;
   with PropType^{$ifndef FPC}^{$endif} do
   if Kind=tkClass then
-    Result := PPtrInt(P)^ else
-    case OrdType of
+    result := PPtrInt(P)^ else
+    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
     otSByte: result := PShortInt(P)^;
     otSWord: result := PSmallInt(P)^;
     otSLong: result := PInteger(P)^;
@@ -21504,10 +21678,13 @@ begin
   with PropType^^ do
   if Kind=tkClass then
     PPtrInt(P)^ := Value else
-    case OrdType of
-    otSByte,otUByte: PByte(P)^ := Value;
-    otSWord,otUWord: PWord(P)^ := Value;
-    otSLong,otULong: PInteger(P)^ := Value;
+    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
+    otSByte: PShortInt(P)^ := Value;
+    otSWord: PSmallInt(P)^ := Value;
+    otSLong: PInteger(P)^ := Value;
+    otUByte: PByte(P)^ := Value;
+    otUWord: PWord(P)^ := Value;
+    otULong: PCardinal(P)^ := Value;
     end;
 end;
 
@@ -21730,6 +21907,15 @@ begin // faster code by AB
   end;
 end;
 
+procedure TPropInfo.SetCurrencyProp(Instance: TObject; Value: Currency);
+begin
+  if SetterIsField then
+    PCurrency(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PCurrency(GetterAddr(Instance))^ := Value else
+    SetFloatProp(Instance,value);
+end;             
+
 function TPropInfo.GetDoubleProp(Instance: TObject): double;
 type // function(Instance: TObject) trick does not work with CPU64 :(
   TGetProc = function: double of object;
@@ -21751,6 +21937,15 @@ begin // faster code by AB
       result := TGetProc(Call) else
       result := TIndexedGetProc(Call)(Index);
   end;
+end;
+
+procedure TPropInfo.SetDoubleProp(Instance: TObject; Value: Double);
+begin
+  if SetterIsField then
+    PDouble(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PDouble(GetterAddr(Instance))^ := Value else
+    SetFloatProp(Instance,value);
 end;
 
 function TPropInfo.GetFloatProp(Instance: TObject): double;
@@ -39387,11 +39582,16 @@ begin
 end;
 
 class procedure TInterfaceFactory.RegisterInterfaces(const aInterfaces: array of PTypeInfo);
+{$ifdef HASINTERFACERTTI}
 var i: integer;
 begin
   for i := 0 to high(aInterfaces) do
     Get(aInterfaces[i]);
 end;
+{$else}
+begin // in fact, TInterfaceFactoryGenerated.RegisterInterface() should do it
+end;
+{$endif}
 
 class function TInterfaceFactory.Get(const aGUID: TGUID): TInterfaceFactory;
 type TGUID32 = packed record a,b,c,d: integer; end; // brute force optimization
@@ -42633,4 +42833,4 @@ end.
 
 
 
-
+

@@ -699,8 +699,6 @@ end;
 procedure TDDDRepositoryRestFactory.AggregateToTable(
   aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
 var i: integer;
-    Value: RawUTF8;
-    wasString: boolean;
 begin
   ComputeMapping;
   if aDest=nil then
@@ -711,32 +709,23 @@ begin
   if aAggregate<>nil then
     for i := 0 to high(fAggregateProp) do
       if fAggregateToTable[i]<>nil then
-      with fAggregateProp[i] do begin
-        GetValueVar(Flattened(aAggregate),false,Value,@wasString);
-        fAggregateToTable[i].SetValueVar(aDest,Value,wasString);
-      end;
+        fAggregateProp[i].CopyProp(aAggregate,fAggregateToTable[i],aDest);
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateFromTable(
   aSource: TSQLRecord; aAggregate: TPersistent);
 var i: integer;
-    Value: RawUTF8;
-    wasString: boolean;
 begin
   ComputeMapping;
   if aAggregate=nil then
     raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
-  if aSource=nil then begin
-    AggregateClear(aAggregate);
-    exit;
-  end;
-  for i := 0 to high(fAggregateProp) do begin
-    if fAggregateToTable[i]<>nil then
-      fAggregateToTable[i].GetValueVar(aSource,false,Value,@wasString) else
-      Value := '';
-    with fAggregateProp[i] do
-      SetValueVar(Flattened(aAggregate),Value,wasString);
-  end;
+  if aSource=nil then
+    AggregateClear(aAggregate) else
+    for i := 0 to high(fAggregateProp) do
+      if fAggregateToTable[i]<>nil then
+        fAggregateToTable[i].CopyProp(aSource,fAggregateProp[i],aAggregate) else
+        with fAggregateProp[i] do
+          SetValue(Flattened(aAggregate),nil,false);
 end;
 
 function TDDDRepositoryRestFactory.GetImplementationName: string;
