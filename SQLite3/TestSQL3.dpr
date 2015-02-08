@@ -119,12 +119,12 @@ uses
   SynSM in '..\SynSM.pas',
   {$endif CPU64}
   mORMotWrappers in 'mORMotWrappers.pas',
+  {$endif FPC}
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
   dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
-  {$endif FPC}
   {$endif NOVARIANTS}
   {$endif LVCL}
   {$ifdef MSWINDOWS}
@@ -182,4 +182,4 @@ begin
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
-end.
+end.
