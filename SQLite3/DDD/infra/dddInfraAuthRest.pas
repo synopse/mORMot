@@ -319,9 +319,9 @@ constructor TDDDAuthenticationRestFactoryAbstract.Create(aRest: TSQLRest;
   aImplementationClass: TDDDAuthenticationClass;
   aOwner: TDDDRepositoryRestManager);
 begin
-  inherited Create(aOwner,
+  inherited Create(
     IDomAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordAuthInfo,
-    ['Logon','LogonName']);
+    ['Logon','LogonName'],aOwner);
 end;
 
 { TDDDAuthenticationRestFactorySHA256 }

@@ -9239,8 +9239,8 @@ begin
   // run tests over an in-memory SQLite3 external database (much faster than file)
   DeleteFile('extdata.db3');
   fProperties := TSQLDBSQLite3ConnectionProperties.Create('extdata.db3','','','');
-  fProperties.ExecuteNoResult('PRAGMA synchronous=0',[]);
-  fProperties.ExecuteNoResult('PRAGMA locking_mode=EXCLUSIVE',[]);
+  (fProperties.MainConnection as TSQLDBSQLite3Connection).Synchronous := smOff;
+  (fProperties.MainConnection as TSQLDBSQLite3Connection).LockingMode := lmExclusive;
   Check(VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal').
     MapField('ID','Key').
     MapField('YearOfDeath','YOD').

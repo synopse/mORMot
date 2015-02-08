@@ -146,7 +146,10 @@ type
 
   /// which kind of process is about to take place after an ORMBegin()
   TCQRSQueryAction = (
-    qaNone, qaSelect, qaGet, qaCommandDirect, qaCommandOnSelect, qaCommit);
+    qaNone,
+    qaSelect, qaGet,
+    qaCommandDirect, qaCommandOnSelect, 
+    qaCommit);
 
   /// define one or several process to take place after an ORMBegin()
   TCQRSQueryActions = set of TCQRSQueryAction;
@@ -284,10 +287,18 @@ type
     // - by default, field names should match on both sides - but you can
     // specify a custom field mapping as TSQLRecord,Aggregate pairs
     // - any missing or unexpected field on any side will just be ignored
-    constructor Create(aOwner: TDDDRepositoryRestManager;
+    constructor Create(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
       aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
-      const TableAggregatePairs: array of RawUTF8); reintroduce; overload;
+      const TableAggregatePairs: array of RawUTF8;
+      aOwner: TDDDRepositoryRestManager=nil); reintroduce; overload;
+    /// initialize the DDD Aggregate factory using a mORMot ORM class
+    // - this overloaded constructor does not expect any custom fields
+    // - any missing or unexpected field on any side will just be ignored
+    constructor Create(
+      const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
+      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+      aOwner: TDDDRepositoryRestManager=nil); reintroduce; overload;
     /// finalize the factory
     destructor Destroy; override;
     /// set a local I*Query or I*Command instance corresponding to this factory
@@ -347,6 +358,8 @@ type
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
     function ORMGetNextAggregate(aAggregate: TPersistent; aRewind: boolean=false): TCQRSResult;
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
+    function ORMSelectCount(ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+      out aResultCount: integer; ForcedBadRequest: boolean=false): TCQRSResult;
     // will log any error on the owner Rest server
     procedure AfterInternalORMResult; override;
   public
@@ -355,6 +368,12 @@ type
     constructor Create(aFactory: TDDDRepositoryRestFactory); reintroduce; virtual;
     /// finalize the used memory
     destructor Destroy; override;
+    /// return the number all currently selected aggregates
+    // - returns 0 if no select was available, 1 if it was a ORMGetSelectOne(),
+    // or the number of items after a ORMGetSelectAll()
+    // - this is a generic operation which would work for any class
+    // - if you do not need this method, just do not declare it in I*Command
+    function GetCount: integer; virtual;
   published
     /// access to the associated rfactory
     property Factory: TDDDRepositoryRestFactory read fFactory;
@@ -372,6 +391,7 @@ type
     fBatchAutomaticTransactionPerRow: cardinal;
     fBatchOptions: TSQLRestBatchOptions;
     fBatchResults: TIDDynArray;
+    procedure ORMEnsureBatchExists;
     // this default implementation will check the status vs command,
     // call fORM.FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
@@ -394,6 +414,10 @@ type
     // - this is a generic operation which would work for any class
     // - if you do not need this method, just do not declare it in I*Command
     function Delete: TCQRSResult; virtual;
+    /// perform a deletion on all currently selected aggregates
+    // - this is a generic operation which would work for any class
+    // - if you do not need this method, just do not declare it in I*Command
+    function DeleteAll: TCQRSResult; virtual;
     /// write all pending changes prepared by Add/UpdatePassword/Delete methods
     // - will process the current fORM using the fCommand
     function Commit: TCQRSResult; virtual;
@@ -541,10 +565,10 @@ end;
 
 { TDDDRepositoryRestFactory }
 
-constructor TDDDRepositoryRestFactory.Create(aOwner: TDDDRepositoryRestManager;
+constructor TDDDRepositoryRestFactory.Create(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
-  const TableAggregatePairs: array of RawUTF8);
+  const TableAggregatePairs: array of RawUTF8; aOwner: TDDDRepositoryRestManager);
 begin
   inherited Create;
   fOwner := aOwner;
@@ -572,6 +596,14 @@ begin
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
   Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self]);
+end;
+
+constructor TDDDRepositoryRestFactory.Create(const aInterface: TGUID;
+  aImplementation: TDDDRepositoryRestClass; aAggregate: TPersistentClass;
+  aRest: TSQLRest; aTable: TSQLRecordClass;
+  aOwner: TDDDRepositoryRestManager);
+begin
+  Create(aInterface,aImplementation,aAggregate,aRest,aTable,[],aOwner);
 end;
 
 destructor TDDDRepositoryRestFactory.Destroy;
@@ -605,8 +637,6 @@ var i,ndx: integer;
     ORMProps: TSQLPropInfoObjArray;
 begin
   ORMProps := fTable.RecordProps.Fields.List;
-  if fPropsMapping.MappingVersion=fPropsMappingVersion then
-    exit;
   for i := 0 to fAggregateRTTI.Count-1 do begin
     fAggregateProp[i] := fAggregateRTTI.List[i] as TSQLPropInfoRTTI;
     ndx := fPropsMapping.ExternalToInternalIndex(fAggregateProp[i].Name);
@@ -654,7 +684,8 @@ procedure TDDDRepositoryRestFactory.AggregateToJSON(aAggregate: TPersistent;
   W: TJSONSerializer; ORMMappedFields: boolean; aID: TID);
 var i: integer;
 begin
-  ComputeMapping;
+  if fPropsMapping.MappingVersion<>fPropsMappingVersion then
+    ComputeMapping;
   if aAggregate=nil then begin
     W.AddShort('null');
     exit;
@@ -700,7 +731,8 @@ procedure TDDDRepositoryRestFactory.AggregateToTable(
   aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
 var i: integer;
 begin
-  ComputeMapping;
+  if fPropsMapping.MappingVersion<>fPropsMappingVersion then
+    ComputeMapping;
   if aDest=nil then
     raise EDDDRepository.CreateUTF8(self,'%.AggregateToTable(%,%,%=nil)',
       [self,aAggregate,aID,fTable]);
@@ -716,7 +748,8 @@ procedure TDDDRepositoryRestFactory.AggregateFromTable(
   aSource: TSQLRecord; aAggregate: TPersistent);
 var i: integer;
 begin
-  ComputeMapping;
+  if fPropsMapping.MappingVersion<>fPropsMappingVersion then
+    ComputeMapping;
   if aAggregate=nil then
     raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
   if aSource=nil then
@@ -760,8 +793,8 @@ begin
   if GetFactoryIndex(aInterface)>=0 then
     raise EDDDRepository.CreateUTF8(nil,'Duplicated GUID for %.AddFactory(%,%,%)',
       [self,GUIDToShort(aInterface),aImplementation,aAggregate]);
-  result := TDDDRepositoryRestFactory.Create(self,
-    aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs);
+  result := TDDDRepositoryRestFactory.Create(
+    aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs,self);
   ObjArrayAdd(fFactory,result);
   aRest.LogClass.Add.Log(sllDDDInfo,'Added factory % to %',[result,self]);
 end;
@@ -799,7 +832,7 @@ constructor TDDDRepositoryRestQuery.Create(
   aFactory: TDDDRepositoryRestFactory);
 begin
   fFactory := aFactory;
-  fORM := fFactory.fTable.Create;
+  fORM := fFactory.Table.Create;
 end;
 
 destructor TDDDRepositoryRestQuery.Destroy;
@@ -843,6 +876,34 @@ begin
     ORMSuccessIf(ORM.FillPrepare(Factory.Rest,ORMWhereClauseFmt,[],Bounds),cqrsNotFound);
 end;
 
+function TDDDRepositoryRestQuery.ORMSelectCount(
+  ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+  out aResultCount: integer; ForcedBadRequest: boolean): TCQRSResult;
+var tmp: Int64;
+begin
+  ORMBegin(qaNone,result); // qaNone and not qaSelect which would fill ORM
+  if ForcedBadRequest then
+    ORMResult(cqrsBadRequest) else
+    if Factory.Rest.OneFieldValue(
+        Factory.Table,'count(*)',ORMWhereClauseFmt,Args,Bounds,tmp) then begin
+       aResultCount := tmp;
+       ORMResult(cqrsSuccess)
+    end else
+      ORMResult(cqrsNotFound);
+end;
+
+function TDDDRepositoryRestQuery.GetCount: integer;
+var dummy: TCQRSResult;
+begin
+  if not ORMBegin(qaGet,dummy) then
+    result := 0 else
+    if ORM.FillTable<>nil then
+      result := ORM.FillTable.RowCount else
+      if ORM.ID=0 then
+        result := 0 else
+        result := 1;
+end;
+
 function TDDDRepositoryRestQuery.ORMGetAggregate(
   aAggregate: TPersistent): TCQRSResult;
 begin
@@ -873,11 +934,11 @@ begin
     SetLength(res,ORM.FillTable.RowCount);
     i := 0;
     if ORM.FillRewind then
-    repeat
+    while ORM.FillOne do begin
       res[i] := Factory.AggregateCreate;
       Factory.AggregateFromTable(ORM,res[i]);
       inc(i);
-    until not ORM.FillOne;
+    end;
     if i=length(res) then
       ORMResult(cqrsSuccess) else begin
       ObjArrayClear(res);
@@ -885,6 +946,7 @@ begin
     end;
   end;
 end;
+
 
 
 { TDDDRepositoryRestCommand }
@@ -908,6 +970,24 @@ begin
     ORMPrepareForCommit(soDelete);
 end;
 
+function TDDDRepositoryRestCommand.DeleteAll: TCQRSResult;
+var i: integer;
+begin
+  if ORMBegin(qaCommandOnSelect,result) then
+    if ORM.FillTable=nil then
+      ORMPrepareForCommit(soDelete) else
+      if fState<qsQuery then
+        ORMResult(cqrsNoPriorQuery) else begin
+        ORMEnsureBatchExists;
+        for i := 1 to ORM.FillTable.RowCount do
+          if fBatch.Delete(ORM.FillTable.IDColumnHiddenValue(i))<0 then begin
+            ORMResult(cqrsDataLayerError);
+            exit;
+          end;
+        ORMResult(cqrsSuccess);
+      end;
+end;
+
 function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TPersistent): TCQRSResult;
 begin
   if ORMBegin(qaCommandDirect,result) then begin
@@ -922,6 +1002,13 @@ begin
     Factory.AggregateToTable(aAggregate,ORM.ID,ORM);
     ORMPrepareForCommit(soUpdate);
   end;
+end;
+
+procedure TDDDRepositoryRestCommand.ORMEnsureBatchExists;
+begin
+  if fBatch=nil then
+    fBatch := TSQLRestBatch.Create(Factory.Rest,Factory.Table,
+      fBatchAutomaticTransactionPerRow,fBatchOptions);
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
@@ -940,14 +1027,14 @@ begin
       exit;
     end;
   end;
-  msg := ORM.FilterAndValidate(Factory.Rest);
-  if msg<>'' then begin
-    ORMResultMsg(cqrsDataLayerError,msg);
-    exit;
+  if aCommand in [soUpdate,soInsert] then begin
+    msg := ORM.FilterAndValidate(Factory.Rest);
+    if msg<>'' then begin
+      ORMResultMsg(cqrsDataLayerError,msg);
+      exit;
+    end;
   end;
-  if fBatch=nil then
-    fBatch := TSQLRestBatch.Create(Factory.Rest,Factory.Table,
-      fBatchAutomaticTransactionPerRow,fBatchOptions);
+  ORMEnsureBatchExists;
   ndx := -1;
   case aCommand of
   soInsert: ndx := fBatch.Add(ORM,true);
