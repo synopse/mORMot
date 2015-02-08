@@ -13074,18 +13074,20 @@ This unit will do nothing when compiled under {\i Delphi}: it will register the 
 The rest of your code would be untouched, and could be shared between Delphi and FPC.
 If you do not modify the {\f1\fs20 interface} methods definition, this generation step could be safely bypassed.
 We hope that in a close future, the FPC team would fix the @http://bugs.freepascal.org/view.php?id=26774 issue, but the ticket seems pretty inactive since its creation.
-:  Writing your project for FPC
+:143  Writing your project for FPC
 If you want your application to compile with FPC, some little patterns should be followed.
 In all your source code file, the easiest is to including the following {\f1\fs20 mORMot} file, which will define all compiler options and conditionals as expected:
 !{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 Then in your {\f1\fs20 .dpr} file, you should write:
 !uses
+!  {$ifdef FPC} // we may be on Kylix or upcoming Delphi for Linux
 !  {$ifdef Linux}
 !  // if you use threads
 !  cthreads,
 !  // widestring manager for Linux if needed !!
 !  // could also be put in another unit ... but doc states: as early as possible
 !  cwstring, // optional
+!  {$endif}
 !  {$endif}
 For instance a minimal FPC project to run the regression tests may be:
 !program LinuxSynTestFPCLinuxi386;
@@ -13101,7 +13103,7 @@ For instance a minimal FPC project to run the regression tests may be:
 In your user code, ensure you do not directly link to the {\f1\fs20 Windows} unit, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}. You could find in {\f1\fs20 SynFPCTypInfo.pas} and {\f1\fs20 SynFPCLinux.pas} some low-level functions dedicated to FPC and Linux compilation, to be used with legacy units - your new code should better rely on higher level functions and classes.
 If you rely on {\i mORMot} classes and types, e.g. use {\f1\fs20 RawUTF8} for all your {\f1\fs20 string} process in the business logic, and do not use Delphi-specific features (like generics, or new syntax sugar), it would be very easy to let your application compile with FPC.
 In practice, we use Delphi as our main IDE, then switch to Lazarus under a small integrated {\i Linux VirtualBox}, running a low resource {\i XFCE} desktop. We defined the {\i Windows} folder containing the source as a {\i VirtualBox} shared folder, so that we are able to compile, debug and test the {\i Linux} version of any executable in native {\i Linux}, on the same computer, from the very same sources. We found out that {\i Lazarus} debugging was pretty smooth on {\i Linux} - GDB is smoother on {\i Linux} than {\i Windows}, by the way. Then switching from {\i Delphi/Windows} to {\i Lazarus/Linux} is direct and natural, especially when the {\i VirtualBox} "Integrated Desktop" feature is enabled.
-:  Linux installation tips
+:142  Linux installation tips
 Here are a few informal notes about getting running a FPC/Lazarus virtual machine running {\i XUbuntu}, on a {\i Windows} host. They are published as a general guideline, and we would not provide any reference procedure, nor support it.
 - Install the latest {\i VirtualBox} version from @http://www.virtualbox.org/ to Windows;
 - Download the latest {\f1\fs20 .iso} version published at @http://xubuntu.org/ or any other place - we use XFCE since it is a very lightweight desktop, perfect to run {\i Lazarus}, and we selected an Ubuntu LTS revision (14.04 at the time of this writing), which would be the same used on Internet servers;
@@ -13133,6 +13135,72 @@ $ svn cleanup
 $ svn update
 - On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
 If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
+For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on Linux, please execute:
+$ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
+Also not that in order to execute the regression tests, you would need to download some files from the command line:
+$ wget https://api.github.com/users/zendframework/repos
+$ mv repos zendframework.json
+$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/interpolation.json
+$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/comments.json
+$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/sections.json
+$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/inverted.json
+$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/partials.json
+If it may be for any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+$user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
+$   linux-gate.so.1 =>  (0xb774c000)
+$   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
+$   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
+$   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
+$   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
+$   /lib/ld-linux.so.2 (0xb774d000)
+
+: CrossKylix support
+The framework source code can also be cross-compiled under Delphi into a @*Linux@ executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for Linux) compiler into the Delphi Windows IDE.
+{\i CrossKylix} has indeed several known drawbacks:
+- It is a dead project, but an alive product. It still works!
+- You can not buy it any more. {\i Kylix} 3 was shipped with Delphi 7.
+- You need an actual {\i Kylix} CD (or an ISO image) to install it, since {\i CrossKylix} is just a wrapper around the official compiler, to let it run under Windows.
+- Visual applications (based on the CLX framework - the predecessor of FMX) may still compile, but should not be used. But for server applications, it is still a pretty viable solution.
+- The debugger and IDE is unusable. But thanks to our {\f1\fs20 SynLog.pas}, you can debug your applications, with a full stack trace in the log, in case of any exception.
+We added {\i CrossKylix} support for several reasons:
+- We use it since years, with great success, so we know it better than FPC.
+- It has still a better compiler than FPC, e.g. for the RTTI we need on interfaces, or even for executable size and memory use.
+- Its compilation is instant - whereas FPC is long to compile.
+- It supports {\f1\fs20 FastMM4}, which performs better than the FPC memory manager, from our tests.
+- Resulting executables, for {\i mORMot} purpose, are faster than FPC - timing based on the regression tests.
+- If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
+- There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code would be the same than Delphi and FPC.
+- There is a Linux compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
+Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for Linux, directly from your {\i Delphi} IDE. Then you need an actual Linux system to test it - please check the @142@.
+A minimal console application which would compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
+!program Test;
+!
+!{$APPTYPE CONSOLE}
+!
+!uses
+!  FastMM4, // optional - only for CrossKylix or Delphi < 2006
+!  mORMotSelfTests;
+!
+!begin
+!  SQLite3ConsoleTests;
+!end.
+Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, you should never use the {\f1\fs20 Windows} unit in your server code, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}.
+We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your Linux.
+On a 32 bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
+$ sudo apt-get install sqlite3
+For a 64 bit system, you need to download and install manually packages for both modes:
+$ sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
+You could try to get the latest {\f1\fs20 .deb} from @https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0 \line If you want to dowwnload and install manually a {\f1\fs20 .deb} for {\f1\fs20 x86}, please install both {\i i386} and {\i amd64} revisions with the same exact version at once, otherwise {\f1\fs20 dpkg} would complain.
+If it may be of any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i CrossKylix} compiled executable:
+$ user@server:~$ ldd Test
+$       linux-gate.so.1 =>  (0xf77be000)
+$       libz.so.1 => /usr/lib32/libz.so.1 (0xf779b000)
+$       librt.so.1 => /lib/i386-linux-gnu/librt.so.1 (0xf7792000)
+$       libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xf7775000)
+$       libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xf7770000)
+$       libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xf75c1000)
+$       /lib/ld-linux.so.2 (0xf77bf000)
+As you can see, there is a very few dependencies - then same as FPC's executable in fact, with the addition of the external {\f1\fs20 libsqlite3.so.0}, which is statically linked to FPC's version.
 : Upgrading from a 1.17 revision
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.

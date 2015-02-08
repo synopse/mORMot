@@ -5794,9 +5794,8 @@ type
       ! while Rec.FillOne do
       !   dosomethingwith(Rec);
       ! if Rec.FillRewind then
-      ! repeat
+      ! while Rec.FillOne do
       !   dosomeotherthingwith(Rec);
-      ! until not Rec.FillOne;
     }
     function FillRewind: boolean;
     {/ close any previous FillPrepare..FillOne loop
@@ -32658,7 +32657,8 @@ begin
   Ints.Add(pointer(aIndex));
 end;
 
-procedure TSQLRestStorageInMemory.DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+procedure TSQLRestStorageInMemory.DoNothingEvent(
+  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
 begin
 end;
 
@@ -33015,7 +33015,7 @@ begin
           ResCount := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
             DoNothingEvent,nil,0,0);
           case Stmt.Where[0].Operator of
-          opEqualTo: SetCount(ResCount);
+          opEqualTo:    SetCount(ResCount);
           opNotEqualTo: SetCount(TableRowCount(fStoredClass)-ResCount);
           end;
         end;
