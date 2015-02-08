@@ -5000,7 +5000,15 @@ constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
     i: integer;
 begin
+  {$ifdef MSWINDOWS}
   fHandle := SafeLoadLibrary(LibraryName);
+  {$else}
+  {$ifdef FPC}
+  fHandle := LoadLibrary(LibraryName);
+  {$else}
+  fHandle := LoadLibrary(pointer(LibraryName));
+  {$endif}
+  {$endif}
   if fHandle=0 then
     raise ESQLite3Exception.CreateFmt('Unable to load %s - %s',
       [LibraryName,SysErrorMessage(GetLastError)]);
@@ -5036,4 +5044,4 @@ initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.

@@ -380,11 +380,13 @@ var
 
 procedure Initialize;
 var c: TCountryIdentifier;
+    ps: PAnsiChar; // circumvent FPC compilation issue
 begin
   with COUNTRY_ISONUM_ORDERED do begin
     for c := ccFirst to high(c) do begin
       Values[c] := COUNTRY_ISONUM[c];
-      COUNTRY_ISO2[c] := PWord(@GetEnumName(TypeInfo(TCountryIdentifier),ord(c))^[3])^;
+      ps := pointer(GetEnumName(TypeInfo(TCountryIdentifier),ord(c)));
+      COUNTRY_ISO2[c] := PWord(ps+3)^;
     end;
     FillIncreasing(@Indexes,0,length(Indexes));
     QuickSortInteger(@Values,@Indexes,0,length(Values)-1);

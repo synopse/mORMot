@@ -66,9 +66,11 @@ unit SynSQLite3Static;
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
   To retrieve and install the latest sqlite3 debian package on Ubuntu:
-  - retrieve latest .deb from https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0
-  - install e.g. as sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
-
+  - retrieve latest .deb from https://launchpad.net/ubuntu/...
+  - for a 32 bit system, install e.g. as
+    sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
+  - for a 64 bit system, you need to download and install both packages, e.g.
+    sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
