@@ -657,6 +657,7 @@ unit SynCommons;
   - added TSynFPUException class to allow per-method customization of the FPU
     exception mapping: to be used e.g. when mixing code between external
     libraries and Delphi code
+  - added dedicated TSynValidateNonVoidText class
   - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
     MaxUpperCount properties to TSynValidateText class
   - if DOPATCHTRTL is defined, will enable asm-optimized RecordClear and
@@ -4357,6 +4358,10 @@ procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 // an existing T*ObjArray
 procedure ObjArrayClear(var aObjArray);
 
+/// wrapper to release all items stored in an array of T*ObjArray dynamic array
+// - e.g. aObjArray may be defined as "array of array of TSynFilter"
+procedure ObjArrayObjArrayClear(var aObjArray);
+
 
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
@@ -7098,7 +7103,8 @@ type
     // - if an instance with the same class type and parameters is already
     // registered, will call aInstance.Free and return the exising instance
     // - if there is no similar instance, will add it to the list and return it
-    function AddOnce(var aObjArray: TSynFilterOrValidateObjArray): TSynFilterOrValidate;
+    function AddOnce(var aObjArray: TSynFilterOrValidateObjArray;
+      aFreeIfAlreadyThere: boolean=true): TSynFilterOrValidate;
   public
     /// initialize the filter or validation instance
     constructor Create(const aParameters: RawUTF8='');
@@ -7172,22 +7178,21 @@ type
     property ForbiddenDomains: RawUTF8 read fForbiddenDomains write fForbiddenDomains;
   end;
 
-  {/ grep-like case-sensitive pattern validation of a Record field content
-     (typicaly a TSQLRecord)
-    - parameter is NOT JSON encoded, but is some basic grep-like pattern
-    - ?	   	Matches any single characer
-    - *	   	Matches any contiguous characters
-    - [abc]  	Matches a or b or c at that position
-    - [^abc]	Matches anything but a or b or c at that position
-    - [!abc]	Matches anything but a or b or c at that position
-    - [a-e]  	Matches a through e at that position
-    - [abcx-z]  Matches a or b or c or x or y or or z, as does [a-cx-z]
-    - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
-    - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
-      match 'this as a test' nor 'this is a zest'
-    - pattern check IS case sensitive (TSynValidatePatternI is not)
-    - this class is not as complete as PCRE regex for example,
-      but code overhead is very small }
+  /// grep-like case-sensitive pattern validation of a Record field content
+  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  // - ?	   	Matches any single characer
+  // - *	   	Matches any contiguous characters
+  // - [abc]  Matches a or b or c at that position
+  // - [^abc]	Matches anything but a or b or c at that position
+  // - [!abc]	Matches anything but a or b or c at that position
+  // - [a-e]  Matches a through e at that position
+  // - [abcx-z] Matches a or b or c or x or y or or z, as does [a-cx-z]
+  // - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
+  // - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
+  //   match 'this as a test' nor 'this is a zest'
+  // - pattern check IS case sensitive (TSynValidatePatternI is not)
+  // - this class is not as complete as PCRE regex for example,
+  //   but code overhead is very small
   TSynValidatePattern = class(TSynValidate)
   public
     /// perform the pattern validation to the specified value
@@ -7204,22 +7209,30 @@ type
     - same as TSynValidatePattern, but is NOT case sensitive }
   TSynValidatePatternI = class(TSynValidatePattern);
 
+  /// text validation to ensure that to any text field would not be ''
+  TSynValidateNonVoidText = class(TSynValidate)
+  public
+    /// perform the non void text validation action to the specified value
+    function Process(aFieldIndex: integer; const Value: RawUTF8;
+      var ErrorMsg: string): boolean; override;
+  end;
+
 {$M+} // to have existing RTTI for published properties
-  /// text validation to be applied to a Record field content
-  // (typicaly a TSQLRecord)
-  // - default MinLength value is 1, MaxLength is maxInt: so you can specify a
-  // blank TSynValidateText.Create to avoid any void textual field
+  /// text validation to be applied to any Record field content 
+  // - default MinLength value is 1, MaxLength is maxInt: so a blank
+  // TSynValidateText.Create('') is the same as TSynValidateNonVoidText
   // - MinAlphaCount, MinDigitCount, MinPunctCount, MinLowerCount and
   // MinUpperCount allow you to specify the minimal count of respectively
   // alphabetical [a-zA-Z], digit [0-9], punctuation [_!;.,/:?%$="#@(){}+-*],
   // lower case or upper case characters
   TSynValidateText = class(TSynValidate)
   private
-    /// used to store internal the associated validation properties
+    /// used to store all associated validation properties by index
     fProps: array[0..15] of cardinal;
   protected
     /// use sInvalidTextChar resourcestring to create a translated error message
-    function ErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer): string;
+    procedure SetErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer;
+      var result: string);
     /// decode "MinLength", "MaxLength", and other parameters into fProps[]
     procedure SetParameters(Value: RawUTF8); override;
   public
@@ -32630,6 +32643,17 @@ begin
   end;
 end;
 
+procedure ObjArrayObjArrayClear(var aObjArray);
+var i: integer;
+    a: TPointerDynArray absolute aObjArray;
+begin
+  if a<>nil then begin
+    for i := 0 to length(a)-1 do
+      ObjArrayClear(a[i]);
+    a := nil;
+  end;
+end;
+
 
 { TObjectHash }
 
@@ -36116,15 +36140,16 @@ begin
   fParameters := Value;
 end;
 
-function TSynFilterOrValidate.AddOnce(
-  var aObjArray: TSynFilterOrValidateObjArray): TSynFilterOrValidate;
+function TSynFilterOrValidate.AddOnce(var aObjArray: TSynFilterOrValidateObjArray;
+  aFreeIfAlreadyThere: boolean): TSynFilterOrValidate;
 var i: integer;
 begin
   if self<>nil then begin
     for i := 0 to length(aObjArray)-1 do
       if (PPointer(aObjArray[i])^=PPointer(self)^) and
          (aObjArray[i].fParameters=fParameters) then begin
-        Free;
+        if aFreeIfAlreadyThere then
+          Free;
         result := aObjArray[i];
         exit;
       end;
@@ -36170,7 +36195,7 @@ end;
 
 procedure TSynFilterTrim.Process(aFieldIndex: integer; var Value: RawUTF8);
 begin
-  Value := trim(Value);
+  Value := Trim(Value);
 end;
 
 
@@ -36240,7 +36265,7 @@ begin
 end;
 
 
-{ TSynValidateText }
+{ TSynValidateNonVoidText }
 
 function Character01n(n: integer): string;
 begin
@@ -36250,6 +36275,24 @@ begin
     n := 2;
   result := GetCSVItemString(pointer(string(sCharacter01n)),n);
 end;
+
+procedure InvalidTextLengthMin(min: integer; var result: string);
+begin
+  result := Format(sInvalidTextLengthMin,[1,Character01n(1)]);
+end;
+
+function TSynValidateNonVoidText.Process(aFieldIndex: integer; const Value: RawUTF8;
+  var ErrorMsg: string): boolean;
+begin
+  if Value='' then begin
+    InvalidTextLengthMin(1,ErrorMsg);
+    result := false;
+  end else
+    result := true;
+end;
+
+
+{ TSynValidateText }
 
 constructor TSynValidateText.Create(const aParameters: RawUTF8);
 begin
@@ -36266,8 +36309,8 @@ begin
   inherited Create(aParameters);
 end;
 
-function TSynValidateText.ErrorMsg(fPropsIndex, InvalidTextIndex,
-  MainIndex: integer): string;
+procedure TSynValidateText.SetErrorMsg(fPropsIndex, InvalidTextIndex,
+  MainIndex: integer; var result: string);
 var P: PChar;
 begin
   P := pointer(string(sInvalidTextChar));
@@ -36283,14 +36326,10 @@ function TSynValidateText.Process(aFieldIndex: integer; const Value: RawUTF8;
 var i, L: cardinal;
     Min: array[2..7] of cardinal;
 begin
-  if (fParameters='') and (Value<>'') then begin
-    result := true; // TSynValidateText.Create('') = not void -> fast check
-    exit;
-  end;
   result := false;
   L := Utf8ToUnicodeLength(pointer(Value));
   if L<MinLength then 
-    ErrorMsg := Format(sInvalidTextLengthMin,[MinLength,Character01n(MinLength)]) else
+    InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
     fillchar(Min,sizeof(Min),0);
@@ -36315,11 +36354,11 @@ begin
     end;
     for i := 2 to 7 do
       if Min[i]<fProps[i] then begin
-        ErrorMsg := self.ErrorMsg(i,i,0);
+        SetErrorMsg(i,i,0,ErrorMsg);
         exit;
       end else
       if Min[i]>fProps[i+8] then begin
-        ErrorMsg := self.ErrorMsg(i+8,i,1);
+        SetErrorMsg(i+8,i,1,ErrorMsg);
         exit;
       end;
     if Value<>'' then begin
@@ -36328,7 +36367,7 @@ begin
         i := 0;
         while (i<L) and (Value[i+1]=' ') do inc(i);
         if i>MaxLeftTrimCount then begin
-          ErrorMsg := self.ErrorMsg(0,0,8);
+          SetErrorMsg(0,0,8,ErrorMsg);
           exit;
         end;
       end;
@@ -36337,7 +36376,7 @@ begin
         i := 0;
         while (i<L) and (Value[L-i]=' ') do dec(i);
         if i>MaxRightTrimCount then begin
-          ErrorMsg := self.ErrorMsg(0,0,9);
+          SetErrorMsg(0,0,9,ErrorMsg);
           exit;
         end;
       end;
