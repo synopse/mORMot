@@ -4,6 +4,9 @@
 // at {{time}} using "{{templateName}}" template
 {{/uri}}
 {{^uri}}
+{{#soa.enabled}}
+// - define RTTI for{{#soa.services}} {{interfaceName}}{{/soa.services}}
+{{/soa.enabled}}
 // - generated at {{time}}
 {{/uri}}
 unit {{fileName}};
@@ -54,13 +57,12 @@ implementation
 { TInterfaceFactoryDefinition }
 
 type
-  /// define and manage missing interface RTTI for defined interfaces
+  /// define and manage missing interface RTTI for the following interfaces:
+{{#soa.services}}
+  // - {{interfaceName}}
+{{/soa.services}}
   TInterfaceFactoryDefinition = class(TInterfaceFactoryGenerated)
   protected
-    /// will declare the following types to the interface factory:
-{{#soa.services}}
-    // - {{interfaceName}}
-{{/soa.services}}
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); override;
   end;
 
