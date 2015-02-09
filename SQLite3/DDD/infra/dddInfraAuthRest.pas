@@ -71,7 +71,7 @@ uses
 { ----- Authentication Implementation using SHA-256 dual step challenge }
 
 type
-  /// ORM object to persist authentication information
+  /// ORM object to persist authentication information, i.e. TAuthInfo
   TSQLRecordAuthInfo = class(TSQLRecord)
   protected
     fLogon: RawUTF8;
@@ -348,5 +348,6 @@ class procedure TSQLRecordAuthInfo.InternalDefineModel(
 begin
   AddFilterNotVoidText(['HashedPassword']);
 end;
+
 
 end.

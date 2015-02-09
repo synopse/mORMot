@@ -1917,6 +1917,8 @@ type
   {$endif}
   PTypeInfoDynArray = array of PTypeInfo;
 
+  TClassDynArray = array of TClass;
+
 {$ifdef FPC}
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 {$PACKRECORDS C}
@@ -2548,6 +2550,7 @@ type
     fPropertyIndex: integer;
     fFromRTTI: boolean;
     function GetNameDisplay: string; virtual;
+    function GetNameUnflattened: RawUTF8; virtual;
     /// those two protected methods allow custom storage of binary content
     // as text
     // - default implementation is to use hexa (ToSQL=true) or Base64 encodings
@@ -2568,6 +2571,11 @@ type
     property Name: RawUTF8 read fName;
     /// the property definition Name, afer un-camelcase and translation
     property NameDisplay: string read GetNameDisplay;
+    /// the property definition Name, with full path name if has been flattened
+    // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
+    // full nested class will be returned, e.g. 'Address.Country.Iso' for
+    // the 'Address_Country' flattened property name
+    property NameUnflattened: RawUTF8 read GetNameUnflattened;
     /// the property index in the RTTI
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
@@ -2696,6 +2704,7 @@ type
     fPropType: PTypeInfo;
     fFlattenedProps: PPropInfoDynArray;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
+    function GetNameUnflattened: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
@@ -3252,7 +3261,7 @@ type
   /// how TSQLPropInfoList.Create() would handle the incoming RTTI
   TSQLPropInfoListOptions = set of (
     pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
-    pilSubClassesFlattening);
+    pilSubClassesFlattening, pilSingleHierarchyLevel);
 
   /// handle a read-only list of fields information for published properties
   // - is mainly used by our ORM for TSQLRecord RTTI, but may be used for
@@ -3450,6 +3459,9 @@ function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Ch
 
 /// retrieve the total number of properties for a class, including its parents
 function ClassFieldCountWithParents(ClassType: TClass): integer;
+
+/// retrieve all class hierachy types which have some published properties  
+function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
@@ -4065,7 +4077,10 @@ type
     // - to be set in overridden class procedure
     // TSQLRecord.InternalRegisterCustomProperties() so that it will be common
     // to all database models, for both client and server
-    function SetCustomCollation(FieldIndex: integer; const aCollationName: RawUTF8): boolean;
+    function SetCustomCollation(FieldIndex: integer; const aCollationName: RawUTF8): boolean; overload;
+    /// set a custom SQlite3 text column collation for a specified field
+    // - overloaded method which expects the field to be named
+    function SetCustomCollation(const aFieldName, aCollationName: RawUTF8): boolean; overload;
     /// set a custom SQlite3 text column collation for all RawUTF8 fields
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUTF8,
     // and let the generated SQLite3 file be available outside
@@ -14896,6 +14911,22 @@ begin
   end;
 end;
 
+function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
+procedure InternalAdd(C: TClass; var list: TClassDynArray);
+var P: PClassProp;
+begin
+  if C=nil then
+    exit;
+  InternalAdd(C.ClassParent,list);
+  P := InternalClassProp(C);
+  if (P<>nil) and (P^.PropCount>0) then
+    ObjArrayAdd(list,pointer(C));
+end;
+begin
+  result := nil;
+  InternalAdd(ClassType,result);
+end;
+
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
 begin
   if ClassType<>nil then
@@ -15062,7 +15093,12 @@ end;
 
 function TSQLPropInfo.GetNameDisplay: string;
 begin
-  GetCaptionFromPCharLen(pointer(Name),result);
+  GetCaptionFromPCharLen(pointer(fName),result);
+end;
+
+function TSQLPropInfo.GetNameUnflattened: RawUTF8;
+begin
+  result := fName;
 end;
 
 procedure TSQLPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
@@ -15475,6 +15511,14 @@ begin
   if Instance=nil then
     result := nil else
     result := fPropInfo^.GetFieldAddr(Instance);
+end;
+
+function TSQLPropInfoRTTI.GetNameUnflattened: RawUTF8;
+var i: integer;
+begin
+  result := ShortStringToAnsi7String(fPropInfo^.Name);
+  for i := length(fFlattenedProps)-1 downto 0 do
+    result := ShortStringToAnsi7String(fFlattenedProps[i]^.Name)+'.'+result;
 end;
 
 function TSQLPropInfoRTTI.Flattened(Instance: TObject): TObject;
@@ -17601,7 +17645,8 @@ var P: PPropInfo;
 begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
-  InternalAddParentsFirst(aClassType.ClassParent,aFlattenedProps);
+  if not (pilSingleHierarchyLevel in fOptions) then
+    InternalAddParentsFirst(aClassType.ClassParent,aFlattenedProps);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     if (P^.PropType^.Kind=tkClass) and
        (P^.PropType^.ClassSQLFieldType in [sftObject,sftUnknown]) then begin
@@ -17621,7 +17666,8 @@ var P: PPropInfo;
 begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
-  InternalAddParentsFirst(aClassType.ClassParent);
+  if not (pilSingleHierarchyLevel in fOptions) then
+    InternalAddParentsFirst(aClassType.ClassParent);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
       pilRaiseEORMExceptionIfNotHandled in fOptions,nil));
@@ -36760,6 +36806,11 @@ begin
       SetLength(fCustomCollation,Fields.Count);
     fCustomCollation[FieldIndex] := aCollationName;
   end;
+end;
+
+function TSQLRecordProperties.SetCustomCollation(const aFieldName, aCollationName: RawUTF8): boolean;
+begin
+  result := SetCustomCollation(Fields.IndexByNameOrExcept(aFieldName),aCollationName);
 end;
 
 procedure TSQLRecordProperties.SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);

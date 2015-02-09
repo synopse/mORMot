@@ -88,7 +88,7 @@ type
 
   TCountryIsoAlpha2 = type RawUTF8;
   TCountryIsoAlpha3 = type RawUTF8;
-  TCountryIsoNumeric = type cardinal;
+  TCountryIsoNumeric = type word;
 
   /// Country object
   // - includes conversion methods for ISO 3166-1 alpha-2/alpha-3/numeric codes

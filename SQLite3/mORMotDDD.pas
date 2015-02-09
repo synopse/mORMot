@@ -283,6 +283,32 @@ type
     function GetTableName: string;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
+    /// will compute the ORM TSQLRecord* source code type definitions
+    // corresponding to DDD aggregate objects into a a supplied file name
+    // - will generate one TSQLRecord* per aggregate class level, following the
+    // inheritance hierarchy
+    // - dedicated DDD types will be translated into native ORM types (e.g. RawUTF8)
+    // - if no file name is supplied, it will generate a dddsqlrecord.inc file
+    // in the executable folder
+    // - could be used as such:
+    // ! TDDDRepositoryRestFactory.ComputeSQLRecord([TPersonContactable,TAuthInfo]);
+    // - once created, you may refine the ORM definition, by adding
+    // ! ...  read f.... write f... stored AS_UNIQUE;
+    // for fields which should be unique, and/or
+    // ! ... read f... write f... index #;
+    // to specify a field width for SQL storage which requires it, and/or define
+    // !protected
+    // !  class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+    // to add some ORM-level filters/validators, or low-level :
+    // !class procedure TSQLRecordMyAggregate.InternalDefineModel(
+    // !  Props: TSQLRecordProperties);
+    // !begin
+    // !  AddFilterNotVoidText(['HashedPassword']);
+    // !  Props.SetCustomCollation('Field','BINARY');
+    // !  Props.AddFilterOrValidate('Email',TSynValidateEmail.Create);
+    // !end;
+    class procedure ComputeSQLRecord(const aAggregate: array of TPersistentClass;
+      DestinationSourceCodeFile: TFileName='');
     /// initialize the DDD Aggregate factory using a mORMot ORM class
     // - by default, field names should match on both sides - but you can
     // specify a custom field mapping as TSQLRecord,Aggregate pairs
@@ -611,6 +637,88 @@ begin
   Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self]);
   fAggregateRTTI.Free;
   inherited;
+end;
+
+class procedure TDDDRepositoryRestFactory.ComputeSQLRecord(
+  const aAggregate: array of TPersistentClass; DestinationSourceCodeFile: TFileName);
+const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
+    // values left to '' will use the RTTI type
+    '',           // sftUnknown
+    'RawUTF8',    // sftAnsiText
+    'RawUTF8',    // sftUTF8Text
+    '',           // sftEnumerate
+    '',           // sftSet
+    '',           // sftInteger
+    '',           // sftID
+    'TRecordReference', // sftRecord
+    'boolean',    // sftBoolean
+    'double',     // sftFloat
+    'TDateTime',  // sftDateTime
+    'TTimeLog',   // sftTimeLog
+    'currency',   // sftCurrency
+    '',           // sftObject
+    'variant',    // sftVariant
+    'TSQLRawBlob',// sftBlob
+    'variant',    // sftBlobDynArray
+    '',           // sftBlobCustom
+    'variant',    // sftUTF8Custom
+    '',           // sftMany
+    'TModTime',   // sftModTime
+    'TCreateTime',// sftCreateTime
+    '');          // sftTID
+var hier: TClassDynArray;
+    a,i,f: integer;
+    code,aggname,recname,parentrecname: RawUTF8;
+    map: TSQLPropInfoList;
+    rectypes: TRawUTF8DynArray;
+begin
+  {$ifdef KYLIX3} hier := nil; {$endif to make compiler happy}
+  if DestinationSourceCodeFile='' then
+    DestinationSourceCodeFile := ExtractFilePath(paramstr(0))+'ddsqlrecord.inc';
+  for a := 0 to high(aAggregate) do begin
+    hier := ClassHierarchyWithField(aAggregate[a]);
+    code := code+#13#10'type';
+    parentrecname := 'TSQLRecord';
+    for i := 0 to high(hier) do begin
+      aggname := RawUTF8(hier[i].ClassName);
+      recname := 'TSQLRecord'+copy(aggname,2,100);
+      map := TSQLPropInfoList.Create(hier[i],
+        [pilAllowIDFields,pilSubClassesFlattening,pilSingleHierarchyLevel]);
+      try
+        code := FormatUTF8('%'#13#10+
+          '  /// ORM class corresponding to % DDD aggregate'#13#10+
+          '  % = class(%)'#13#10'  protected'#13#10,
+          [code,aggname,recname,parentrecname]);
+        SetLength(rectypes,map.count);
+        for f := 0 to map.Count-1 do
+        with map.List[f] do begin
+          rectypes[f] := RAW_TYPE[SQLFieldType];
+          if rectypes[f]='' then
+            if SQLFieldType=sftInteger then begin
+              rectypes[f] := 'Int64';
+              if InheritsFrom(TSQLPropInfo) then
+                with TSQLPropInfoRTTI(map.List[f]).PropType^ do
+                  if (Kind=tkInteger) and (OrdType<>otULong) then
+                    rectypes[f] := 'integer'; // only cardinal -> Int64
+            end else
+              rectypes[f]:= SQLFieldRTTITypeName;
+          code := FormatUTF8('%    f%: %; // %'#13#10,
+            [code,Name,rectypes[f],SQLFieldRTTITypeName]);
+        end;
+        code := code+'  published'#13#10;
+        for f := 0 to map.Count-1 do
+        with map.List[f] do
+          code := FormatUTF8('%    /// maps %.%'#13#10+
+            '    property %: % read f% write f%;'#13#10,
+            [code,aggname,NameUnflattened,Name,rectypes[f],Name,Name]);
+        code := code+'  end;'#13#10;
+      finally
+        map.Free;
+      end;
+      parentrecname := recname;
+    end;
+  end;
+  FileFromString(code,DestinationSourceCodeFile);
 end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
