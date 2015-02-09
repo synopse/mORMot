@@ -78,7 +78,12 @@ type
     fHashedPassword: RawUTF8;
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   published
+    /// will map TAuthInfo.LogonName
+    // - is defined as "stored AS_UNIQUE" so that it may be used as primary key
     property Logon: RawUTF8 read fLogon write fLogon stored AS_UNIQUE;
+    /// the password, stored in a hashed form
+    // - this property does not exist at TAuthInfo level, so will be private
+    // to the storage layer - which is the safest option possible
     property HashedPassword: RawUTF8 read fHashedPassword write fHashedPassword;
   end;
 
@@ -230,7 +235,7 @@ begin
     Logon := aLogonName;
     HashedPassword := aHashedPassword;
   end;
-  ORMPrepareForCommit(soInsert);
+  ORMPrepareForCommit(soInsert,nil);
 end;
 
 function TDDDAuthenticationAbstract.UpdatePassword(
@@ -239,7 +244,7 @@ begin
   if not ORMBegin(qaCommandOnSelect,result) then
     exit;
   (ORM as TSQLRecordAuthInfo).HashedPassword := aHashedPassword;
-  ORMPrepareForCommit(soUpdate);
+  ORMPrepareForCommit(soUpdate,nil);
 end;
 
 class procedure TDDDAuthenticationAbstract.RegressionTests(
@@ -324,6 +329,7 @@ begin
     ['Logon','LogonName'],aOwner);
 end;
 
+
 { TDDDAuthenticationRestFactorySHA256 }
 
 constructor TDDDAuthenticationRestFactorySHA256.Create(aRest: TSQLRest;
@@ -341,13 +347,13 @@ begin
 end;
 
 
+
 { TSQLRecordAuthInfo }
 
 class procedure TSQLRecordAuthInfo.InternalDefineModel(
   Props: TSQLRecordProperties);
 begin
-  AddFilterNotVoidText(['HashedPassword']);
+  AddFilterNotVoidText(['Logon','HashedPassword']);
 end;
-
 
 end.

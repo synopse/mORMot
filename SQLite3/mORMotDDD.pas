@@ -120,6 +120,7 @@ type
   // - cqrsNotFound appear after a I*Query SelectBy*() method with no match
   // - cqrsNoMoreData indicates a GetNext*() method has no more matching data
   // - cqrsDataLayerError indicates a low-level error at database level
+  // - cqrsDDDValidationFailed will be trigerred when
   // - cqrsInvalidContent for any I*Command method with invalid aggregate input
   // value (e.g. a missing field)
   // - cqrsAlreadyExists for a I*Command.Add method with a primay key conflict
@@ -129,7 +130,7 @@ type
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
-     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
+     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand);
 
@@ -271,16 +272,29 @@ type
     fAggregate: TPersistentClass;
     fAggregateHasCustomCreate: boolean;
     fTable: TSQLRecordClass;
-    fPropsMapping: TSQLRecordPropertiesMapping;
-    fPropsMappingVersion: cardinal;
     fAggregateRTTI: TSQLPropInfoList;
+    // stored in fGarbageCollector, following fAggregateProp[]
+    fGarbageCollector: TObjectDynArray;
+    fFilter: array of array of TSynFilter;
+    fValidate: array of array of TSynValidate;
     // TSQLPropInfoList correspondance, as filled by ComputeMapping:
     fAggregateToTable: TSQLPropInfoObjArray;
     fAggregateProp: TSQLPropInfoRTTIObjArray;
+    // store custom field mapping between TSQLRecord and Aggregate
+    fPropsMapping: TSQLRecordPropertiesMapping;
+    fPropsMappingVersion: cardinal;
     procedure ComputeMapping;
     function GetImplementationName: string;
     function GetAggregateName: string;
     function GetTableName: string;
+    // override those methods to customize the data marshalling
+    procedure AggregatePropToTable(
+      aAggregate: TPersistent; aAggregateProp: TSQLPropInfo;
+      aRecord: TSQLRecord; aRecordProp: TSQLPropInfo); virtual;
+    procedure TablePropToAggregate(
+      aRecord: TSQLRecord; aRecordProp: TSQLPropInfo;
+      aAggregate: TPersistent; aAggregateProp: TSQLPropInfo); virtual;
+    // to implement the TInterfaceResolver abilities
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
     /// will compute the ORM TSQLRecord* source code type definitions
@@ -327,12 +341,41 @@ type
       aOwner: TDDDRepositoryRestManager=nil); reintroduce; overload;
     /// finalize the factory
     destructor Destroy; override;
+    /// register a custom filter or validator to some Aggregate's fields
+    // - once added, the TSynFilterOrValidate instance will be owned to
+    // this factory, until it is released
+    // - the field names should be named from their full path (e.g. 'Email' or
+    // 'Address.Country.Iso') unless aFieldNameFlattened is TRUE, which will
+    // expect ORM-like naming (e.g. 'Address_Country')
+    // - if '*' is specified as field name, it will be applied to all text
+    // fields, so the following will ensure that all text fields will be
+    // trimmed for spaces:
+    // !   AddFilterOrValidate(['*'],TSynFilterTrim.Create);
+    // - filters and validators will be applied to the
+    // - the same filtering classes as with the ORM can be applied to DDD's
+    // aggregates, e.g. TSynFilterUpperCase, TSynFilterLowerCase or
+    // TSynFilterTrim
+    // - the same validation classes as with the ORM can be applied to DDD's
+    // aggregates, e.g. TSynValidateText.Create for a void field,
+    // TSynValidateText.Create('{MinLength:5}') for a more complex test
+    // (including custom password strength validation if TSynValidatePassWord
+    // is not enough), TSynValidateIPAddress.Create or TSynValidateEmail.Create
+    // for some network settings, or TSynValidatePattern.Create()
+    // - you should not define TSynValidateUniqueField here, which could't be
+    // checked at DDD level, but rather set a "stored AS_UNIQUE" attribute
+    // in the corresponding property of the TSQLRecord type definition
+    procedure AddFilterOrValidate(const aFieldNames: array of RawUTF8;
+      aFilterOrValidate: TSynFilterOrValidate; aFieldNameFlattened: boolean=false); virtual;
     /// set a local I*Query or I*Command instance corresponding to this factory
     procedure Get(out Obj); virtual;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
     /// create a new DDD Aggregate instance
     function AggregateCreate: TPersistent;
+    /// perform filtering and validation on a supplied DDD Aggregate
+    // - all logic defined by AddFilterOrValidate() will be processed
+    function AggregateFilterAndValidate(aAggregate: TPersistent;
+      aInvalidFieldIndex: PInteger=nil): string; virtual;
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
     // TSQLRecord fields, so that it would be compatible with ORM's JSON
@@ -419,9 +462,10 @@ type
     fBatchResults: TIDDynArray;
     procedure ORMEnsureBatchExists;
     // this default implementation will check the status vs command,
-    // call fORM.FilterAndValidate, then add to the internal BATCH
+    // call DDD's + ORM's FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
-    procedure ORMPrepareForCommit(aCommand: TSQLOccasion); virtual;
+    procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
+      aAggregate: TPersistent); virtual;
     /// minimal implementation using AggregateToTable() conversion
     function ORMAdd(aAggregate: TPersistent): TCQRSResult; virtual;
     function ORMUpdate(aAggregate: TPersistent): TCQRSResult; virtual;
@@ -636,6 +680,7 @@ destructor TDDDRepositoryRestFactory.Destroy;
 begin
   Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self]);
   fAggregateRTTI.Free;
+  ObjArrayClear(fGarbageCollector);
   inherited;
 end;
 
@@ -643,29 +688,29 @@ class procedure TDDDRepositoryRestFactory.ComputeSQLRecord(
   const aAggregate: array of TPersistentClass; DestinationSourceCodeFile: TFileName);
 const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     // values left to '' will use the RTTI type
-    '',           // sftUnknown
-    'RawUTF8',    // sftAnsiText
-    'RawUTF8',    // sftUTF8Text
-    '',           // sftEnumerate
-    '',           // sftSet
-    '',           // sftInteger
-    '',           // sftID
-    'TRecordReference', // sftRecord
-    'boolean',    // sftBoolean
-    'double',     // sftFloat
-    'TDateTime',  // sftDateTime
-    'TTimeLog',   // sftTimeLog
-    'currency',   // sftCurrency
-    '',           // sftObject
-    'variant',    // sftVariant
-    'TSQLRawBlob',// sftBlob
-    'variant',    // sftBlobDynArray
-    '',           // sftBlobCustom
-    'variant',    // sftUTF8Custom
-    '',           // sftMany
-    'TModTime',   // sftModTime
-    'TCreateTime',// sftCreateTime
-    '');          // sftTID
+    '',                 // sftUnknown
+    'RawUTF8',          // sftAnsiText
+    'RawUTF8',          // sftUTF8Text
+    '',                 // sftEnumerate
+    '',                 // sftSet
+    '',                 // sftInteger
+    '',                 // sftID = TSQLRecord(aID)
+    'TRecordReference', // sftRecord = TRecordReference
+    'boolean',          // sftBoolean
+    'double',           // sftFloat
+    'TDateTime',        // sftDateTime
+    'TTimeLog',         // sftTimeLog
+    'currency',         // sftCurrency
+    '',                 // sftObject
+    'variant',          // sftVariant
+    'TSQLRawBlob',      // sftBlob
+    'variant',          // sftBlobDynArray
+    '',                 // sftBlobCustom
+    'variant',          // sftUTF8Custom
+    '',                 // sftMany
+    'TModTime',         // sftModTime
+    'TCreateTime',      // sftCreateTime
+    '');                // sftTID
 var hier: TClassDynArray;
     a,i,f: integer;
     code,aggname,recname,parentrecname: RawUTF8;
@@ -765,6 +810,23 @@ begin
     result := GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj);
 end;
 
+procedure TDDDRepositoryRestFactory.AggregatePropToTable(
+  aAggregate: TPersistent; aAggregateProp: TSQLPropInfo;
+  aRecord: TSQLRecord; aRecordProp: TSQLPropInfo);
+begin
+  if aRecordProp<>nil then
+    aAggregateProp.CopyProp(aAggregate,aRecordProp,aRecord);
+end;
+
+procedure TDDDRepositoryRestFactory.TablePropToAggregate(
+  aRecord: TSQLRecord; aRecordProp: TSQLPropInfo; aAggregate: TPersistent;
+  aAggregateProp: TSQLPropInfo);
+begin
+  if aRecordProp=nil then
+    aAggregateProp.SetValue(aAggregate,nil,false) else
+    aRecordProp.CopyProp(aRecord,aAggregateProp,aAggregate);
+end;
+
 procedure TDDDRepositoryRestFactory.Get(out Obj);
 begin
   if not GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj) then
@@ -848,8 +910,7 @@ begin
   aDest.ID := aID;
   if aAggregate<>nil then
     for i := 0 to high(fAggregateProp) do
-      if fAggregateToTable[i]<>nil then
-        fAggregateProp[i].CopyProp(aAggregate,fAggregateToTable[i],aDest);
+      AggregatePropToTable(aAggregate,fAggregateProp[i],aDest,fAggregateToTable[i]);
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateFromTable(
@@ -863,10 +924,7 @@ begin
   if aSource=nil then
     AggregateClear(aAggregate) else
     for i := 0 to high(fAggregateProp) do
-      if fAggregateToTable[i]<>nil then
-        fAggregateToTable[i].CopyProp(aSource,fAggregateProp[i],aAggregate) else
-        with fAggregateProp[i] do
-          SetValue(Flattened(aAggregate),nil,false);
+      TablePropToAggregate(aSource,fAggregateToTable[i],aAggregate,fAggregateProp[i]);
 end;
 
 function TDDDRepositoryRestFactory.GetImplementationName: string;
@@ -888,6 +946,80 @@ begin
   if self=nil then
     result := '' else
     result := fTable.ClassName;
+end;
+
+procedure TDDDRepositoryRestFactory.AddFilterOrValidate(
+  const aFieldNames: array of RawUTF8; aFilterOrValidate: TSynFilterOrValidate;
+  aFieldNameFlattened: boolean);
+var f,ndx: integer;
+    arr: ^TPointerDynArray;
+begin
+  if aFilterOrValidate=nil then
+    exit;
+  ObjArrayAdd(fGarbageCollector,aFilterOrValidate);
+  for f := 0 to high(aFieldNames) do begin
+    if aFilterOrValidate.InheritsFrom(TSynValidate) then
+      arr := @fValidate else
+      arr := @fFilter;
+    if arr^=nil then
+      SetLength(arr^,fAggregateRTTI.Count);
+    if aFieldNames[f]='*' then begin // apply to all text fields
+      for ndx := 0 to high(fAggregateProp) do
+        if fAggregateProp[ndx].SQLFieldType in [sftAnsiText,sftUTF8Text] then
+          aFilterOrValidate.AddOnce(TSynFilterOrValidateObjArray(arr^[ndx]),false);
+    end else begin
+      if aFieldNameFlattened then
+        ndx := fAggregateRTTI.IndexByNameUnflattenedOrExcept(aFieldNames[f]) else
+        ndx := fAggregateRTTI.IndexByNameOrExcept(aFieldNames[f]);
+      aFilterOrValidate.AddOnce(TSynFilterOrValidateObjArray(arr^[ndx]),false);
+    end;
+  end;
+end;
+
+function TDDDRepositoryRestFactory.AggregateFilterAndValidate(
+  aAggregate: TPersistent; aInvalidFieldIndex: PInteger): string;
+var f,i: integer;
+    Value: TRawUTF8DynArray; // avoid twice retrieval
+    Old: RawUTF8;
+    str: boolean;
+begin
+  if (aAggregate=nil) or (aAggregate.ClassType<>fAggregate) then
+    raise EDDDRepository.CreateUTF8(self,
+      '%.AggregateFilterAndValidate(%) expected a % instance',
+      [self,aAggregate,fAggregate]);
+  // first process all filters
+  SetLength(Value,fAggregateRTTI.Count);
+  for f := 0 to high(fFilter) do
+    if fFilter[f]<>nil then begin
+      with fAggregateProp[f] do
+        GetValueVar(Flattened(aAggregate),false,Value[f],@str);
+      Old := Value[f];
+      for i := 0 to high(fFilter[f]) do
+        fFilter[f,i].Process(f,Value[f]);
+      if Old<>Value[f] then
+        with fAggregateProp[f] do
+          SetValueVar(Flattened(aAggregate),Value[f],str);
+    end;
+  // then validate the content
+  for f := 0 to high(fValidate) do
+    if fValidate[f]<>nil then begin
+      if Value[f]='' then // if not already retrieved
+        with fAggregateProp[f] do
+          GetValueVar(Flattened(aAggregate),false,Value[f],nil);
+      for i := 0 to high(fValidate[f]) do
+        if not fValidate[f,i].Process(f,Value[f],result) then begin
+          if aInvalidFieldIndex<>nil then
+            aInvalidFieldIndex^ := f;
+          if result='' then
+            // no custom message -> show a default message
+            result := format(sValidationFailed,[
+              GetCaptionFromClass(fValidate[f,i].ClassType)]);
+          result := format('%s.%s: %s',
+            [fAggregate.ClassName,fAggregateProp[f].NameUnflattened,result]);
+          exit;
+        end;
+    end;
+  result := ''; // if we reached here, there was no error
 end;
 
 
@@ -1075,7 +1207,7 @@ end;
 function TDDDRepositoryRestCommand.Delete: TCQRSResult;
 begin
   if ORMBegin(qaCommandOnSelect,result) then
-    ORMPrepareForCommit(soDelete);
+    ORMPrepareForCommit(soDelete,nil);
 end;
 
 function TDDDRepositoryRestCommand.DeleteAll: TCQRSResult;
@@ -1083,7 +1215,7 @@ var i: integer;
 begin
   if ORMBegin(qaCommandOnSelect,result) then
     if ORM.FillTable=nil then
-      ORMPrepareForCommit(soDelete) else
+      ORMPrepareForCommit(soDelete,nil) else
       if fState<qsQuery then
         ORMResult(cqrsNoPriorQuery) else begin
         ORMEnsureBatchExists;
@@ -1100,7 +1232,7 @@ function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TPersistent): TCQRSResult;
 begin
   if ORMBegin(qaCommandDirect,result) then begin
     Factory.AggregateToTable(aAggregate,0,ORM);
-    ORMPrepareForCommit(soInsert);
+    ORMPrepareForCommit(soInsert,aAggregate);
   end;
 end;
 
@@ -1108,7 +1240,7 @@ function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TPersistent): TCQRSResu
 begin
   if ORMBegin(qaCommandOnSelect,result) then begin
     Factory.AggregateToTable(aAggregate,ORM.ID,ORM);
-    ORMPrepareForCommit(soUpdate);
+    ORMPrepareForCommit(soUpdate,aAggregate);
   end;
 end;
 
@@ -1120,7 +1252,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
-  aCommand: TSQLOccasion);
+  aCommand: TSQLOccasion; aAggregate: TPersistent);
 var msg: RawUTF8;
     ndx: integer;
 begin
@@ -1136,6 +1268,13 @@ begin
     end;
   end;
   if aCommand in [soUpdate,soInsert] then begin
+    if aAggregate<>nil then begin
+      msg := Factory.AggregateFilterAndValidate(aAggregate);
+      if msg<>'' then begin
+        ORMResultMsg(cqrsDDDValidationFailed,msg);
+        exit;
+      end;
+    end;
     msg := ORM.FilterAndValidate(Factory.Rest);
     if msg<>'' then begin
       ORMResultMsg(cqrsDataLayerError,msg);
@@ -1174,4 +1313,4 @@ begin
 end;
 
 
-end.
+end.

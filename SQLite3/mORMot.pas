@@ -2544,13 +2544,13 @@ type
   TSQLPropInfo = class
   protected
     fName: RawUTF8;
+    fNameUnflattened: RawUTF8;
     fSQLFieldType: TSQLFieldType;
     fAttributes: TSQLPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
     fFromRTTI: boolean;
     function GetNameDisplay: string; virtual;
-    function GetNameUnflattened: RawUTF8; virtual;
     /// those two protected methods allow custom storage of binary content
     // as text
     // - default implementation is to use hexa (ToSQL=true) or Base64 encodings
@@ -2575,7 +2575,7 @@ type
     // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
     // full nested class will be returned, e.g. 'Address.Country.Iso' for
     // the 'Address_Country' flattened property name
-    property NameUnflattened: RawUTF8 read GetNameUnflattened;
+    property NameUnflattened: RawUTF8 read fNameUnflattened;
     /// the property index in the RTTI
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
@@ -2704,7 +2704,6 @@ type
     fPropType: PTypeInfo;
     fFlattenedProps: PPropInfoDynArray;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
-    function GetNameUnflattened: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
@@ -3304,6 +3303,13 @@ type
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EORMException if not found in the internal list
     function IndexByNameOrExcept(const aName: RawUTF8): integer;
+    /// find an item in the list, searching by unflattened name
+    // - for a flattened property, you may for instance call
+    // IndexByNameUnflattenedOrExcept('Address.Country.Iso')
+    // instead of IndexByNameOrExcept('Address_Country')
+    // - won't identify 'ID' / 'RowID' field names, just List[].
+    // - raise an EORMException if not found in the internal list
+    function IndexByNameUnflattenedOrExcept(const aName: RawUTF8): integer;
     /// fill a TRawUTF8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
@@ -13964,7 +13970,8 @@ type
     property ProcessRec: TSQLRecord read fProcessRec;
   end;
 
-  /// will define a validation for a TSQLRecord Unique field
+  /// will define a validation for a TSQLRecord Unique text field
+  // - this class will handle only textual fields, not numeric values
   // - it will check that the field value is not void
   // - it will check that the field value is not a duplicate
   TSynValidateUniqueField = class(TSynValidateRest)
@@ -15096,11 +15103,6 @@ begin
   GetCaptionFromPCharLen(pointer(fName),result);
 end;
 
-function TSQLPropInfo.GetNameUnflattened: RawUTF8;
-begin
-  result := fName;
-end;
-
 procedure TSQLPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
 begin
   result := BlobToTSQLRawBlob(Value);
@@ -15130,6 +15132,7 @@ begin
   if aName='' then
     EORMException.CreateUTF8('Void name for %.Create',[self]);
   fName := aName;
+  fNameUnflattened := aName;
   fSQLFieldType := aSQLFieldType;
   fAttributes := aAttributes;
   fFieldWidth := aFieldWidth;
@@ -15177,8 +15180,8 @@ const
      ftInt64,     // sftEnumerate
      ftInt64,     // sftSet
      ftInt64,     // sftInteger
-     ftInt64,     // sftID
-     ftInt64,     // sftRecord
+     ftInt64,     // sftID = TSQLRecord(aID)
+     ftInt64,     // sftRecord = TRecordReference
      ftInt64,     // sftBoolean
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
@@ -15413,7 +15416,11 @@ procedure FlattenedPropNameSet;
 var i,max: Integer;
 begin // Address.Street1 -> Address_Street1
   (result as TSQLPropInfoRTTI).fFlattenedProps := aFlattenedProps;
+  result.fNameUnflattened := result.fName;
   max := high(aFlattenedProps);
+  for i := max downto 0 do
+    result.fNameUnflattened :=
+      ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'.'+result.fNameUnflattened;
   if (max>=0) and (aFlattenedProps[max]^.PropType^.ClassFieldCount=1) then begin
     // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
     result.fName := ShortStringToAnsi7String(aFlattenedProps[max]^.Name);
@@ -15439,11 +15446,11 @@ begin
       C := TSQLPropInfoRTTICurrency;
     sftDateTime:
       C := TSQLPropInfoRTTIDateTime;
-    sftID:
+    sftID: // = TSQLRecord(aID)
       C := TSQLPropInfoRTTIID;
     sftTID:
       C := TSQLPropInfoRTTITID;
-    sftRecord:
+    sftRecord: // = TRecordReference
       C := TSQLPropInfoRTTIInstance;
     sftMany:
       C := TSQLPropInfoRTTIMany;
@@ -15511,14 +15518,6 @@ begin
   if Instance=nil then
     result := nil else
     result := fPropInfo^.GetFieldAddr(Instance);
-end;
-
-function TSQLPropInfoRTTI.GetNameUnflattened: RawUTF8;
-var i: integer;
-begin
-  result := ShortStringToAnsi7String(fPropInfo^.Name);
-  for i := length(fFlattenedProps)-1 downto 0 do
-    result := ShortStringToAnsi7String(fFlattenedProps[i]^.Name)+'.'+result;
 end;
 
 function TSQLPropInfoRTTI.Flattened(Instance: TObject): TObject;
@@ -17793,10 +17792,10 @@ function TSQLPropInfoList.IndexByNameOrExcept(const aName: RawUTF8): integer;
 begin
   if IsRowID(pointer(aName)) then
     result := -1 else begin
-    result := IndexByName(pointer(aName));
+    result := IndexByName(pointer(aName)); // fast binary search
     if result<0 then
-      raise EORMException.CreateUTF8('%.IndexByNameOrExcept(%): unkwnown field',
-        [self,aName]);
+      raise EORMException.CreateUTF8(
+        '%.IndexByNameOrExcept(%): unkwnown field in %',[self,aName,fTable]);
   end;
 end;
 
@@ -17806,6 +17805,21 @@ begin
   SetLength(Names,Count);
   for i := 0 to Count-1 do
     Names[i] := fList[i].Name;
+end;
+
+function TSQLPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUTF8): integer;
+begin
+  if pilSubClassesFlattening in fOptions then begin
+    for result := 0 to Count-1 do
+      if IdemPropNameU(List[result].NameUnflattened,aName) then
+        exit;
+  end else begin
+    result := IndexByName(pointer(aName)); // faster binary search
+    if result>=0 then
+      exit;
+  end;
+  raise EORMException.CreateUTF8(
+    '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %',[self,aName,fTable]);
 end;
 
 
@@ -21365,8 +21379,7 @@ begin
 int:  SetOrdProp(Dest,GetOrdProp(Source));
     tkClass:
     case PropType^.ClassSQLFieldType of
-      sftID:
-        // special case for TSQLRecord published properties (sftID, sftRecord)
+      sftID: // TSQLRecord published properties (sftID)
         if TSQLRecord(Source).fFill.JoinedFields then
           // -> pre-allocated fields by Create*Joined()
           goto obj else
@@ -24358,7 +24371,7 @@ begin
     for i := 0 to high(aFieldNames) do begin
       f := Fields.IndexByNameOrExcept(aFieldNames[i]);
       AddFilterOrValidate(f,TSynFilterTrim.Create);
-      AddFilterOrValidate(f,TSynValidateText.Create);
+      AddFilterOrValidate(f,TSynValidateNonVoidText.Create);
     end;
   end;
 end;
@@ -24369,25 +24382,27 @@ var f, i: integer;
     Value: RawUTF8;
     Validate: TSynValidate;
     ValidateRest: TSynValidateRest absolute Validate;
+    wasTSynValidateRest: boolean;
 begin
   result := '';
   if (self=nil) or IsZero(aFields) then
     // avoid GPF and handle case if no field was selected
     exit;
   with RecordProps do
+  if Filters<>nil then
   for f := 0 to Fields.Count-1 do
   if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then begin
-    if Filters<>nil then
-      for i := 0 to length(Filters[f])-1 do begin
-        Validate := TSynValidate(Filters[f,i]);
-        if Validate.InheritsFrom(TSynValidate) then begin
-          if Value='' then
-            Fields.List[f].GetValueVar(self,false,Value,nil);
-          if Validate.InheritsFrom(TSynValidateRest) then begin
-            // set additional parameters
-            ValidateRest.fProcessRec := self;
-            ValidateRest.fProcessRest := aRest;
-          end;
+    for i := 0 to length(Filters[f])-1 do begin
+      Validate := TSynValidate(Filters[f,i]);
+      if Validate.InheritsFrom(TSynValidate) then begin
+        if Value='' then
+          Fields.List[f].GetValueVar(self,false,Value,nil);
+        wasTSynValidateRest := Validate.InheritsFrom(TSynValidateRest);
+        if wasTSynValidateRest then begin // set additional parameters
+          ValidateRest.fProcessRec := self;
+          ValidateRest.fProcessRest := aRest;
+        end;
+        try
           if not Validate.Process(f,Value,result) then begin
             // TSynValidate process failed -> notify caller
             if aInvalidFieldIndex<>nil then
@@ -24398,8 +24413,14 @@ begin
                 GetCaptionFromClass(Validate.ClassType)]);
             exit;
           end;
+        finally
+          if wasTSynValidateRest then begin // reset additional parameters
+            ValidateRest.fProcessRec := nil;
+            ValidateRest.fProcessRest := nil;
+          end;
         end;
       end;
+    end;
     Value := '';
   end;
 end;
@@ -24864,7 +24885,7 @@ begin
     case List[f].SQLFieldType of
     sftRecord:
       RegisterTableForRecordReference(List[f],Table); // Table not used
-    sftID:
+    sftID: 
       RegisterTableForRecordReference(
         List[f],(List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
     sftTID:
@@ -36649,7 +36670,7 @@ begin
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
-      sftID:
+      sftID: // = TSQLRecord(aID)
         if isTSQLRecordMany and
            (IdemPropNameU(F.Name,'Source') or IdemPropNameU(F.Name,'Dest')) then
           goto Simple else begin
@@ -36771,8 +36792,8 @@ const
     ' INTEGER, ',                    // sftEnumerate
     ' INTEGER, ',                    // sftSet
     ' INTEGER, ',                    // sftInteger
-    ' INTEGER, ',                    // sftID
-    ' INTEGER, ',                    // sftRecord
+    ' INTEGER, ',                    // sftID = TSQLRecord(aID)
+    ' INTEGER, ',                    // sftRecord = TRecordReference
     ' INTEGER, ',                    // sftBoolean
     ' FLOAT, ',                      // sftFloat
     ' TEXT COLLATE ISO8601, ',       // sftDateTime
@@ -37130,7 +37151,6 @@ begin
   Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeName,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth));
 end;
-
 
 
 { TSynValidateUniqueField }
