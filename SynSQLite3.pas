@@ -589,18 +589,18 @@ type
   PSQLite3IndexConstraintUsageArray = ^TSQLite3IndexConstraintUsageArray;
   TSQLite3IndexConstraintUsageArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
 
-  {/ Structure used as part of the virtual table interface to pass information
-    into and receive the reply from the xBestIndex() method of a virtual table module
-   - Outputs fields will be passed as parameter to the xFilter() method, and
-     will be initialized to zero by SQLite
-   - For instance, xBestIndex() method fills the idxNum and idxStr fields with
-     information that communicates an indexing strategy to the xFilter method.
-     The information in idxNum and idxStr is arbitrary as far as the SQLite core
-     is concerned. The SQLite core just copies the information through to the
-     xFilter() method. Any desired meaning can be assigned to idxNum and idxStr
-     as long as xBestIndex() and xFilter() agree on what that meaning is.
-     Use the SetInfo() method of this object in order to make a temporary copy
-     of any needed data. }
+  /// Structure used as part of the virtual table interface to pass information
+  // into and receive the reply from the xBestIndex() method of a virtual table module
+  // - Outputs fields will be passed as parameter to the xFilter() method, and
+  // will be initialized to zero by SQLite
+  // - For instance, xBestIndex() method fills the idxNum and idxStr fields with
+  // information that communicates an indexing strategy to the xFilter method.
+  // The information in idxNum and idxStr is arbitrary as far as the SQLite core
+  // is concerned. The SQLite core just copies the information through to the
+  // xFilter() method. Any desired meaning can be assigned to idxNum and idxStr
+  // as long as xBestIndex() and xFilter() agree on what that meaning is.
+  // Use the SetInfo() method of this object in order to make a temporary copy
+  // of any needed data. 
   TSQLite3IndexInfo = record
     /// input: Number of entries in aConstraint array
     nConstraint: Integer;

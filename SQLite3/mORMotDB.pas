@@ -290,11 +290,11 @@ type
     function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// overridden method for direct external database engine call
     function TableHasRows(Table: TSQLRecordClass): boolean; override;
-     {{ begin a transaction (implements REST BEGIN Member)
-     - to be used to speed up some SQL statements like Insert/Update/Delete
-     - must be ended with Commit on success
-     - must be aborted with Rollback if any SQL statement failed
-     - return true if no transaction is active, false otherwise }
+    /// begin a transaction (implements REST BEGIN Member)
+    // - to be used to speed up some SQL statements like Insert/Update/Delete
+    // - must be ended with Commit on success
+    // - must be aborted with Rollback if any SQL statement failed
+    // - return true if no transaction is active, false otherwise
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
     // - write all pending SQL statements to the external database 

@@ -270,7 +270,7 @@ unit SynDB;
     nested transactions, as long as the same connection is re-used
   - added TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed()
     internal method, used by some overridden GetFields() implementations
-
+  - ensure a primary key column on SQlite3 is identified as indexed
 
 }
 
@@ -2597,25 +2597,25 @@ type
   public
     /// the Column type of the current Row
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0
-     - should retrieve directly the 64 bit Currency content, to avoid
-     any rounding/conversion error from floating-point types }
+    /// return a Column currency value of the current Row, first Col is 0
+    // - should retrieve directly the 64 bit Currency content, to avoid
+    // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
-    {/ return a Column text value as generic VCL string of the current Row, first Col is 0 }
+    /// return a Column text value as generic VCL string of the current Row, first Col is 0
     function ColumnString(Col: integer): string; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-    {{ return all columns values into JSON content }
+    /// return all columns values into JSON content
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// direct access to the data buffer of the current row
     // - points to Double/Currency value, or variable-length Int64/UTF8/Blob
@@ -4859,11 +4859,11 @@ begin
     try
       with Execute('PRAGMA table_info(`'+aTableName+'`)',[]) do
       while Step do begin
-        // cid,name,type,notnull,dflt_value,pk
+        // cid=0,name=1,type=2,notnull=3,dflt_value=4,pk=5
         F.ColumnName := ColumnUTF8(1);
         F.ColumnTypeNative := ColumnUTF8(2);
         F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,0);
-        F.ColumnIndexed := IsRowID(pointer(F.ColumnName)); // by definition for SQLite3
+        F.ColumnIndexed := (ColumnInt(5)=1); // by definition for SQLite3
         FA.Add(F);
       end;
     except
@@ -4873,10 +4873,10 @@ begin
     try
       with Execute('PRAGMA index_list(`'+aTableName+'`)',[]) do
       while Step do
-        // seq,name,unique
+        // seq=0,name=1,unique=2
         with Execute('PRAGMA index_info('+ColumnUTF8(1)+')',[]) do
           while Step do begin
-            F.ColumnName := ColumnUTF8(2); // seqno,cid,name
+            F.ColumnName := ColumnUTF8(2); // seqno=0,cid=1,name=2
             i := FA.Find(F);
             if i>=0 then
               Fields[i].ColumnIndexed := true;
@@ -7993,4 +7993,4 @@ initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);
   assert(SizeOf(TSQLDBParam)=sizeof(PTrUInt)*3+sizeof(Int64));
 end.
-
+

@@ -39545,7 +39545,6 @@ begin
 end;
 
 
-
 { TInterfaceFactory }
 
 function ToText(aValue: TServiceInstanceImplementation): RawUTF8;
@@ -39587,24 +39586,27 @@ begin
       ftCurr: result := smvCurrency;
     end;
   {$ifdef FPC}tkAString,{$endif} tkLString:
-    if P=TypeInfo(RawUTF8) then
-      result := smvRawUTF8 else
     if P=TypeInfo(RawJSON) then
-      result := smvRawJSON
-{$ifndef UNICODE}
-      else result := smvString;
-{$else};
+      result := smvRawJSON else
+  {$ifndef UNICODE}
+    if P=TypeInfo(AnsiString) then
+      result := smvString else
+      result := smvRawUTF8; // UTF-8 by default
+  {$else UNICODE}
+      result := smvRawUTF8;
   tkUString:
     result := smvString;
-{$endif}
+  {$endif}
   tkWString:
     result := smvWideString;
   tkClass:
-    if JSONObject(P^.ClassType^.ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
-       [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-        oSQLRecord,oSQLMany,oPersistent,oCustom] then
+    with P^.ClassType^ do
+    if (ClassFieldCountWithParents(ClassType)>0) or
+       (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
+         [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
+          oSQLRecord,oSQLMany,oPersistent,oCustom]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
-  tkRecord{$ifdef FPC},tkObject{$endif}:
+  {$ifdef FPC}tkObject,{$endif} tkRecord:
     // Base64 encoding of our RecordLoad / RecordSave binary format
     result := smvRecord;
   {$ifndef NOVARIANTS}
