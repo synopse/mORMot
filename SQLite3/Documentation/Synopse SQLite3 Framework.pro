@@ -2522,7 +2522,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
 :     Dynamic arrays fields
 :      Dynamic arrays from Delphi Code
 For instance, here is how the regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\i @*dynamic array@s} fields:
@@ -2966,6 +2966,7 @@ In order to make this easy, a dedicated set of classes are available in the {\f1
 Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
 \graph HierTSynFilters Default filters and Validation classes hierarchy
 \TSynValidatePassWord\TSynValidateText
+\TSynValidateNonVoidText\TSynValidate
 \TSynValidateText\TSynValidate
 \TSynValidateTableUniqueField\TSynValidateTable
 \TSynValidateTable\TSynValidate
@@ -2986,8 +2987,8 @@ rankdir=LR;
 \
 You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
 Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
-Of course, the {\f1\fs20 mORMotUIEdit} unit now handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (using one of the {\f1\fs20 TSQLValidate} classes).
-The unique field validation is now in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
+Of course, the {\f1\fs20 mORMotUIEdit} unit handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (via the {\f1\fs20 TSQLValidate} classes).
+The field validation process is run in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
 To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
 !function CreateFileModel(Owner: TSQLRest): TSQLModel;
 !begin
@@ -2997,6 +2998,18 @@ To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLMo
 !  TSQLFile.AddFilterOrValidate('Name',TSQLFilterLowerCase);
 !  TSQLUser.AddFilterOrValidate('Email',TSQLValidateEmail);
 !end;
+As an alternative, you can override the following method:
+!  TSQLRecordAuthInfo = class(TSQLRecord)
+!  protected
+!!    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+!  ...
+!
+!class procedure TSQLRecordAuthInfo.InternalDefineModel(
+!  Props: TSQLRecordProperties);
+!begin
+!  AddFilterNotVoidText(['Logon','HashedPassword']);
+!end;
+It does make sense to define this behavior within the {\f1\fs20 TSQLRecord} definition, so that it would be shared by all models.
 In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
 For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
 !procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
@@ -3360,7 +3373,7 @@ This framework uses a compiled version of the official {\i SQLite3} library sour
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
 - Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@});
 - {\i SQLite3} library unit was compiled including @*RTREE@ extension for doing very fast range queries;
-- It can include @*FTS@3/FTS4 full text search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
+- It can include @*FTS@3/FTS4 @*full text@ search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
 - Additional {\i @*collation@s} (i.e. sorting functions) were added to handle efficiently not only @*UTF-8@ text, but also e.g. @*ISO 8601@ time encoding, fast {\i Win1252} diacritic-agnostic comparison and native slower but accurate Windows UTF-16 functions;
 - Additional @*SQL@ functions like {\i Soundex} for English/French/Spanish phonemes, {\f1\fs20 MOD} or {\f1\fs20 CONCAT}, and some dedicated functions able to directly search for data within @*BLOB@ fields containing an {\i Delphi} high-level type (like a serialized dynamic array);
@@ -3828,7 +3841,7 @@ The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
 The {\f1\fs20 rank} internal @*SQL function@ has been implemented in {\i Delphi}, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
-:   FTS4 index tables without content
+:144   FTS4 index tables without content
 Just as {\i SQlite3} allows, the framework permits FTS4 to forego storing the text being indexed, letting the indexed documents be stored in a database table created and managed by the user (an "external content" FTS4 table).
 Because the indexed documents themselves are usually much larger than the full-text index, this option can be used to achieve significant storage space savings. Contentless FTS4 tables still support {\f1\fs20 SELECT} statements. However, it is an error to attempt to retrieve the value of any table column other than the {\f1\fs20 docid} column. The auxiliary function {\f1\fs20 matchinfo()} may be used - so {\f1\fs20 TSQLRest.FTSMatch} method will work as expected, but {\f1\fs20 snippet()} and {\f1\fs20 offsets()} would cause an exception at execution.
 For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
@@ -10919,12 +10932,13 @@ The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f
 Then the whole database model will be created in this function:
 !function CreateModel: TSQLModel;
 !begin
-!  result := TSQLModel.Create([TSQLBlogInfo,TSQLCategory,TSQLAuthor,
-!    TSQLArticle,TSQLComment],'blog');
-!  TSQLArticle.AddFilterOrValidate('Title',TSynFilterTrim.Create);
-!  TSQLArticle.AddFilterOrValidate('Title',TSynValidateText.Create);
-!  TSQLArticle.AddFilterOrValidate('Content',TSynFilterTrim.Create);
-!  TSQLArticle.AddFilterOrValidate('Content',TSynValidateText.Create);
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
+!    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
+!  TSQLArticle.AddFilterNotVoidText(['Title','Content']);
+!  TSQLComment.AddFilterNotVoidText(['Title','Content']);
+!  TSQLTag.AddFilterNotVoidText(['Ident']);
+!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+!    TSQLArticle,['title','abstract','content']);
 !end;
 As you can discover:
 - We used {\f1\fs20 class} inheritance to gather properties for similar tables;
@@ -10934,9 +10948,10 @@ As you can discover:
 - {\f1\fs20 Article} tags are stored as a dynamic array of integer within the record, and not in a separated pivot table: it would make the database smaller, and queries faster (since we avoid a JOIN);
 - Some properties are defined (and stored) twice, e.g. {\f1\fs20 TSQLContent} defines one {\f1\fs20 AuthorName} field in addition to the {\f1\fs20 Author} ID field, as a convenient direct access to the author name, therefore avoiding a JOINed query at each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
 - We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
-- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterOrValidate()} method, which would be applied before an article is stored;
+- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterNotVoidText()} method, which would be applied before an article is stored in the controller's code (in {\f1\fs20 TBlogApplication. ArticleCommit});
 - The whole application would run without writing any SQL, but just high-level ORM methods;
-- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG).
+- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG);
+- @*Full Text@ indexation data, implemented as @8@ in the {\i SQLite3} engine, is stored in a dedicated {\f1\fs20 TSQLArticleSearch} table - see @144@ for details about this powerful feature.
 Foreign keys and indexes are managed as such:
 - The {\f1\fs20 TSQLRecord.ID} @*primary key@ of any ORM class will be indexed;
 - For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};

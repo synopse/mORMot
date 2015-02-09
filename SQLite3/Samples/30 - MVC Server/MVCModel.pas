@@ -161,11 +161,11 @@ function CreateModel: TSQLModel;
 begin
   result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
     TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
-  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-    TSQLArticle,['title','abstract','content']);
   TSQLArticle.AddFilterNotVoidText(['Title','Content']);
   TSQLComment.AddFilterNotVoidText(['Title','Content']);
   TSQLTag.AddFilterNotVoidText(['Ident']);
+  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+    TSQLArticle,['title','abstract','content']);
 end;
 
 
