@@ -3018,9 +3018,13 @@ begin
     {$else}
   with fWriter do begin
     ExecutableName := GetModuleName(hInstance);
-    AddNoJSONEscapeString(ExecutableName);
+    if ExecutableName='' then
+      AddShort('nomodulename') else
+      AddNoJSONEscapeString(ExecutableName);
     AddShort(' unknown (');
-    AddDateTime(FileAgeToDateTime(ExecutableName));
+    if ExecutableName='' then
+      AddDateTime(now) else
+      AddDateTime(FileAgeToDateTime(ExecutableName));
     Add(')');
     NewLine;
     AddShort('Host='); AddString(GetHostName);
