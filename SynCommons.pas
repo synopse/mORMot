@@ -7208,7 +7208,7 @@ type
   /// text validation to be applied to a Record field content
   // (typicaly a TSQLRecord)
   // - default MinLength value is 1, MaxLength is maxInt: so you can specify a
-  // blank TSynValidateText to avoid any void textual field
+  // blank TSynValidateText.Create to avoid any void textual field
   // - MinAlphaCount, MinDigitCount, MinPunctCount, MinLowerCount and
   // MinUpperCount allow you to specify the minimal count of respectively
   // alphabetical [a-zA-Z], digit [0-9], punctuation [_!;.,/:?%$="#@(){}+-*],
@@ -36263,7 +36263,7 @@ begin
   MaxPunctCount := maxInt;
   MaxLowerCount := maxInt;
   MaxUpperCount := maxInt;
-  inherited;
+  inherited Create(aParameters);
 end;
 
 function TSynValidateText.ErrorMsg(fPropsIndex, InvalidTextIndex,
@@ -36283,9 +36283,13 @@ function TSynValidateText.Process(aFieldIndex: integer; const Value: RawUTF8;
 var i, L: cardinal;
     Min: array[2..7] of cardinal;
 begin
+  if (fParameters='') and (Value<>'') then begin
+    result := true; // TSynValidateText.Create('') = not void -> fast check
+    exit;
+  end;
   result := false;
   L := Utf8ToUnicodeLength(pointer(Value));
-  if L<MinLength then
+  if L<MinLength then 
     ErrorMsg := Format(sInvalidTextLengthMin,[MinLength,Character01n(MinLength)]) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
