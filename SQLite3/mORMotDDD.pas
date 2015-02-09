@@ -375,7 +375,7 @@ type
     /// perform filtering and validation on a supplied DDD Aggregate
     // - all logic defined by AddFilterOrValidate() will be processed
     function AggregateFilterAndValidate(aAggregate: TPersistent;
-      aInvalidFieldIndex: PInteger=nil): string; virtual;
+      aInvalidFieldIndex: PInteger=nil): RawUTF8; virtual;
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
     // TSQLRecord fields, so that it would be compatible with ORM's JSON
@@ -977,10 +977,11 @@ begin
 end;
 
 function TDDDRepositoryRestFactory.AggregateFilterAndValidate(
-  aAggregate: TPersistent; aInvalidFieldIndex: PInteger): string;
+  aAggregate: TPersistent; aInvalidFieldIndex: PInteger): RawUTF8;
 var f,i: integer;
     Value: TRawUTF8DynArray; // avoid twice retrieval
     Old: RawUTF8;
+    msg: string;
     str: boolean;
 begin
   if (aAggregate=nil) or (aAggregate.ClassType<>fAggregate) then
@@ -1007,15 +1008,14 @@ begin
         with fAggregateProp[f] do
           GetValueVar(Flattened(aAggregate),false,Value[f],nil);
       for i := 0 to high(fValidate[f]) do
-        if not fValidate[f,i].Process(f,Value[f],result) then begin
+        if not fValidate[f,i].Process(f,Value[f],msg) then begin
           if aInvalidFieldIndex<>nil then
             aInvalidFieldIndex^ := f;
-          if result='' then
+          if msg='' then
             // no custom message -> show a default message
-            result := format(sValidationFailed,[
-              GetCaptionFromClass(fValidate[f,i].ClassType)]);
-          result := format('%s.%s: %s',
-            [fAggregate.ClassName,fAggregateProp[f].NameUnflattened,result]);
+            msg := format(sValidationFailed,[GetCaptionFromClass(fValidate[f,i].ClassType)]);
+          result := FormatUTF8('%.%: %',
+            [fAggregate,fAggregateProp[f].NameUnflattened,msg]);
           exit;
         end;
     end;
