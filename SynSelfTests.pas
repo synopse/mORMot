@@ -8956,7 +8956,7 @@ end;
 
 procedure TTestExternalDatabase._SynDBRemote;
 var Props: TSQLDBConnectionProperties;
-procedure DoTest(proxy: TSQLDBConnectionProperties);
+procedure DoTest(proxy: TSQLDBConnectionProperties; msg: PUTF8Char);
 procedure DoTests;
 var res: ISQLDBRows;
     id,lastid,n,n1: integer;
@@ -8981,6 +8981,7 @@ begin
   result := res.ColumnInt(0);
 end;
 begin
+  TSynLogTestLog.Enter(proxy,msg);
   if proxy<>Props then
     Check(proxy.UserID='user');
   proxy.ExecuteNoResult('delete from people where ID>=?',[50000]);
@@ -9041,18 +9042,18 @@ const ADDR='localhost:'+HTTP_DEFAULTPORT;
 begin
   Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
   try
-    DoTest(Props);
+    DoTest(Props,'raw Props');
     DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(
-      Props,'user','pass',TSQLDBProxyConnectionProtocol));
+      Props,'user','pass',TSQLDBProxyConnectionProtocol),'proxy test');
     DoTest(TSQLDBRemoteConnectionPropertiesTest.Create(
-      Props,'user','pass',TSQLDBRemoteConnectionProtocol));
+      Props,'user','pass',TSQLDBRemoteConnectionProtocol),'remote test');
     Server := {$ifdef MSWINDOWS}TSQLDBServerHttpApi{$else}TSQLDBServerSockets{$endif}.
       Create(Props,'root',HTTP_DEFAULTPORT,'user','pass');
     try
-      DoTest(TSQLDBSocketConnectionProperties.Create(ADDR,'root','user','pass'));
+      DoTest(TSQLDBSocketConnectionProperties.Create(ADDR,'root','user','pass'),'socket');
       {$ifdef MSWINDOWS}
-      DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'));
-      DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'));
+      DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'),'winhttp');
+      DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'),'wininet');
       {$endif}
     finally
       Server.Free;

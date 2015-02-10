@@ -1779,6 +1779,7 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
+  inherited Reset;
   if fParamCount>0 then begin
     fParam.Clear;
     Finalize(fParamBindings);

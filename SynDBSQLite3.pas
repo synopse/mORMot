@@ -750,6 +750,7 @@ end;
 
 procedure TSQLDBSQLite3Statement.Reset;
 begin
+  inherited Reset;
   fStatement.Reset;
   // fStatement.BindReset; // slow down the process, and is not mandatory
 end;
