@@ -1781,7 +1781,6 @@ end;
 
 {$ifdef KYLIX3}
   // Kylix has a totally diverse exception scheme
-  // see 
   {$define WITH_MAPPED_EXCEPTIONS}
 {$endif}
 
@@ -2516,11 +2515,10 @@ var
     BackTrace, BackTraceHash: pointer): byte; stdcall;
 {$endif}
 
+{$STACKFRAMES ON}
 function TSynLog._Release: Integer;
-{$ifdef MSWINDOWS}
 {$ifndef CPU64}
 var aStackFrame: PtrInt;
-{$endif}
 {$endif}
 begin
   if fFamily.Level*[sllEnter,sllLeave]<>[] then begin
@@ -2532,20 +2530,20 @@ begin
         if RefCount=0 then begin
           if sllLeave in fFamily.Level then begin
             if MethodName=nil then begin
-              {$ifdef MSWINDOWS}
               {$ifdef CPU64}
+              {$ifdef MSWINDOWS}
               if RtlCaptureStackBackTrace(1,1,@Caller,nil)=0 then
                 Caller := 0 else
                 dec(Caller,5); // ignore caller op codes
+              {$else}
+              Caller := 0; // no stack trace yet under Linux64
+              {$endif}
               {$else}
               asm
                 mov eax,[ebp+16] // +4->_IntfClear +16->initial caller
                 mov aStackFrame,eax
               end;
               Caller := aStackFrame-5;
-              {$endif}
-              {$else}
-              Caller := 0; // no stack trace yet under Linux
               {$endif}
             end;
             DoEnterLeave(sllLeave);
@@ -2560,6 +2558,7 @@ begin
   end else
     result := 1;
 end;
+{$STACKFRAMES OFF}
 
 constructor TSynLog.Create(aFamily: TSynLogFamily);
 begin
@@ -2659,6 +2658,7 @@ begin
   result := Family.SynLog;
 end;
 
+{$STACKFRAMES ON}
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUTF8Char;
   aMethodNameLocal: boolean): ISynLog;
 var aSynLog: TSynLog;
@@ -2683,20 +2683,20 @@ begin
         inc(RecursionCapacity,32);
         SetLength(Recursion,RecursionCapacity);
       end;
-      {$ifdef MSWINDOWS}
       {$ifdef CPU64}
+      {$ifdef MSWINDOWS}
       if RtlCaptureStackBackTrace(1,1,@aStackFrame,nil)=0 then
         aStackFrame := 0 else
         dec(aStackFrame,5); // ignore call TSynLog.Enter op codes
+      {$else}
+      aStackFrame := 0; // No stack trace yet under Linux64
+      {$endif}
       {$else}
       asm
         mov eax,[ebp+4]  // retrieve caller EIP from push ebp; mov ebp,esp
         sub eax,5        // ignore call TSynLog.Enter op codes
         mov aStackFrame,eax
       end;
-      {$endif}
-      {$else}
-      aStackFrame := 0; // No stack trace yet under Linux
       {$endif}
       with Recursion[RecursionCount] do begin
         Instance := aInstance;
@@ -2717,6 +2717,7 @@ begin
   // copy to ISynLog interface -> will call TSynLog._AddRef
   result := aSynLog;
 end;
+{$STACKFRAMES OFF}
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var PVMT: pointer;
@@ -2887,6 +2888,7 @@ begin
     LogInternal(Level,aName,aTypeInfo,aValue,Instance);
 end;
 
+{$STACKFRAMES ON}
 procedure TSynLog.Log(Level: TSynLogInfo);
 var aCaller: PtrUInt;
     LastError: DWORD;
@@ -2899,20 +2901,20 @@ begin
   try
     if LastError<>0 then
       AddErrorMessage(LastError);
-    {$ifdef MSWINDOWS}
     {$ifdef CPU64}
+    {$ifdef MSWINDOWS}
     if RtlCaptureStackBackTrace(1,1,@aCaller,nil)=0 then
       aCaller := 0 else
       dec(aCaller,5); // ignore call TSynLog.Enter op codes
+    {$else}
+    aCaller := 0; // no stack trace yet under Linux64
+    {$endif}
     {$else}
     asm
       mov eax,[ebp+4]  // retrieve caller EIP from push ebp; mov ebp,esp
       sub eax,5        // ignore call TSynLog.Enter op codes
       mov aCaller,eax
     end;
-    {$endif}
-    {$else}
-    aCaller := 0; // no stack trace yet under Linux
     {$endif}
     TSynMapFile.Log(fWriter,aCaller,false);
   finally
@@ -2921,6 +2923,7 @@ begin
       SetLastError(LastError);
   end;
 end;
+{$STACKFRAMES OFF}
 
 {$ifndef DELPHI5OROLDER}
 class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;

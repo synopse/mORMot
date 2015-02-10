@@ -70,6 +70,7 @@ unit SynDBSQLite3;
   Version 1.18
   - statement cache refactoring: cache logic is now at SynDB unit level
   - fixed ticket [4c68975022] about broken SQL statement when logging active
+  - fixed logging SQL content of external SQLite3 statements 
   - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
   - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
     constructor, to be used e.g. with a TSQLRestServerDB.DB existing database

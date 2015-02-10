@@ -531,8 +531,14 @@ end;
 
 { TSynTestCase }
 
+{$define CHECKDOLOG}
+
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
 begin
+  {$ifdef CHECKDOLOG}
+  if msg<>'' then
+    TSynLogTestLog.Add.Log(sllTrace,msg);
+  {$endif}
   Inc(fAssertions);
   if not condition then
     TestFailed(msg);
@@ -540,6 +546,10 @@ end;
 
 function TSynTestCase.CheckFailed(condition: Boolean; const msg: string): Boolean;
 begin
+  {$ifdef CHECKDOLOG}
+  if msg<>'' then
+    TSynLogTestLog.Add.Log(sllTrace,msg);
+  {$endif}
   Inc(fAssertions);
   if condition then
     result := false else begin

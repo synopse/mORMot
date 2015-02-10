@@ -107,6 +107,7 @@ unit SynOleDB;
     unrecognized column type when table schema is retrieved from SQL
   - fixed issue when running TOleDBStatement.Step(true)
   - fixed issue [e8c211062e] when binding NULL values in multi INSERT statements
+  - fixed logging SQL content of external OleDB statements 
 
 }
 
