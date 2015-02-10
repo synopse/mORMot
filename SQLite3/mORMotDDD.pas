@@ -569,10 +569,8 @@ begin
       [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
   fLastErrorAddress^ := Error;
   fLastError := Error;
-  if Error<>cqrsSuccess then begin
-    fLastErrorContext := _JsonFast(ObjectToJSONDebug(self));
-    TDocVariantData(fLastErrorContext).AddValue('LocalTime',NowToString);
-  end else
+  if Error<>cqrsSuccess then
+    fLastErrorContext := ObjectToVariantDebug(self,'%',[NowToString]) else
     if ACTION_TO_STATE[fAction]<>qsNone then
       fState := ACTION_TO_STATE[fAction];
   fAction := qaNone;
@@ -594,7 +592,7 @@ procedure TCQRSQueryObject.ORMResultDoc(Error: TCQRSResult;
   const ErrorInfo: variant);
 begin
   InternalORMResult(Error);
-  TDocVariantData(fLastErrorContext).AddValue('Info',ErrorInfo);
+  _ObjAddProps(['ErrorInfo',ErrorInfo],fLastErrorContext);
   AfterInternalORMResult;
 end;
 
@@ -608,7 +606,7 @@ procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
   const ErrorMessage: RawUTF8);
 begin
   InternalORMResult(Error);
-  TDocVariantData(fLastErrorContext).AddValue('Msg',ErrorMessage);
+  _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
   AfterInternalORMResult;
 end;
 

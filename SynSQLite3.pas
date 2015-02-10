@@ -1113,7 +1113,8 @@ type
     /// Argument to xInit() and xShutdown()
     pAppData: pointer;
   end;
-  
+
+  {$M+}
   /// wrapper around all SQLite3 library API calls
   // - abstract class allowing direct binding of static sqlite3.obj
   // (TSQLite3LibrayStatic) or with an external library (TSQLite3LibraryDynamic)
@@ -1124,6 +1125,7 @@ type
   TSQLite3Library = class
   protected
     fUseInternalMM: boolean;
+    function GetVersion: RawUTF8;
   public
     /// initialize the SQLite3 database code
     // - automaticaly called by the initialization block of this unit
@@ -1950,9 +1952,11 @@ type
     // under multi-process activity
     // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
+  published
     /// will return the class name and SQLite3 version number
-    function Information: RawUTF8;
+    property Version: RawUTF8 read GetVersion;
   end;
+  {$M-}
 
   /// allow access to an exernal SQLite3 library engine
   // - you can e.g. replace the main sqlite3 engine with any external library:
@@ -1961,12 +1965,15 @@ type
   TSQLite3LibraryDynamic = class(TSQLite3Library)
   protected
     fHandle: THandle;
+    fLibraryName: TFileName;
   public
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
     constructor Create(const LibraryName: TFileName='sqlite3.dll'); reintroduce;
     /// unload the external library
     destructor Destroy; override;
+  published
+    property LibraryName: TFileName read fLibraryName;
   end;
 
   
@@ -2048,17 +2055,20 @@ type
 
   /// custom SQLite3 dedicated Exception type
   ESQLite3Exception = class(ESynException)
+  protected
+    fErrorCode: integer;
   public
     /// the DB which raised this exception
     DB: TSQLite3DB;
-    /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
-    ErrorCode: integer;
     /// the corresponding error code, e.g. secMISUSE
     SQLite3ErrorCode: TSQLite3ErrorCode;
     /// create the exception, getting the message from DB
     constructor Create(aDB: TSQLite3DB; aErrorCode: integer); reintroduce; overload;
     /// create the exception, getting the message from caller
     constructor Create(const aMessage: string; aErrorCode: integer); reintroduce; overload;
+  published
+    /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
+    property ErrorCode: integer read fErrorCode;
   end;
 
 /// convert a SQLite3 result code into a TSQLite3ErrorCode item
@@ -2148,7 +2158,9 @@ type
     lcCompoundSelect, lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
     lcVariableNumber, lcTriggerDepth);
 
+  {$M+}
   TSQLDatabase = class;
+  {$M-}
 
   TSQLBlobStream = class;
 
@@ -2525,6 +2537,7 @@ type
   protected
     fDB: TSQLite3DB;
     fFileName: TFileName;
+    fFileNameWithoutPath: TFileName;
     fIsMemory: boolean;
     fPassword: RawUTF8;
     fTransactionActive: boolean;
@@ -2559,6 +2572,8 @@ type
     function GetLimit(Category: TSQLLimitCategory): integer;
     procedure SetLimit(Category: TSQLLimitCategory; Value: integer);
     function GetBackupBackgroundInProcess: boolean;
+    function SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
+    class function GetSQLite3Library: TSQLite3Library;
   public
     /// enter the TRTLCriticalSection: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
@@ -2650,26 +2665,26 @@ type
      - Execute the first statement in aSQL
      - this statement must get a one field/column result of INTEGER
      - raise an ESQLite3Exception on any error }
-    procedure Execute(const aSQL: RawUTF8; out ID: Int64); overload;
+    procedure Execute(const aSQL: RawUTF8; out ID: Int64; NoLog: boolean=false); overload;
     {/ Execute one SQL statement which returns one UTF-8 encoded string value
      - Execute the first statement in aSQL
      - this statement must get a one field/column result of TEXT
      - raise an ESQLite3Exception on any error }
-    procedure Execute(const aSQL: RawUTF8; out ID: RawUTF8); overload;
+    procedure Execute(const aSQL: RawUTF8; out ID: RawUTF8; NoLog: boolean=false); overload;
     {/ Execute one SQL statements in aSQL UTF-8 encoded string
      - can be prepared with TransactionBegin()
      - raise no Exception on error, but returns FALSE in such case }
-    function ExecuteNoException(const aSQL: RawUTF8): boolean; overload;
+    function ExecuteNoException(const aSQL: RawUTF8): boolean; 
     {/ Seamless execution of a SQL statement which returns one integer
      - Execute the first statement in aSQL
      - this statement must get a one field/column result of INTEGER
      - returns 0 on any error }
-    procedure ExecuteNoException(const aSQL: RawUTF8; out ID: Int64); overload;
+    function ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64; 
     {/ Seamless execution of a SQL statement which returns one UTF-8 encoded string
      - Execute the first statement in aSQL
      - this statement must get a one field/column result of TEXT
      - returns '' on any error }
-    procedure ExecuteNoException(const aSQL: RawUTF8; out ID: RawUTF8); overload;
+    function ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8; 
     /// Execute one SQL statement returning its results in JSON format
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
     function ExecuteJSON(const aSQL: RawUTF8; Expand: boolean=false; aResultCount: PPtrInt=nil): RawUTF8;
@@ -2799,6 +2814,30 @@ type
 
     /// read-only access to the SQLite3 database handle
     property DB: TSQLite3DB read fDB;
+    /// read-only access to the SQLite3 database filename opened without its path
+    property FileNameWithoutPath: TFileName read fFileNameWithoutPath;
+    /// access to the internal JSON cache, used by ExecuteJSON() method
+    // - see UseCache property and CacheFlush method
+    property Cache: TSynCache read fCache;
+    /// retrieve of define a limit on the current database connection
+    // - see TSQLLimitCategory for a details of all available limits
+    // - see @http://www.sqlite.org/c3ref/limit.html
+    property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
+    {$ifdef WITHLOG}
+    /// access to the log class associated with this SQLite3 database engine
+    // - can be customized, e.g. by overriden TSQLRestServerDB.SetLogClass()
+    property Log: TSynLogClass read fLog write fLog;
+    /// sets a maximum size (in bytes) to be logged as sllResult rows
+    // - by default, is set to 512 bytes, which sounds a good compromise
+    // since it does not make sense to log all the JSON content retrieved from
+    // the database engine, when a huge SELECT is executed
+    property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
+    {$endif}
+    /// this integer pointer (if not nil) is incremented when any SQL statement
+    // changes the database contents (i.e. any not SELECT statement)
+    // - this pointer is thread-safe updated, inside a critical section
+    property InternalState: PCardinal read fInternalState write fInternalState;
+  published
     /// read-only access to the SQLite3 database filename opened
     property FileName: TFileName read fFileName;
     /// equals TRUE if the SQLite3 database was created as ':memory:'
@@ -2809,13 +2848,6 @@ type
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
     // - cache is used by TSQLDataBase.ExecuteJSON() and TSQLTableDB.Create()
     property UseCache: boolean read GetUseCache write SetUseCache;
-    /// access to the internal JSON cache, used by ExecuteJSON() method
-    // - see UseCache property and CacheFlush method
-    property Cache: TSynCache read fCache;
-    /// this integer pointer (if not nil) is incremented when any SQL statement
-    // changes the database contents (i.e. any not SELECT statement)
-    // - this pointer is thread-safe updated, inside a critical section
-    property InternalState: PCardinal read fInternalState write fInternalState;
     /// return TRUE if a Transaction begun
     property TransactionActive: boolean read fTransactionActive;
     /// sets a busy handler that sleeps for a specified amount of time
@@ -2828,20 +2860,20 @@ type
     // only endures for the current session. The cache size reverts to the
     // default value when the database is closed and reopened
     // - we do not handle negative values here (i.e. KB of RAM), since it won't
-    // work if the linked SQLite3 library is version 3.7.9 and earlier 
+    // work if the linked SQLite3 library is version 3.7.9 and earlier
     property CacheSize: cardinal read GetCacheSize write SetCacheSize;
-    {/ query or change the Write-Ahead Logging mode for the database
-      - beginning with version 3.7 of the SQLite3 engine, a new "Write-Ahead Log"
-        option (hereafter referred to as "WAL") is optionaly available
-      - WAL might be very slightly slower (perhaps 1% or 2% slower) than the
-        traditional rollback-journal approach in applications that do mostly reads
-        and seldom write; but WAL provides more concurrency as readers do not block
-        writers and a writer does not block readers. Reading and writing can
-        proceed concurrently. With our SQLite3 framework, it's not needed.
-      - by default, this option is not set: only implement if you really need it,
-        but our SQlite3 framework use locked access to the databse, so there
-        should be no benefit of WAL for the framework; but if you call
-        directly TSQLDatabase instances in your code, it may be useful to you }
+    /// query or change the Write-Ahead Logging mode for the database
+    // - beginning with version 3.7 of the SQLite3 engine, a new "Write-Ahead Log"
+    // option (hereafter referred to as "WAL") is optionaly available
+    // - WAL might be very slightly slower (perhaps 1% or 2% slower) than the
+    // traditional rollback-journal approach in applications that do mostly reads
+    // and seldom write; but WAL provides more concurrency as readers do not block
+    // writers and a writer does not block readers. Reading and writing can
+    // proceed concurrently. With our SQLite3 framework, it's not needed.
+    // - by default, this option is not set: only implement if you really need it,
+    // but our SQlite3 framework use locked access to the databse, so there
+    // should be no benefit of WAL for the framework; but if you call
+    // directly TSQLDatabase instances in your code, it may be useful to you
     property WALMode: Boolean read GetWALMode write SetWALMode;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
@@ -2863,32 +2895,20 @@ type
     // - set to a number of Mega Bytes value of memory for the mapping
     // - expects a SQLite3 engine version >= 3.7.17
     // - Memory-Mapped I/O is NOT compatible with password encryption as
-    // implemented in our SynSQLite3Static unit 
+    // implemented in our SynSQLite3Static unit
     property MemoryMappedMB: cardinal read GetMemoryMappedMB write SetMemoryMappedMB;
-    /// retrieve of define a limit on the current database connection
-    // - see TSQLLimitCategory for a details of all available limits
-    // - see @http://www.sqlite.org/c3ref/limit.html
-    property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
-    {$ifdef WITHLOG}
-    /// access to the log class associated with this SQLite3 database engine
-    // - can be customized, e.g. by overriden TSQLRestServerDB.SetLogClass()
-    property Log: TSynLogClass read fLog write fLog;
-    /// sets a maximum size (in bytes) to be logged as sllResult rows
-    // - by default, is set to 512 bytes, which sounds a good compromise
-    // since it does not make sense to log all the JSON content retrieved from
-    // the database engine, when a huge SELECT is executed
-    property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
-    {$endif}
-    {/ retrieve or set the user_version stored in the SQLite3 database file
-      - user-version is a 32-bit signed integer stored in the database header
-      - it can be used to change the database in case of format upgrade (e.g.
-        refresh some hand-made triggers) }
+    /// retrieve or set the user_version stored in the SQLite3 database file
+    // - user-version is a 32-bit signed integer stored in the database header
+    //- it can be used to change the database in case of format upgrade (e.g.
+    // refresh some hand-made triggers)
     property user_version: cardinal read GetUserVersion write SetUserVersion;
     /// reflects how the database connection was created in the constructor
     property OpenV2Flags: Integer read fOpenV2Flags;
     /// is set to TRUE while a BackupBackground() process is still running
-    // - see also BackupBackgroundWaitUntilFinished() method 
+    // - see also BackupBackgroundWaitUntilFinished() method
     property BackupBackgroundInProcess: boolean read GetBackupBackgroundInProcess;
+    /// the SQLite3 library which is currently running
+    property SQLite3Library: TSQLite3Library read GetSQLite3Library;
   end;
 
   /// used to read or write a BLOB Incrementaly
@@ -2903,21 +2923,21 @@ type
     fPosition: longint;
     fWritable: boolean;
   public
-    {/ Opens a BLOB located in row RowID, column ColumnName, table TableName
-    in database DBName; in other words, the same BLOB that would be selected by:
-    ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID; }
+    /// Opens a BLOB located in row RowID, column ColumnName, table TableName
+    // in database DBName; in other words, the same BLOB that would be selected by:
+    // ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
     constructor Create(aDB: TSQLite3DB; const DBName, TableName,
       ColumnName: RawUTF8; RowID: Int64; ReadWrite: boolean);
-    {/ release the BLOB object }
+    /// release the BLOB object
     destructor Destroy; override;
-    {/ read Count bytes from the opened BLOB in Buffer }
+    /// read Count bytes from the opened BLOB in Buffer
     function Read(var Buffer; Count: Longint): Longint; override;
-    {/ write is allowed for in-place replacement (resizing is not allowed)
-     - Create() must have been called with ReadWrite=true }
+    /// write is allowed for in-place replacement (resizing is not allowed)
+    // - Create() must have been called with ReadWrite=true
     function Write(const Buffer; Count: Longint): Longint; override;
-    {/ change the current read position }
+    /// change the current read position
     function Seek(Offset: Longint; Origin: Word): Longint; override;
-    {/ read-only access to the BLOB object handle }
+    /// read-only access to the BLOB object handle 
     property Handle: TSQLite3Blob read fBlob;
   end;
 
@@ -3357,7 +3377,8 @@ begin
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
-    fIsMemory := true;
+    fIsMemory := true else
+    fFileNameWithoutPath := ExtractFileName(fFileName);
   fPassword := aPassword;
   fSQLFunctions := TObjectList.Create;
   result := DBOpen;
@@ -3400,14 +3421,26 @@ begin
   inherited;
 end;
 
+function TSQLDataBase.SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
+begin
+  result := false;
+  {$ifdef WITHLOG}
+  if (self=nil) or (fLog=nil) or not (sllSQL in fLog.Family.Level) then
+    exit;
+  if not IdemPChar(pointer(aSQL),'PRAGMA ') or (PosEx('=',aSQL)>0) then
+    result := true;
+  {$endif}
+end;
+
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var R: TSQLRequest;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,4096);
-{$endif}
+  {$ifdef WITHLOG}
+  if SQLShouldBeLogged(aSQL) then
+    fLog.Enter(self).Log(sllSQL,aSQL,self,4096);
+  {$endif}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB,aSQl);
@@ -3418,17 +3451,19 @@ end;
 
 procedure TSQLDataBase.Execute(const aSQL: RawUTF8);
 var R: TSQLRequest;
+    Timer: TPrecisionTimer;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  Timer.Start;
   Lock(aSQL); // run one statement -> we can trust isSelect()
   try
     R.Execute(DB,aSQL);
   finally
     UnLock;
+    {$ifdef WITHLOG}
+    fLog.Add.Log(sllSQL,'% % %',[Timer.Stop,FileNameWithoutPath,aSQL],self);
+    {$endif}
   end;
 end;
 
@@ -3440,7 +3475,8 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   end;
 {$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
+  if SQLShouldBeLogged(aSQL) then
+    fLog.Enter(self).Log(sllSQL,aSQL,self,2048);
 {$endif}
   Lock(aSQL);
   try
@@ -3450,76 +3486,89 @@ begin
   end;
 end;
 
-procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: Int64);
+procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: Int64; NoLog: boolean);
 var R: TSQLRequest;
+    Timer: TPrecisionTimer;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  Timer.Start;
   Lock(aSQL);
   try
     R.Execute(DB,aSQL,ID);
   finally
     UnLock;
+    {$ifdef WITHLOG}
+    if not NoLog then
+      fLog.Add.Log(sllSQL,'% % returned % for %',
+        [Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
+    {$endif}
   end;
 end;
 
-procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: RawUTF8);
+procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: RawUTF8; NoLog: boolean);
 var R: TSQLRequest;
+    Timer: TPrecisionTimer;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  Timer.Start;
   Lock(aSQL);
   try
     R.Execute(DB,aSQL,ID);
   finally
     UnLock;
+    {$ifdef WITHLOG}
+    if not NoLog then
+      fLog.Add.Log(sllSQL,'% % returned "%" for %',
+        [Timer.Stop,FileNameWithoutPath,ID,aSQL],self);
+    {$endif}
   end;
 end;
 
 function TSQLDataBase.ExecuteNoException(const aSQL: RawUTF8): boolean;
 begin
-  try
-    Execute(aSQL);
-    result := true;
-  except
-    result := false;
-  end;
+  if (self=nil) or (DB=0) then
+    result := false else
+    try
+      Execute(aSQL);
+      result := true;
+    except
+      result := false;
+    end;
 end;
 
-procedure TSQLDataBase.ExecuteNoException(const aSQL: RawUTF8; out ID: Int64);
+function TSQLDataBase.ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64;
 begin
-  try
-    Execute(aSQL,ID);
-  except
-    ID := 0;
-  end;
+  if (self=nil) or (DB=0) then
+    result := 0 else
+    try
+      Execute(aSQL,result,true);
+    except
+      result := 0;
+    end;
 end;
 
-procedure TSQLDataBase.ExecuteNoException(const aSQL: RawUTF8; out ID: RawUTF8);
+function TSQLDataBase.ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8;
 begin
-  try
-    Execute(aSQL,ID);
-  except
-    ID := '';
-  end;
+  if (self=nil) or (DB=0) then
+    result := '' else
+    try
+      Execute(aSQL,result,true);
+    except
+      result := '';
+    end;
 end;
 
 function TSQLDataBase.ExecuteJSON(const aSQL: RawUTF8; Expand: boolean=false;
   aResultCount: PPtrInt=nil): RawUTF8;
 var R: TSQLRequest;
     Count: PtrInt;
+    Timer: TPrecisionTimer;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  Timer.Start;
   result := LockJSON(aSQL,aResultCount); // lock and try getting the request from the cache
   if result='' then // only Execute the DB request if not got from cache
   try
@@ -3528,24 +3577,30 @@ begin
       aResultCount^ := Count;
   finally
     UnLockJSON(result,Count);
+    {$ifdef WITHLOG}
+    fLog.Add.Log(sllSQL,'% % returned % bytes %',
+      [Timer.Stop,FileNameWithoutPath,length(result),aSQL],self);
+    {$endif}
   end;
 end;
 
 function TSQLDataBase.Execute(const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer;
 var R: TSQLRequest;
+    Timer: TPrecisionTimer;
 begin
-  if self=nil then begin
-    result := 0;
+  result := 0;
+  if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  end;
-{$ifdef WITHLOG}
-  fLog.Enter(self,nil,true).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  Timer.Start;
   Lock(aSQL);
   try
     result := R.Execute(DB,aSQL,Values);
   finally
     UnLock;
+    {$ifdef WITHLOG}
+    fLog.Add.Log(sllSQL,'% % returned % rows %',
+      [Timer.Stop,FileNameWithoutPath,length(Values),aSQL],self);
+    {$endif}
   end;
 end;
 
@@ -3556,14 +3611,6 @@ begin
     try
       Lock;
       result := sqlite3.last_insert_rowid(DB);
-      {$ifdef WITHLOG}
-      if fLog<>nil then
-        {$ifdef DELPHI5OROLDER}
-        fLog.Add.Log(sllDB,'LastInsertRowID='+Int64ToUTF8(result),self);
-        {$else}
-        fLog.Add.Log(sllDB,'LastInsertRowID=%',result,self);
-        {$endif}
-      {$endif}
     finally
       UnLock;
     end;
@@ -3592,19 +3639,13 @@ end;
 procedure TSQLDataBase.GetTableNames(var Names: TRawUTF8DynArray);
 begin // SQL statement taken from official SQLite3 FAQ
   SetLength(Names,Execute(SQL_GET_TABLE_NAMES,Names));
-  {$ifdef WITHLOG}
-  {$ifndef DELPHI5OROLDER}
-  if fLog<>nil then
-    fLog.Add.Log(sllDebug,'TableNames',TypeInfo(TRawUTF8DynArray),Names,self);
-  {$endif}
-  {$endif}
 end;
 
 procedure TSQLDataBase.GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
 var R: TSQLRequest;
     n: integer;
 begin
-  if self=nil then
+  if (self=nil) or (fDB=0) then
     exit; // avoid GPF in case of call from a static-only server
   Lock;
   try
@@ -3629,7 +3670,7 @@ end;
 
 function TSQLDataBase.GetUseCache: boolean;
 begin
-  result := (Self<>nil) and (fCache<>nil);
+  result := (self<>nil) and (fCache<>nil);
 end;
 
 procedure TSQLDataBase.SetUseCache(const Value: boolean);
@@ -3694,12 +3735,7 @@ begin
         end;
         {$endif}
         LeaveCriticalSection(fLock); // found in cache -> leave critical section
-      end
-      {$ifdef WITHLOG}
-      else
-        if fLog<>nil then
-          fLog.Add.Log(sllCache,'not in cache',self);
-      {$endif}
+      end;
     end else begin
       // UPDATE, INSERT or any non SELECT statement
       CacheFlush;
@@ -3731,7 +3767,7 @@ function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
 {$ifdef WITHLOG}
 var Log: ISynLog;
 begin
-  Log := fLog.Enter(self,nil,true);
+  Log := fLog.Enter(self);
 {$else}
 begin
 {$endif}
@@ -3771,6 +3807,11 @@ begin
   result := (self<>nil) and (fBackupBackgroundInProcess<>nil); 
 end;
 
+class function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
+begin
+  result := sqlite3;
+end;
+
 function TSQLDataBase.BackupBackground(const BackupFileName: TFileName;
   StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
   const aPassword: RawUTF8): boolean;
@@ -3781,6 +3822,9 @@ begin
   if (self=nil) or (BackupFileName='') or not Assigned(sqlite3.backup_init) or
      (fBackupBackgroundInProcess<>nil) then
     exit;
+  {$ifdef WITHLOG}
+  fLog.Add.Log(sllDB,self);
+  {$endif}
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
       exit;
@@ -3824,7 +3868,7 @@ begin
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  fLog.Enter;
+  fLog.Enter.Log(sllDB,self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.Create('DBClose called with no sqlite3 global');
@@ -3840,7 +3884,7 @@ var utf8: RawUTF8;
 {$ifdef WITHLOG}
     Log: ISynLog;
 begin
-  Log := fLog.Enter(self,nil,true);
+  Log := fLog.Enter(self);
 {$else}
 begin
 {$endif}
@@ -3923,14 +3967,14 @@ begin
   // tune up execution speed
   if not fIsMemory then
     CacheSize := 10000;
+  {$ifdef WITHLOG}
+  Log.Log(sllDB,self);
+  {$endif}
 end;
 
-
 function TSQLDataBase.GetUserVersion: cardinal;
-var tmp: Int64;
 begin
-  ExecuteNoException('PRAGMA user_version',tmp);
-  result := tmp;
+  result := ExecuteNoExceptionInt64('PRAGMA user_version');
 end;
 
 procedure TSQLDataBase.SetUserVersion(const Value: cardinal);
@@ -3939,10 +3983,8 @@ begin
 end;
 
 function TSQLDataBase.GetCacheSize: cardinal;
-var tmp: Int64;
 begin
-  ExecuteNoException('PRAGMA cache_size',tmp);
-  result := tmp;
+  result := ExecuteNoExceptionInt64('PRAGMA cache_size');
 end;
 
 procedure TSQLDataBase.SetCacheSize(const Value: cardinal);
@@ -3961,17 +4003,13 @@ begin
 end;
 
 function TSQLDataBase.GetMemoryMappedMB: cardinal;
-var tmp: Int64;
 begin
-  ExecuteNoException('PRAGMA mmap_size ',tmp);
-  result := tmp shr 20;
+  result := ExecuteNoExceptionInt64('PRAGMA mmap_size') shr 20;
 end;
 
 function TSQLDataBase.GetSynchronous: TSQLSynchronousMode;
-var tmp: Int64;
 begin
-  ExecuteNoException('PRAGMA synchronous ',tmp);
-  result := TSQLSynchronousMode(tmp);
+  result := TSQLSynchronousMode(ExecuteNoExceptionInt64('PRAGMA synchronous'));
 end;
 
 procedure TSQLDataBase.SetLockingMode(const Value: TSQLLockingMode);
@@ -3983,7 +4021,7 @@ end;
 function TSQLDataBase.GetLockingMode: TSQLLockingMode;
 var tmp: RawUTF8;
 begin
-  ExecuteNoException('PRAGMA locking_mode',tmp);
+  tmp := ExecuteNoExceptionUTF8('PRAGMA locking_mode');
   if IdemPropNameU(tmp,'EXCLUSIVE') then
     result := lmExclusive else
     result := lmNormal;
@@ -3996,31 +4034,21 @@ begin
 end;
 
 function TSQLDataBase.GetWALMode: boolean;
-var tmp: RawUTF8;
 begin
-  ExecuteNoException('PRAGMA journal_mode',tmp);
-  result := IdemPropNameU(tmp,'wal');
+  result := IdemPropNameU(ExecuteNoExceptionUTF8('PRAGMA journal_mode'),'wal');
 end;
 
 procedure TSQLDataBase.SetBusyTimeout(const ms: Integer);
 begin
-  if self=nil then
+  if (self=nil) or (fDB=0) then
     exit;
-  {$ifdef WITHLOG}
-  if fLog<>nil then
-    {$ifdef DELPHI5OROLDER}
-    fLog.Add.Log(sllDB,'SetBusyTimeout='+Int32ToUTF8(ms),self);
-    {$else}
-    fLog.Add.Log(sllDB,'SetBusyTimeout=%',ms,self);
-    {$endif}
-  {$endif}
   sqlite3.busy_timeout(DB,ms);
   fBusyTimeout := ms;
 end;
 
 function TSQLDataBase.GetLimit(Category: TSQLLimitCategory): integer;
 begin
-  if (self=nil) or not Assigned(sqlite3.limit) then
+  if (self=nil) or (fDB=0) or not Assigned(sqlite3.limit) then
     result := 0 else
     result := sqlite3.limit(fDB,ord(Category),-1);
 end;
@@ -4626,7 +4654,7 @@ end;
 
 constructor ESQLite3Exception.Create(const aMessage: string; aErrorCode: integer);
 begin
-  ErrorCode := aErrorCode;
+  fErrorCode := aErrorCode;
   SQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   Create(aMessage);
 end;
@@ -4951,7 +4979,6 @@ begin
   mem.pAppData := nil; 
   res := config(SQLITE_CONFIG_MALLOC,@mem);
   if res<>SQLITE_OK then begin
-    writeln('external MM failure');
     {$ifdef WITHLOG}
     {$ifdef DELPHI5OROLDER}
     SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed');
@@ -4963,13 +4990,12 @@ begin
     fUseInternalMM := true;
 end;
 
-function TSQLite3Library.Information: RawUTF8;
+function TSQLite3Library.GetVersion: RawUTF8;
 const MM: array[boolean] of string[2] = ('ex','in');
 begin
   if self=nil then
     result := 'No TSQLite3Library available' else
-    result := FormatUTF8('% running % with %ternal MM',
-      [ClassName,libversion,MM[fUseInternalMM]]);
+    result := FormatUTF8('% with %ternal MM',[libversion,MM[fUseInternalMM]]);
 end;
 
 
@@ -5009,6 +5035,7 @@ begin
   fHandle := LoadLibrary(pointer(LibraryName));
   {$endif}
   {$endif}
+  fLibraryName := LibraryName;
   if fHandle=0 then
     raise ESQLite3Exception.CreateFmt('Unable to load %s - %s',
       [LibraryName,SysErrorMessage(GetLastError)]);

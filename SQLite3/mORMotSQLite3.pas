@@ -330,12 +330,15 @@ type
     /// initialized by Create(aModel,aDBFileName)
     fOwnedDB: TSQLDataBase;
     /// prepared statements with parameters for faster SQLite3 execution
-    // - works for SQL code with :(%): internal parameters
+    // - used for SQL code with :(%): internal parameters
     fStatementCache: TSQLStatementCached;
-    /// static statement used if fStatementCache is not to be used
-    // - for any SQL code with no :(%): internal parameters
-    // - only one global is OK: is protected via a nested DB.LockJSON/DB.Unlock
+    /// used during GetAndPrepareStatement() execution (run in global lock)
+    fStatement: PSQLRequest;
     fStaticStatement: TSQLRequest;
+    fStatementTimer: TPrecisionTimer;
+    fStatementSQL: RawUTF8;
+    fStatementGenericSQL: RawUTF8;
+    fStatementLastException: RawUTF8;
     /// list of TSQLVirtualTableModuleServerDB registered external modules
     // - is a TList and not a TObjectList since instances will be destroyed by
     // the SQLite3 engine via sqlite3InternalFreeModule() private function
@@ -356,15 +359,16 @@ type
     fBatchFirstID: TID;
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
-    /// retrieve a TSQLRequest instance, corresponding to any previous
-    // prepared statement using :(%): internal parameters
-    // - will return @fStaticStatement if no :(%): internal parameters appear:
+    /// retrieve a TSQLRequest instance in fStatement
+    // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSQLRequest.Close method must be called
-    // - will return a @fStatementCache[].Statement, after having bounded the
+    // - will set a @fStatementCache[].Statement, after having bounded the
     // :(%): parameter values; in this case, TSQLRequest.Close must not be called
     // - expect sftBlob, sftBlobDynArray and sftBlobRecord properties
     // to be encoded as ':("\uFFF0base64encodedbinary"):'
-    function GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean): PSQLRequest;
+    procedure GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean);
+    /// free a static prepared statement on success or from except on E: Exception block 
+    procedure GetAndPrepareStatementRelease(E: Exception=nil; const Msg: RawUTF8='');
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
     {$ifdef WITHLOG}
@@ -509,7 +513,7 @@ type
     // create a new TSQLRecord type)
     procedure CreateMissingTables(user_version: cardinal=0;
       Options: TSQLInitializeTableOptions=[]); override;
-
+  published
     /// associated database
     property DB: TSQLDataBase read fDB;
   end;
@@ -659,41 +663,58 @@ end;
 
 { TSQLRestServerDB }
 
-function TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
-  ForceCacheStatement: boolean): PSQLRequest;
-var i, maxParam: integer;
+procedure TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
+  ForceCacheStatement: boolean);
+var i, maxParam,sqlite3param: integer;
     Types: TSQLParamTypeDynArray;
     Nulls: TSQLFieldBits;
     Values: TRawUTF8DynArray;
-    GenericSQL: RawUTF8;
 begin
-  GenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
+  fStatementTimer.Start;
+  fStatementSQL := SQL;
+  fStatementGenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
   if (maxParam=0) and not ForceCacheStatement then begin
     // SQL code with no valid :(...): internal parameters
-    result := @fStaticStatement;
-    result^.Prepare(DB.DB,SQL);
-    {$ifdef WITHLOG}
-    fLogFamily.SynLog.Log(sllSQL,'% is no prepared statement',SQL,self);
-    {$endif}
+    fStatementGenericSQL := '';
+    fStaticStatement.Prepare(DB.DB,SQL);
+    fStatement := @fStaticStatement;
     exit;
   end;
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllSQL,'% prepared with % param%',[SQL,maxParam,PLURAL_FORM[maxParam>1]],self);
-  {$endif}
-  result := fStatementCache.Prepare(GenericSQL);
+  fStatement := fStatementCache.Prepare(fStatementGenericSQL);
   // bind parameters
-  assert(sqlite3.bind_parameter_count(result^.Request)=maxParam);
+  sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
+  if sqlite3param<>maxParam then
+    raise EORMException.CreateUTF8(
+      '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
+      [self,fStatementGenericSQL,maxParam,sqlite3param]);
   for i := 0 to maxParam-1 do
   if i in Nulls then
-    result^.BindNull(i+1) else
+    fStatement^.BindNull(i+1) else
     case Types[i] of
       sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
-      sptText:    result^.Bind(i+1,Values[i]);
-      sptBlob:    result^.Bind(i+1,pointer(Values[i]),length(Values[i]));
-      sptInteger: result^.Bind(i+1,GetInt64(pointer(Values[i])));
-      sptFloat:   result^.Bind(i+1,GetExtended(pointer(Values[i])));
+      sptText:    fStatement^.Bind(i+1,Values[i]);
+      sptBlob:    fStatement^.Bind(i+1,pointer(Values[i]),length(Values[i]));
+      sptInteger: fStatement^.Bind(i+1,GetInt64(pointer(Values[i])));
+      sptFloat:   fStatement^.Bind(i+1,GetExtended(pointer(Values[i])));
     end;
 end;
+
+procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
+begin
+  {$ifdef WITHLOG}
+  with fLogFamily.SynLog do
+  if E=nil then
+    Log(sllSQL,'% % %',[fStatementTimer.Stop,Msg,fStatementSQL],self) else
+    Log(sllError,'% for % // %',[E,fStatementSQL,fStatementGenericSQL],self);
+  {$endif}
+  if fStatement=@fStaticStatement then
+    fStaticStatement.Close;
+  fStatement := nil;
+  fStatementSQL := '';
+  fStatementGenericSQL := '';
+  if E<>nil then
+    fStatementLastException := FormatUTF8('% %',[E,ObjectToJSON(E)]);
+end; 
 
 procedure TSQLRestServerDB.FlushStatementCache;
 begin
@@ -833,10 +854,14 @@ var t,f,nt,nf: integer;
     aSQL: RawUTF8;
 begin
   if DB.TransactionActive then
-    raise EBusinessLayerException.Create('CreateMissingTables: Transaction');
+    raise EBusinessLayerException.Create('CreateMissingTables in transaction');
   fDB.GetTableNames(TableNamesAtCreation);
   nt := length(TableNamesAtCreation);
   QuickSortRawUTF8(TableNamesAtCreation,nt,nil,@StrIComp);
+  {$ifdef WITHLOG}
+  fLogFamily.SynLog.Log(sllDB,'CreateMissingTables on %',[fDB],self);
+  fLogFamily.SynLog.Log(sllDB,'GetTables',TypeInfo(TRawUTF8DynArray),TableNamesAtCreation,self);
+  {$endif}
   fillchar(TableJustCreated,sizeof(TSQLFieldTables),0);
   try
     // create not static and not existing tables
@@ -955,8 +980,8 @@ end;
 function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
   ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUTF8;
   ValueInts: PIntegerDynArray; LastInsertedID: PInt64): boolean;
-var Req: PSQLRequest;
-    ValueIntsCount, Res: Integer;
+var ValueIntsCount, Res: Integer;
+    msg: RawUTF8;
 begin
   if (self<>nil) and (DB<>nil) then
   try
@@ -965,35 +990,43 @@ begin
       result := true;
       if not PrepareVacuum(aSQL) then
         exit; // no-op if there are some static virtual tables around
-      Req := GetAndPrepareStatement(aSQL,ForceCacheStatement);
-      if Req<>nil then
-      with Req^ do
       try
+        GetAndPrepareStatement(aSQL,ForceCacheStatement);
         if ValueInts<>nil then begin
           ValueIntsCount := 0;
           repeat
-            res := Step;
+            res := fStatement^.Step;
             if res=SQLITE_ROW then
-              AddInteger(ValueInts^,ValueIntsCount,FieldInt(0));
+              AddInteger(ValueInts^,ValueIntsCount,fStatement^.FieldInt(0));
           until res=SQLITE_DONE;
           SetLength(ValueInts^,ValueIntsCount);
+          msg := FormatUTF8('returned % integer%',
+            [ValueIntsCount,PLURAL_FORM[ValueIntsCount>1]]);
         end else
         if (ValueInt=nil) and (ValueUTF8=nil) then begin
           // default execution: loop through all rows
-          repeat until Step<>SQLITE_ROW;
-          if LastInsertedID<>nil then
+          repeat until fStatement^.Step<>SQLITE_ROW;
+          if LastInsertedID<>nil then begin
             LastInsertedID^ := DB.LastInsertRowID;
-        end else begin
-          // get one row, and retrieve value
-          if Step=SQLITE_ROW then
-            if ValueInt<>nil then
-              ValueInt^ := FieldInt(0) else
-              ValueUTF8^ := FieldUTF8(0) else
-            result := false;
+            msg := FormatUTF8('lastInsertedID=%',[LastInsertedID^]);
           end;
-      finally
-        if Req=@fStaticStatement then
-          Close;
+        end else
+          // get one row, and retrieve value
+          if fStatement^.Step<>SQLITE_ROW then
+            result := false else
+            if ValueInt<>nil then begin
+              ValueInt^ := fStatement^.FieldInt(0);
+              msg := FormatUTF8('returned=%',[ValueInt^]);
+            end else begin
+              ValueUTF8^ := fStatement^.FieldUTF8(0);
+              msg := FormatUTF8('returned="%"',[ValueUTF8^]);
+            end;
+        GetAndPrepareStatementRelease(nil,msg);
+      except
+        on E: Exception do begin
+          GetAndPrepareStatementRelease(E);
+          result := false;
+        end;
       end;
     finally
       DB.UnLock;
@@ -1001,9 +1034,9 @@ begin
   except
     on E: ESQLite3Exception do begin
       {$ifdef WITHLOG}
-      fLogFamily.SynLog.Log(sllError,'% for %',[E,aSQL],self);
+      fLogFamily.SynLog.Log(sllError,'% for % // %',[E,aSQL,fStatementGenericSQL],self);
       {$else}
-      LogToTextFile('TSQLRestServerDB.InternalExecute: '+RawUTF8(E.Message)+#13#10+aSQL);
+      LogToTextFile('TSQLRestServerDB.InternalExecute '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}
       result := false;
     end;
@@ -1019,6 +1052,9 @@ begin
   result := false;
   if (self<>nil) and (DB<>nil) and (aSQL<>'') and Assigned(StoredProc) then
   try
+    {$ifdef WITHLOG}
+    fLogFamily.SynLog.Enter(self);
+    {$endif}
     DB.LockAndFlushCache; // even if aSQL is SELECT, StoredProc may update data
     try
       try
@@ -1055,8 +1091,7 @@ end;
 
 function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
-var Req: PSQLRequest;
-    MS: TRawByteStringStream;
+var MS: TRawByteStringStream;
     RowCount: integer;
 begin
   result := '';
@@ -1067,24 +1102,20 @@ begin
     if result='' then // Execute request if was not got from cache
     try
       try
-        Req := GetAndPrepareStatement(SQL,false);
-        if Req<>nil then begin
-          MS := TRawByteStringStream.Create;
-          try
-            try
-              RowCount := Req^.Execute(0,'',MS,ForceAJAX or (not NoAJAXJSON));
-              result := MS.DataString;
-            finally
-              if Req=@fStaticStatement then
-                Req^.Close;
-            end;
-          finally
-            MS.Free;
-          end;
+        GetAndPrepareStatement(SQL,false);
+        MS := TRawByteStringStream.Create;
+        try
+          RowCount := fStatement^.Execute(0,'',MS,ForceAJAX or (not NoAJAXJSON));
+          result := MS.DataString;
+        finally
+          MS.Free;
         end;
+        GetAndPrepareStatementRelease(nil,
+          FormatUTF8('returned % row% as % bytes',
+            [RowCount,PLURAL_FORM[RowCount>1],length(result)]));
       except
-        on ESQLite3Exception do
-          result := '';
+        on E: ESQLite3Exception do
+          GetAndPrepareStatementRelease(E);
       end;
     finally
       DB.UnLockJSON(result,RowCount);
@@ -1114,28 +1145,27 @@ end;
 function TSQLRestServerDB.MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
-    Req: PSQLRequest;
 begin
   result := false;
   if (aID<0) or (TableModelIndex<0) or not BlobField^.IsBlob then
     exit;
   // retrieve the BLOB using SQL
   try
-    SQL := FormatUTF8('SELECT % FROM % WHERE RowID=?;',
-      [BlobField^.Name,Model.TableProps[TableModelIndex].Props.SQLTableName]);
+    SQL := FormatUTF8('SELECT % FROM % WHERE RowID=?',
+      [BlobField^.Name,Model.TableProps[TableModelIndex].Props.SQLTableName],[aID]);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
-      Req := fStatementCache.Prepare(SQL);
-      with Req^ do
+      GetAndPrepareStatement(SQL,true);
       try
-        Bind(1,aID);
-        if (FieldCount=1) and (Step=SQLITE_ROW) then begin
-          BlobData := FieldBlob(0);
+        fStatement^.Bind(1,aID);
+        if (fStatement^.FieldCount=1) and (fStatement^.Step=SQLITE_ROW) then begin
+          BlobData := fStatement^.FieldBlob(0);
           result := true;
         end;
-      finally
-        if Req=@fStaticStatement then
-          Close;
+        GetAndPrepareStatementRelease(nil,FormatUTF8('returned % bytes',[length(BlobData)]));
+      except
+        on E: Exception do
+          GetAndPrepareStatementRelease(E);
       end;
     finally
       DB.UnLock;
@@ -1579,7 +1609,6 @@ var ndx,f,r,prop,fieldCount,valuesCount,rowCount,valuesFirstRow: integer;
     Types: TSQLDBFieldTypeDynArray;
     SQL, privateCopy: RawUTF8;
     Props: TSQLRecordProperties;
-    Statement: PSQLRequest;
     Decode: TJSONObjectDecoder;
 begin
   if fBatchMethod<>mPOST then
@@ -1646,41 +1675,49 @@ begin
         DecodeSaved := true;
       until ndx=fBatchValuesCount;
       // INSERT Values[] into the DB
-      if rowCount>1 then
-        SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
-      Statement := nil; // make compiler happy
       DB.LockAndFlushCache;
       try
-        if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
-          Statement := fStatementCache.Prepare(SQL) else begin
-          Statement := @fStaticStatement;
-          Statement^.Prepare(DB.DB,SQL)
+        try
+          fStatementSQL := FormatUTF8('% multi %',[rowCount,SQL]);
+          if rowCount>1 then
+            SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
+          fStatementGenericSQL := SQL; // full log on error
+          fStatementTimer.Start;
+          if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
+            fStatement := fStatementCache.Prepare(SQL) else begin
+            fStaticStatement.Prepare(DB.DB,SQL);
+            fStatement := @fStaticStatement;
+          end;
+          prop := 0;
+          for f := 0 to valuesCount-1 do begin
+            if GetBit(ValuesNull[0],f) then
+              fStatement^.BindNull(f+1) else
+              case Types[prop] of
+              ftInt64:
+                fStatement^.Bind(f+1,GetInt64(pointer(Values[f])));
+              ftDouble, ftCurrency:
+                fStatement^.Bind(f+1,GetExtended(pointer(Values[f])));
+              ftDate, ftUTF8:
+                fStatement^.Bind(f+1,Values[f]);
+              ftBlob:
+                fStatement^.Bind(f+1,pointer(Values[f]),length(Values[f]));
+              end;
+            inc(prop);
+            if prop=fieldCount then
+              prop := 0;
+          end;
+          repeat until fStatement^.Step<>SQLITE_ROW;
+          for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
+            InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID+r,fBatchValues[r],nil);
+          inc(valuesFirstRow,rowCount);
+          GetAndPrepareStatementRelease;
+        except
+          on E: Exception do begin
+            GetAndPrepareStatementRelease(E);
+            raise;
+          end;
         end;
-        prop := 0;
-        for f := 0 to valuesCount-1 do begin
-          if GetBit(ValuesNull[0],f) then
-            Statement^.BindNull(f+1) else
-            case Types[prop] of
-            ftInt64:
-              Statement^.Bind(f+1,GetInt64(pointer(Values[f])));
-            ftDouble, ftCurrency:
-              Statement^.Bind(f+1,GetExtended(pointer(Values[f])));
-            ftDate, ftUTF8:
-              Statement^.Bind(f+1,Values[f]);
-            ftBlob:
-              Statement^.Bind(f+1,pointer(Values[f]),length(Values[f]));
-            end;
-          inc(prop);
-          if prop=fieldCount then
-            prop := 0;
-        end;
-        repeat until Statement^.Step<>SQLITE_ROW;
-        for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
-          InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID+r,fBatchValues[r],nil);
-        inc(valuesFirstRow,rowCount);
       finally
-        if Statement=@fStaticStatement then
-          fStaticStatement.Close;
         DB.UnLock;
       end;
       fillchar(ValuesNull[0],(ValuesCount shr 3)+1,0);
@@ -1696,6 +1733,7 @@ begin
     LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
   end;
 end;
+
 
 { TSQLRestClientDB }
 

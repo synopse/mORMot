@@ -531,7 +531,7 @@ end;
 
 { TSynTestCase }
 
-{$define CHECKDOLOG}
+{.$define CHECKDOLOG}
 
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
 begin
@@ -1114,14 +1114,20 @@ var tmp: RawUTF8;
 begin
   inherited;
   with TestCase[fCurrentMethod] do begin
-{$ifdef DELPHI5OROLDER}
+    {$ifdef DELPHI5OROLDER}
     tmp := Ident+': '+TestName[fCurrentMethodIndex];
     if msg<>'' then
       tmp := tmp+' "'+msg+'"';
     fLogFile.Log(sllFail,tmp);
-{$else}
+    {$else}
     fLogFile.Log(sllFail,sFailed,[Ident,TestName[fCurrentMethodIndex],msg],aTest);
-{$endif}
+    {$endif}
+    TextColor(ccLightRed);
+    {$ifdef KYLIX3} // we do not have a debugger for CrossKylix -> stop here!
+    fLogFile.Flush(true);
+    writeln('!!! ',Ident,' - ',TestName[fCurrentMethodIndex],
+      ' "',msg,'" failed !!!'); readln;
+    {$endif}
   end;
 end;
 

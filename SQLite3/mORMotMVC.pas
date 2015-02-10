@@ -1407,8 +1407,8 @@ begin
     CommandError('notfound',true,HTML_NOTFOUND);
   except
     on E: Exception do
-      CommandError('exception',FormatUTF8('% raised in %.ExecuteCommand: %',
-        [E,self,E.Message]),HTML_SERVERERROR);
+      CommandError('exception',
+        ObjectToVariantDebug(E,'%.ExecuteCommand',[self]),HTML_SERVERERROR);
   end;
 end;
 

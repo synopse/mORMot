@@ -2287,11 +2287,7 @@ type
     /// initialize the Exception for a given request
     constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
       aConnection: TMongoConnection); reintroduce;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    /// used to customize the exception log to contain information about the Query
-    // - it will log the connection parameters
-    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
-    {$endif}
+  published
     /// the associated connection
     property Connection: TMongoConnection read fConnection;
   end;
@@ -2310,6 +2306,7 @@ type
     // - it will log the database parameters
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
     {$endif}
+  published
     /// the associated Database
     property Database: TMongoDatabase read fDatabase;
   end;
@@ -2341,6 +2338,7 @@ type
     {$endif}
     /// the associated error reply document
     property ErrorReply: TMongoReplyCursor read fError;
+  published
     /// the associated error reply document, as a TDocVariant instance
     // - will return the first document available in ErrorReply, or the supplied
     // aErrorDoc: TDocVariantData instance
@@ -5129,18 +5127,6 @@ begin
   fConnection := aConnection;
 end;
 
-{$ifndef NOEXCEPTIONINTERCEPT}
-function EMongoConnectionException.CustomLog(WR: TTextWriter;
-  const Context: TSynLogExceptionContext): boolean;
-begin
-  inherited CustomLog(WR,Context);
-  WR.AddShort('  ');
-  if fConnection<>nil then
-    WR.Add('using %:%  ',[fConnection.ServerAddress,fConnection.ServerPort]);
-  result := false; // log stack trace
-end;
-{$endif}
-
 
 { EMongoRequestException }
 
@@ -5185,11 +5171,7 @@ begin
     fRequest.ToJSON(WR,modMongoShell);
   end;
   if fError.Reply<>'' then
-    fError.FetchAllToJSON(WR,modMongoShell,True) else
-  if TVarData(fErrorDoc).VType<>varEmpty then begin
-    WR.AddShort(' ReplyDocument:');
-    AddMongoJSON(variant(fErrorDoc),WR,modMongoShell);
-  end;
+    fError.FetchAllToJSON(WR,modMongoShell,True);
   result := false; // log stack trace
 end;
 {$endif}

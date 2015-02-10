@@ -1536,14 +1536,13 @@ procedure TOleDBStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
 var L: integer;
     SQLW: RawUnicode;
+    Timer: TPrecisionTimer;
 begin
+  Timer.Start;
   if Assigned(fCommand) or Assigned(fRowSet) or (fColumnCount>0) or
      (fColumnBindings<>nil) or (fParamBindings<>nil) then
     raise EOleDBException.CreateUTF8('%.Prepare should be called once',[self]);
   inherited;
-  with SynDBLog.Add do
-  if sllSQL in Family.Level then
-    Log(sllSQL,SQLWithInlinedParams,self,2048);
   with OleDBConnection do begin
     if not IsConnected then
       Connect;
@@ -1556,6 +1555,9 @@ begin
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
+  with SynDBLog.Add do
+  if sllDB in Family.Level then
+    Log(sllDB,'Prepare % %',[Timer.Stop,SQL],self);
 end;
 
 procedure TOleDBStatement.ExecutePrepared;
@@ -1564,9 +1566,9 @@ var i: integer;
     B: PDBBinding;
     ParamsStatus: TCardinalDynArray;
     RowSet: IRowSet;
-    Log: ISynLog;
+    Timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Timer.Start;
   try
     // 1. check execution context
     if not Assigned(fCommand) then
@@ -1648,9 +1650,12 @@ begin
       // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
       OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
+    with SynDBLog.Add do
+      if sllSQL in Family.Level then
+        Log(sllSQL,'% %',[Timer.Stop,SQLWithInlinedParams],self);
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      SynDBLog.Add.Log(sllError,E);
       raise;
     end;
   end;
@@ -1696,9 +1701,6 @@ begin
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if fRowSetAccessor=0 then begin
     // first time called -> need to init accessor from fColumnBindings[]
-    {$ifndef DELPHI5OROLDER}
-    SynDBLog.Enter(self,'CreateAccessor',true);
-    {$endif}
     SetLength(Status,fColumnCount);
     OleDBConnection.OleDBCheck(self,(fRowSet as IAccessor).CreateAccessor(
       DBACCESSOR_ROWDATA or DBACCESSOR_OPTIMIZED,fColumnCount,
@@ -1735,12 +1737,10 @@ begin
 end;
 
 destructor TOleDBStatement.Destroy;
-var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
   try
     {$ifndef DELPHI5OROLDER}
-    Log.Log(sllDB,'Total rows = %',[TotalRowsRetrieved],self);
+    SynDBLog.Add.Log(sllDB,'Rows = %',[self,TotalRowsRetrieved],self);
     {$endif}
     CloseRowSet;
   finally
@@ -1954,7 +1954,7 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   // check context
   if Connected then
     Disconnect;
@@ -1992,7 +1992,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2004,7 +2004,7 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
@@ -2017,7 +2017,7 @@ end;
 
 procedure TOleDBConnection.Disconnect;
 begin
-  SynDBLog.Enter(self,nil,true);
+  SynDBLog.Enter(self);
   try
     inherited Disconnect; // flush any cached statement
   finally

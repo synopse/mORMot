@@ -2047,9 +2047,14 @@ begin
         end; // no break on purpose, if ErrorCode matches more than one Exception
     end;
     {$endif}
-    WR.AddShort(' ("');
-    WR.AddJSONEscapeString(Context.EInstance.Message);
-    WR.AddShort('")');
+    WR.Add(' ');
+    if (WR.ClassType=TTextWriter) or
+       not Context.EInstance.InheritsFrom(ESynException) then begin
+      WR.AddShort('("');
+      WR.AddJSONEscapeString(Context.EInstance.Message);
+      WR.AddShort('")');
+    end else
+       WR.WriteObject(Context.EInstance);
   end else begin
     WR.AddShort(' (');
     WR.AddPointer(Context.ECode);
@@ -3220,9 +3225,12 @@ begin
       if Instance<>nil then
         if Instance.InheritsFrom(Exception) then begin
           fWriter.AddInstanceName(Instance,':');
-          fWriter.Add('"');
-          fWriter.AddJSONEscapeString(Exception(Instance).Message);
-          fWriter.Add('"');
+          if Instance.InheritsFrom(ESynException) then
+            fWriter.WriteObject(Instance,[woFullExpand]) else begin
+            fWriter.Add('"');
+            fWriter.AddJSONEscapeString(Exception(Instance).Message);
+            fWriter.Add('"');
+          end;
         end else
           fWriter.WriteObject(Instance,[woFullExpand]);
     end else begin

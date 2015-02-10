@@ -4359,6 +4359,7 @@ procedure TCollTstDynArrayTest;
 var CA: TCollTstDynArray;
     i: integer;
     tmp: RawByteString;
+    pu: PUTF8Char;
 begin
   CA := TCollTstDynArray.Create;
   try
@@ -4415,7 +4416,8 @@ begin
     U := ObjectToJSON(CA);
     DA.Clear;
     Check(Length(CA.FileVersion)=0);
-    Check(JSONToObject(CA,pointer(U),Valid)=nil);
+    pu := JSONToObject(CA,pointer(U),Valid);
+    Check(pu=nil);
     Check(Valid);
     Check(Length(CA.Ints)=20000);
     Check(Length(CA.TimeLog)=CA.Str.Count);
@@ -7645,7 +7647,7 @@ var
 function TTestSQLite3Engine.OnBackupProgress(Sender: TSQLDatabaseBackupThread): Boolean;
 begin
   if Sender.Step in backupFinished then
-    SQLite3Log.Add.Log(sllTrace,'Background backup finished in '+BackupTimer.Stop);
+    SQLite3Log.Add.Log(sllDB,'Background backup finished in '+BackupTimer.Stop);
   BackupProgressStep := Sender.Step;
   result := true;
 end;
@@ -7723,15 +7725,11 @@ var
   i1,i2: integer;
   Res: Int64;
   password, s: RawUTF8;
+  R: TSQLRequest;
 begin
-  SoundexValues[0] := 'bonjour';
-  SoundexValues[1] := 'bonchour';
-  SoundexValues[2] := 'Bnjr';
-  SoundexValues[3] := 'mohammad';
-  SoundexValues[4] := 'mohhhammeeet';
-  SoundexValues[5] := 'bonjourtr'+_uE8+'slongmotquid'+_uE9+'passe';
   if Pos('TSQLite3Library',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10+string(sqlite3.Information);
+    Owner.CustomVersions := Owner.CustomVersions+#13#10+
+      string(sqlite3.ClassName)+' '+string(sqlite3.Version);
   if ClassType=TTestMemoryBased then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';
@@ -7747,12 +7745,22 @@ begin
   Demo.LockingMode := lmExclusive;
   if ClassType=TTestFileBasedMemoryMap then 
     Demo.MemoryMappedMB := 256; // will do nothing for SQLite3 < 3.7.17
+  R.Prepare(Demo.DB,'select mod(?,?)');
   for i1 := 0 to 100 do
     for i2 := 1 to 100 do begin
-      s := FormatUTF8('SELECT MOD(%,%);',[i1,i2]);
-      Demo.Execute(s,res);
-      Check(res=i1 mod i2,s);
+      R.Bind(1,i1);
+      R.Bind(2,i2);
+      check(R.Step=SQLITE_ROW);
+      check(R.FieldInt(0)=i1 mod i2);
+      R.Reset;
     end;
+  R.Close;
+  SoundexValues[0] := 'bonjour';
+  SoundexValues[1] := 'bonchour';
+  SoundexValues[2] := 'Bnjr';
+  SoundexValues[3] := 'mohammad';
+  SoundexValues[4] := 'mohhhammeeet';
+  SoundexValues[5] := 'bonjourtr'+_uE8+'slongmotquid'+_uE9+'passe';
   for i1 := 0 to high(SoundexValues) do begin
     s := FormatUTF8('SELECT SoundEx("%");',[SoundexValues[i1]]);
     Demo.Execute(s,res);

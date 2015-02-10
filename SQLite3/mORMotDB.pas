@@ -585,6 +585,7 @@ begin
     result := nil;
 end;
 
+
 { TSQLRestStorageExternal }
 
 constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
@@ -665,21 +666,28 @@ var SQL: RawUTF8;
     FieldAdded: Boolean;
     CreateColumns: TSQLDBColumnCreateDynArray;
     log: TSynLog;
+procedure GetFields;
 begin
+  fProperties.GetFields(fTableName,fFieldsExternal);
+  log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
+end;
+begin
+  log := Owner.LogClass.Add;
+  log.Enter(self);
   inherited Create(aClass,aServer);
   // initialize external DB properties
   fTableName := StoredClassProps.ExternalDB.TableName;
   fProperties := StoredClassProps.ExternalDB.ConnectionProperties as TSQLDBConnectionProperties;
+  log.Log(sllInfo,'% % Server=%',[StoredClass,fProperties,Owner],self);
   if fProperties=nil then
     raise EBusinessLayerException.CreateUTF8(
-      '%.Create: No external DB defined for %',[self,StoredClass]);
+      '%.Create: no external DB defined for %',[self,StoredClass]);
   // ensure external field names are compatible with the external DB keywords
   for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
     nfo := StoredClassRecordProps.Fields.List[f];
     if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
       SQL := fStoredClassProps.ExternalDB.FieldNames[f];
       if fProperties.IsSQLKeyword(SQL) then begin
-        log := Owner.LogClass.Add;
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName]);
         if fStoredClassProps.ExternalDB.AutoMapKeywordFields then begin
@@ -692,7 +700,7 @@ begin
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
-  fProperties.GetFields(fTableName,fFieldsExternal);
+  GetFields;
   if fFieldsExternal=nil then begin
     // table is not yet existing -> try to create it
     with aClass.RecordProps do begin
@@ -712,7 +720,7 @@ begin
     SQL := fProperties.SQLCreate(fTableName,CreateColumns,false);
     if SQL<>'' then
       if ExecuteDirect(pointer(SQL),[],[],false)<>nil then begin
-        fProperties.GetFields(fTableName,fFieldsExternal); // fields from DB after create
+        GetFields;
         if fFieldsExternal=nil then
           raise EORMException.CreateUTF8('%.Create: external table creation % failed:'+
             ' GetFields() returned nil - SQL="%"',[self,StoredClass,fTableName,SQL]);
@@ -739,7 +747,7 @@ begin
       end;
     end;
   if FieldAdded then begin
-    fProperties.GetFields(fTableName,fFieldsExternal); // get from DB after ALTER TABLE
+    GetFields; // get from DB after ALTER TABLE
     FieldsInternalInit;
   end;
   // compute the SQL statements used internaly for external DB requests
@@ -1889,8 +1897,11 @@ begin
         end;
         OmitCheck := true; // search handled via SQL query
         Value.VType := ftNull; // caller vt_BestIndex() expects <> ftUnknown
-        if hasIndex then // the more indexes, the faster
-          Prepared.EstimatedCost := Prepared.EstimatedCost/100;
+        if hasIndex then
+          // the more indexes, the faster
+          Prepared.EstimatedCost := Prepared.EstimatedCost/100 else
+          // always favor a where clause: full scan is always slower
+          Prepared.EstimatedCost := Prepared.EstimatedCost/2;
       end;
     // check the OrderBy[] clauses
     if Prepared.OrderByCount>0 then begin

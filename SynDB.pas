@@ -515,7 +515,9 @@ type
   /// set of the available database definitions
   TSQLDBDefinitions = set of TSQLDBDefinition;
 
+  {$M+}
   TSQLDBStatement = class;
+  {$M-}
 
 {$ifndef LVCL}
 {$ifndef DELPHI5OROLDER}
@@ -898,8 +900,6 @@ type
     function UpdateCount: Integer;
   end;
 
-  {$M+} { published properties to be logged as JSON }
-
 {$ifdef WITH_PROXY}
   /// proxy commands implemented by TSQLDBProxyConnectionProperties.Process()
   // - method signature expect "const Input" and "var Output" arguments
@@ -949,8 +949,10 @@ type
 
 {$endif WITH_PROXY}
 
+  {$M+} { published properties to be logged as JSON }
   TSQLDBConnection = class;
   TSQLDBConnectionProperties = class;
+  {$M-}
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
@@ -1388,14 +1390,53 @@ type
     // - call the ThreadSafeConnection method instead e.g. for multi-thread
     // access, or NewThreadSafeStatement for direct retrieval of a new statement
     property MainConnection: TSQLDBConnection read GetMainConnection;
-    /// the associated User Identifier, as specified at creation
-    property UserID: RawUTF8 read fUserID;
     /// the associated User Password, as specified at creation
+    // - not published, for security reasons (may be serialized otherwise)
     property PassWord: RawUTF8 read fPassWord;
     /// can be used to store the fForeignKeys[] data in an external BLOB
     // - since GetForeignKeys can be (somewhat) slow, could save a lot of time
     property ForeignKeysData: RawByteString
       read GetForeignKeysData write SetForeignKeysData;
+    /// this event handler will be called during all process
+    // - can be used e.g. to change the desktop cursor
+    // - you can override this property directly in the TSQLDBConnection
+    property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
+    /// you can define a callback method able to handle multiple INSERT
+    // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
+    // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
+    property OnBatchInsert: TOnBatchInsert read fOnBatchInsert write fOnBatchInsert;
+  published { to be logged as JSON - no UserID nor Password for security :) }
+    /// return the database engine name, as computed from the class name
+    // - 'TSQLDBConnectionProperties' will be trimmed left side of the class name
+    property Engine: RawUTF8 read fEngineName;
+    /// the associated server name, as specified at creation
+    property ServerName: RawUTF8 read fServerName;
+    /// the associated database name, as specified at creation
+    property DatabaseName: RawUTF8 read fDatabaseName;
+    /// the associated User Identifier, as specified at creation
+    property UserID: RawUTF8 read fUserID;
+    /// the remote DBMS type, as stated by the inheriting class itself, or
+    //  retrieved at connecton time (e.g. for ODBC)
+    property DBMS: TSQLDBDefinition read GetDBMS;
+    /// the remote DBMS type name, retrieved as text from the DBMS property
+    property DBMSEngineName: RawUTF8 read GetDBMSName;
+    /// the abilities of the database for batch sending
+    // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
+    property BatchSendingAbilities: TSQLDBStatementCRUDs read fBatchSendingAbilities;
+    /// the maximum number of rows to be transmitted at once for batch sending
+    // - e.g. Oracle handles array DML operation with iters <= 32767 at best
+    // - if OnBatchInsert points to MultipleValuesInsert(), this value is
+    // ignored, and the maximum number of parameters is guessed per DBMS type
+    property BatchMaxSentAtOnce: integer read fBatchMaxSentAtOnce write fBatchMaxSentAtOnce;
+    /// the maximum size, in bytes, of logged SQL statements
+    // - default 0 will log statement and parameters with no size limit
+    // - setting -1 will log statement without any parameter value (just ?)
+    // - setting any value >0 will log statement and parameters up to the
+    // number of bytes (could be set e.g. to 2048 to log up to 2KB per statement)
+    property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
+    /// allow to log the SQL statement when any low-level ESQLDBException is raised
+    property LogSQLStatementOnException: boolean read fLogSQLStatementOnException
+      write fLogSQLStatementOnException;
     /// an optional Schema name to be used for SQLGetField() instead of UserID
     // - by default, UserID will be used as schema name, if none is specified
     // (i.e. if table name is not set as SCHEMA.TABLE)
@@ -1423,44 +1464,6 @@ type
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
     property StoreVoidStringAsNull: Boolean read fStoreVoidStringAsNull write fStoreVoidStringAsNull;
-    /// this event handler will be called during all process
-    // - can be used e.g. to change the desktop cursor
-    // - you can override this property directly in the TSQLDBConnection
-    property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
-  published { to be logged as JSON - no UserID nor Password for security :) }
-    /// return the database engine name, as computed from the class name
-    // - 'TSQLDBConnectionProperties' will be trimmed left side of the class name
-    property Engine: RawUTF8 read fEngineName;
-    /// the associated server name, as specified at creation
-    property ServerName: RawUTF8 read fServerName;
-    /// the associated database name, as specified at creation
-    property DatabaseName: RawUTF8 read fDatabaseName;
-    /// the remote DBMS type, as stated by the inheriting class itself, or
-    //  retrieved at connecton time (e.g. for ODBC)
-    property DBMS: TSQLDBDefinition read GetDBMS;
-    /// the remote DBMS type name, retrieved as text from the DBMS property
-    property DBMSEngineName: RawUTF8 read GetDBMSName;
-    /// the abilities of the database for batch sending
-    // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
-    property BatchSendingAbilities: TSQLDBStatementCRUDs read fBatchSendingAbilities;
-    /// the maximum number of rows to be transmitted at once for batch sending
-    // - e.g. Oracle handles array DML operation with iters <= 32767 at best
-    // - if OnBatchInsert points to MultipleValuesInsert(), this value is
-    // ignored, and the maximum number of parameters is guessed per DBMS type
-    property BatchMaxSentAtOnce: integer read fBatchMaxSentAtOnce write fBatchMaxSentAtOnce;
-    /// the maximum size, in bytes, of logged SQL statements
-    // - default 0 will log statement and parameters with no size limit
-    // - setting -1 will log statement without any parameter value (just ?)
-    // - setting any value >0 will log statement and parameters up to the
-    // number of bytes (could be set e.g. to 2048 to log up to 2KB per statement)
-    property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
-    /// allow to log the SQL statement when any low-level ESQLDBException is raised
-    property LogSQLStatementOnException: boolean read fLogSQLStatementOnException
-      write fLogSQLStatementOnException;
-    /// you can define a callback method able to handle multiple INSERT
-    // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
-    // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
-    property OnBatchInsert: TOnBatchInsert read fOnBatchInsert write fOnBatchInsert;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
@@ -1480,7 +1483,6 @@ type
     property VariantStringAsWideString: boolean read fVariantWideString write fVariantWideString;
     {$endif}
   end;
-  {$M-}
 
   /// specify the class of TSQLDBConnectionProperties
   // - sometimes used to create connection properties instances, from a set
@@ -1545,6 +1547,7 @@ type
     fErrorMessage: RawUTF8;
     fTransactionCount: integer;
     fServerTimeStampOffset: TDateTime;
+    fServerTimeStampAtConnection: TDateTime;
     fCache: TRawUTF8ListHashed;
     fOnProcess: TOnSQLDBProcess;
     fTotalConnectionCount: integer;
@@ -1627,12 +1630,6 @@ type
       out Output: RawByteString; Protocol: TSQLDBProxyConnectionProtocol); virtual;
     {$endif}
 
-    /// number of nested StartTransaction calls
-    // - equals 0 if no transaction is active
-    property TransactionCount: integer read fTransactionCount;
-    /// TRUE if StartTransaction has been called
-    // - check if TransactionCount>0
-    property InTransaction: boolean read GetInTransaction;
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
     // will most likely return a local time, not an UTC time
@@ -1648,6 +1645,20 @@ type
     // - can be used e.g. to change the desktop cursor
     // - by default, will follow TSQLDBConnectionProperties.OnProcess property
     property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
+  published { to be logged as JSON }
+    /// returns TRUE if the connection was set
+    property Connected: boolean read IsConnected;
+    /// the time returned by the server when the connection occurred
+    property ServerTimeStampAtConnection: TDateTime read fServerTimeStampAtConnection;
+    /// number of sucessfull connections for this instance
+    // - can be greater than 1 in case of re-connection via Disconnect/Connect
+    property TotalConnectionCount: integer read fTotalConnectionCount;
+    /// number of nested StartTransaction calls
+    // - equals 0 if no transaction is active
+    property TransactionCount: integer read fTransactionCount;
+    /// TRUE if StartTransaction has been called
+    // - check if TransactionCount>0
+    property InTransaction: boolean read GetInTransaction;
     /// defines if Disconnect shall Rollback any pending transaction
     // - some engines executes a COMMIT when the client is disconnected, others
     // do raise an exception: this parameter ensures that any pending transaction
@@ -1655,23 +1666,17 @@ type
     // - is set to TRUE by default
     property RollbackOnDisconnect: Boolean
       read fRollbackOnDisconnect write fRollbackOnDisconnect;
+    /// some error message, e.g. during execution of NewStatementPrepared
+    property LastErrorMessage: RawUTF8 read fErrorMessage;
+    /// some error exception, e.g. during execution of NewStatementPrepared
+    property LastErrorException: ExceptClass read fErrorException;
     /// TRUE if last error is a broken connection, e.g. during execution of
     // NewStatementPrepared
     // - i.e. LastErrorException/LastErrorMessage concerns the database connection
     // - will use TSQLDBConnectionProperties.ExceptionIsAboutConnection virtual method
     property LastErrorWasAboutConnection: boolean read GetLastErrorWasAboutConnection;
-  published { to be logged as JSON }
     /// the associated database properties
     property Properties: TSQLDBConnectionProperties read fProperties;
-    /// returns TRUE if the connection was set
-    property Connected: boolean read IsConnected;
-    /// number of sucessfull connections for this instance
-    // - can be greater than 1 in case of re-connection via Disconnect/Connect 
-    property TotalConnectionCount: integer read fTotalConnectionCount;
-    /// some error message, e.g. during execution of NewStatementPrepared
-    property LastErrorMessage: RawUTF8 read fErrorMessage;
-    /// some error exception, e.g. during execution of NewStatementPrepared
-    property LastErrorException: ExceptClass read fErrorException;
   end;
 
   /// generic abstract class to implement a prepared SQL query
@@ -2148,9 +2153,7 @@ type
     procedure ColumnsToBinary(W: TFileBufferWriter;
       const Null: TSQLDBProxyStatementColumns;
       const ColTypes: TSQLDBFieldTypeDynArray); virtual;
-
-    /// the associated database connection
-    property Connection: TSQLDBConnection read fConnection;
+  published
     /// the prepared SQL statement, as supplied to Prepare() method
     property SQL: RawUTF8 read fSQL;
     /// the prepared SQL statement, with all '?' changed into the supplied
@@ -2163,6 +2166,8 @@ type
     // - is not reset when there is no more row of available data (Step returns
     // false), or when Step() is called with SeekFirst=true
     property TotalRowsRetrieved: Integer read fTotalRowsRetrieved;
+    /// the associated database connection
+    property Connection: TSQLDBConnection read fConnection;
   end;
 
   /// abstract connection created from TSQLDBConnectionProperties
@@ -2464,11 +2469,16 @@ type
 
   /// generic Exception type, as used by the SynDB unit
   ESQLDBException = class(ESynException)
+  protected
+    fStatement: TSQLDBStatement;
   public
     /// constructor which will use FormatUTF8() instead of Format()
-    // - if the first Args[0] is a TSQLStatement class instance, the current
+    // - if the first Args[0] is a TSQLDBStatement class instance, the current
     // SQL statement will be part of the exception message 
     constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
+  published
+    /// associated TSQLDBStatement instance, if supplied as first parameter
+    property Statement: TSQLDBStatement read fStatement;
   end;
 
 {$ifdef WITH_PROXY}
@@ -3846,6 +3856,12 @@ begin
   inc(fTotalConnectionCount);
   if fTotalConnectionCount>1 then
     InternalProcess(speReconnected);
+  if fServerTimeStampAtConnection=0 then
+    try
+      fServerTimeStampAtConnection := ServerDateTime;
+    except
+      fServerTimeStampAtConnection := Now;
+    end;
 end;
 
 procedure TSQLDBConnection.Disconnect;
@@ -6661,54 +6677,58 @@ var P,B: PUTF8Char;
     maxSize,maxAllowed: cardinal;
     W: TTextWriter;
 begin
-  P := pointer(fSQL);
-  if P=nil then begin
-    result := '';
-    exit;
-  end;
-  if fSQLWithInlinedParams<>'' then begin
-    result := fSQLWithInlinedParams; // already computed
-    exit;
-  end;
-  maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
-  if integer(maxSize)<0 then begin
-    result := fSQL; // -1 -> log statement without any parameter value (just ?)
-    exit;
-  end;
-  num := 1;
-  W := nil;
   try
-    repeat
-      B := P;
-      while not (P^ in ['?',#0]) do begin
-        if (P[0]='''') and (P[1]<>'''') then begin
-          repeat // ignore chars inside ' quotes
-            inc(P);
-          until (P[0]=#0) or ((P[0]='''')and(P[1]<>''''));
-          if P[0]=#0 then break;
+    P := pointer(fSQL);
+    if P=nil then begin
+      result := '';
+      exit;
+    end;
+    if fSQLWithInlinedParams<>'' then begin
+      result := fSQLWithInlinedParams; // already computed
+      exit;
+    end;
+    maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+    if integer(maxSize)<0 then begin
+      result := fSQL; // -1 -> log statement without any parameter value (just ?)
+      exit;
+    end;
+    num := 1;
+    W := nil;
+    try
+      repeat
+        B := P;
+        while not (P^ in ['?',#0]) do begin
+          if (P[0]='''') and (P[1]<>'''') then begin
+            repeat // ignore chars inside ' quotes
+              inc(P);
+            until (P[0]=#0) or ((P[0]='''')and(P[1]<>''''));
+            if P[0]=#0 then break;
+          end;
+          inc(P);
         end;
-        inc(P);
-      end;
-      if W=nil then
-        if P^=#0 then begin
-          result := fSQL;
-          exit;
-        end else
-        W := TTextWriter.CreateOwnedStream;
-      W.AddNoJSONEscape(B,P-B);
-      if P^=#0 then
-        break;
-      inc(P); // jump P^='?'
-      if maxSize>0 then
-        maxAllowed := W.TextLength-maxSize else
-        maxAllowed := maxInt;
-      AddParamValueAsText(num,W,maxAllowed);
-      inc(num);
-    until (P^=#0) or ((maxSize>0)and(W.TextLength>=maxSize));
-    result := W.Text;
-    fSQLWithInlinedParams := result;
-  finally
-    W.Free;
+        if W=nil then
+          if P^=#0 then begin
+            result := fSQL;
+            exit;
+          end else
+          W := TTextWriter.CreateOwnedStream;
+        W.AddNoJSONEscape(B,P-B);
+        if P^=#0 then
+          break;
+        inc(P); // jump P^='?'
+        if maxSize>0 then
+          maxAllowed := W.TextLength-maxSize else
+          maxAllowed := maxInt;
+        AddParamValueAsText(num,W,maxAllowed);
+        inc(num);
+      until (P^=#0) or ((maxSize>0)and(W.TextLength>=maxSize));
+      result := W.Text;
+      fSQLWithInlinedParams := result;
+    finally
+      W.Free;
+    end;
+  except
+    result := '';
   end;
 end;
 
@@ -6724,7 +6744,7 @@ var V: variant;
     L: integer;
 begin
   if cardinal(Param-1)>=cardinal(fParamCount) then
-    result := '?OOR?' else begin
+    result := '?' else begin
     if MaxCharCount<=0 then
       MaxCharCount := maxInt;
     case ParamToVariant(Param,V,false) of
@@ -7072,7 +7092,7 @@ procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer; Dest: TT
 begin
   dec(Param);
   if cardinal(Param)>=cardinal(fParamCount) then
-    Dest.AddShort('?OOR?') else
+    Dest.Add(',') else
     with fParams[Param] do
     case VType of
       ftNull:     Dest.AddShort('NULL');
@@ -7969,28 +7989,38 @@ end;
 { ESQLDBException }
 
 constructor ESQLDBException.CreateUTF8(Format: PUTF8Char; const Args: array of const);
-var msg,sql: RawUTF8;
-    Stmt: TSQLDBStatement;
+var msg, sql: RawUTF8;
 begin
   msg := FormatUTF8(Format,Args);
   if (length(Args)>0) and (Args[0].VType=vtObject) and (Args[0].VObject<>nil) then begin
-    Stmt := TSQLDBStatement(Args[0].VObject);
-    if Stmt.InheritsFrom(TSQLDBStatement) and
-       Stmt.Connection.Properties.LogSQLStatementOnException then begin
-      try
-        sql := Stmt.GetSQLWithInlinedParams;
-      except
-        sql := Stmt.SQL; // if parameter access failed -> append with ?
+    if Args[0].VObject.InheritsFrom(TSQLDBStatement) then begin
+      fStatement := TSQLDBStatement(Args[0].VObject);
+      if fStatement.Connection.Properties.LogSQLStatementOnException then begin
+        try
+          sql := fStatement.GetSQLWithInlinedParams;
+        except
+          sql := fStatement.SQL; // if parameter access failed -> append with ?
+        end;
+        msg := msg+' - '+sql;
       end;
-      msg := msg+' - '+sql;
     end;
   end;
   inherited Create(UTF8ToString(msg));
 end;
 
 
+const
+  __TSQLDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 '+
+    'ColumnLength,ColumnPrecision,ColumnScale: PtrInt '+
+    'ColumnType TSQLDBFieldType ColumnIndexed boolean';
+
 initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);
   assert(SizeOf(TSQLDBParam)=sizeof(PTrUInt)*3+sizeof(Int64));
+  {$ifndef ISDELPHI2010}
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLDBFieldType));
+  TTextWriter.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
+  {$endif}
 end.
 

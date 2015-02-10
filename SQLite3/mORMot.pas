@@ -1140,6 +1140,9 @@ unit mORMot;
 {.$define PUREPASCAL}  // define for debugg, not on production
 {.$define USETYPEINFO} // define for debugg, not on production
 
+{$define WITHSTATPROCESS}
+// if defined, the server statistics will contain precise working time process 
+
 {$ifdef MSWINDOWS}
 
   {.$define ANONYMOUSNAMEDPIPE}
@@ -1771,7 +1774,14 @@ function ObjectToJSON(Value: TObject;
 // class name and sets/enumerates as text
 // - could be used to create a TDocVariant object with full information
 // - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
+// also able to serialize plain Exception as a simple '{"Exception":"Message"}'
 function ObjectToJSONDebug(Value: TObject): RawUTF8;
+
+/// will serialize any TObject into a TDocVariant document
+// - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
+// "Context":"..." message
+function ObjectToVariantDebug(Value: TObject;
+  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -4662,7 +4672,10 @@ type
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
     procedure Error(Format: PUTF8Char; const Args: array of const;
       Status: integer=HTML_BADREQUEST); overload;
-
+    /// use this method to send back an error to the caller
+    // - will serialize the supplied exception, with an optional error message
+    procedure Error(E: Exception; Format: PUTF8Char; const Args: array of const;
+      Status: integer=HTML_BADREQUEST); overload;
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overridden
     // - as input, method should be the method name to be executed,
@@ -9938,6 +9951,7 @@ type
     fServices: TServiceContainer;
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
+    fFrequencyTimeStamp: Int64;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of record
       Mode: TSQLRestServerAcquireMode;
       LockedTimeOut: cardinal;
@@ -11013,11 +11027,6 @@ type
   // - use a GlobalFree() function to release memory for Resp and Head responses
   TURIMapRequest = function(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): Int64Rec; cdecl;
 
-{$ifdef MSWINDOWS}
-  {$define WITHSTATPROCESS}
-  { if defined, the server statistics will contain precise working time process }
-{$endif}
-
   /// structure used to specify custom request paging parameters for TSQLRestServer
   // - default values are the one used for YUI component paging (i.e.
   // PAGINGPARAMETERS_YAHOO constant, as set by TSQLRestServer.Create)
@@ -11079,17 +11088,17 @@ type
     fCurrentThreadCount: integer;
     /// how many concurrent requests are processed in TSQLRestServer.URI()
     fCurrentRequestCount: integer;
-{$ifdef WITHSTATPROCESS}
+    {$ifdef WITHSTATPROCESS}
     /// time used to process the requests, with appended unit ('0.13 ms' e.g.)
     function GetProcessTimeString: RawUTF8;
-{$endif}
+    {$endif}
   public
-{$ifdef WITHSTATPROCESS}
+    {$ifdef WITHSTATPROCESS}
     /// high-resolution performance counter of the time used to process the requests
     // - this value depend on the high-resolution performance counter frequency
     // - use ProcessTime property below to get the time in seconds
     ProcessTimeCounter: Int64;
-{$endif}
+    {$endif}
     /// update ClientsCurrent and ClientsMax
     procedure ClientConnect;
     /// update ClientsCurrent and ClientsMax
@@ -11127,10 +11136,10 @@ type
     property CurrentThreadCount: integer read fCurrentThreadCount;
     /// how many concurrent requests are processed in TSQLRestServer.URI()
     property CurrentRequestCount: integer read fCurrentRequestCount;
-{$ifdef WITHSTATPROCESS}
+    {$ifdef WITHSTATPROCESS}
     /// the global time spent in the server process
     property ProcessTime: RawUTF8 read GetProcessTimeString;
-{$endif}
+    {$endif}
   end;
 
   TAuthSession = class;
@@ -25678,6 +25687,7 @@ begin
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 2000; // default 2 seconds
   fRoutingClass := TSQLRestRoutingREST;
+  QueryPerformanceFrequency(fFrequencyTimeStamp);
   for cmd := Low(cmd) to high(cmd) do
     InitializeCriticalSection(fAcquireExecution[cmd].Lock);
   {$ifdef WITHLOG}
@@ -27824,7 +27834,7 @@ begin
       StatusCodeToErrorMsg(ErrorCode,fLastErrorMessage);
   end else begin
     fLastErrorException := PPointer(E)^;
-    StringToUTF8(E.Message,fLastErrorMessage);
+    fLastErrorMessage := ObjectToJSONDebug(E);
   end;
 end;
 
@@ -30330,6 +30340,20 @@ begin
   Error(FormatUTF8(Format,Args),Status);
 end;
 
+procedure TSQLRestServerURIContext.Error(E: Exception;
+  Format: PUTF8Char; const Args: array of const; Status: integer);
+var msg,exc: RawUTF8;
+begin
+  msg := FormatUTF8(Format,Args);
+  if E=nil then
+    Error(msg,Status) else begin
+    exc := ObjectToJSONDebug(E);
+    if msg='' then
+      Error('{"%":%}',[E,exc],Status) else
+      Error(FormatUTF8('{"msg":?,"%":%}',[E,exc],[msg],true),Status);
+  end;
+end;
+
 procedure TSQLRestServerURIContext.Error(const ErrorMessage: RawUTF8; Status: integer);
 var ErrorMsg: RawUTF8;
 begin
@@ -30343,15 +30367,22 @@ begin
     StatusCodeToErrorMsg(Status,ErrorMsg) else
     ErrorMsg := ErrorMessage;
   {$ifdef WITHLOG}
-  Log.Log(sllServer,'% % ERROR=% (%)',[Call.Method,URIWithoutSignature,Call.OutStatus,ErrorMsg]);
+  Log.Log(sllServer,'% % ERROR=% %',
+    [Call.Method,URIWithoutSignature,Call.OutStatus,ErrorMsg]);
   {$endif}
   with TTextWriter.CreateOwnedStream do
   try
-    AddShort('{'#13#10'"ErrorCode":');
+    AddShort('{'#13#10'"errorCode":');
     Add(call.OutStatus);
-    AddShort(','#13#10'"ErrorText":"');
-    AddJSONEscape(pointer(ErrorMsg));
-    AddShort('"'#13#10'}');
+    if (ErrorMsg<>'') and (ErrorMsg[1]='{') and (ErrorMsg[length(ErrorMsg)]='}') then begin
+      AddShort(','#13#10'"error":'#13#10);
+      AddNoJSONEscape(pointer(ErrorMsg));
+      AddShort(#13#10'}');
+    end else begin
+      AddShort(','#13#10'"errorText":"');
+      AddJSONEscape(pointer(ErrorMsg));
+      AddShort('"'#13#10'}');
+    end;
     SetText(Call.OutBody);
   finally
     Free;
@@ -30590,13 +30621,16 @@ begin
 begin
 {$endif}
   inc(fStats.fIncomingBytes,length(Call.url)+length(call.method)+length(call.InHead)+length(call.InBody)+12);
+  InterlockedIncrement(fStats.fCurrentRequestCount);
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
   Ctxt := ServicesRouting.Create(self,Call);
   try
-    InterlockedIncrement(fStats.fCurrentRequestCount);
     {$ifdef WITHLOG}
-    Ctxt.Log := fLogClass.Enter(Self,pointer(Ctxt.URIWithoutSignature),true).Instance;
+    Ctxt.Log := fLogClass.Add;
+    if sllEnter in Ctxt.Log.Family.Level then
+      Ctxt.Log.Enter(self,pointer(FormatUTF8('URI(% % inlen=%)',
+        [Call.Method,Call.Url,length(Call.InBody)])),true);
     {$endif}
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTML_UNAVAILABLE) else
@@ -30629,7 +30663,7 @@ begin
           Ctxt.Execute(execORMWrite);
       except
         on E: Exception do // return 500 internal server error
-          Ctxt.Error('Exception %: %',[E,E.Message],HTML_SERVERERROR);
+          Ctxt.Error(E,'',[],HTML_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -30640,9 +30674,6 @@ begin
          (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
          IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
         inc(fStats.fOutcomingFiles);
-      {$ifdef WITHLOG}
-      Ctxt.Log.Log(sllServer,'% % -> %',[Call.Method,Ctxt.URI,Call.OutStatus],self);
-      {$endif}
     end else begin
       inc(fStats.fInvalid);
       if Call.OutBody='' then // if no custom error message, compute it now as JSON
@@ -30658,11 +30689,18 @@ begin
     if Ctxt.OutSetCookie<>'' then
       Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
         '; Path=/'+Model.Root);
+  finally
     {$ifdef WITHSTATPROCESS}
     QueryPerformanceCounter(timeEnd);
-    inc(fStats.ProcessTimeCounter,timeEnd-timeStart);
+    timeEnd := timeEnd-timeStart;
+    inc(fStats.ProcessTimeCounter,timeEnd);
     {$endif}
-  finally
+    {$ifdef WITHLOG}
+    Ctxt.Log.Log(sllServer,'% % % % -> % with outlen=% in % us',
+      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,
+       Ctxt.URIWithoutSignature,Call.OutStatus,length(Call.OutBody),
+       (timeEnd*Int64(1000*1000))div fFrequencyTimeStamp],self);
+    {$endif}
     InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
   end;
@@ -30700,8 +30738,7 @@ begin
     EngineBatchSend(Ctxt.Table,Ctxt.Call.InBody,TIDDynArray(Results),0);
   except
     on E: Exception do begin
-      Ctxt.Error('Exception % "%" did break % BATCH process',
-        [E,E.Message,Ctxt.Table]);
+      Ctxt.Error(E,'did break % BATCH process',[Ctxt.Table],HTML_SERVERERROR);
       exit;
     end;
   end;
@@ -34906,7 +34943,19 @@ end;
 
 function ObjectToJSONDebug(Value: TObject): RawUTF8;
 begin
-  result := ObjectToJSON(Value,[woDontStoreDefault,woFullExpand]);
+  if Value=nil then
+    result := 'null' else
+  if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
+    result := FormatUTF8('{"%":?)',[Value],[Exception(Value).Message],True) else
+    result := ObjectToJSON(Value,[woDontStoreDefault,woFullExpand]);
+end;
+
+function ObjectToVariantDebug(Value: TObject;
+  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant;
+begin
+  result := _JsonFast(ObjectToJSONDebug(Value));
+  if ContextFormat<>'' then
+    _ObjAddProps(['context',FormatUTF8(ContextFormat,ContextArgs)],result);
 end;
 
 function UrlEncode(const NameValuePairs: array of const): RawUTF8;

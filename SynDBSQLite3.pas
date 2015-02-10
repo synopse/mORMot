@@ -706,18 +706,34 @@ begin
 end;
 
 procedure TSQLDBSQLite3Statement.ExecutePrepared;
+var SQLToBeLogged: RawUTF8;
+    Timer: TPrecisionTimer;
 begin
-  if fBindShouldStoreValue then
-    SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,512);
-  if not fExpectResults then
-  try
-    // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
+  if fBindShouldStoreValue then begin
+    SQLToBeLogged := SQLWithInlinedParams;
+    if length(SQLToBeLogged)>512 then begin
+      SetLength(SQLToBeLogged,512);
+      SQLToBeLogged[511] := '.';
+      SQLToBeLogged[512] := '.';
+    end;
+  end;
+  if fExpectResults then
+    SynDBLog.Add.Log(sllSQL,'% %',[TSQLDBSQLite3Connection(Connection).DB.
+      FileNameWithoutPath,SQLToBeLogged],self) else
+  try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
+    if fBindShouldStoreValue then
+      Timer.Start;
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
+    if fBindShouldStoreValue then
+      SynDBLog.Add.Log(sllSQL,'% % %',[Timer.Stop,TSQLDBSQLite3Connection(Connection).
+        DB.FileNameWithoutPath,SQLToBeLogged],self);
   except
-    on Exception do begin
-      if not fBindShouldStoreValue then
-        SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,4096);
+    on E: Exception do begin
+      if fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllSQL,'Error % on % for "%" as "%"',[E,
+          TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
+          SQLWithInlinedParams],self);
       raise;
     end;
   end;
@@ -738,7 +754,10 @@ end;
 
 procedure TSQLDBSQLite3Statement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
+var Timer: TPrecisionTimer;
 begin
+  if fBindShouldStoreValue then
+    Timer.Start;
   inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
   fStatement.Prepare(TSQLDBSQLite3Connection(Connection).fDB.DB,aSQL);
   fColumnCount := fStatement.FieldCount;
@@ -747,6 +766,9 @@ begin
     SetLength(fBindValues,fParamCount);
     SetLength(fBindIsString,(fParamCount shr 3)+1);
   end;
+  if fBindShouldStoreValue and (PosEx('?',SQL)>0) then
+    SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
+      TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
 end;
 
 procedure TSQLDBSQLite3Statement.Reset;
@@ -767,9 +789,11 @@ begin
   try
     result := fStatement.Step=SQLITE_ROW;
   except
-    on Exception do begin
-      if not fBindShouldStoreValue then
-        SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,4096);
+    on E: Exception do begin
+      if fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllError,'Error % on % for "%" as "%"',
+          [E,TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
+          SQLWithInlinedParams],self);
       raise;
     end;
   end;
