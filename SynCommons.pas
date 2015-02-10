@@ -372,6 +372,8 @@ unit SynCommons;
   - BREAKING CHANGE rename of Iso8601 low-level structure as TTimeLogBits, to use
     explicitly the TTimeLog type and name for all Int64 bit-oriented functions -
     now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
+  - BREAKING CHANGE: TTextWriter.Add(Format) won't handle the alternate $ % tags
+    any more, unless you define the OLDTEXTWRITERFORMAT conditional
   - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
@@ -5454,6 +5456,11 @@ type
     /// append strings or integers with a specified format
     // - % = #37 indicates a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
+    // - if StringEscape is false (by default), the text won't be escaped before
+    // adding; but if set to true text will be JSON escaped at writing
+    // - note that cardinal values should be type-casted to Int64() (otherwise
+    // the integer mapped value will be transmitted, therefore wrongly)
+    {$ifdef OLDTEXTWRITERFORMAT}
     // - $ = #36 indicates an integer to be written with 2 digits and a comma
     // - £ = #163 indicates an integer to be written with 4 digits and a comma
     // - µ = #181 indicates an integer to be written with 3 digits without any comma
@@ -5464,10 +5471,7 @@ type
     // - since some of this characters above are > #127, they are not UTF-8
     // ready, so we expect the input format to be WinAnsi, i.e. mostly English
     // text (with chars < #128) with some values to be inserted inside
-    // - if StringEscape is false (by default), the text won't be escaped before
-    // adding; but if set to true text will be JSON escaped at writing
-    // - note that cardinal values should be type-casted to Int64() (otherwise
-    // the integer mapped value will be transmitted, therefore wrongly)
+    {$endif}
     procedure Add(Format: PWinAnsiChar; const Values: array of const;
       Escape: TTextWriterKind=twNone); overload;
 {$endif DELPHI5OROLDER}
@@ -7407,7 +7411,11 @@ type
   // - should return FALSE if Context.EAddr and Stack trace is to be appended
   TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 
+  {$M+}
   /// generic parent class of all custom Exception types of this unit
+  // - all our classes inheriting from ESynException are serializable,
+  // so you could use ObjectToJSONDebug(anyESynException) to retrieve some
+  // extended information
   ESynException = class(Exception)
   public
     /// constructor which will use FormatUTF8() instead of Format()
@@ -7425,7 +7433,10 @@ type
     // written (i.e. as for any TSynLogExceptionToStr callback)
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
     {$endif}
+  published
+    property Message;
   end;
+  {$M-}
 
   /// exception raised by all TSynTable related code
   ETableDataException = class(ESynException);
@@ -27177,11 +27188,13 @@ begin
     result := TJSONCustomParserRTTIType(ndx) else
     // recognize some simple type aliases (.. = type ..) as defined in mORMot.pas
     case IdemPCharArray(pointer(ItemTypeName),['TSQLRAWBLOB','TRECORDREFERENCE',
-      'TRECORDREFERENCETOBEDELETED','TMODTIME','TCREATETIME']) of
+      'TRECORDREFERENCETOBEDELETED','TMODTIME','TCREATETIME','PTRINT','PTRUINT']) of
       // see also PT_COMPLEXTYPES
       0:   result := ptRawByteString;
       1,2: result := ptPtrUInt;
       3,4: result := ptTimeLog;
+      5:   result := ptPtrInt;
+      6:   result := ptPtrUInt;
       else result := ptCustom;
       // warning: recognized types should match at binary storage level!
     end;
@@ -33731,14 +33744,18 @@ begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
     repeat
       case ord(Format^) of
       0: exit;
-      13, 164: AddCR; // CR,¤ -> add CR,LF
+      13: AddCR;
+      ord('%'): break;
+      {$ifdef OLDTEXTWRITERFORMAT}
+      164: AddCR; // ¤ -> add CR,LF
       167: if B^=',' then dec(B); // §
       ord('|'): begin
         inc(Format); // |% -> %
         goto write;
       end;
-      ord('$'),ord('%'),163,181: // $,%,£,µ
+      ord('$'),163,181: // $,£,µ
         break; // process command value
+      {$endif}
       else begin
 write:  if B>=BEnd then
           Flush;
@@ -33751,7 +33768,8 @@ write:  if B>=BEnd then
     // add next value as text
     if ValuesIndex<=high(Values) then // missing value will display nothing
     case ord(Format^) of
-    ord('%'): with Values[ValuesIndex] do
+    ord('%'):
+       with Values[ValuesIndex] do
        case Vtype of
          vtInteger:      Add(VInteger);
          vtBoolean:      AddU(byte(VBoolean));
@@ -33786,12 +33804,14 @@ write:  if B>=BEnd then
            if VUnicodeString<>nil then // convert to UTF-8
              AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
 {$endif} end;
+    {$ifdef OLDTEXTWRITERFORMAT}
     ord('$'): with Values[ValuesIndex] do
            if Vtype=vtInteger then Add2(VInteger);
     163: with Values[ValuesIndex] do // £
            if Vtype=vtInteger then Add4(VInteger);
     181: with Values[ValuesIndex] do // µ
            if Vtype=vtInteger then Add3(VInteger);
+    {$endif}
     end;
     inc(Format);
     inc(ValuesIndex);

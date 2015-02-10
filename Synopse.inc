@@ -131,6 +131,9 @@
 // if defined, SetThreadName() would not raise the exception used to set the
 // thread name: to be defined if you have issues when debugging your application
 
+{.$define OLDTEXTWRITERFORMAT}
+// force TTextWriter.Add(Format) to handle the alternate $ % tags
+
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL
   {$define OWNNORMTOUPPER}
