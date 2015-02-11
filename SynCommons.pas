@@ -7163,6 +7163,7 @@ type
     fAllowedTLD: RawUTF8;
     fForbiddenTLD: RawUTF8;
     fForbiddenDomains: RawUTF8;
+    fAnyTLD: boolean;
   protected
     /// decode "AlowedTLD" and/or "PreventTLD" parameters
     procedure SetParameters(Value: RawUTF8); override;
@@ -7170,6 +7171,13 @@ type
     /// perform the Email Address validation action to the specified value
     // - call IsValidEmail() function and check for the supplied TLD
     function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
+    /// allow any TLD to be allowed, even if not a generic TLD (.com,.net ...)
+    // - the only restriction is that it should be ascii characters
+    // - this is due to the fact that already over 1,300 new gTLD names or
+    // "strings" could become available in the next few years: there is a
+    // growing list of new gTLDs available at
+    // @http://newgtlds.icann.org/en/program-status/delegated-strings
+    property AnyTLD: boolean read fAnyTLD write fAnyTLD;
     /// a CSV list of allowed TLD
     // - if accessed directly, should be set as lower case values
     // - e.g. 'com,org,net'
@@ -15810,7 +15818,7 @@ begin
     exit;
   end;
   if PWord(Format)^=ord('%') then begin
-    VarRecToUTF8(Args[0],result);
+    VarRecToUTF8(Args[0],result); // optimize raw conversion
     exit;
   end;
   result := '';
@@ -36236,33 +36244,36 @@ end;
 
 function TSynValidateEmail.Process(aFieldIndex: integer; const Value: RawUTF8;
   var ErrorMsg: string): boolean;
-var TLD: RawUTF8;
+var TLD,DOM: RawUTF8;
     i: integer;
 const TopLevelTLD: array[0..19] of PUTF8Char = (
   // see http://en.wikipedia.org/wiki/List_of_Internet_top-level_domains
   'aero','asia','biz','cat','com','coop','edu','gov','info','int','jobs',
   'mil','mobi','museum','name','net','org','pro','tel','travel'); // no xxx !
 begin
-  result := IsValidEmail(pointer(Value));
-  if result then begin
+  if IsValidEmail(pointer(Value)) then
+  repeat
+    DOM := lowercase(copy(Value,PosEx('@',Value)+1,100));
+    if length(DOM)>63 then
+      break; // exceeded 63-character limit of a DNS name
+    if (ForbiddenDomains<>'') and (FindCSVIndex(pointer(ForbiddenDomains),DOM)>=0) then
+      break;
     i := length(Value);
     while (i>0) and (Value[i]<>'.') do dec(i);
     TLD := lowercase(copy(Value,i+1,100));
-    if FastFindPUTF8CharSorted(@TopLevelTLD,high(TopLevelTLD),pointer(TLD),@StrComp)<0 then
-      if length(TLD)<>2 then
-        // if not a Top-Level TLD, guess a valid country is a two chars string
-        result := false;
-    if result and (AllowedTLD<>'') then
-      result := FindCSVIndex(pointer(AllowedTLD),TLD)>=0;
-    if result and (ForbiddenTLD<>'') then
-      result := FindCSVIndex(pointer(ForbiddenTLD),TLD)<0;
-    if result and (ForbiddenDomains<>'') then begin
-      TLD := lowercase(copy(Value,PosEx('@',Value)+1,100));
-      result := FindCSVIndex(pointer(ForbiddenDomains),TLD)<0;
-    end;
-  end;
-  if not result then
-    ErrorMsg := Format(sInvalidEmailAddress,[UTF8ToString(Value)]);
+    if (AllowedTLD<>'') and (FindCSVIndex(pointer(AllowedTLD),TLD)<0) then
+      break;
+    if (ForbiddenTLD<>'') and (FindCSVIndex(pointer(ForbiddenTLD),TLD)>=0) then
+      break;
+    if not fAnyTLD then
+      if FastFindPUTF8CharSorted(@TopLevelTLD,high(TopLevelTLD),pointer(TLD),@StrComp)<0 then
+        if length(TLD)<>2 then
+          break; // assume a two chars string is a ISO 3166-1 alpha-2 code
+    result := true;
+    exit;
+  until true;
+  ErrorMsg := Format(sInvalidEmailAddress,[UTF8ToString(Value)]);
+  result := false;
 end;
 
 procedure TSynValidateEmail.SetParameters(Value: RawUTF8);
