@@ -4921,7 +4921,7 @@ end;
 
 { TSQLite3Library }
 
-procedure TSQLite3Library.ForceToUseSharedMemoryManager;
+// due to a FPC's bug, all those functions should be declared outside the method
 function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
   GetMem(result,size+4);
@@ -4953,20 +4953,20 @@ function xRoundup(size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$end
 begin
   result := size;
 end;
-function xInit(appData: pointer): integer;
+function xInit(appData: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
   result := SQLITE_OK;
 end;
 procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
 end;
+
+procedure TSQLite3Library.ForceToUseSharedMemoryManager;
 var mem: TSQLite3MemMethods;
     res: integer;
 begin
-  {$ifndef FPC}   // better stay away from FPC memory manager
   {$ifndef CPU64} // not working under Win64
   if not Assigned(config) then
-  {$endif}
   {$endif}
     exit;
   mem.xMalloc := @xMalloc;
@@ -4976,17 +4976,13 @@ begin
   mem.xRoundup := @xRoundup;
   mem.xInit := @xInit;
   mem.xShutdown := @xShutdown;
-  mem.pAppData := nil; 
+  mem.pAppData := nil;
   res := config(SQLITE_CONFIG_MALLOC,@mem);
-  if res<>SQLITE_OK then begin
+  if res<>SQLITE_OK then
     {$ifdef WITHLOG}
-    {$ifdef DELPHI5OROLDER}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed');
-    {$else}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]);
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed'
+      {$ifndef DELPHI5OROLDER}+' as %',[res]{$endif}) else
     {$endif}
-    {$endif}
-  end else
     fUseInternalMM := true;
 end;
 
@@ -5071,4 +5067,4 @@ initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.

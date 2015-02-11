@@ -1306,7 +1306,7 @@ begin
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
   {$ifdef FPC}
-  ForceToUseSharedMemoryManager; // before sqlite3_initialize
+  ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
   {$else}
   fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$endif}
@@ -1325,4 +1325,4 @@ initialization
   sqlite3 := TSQLite3LibraryStatic.Create;
 {$endif NOSQLITE3STATIC}
 
-end.
+end.
