@@ -195,6 +195,7 @@ type
     procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
     procedure ORMResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
+    procedure ORMResultString(Error: TCQRSResult; const ErrorMessage: string); 
     procedure ORMResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
     procedure ORMResultJSON(Error: TCQRSResult;
       JSONFmt: PUTF8Char; const Args,Params: array of const);
@@ -610,6 +611,14 @@ begin
   AfterInternalORMResult;
 end;
 
+procedure TCQRSQueryObject.ORMResultString(Error: TCQRSResult;
+  const ErrorMessage: string);
+begin
+  InternalORMResult(Error);
+  _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
+  AfterInternalORMResult;
+end;
+
 procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
   ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
 begin
@@ -963,7 +972,7 @@ begin
       SetLength(arr^,fAggregateRTTI.Count);
     if aFieldNames[f]='*' then begin // apply to all text fields
       for ndx := 0 to high(fAggregateProp) do
-        if fAggregateProp[ndx].SQLFieldType in [sftAnsiText,sftUTF8Text] then
+        if fAggregateProp[ndx].SQLFieldType in RAWTEXT_FIELDS then
           aFilterOrValidate.AddOnce(TSynFilterOrValidateObjArray(arr^[ndx]),false);
     end else begin
       if aFieldNameFlattened then

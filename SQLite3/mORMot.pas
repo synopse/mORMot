@@ -839,6 +839,8 @@ unit mORMot;
       order to enable it, define a SSPIAUTH conditional and call
       TSQLRestClientURI.SetUser() with an empty user name, and ensure that
       TSQLAuthUser.LoginName contains a matching 'DomainName\UserName' value
+    - added TSQLRecordTimed class, and TSQLRecord.AddFilterNotVoidAllTextFields
+      and TSQLModel.AddTableInherited methods
     - Windows Authentication can use either NTLM or the more secure Kerberos
       protocol, if the corresponding SPN domain is set as password
     - feature request [5a17a4277f]: you can now define in the Model your custom
@@ -1498,6 +1500,11 @@ const
   TEXT_FIELDS: TSQLFieldTypes =
     [sftAnsiText, sftUTF8Text, sftDateTime, sftObject, sftUTF8Custom
       {$ifndef NOVARIANTS}, sftVariant{$endif}];
+
+  /// kind of fields which will contain pure TEXT values
+  // - independently from the actual storage level
+  // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
+  RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText, sftUTF8Text];
 
 type
   /// the available options for TSQLRest.BatchStart() process
@@ -5164,6 +5171,10 @@ type
     /// register a TSynFilterTrim and a TSynValidateText filters so that
     // the specified fields, after space trimming, won't be void
     class procedure AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
+    /// register a TSynFilterTrim and a TSynValidateText filters so that
+    // all text fields, after space trimming, won't be void
+    // - will only affect RAWTEXT_FIELDS
+    class procedure AddFilterNotVoidAllTextFields;
     /// protect several TSQLRecord local variable instances
     // - specified as localVariable/recordClass pairs
     // - is a wrapper around TAutoFree.Several(...) constructor
@@ -7202,7 +7213,15 @@ type
     // aTableIndexCreated^ is set to the newly created index in Tables[])
     // - supplied class will be redefined as non-virtual: VirtualTableExternalRegister
     // explicit call is to be made if table should be managed as external
+    // - return FALSE if already present, or TRUE if was added to the internal list
     function AddTable(aTable: TSQLRecordClass; aTableIndexCreated: PInteger=nil): boolean;
+    /// add the class if it doesn't exist yet as itself or as inherited class
+    // - similar to AddTable(), but any class inheriting from the supplied type
+    // would be considered as sufficient
+    // - return the class which has been added, or was already there as
+    // inherited, so that could be used for further instance creation:
+    // ! fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser); 
+    function AddTableInherited(aTable: TSQLRecordClass): pointer;
     /// get the index of aTable in Tables[]
     // - returns -1 if the table is not in the model
     function GetTableIndex(aTable: TSQLRecordClass): integer; overload;
@@ -10588,6 +10607,10 @@ type
     // - return true on success
     // - call internaly the Update() / EngineUpdate() virtual methods 
     function Update(aTable: TSQLRecordClass; aID: TID; const aSimpleFields: array of const): boolean; overload;
+    /// create or update a member, depending if the Value has already an ID
+    // - implements REST POST if Value.ID=0 or PUT collection on Value.ID
+    // - will return the created or updated ID
+    function AddOrUpdate(Value: TSQLRecord): TID;
     /// update one field/column value a given member
     // - implements REST PUT collection with one field value
     // - only one single field shall be specified in FieldValue, but could
@@ -24388,13 +24411,23 @@ end;
 class procedure TSQLRecord.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
 var i,f: Integer;
 begin
-  with RecordProps do begin
+  with RecordProps do
     for i := 0 to high(aFieldNames) do begin
       f := Fields.IndexByNameOrExcept(aFieldNames[i]);
       AddFilterOrValidate(f,TSynFilterTrim.Create);
       AddFilterOrValidate(f,TSynValidateNonVoidText.Create);
     end;
-  end;
+end;
+
+class procedure TSQLRecord.AddFilterNotVoidAllTextFields;
+var f: Integer;
+begin
+  with RecordProps,Fields do
+    for f := 0 to Count-1 do
+      if List[f].SQLFieldType in RAWTEXT_FIELDS then begin
+        AddFilterOrValidate(f,TSynFilterTrim.Create);
+        AddFilterOrValidate(f,TSynValidateNonVoidText.Create);
+      end;
 end;
 
 function TSQLRecord.Validate(aRest: TSQLRest; const aFields: TSQLFieldBits;
@@ -24955,7 +24988,8 @@ begin
   result := fTableProps[GetTableIndexExisting(aClass)];
 end;
 
-function TSQLModel.AddTable(aTable: TSQLRecordClass; aTableIndexCreated: PInteger=nil): boolean;
+function TSQLModel.AddTable(aTable: TSQLRecordClass;
+  aTableIndexCreated: PInteger=nil): boolean;
 var n: integer;
 begin
   // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
@@ -24978,6 +25012,16 @@ begin
   if aTableIndexCreated<>nil then
     aTableIndexCreated^ := fTablesMax;
   result := true;
+end;
+
+function TSQLModel.AddTableInherited(aTable: TSQLRecordClass): pointer;
+var ndx: integer;
+begin
+  ndx := GetTableIndexInheritsFrom(aTable);
+  if ndx<0 then
+    if not AddTable(aTable,@ndx) then
+      raise EORMException.CreateUTF8('%.AddTableInherited(%)',[self,aTable]);
+  result := Tables[ndx];
 end;
 
 constructor TSQLModel.Create(CloneFrom: TSQLModel);
@@ -26545,6 +26589,17 @@ begin
   finally
     Value.Free;
   end;
+end;
+
+function TSQLRest.AddOrUpdate(Value: TSQLRecord): TID;
+begin
+  if (self=nil) or (Value=nil) then
+    result := 0 else
+  if Value.fID=0 then
+    result := Add(Value,true) else
+    if Update(Value) then
+      result := Value.fID else
+      result := 0;
 end;
 
 procedure TSQLRest.QueryAddCustom(aTypeInfo: pointer; aEvent: TSQLQueryEvent;
@@ -29095,7 +29150,7 @@ end;
 
 function TSQLRestServer.AuthenticationRegister(
   aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
-var i, TableIndex: integer;
+var i: integer;
 begin
   result := nil;
   if self=nil then
@@ -29112,14 +29167,8 @@ begin
     fSessionAuthentications.Add(result); // will be owned by fSessionAuthentications
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
-    TableIndex := Model.GetTableIndexInheritsFrom(TSQLAuthUser);
-    if TableIndex<0 then
-      Model.AddTable(fSQLAuthUserClass,@TableIndex);
-    fSQLAuthUserClass := TSQLAuthUserClass(Model.fTables[TableIndex]);
-    TableIndex := Model.GetTableIndexInheritsFrom(TSQLAuthGroup);
-    if TableIndex<0 then
-      Model.AddTable(fSQLAuthGroupClass,@TableIndex);
-    fSQLAuthGroupClass := TSQLAuthGroupClass(Model.fTables[TableIndex]);
+    fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
+    fSQLAuthGroupClass := Model.AddTableInherited(TSQLAuthGroup);
     if fAfterCreation and
       ((not TableHasRows(fSQLAuthUserClass)) or
        (not TableHasRows(fSQLAuthGroupClass))) then
