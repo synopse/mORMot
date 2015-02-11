@@ -1119,7 +1119,7 @@ type
   // - abstract class allowing direct binding of static sqlite3.obj
   // (TSQLite3LibrayStatic) or with an external library (TSQLite3LibraryDynamic)
   // - a global sqlite3: TSQLite3Library will be defined in this unit, so
-  // you should call sqlite3.open() instead of sqlite3.open() for instance
+  // you should call sqlite3.open() instead of sqlite3_open() for instance
   // - if your project refers to SynSQLite3Static unit, it will initialize a
   // TSQLite3LibrayStatic instance
   TSQLite3Library = class
