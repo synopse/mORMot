@@ -374,7 +374,9 @@ unit SynCommons;
     now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
   - BREAKING CHANGE: TTextWriter.Add(Format) won't handle the alternate $ % tags
     any more, unless you define the OLDTEXTWRITERFORMAT conditional
-  - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
+  - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Win32/Win64 target platform only
+    for the SynCommons and mORMot* units, but see SynCrossPlatform* units for
+    clients on all other targets, including OSX and the NextGen compilers)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
     kind varString and type RawUTF8 - prior to Delphi 2009, ensure you call
@@ -37064,6 +37066,7 @@ begin
     {$elseif defined(VER260)}+' XE5'
     {$elseif defined(VER270)}+' XE6'
     {$elseif defined(VER280)}+' XE7'
+    {$elseif defined(VER290)}+' XE8'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
   {$endif LINUX}

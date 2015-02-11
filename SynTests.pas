@@ -1122,11 +1122,13 @@ begin
     {$else}
     fLogFile.Log(sllFail,sFailed,[Ident,TestName[fCurrentMethodIndex],msg],aTest);
     {$endif}
-    TextColor(ccLightRed);
-    {$ifdef KYLIX3} // we do not have a debugger for CrossKylix -> stop here!
+    {$ifdef KYLIX3}
     fLogFile.Flush(true);
-    writeln('!!! ',Ident,' - ',TestName[fCurrentMethodIndex],
-      ' "',msg,'" failed !!!'); readln;
+    // we do not have a debugger for CrossKylix -> stop here!
+    TextColor(ccLightRed);
+    writeln('!!! ',Ident,' - ',TestName[fCurrentMethodIndex],' "',msg,'" failed !!!');
+    write('Press [Enter] to continue, or Ctrl+C to abort ');
+    readln;
     {$endif}
   end;
 end;

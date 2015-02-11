@@ -5025,11 +5025,7 @@ begin
   {$ifdef MSWINDOWS}
   fHandle := SafeLoadLibrary(LibraryName);
   {$else}
-  {$ifdef FPC}
-  fHandle := LoadLibrary(LibraryName);
-  {$else}
-  fHandle := LoadLibrary(pointer(LibraryName));
-  {$endif}
+  fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
   {$endif}
   fLibraryName := LibraryName;
   if fHandle=0 then
@@ -5043,15 +5039,12 @@ begin
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
     FreeLibrary(fHandle);
     fHandle := 0;
-    raise ESQLite3Exception.CreateFmt('TOO OLD %s - need revision 3.7 at least!',
-      [LibraryName]);
-  end; // some APIs like Lib.key() or Lib.trace() may not be available
+    raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
+  end; // some APIs like config() key() or trace() may not be available
   {$ifdef WITHLOG}
-  {$ifdef DELPHI5OROLDER}
-  SynSQLite3Log.Add.Log(sllInfo,'Loaded external '+LibraryName+' version '+libversion);
-  {$else}
-  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,libversion]);
-  {$endif}
+  SynSQLite3Log.Add.Log(sllInfo,'Loaded external '+
+    {$ifdef DELPHI5OROLDER}LibraryName+' version '+libversion
+    {$else}'% version %',[LibraryName,libversion]{$endif});
   {$endif}
 end;
 
