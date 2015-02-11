@@ -7852,6 +7852,18 @@ type
     procedure UnSign;
   end;
 
+  /// a base record, which would have creation and modification timestamp fields
+  TSQLRecordTimed = class(TSQLRecord)
+  protected
+    fCreated: TCreateTime;
+    fModified: TModTime;
+  published
+    /// will be filled by the ORM when this item will be created in the database
+    property Created: TCreateTime read fCreated write fCreated;
+    /// will be filled by the ORM any this item will be written in the database
+    property Modified: TModTime read fModified write fModified;
+  end;
+
   /// common ancestor for tables which should implement any interface
   // - by default, TSQLRecord does not implement any interface: this does make
   // sense for performance and resource use reasons
