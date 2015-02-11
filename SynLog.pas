@@ -3027,6 +3027,8 @@ begin
   with fWriter do begin
     ExecutableName := GetModuleName(hInstance);
     if ExecutableName='' then
+      ExecutableName := paramstr(0);
+    if ExecutableName='' then
       AddShort('nomodulename') else
       AddNoJSONEscapeString(ExecutableName);
     AddShort(' unknown (');
@@ -3036,13 +3038,15 @@ begin
     Add(')');
     NewLine;
     AddShort('Host='); AddString(GetHostName);
-    AddShort(' User=unknown CPU=');
-    {$ifdef KYLIX3} // LibC.getlogin() returns ''
+    AddShort(' User=');
+    {$ifdef KYLIX3}
+    AddNoJSONEscape(LibC.getpwuid(LibC.getuid)^.pw_name);
+    AddShort(' CPU=');
     Add(LibC.get_nprocs); Add('/'); Add(LibC.get_nprocs_conf);
     AddShort(' OS=');
     uname(uts);
     {$else}
-    AddShort('unknown OS=');
+    AddShort('unknown CPU=unknown OS=');
     FPUname(uts);
     {$endif}
     AddNoJSONEscape(@uts.sysname); Add('-'); AddNoJSONEscape(@uts.release);
