@@ -110,7 +110,7 @@ type
   ECQRSException = class(EDDDException);
 
 
-{ *********** Persistence / Repository Interfaces }
+{ ----- Persistence / Repository Interfaces }
 
 type
   /// result enumerate for I*Query/I*Command CQRS repository service methods
@@ -130,12 +130,13 @@ type
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
-     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError, cqrsDDDValidationFailed,
+     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
+     cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand);
 
   /// generic interface, to be used for CQRS I*Query types definition
-  // - TCQRSQueryObject class will allow to easily implement LastError* members 
+  // - TCQRSQueryObject class will allow to easily implement LastError* members
   ICQRSQuery = interface(IInvokable)
     ['{923614C8-A639-45AD-A3A3-4548337923C9}']
     /// should return the last error as an enumerate
@@ -145,11 +146,41 @@ type
     function GetLastErrorInfo: variant;
   end;
 
+{ ----- Services Interfaces }
+
+type
+  /// generic interface, to be used so that you may retrieve a running state
+  IMonitored = interface(IInvokable)
+    ['{7F5E1569-E06B-48A0-954C-95784EC23363}']
+    /// retrieve the current status of the instance
+    // - the status is returned as a schema-less value (typically a TDocVariant
+    // document), which may contain statistics about the current processing
+    // numbers, timing and throughput
+    function RetrieveState(out Status: variant): TCQRSResult;
+  end;
+
+  /// generic interface, to be used so that you may manage a service/daemon instance
+  IMonitoredDaemon = interface(IMonitored)
+    ['{F5717AFC-5D0E-4E13-BD5B-25C08CB177A7}']
+    /// launch the service/daemon
+    // - should first stop any previous running instance (so may be used to
+    // restart a service on demand)
+    function Start: TCQRSResult;
+    /// abort the service/daemon, returning statistics about the whole execution
+    function Stop(out Statistics: variant): TCQRSResult;
+  end;
+
+
+{ *********** Cross-Cutting Layer Implementation}
+
+{ ----- Persistence / Repository CQRS Implementation }
+
+type
   /// which kind of process is about to take place after an ORMBegin()
   TCQRSQueryAction = (
     qaNone,
     qaSelect, qaGet,
-    qaCommandDirect, qaCommandOnSelect, 
+    qaCommandDirect, qaCommandOnSelect,
     qaCommit);
 
   /// define one or several process to take place after an ORMBegin()
@@ -184,18 +215,19 @@ type
     fLastErrorContext: variant;
     fAction: TCQRSQueryAction;
     fState: TCQRSQueryState;
+    fLock: IAutoLocker;
     // method to be called at first for LastError process
     function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
     function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
-    procedure ORMResult(Error: TCQRSResult); 
+    procedure ORMResult(Error: TCQRSResult);
     procedure ORMSuccessIf(SuccessCondition: boolean;
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
     procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
     procedure ORMResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
-    procedure ORMResultString(Error: TCQRSResult; const ErrorMessage: string); 
+    procedure ORMResultString(Error: TCQRSResult; const ErrorMessage: string);
     procedure ORMResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
     procedure ORMResultJSON(Error: TCQRSResult;
       JSONFmt: PUTF8Char; const Args,Params: array of const);
@@ -203,6 +235,9 @@ type
     function GetLastErrorInfo: variant; virtual;
     procedure InternalORMResult(Error: TCQRSResult); virtual;
     procedure AfterInternalORMResult; virtual;
+  public
+    /// initialize the class instance
+    constructor Create; override;
   published
     /// the last error, as an enumerate
     property LastError: TCQRSResult read GetLastError;
@@ -212,9 +247,6 @@ type
     property State: TCQRSQueryState read fState;
   end;
 
-
-
-{ *********** Cross-Cutting Layer Implementation}
 
 { ----- Persistence / Repository Implementation using mORMot's ORM }
 
@@ -525,6 +557,12 @@ implementation
 { *********** Persistence / Repository Interfaces }
 
 { TCQRSQueryObject }
+
+constructor TCQRSQueryObject.Create;
+begin
+  fLock := TAutoLocker.Create;
+  inherited;
+end;
 
 function TCQRSQueryObject.GetLastError: TCQRSResult;
 begin
@@ -1332,12 +1370,14 @@ begin
 end;
 
 
-{ TCQRSQueryObjectRest }
-constructor TCQRSQueryObjectRest.Create(aRest: TSQLRest);begin
+{ TCQRSQueryObjectRest }
+
+constructor TCQRSQueryObjectRest.Create(aRest: TSQLRest);
+begin
   inherited Create;
   if not Assigned(aRest) then
-    raise ECQRSException.CreateUTF8('%.Create(nil)',[self]);
+    raise ECQRSException.CreateUTF8('%.Create(Rest=nil)',[self]);
   fRest := aRest;
 end;
 
-end.
+end.
