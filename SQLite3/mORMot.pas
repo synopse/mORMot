@@ -796,8 +796,9 @@ unit mORMot;
       allow access to the execution context
     - to make the implicit explicit, TSQLRestServerURIContext.ID has been
       renamed TableID, and a new ServiceInstanceID instance has been added
-    - fixed TSQLRestServer.BeginCurrentThread/EndCurrentThread process to be
-      triggered as expected (and checking that it is from the thread itself)
+    - BeginCurrentThread/EndCurrentThread will now be defined at TSQLRest class
+      abstract level, and code review has been made to ensure that they will
+      be triggered as expected (i.e. always and from the thread itself)
     - new function CurrentServiceContext, to be used from packages instead of
       direct ServiceContext threadvar access - circumvent Delphi RTL/compiler
       restriction (bug?) as reported by [155b09dc1b]
@@ -1786,7 +1787,9 @@ function ObjectToJSONDebug(Value: TObject): RawUTF8;
 
 /// will serialize any TObject into a TDocVariant document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
-// "Context":"..." message
+// "Context":"..." text message
+// - if the supplied context format matches '{....}' then it will be added
+// as a corresponding TDocVariant JSON object
 function ObjectToVariantDebug(Value: TObject;
   ContextFormat: PUTF8Char; const ContextArgs: array of const): variant;
 
@@ -10893,6 +10896,14 @@ type
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
     {$endif}
 
+    /// you can call this method in TThread.Execute to ensure that
+    // the thread will be taken in account during process
+    // - this abstract method won't do anything, but TSQLRestServer's will
+    procedure BeginCurrentThread(Sender: TThread); virtual;
+    /// you can call this method just before a thread is finished to ensure
+    // e.g. that the associated external DB connection will be released
+    // - this abstract method won't do anything, but TSQLRestServer's will
+    procedure EndCurrentThread(Sender: TThread); virtual;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -12360,7 +12371,7 @@ type
     // TSQLRestStorage instances
     // - this method shall be called from the thread just initiated: e.g.
     // if you call it from the main thread, it may fail to prepare resources
-    procedure BeginCurrentThread(Sender: TThread); virtual;
+    procedure BeginCurrentThread(Sender: TThread); override;
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
     // - this default implementation will call the methods of all its internal
@@ -12370,7 +12381,7 @@ type
     // if you call it from the main thread, it may fail to release resources
     // - it is set e.g. by TSQLite3HttpServer to be called from HTTP threads,
     // or by TSQLRestServerNamedPipeResponse for named-pipe server cleaning
-    procedure EndCurrentThread(Sender: TThread); virtual;
+    procedure EndCurrentThread(Sender: TThread); override;
 
     /// implement a generic local, piped or HTTP/1.1 provider
     // - this is the main entry point of the server, from the client side
@@ -12699,14 +12710,14 @@ type
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
     // a third party process (like proper OLE initialization)
-    procedure BeginCurrentThread(Sender: TThread); virtual;
+    procedure BeginCurrentThread(Sender: TThread); override;
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
     // - this overridden method will do nothing (should have been already made
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
     // a third party process (like proper OLE initialization)
-    procedure EndCurrentThread(Sender: TThread); virtual;
+    procedure EndCurrentThread(Sender: TThread); override;
 
     /// implement TSQLRest unlocking (UNLOCK verb)
     // - to be called e.g. after a Retrieve() with forupdate=TRUE
@@ -26935,6 +26946,14 @@ begin
   result := true; // always worth caching by default
 end;
 
+procedure TSQLRest.BeginCurrentThread(Sender: TThread);
+begin // nothing do to at this level -> see TSQLRestServer
+end;
+
+procedure TSQLRest.EndCurrentThread(Sender: TThread);
+begin // nothing do to at this level -> see TSQLRestServer
+end;
+
 function TSQLRest.GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
 begin
   result := fAcquireExecution[Cmd].Mode;
@@ -35016,7 +35035,9 @@ function ObjectToVariantDebug(Value: TObject;
 begin
   result := _JsonFast(ObjectToJSONDebug(Value));
   if ContextFormat<>'' then
-    _ObjAddProps(['context',FormatUTF8(ContextFormat,ContextArgs)],result);
+    if ContextFormat[0]='{' then
+      _ObjAddProps(['context',_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
+      _ObjAddProps(['context',FormatUTF8(ContextFormat,ContextArgs)],result);
 end;
 
 function UrlEncode(const NameValuePairs: array of const): RawUTF8;
