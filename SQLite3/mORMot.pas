@@ -1791,7 +1791,11 @@ function ObjectToJSONDebug(Value: TObject): RawUTF8;
 // - if the supplied context format matches '{....}' then it will be added
 // as a corresponding TDocVariant JSON object
 function ObjectToVariantDebug(Value: TObject;
-  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant;
+  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant; overload;
+
+/// will serialize any TObject into a TDocVariant document
+// - just a wrapper around _JsonFast(ObjectToJSONDebug()) 
+function ObjectToVariantDebug(Value: TObject): variant; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -35028,6 +35032,11 @@ begin
   if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
     result := FormatUTF8('{"%":?)',[Value],[Exception(Value).Message],True) else
     result := ObjectToJSON(Value,[woDontStoreDefault,woFullExpand]);
+end;
+
+function ObjectToVariantDebug(Value: TObject): variant;
+begin
+  result := _JsonFast(ObjectToJSONDebug(Value));
 end;
 
 function ObjectToVariantDebug(Value: TObject;

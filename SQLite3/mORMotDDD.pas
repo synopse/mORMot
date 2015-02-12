@@ -131,7 +131,7 @@ type
   TCQRSResult =
     (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
      cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
-     cqrsDDDValidationFailed,
+     cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand);
 
@@ -221,7 +221,8 @@ type
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
     function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
-    procedure ORMResult(Error: TCQRSResult);
+    procedure ORMResult(Error: TCQRSResult); overload;
+    procedure ORMResult(E: Exception); overload;
     procedure ORMSuccessIf(SuccessCondition: boolean;
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
     procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
@@ -610,6 +611,13 @@ end;
 procedure TCQRSQueryObject.ORMResult(Error: TCQRSResult);
 begin
   InternalORMResult(Error);
+  AfterInternalORMResult;
+end;
+
+procedure TCQRSQueryObject.ORMResult(E: Exception);
+begin
+  InternalORMResult(cqrsInternalError);
+  _ObjAddProps(['Exception',ObjectToVariantDebug(E)],fLastErrorContext);
   AfterInternalORMResult;
 end;
 
