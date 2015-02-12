@@ -137,6 +137,8 @@ unit SynCrtSock;
   - converted any AnsiString type into a more neutral RawByteString (this is
     correct for URIs or port numbers, and avoid any dependency to SynCommons)
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
+  - added optional parameter to set buffer size for TCrtSocket.CreateSockIn
+    and TCrtSocket.CreateSockOut methods
   - added THttpServerRequest.UseSSL property to check if connection is secured
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
@@ -379,12 +381,13 @@ type
     // - read(char) or readln() is indeed very fast
     // - multithread applications would also use this SockIn pseudo-text file
     // - by default, expect CR+LF as line feed (i.e. the HTTP way)
-    procedure CreateSockIn(LineBreak: TTextLineBreakStyle=tlbsCRLF);
+    procedure CreateSockIn(LineBreak: TTextLineBreakStyle=tlbsCRLF;
+      InputBufferSize: Integer=1024);
     /// initialize SockOut for sending with write[ln](SockOut^,....)
     // - data is sent (flushed) after each writeln() - it's a compiler feature
     // - use rather SockSend() + SockSendFlush to send headers at once e.g.
     // since writeln(SockOut^,..) flush buffer each time
-    procedure CreateSockOut;
+    procedure CreateSockOut(OutputBufferSize: Integer=1024);
     /// close the opened socket, and corresponding SockIn/SockOut
     destructor Destroy; override;
     /// read Length bytes from SockIn buffer + Sock if necessary
@@ -2742,18 +2745,21 @@ begin
 end;
 
 const
-  SOCKBUFSIZE = 1024; // big enough for headers (content will be read directly)
+  SOCKMINBUFSIZE = 1024; // big enough for headers (content will be read directly)
 
-procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle);
+procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
+  InputBufferSize: Integer);
 begin
   if (Self=nil) or (SockIn<>nil) then
     exit; // initialization already occured
-  GetMem(SockIn,sizeof(TTextRec)+SOCKBUFSIZE);
+  if InputBufferSize<SOCKMINBUFSIZE then
+    InputBufferSize := SOCKMINBUFSIZE;
+  GetMem(SockIn,sizeof(TTextRec)+InputBufferSize);
   fillchar(SockIn^,sizeof(TTextRec),0);
   with TTextRec(SockIn^) do begin
     Handle := PtrInt(self);
     Mode := fmClosed;
-    BufSize := SOCKBUFSIZE;
+    BufSize := InputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
   end;
@@ -2763,21 +2769,23 @@ begin
   Reset(SockIn^);
 end;
 
-procedure TCrtSocket.CreateSockOut;
+procedure TCrtSocket.CreateSockOut(OutputBufferSize: Integer);
 begin
   if SockOut<>nil then
     exit; // initialization already occured
-  GetMem(SockOut,sizeof(TTextRec)+SOCKBUFSIZE);
+  if OutputBufferSize<SOCKMINBUFSIZE then
+    OutputBufferSize := SOCKMINBUFSIZE;
+  GetMem(SockOut,sizeof(TTextRec)+OutputBufferSize);
   fillchar(SockOut^,sizeof(TTextRec),0);
   with TTextRec(SockOut^) do begin
     Handle := PtrInt(self);
     Mode := fmClosed;
-    BufSize := SOCKBUFSIZE;
+    BufSize := OutputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
   end;
 {$ifdef CONDITIONALEXPRESSIONS}
-  SetLineBreakStyle(SockOut^,tlbsCRLF);
+  SetLineBreakStyle(SockOut^,tlbsCRLF); // force e.g. for Linux platforms
 {$endif}
   Rewrite(SockOut^);
 end;
@@ -3134,7 +3142,7 @@ begin
     readln(TCP.SockIn^,Res);
   until (Length(Res)<4)or(Res[4]<>'-');
   if not IdemPChar(pointer(Res),pointer(Answer)) then
-    raise Exception.Create(string(Res));
+    raise ECrtSocket.Create(string(Res));
 end;
 procedure Exec(const Command, Answer: RawByteString);
 begin
