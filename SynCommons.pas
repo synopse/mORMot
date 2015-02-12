@@ -748,7 +748,6 @@ const
   CP_UTF8 = 65001;
 {$endif}
 
-
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 type
   PBoolean = ^Boolean;
@@ -7154,6 +7153,7 @@ type
   // - optional JSON encoded parameters are "AllowedTLD" or "ForbiddenTLD",
   // expecting a CSV lis of Top-Level-Domain (TLD) names, e.g.
   // $ '{"AllowedTLD":"com,org,net","ForbiddenTLD":"fr"}'
+  // $ '{AnyTLD:true,ForbiddenDomains:"mailinator.com,yopmail.com"}'
   // - this will process a validation according to RFC 822 (calling the
   // IsValidEmail() function) then will check for the TLD to be in one of
   // the Top-Level domains ('.com' and such) or a two-char country, and
@@ -7165,18 +7165,18 @@ type
     fForbiddenDomains: RawUTF8;
     fAnyTLD: boolean;
   protected
-    /// decode "AlowedTLD" and/or "PreventTLD" parameters
+    /// decode all published properties from their JSON representation
     procedure SetParameters(Value: RawUTF8); override;
   public
     /// perform the Email Address validation action to the specified value
     // - call IsValidEmail() function and check for the supplied TLD
     function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
     /// allow any TLD to be allowed, even if not a generic TLD (.com,.net ...)
-    // - the only restriction is that it should be ascii characters
-    // - this is due to the fact that already over 1,300 new gTLD names or
+    // - this may be mandatory since already over 1,300 new gTLD names or
     // "strings" could become available in the next few years: there is a
     // growing list of new gTLDs available at
     // @http://newgtlds.icann.org/en/program-status/delegated-strings
+    // - the only restriction is that it should be ascii characters
     property AnyTLD: boolean read fAnyTLD write fAnyTLD;
     /// a CSV list of allowed TLD
     // - if accessed directly, should be set as lower case values
@@ -8755,6 +8755,10 @@ procedure RedirectCodeRestore(Func: pointer; const Backup: TPatchCode);
 /// allow to fix TEvent.WaitFor() method for Kylix
 // - under Windows or with FPC, will call original TEvent.WaitFor() method
 function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+
+/// allow to fix TEvent.WaitFor(Event,INFINITE) method for Kylix
+// - under Windows or with FPC, will call original TEvent.WaitFor() method
+procedure FixedWaitForever(Event: TEvent);
 
 
 type
@@ -11119,7 +11123,7 @@ type
     // - using an IUnknown interface to let the compiler auto-generate a
     // try..finally block statement to release the lock
     // - warning: under FPC, you should assign the result of this method to a local
-    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
     function ProtectMethod: IUnknown;
     /// enter the mutex
     // - any call to Enter should be ended with a call to Leave
@@ -11142,6 +11146,8 @@ type
     /// initialize the mutex
     constructor Create;
     /// will enter the mutex until the IUnknown reference is released
+    // - warning: under FPC, you should assign its result to a local lockFPC:
+    // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
     function ProtectMethod: IUnknown;
     /// enter the mutex
     procedure Enter;
@@ -36280,10 +36286,11 @@ procedure TSynValidateEmail.SetParameters(Value: RawUTF8);
 var V: TPUtf8CharDynArray;
 begin
   inherited;
-  JSONDecode(Value,['AllowedTLD','ForbiddenTLD','ForbiddenDomains'],V);
+  JSONDecode(Value,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
   AllowedTLD := LowerCase(V[0]);
   ForbiddenTLD := LowerCase(V[1]);
   ForbiddenDomains  := LowerCase(V[2]);
+  AnyTLD := (V[3]='1') or IdemPropNameU(V[3],'true');
 end;
 
 
@@ -42646,11 +42653,16 @@ end;
 
 {$endif KYLIX3}
 
+procedure FixedWaitForever(Event: TEvent);
+begin
+  FixedWaitFor(Event,INFINITE);
+end;
+
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
   SetPendingProcess(flagDestroying);
   fProcessEvent.SetEvent;  // notify terminated
-  FixedWaitFor(fCallerEvent,INFINITE);
+  FixedWaitForever(fCallerEvent);
   FreeAndNil(fProcessEvent);
   FreeAndNil(fCallerEvent);
   DeleteCriticalSection(fPendingProcessLock);
@@ -42774,7 +42786,7 @@ begin
         OnIdleProcessNotify;
     end else
     {$endif}
-      FixedWaitFor(fCallerEvent,INFINITE);
+      FixedWaitForever(fCallerEvent);
     assert(fPendingProcessFlag=flagFinished);
     if fBackgroundException<>nil then begin
       E := fBackgroundException;

@@ -10754,7 +10754,7 @@ type
     // - call several REST PUT collection (one for each BLOB) for the member
     // - uses the UpdateBlob() method to send the BLOB properties content to the Server
     // - called internaly by Add and Update methods when ForceBlobTransfert /
-    // ForceBlobTransertTable[] is set
+    // ForceBlobTransfertTable[] is set
     // - you can use this method by hand, to avoid several calls to UpdateBlob()
     // - returns TRUE on success (or if there is no BLOB field)
     // - returns FALSE on error (e.g. if Value is invalid or with db/transmission)
@@ -10762,7 +10762,7 @@ type
     /// get all BLOB fields of the supplied value from the remote server
     // - call several REST GET collection (one for each BLOB) for the member
     // - call internaly e.g. by TSQLRestClient.Retrieve method when
-    // ForceBlobTransfert / ForceBlobTransertTable[] is set
+    // ForceBlobTransfert / ForceBlobTransfertTable[] is set
     function RetrieveBlobFields(Value: TSQLRecord): boolean; virtual;
 
     /// begin a transaction

@@ -494,6 +494,18 @@ type
     function Commit: TCQRSResult; virtual;
   end;
 
+  /// abstract CQRS class tied to a TSQLRest instance for low-level persistence
+  // - not used directly by the DDD repositories (since they will rely on
+  // a TDDDRepositoryRestFactory for the actual ORM process), but may be the
+  // root class for any Rest-based infrastructure cross-cutting features
+  TCQRSQueryObjectRest = class(TCQRSQueryObject)
+  protected
+    fRest: TSQLRest;
+  public
+    constructor Create(aRest: TSQLRest); reintroduce;
+    property Rest: TSQLRest read FRest;
+  end;
+
 
 
 { *********** Application Layer Implementation }
@@ -1319,5 +1331,13 @@ begin
     InternalCommit;
 end;
 
+
+{ TCQRSQueryObjectRest }
+constructor TCQRSQueryObjectRest.Create(aRest: TSQLRest);begin
+  inherited Create;
+  if not Assigned(aRest) then
+    raise ECQRSException.CreateUTF8('%.Create(nil)',[self]);
+  fRest := aRest;
+end;
 
 end.
