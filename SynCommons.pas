@@ -11362,15 +11362,27 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZCompress(const Data: RawByteString): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-procedure SynLZCompress(P: PAnsiChar; PLen: integer;out Result: RawByteString); overload;
+procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString); overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-procedure SynLZDecompress(P: PAnsiChar; PLen: integer;out Result: RawByteString); overload;
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString); overload;
+
+/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+function SynLZCompressToBytes(const Data: RawByteString): TByteDynArray; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+function SynLZCompressToBytes(P: PAnsiChar; PLen: integer): TByteDynArray; overload;
+
+/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
+function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload; 
 
 
 resourcestring
@@ -41711,10 +41723,7 @@ begin
     Head.Magic := Magic;
     Head.UnCompressedSize := DataLen;
     Head.HashUncompressed := Hash32(S,DataLen);
-{$ifdef PUREPASCAL}
-    result := SynLZcompress1pas(S,DataLen,P); {$else}
-    result := SynLZcompress1asm(S,DataLen,P);
-{$endif}
+    result := SynLZcompress1(S,DataLen,P); 
     Head.CompressedSize := result;
     Head.HashCompressed := Hash32(P,result);
     Dest.Write(Head,sizeof(Head));
@@ -41772,24 +41781,17 @@ begin
           P := pointer(tmp);
           S.Read(P[FILESYNLZ_HEADER],Head.UnCompressedSize);
           Head.HashUncompressed := Hash32(P+FILESYNLZ_HEADER,Head.UnCompressedSize);
-{$ifdef PUREPASCAL}
-          Head.CompressedSize := SynLZcompress1pas(P+FILESYNLZ_HEADER,Head.UnCompressedSize,P);
-{$else}   Head.CompressedSize := SynLZcompress1asm(P+FILESYNLZ_HEADER,Head.UnCompressedSize,P);
-{$endif}  Head.HashCompressed := Hash32(P,Head.CompressedSize);
+          Head.CompressedSize := SynLZcompress1(P+FILESYNLZ_HEADER,Head.UnCompressedSize,P);
+          Head.HashCompressed := Hash32(P,Head.CompressedSize);
           if (D.Write(Head,sizeof(Head))<>sizeof(Head)) or
              (D.Write(P^,Head.CompressedSize)<>Head.CompressedSize) then
             exit;
           dec(Count,Head.UnCompressedSize);
         end;
-        {$ifdef MSWINDOWS}
-        result := FileSetDate(D.Handle,FileGetDate(S.Handle))=0;
-        {$endif}
       finally
         D.Free;
       end;
-      {$ifndef MSWINDOWS}
       result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
-      {$endif}
     finally
       S.Free;
     end;
@@ -41833,25 +41835,16 @@ begin
           if (Hash32(PS,Head.CompressedSize)<>Head.HashCompressed) or
              (SynLZdecompressdestlen(PS)<>Head.UnCompressedSize) then
             exit;
-          {$ifdef PUREPASCAL}
-          if (SynLZdecompress1pas(PS,Head.CompressedSize,PD)<>Head.UnCompressedSize) or
-          {$else}
-          if (SynLZdecompress1asm(PS,Head.CompressedSize,PD)<>Head.UnCompressedSize) or
-          {$endif}
+          if (SynLZdecompress1(PS,Head.CompressedSize,PD)<>Head.UnCompressedSize) or
              (Hash32(PD,Head.UnCompressedSize)<>Head.HashUncompressed) then
             exit;
           if D.Write(PD^,Head.UncompressedSize)<>Head.UncompressedSize then
             exit;
         end;
-        {$ifdef MSWINDOWS}
-        result := FileSetDate(D.Handle,FileGetDate(S.Handle))=0;
-        {$endif}
       finally
         D.Free;
       end;
-      {$ifndef MSWINDOWS}
       result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
-      {$endif}
     finally
       S.Free;
     end;
@@ -41924,11 +41917,7 @@ begin
     exit;
   result := THeapMemoryStream.Create;
   result.Size := Head.UnCompressedSize;
-  {$ifdef PUREPASCAL}
-  if (SynLZdecompress1pas(P,Head.CompressedSize,result.Memory)<>Head.UnCompressedSize) or
-  {$else}
-  if (SynLZdecompress1asm(P,Head.CompressedSize,result.Memory)<>Head.UnCompressedSize) or
-  {$endif}
+  if (SynLZdecompress1(P,Head.CompressedSize,result.Memory)<>Head.UnCompressedSize) or
      (Hash32(result.Memory,Head.UnCompressedSize)<>Head.HashUncompressed) then
     FreeAndNil(result);
 end;
@@ -41963,11 +41952,7 @@ begin
     R := pointer(result);
     PCardinal(R)^ := crc;
     R[4] := SYNLZCOMPRESS_SYNLZ;
-    {$ifdef PUREPASCAL}
-    len := SynLZcompress1pas(P,PLen,R+9);
-    {$else}
-    len := SynLZcompress1asm(P,PLen,R+9);
-    {$endif}
+    len := SynLZcompress1(P,PLen,R+9);
     PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
     SetLength(result,len+9);
   end;
@@ -41991,15 +41976,47 @@ begin
     len := SynLZdecompressdestlen(P+9);
     SetLength(result,len);
     if (len<>0) and
-       {$ifdef PUREPASCAL}
-       ((SynLZdecompress1pas(P+9,PLen-9,pointer(result))<>len) or
-       {$else}
-       ((SynLZdecompress1asm(P+9,PLen-9,pointer(result))<>len) or
-       {$endif}
+       ((SynLZdecompress1(P+9,PLen-9,pointer(result))<>len) or
        (crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
       result := '';
   end;
   end;
+end;
+
+function SynLZCompressToBytes(const Data: RawByteString): TByteDynArray;
+begin
+  result := SynLZCompressToBytes(pointer(Data),length(Data));
+end;
+
+function SynLZCompressToBytes(P: PAnsiChar; PLen: integer): TByteDynArray; overload;
+var len: integer;
+    R: PAnsiChar;
+    crc: cardinal;
+begin
+  if PLen=0 then
+    exit;
+  crc := crc32c(0,P,PLen);
+  if PLen<SYNLZCOMPRESS_SYNLZ_SIZETRIGGER then begin
+    SetLength(result,PLen+9);
+    R := pointer(result);
+    PCardinal(R)^ := crc;
+    R[4] := SYNLZCOMPRESS_STORED;
+    PCardinal(R+5)^ := crc;
+    move(P^,R[9],PLen);
+  end else begin
+    SetLength(result,SynLZcompressdestlen(PLen)+9);
+    R := pointer(result);
+    PCardinal(R)^ := crc;
+    R[4] := SYNLZCOMPRESS_SYNLZ;
+    len := SynLZcompress1(P,PLen,R+9);
+    PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    SetLength(result,len+9);
+  end;
+end;
+
+function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
+begin
+  SynLZDecompress(pointer(Data),length(Data),result);
 end;
 
 

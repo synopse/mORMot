@@ -192,7 +192,8 @@ unit SynLZ;
   - Use RawByteString type for CompressSynLZ() function prototype
 
   Version 1.18
-  - unit fixed and tested with Delphi XE2/XE3 64-bit compiler
+  - unit fixed and tested with Delphi XE2 and up 64-bit compiler
+  - introducing SynLZCompress1/SynLZDecompress1 low-level functions
   - added SynLZdecompress1partial() function for partial and secure (but slower)
     decompression - implements feature request [82ca067959]
   - removed several compilation hints when assertions are set to off
@@ -209,31 +210,43 @@ function SynLZcompressdestlen(in_len: integer): integer;
 /// get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
 
-/// 1st compression method uses hashing with a 32bits control word
+/// 1st compression algorithm uses hashing with a 32bits control word
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
-/// 1st compression method uses hashing with a 32bits control word
-// - this is the fastest pure pascal method
+/// 1st compression algorithm uses hashing with a 32bits control word
+// - this is the fastest pure pascal implementation
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
 
-/// 1st compression method uses hashing with a 32bits control word
+/// 1st compression algorithm uses hashing with a 32bits control word
 // - this overload function is slower, but will allow to uncompress only the start
 // of the content (e.g. to read some metadata header)
 // - it will also check for dst buffer overflow, so will be more secure than
 // other functions, which expect the content to be verified (e.g. via CRC)
-function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar; maxDst: Integer): Integer; 
+function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
+  maxDst: Integer): Integer; 
 
 {$ifndef PUREPASCAL}
-/// optimized asm version of the 1st compression method
+/// optimized asm version of the 1st compression algorithm
 function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-/// optimized asm version of the 1st compression method
+/// optimized asm version of the 1st compression algorithm
 function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
 {$endif PUREPASCAL}
 
-/// 2nd compression method optimizes pattern copy -> a bit smaller, but slower
+/// 2nd compression algorithm optimizing pattern copy
+// - this algorithm is a bit smaller, but slower, so the 1st method is preferred
 function SynLZcompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-/// 2nd compression method optimizes pattern copy -> a bit smaller, but slower
+/// 2nd compression algorithm optimizing pattern copy
+// - this algorithm is a bit smaller, but slower, so the 1st method is preferred
 function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+
+var
+  /// fastest available SynLZ compression (using 1st algorithm)
+  SynLZCompress1: function(src: PAnsiChar; size: integer; dst: PAnsiChar): integer
+     = {$ifdef PUREPASCAL}SynLZcompress1pas{$else}SynLZcompress1asm{$endif};
+
+  /// fastest available SynLZ decompression (using 1st algorithm)
+  SynLZDecompress1: function(src: PAnsiChar; size: integer; dst: PAnsiChar): integer
+     = {$ifdef PUREPASCAL}SynLZDecompress1pas{$else}SynLZDecompress1asm{$endif};
 
 {$ifndef UNICODE}
 type
@@ -1226,10 +1239,7 @@ begin
     SetString(result,nil,len);
     P := pointer(result);
     PCardinal(P)^ := Hash32(pointer(Data),DataLen);
-{$ifdef PUREPASCAL}
-    len := SynLZcompress1pas(pointer(Data),DataLen,P+8); {$else}
-    len := SynLZcompress1asm(pointer(Data),DataLen,P+8);
-{$endif}
+    len := SynLZcompress1(pointer(Data),DataLen,P+8);
     PCardinal(P+4)^ := Hash32(pointer(P+8),len);
     SetString(Data,P,len+8);
   end else begin
@@ -1240,10 +1250,7 @@ begin
     len := SynLZdecompressdestlen(P+8);
     SetLength(result,len);
     if (len<>0) and
-{$ifdef PUREPASCAL}
-        ((SynLZdecompress1pas(P+8,DataLen-8,pointer(result))<>len) or
-{$else} ((SynLZdecompress1asm(P+8,DataLen-8,pointer(result))<>len) or
-{$endif}
+        ((SynLZdecompress1(P+8,DataLen-8,pointer(result))<>len) or
        (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
       result := '';
       exit;

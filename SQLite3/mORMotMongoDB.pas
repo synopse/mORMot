@@ -439,7 +439,7 @@ begin
           blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
           if blob='' then
             SetVariantNull(Variant(V^)) else begin
-            typenfo := (info as TSQLPropInfoRTTIDynArray).PropInfo^.PropType{$ifndef FPC}^{$endif};
+            typenfo := (info as TSQLPropInfoRTTIDynArray).PropType; 
             if typenfo=TypeInfo(TByteDynArray) then
               js := '' else // embedded BLOB type stored as BSON binary
               js := DynArraySaveJSON(typenfo,blob);
