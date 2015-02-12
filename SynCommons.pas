@@ -588,7 +588,7 @@ unit SynCommons;
   - fixed ticket [1c940a4437] to avoid negative value in TPrecisionTimer.PerSec,
     in case of incorrect Start/Stop methods sequence
   - implement ticket [e3f9742865] for enhanced JSON in soWriteHumanReadable mode
-  - added TPrecisionTimer.ProfileCurrentMethod() and TimeInUniSec property
+  - added TPrecisionTimer.ProfileCurrentMethod() and TimeInMicroSec property
     for feature request [1abca090ee]
   - added TLocalPrecisionTimer/ILocalPrecisionTimer to alllocate a local timer
     instance on the stack
@@ -4200,6 +4200,7 @@ type
     function JustAdded: boolean;
   end;
 
+  {$M+} 
   /// abstract parent class with threadsafe implementation of IInterface and
   // a virtual constructor
   // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
@@ -4212,7 +4213,6 @@ type
     constructor Create; virtual;
   end;
 
-  {$M+} { TPersistent has no RTTI for LVCL! }
   /// abstract parent class with a virtual constructor, ready to be overridden
   // to initialize the instance
   // - you can specify such a class if you need an object including published
@@ -6352,7 +6352,7 @@ type
     property Size: cardinal read fBufSize;
   end;
 
-{$M+}
+  {$M+}
   /// able to read a UTF-8 text file using memory map
   // - much faster than TStringList.LoadFromFile()
   // - will ignore any trailing UTF-8 BOM in the file content, but will not
@@ -6435,7 +6435,7 @@ type
     /// the number of text lines
     property Count: integer read fCount;
   end;
-{$M-}
+  {$M-}
 
   /// a fake TStream, which will just count the number of bytes written
   TFakeWriterStream = class(TStream)
@@ -7255,7 +7255,7 @@ type
     // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
     // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1}
     // - you can use MongoDB enhanced syntax e.g. '{MinLength:5,MaxLength:10}'
-    constructor Create(const aParameters: RawUTF8='');
+    constructor Create(const aParameters: RawUTF8=''); virtual;
     /// perform the text length validation action to the specified value
     function Process(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string): boolean; override;
@@ -8723,6 +8723,11 @@ function GetCurrentThreadID: LongWord; cdecl;
 /// overloaded function using open64() to allow 64 bit positions
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
 {$endif}
+
+/// compatibility function, to be implemented according to the running OS
+// - expect more or less the same result as the homonymous Win32 API function
+// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas 
+function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
 
@@ -10919,9 +10924,13 @@ type
     procedure Start;
     /// stop the timer, returning the time elapsed, with appened time resolution (us,ms,s)
     function Stop: RawUTF8;
-    /// stop the timer, ready to continue its time measure
+    /// stop the timer, ready to continue its time measurement via Resume
     procedure Pause;
     /// resume a paused timer
+    // - if the previous method called was Pause, it will ignore all the
+    // time elapsed since then
+    // - if the previous method called was Start, it will start as if it was
+    // in pause mode
     procedure Resume;
     /// resume a paused timer until the method ends
     // - will internaly create a TInterfaceObject class to let the compiler
@@ -10936,12 +10945,12 @@ type
     /// return the time elapsed, with appened time resolution (us,ms,s)
     function Time: RawUTF8;
     /// compute the per second count
-    function PerSec(Count: cardinal): cardinal;
+    function PerSec(const Count: Int64): cardinal;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
     function ByCount(Count: cardinal): RawUTF8;
     /// Int64 representation of time after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInUniSec: Int64 read iTime;
+    property TimeInMicroSec: Int64 read iTime write iTime;
   end;
 
   /// interface to a reference counted high resolution timer instance
@@ -16398,7 +16407,8 @@ begin
   end;
   OSVersion := Vers;
 end;
-{$endif MSWINDOWS}
+
+{$else}
 
 {$ifdef KYLIX3}
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
@@ -16435,7 +16445,22 @@ begin
     result := FileHandle;
   end;
 end;
+
+function GetTickCount64: Int64;
+begin
+  result := SynKylix.GetTickCount64;
+end;
+
+{$endif KYLIX3}
+
+{$ifdef FPC}
+function GetTickCount64: Int64;
+begin
+  result := SynFPCLinux.GetTickCount64;
+end;
 {$endif}
+
+{$endif MSWINDOWS}
 
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
@@ -36638,11 +36663,11 @@ begin
     result := MicroSecToString(iTime div Count);
 end;
 
-function TPrecisionTimer.PerSec(Count: cardinal): cardinal;
+function TPrecisionTimer.PerSec(const Count: Int64): cardinal;
 begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Int64(Count)*Int64(1000*1000)) div iTime;
+    result := (Count*Int64(1000*1000)) div iTime;
 end;
 
 procedure TPrecisionTimer.Init;
