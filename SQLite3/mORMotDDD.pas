@@ -296,12 +296,11 @@ type
 
   /// implement DDD's TPersistent factory over one ORM's TSQLRecord
   // - it will centralize some helper classes and optimized class mapping
-  TDDDRepositoryRestFactory = class(TInterfaceResolver)
+  TDDDRepositoryRestFactory = class(TInterfaceResolverForSingleInterface)
   protected
     fOwner: TDDDRepositoryRestManager;
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
-    fImplementationEntry: PInterfaceEntry;
     fRest: TSQLRest;
     fAggregate: TPersistentClass;
     fAggregateHasCustomCreate: boolean;
@@ -328,8 +327,7 @@ type
     procedure TablePropToAggregate(
       aRecord: TSQLRecord; aRecordProp: TSQLPropInfo;
       aAggregate: TPersistent; aAggregateProp: TSQLPropInfo); virtual;
-    // to implement the TInterfaceResolver abilities
-    function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    function CreateInstance: TInterfacedObject; override;
   public
     /// will compute the ORM TSQLRecord* source code type definitions
     // corresponding to DDD aggregate objects into a a supplied file name
@@ -400,8 +398,6 @@ type
     // in the corresponding property of the TSQLRecord type definition
     procedure AddFilterOrValidate(const aFieldNames: array of RawUTF8;
       aFilterOrValidate: TSynFilterOrValidate; aFieldNameFlattened: boolean=false); virtual;
-    /// set a local I*Query or I*Command instance corresponding to this factory
-    procedure Get(out Obj); virtual;
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TPersistent);
     /// create a new DDD Aggregate instance
@@ -535,7 +531,11 @@ type
   protected
     fRest: TSQLRest;
   public
-    constructor Create(aRest: TSQLRest); reintroduce;
+    constructor Create(aRest: TSQLRest); reintroduce; virtual; 
+    constructor CreateInjected(aRest: TSQLRest;
+      const aStubsByGUID: array of TGUID;
+      const aOtherResolvers: array of TInterfaceResolver;
+      const aDependencies: array of TInterfacedObject); reintroduce;
     property Rest: TSQLRest read FRest;
   end;
 
@@ -705,22 +705,18 @@ constructor TDDDRepositoryRestFactory.Create(
   aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8; aOwner: TDDDRepositoryRestManager);
 begin
-  inherited Create;
-  fOwner := aOwner;
-  fImplementation := aImplementation;
-  fImplementationEntry := aImplementation.GetInterfaceEntry(aInterface);
-  fRest := aRest;
-  fAggregate := aAggregate;
-  fAggregateHasCustomCreate := fAggregate.InheritsFrom(TPersistentWithCustomCreate);
-  fTable := aTable;
   fInterface := TInterfaceFactory.Get(aInterface);
   if fInterface=nil then
     raise EDDDRepository.CreateUTF8(self,
      '%.Create(%): Interface not registered - you could use TInterfaceFactory.'+
      'RegisterInterfaces()',[self,GUIDToShort(aInterface)]);
-  if fImplementationEntry=nil then
-    raise EDDDRepository.CreateUTF8(self,'%.Create: % does not implement %',
-      [self,aImplementation,fInterface.InterfaceTypeInfo^.Name]);
+  inherited Create(fInterface.InterfaceTypeInfo,aImplementation);
+  fOwner := aOwner;
+  fImplementation := aImplementation;
+  fRest := aRest;
+  fAggregate := aAggregate;
+  fAggregateHasCustomCreate := fAggregate.InheritsFrom(TPersistentWithCustomCreate);
+  fTable := aTable;
   if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
   fPropsMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
@@ -867,14 +863,6 @@ begin
   fPropsMappingVersion := fPropsMapping.MappingVersion;
 end;
 
-function TDDDRepositoryRestFactory.TryResolve(
-  aInterface: PTypeInfo; out Obj): boolean;
-begin
-  if fInterface.InterfaceTypeInfo<>aInterface then
-    result := false else
-    result := GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj);
-end;
-
 procedure TDDDRepositoryRestFactory.AggregatePropToTable(
   aAggregate: TPersistent; aAggregateProp: TSQLPropInfo;
   aRecord: TSQLRecord; aRecordProp: TSQLPropInfo);
@@ -892,10 +880,9 @@ begin
     aRecordProp.CopyProp(aRecord,aAggregateProp,aAggregate);
 end;
 
-procedure TDDDRepositoryRestFactory.Get(out Obj);
+function TDDDRepositoryRestFactory.CreateInstance: TInterfacedObject;
 begin
-  if not GetInterfaceFromEntry(fImplementation.Create(self),fImplementationEntry,Obj) then
-    raise ECQRSException.CreateUTF8('%.Get(%)',[self,fInterface.InterfaceTypeInfo^.Name]);
+  result := fImplementation.Create(self);
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateClear(
@@ -1386,6 +1373,15 @@ begin
   if not Assigned(aRest) then
     raise ECQRSException.CreateUTF8('%.Create(Rest=nil)',[self]);
   fRest := aRest;
+end;
+
+constructor TCQRSQueryObjectRest.CreateInjected(aRest: TSQLRest;
+  const aStubsByGUID: array of TGUID;
+  const aOtherResolvers: array of TInterfaceResolver;
+  const aDependencies: array of TInterfacedObject);
+begin
+  Create(aRest);
+  inherited CreateInjected(aStubsByGUID,aOtherResolvers,aDependencies);
 end;
 
 end.

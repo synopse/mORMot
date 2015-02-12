@@ -258,14 +258,14 @@ var auth: IDomAuthCommand;
     info: TAuthInfo;
     i: integer;
 begin
-  Factory.Get(auth);
+  test.Check(Factory.GetOneInstance(auth));
   for i := 1 to MAX do begin
     UInt32ToUtf8(i,log);
     UInt32ToUtf8(i*7,pass);
     test.Check(auth.Add(log,ComputeHashPassword(log,pass))=cqrsSuccess);
   end;
   test.Check(auth.Commit=cqrsSuccess);
-  Factory.Get(auth);
+  test.Check(Factory.GetOneInstance(auth));
   info := TAuthInfo.Create;
   try
     for i := 1 to MAX do begin
@@ -283,12 +283,9 @@ begin
   end;
 end;
 var Rest: TSQLRestServerFullMemory;
-    Model: TSQLModel;
 begin
-  Model := TSQLModel.Create([TSQLRecordAuthInfo]);
-  Rest := TSQLRestServerFullMemory.Create(Model);
+  Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordAuthInfo]);
   try
-    Model.Owner := Rest;
     Factory := TDDDAuthenticationRestFactoryAbstract.Create(Rest,self,nil);
     try
       TestOne; // sub function to ensure that all I*Command are released

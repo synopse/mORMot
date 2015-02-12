@@ -489,11 +489,14 @@ type
     // - intercept any DB exception and return false on error, true on success
     function StoredProcExecute(const aSQL: RawUTF8; StoredProc: TOnSQLStoredProc): boolean; 
   public
-    /// initialize a REST server with a database
+    /// initialize a REST server with an in-memory SQLite3 database
+    // - could be used for test purposes
+    constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
+    /// initialize a REST server with a SQLite3 database
     // - any needed TSQLVirtualTable class should have been already registered
     // via the RegisterVirtualTableModule() method
     constructor Create(aModel: TSQLModel; aDB: TSQLDataBase;
-      aHandleUserAuthentication: boolean=false); overload; virtual;
+      aHandleUserAuthentication: boolean=false); reintroduce; overload; virtual;
     /// initialize a REST server with a database, by specifying its filename
     // - TSQLRestServerDB will initialize a owned TSQLDataBase, and free it on Destroy
     // - if specified, the password will be used to cypher this file on disk
@@ -785,6 +788,12 @@ begin
   if (aRTree=nil) or (BlobA=nil) or (BlobB=nil) then
     sqlite3.result_error(Context,'invalid call') else
     sqlite3.result_int64(Context,byte(aRTree.ContainedIn(BlobA^,BlobB^)));
+end;
+
+constructor TSQLRestServerDB.Create(aModel: TSQLModel; 
+  aHandleUserAuthentication: boolean);
+begin
+  Create(aModel,SQLITE_MEMORY_DATABASE_NAME,aHandleUserAuthentication);
 end;
 
 constructor TSQLRestServerDB.Create(aModel: TSQLModel; aDB: TSQLDataBase;

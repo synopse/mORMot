@@ -762,6 +762,8 @@ unit mORMot;
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
     - introducing TInjectableObject to easily implement the IoC SOLID pattern,
       for both TSQLRest services and stubing/mocking
+    - introducing TInterfaceResolver and TInterfaceResolverForSingleInterface
+      abstract class, to be used for IoC with TInjectableObject types
     - added TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
       methods to specify interface from it name, without the need to use the
       TypeInfo(IMyInterface) syntax in end-user code
@@ -776,7 +778,7 @@ unit mORMot;
       is set (can be useful e.g. when consuming services from XML only clients) -
       as an alternative, ResultAsXMLObjectIfAcceptOnlyXML option will recognize
       'Accept: application/xml' or 'Accept: text/xml' HTTP header and return
-      XML content instead of JSON - with optional ResultAsXMLObjectNameSpace 
+      XML content instead of JSON - with optional ResultAsXMLObjectNameSpace
     - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
@@ -944,6 +946,8 @@ unit mORMot;
       TSQLModel.VirtualTableRegister()
     - added Owner, Actions, Events parameters to TSQLModel.Create() constructor
     - fixed issue in TSQLRestServer.Create() about authentication enabling
+    - introducing TSQLRestServer.CreateWithOwnModel() constructor to ease
+      creation of simple Rest in-memory storage, e.g. for testing purposes
     - added TSQLModel.GetTableIndexExisting() method to raise an explicit
       EModelException if the table is not part of the model - used now by
       almost all CRUD Client and Server operations - ticket [aa0d6f1e90]
@@ -2203,6 +2207,9 @@ type
     // AnsiString as 0, and any other type as RawUTF8
     function AnsiStringCodePage: integer;
       {$ifdef UNICODE}inline;{$endif}
+    /// get the TGUID of a given interface type information
+    // - returns nil if this type is not an interface
+    function InterfaceGUID: PGUID;
   end;
 
 {$ifdef FPC}
@@ -8241,6 +8248,9 @@ type
 
   {$endif LVCL}
 
+  /// the class of TInterfacedObject kind
+  TInterfacedObjectClass = class of TInterfacedObject;
+
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them when freed
   // - will also release any T*ObjArray dynamic array storage of persistents,
@@ -8276,6 +8286,25 @@ type
   end;
   {$M-}
 
+  /// abstract factory class targetting a single kind of interface
+  TInterfaceResolverForSingleInterface = class(TInterfaceResolver)
+  protected
+    fInterfaceTypeInfo: PTypeInfo;
+    fImplementationEntry: PInterfaceEntry;
+    function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    // inherited classes should provide the right class
+    function CreateInstance: TInterfacedObject; virtual; abstract;
+  public
+    /// this overriden constructor will check and store the supplied class
+    // to implement an interface
+    constructor Create(aInterface: PTypeInfo; aImplementation: TInterfacedObjectClass); overload;
+    /// this overriden constructor will check and store the supplied class
+    // to implement an interface by TGUID
+    constructor Create(const aInterface: TGUID; aImplementation: TInterfacedObjectClass); overload;
+    /// you can use this method to resolve the interface as a new instance 
+    function GetOneInstance(out Obj): boolean;
+  end;
+
   TInterfaceStub = class;
 
   /// used to store a list of TInterfaceResolver instances
@@ -8298,6 +8327,7 @@ type
     // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
     fCreatedInterfaceStub: TInterfaceStubObjArray;
+    fDependencies: array of TInterfacedObject;
     // IoC resolution protected methods
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean;
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
@@ -8322,6 +8352,7 @@ type
     // !   ...
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
+      const aDependencies: array of TInterfacedObject;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
     /// register a dependency resolver class to this instance list
     // - the resolver may be a TServiceContainer or a TInterfaceStub
@@ -12287,7 +12318,10 @@ type
     // 'Supervisor' (i.e. all R/W access) by default
     // - if HandleUserAuthentication is true, will add TSQLAuthUser and
     // TSQLAuthGroup to the TSQLModel (if not already there)
-    constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce;
+    constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
+    /// Server initialization with a temporary Database Model
+    constructor CreateWithOwnModel(const Tables: array of TSQLRecordClass;
+      aHandleUserAuthentication: boolean=false);
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
     
@@ -13145,13 +13179,15 @@ type
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
   public
-    /// initialize a REST server with a database file
+    /// initialize an in-memory REST server with no database file
+    constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
+    /// initialize an in-memory REST server with a database file
     // - all classes of the model will be created as TSQLRestStorageInMemory
     // - then data persistence will be initialized using aFileName, but no
-    // file will be written to disk, unless you call explicitly UpdateToFile 
+    // file will be written to disk, unless you call explicitly UpdateToFile
     // - if aFileName is left void (''), data will not be persistent
-    constructor Create(aModel: TSQLModel; const aFileName: TFileName='';
-      aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
+    constructor Create(aModel: TSQLModel; const aFileName: TFileName;
+      aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; overload; virtual;
     /// finalize the REST server
     // - this overridden destructor will write any modification on file (if
     // needed), and release all used memory
@@ -22195,6 +22231,24 @@ end;
 {$endif USETYPEINFO}
 
 
+type
+  PInterfaceTypeData = ^TInterfaceTypeData;
+  TInterfaceTypeData = packed record
+    IntfParent : PPTypeInfo; // ancestor
+    IntfFlags : set of (ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC}, ifHasStrGUID{$endif});
+    IntfGuid : TGUID;
+    IntfUnit : ShortString;
+  end;
+
+  TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
+    mkClassProcedure, mkClassFunction, { Obsolete } mkSafeProcedure, mkSafeFunction);
+
+  TIntfMethodEntryTail = packed record
+    Kind: TMethodKind;
+    CC: TCallingConvention;
+    ParamCount: Byte;
+  end;
+
 { TTypeInfo }
 
 {$ifdef HASINLINE}
@@ -22459,7 +22513,8 @@ begin
   {$ifdef UNICODE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
-    result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^; // from RTTI
+    if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
+      result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^ else // from RTTI
   {$else}
   if @self=TypeInfo(RawUTF8) then
     result := CP_UTF8 else
@@ -22473,8 +22528,15 @@ begin
     result := CP_RAWBYTESTRING else
   if @self=TypeInfo(AnsiString) then
     result := 0 else
-    result := CP_UTF8;
   {$endif}
+    result := CP_UTF8; // default is UTF-8
+end;
+
+function TTypeInfo.InterfaceGUID: PGUID;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := nil else
+    result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfGuid;
 end;
 
 
@@ -28721,6 +28783,15 @@ begin
   ServiceMethodByPassAuthentication('TimeStamp');
 end;
 
+constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
+  aHandleUserAuthentication: boolean);
+var Model: TSQLModel;
+begin
+  Model := TSQLModel.Create(Tables);
+  Create(Model,aHandleUserAuthentication);
+  Model.Owner := self;
+end;
+
 procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0;
   Options: TSQLInitializeTableOptions=[]);
 begin 
@@ -28758,6 +28829,8 @@ end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
 begin
+  if fSessions=nil then
+    exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
   fLogClass.Enter(self,'Shutdown').
     Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
@@ -34084,11 +34157,9 @@ end;
 { TSQLRestServerFullMemory }
 
 constructor TSQLRestServerFullMemory.Create(aModel: TSQLModel;
-  const aFileName: TFileName; aBinaryFile, aHandleUserAuthentication: boolean);
+  aHandleUserAuthentication: boolean);
 var t: integer;
 begin
-  fFileName := aFileName;
-  fBinaryFile := aBinaryFile;
   inherited Create(aModel,aHandleUserAuthentication);
   fStaticDataCount := length(fModel.Tables);
   SetLength(fStorage,fStaticDataCount);
@@ -34096,6 +34167,14 @@ begin
     fStorage[t] := (StaticDataCreate(fModel.Tables[t]) as TSQLRestStorageInMemory);
     fStorage[t].fStorageLockShouldIncreaseOwnerInternalState := true;
   end;
+end;
+
+constructor TSQLRestServerFullMemory.Create(aModel: TSQLModel;
+  const aFileName: TFileName; aBinaryFile, aHandleUserAuthentication: boolean);
+begin
+  fFileName := aFileName;
+  fBinaryFile := aBinaryFile;
+  Create(aModel,aHandleUserAuthentication);
   LoadFromFile;
   CreateMissingTables(0,[]);
 end;
@@ -39073,24 +39152,6 @@ end;
 
 { TServiceContainer }
 
-type
-  PInterfaceTypeData = ^TInterfaceTypeData;
-  TInterfaceTypeData = packed record
-    IntfParent : PPTypeInfo; // ancestor
-    IntfFlags : set of (ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC}, ifHasStrGUID{$endif});
-    IntfGuid : TGUID;
-    IntfUnit : ShortString;
-  end;
-
-  TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
-    mkClassProcedure, mkClassFunction, { Obsolete } mkSafeProcedure, mkSafeFunction);
-
-  TIntfMethodEntryTail = packed record
-    Kind: TMethodKind;
-    CC: TCallingConvention;
-    ParamCount: Byte;
-  end;
-
 function TServiceContainer.AddInterface(
   const aInterfaces: array of PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   aContractExpected: RawUTF8): boolean;
@@ -41268,17 +41329,61 @@ begin
 end;
 
 
+{ TInterfaceResolverForSingleInterface }
+
+constructor TInterfaceResolverForSingleInterface.Create(
+  aInterface: PTypeInfo; aImplementation: TInterfacedObjectClass);
+var guid: PGUID;
+begin
+  fInterfaceTypeInfo := aInterface;
+  guid := aInterface^.InterfaceGUID;
+  if guid=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Create expects an Interface',[self]);
+  fImplementationEntry := aImplementation.GetInterfaceEntry(guid^);
+  if fImplementationEntry=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Create: % does not implement %',
+      [self,aImplementation,fInterfaceTypeInfo^.Name]);
+end;
+
+constructor TInterfaceResolverForSingleInterface.Create(const aInterface: TGUID;
+  aImplementation: TInterfacedObjectClass);
+begin
+  Create(TInterfaceFactory.GUID2TypeInfo(aInterface),aImplementation);
+end;
+
+function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
+begin
+  result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
+end;
+
+function TInterfaceResolverForSingleInterface.TryResolve(
+  aInterface: PTypeInfo; out Obj): boolean;
+begin
+  if fInterfaceTypeInfo<>aInterface then
+    result := false else
+    result := GetOneInstance(Obj);
+end;
+
+
 { TInjectableObject }
 
 function TInjectableObject.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
 var i: integer;
 begin
-  if (self<>nil) and (aInterface<>nil) and (fResolvers<>nil) then
+  if (self<>nil) and (aInterface<>nil) then begin
+    if fResolvers<>nil then
     for i := 0 to length(fResolvers)-1 do
       if fResolvers[i].TryResolve(aInterface,Obj) then begin
         result := true;
         exit;
       end;
+    if fDependencies<>nil then
+    for i := 0 to Length(fDependencies)-1 do
+      if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then begin
+        result := true;
+        exit;
+      end;
+  end;
   result := false;
 end;
 
@@ -41354,6 +41459,7 @@ end;
 
 constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
   const aOtherResolvers: array of TInterfaceResolver;
+  const aDependencies: array of TInterfacedObject;
   aRaiseEServiceExceptionIfNotFound: boolean);
 var i: integer;
 begin
@@ -41368,6 +41474,8 @@ begin
     include(fCreatedInterfaceStub[i].fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
     AddResolver(fCreatedInterfaceStub[i]);
   end;
+  for i := 0 to high(aDependencies) do
+    ObjArrayAdd(fDependencies,aDependencies[i]);
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 

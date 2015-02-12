@@ -36327,7 +36327,7 @@ begin
   AllowedTLD := LowerCase(V[0]);
   ForbiddenTLD := LowerCase(V[1]);
   ForbiddenDomains  := LowerCase(V[2]);
-  AnyTLD := (V[3]='1') or IdemPropNameU(V[3],'true');
+  AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
 end;
 
 
