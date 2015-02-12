@@ -1355,15 +1355,15 @@ end;
 type
   EncoderParameter = record
     Guid           : TGUID;   // GUID of the parameter
-    NumberOfValues : ULONG;   // Number of the parameter values
-    Type_          : ULONG;   // Value type, like ValueTypeLONG  etc.
-    Value          : Pointer; // A pointer to the parameter values
+    NumberOfValues : ULONG;   // number of values for this parameter
+    Type_          : ULONG;   // value type, like ValueTypeLONG  etc.
+    Value          : Pointer; // a pointer to the parameter values
   end;
   TEncoderParameter = EncoderParameter;
   PEncoderParameter = ^TEncoderParameter;
   EncoderParameters = record
-    Count     : UINT;               // Number of parameters in this structure
-    Parameter : array[0..0] of TEncoderParameter;  // Parameter values
+    Count     : UINT;  // number of parameters in this structure
+    Parameter : array[0..0] of TEncoderParameter;  // parameter values
   end;
   TEncoderParameters = EncoderParameters;
   PEncoderParameters = ^TEncoderParameters;
@@ -1376,7 +1376,7 @@ const
 function TSynPicture.SaveAs(Stream: TStream; Format: TGDIPPictureType;
   CompressionQuality: integer; IfBitmapSetResolution: single): TGdipStatus;
 var fStream: IStream;
-    Len,Dummy: Int64;
+    Len,Dummy: {$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};
     tmp: pointer;
     Params: TEncoderParameters;
     PParams: pointer;

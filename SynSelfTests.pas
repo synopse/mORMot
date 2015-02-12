@@ -147,6 +147,7 @@ uses
   {$ifdef MSWINDOWS}
   SynOleDB,
   {$ifndef FPC}
+  SynGdiPlus,
   SynPdf,
   {$endif}
   {$endif}
