@@ -120,6 +120,7 @@ type
   // - cqrsNotFound appear after a I*Query SelectBy*() method with no match
   // - cqrsNoMoreData indicates a GetNext*() method has no more matching data
   // - cqrsDataLayerError indicates a low-level error at database level
+  // - cqrsInternalError for an unexpected issue, like an Exception raised
   // - cqrsDDDValidationFailed will be trigerred when
   // - cqrsInvalidContent for any I*Command method with invalid aggregate input
   // value (e.g. a missing field)

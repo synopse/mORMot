@@ -8340,7 +8340,8 @@ type
     // - simple TInterfaceStub could be created directly from their TGUID,
     // then any kind of IoC resolver instances could be specified, i.e. either
     // customized TInterfaceStub/TInterfaceMock, a TServiceContainer or
-    // a TDDDRepositoryRestObjectMapping
+    // a TDDDRepositoryRestObjectMapping, and then any TInterfacedObject
+    // instance would be used during dependency resolution:
     // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
@@ -8348,8 +8349,11 @@ type
     // !     [ICalculator],
     // !     [TInterfaceMock.Create(IPersistence,self).
     // !       ExpectsCount('SaveItem',qoEqualTo,1),
-    // !      RestInstance.Services]);
+    // !      RestInstance.Services],
+    // !     [AnyInterfacedObject]);
     // !   ...
+    // - note that all the injected stubs/mocks instances will be owned by the
+    // TInjectableObject, and therefore released with it
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject;
